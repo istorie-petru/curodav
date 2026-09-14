@@ -1439,8 +1439,7 @@ tbody tr:last-child{border-bottom:none;}
 tbody tr:hover{background:var(--row-alt);}
 tbody td{padding:10px 8px; vertical-align:middle;}
 
-/* Labels manage table -- color dot + name, optional Group badge, Usage
-   count, icon actions.
+/* Labels manage table -- icon + name, Usage, icon actions.
    2026-08-28: this used to give #labels-table its own compact 6px row
    padding (plus 12px first/last-child edge padding) so it read as a
    denser, "airier" table than the rest of the app's plain tables.
@@ -1448,17 +1447,82 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    to the others"): removed -- Holidays/Time Blocks/every other settings
    table use the global `tbody td` 10px/8px padding above with no
    first/last-child override, and there was no longer a real reason for
-   Labels alone to look denser than its own Settings siblings. The Actions
-   column still reads right-aligned without the removed `text-align:right`
-   here -- `.action-buttons` (below) is `justify-content:flex-end`
-   regardless of the cell's own text-align. */
+   Labels alone to look denser than its own Settings siblings.
+   2026-09-16 (direct request, "the table rows are not narrow enough for
+   desktop"): reintroduced, scoped to `#labels-table-wrapper` rather than
+   a bare `#labels-table` selector -- this reopens exactly the gap the
+   2026-09-08 pass closed, but that's a deliberate reversal this time, not
+   drift; see this rule's own scoped block below rather than restating
+   the compact padding here, so the two decisions stay easy to find
+   side-by-side in source. The Actions column still reads right-aligned
+   without a `text-align:right` here -- `.action-buttons` (below) is
+   `justify-content:flex-end` regardless of the cell's own text-align. */
 
 .label-cell { display: inline-flex; align-items: center; gap: var(--space-2); }
 .color-dot {
     width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
     box-shadow: inset 0 0 0 1px rgba(0,0,0,.15);
 }
+/* 2026-09-14 (direct request: Settings > Labels table icon instead of a
+   color dot) -- sized/aligned to sit where the .color-dot it replaced
+   did; color itself comes from the inline `var(--cal-accent-*)` style
+   labels_manage.html/_labels_table_body.html set per row, not from this
+   rule (a label's color is per-row data, not something a shared class
+   can know). */
+.label-cell-icon { display: inline-flex; flex-shrink: 0; }
 .label-name { font-weight: 500; color: var(--fg-primary); }
+
+/* Settings > Labels: a single table (2026-09-16, direct request --
+   "don't want the header repeated for every group" / "don't want
+   separate behavior for the labels that are not assigned"). Replaces the
+   2026-09-14 "one <table> per Space" design (each with its own repeated
+   thead, plus Ungrouped's own separate heading+table) with one `<table
+   class="labels-table">`, one `<thead>`, one `<tbody>` -- a Space's own
+   row (`.labels-space-row` below) sits inline with its children and with
+   every ungrouped label, no per-group wrapper element left at all (each
+   row still carries a bare `data-label-group` attribute, unread by any
+   script today, same "hook nothing uses yet" status the removed wrapper
+   divs had).
+
+   `.labels-space-row` is the one row per Space that reads as a "card":
+   a light hue-tinted background and rounded corners. Painted via a
+   single `data-style` on the `<tr>` that sets two custom properties
+   (`--row-tint`/`--row-tint-fg`, see _labels_table_body.html) rather than
+   one `data-style` per inner span -- plain CSS below applies them to
+   each `<td>`'s own background (not the `<tr>`'s) specifically so
+   `border-radius` on the first/last cell actually clips visible
+   background, which it can't do if the color is painted on the parent
+   `<tr>` instead. A Space's row used to also get a colored
+   `.label-icon-tile` squircle; direct feedback ("the .label-icon-tile
+   for spaces is unnecessary, show only the icon like for any plain
+   label") dropped that -- a Space's row now uses the same
+   `.label-cell-icon` glyph every plain label row uses, just bold and
+   tinted along with the rest of the row via `--row-tint-fg`.
+
+   Rounded-corner hover follows the same per-`<td>`-background technique,
+   scoped to this table only (not the global `tbody tr:hover` rule
+   above, which every other settings table still uses unmodified). */
+.labels-space-row td{background:var(--row-tint);}
+.labels-space-row td:first-child{border-radius:var(--radius-sm) 0 0 var(--radius-sm);}
+.labels-space-row td:last-child{border-radius:0 var(--radius-sm) var(--radius-sm) 0;}
+.labels-space-row .label-cell-icon,
+.labels-space-row .label-name,
+.labels-space-row .usage-badge,
+.labels-space-row .text-muted{color:var(--row-tint-fg);}
+.labels-space-row .label-name{font-weight:600;}
+
+#labels-table-wrapper tbody tr:not(.labels-space-row):hover{background:none;}
+#labels-table-wrapper tbody tr:not(.labels-space-row):hover td{background:var(--row-alt);}
+#labels-table-wrapper tbody tr:not(.labels-space-row):hover td:first-child{border-radius:var(--radius-sm) 0 0 var(--radius-sm);}
+#labels-table-wrapper tbody tr:not(.labels-space-row):hover td:last-child{border-radius:0 var(--radius-sm) var(--radius-sm) 0;}
+
+/* 2026-09-16 (direct request, "the table rows are not narrow enough for
+   desktop") -- narrower than the global `tbody td`/`thead th` padding
+   above, scoped to this page only (see this file's header comment on why
+   this reopens the 2026-09-08 decision on purpose). */
+#labels-table-wrapper thead th{padding:8px 8px;}
+#labels-table-wrapper tbody td{padding:6px 8px;}
+#labels-table-wrapper .labels-space-row td{padding:6px 8px;}
 
 .group-badge {
     display: inline-block; padding: 2px 8px; border-radius: var(--radius-pill);
@@ -2417,7 +2481,19 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    `@container` rules something specific to target rather than the
    nearest ancestor container generically. */
 .kanban-board-wrap{container-type:inline-size; container-name:kanban;}
-.kanban-board{display:flex; gap:var(--space-3); overflow-x:auto; padding-bottom:var(--space-1); align-items:flex-start;}
+/* 2026-09-13 (direct request: "drop anywhere in the column, even on its
+   header... columns should be the same size as the longest column on the
+   same row, so drag and drop would work for the same row without moving
+   the mouse vertically") -- `align-items:flex-start` (the previous value)
+   overrode flex's own default of `stretch`, which is why each column used
+   to size to only its own content; dropping that declaration (stretch is
+   the default, no explicit value needed) makes every column in a flex
+   LINE -- i.e. each visual row, both before and after `flex-wrap` kicks in
+   at the two narrower `@container` tiers below -- stretch to the tallest
+   column in that row. `.kanban-column` has no explicit height of its own,
+   so this is a pure consequence of the flex default, no extra rule
+   needed. */
+.kanban-board{display:flex; gap:var(--space-3); overflow-x:auto; padding-bottom:var(--space-1);}
 /* 2026-08-08 -- columns are responsive now: each grows/shrinks with the
    page width so the board fills the viewport without a horizontal scroll
    whenever the columns can actually fit side by side. 340px is the
@@ -2433,11 +2509,21 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
   flex:1 1 0; min-width:240px; max-width:340px;
   background:var(--bg-secondary); border-radius:var(--radius-md); padding:var(--space-2);
   display:flex; flex-direction:column; gap:var(--space-2); min-height:80px;
+  transition:background var(--dur-fast) var(--ease-standard);
 }
 .kanban-column-head{display:flex; align-items:center; justify-content:space-between; padding:2px 2px var(--space-1);}
 .kanban-count{font-size:var(--text-caption); color:var(--fg-tertiary); font-weight:600;}
-.kanban-cards{display:flex; flex-direction:column; gap:var(--space-2); min-height:40px; border-radius:var(--radius-sm); transition:background var(--dur-fast) var(--ease-standard);}
-.kanban-cards.drop-hover{background:var(--accent-neutral-subtle);}
+/* flex:1 (added alongside the equal-height column change above) lets the
+   card list itself fill a column stretched taller than its own content --
+   without it the drop-hover highlight below would leave a plain unhovered
+   gap under a short column's last card even while that whole column (now
+   the actual drop target, .kanban-column via tasks_board.js) is a valid
+   drop zone. */
+.kanban-cards{display:flex; flex:1; flex-direction:column; gap:var(--space-2); min-height:40px; border-radius:var(--radius-sm);}
+/* Drop-hover now highlights the whole column (2026-09-13, drop target
+   widened from `.kanban-cards` to `.kanban-column` in tasks_board.js so a
+   drop on the column header works too) -- was `.kanban-cards.drop-hover`. */
+.kanban-column.drop-hover{background:var(--accent-neutral-subtle);}
 .kanban-card{
   background:var(--bg-elevated); border:none; border-radius:var(--radius-control);
   padding:var(--space-2) var(--space-3); box-shadow:var(--elevation-1); display:flex; flex-direction:column; gap:var(--space-1);
@@ -2651,6 +2737,19 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 }
 .avatar-large{width:52px; height:52px; font-size:20px;}
 img.avatar-circle{object-fit:cover;}
+/* 2026-09-13 (direct request: "contact's avatar-circle avatar-large
+   avatar should be colored in backgrounds like for Projects and Spaces
+   avatars") -- deps.py's avatar() global now adds this class (alongside
+   `--tile-swatch`, same CSS var name/palette `.label-icon-tile` already
+   uses for the Projects/Spaces icon tile, see this file's own comment on
+   that rule) only to the no-photo initials-fallback `<span>`; a real
+   photo `<img class="avatar-circle">` never gets this class, so it's
+   unaffected. Stays a circle (`.avatar-circle`'s own 50% radius), unlike
+   `.label-icon-tile`'s squircle -- the request was for color, not shape.
+   White text reads on every one of the 16 `--cal-bg-*` swatches, unlike
+   the plain-gray fallback's `--fg-primary` (a light/dark theme text
+   color chosen to sit on a neutral background, not a saturated one). */
+.avatar-circle.avatar-colored{background:var(--tile-swatch, var(--accent-neutral-subtle)); color:#fff;}
 .contact-quick-actions{display:flex; gap:8px; margin-bottom:14px;}
 
 /* Photo upload field (contact_form.html) -- avatar (real photo or initials
@@ -2987,7 +3086,7 @@ main.main-calendar > .page-header-narrow{flex:none;}
    aside -- that aside stays flex:none below, the grid card claims the
    remainder). */
 main.main-calendar > .calendar-viewport,
-main.main-calendar > .project-calendar-layout{flex:1 1 auto; min-height:0; margin-bottom:0;}
+main.main-calendar > .project-calendar-layout{flex:1 1 auto; min-height:0;}
 /* The widget itself: a flex column so a Week/Day time grid can pin its
    header (below) while scrolling the hours, and a scroll container in
    its own right so Month/4-Week (no further internal flex target) also
@@ -3044,6 +3143,14 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
      tracks the real, current visual viewport rather than the largest
      possible one, same reasoning as the mobile block below. */
   main.main-calendar{height:100vh; height:100dvh;}
+}
+@media (max-width:720px){
+  /* This margin-bottom only exists to keep the grid's own content clear
+     of the mobile bottom nav bar (.mobile-tabbar, 64px, fixed/persistent
+     below this breakpoint) -- desktop has no such bar, so the block above
+     leaves it out entirely instead of setting it to 0 here. */
+  main.main-calendar > .calendar-viewport,
+  main.main-calendar > .project-calendar-layout{margin-bottom:8dvh;}
 }
 
 /* Week/Day time grid (routers/calendar.py week_view/day_view, grid_layout.py) */
@@ -3241,7 +3348,16 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    plain document-flow context .card is used in elsewhere. */
 .project-calendar-layout > .card{margin-bottom:0;}
 .project-calendar-unscheduled{width:100%; flex:none;}
-.project-calendar-grid{flex:1; min-width:0;}
+/* min-height:0 (added alongside the pre-existing min-width:0) -- without
+   it, this flex:1 child of the column-direction .project-calendar-layout
+   defaults to min-height:auto, which floors it at its own content height
+   (24 hours of .time-grid-body) rather than letting it shrink to the
+   space actually left in the layout. That silently defeated the internal
+   overflow-y:auto already declared on main.main-calendar .calendar-viewport
+   and .time-grid-wrap above -- the card just grew past the viewport
+   instead of scrolling, pushing the whole page into document-level
+   scroll rather than scrolling the grid in place. */
+.project-calendar-grid{flex:1; min-width:0; min-height:0;}
 /* Collapsible "Unscheduled work" strip (1.9 side work,
    static/unscheduled_panel_toggle.js) -- header (title + toggle button)
    always visible; collapsed hides the item strip entirely, leaving just the
@@ -3314,6 +3430,17 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    back toward the earlier 84px "3 rows" version that read as oversized. */
 #unscheduled-panel-body{height:36px; overflow-y:auto; scrollbar-width:none;}
 #unscheduled-panel-body::-webkit-scrollbar{display:none;}
+/* The "No unscheduled work -- ..." empty-state sentence (_calendar_week_
+   grid.html) is long enough to wrap to 2-3 lines inside the fixed 36px
+   single-row height above on a narrow phone, clipping instead of reading
+   -- the empty aside carries no information a mobile user needs anyway
+   (there's simply nothing to drag), so it's hidden below the mobile
+   breakpoint rather than resized. Scoped to this panel's own empty state,
+   not the shared .empty-state-compact class (also used by
+   _task_work_allocations.html, which should keep its text everywhere). */
+@media (max-width:720px){
+  #unscheduled-panel-body .empty-state{display:none;}
+}
 /* 2026-09-02 redesign (direct feedback: "smaller, minimalist and be able
    to fit inline, and to have more rows"): a wrapping grid, not a
    horizontal scroll strip -- flex-wrap:wrap instead of nowrap+
@@ -4050,10 +4177,44 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
   /* Grab handle -- same drag-to-dismiss affordance/markup pattern as
      #modal-handle (style.css's own .modal-handle rule, static/modal.js),
      hidden on desktop (base rule further up sets display:none) and shown
-     here only. */
+     here only.
+     2026-09-13 (direct report: "doesn't allow to be dragged down to
+     close"). #modal-handle sits OUTSIDE its sheet's scrollable region
+     (a sibling of .modal-body, which alone scrolls) -- this handle is the
+     opposite: the very first child INSIDE .tabbar, and .tabbar itself is
+     the overflow-y:auto scrollport (it has to be; there's no separate
+     inner wrapper for the Spaces/Projects tree). Two consequences a
+     plain 36x4px pointerdown target doesn't survive: (1) the touchable
+     box was literally 4px tall, worse odds of a thumb landing on it than
+     #modal-handle's identically-sized box gets, since that one at least
+     isn't fighting a sibling scroll gesture for the same pixels; (2)
+     being a normal (not sticky) flex child, it scrolls away with the
+     list the moment a Spaces tree is tall enough to need scrolling --
+     "grab the top of the sheet" stops being reachable at all once the
+     user has scrolled down.
+     Fix, CSS-only (no JS/markup change -- static/mobile_nav_drawer.js
+     still binds pointerdown/move/up to this same #mobile-nav-handle
+     id): `position:sticky;top:0` pins it to the scrollport's top edge
+     regardless of scroll offset (the ancestor .tabbar IS the nearest
+     scrolling container sticky needs), and the box itself grows to a
+     real 28px touch target with the small pill drawn via ::before
+     instead of being the box -- the visible affordance stays the same
+     size, only the invisible hit/drag area around it grows. An opaque
+     background is required once it's sticky (not optional polish): with
+     the list scrolled down, list rows now pass underneath this pinned
+     row, and without a background they'd show through it. z-index:1
+     lifts it above those scrolling rows within .tabbar's own stacking
+     context (unrelated to the page-level z-index scale further up this
+     file -- purely local, siblings only). */
   .mobile-nav-handle{
-    display:block; width:36px; height:4px; border-radius:var(--radius-pill); background:var(--border-strong);
-    margin:var(--space-2) auto var(--space-1); flex:none; touch-action:none;
+    display:flex; align-items:center; justify-content:center;
+    position:sticky; top:0; z-index:1;
+    width:100%; height:28px; margin:0; flex:none; touch-action:none;
+    background:var(--bg-elevated);
+  }
+  .mobile-nav-handle::before{
+    content:""; display:block; width:36px; height:4px;
+    border-radius:var(--radius-pill); background:var(--border-strong);
   }
   /* No separate collapse/expand state exists at this width -- the drawer
      is always the "expanded" look, so the desktop toggle/app-name header
@@ -4244,7 +4405,7 @@ main.main-shell > .toolbar.top-app-bar{
   flex:none;
 }
 .main-shell-body{
-  flex:1 1 auto; min-height:0; overflow-y:auto;
+  flex:1 1 auto; min-height:0; overflow-y:auto; margin-bottom:6dvh;
 }
 @media (min-width:721px){
   /* No bottom bar to reserve on desktop, same as main.main-calendar. */
@@ -4850,7 +5011,18 @@ body.command-palette-open{overflow:hidden;}
 @media (max-width:720px){
    .modal-overlay{align-items:flex-end; padding:0;}
    .modal{
-     width:100%; max-width:100%; border-radius:28px 28px 0 0;
+     /* min-width:500px (base .modal rule, above) was never reset here --
+        width:100% only wins over it when the overlay itself is >=500px
+        wide, so any phone narrower than that (nearly all of them: 350-
+        430px is the common range) got a modal wider than the viewport,
+        overflowing the screen instead of filling it edge to edge.
+        min(500px, 100%) keeps 500px as a ceiling on larger phones/small
+        tablets in this breakpoint while never exceeding the true
+        available width -- the sheet now spans 350-500px on the phones
+        that width range describes, floor-less below that since a phone
+        narrower than 350px should still get a real edge-to-edge sheet,
+        not a forced-wide one. */
+     width:100%; max-width:100%; min-width:min(500px, 100%); border-radius:28px 28px 0 0;
      max-height:90vh; min-height:0; transform:translateY(100%);
      padding-bottom:env(safe-area-inset-bottom, 0px);
    }
@@ -5240,7 +5412,6 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   flex:1;
 }
 .project-progress-fill{height:100%; background:var(--accent-neutral);}
-.project-scope-section{margin-top:16px;}
 
 /* projects.html (side work, 2026-08-15 direct feedback: "square colored
    cards... open with click, not an open button"). The whole card is one
@@ -5287,8 +5458,6 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 @media (max-width:480px){
   .project-grid{grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));}
 }
-.project-scope-section h2{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
-
 /* habits: _habit_heatmap.html, habits_list.html, habit_detail.html.
    GitHub-contribution-graph layout: a row of month labels above a row of
    week-columns, each column a flex-stack of 7 day cells. No per-habit
@@ -5657,13 +5826,20 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .cal-agenda-time{color:var(--fg-tertiary); font-variant-numeric:tabular-nums; min-width:30px;}
 
 /* Contact List widget (_widget_contact_list.html) -- compact contact
-   rows for the Space widget grid, filtered by tags. */
+   rows for the Space widget grid, filtered by tags.
+   2026-09-16 (direct request: "should also contain the contact's photo")
+   -- row went from a flex-column text-only stack to flex-row (leading
+   avatar + a nested `.contact-list-main` text column), same shape as
+   `.contact-row`/`.contact-row-main` above (this file's own contacts-list
+   page rows) just reused at this widget's more compact scale -- plain
+   `.avatar-circle` (34px), no `.avatar-large`. */
 .contact-list-widget{display:flex; flex-direction:column; gap:2px;}
 .contact-list-row{
-  display:flex; flex-direction:column; gap:1px; padding:var(--space-2) var(--space-1);
+  display:flex; align-items:center; gap:var(--space-2); padding:var(--space-2) var(--space-1);
   border-radius:var(--radius-sm); text-decoration:none; color:inherit;
 }
 .contact-list-row:hover{background:var(--row-alt); text-decoration:none;}
+.contact-list-main{display:flex; flex-direction:column; gap:1px; min-width:0; flex:1;}
 .contact-list-name{font-size:var(--text-body); font-weight:500; color:var(--fg-primary);}
 .contact-list-org{font-size:var(--text-footnote); color:var(--fg-secondary);}
 .contact-list-detail{font-size:var(--text-footnote); color:var(--fg-tertiary);}
@@ -5776,6 +5952,18 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .widget-row-icon{width:26px;}
 .widget-row-time{white-space:nowrap; width:1%;}
 .widget-row-right{text-align:right;}
+/* 2026-09-13 (direct request, "the checkbox has a left margin the other
+   [rows] don't have"): a task row's leading cell is a real `.icon-btn`
+   (28px, 40px on coarse pointer -- the shared touch-target size every
+   icon-btn in the app uses), which centers its 16px icon inside that whole
+   box. An event/deadline row's leading marker (`.widget-event-dot`, the
+   flag `.icon-sm`) has no such wrapper box, so it sits flush against the
+   cell's own left padding -- the checkbox's icon, centered in a box wider
+   than itself, effectively sat ~6px further right of that same edge.
+   `justify-content:flex-start` only changes where the icon sits INSIDE the
+   button (flush left, matching the other rows) without shrinking the
+   button itself, so the tap target stays full-size at every breakpoint. */
+.widget-row-icon .icon-btn{justify-content:flex-start;}
 /* Event row leading marker (2026-09-13, direct request: "circle dot like
    in mockup") -- sits in the same `.widget-row-icon` 26px slot a task's
    checkbox occupies, so an Agenda widget's Overdue/Tasks/Events rows all
@@ -6519,7 +6707,18 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 }
 .page-banner-title{
   margin:0; min-width:0; color:var(--fg-primary); font-weight:700;
-  letter-spacing:-0.3px; line-height:1.2;
+  letter-spacing:-0.3px;
+  /* Line-height inverted against viewport width: tight (1.5) at a
+     roomy/full-width 1200px+ viewport, loosening to 2 as the viewport
+     shrinks toward a ~300px phone -- a wrapped multi-line title needs
+     more breathing room between lines the narrower (and therefore more
+     likely to wrap) the column gets. (100vw - 300px)/900px is a 0..1
+     ratio between the 300px and 1200px reference widths (length divided
+     by length, so it resolves to a plain unitless number, not a length --
+     mixing units directly, e.g. `2 - 100vw`, isn't valid calc()); clamp()
+     pins it at 2 below 300px and 1.5 above 1200px instead of continuing
+     to extrapolate past either reference point. */
+  line-height:clamp(1.5, calc(2 - ((100vw - 300px) / 900px) * 0.5), 2);
   font-size:clamp(1.15rem, 2.5vw, 1.6rem);
 }
 .page-banner-title .icon{width:1.15em; height:1.15em; vertical-align:-0.2em;}
@@ -7137,6 +7336,16 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
     font-weight: 500;
     background: var(--accent-neutral-subtle);
     color: var(--fg-secondary);
+}
+
+/* 2026-09-14 (direct request: negative label filtering on Published
+   Lists) -- excluded labels render in the same Filter column as the
+   included ones, tinted red/minus-prefixed so "matches X" and "minus Y"
+   stay visually distinct at a glance instead of reading as one
+   undifferentiated group of pills. */
+.filter-label-exclude {
+    background: var(--tag-red-bg);
+    color: var(--tag-red-fg);
 }
 
 .tag-task { background: var(--tag-blue-bg); color: var(--tag-blue-fg); }

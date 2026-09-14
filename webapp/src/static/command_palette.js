@@ -221,9 +221,17 @@
     overlay.classList.add("is-open");
     document.body.classList.add("command-palette-open");
     updatePanelsVisibility();
-    window.setTimeout(function () {
-      input.focus();
-    }, 0);
+    // Skip the auto-focus below the mobile breakpoint (same 720px cutoff
+    // style.css's own mobile blocks use) -- focusing a text input pops
+    // the on-screen keyboard immediately on phones, covering half the
+    // overlay before the person has even looked at it. Desktop keeps the
+    // immediate focus (no keyboard to summon, and it's the whole point of
+    // a keyboard-driven Ctrl-K palette).
+    if (!window.matchMedia || !window.matchMedia("(max-width:720px)").matches) {
+      window.setTimeout(function () {
+        input.focus();
+      }, 0);
+    }
     runQuery("");
   }
 

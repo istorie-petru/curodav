@@ -203,6 +203,66 @@ class TestContactPhotoRoute:
         resp = contacts_router.contact_photo_image("c1", conn=conn)
         assert resp.media_type == "image/webp"
 
+    def test_a_real_stored_jpeg_is_served_transcoded_to_webp(self, conn):
+        # 2026-09-13 direct request: "contact images should be resource
+        # efficient (webp) -- I'd prefer the frontend to serve webp
+        # images, not the one in vcf directly." The two tests above use
+        # fake, non-decodable bytes -- image_convert.to_webp can't decode
+        # those, so the route falls back to its old pre-transcode
+        # behavior for them (still correctly tested, but doesn't exercise
+        # the new code path at all). This uses a real, Pillow-decodable
+        # 2x2 JPEG to confirm the actual transcode happens: stored as
+        # JPEG, served as real WebP bytes (checked via image_sniff's own
+        # magic-byte signature, the same check routers/contacts.py's
+        # upload path uses) with media_type flipped to image/webp even
+        # though `photo_type` on disk is still "JPEG".
+        from PIL import Image
+        from src.image_sniff import sniff_image_type
+
+        buf = io.BytesIO()
+        Image.new("RGB", (2, 2), color=(200, 40, 40)).save(buf, format="JPEG")
+        jpeg_bytes = buf.getvalue()
+        _make_contact(conn, photo_b64=base64.b64encode(jpeg_bytes).decode("ascii"), photo_type="JPEG")
+        resp = contacts_router.contact_photo_image("c1", conn=conn)
+        assert resp.media_type == "image/webp"
+        assert resp.body != jpeg_bytes
+        assert sniff_image_type(resp.body) == "webp"
+        # Round-trips back to a real, same-size, visually-matching image --
+        # not just "some webp bytes." Lossy WebP (quality=82, see
+        # image_convert.py's own comment on why 82) shifts individual
+        # channel values by a few units even on a flat 2x2 swatch, so this
+        # checks closeness rather than exact equality -- an exact match
+        # would only hold for a lossless encode, which isn't what "resource
+        # efficient" calls for here.
+        with Image.open(io.BytesIO(resp.body)) as decoded:
+            assert decoded.size == (2, 2)
+            r, g, b = decoded.convert("RGB").getpixel((0, 0))
+            assert abs(r - 200) <= 8 and abs(g - 40) <= 8 and abs(b - 40) <= 8
+
+    def test_a_real_stored_png_with_transparency_is_served_transcoded_to_webp(self, conn):
+        # Same as above, but confirms a source format with an alpha
+        # channel (PNG) round-trips through image_convert.to_webp's own
+        # `convert("RGBA")` step without losing transparency -- flattening
+        # onto an opaque background would silently change how the photo
+        # actually looks, which the direct request's "of course they
+        # should be the same" explicitly rules out.
+        from PIL import Image
+
+        buf = io.BytesIO()
+        Image.new("RGBA", (2, 2), color=(10, 20, 30, 128)).save(buf, format="PNG")
+        png_bytes = buf.getvalue()
+        _make_contact(conn, photo_b64=base64.b64encode(png_bytes).decode("ascii"), photo_type="PNG")
+        resp = contacts_router.contact_photo_image("c1", conn=conn)
+        assert resp.media_type == "image/webp"
+        with Image.open(io.BytesIO(resp.body)) as decoded:
+            assert decoded.mode == "RGBA"
+            r, g, b, a = decoded.getpixel((0, 0))
+            assert abs(r - 10) <= 8 and abs(g - 20) <= 8 and abs(b - 30) <= 8
+            # Alpha is what actually matters here -- confirms transparency
+            # survived the convert("RGBA")+WebP round-trip rather than
+            # getting flattened to a fully opaque pixel.
+            assert abs(a - 128) <= 8
+
 
 class TestProfilePhotoRoute:
     def test_serves_photo_bytes_with_immutable_cache_control(self, conn):

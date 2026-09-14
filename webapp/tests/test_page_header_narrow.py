@@ -68,6 +68,7 @@ def _request_with_app(path, db_path, backup_dir=None):
     dependency alone."""
     fake_app = SimpleNamespace(state=SimpleNamespace(settings=SimpleNamespace(
         db_path=db_path, backup_dir=backup_dir, radicale_base_url="http://localhost:5232",
+        radicale_public_base_url=None,
     )))
     return Request(
         {

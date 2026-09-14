@@ -63,7 +63,7 @@
 <tr data-uid="{{ t.uid }}" class="{% if t.status in ('done', 'archived') %}task-row-completed{% endif %}">
     {% if show_select %}
     <td>
-        <input type="checkbox" class="row-select" data-uid="{{ t.uid }}" aria-label="Select {{ t.title }}">
+        <input type="checkbox" class="row-select" data-uid="{{ t.uid }}" aria-label="Select {{ t.title }}" autocomplete="off">
     </td>
     {% endif %}
     <td class="task-title-cell">

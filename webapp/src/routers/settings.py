@@ -105,6 +105,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+import httpx
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
@@ -1245,6 +1246,145 @@ def _backups_dir(request: Request) -> Path:
     return request.app.state.settings.backup_dir
 
 
+# --------------------------------------------------------------------- #
+# Radicale config visibility (direct request, 2026-09-13 follow-up to the
+# DAV deploy automation work above): "these env variables are opaque and
+# hard to set or verify, and I don't know if they're set correctly if set
+# in app or in the app setup." Three things were true and none of them
+# were visible anywhere in the UI: (1) Radicale's URL/username/password
+# can currently be sourced from an env file, from app_meta (persisted via
+# Settings > Your Profile's Account form), or neither (the devuser/devpass
+# dev default) -- config.py's own apply_persisted_radicale_overrides
+# docstring is the only place that precedence rule was written down; (2) an
+# env-file edit (curodav-ctl or Settings' own env_file.update_env_file)
+# only takes effect after a restart, and nothing flagged when the file and
+# the running process had drifted apart; (3) there was no way to ask "is
+# this actually working right now" short of watching journalctl during a
+# real phone sync attempt. The four helpers below and the Data &
+# Maintenance route context feed a "CalDAV / Radicale sync" card that
+# answers all three without leaving the browser.
+# --------------------------------------------------------------------- #
+
+
+def _radicale_config_source(settings, conn) -> str:
+    """Which of the three places (see block comment above)
+    `settings.radicale_base_url`/`username`/`password` actually came from,
+    for right now -- not a guess, a direct readout of the same fields
+    config.py's own load_settings/apply_persisted_radicale_overrides
+    already computed. `radicale_env_configured` is authoritative for "env"
+    (config.py sets it True iff CC_RADICALE_URL was present in the process
+    environment at startup, whatever supplied it); app_meta's
+    RADICALE_URL_KEY is only ever populated by the Account form's
+    not-env-managed branch, so its presence alone means "database" without
+    needing to also check username/password."""
+    if getattr(settings, "radicale_env_configured", False):
+        return "environment file (CC_RADICALE_URL)" if getattr(settings, "env_file_path", None) else "an environment variable (CC_RADICALE_URL) with no known file to edit"
+    if db.get_app_meta(conn, config.RADICALE_URL_KEY):
+        return "the database (set via Settings › Your Profile)"
+    return "nothing -- using the built-in dev default (devuser/devpass)"
+
+
+def _env_file_drift(settings) -> str | None:
+    """None unless the on-disk env file's CC_RADICALE_* values disagree
+    with what THIS running process actually has loaded (which only ever
+    changes at startup -- main.py's lifespan builds the CalDavBridge once,
+    no live reload). A disagreement means someone edited curodav.env (by
+    hand, or via curodav-ctl install --dav) after this process last
+    started, and hasn't restarted since -- exactly the "did my env change
+    actually take effect" question with no other visible answer. Only
+    checked when env-configured; app_meta-backed installs have no file to
+    drift from."""
+    env_path = getattr(settings, "env_file_path", None)
+    if not env_path or not getattr(settings, "radicale_env_configured", False):
+        return None
+    file_values = env_file.read_env_file(env_path)
+    live = {
+        "CC_RADICALE_URL": getattr(settings, "radicale_base_url", None),
+        "CC_RADICALE_USER": getattr(settings, "radicale_username", None),
+        "CC_RADICALE_PASSWORD": getattr(settings, "radicale_password", None),
+    }
+    drifted = sorted(key for key, value in live.items() if key in file_values and file_values[key] != value)
+    if not drifted:
+        return None
+    return (
+        f"curodav.env has changed ({', '.join(drifted)}) since this process last started -- "
+        "restart the app (below) to pick up the new value."
+    )
+
+
+def _radicale_public_url_mismatch(settings) -> str | None:
+    """None unless `CC_RADICALE_PUBLIC_URL` (display-only, Published
+    Lists' subscribe_url) and `CC_RADICALE_URL` (what the app actually
+    syncs against) disagree about which Radicale *user* they point at --
+    e.g. CC_RADICALE_URL was hand-edited or RADICALE_USER rotated via
+    `curodav-ctl install --dav` without the public URL being updated to
+    match. Compares only the last non-empty path segment (the username --
+    both URLs' documented shape is `.../<user>/`), not the whole URL,
+    since scheme/host legitimately differ (loopback vs. the public
+    hostname) by design."""
+    base = (getattr(settings, "radicale_base_url", None) or "").rstrip("/")
+    public = (getattr(settings, "radicale_public_base_url", None) or "").rstrip("/")
+    if not base or not public:
+        return None
+    base_user = base.rsplit("/", 1)[-1]
+    public_user = public.rsplit("/", 1)[-1]
+    if base_user and public_user and base_user != public_user:
+        return (
+            f'The public URL\'s user ("{public_user}") doesn\'t match the sync URL\'s '
+            f'("{base_user}") -- CC_RADICALE_PUBLIC_URL and CC_RADICALE_URL look out of sync.'
+        )
+    return None
+
+
+def _check_radicale_connection(settings) -> tuple[bool, str]:
+    """A live, authenticated PROPFIND against whatever Radicale connection
+    THIS running process currently has loaded -- the only way to answer
+    "is this actually working right now" without watching journalctl
+    during a real phone sync. Deliberately bypasses app.state.bridge: that
+    CalDavBridge was built once at startup (main.py's lifespan) and is
+    `None` forever if Radicale was unreachable at that moment, so reading
+    it here would just repeat one stale verdict on every click instead of
+    a fresh check -- the whole point of a "Test connection" button. Depth
+    0 PROPFIND on the base collection URL is the cheapest real request
+    that exercises both the network path and the credentials (a bare GET
+    can 200 on an unauthenticated reverse proxy without ever reaching
+    Radicale's own auth check)."""
+    url = getattr(settings, "radicale_base_url", "") or ""
+    user = getattr(settings, "radicale_username", "") or ""
+    password = getattr(settings, "radicale_password", "") or ""
+    try:
+        resp = httpx.request(
+            "PROPFIND",
+            url,
+            auth=(user, password),
+            headers={"Depth": "0", "Content-Type": "application/xml"},
+            content='<?xml version="1.0" encoding="utf-8"?>'
+            '<D:propfind xmlns:D="DAV:"><D:prop><D:displayname/></D:prop></D:propfind>',
+            timeout=5.0,
+        )
+    except httpx.RequestError as exc:
+        return False, f"Could not reach Radicale at {url} -- {exc}"
+    if resp.status_code in (200, 207):
+        return True, f"Connected -- HTTP {resp.status_code} from {url}."
+    if resp.status_code in (401, 403):
+        return False, f"Radicale rejected the credentials (HTTP {resp.status_code}) -- check the username/password."
+    return False, f"Unexpected response from Radicale: HTTP {resp.status_code}."
+
+
+@router.post("/settings/radicale/test-connection")
+def test_radicale_connection(request: Request):
+    """"Test connection" button (Data & Maintenance's CalDAV/Radicale
+    card) -- see _check_radicale_connection's own docstring for why this
+    always does a fresh live request rather than reusing app.state.bridge.
+    Reuses the page's existing toast mechanism (data_maintenance.js reads
+    ?note=/?error=), same as every other action on this page, so the
+    result shows up as a floating toast right next to the button that
+    triggered it instead of a full page reload changing anything else."""
+    ok, message = _check_radicale_connection(request.app.state.settings)
+    target = "/settings/data-maintenance"
+    return _redirect_with_note(target, message) if ok else _redirect_with_error(target, message)
+
+
 def _choices_with_stored_value(
     choices: list[tuple[str, str]], stored: str
 ) -> list[tuple[str, str]]:
@@ -1306,6 +1446,14 @@ def settings_data_maintenance(request: Request, conn=Depends(get_db)):
         # stand-in for Settings (not the real dataclass) predating this
         # field.
         "radicale_env_configured": getattr(request.app.state.settings, "radicale_env_configured", False),
+        # 2026-09-13 direct request (opacity/verifiability of the
+        # CC_RADICALE_* env vars) -- see the "Radicale config visibility"
+        # block comment above _radicale_config_source for the full
+        # rationale behind these four fields.
+        "radicale_source": _radicale_config_source(request.app.state.settings, conn),
+        "radicale_public_url": getattr(request.app.state.settings, "radicale_public_base_url", None),
+        "radicale_public_url_warning": _radicale_public_url_mismatch(request.app.state.settings),
+        "radicale_env_drift": _env_file_drift(request.app.state.settings),
         # Restart app (2026-09-08, moved here 2026-09-11 direct request) --
         # only meaningful when this process is under systemd with
         # Restart=always (curodav-ctl's generated unit); see restart_app's

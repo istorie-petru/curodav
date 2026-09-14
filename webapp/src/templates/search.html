@@ -16,8 +16,20 @@
 </div>
 <form class="search-page-form" data-command-palette-page action="/search" method="get">
     <input type="search" name="q" value="{{ q }}" placeholder="Search tasks, events, contacts..."
-           class="search-page-input" data-command-palette-input autofocus autocomplete="off">
+           class="search-page-input" data-command-palette-input autocomplete="off">
 </form>
+{# Plain HTML `autofocus` has no media-query equivalent, so it can't be
+   made mobile-only in markup -- moved to a tiny inline script that only
+   focuses on a wide-enough viewport, matching command_palette.js's own
+   mobile-skips-focus behavior for the overlay's input (search should never
+   pop the on-screen keyboard on a phone; desktop keeps the convenience of
+   landing here ready to type). #}
+<script>
+  if (!window.matchMedia || !window.matchMedia("(max-width:720px)").matches) {
+    var __searchInput = document.querySelector(".search-page-input");
+    if (__searchInput) __searchInput.focus();
+  }
+</script>
 <div class="checklist search-page-results" data-command-palette-results>
     {% if not q %}
     <div class="empty-state empty-state-loose">Type to search across tasks, events, and contacts.</div>

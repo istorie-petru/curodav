@@ -188,7 +188,11 @@ class TestIdentityMark:
     def test_contact_header_shows_avatar_and_org(self, conn):
         _seed_contact(conn, "c1", full_name="Ada Lovelace", org="Analytical Engines")
         body = contacts_router.contact_detail("c1", _request("/contacts/c1"), conn=conn).body.decode()
-        assert 'class="avatar-circle avatar-large"' in body
+        # 2026-09-13: no-photo initials fallback now also carries
+        # avatar-colored (deps.py's avatar(), see test_banners.py's own
+        # comment on the same change) -- substring match, not the old
+        # exact-two-class string.
+        assert 'class="avatar-circle avatar-large avatar-colored"' in body
         assert "Ada Lovelace" in body
         assert "Analytical Engines" in body
         assert 'class="detail-heading-sub"' in body

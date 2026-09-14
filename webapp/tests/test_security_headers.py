@@ -239,3 +239,63 @@ class TestSecurityHeadersOrderingAgainstRealApp:
         assert resp.headers["x-frame-options"] == "DENY"
         csp = resp.headers["content-security-policy"]
         assert csp == CSP_POLICY.format(nonce=NONCE_RE.search(csp).group(1))
+
+
+# --------------------------------------------------------------------- #
+# Regression guard: every per-request-computed style value must go
+# through `data-style` (dynamic_styles.js), never a literal `style="..."`
+# attribute (2026-09-15, direct bug report -- "the .label-icon-tile
+# background-color still doesn't follow the label's color").
+#
+# CSP's style-src (above, no `'unsafe-inline'`) blocks a `style="..."`
+# HTML attribute in any real enforcing browser -- a nonce only ever
+# covers a `<style>` *element*, never an attribute. Four call sites
+# (_page_banner.html's icon_tile span, three in _labels_table_body.html,
+# plus deps.py's `avatar()` initials-fallback span) were added after
+# 2026-09-07's CSP hardening without anyone noticing they'd reintroduced
+# exactly the class of bug that hardening pass eliminated -- because every
+# way of *checking* short of an actual CSP-enforcing browser (reading the
+# template source, curling the rendered HTML, even reading the live DOM's
+# attribute value back out) looks completely correct; only a real
+# browser's computed style silently disagrees. Caught here by scanning
+# every template for a `style="..."` attribute that contains a Jinja
+# `{{ }}` expression (the tell that its value varies per request/row and
+# so can't be a fixed CSS class) -- a static value like
+# `style="display:none"` is fine and not what this guards against.
+# --------------------------------------------------------------------- #
+
+_TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "src" / "templates"
+_DYNAMIC_STYLE_ATTR_RE = re.compile(r'style="[^"]*\{\{')
+
+
+class TestNoRawInlineStyleWithDynamicValue:
+    def test_no_template_uses_a_literal_style_attribute_for_a_computed_value(self):
+        offenders = []
+        for path in sorted(_TEMPLATES_DIR.glob("*.html")):
+            text = path.read_text()
+            for match in _DYNAMIC_STYLE_ATTR_RE.finditer(text):
+                # `data-style="...{{ ... }}"` is the sanctioned form --
+                # only flag a *literal* `style=` (not preceded by `data-`).
+                start = match.start()
+                if start >= 5 and text[start - 5 : start] == "data-":
+                    continue
+                line_no = text.count("\n", 0, start) + 1
+                offenders.append(f"{path.name}:{line_no}")
+        assert offenders == [], (
+            "Found literal style=\"...{{ ... }}\" attribute(s) with a "
+            "per-request-computed value -- CSP's style-src silently drops "
+            "these in a real browser. Use data-style instead "
+            f"(dynamic_styles.js applies it via the CSSOM): {offenders}"
+        )
+
+    def test_devs_avatar_helper_also_uses_data_style_not_a_literal_attribute(self):
+        # deps.py's `_avatar()` builds its initials-fallback <span> as a
+        # plain Python f-string, not a Jinja template -- the glob-based
+        # scan above can't see it. Same bug, same fix, checked directly
+        # against the source.
+        deps_source = (Path(__file__).resolve().parent.parent / "src" / "deps.py").read_text()
+        assert 'data-style="--tile-swatch:' in deps_source
+        # A literal (non-"data-") style= attribute -- checked by excluding
+        # the sanctioned "data-style=" match, not a bare substring check,
+        # since "data-style=" itself contains "style=" as a substring.
+        assert re.search(r'(?<!data-)style="--tile-swatch:', deps_source) is None

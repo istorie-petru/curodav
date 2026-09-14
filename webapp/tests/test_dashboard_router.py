@@ -53,8 +53,8 @@ def _seed_recurring_event(conn, uid, start_at, end_at=None, recurrence=None, tag
 class TestDefaultWidgetSeeding:
     def test_seeds_default_widgets_on_first_visit(self, conn):
         # 2026-08-15 widget consolidation: default seed is Agenda (range=
-        # today) + a stack of At a Glance / Agenda (all_upcoming, events
-        # only) -- see dashboard_router._seed_agenda_stack_layout.
+        # today) + a stack of At a Glance / Agenda (all_upcoming) -- see
+        # dashboard_router._seed_agenda_stack_layout.
         # 2026-09-13: dropped the stack's former third member (another
         # today-range Agenda, overdue+tasks+events) -- it duplicated the
         # standalone widget's own content almost exactly, a side effect of
@@ -62,6 +62,10 @@ class TestDefaultWidgetSeeding:
         # widgets also get explicit titles now ("Today"/"At a
         # glance"/"Upcoming") instead of falling back to the generic
         # "Agenda" spec label three separate times.
+        # 2026-09-14 (Spaces -- labels-as-membership rework slice 5): the
+        # Upcoming member's Show list grew from events-only to
+        # events+tasks -- config-only, see _DEFAULT_STACK_MEMBER_TYPES's
+        # own comment.
         dashboard_router._ensure_default_widgets(conn)
         widgets = db.list_dashboard_widgets(conn)
         top_level = sorted((w for w in widgets if not w.get("group_uid")), key=lambda w: w["position"])
@@ -72,7 +76,24 @@ class TestDefaultWidgetSeeding:
         members = sorted((w for w in widgets if w.get("group_uid") == stack["uid"]), key=lambda w: w["position"])
         assert [w["type"] for w in members] == ["at_a_glance", "agenda"]
         assert [w["title"] for w in members] == ["At a glance", "Upcoming"]
-        assert members[1]["config"]["show"] == ["events"]
+        assert members[1]["config"]["show"] == ["events", "tasks"]
+
+    def test_seeded_upcoming_widget_actually_renders_both_tasks_and_events(self, conn):
+        # 2026-09-14 (Spaces -- labels-as-membership rework slice 5):
+        # end-to-end check, not just the config-seeding assertion above --
+        # the seeded Upcoming member's config, run through the real
+        # renderer, must surface a task alongside an event, not just
+        # events (its pre-slice-5 default).
+        dashboard_router._ensure_default_widgets(conn)
+        widgets = db.list_dashboard_widgets(conn)
+        stack = next(w for w in widgets if w["type"] == "stack")
+        upcoming = next(w for w in widgets if w.get("group_uid") == stack["uid"] and w["title"] == "Upcoming")
+        today = date.today()
+        _seed_task(conn, "t1", due_at=(today + timedelta(days=2)).isoformat())
+        _seed_event(conn, "e1", start_at=f"{(today + timedelta(days=3)).isoformat()}T09:00:00")
+        data = dashboard_router._render_agenda(conn, upcoming["config"])
+        assert {t["uid"] for t in data["tasks"]} == {"t1"}
+        assert {e["uid"] for e in data["events"]} == {"e1"}
 
     def test_default_seed_sets_width_on_paired_widgets(self, conn):
         # The main Agenda widget and the stack share the width split
@@ -170,6 +191,91 @@ class TestFiltering:
         _seed_task(conn, "t2")
         result = dashboard_router._filtered_tasks(conn, {})
         assert {t["uid"] for t in result} == {"t1", "t2"}
+
+
+class TestScopeChildNames:
+    """_scope_child_names (Spaces -- labels-as-membership rework slice 4,
+    2026-09-14) -- the one place a page's `label_name` resolves to its
+    hard tag-membership scope now, replacing three near-identical inline
+    copies (the old _effective_tags_filter, _child_label_names, and
+    _render_habit_checkin's own branch)."""
+
+    def test_none_when_no_label_name(self, conn):
+        assert dashboard_router._scope_child_names(conn, None) is None
+
+    def test_space_resolves_to_its_child_label_names(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "MATH201", "parent_name": "Uni", "created_at": _now()})
+        assert dashboard_router._scope_child_names(conn, "Uni") == {"CS101", "MATH201"}
+
+    def test_plain_label_resolves_to_just_its_own_name(self, conn):
+        db.upsert_label_config(conn, {"name": "CS101", "created_at": _now()})
+        assert dashboard_router._scope_child_names(conn, "CS101") == {"CS101"}
+
+    def test_unconfigured_label_name_resolves_to_just_its_own_name(self, conn):
+        # No label_config row at all -- get_label_config returns None,
+        # still not a Space, same "treat as a plain label" fallback every
+        # other label-scoped query in this app uses.
+        assert dashboard_router._scope_child_names(conn, "Adhoc") == {"Adhoc"}
+
+
+class TestHardTopLevelScopeFilter:
+    """2026-09-14 (Spaces -- labels-as-membership rework slice 4): before
+    this slice, a widget's own optional `config["tags"]` filter was
+    UNION'd with the page's label_name-derived scope into one OR-matched
+    list (_effective_tags_filter's old behavior) -- so a widget on a
+    Space/Project page with its own tag filter selected could still show
+    items from OUTSIDE that page's scope, as long as they matched the
+    widget's own filter. `_passes_scope` is now a separate, unconditional
+    AND-check every item must clear regardless of the widget's own
+    filter -- these tests seed exactly that leak scenario for each item
+    type and assert it's closed."""
+
+    def test_task_widget_filter_no_longer_escapes_page_scope(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+        # In scope (CS101) and matches the widget's own "Urgent" filter.
+        _seed_task(conn, "in_scope_and_matches", tags=["CS101", "Urgent"])
+        # Matches the widget's own filter but is OUTSIDE the Space --
+        # pre-slice-4 this leaked in via the OR union.
+        _seed_task(conn, "matches_but_out_of_scope", tags=["Urgent"])
+        # In scope but doesn't match the widget's own filter.
+        _seed_task(conn, "in_scope_no_match", tags=["CS101"])
+        result = dashboard_router._filtered_tasks(conn, {"label_name": "Uni", "tags": ["Urgent"]}, open_only=False)
+        assert {t["uid"] for t in result} == {"in_scope_and_matches"}
+
+    def test_event_widget_filter_no_longer_escapes_page_scope(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+        _seed_event(conn, "in_scope_and_matches", tags=["CS101", "Urgent"])
+        _seed_event(conn, "matches_but_out_of_scope", tags=["Urgent"])
+        result = dashboard_router._filtered_events(conn, {"label_name": "Uni", "tags": ["Urgent"]})
+        assert {e["uid"] for e in result} == {"in_scope_and_matches"}
+
+    def test_contact_widget_filter_no_longer_escapes_page_scope(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+        db.upsert_contact(conn, {"uid": "c1", "full_name": "In scope", "tags": ["CS101", "Professor"], "created_at": _now()})
+        db.upsert_contact(conn, {"uid": "c2", "full_name": "Out of scope", "tags": ["Professor"], "created_at": _now()})
+        data = dashboard_router._render_contact_list(conn, {"label_name": "Uni", "tags": ["Professor"]})
+        assert {c["uid"] for c in data["contacts"]} == {"c1"}
+
+    def test_plain_label_page_widget_filter_no_longer_escapes_its_own_scope(self, conn):
+        # Same leak, a plain/project label page rather than a Space.
+        db.upsert_label_config(conn, {"name": "CS101", "created_at": _now()})
+        _seed_task(conn, "in_scope_and_matches", tags=["CS101", "Urgent"])
+        _seed_task(conn, "matches_but_out_of_scope", tags=["Urgent"])
+        result = dashboard_router._filtered_tasks(conn, {"label_name": "CS101", "tags": ["Urgent"]}, open_only=False)
+        assert {t["uid"] for t in result} == {"in_scope_and_matches"}
+
+    def test_home_unscoped_widget_filter_is_unaffected(self, conn):
+        # No label_name at all (Home) -- scope_names is None, only the
+        # widget's own filter applies, exactly as before this slice.
+        _seed_task(conn, "matches", tags=["Urgent"])
+        _seed_task(conn, "no_match", tags=["Other"])
+        result = dashboard_router._filtered_tasks(conn, {"tags": ["Urgent"]}, open_only=False)
+        assert {t["uid"] for t in result} == {"matches"}
 
 
 class TestAgendaWidgetToday:
@@ -270,16 +376,35 @@ class TestAgendaWidgetAllUpcoming:
         data = dashboard_router._render_agenda(conn, {"range": "all_upcoming", "show": ["events"], "limit": 2})
         assert len(data["events"]) == 2
 
-    def test_limit_zero_means_unlimited(self, conn):
+    def test_limit_zero_means_20_items_max(self, conn):
         # 2026-08-31 direct feedback: "add a way to set the limit to 0
         # (0 = unlimited)" -- `config.get("limit") or 10` used to collapse
-        # a stored 0 back into the 10-item default; must not slice at all
-        # once explicitly set to 0.
+        # a stored 0 back into the 10-item default; must not fall back to
+        # the default once explicitly set to 0.
+        # 2026-09-13 direct request ("no limit should actually be 20
+        # maximum items") -- 0 is no longer truly unlimited, it now caps at
+        # 20, so this seeds 25 (more than the cap) and asserts exactly 20
+        # come back, replacing the old "returns all 25" assertion.
         now = datetime.now(timezone.utc)
-        for i in range(15):
+        for i in range(25):
             _seed_event(conn, f"e{i}", start_at=(now + timedelta(days=i + 1)).isoformat())
         data = dashboard_router._render_agenda(conn, {"range": "all_upcoming", "show": ["events"], "limit": 0})
-        assert len(data["events"]) == 15
+        assert len(data["events"]) == 20
+
+    def test_all_upcoming_range_bounds_to_364_days_out(self, conn):
+        # 2026-09-13 direct request: "widgets that don't have a time limit
+        # -- the time limit shouldn't actually be infinite, it should
+        # always be 364 days into the future." Previously all_upcoming left
+        # Tasks with no upper bound at all and windowed Events to 730 days
+        # (recurrence-expansion cap, not a real display bound); both now
+        # share a 364-day horizon. limit=0 (see above) would otherwise cap
+        # this at 20, well below the 25 seeded, so a generous per-item
+        # limit here isolates the date-bound behavior specifically.
+        now = datetime.now(timezone.utc)
+        _seed_event(conn, "within_horizon", start_at=(now + timedelta(days=360)).isoformat())
+        _seed_event(conn, "past_horizon", start_at=(now + timedelta(days=400)).isoformat())
+        data = dashboard_router._render_agenda(conn, {"range": "all_upcoming", "show": ["events"], "limit": 30})
+        assert [e["uid"] for e in data["events"]] == ["within_horizon"]
 
 
 class TestAgendaWidgetOverdueOnly:
@@ -1086,13 +1211,17 @@ class TestContactListWidget:
         data = dashboard_router._render_contact_list(conn, {"tags": ["tagged"], "limit": 3})
         assert len(data["contacts"]) == 3
 
-    def test_limit_zero_means_unlimited(self, conn):
+    def test_limit_zero_means_20_items_max(self, conn):
         # 2026-08-31 direct feedback: "add a way to set the limit to 0
-        # (0 = unlimited)".
+        # (0 = unlimited)". 2026-09-13 direct request ("no limit should
+        # actually be 20 maximum items") -- 0 no longer means truly
+        # unlimited, it now caps at 20; seeds 25 (more than the cap) and
+        # asserts exactly 20 come back, replacing the old "returns all 25"
+        # assertion.
         for i in range(25):
             self._seed_contact(conn, f"c{i}", f"Contact {i}", tags=["tagged"])
         data = dashboard_router._render_contact_list(conn, {"tags": ["tagged"], "limit": 0})
-        assert len(data["contacts"]) == 25
+        assert len(data["contacts"]) == 20
 
     def test_registered_in_widget_types(self, conn):
         assert "contact_list" in dashboard_router.WIDGET_TYPES

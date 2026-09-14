@@ -1,34 +1,14 @@
-# Rendered by install-cloudflared.sh into /etc/cloudflared/config.yml
-# ({{TUNNEL_ID}}/{{DOMAIN_APP}} substituted from the tunnel just created +
-# deploy.env). Re-run install-cloudflared.sh (not a manual edit here) if
-# DOMAIN_APP changes -- it re-renders and restarts the service.
-#
-# ONE hostname, ONE ingress rule, ONE tunnel -- Radicale is NOT a second
-# subdomain/second DNS route. It's reachable at {{DOMAIN_APP}}/radicale/,
-# a path under this same hostname, dispatched locally by nginx (see
-# ../nginx/) AFTER the tunnel -- cloudflared itself only ever routes by
-# hostname, so it can't split by path; that's nginx's job, not this file's.
-#
-# No local TLS layer is needed -- Cloudflare terminates TLS at their edge
-# and the tunnel carries plain HTTP to nginx over loopback. Unlike a
-# Caddy-in-front-with-Let's-Encrypt setup, no inbound port is opened on
-# this host at all: the tunnel is a fully outbound connection cloudflared
-# makes out to Cloudflare's network (see ../firewall.sh -- 80/443 don't
-# need to be open for this to work).
+# Rendered by install-cloudflared.sh into /etc/cloudflared/config.yml.
+# Re-run install-cloudflared.sh (not a manual edit) if DOMAIN_APP changes.
 
 tunnel: {{TUNNEL_ID}}
 credentials-file: /etc/cloudflared/{{TUNNEL_ID}}.json
 
 ingress:
-  # nginx (../nginx/) listens here and fans out by path: /radicale/* to
-  # radicale.service (127.0.0.1:5232), everything else to curodav.service
-  # (127.0.0.1:8000, scripts/curodav-ctl). Neither service is addressed
-  # directly from this file -- see ../nginx/curodav.nginx.conf.template.
+  # nginx listens here and fans out by path: /radicale/* to Radicale,
+  # everything else to curodav (see ../nginx/curodav.nginx.conf.template).
   - hostname: {{DOMAIN_APP}}
     service: http://127.0.0.1:8080
 
-  # Required catch-all -- cloudflared refuses to start without one. Any
-  # request that doesn't match the hostname above (shouldn't happen; DNS
-  # only ever routes DOMAIN_APP at this tunnel) gets a 404 instead of
-  # falling through to whatever's listening on some other port.
+  # Required catch-all -- cloudflared refuses to start without one.
   - service: http_status:404

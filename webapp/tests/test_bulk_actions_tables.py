@@ -170,6 +170,61 @@ class TestLabelsBulkDelete:
         assert resp.status_code == 400
 
 
+class TestLabelsBulkMerge:
+    """2026-09-13 (direct request: "in the labels table bulk select i would
+    like an option to merge labels into one"). `labels_router.bulk_merge_labels`
+    is a plain loop over the existing single-pair `db.merge_labels` (see
+    TestPhase2Labels' own merge coverage in test_phase2_labels.py for that
+    function's own union/repoint semantics) -- these tests cover the bulk
+    wrapper's own contract: merging N selected labels into one destination,
+    skipping the destination if it's also among the selected names, and the
+    modal-context GET endpoint that lists candidates."""
+
+    def test_merges_every_selected_label_into_the_destination(self, conn):
+        db.set_object_labels(conn, "task", "t1", ["Work"])
+        db.set_object_labels(conn, "task", "t2", ["Errands"])
+        db.set_object_labels(conn, "task", "t3", ["Chores"])
+        resp = labels_router.bulk_merge_labels(uids=["Errands", "Chores"], dest_name="Work", conn=conn)
+        assert resp.status_code == 303
+        assert db.list_labels_for_object(conn, "task", "t1") == ["Work"]
+        assert db.list_labels_for_object(conn, "task", "t2") == ["Work"]
+        assert db.list_labels_for_object(conn, "task", "t3") == ["Work"]
+        assert "Errands" not in db.list_all_label_names(conn)
+        assert "Chores" not in db.list_all_label_names(conn)
+
+    def test_destination_included_in_uids_is_skipped_not_merged_into_itself(self, conn):
+        db.set_object_labels(conn, "task", "t1", ["Work"])
+        db.set_object_labels(conn, "task", "t2", ["Errands"])
+        resp = labels_router.bulk_merge_labels(uids=["Work", "Errands"], dest_name="Work", conn=conn)
+        assert resp.status_code == 303
+        assert db.list_labels_for_object(conn, "task", "t1") == ["Work"]
+        assert db.list_labels_for_object(conn, "task", "t2") == ["Work"]
+
+    def test_empty_dest_name_400s(self, conn):
+        with pytest.raises(Exception):
+            labels_router.bulk_merge_labels(uids=["Work", "Errands"], dest_name="  ", conn=conn)
+
+    def test_reserved_dest_name_rejected(self, conn):
+        with pytest.raises(Exception):
+            labels_router.bulk_merge_labels(uids=["Work"], dest_name=db.PAGE_HEADER_BANNER_SCOPE, conn=conn)
+
+    def test_bulk_merge_modal_lists_selected_and_all_label_names(self, conn):
+        db.set_object_labels(conn, "task", "t1", ["Work"])
+        db.set_object_labels(conn, "task", "t2", ["Errands"])
+        db.set_object_labels(conn, "task", "t3", ["Chores"])
+        req = Request(
+            {
+                "type": "http", "method": "GET", "path": "/settings/labels/bulk-merge-modal",
+                "query_string": b"uids=Work,Errands", "scheme": "http", "server": ("t", 80),
+                "root_path": "", "headers": [],
+            }
+        )
+        resp = labels_router.bulk_merge_modal(uids="Work,Errands", request=req, conn=conn)
+        ctx = resp.context
+        assert ctx["selected_names"] == ["Work", "Errands"]
+        assert ctx["all_label_names"] == ["Chores", "Errands", "Work"]
+
+
 class TestHolidaysBulkDelete:
     def test_deletes_every_selected_holiday(self, conn):
         import asyncio

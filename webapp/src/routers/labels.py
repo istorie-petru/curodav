@@ -12,13 +12,18 @@ This router owns:
   1. The manage page (`/settings/labels`) -- rename/merge/recolor/icon/
      parent/generate_space/"clear" (strip from everywhere), same "flat row
      list" pattern tags.py/projects.py used to have.
-  2. The generated label page (`/settings/labels/{name}`) -- for a `generate_space`
-     label this is what used to be a Space's own page (aggregating its
-     child labels' content); for a plain label it's what used to be a
-     Project's own page (that label's own tasks/events/contacts/classes).
-     Both are the same underlying page now -- see `_label_scope` below --
-     driven off `label_config` + `object_labels` instead of
-     `project_groups`/`projects`.
+  2. The generated label page (`/settings/labels/{name}`) -- for a plain
+     label this is what used to be a Project's own page (that label's own
+     tasks/events/contacts), driven off `label_config` + `object_labels`
+     instead of `project_groups`/`projects`. A `generate_space=1` label
+     redirects straight to `/spaces/{name}` instead (`label_detail`
+     below) -- routers/spaces.py owns that page and its own `_label_scope`
+     now, a materially different query since 2026-09-14 (Spaces --
+     labels-as-membership rework slice 3, see that file's own docstring):
+     membership through child labels, not this router's direct-tag
+     `_label_scope` below, which a Space's page hasn't actually used in
+     practice since the redirect existed -- kept in this file only for
+     plain/project labels.
 
 2026-08-07: `databases` dropped from the object types a label can carry
 -- the Databases feature (and Grades, built on it) is removed entirely.
@@ -41,14 +46,15 @@ pointing at it; that's harmless and expected, not cleaned up here.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import db
-from ..deps import get_db, templates
+from ..deps import EDIT_MODE_KEY, get_db, templates
 from . import dashboard as dashboard_router
+from . import tasks as tasks_router
 
 router = APIRouter(prefix="/settings/labels", tags=["labels"])
 
@@ -69,6 +75,24 @@ def _reject_reserved_label_name(name: str) -> None:
     reserved = {db.PAGE_HEADER_BANNER_SCOPE, *db.SEASON_BANNER_SCOPES.values()}
     if name in reserved:
         raise HTTPException(400, f'"{name}" is a reserved name and can\'t be used for a label.')
+
+
+def _validate_parent_name(conn, parent_name: str) -> str | None:
+    """2026-09-14 (Spaces -- labels-as-membership rework slice 1): the
+    label edit/create forms' old free-text `label_group` input is replaced
+    by a real Space-link dropdown (`parent_name`) -- unlike the free text
+    it replaces, this is a real FK into `label_config` and must actually
+    name a Space (`generate_space=1`), same "reject, don't silently
+    coerce" validation style `create_label`/`update_label` already use for
+    a required new_name/project dates. Blank collapses to None (no
+    space)."""
+    parent_name = (parent_name or "").strip()
+    if not parent_name:
+        return None
+    space_names = {s["name"] for s in db.list_space_labels(conn)}
+    if parent_name not in space_names:
+        raise HTTPException(400, f'"{parent_name}" is not a Space.')
+    return parent_name
 
 # 2026-08-08: grew from 8 to 16 -- direct feedback ("more colors options
 # (16) with small label under each color"). Order is a rough rainbow
@@ -197,6 +221,24 @@ ICON_GROUPS: dict[str, list[str]] = {
         "clock", "bell", "tool", "settings", "activity", "calendar",
         "home", "repeat",
     ],
+    # Added 2026-09-13 (direct request: "a bigger library of icons that fit
+    # the actual uses of the app") -- curated against the user's real label
+    # list (University, Asociația de Dezbateri, Birthday, Creangă Debate,
+    # Debate, Family, High School), which had nothing more specific than
+    # generic book/award/users glyphs to work with. New symbols drawn in
+    # _icons_sprite.html; see that file's own comment for the full list.
+    "School & University": [
+        "graduation-cap", "school", "backpack", "pencil", "ruler",
+        "calculator", "id-card", "chalkboard", "notebook", "atom",
+    ],
+    "Debate & Speech": [
+        "message-circle", "message-square", "megaphone", "podium", "gavel",
+        "trophy", "medal", "handshake", "quote", "scale",
+    ],
+    "Family & Celebrations": [
+        "cake", "balloon", "party-popper", "baby", "family-tree",
+        "candle", "confetti", "sparkles", "ribbon", "home-heart",
+    ],
 }
 
 LABEL_ICONS = [name for group in ICON_GROUPS.values() for name in group]
@@ -244,8 +286,67 @@ def _labels_context(conn, request: Request) -> dict:
         if lbl.get("is_project"):
             lbl["project_status"] = db.project_status(conn, lbl)
 
-    # Return flat list sorted by name for the new table design
-    labels.sort(key=lambda l: l["name"].lower())
+    # 2026-09-13 (direct request, 9 of 9 in a "before v2.2.0 release"
+    # batch: "the label table inside settings should be sorted by Groups
+    # first, then by type (space first, then projects, then plain), then
+    # alphabetically") -- was flat-alphabetical-by-name only. `_label_role`
+    # below already encodes the exact mutually-exclusive type a label can
+    # have; `_ROLE_SORT_RANK` maps it to the requested space/project/plain
+    # ordering (deliberately not the same order `_label_role` computes
+    # its own precedence in -- that function's "is_project wins if both
+    # flags are somehow set" is about resolving ambiguity, unrelated to
+    # what order the three buckets should sort in here). `parent_name` is
+    # the primary key ("Groups first", 2026-09-14: was `label_group`, a
+    # free-text field with no real membership meaning -- the Spaces --
+    # labels-as-membership rework slice 1 makes `parent_name`, the real
+    # Space-link FK, the one grouping mechanism), so every label sharing a
+    # Space sits together, sub-sorted by type then name within it;
+    # unparented rows (`parent_name` empty/None) happen to land before any
+    # named Space purely because `"" < "Anything"` in Python's default
+    # string ordering -- no direction ("ungrouped first" vs "last") was
+    # specified in the request, this is just `sorted()`'s natural
+    # behavior for the tuple key below, not a deliberate call either way.
+    #
+    # This flat, fully-sorted `labels` list is still returned below (and
+    # still what `TestSettingsLabelsTableSortOrder` asserts against) --
+    # 2026-09-14 slice 2 ("Settings > Labels: one table per Space") builds
+    # `label_groups`/`ungrouped_labels` (the per-Space-table template
+    # actually renders) by filtering THIS list rather than re-sorting, so
+    # a Space's own row and its children keep the exact same relative
+    # order within their table that this sort already establishes.
+    labels.sort(key=lambda l: ((l.get("parent_name") or "").lower(), _ROLE_SORT_RANK[_label_role(l)], l["name"].lower()))
+
+    # 2026-09-14 (Spaces -- labels-as-membership rework slice 2): group by
+    # `parent_name` into one bucket per Space (plus "Ungrouped") instead of
+    # labels_manage.html/_labels_table_body.html rendering one flat table
+    # with a `label_group` text-badge column. A Space's own row heads its
+    # own bucket (its `parent_name` is never itself -- Spaces don't nest,
+    # slice 1's dropdown never offers a Space as its own parent -- so it
+    # has to be added explicitly, not just picked up by the parent_name
+    # filter below) so it stays reachable/editable from this page even
+    # though it no longer also appears as a plain row elsewhere; every
+    # other label with no parent_name lands in "Ungrouped", and any label
+    # whose `parent_name` points at something that isn't (or no longer is)
+    # a real Space -- stale data, not reachable through slice 1's
+    # validated dropdown, but `_validate_parent_name` only guards the
+    # write path -- falls back to Ungrouped too rather than silently
+    # vanishing.
+    space_rows = {l["name"]: l for l in labels if l.get("generate_space")}
+    children_by_space: dict[str, list[dict]] = {name: [] for name in space_rows}
+    ungrouped: list[dict] = []
+    for lbl in labels:
+        if lbl.get("generate_space"):
+            continue
+        parent = lbl.get("parent_name")
+        if parent in children_by_space:
+            children_by_space[parent].append(lbl)
+        else:
+            ungrouped.append(lbl)
+
+    label_groups = [
+        {"space": space_rows[name], "labels": [space_rows[name]] + children_by_space[name]}
+        for name in sorted(space_rows, key=str.lower)
+    ]
 
     return {
         "request": request,
@@ -254,6 +355,8 @@ def _labels_context(conn, request: Request) -> dict:
         "title": "Labels",
         "labels": labels,
         "has_labels": bool(labels),
+        "label_groups": label_groups,
+        "ungrouped_labels": ungrouped,
     }
 
 
@@ -272,6 +375,15 @@ def _label_role(cfg: dict) -> str:
     return "none"
 
 
+# 2026-09-13: sort-order weights for _labels_context's Settings > Labels
+# table sort (direct request: "space first, then projects, then plain") --
+# a separate mapping from _label_role's own return values rather than
+# hardcoding numbers inline at the one call site, so the requested order
+# reads directly off this table instead of needing _label_role's docstring
+# cross-referenced to see what "space"/"project"/"none" even mean here.
+_ROLE_SORT_RANK = {"space": 0, "project": 1, "none": 2}
+
+
 @router.get("/{name}/edit")
 def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
     """The label edit modal -- uses the unified label_form_modal.html."""
@@ -284,6 +396,7 @@ def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
             "colors": COLORS,
             "icon_groups": ICON_GROUPS,
             "role": _label_role(cfg),
+            "space_options": db.list_space_labels(conn),
             # 2026-08-30 (direct request): a label's banner used to be
             # reachable only through a dashboard page's own edit-mode "Add/
             # Change banner" button (routers/banners.py, generate_space/
@@ -317,7 +430,7 @@ def update_label(
     new_name: str = Form(""),
     color: str = Form("blue"),
     icon: str = Form(""),
-    label_group: str = Form(""),
+    parent_name: str = Form(""),
     description: str = Form(""),
     role: str = Form("none"),
     start_date: str = Form(""),
@@ -347,13 +460,18 @@ def update_label(
     or None` pattern; mirrored here."""
     new_name = (new_name or "").strip() or name
     icon = (icon or "").strip() or None
-    label_group = (label_group or "").strip() or None
     start_date = start_date.strip() if isinstance(start_date, str) else ""
     end_date = end_date.strip() if isinstance(end_date, str) else ""
 
     role = role if role in ("none", "space", "project") else "none"
     generate_space = 1 if role == "space" else 0
     is_project = 1 if role == "project" else 0
+
+    # Spaces don't nest (list_child_labels is non-recursive, one level) --
+    # a label becoming a Space has no Space of its own to belong to, so any
+    # parent_name submitted alongside role=space is ignored rather than
+    # validated. Otherwise validate it names a real, existing Space.
+    parent_name = None if generate_space else _validate_parent_name(conn, parent_name)
 
     if is_project and (not start_date or not end_date):
         raise HTTPException(400, "A project needs both a start and end date.")
@@ -368,7 +486,7 @@ def update_label(
         "name": name,
         "color": color if color in COLORS else "blue",
         "icon": icon,
-        "label_group": label_group,
+        "parent_name": parent_name,
         "description": description,
         "generate_space": generate_space,
         "is_project": is_project,
@@ -426,6 +544,7 @@ def new_label_modal(request: Request, conn=Depends(get_db)):
             "colors": COLORS,
             "icon_groups": ICON_GROUPS,
             "role": "none",
+            "space_options": db.list_space_labels(conn),
         },
     )
 
@@ -435,7 +554,7 @@ def create_label(
     new_name: str = Form(...),
     color: str = Form("blue"),
     icon: str = Form(""),
-    label_group: str = Form(""),
+    parent_name: str = Form(""),
     role: str = Form("none"),
     start_date: str = Form(""),
     end_date: str = Form(""),
@@ -456,8 +575,9 @@ def create_label(
     _reject_reserved_label_name(new_name)
 
     icon = (icon or "").strip() or None
-    label_group = label_group.strip() or None
     role = role if role in ("none", "space", "project") else "none"
+    # Spaces don't nest -- see update_label's identical guard right above.
+    parent_name = None if role == "space" else _validate_parent_name(conn, parent_name)
 
     if role == "project" and (not start_date or not end_date):
         raise HTTPException(400, "A project needs both a start and end date.")
@@ -466,7 +586,7 @@ def create_label(
         "name": new_name,
         "color": color if color in COLORS else "blue",
         "icon": icon,
-        "label_group": label_group,
+        "parent_name": parent_name,
         "generate_space": 1 if role == "space" else 0,
         "is_project": 1 if role == "project" else 0,
         "created_at": _now(),
@@ -503,6 +623,46 @@ async def bulk_delete_labels(request: Request, conn=Depends(get_db)):
     for name in names:
         db.clear_label(conn, name)
     return JSONResponse({"ok": True, "count": len(names)})
+
+
+@router.get("/bulk-merge-modal")
+def bulk_merge_modal(uids: str, request: Request, conn=Depends(get_db)):
+    """Direct request: "in the labels table bulk select i would like an
+    option to merge labels into one". Opened via `static/bulk_select.js`'s
+    Merge button (see labels_manage.html's CCBulkSelect.init call) using
+    `window.CCModal.open`, same mechanism the per-row Edit button already
+    uses -- `uids` arrives as a comma-joined query string (a GET link, not
+    a JSON body) since this is a plain data-modal navigation, not a fetch
+    call. Destination list is every existing label (2026-09-13 direct
+    answer to a clarifying question: "pick any existing label" -- not
+    restricted to the selected rows themselves, so a merge target outside
+    the current selection is allowed, same freedom the single-row Merge
+    modal already gives)."""
+    selected = [n for n in uids.split(",") if n]
+    all_names = sorted((l["name"] for l in db.list_labels(conn)), key=str.lower)
+    return templates.TemplateResponse(
+        "label_bulk_merge_modal.html",
+        {"request": request, "selected_names": selected, "all_label_names": all_names},
+    )
+
+
+@router.post("/bulk-merge")
+def bulk_merge_labels(uids: list[str] = Form([]), dest_name: str = Form(...), conn=Depends(get_db)):
+    """Merges every selected label in `uids` into `dest_name` -- a plain
+    loop over the existing single-pair `db.merge_labels` (see merge_label
+    above), same underlying semantics: each source label's usage moves
+    onto `dest_name` and its own `label_config` row is dropped. `dest_name`
+    itself is skipped if it's also among `uids` (merging a label into
+    itself is a no-op `db.merge_labels` already guards against, but
+    skipping here avoids the pointless call)."""
+    dest_name = (dest_name or "").strip()
+    if not dest_name:
+        raise HTTPException(400, "Choose a label to merge into")
+    _reject_reserved_label_name(dest_name)
+    for name in uids:
+        if name and name != dest_name:
+            db.merge_labels(conn, name, dest_name)
+    return RedirectResponse(url="/settings/labels", status_code=303)
 
 
 @router.post("/{name}/set")
@@ -548,34 +708,24 @@ def set_label(
 
 
 # --------------------------------------------------------------------- #
-# Generated label page -- a Space (generate_space=1) or a plain label's
-# own page (the former Project page). Direct object_labels membership
-# only, never transitive through parent_name/child labels (§2/§5).
+# Generated label page -- a plain label's own page (the former Project
+# page, now a Kanban+Agenda page -- see label_detail's own comment,
+# 2026-09-16). `label_detail` below redirects a generate_space=1 label to
+# `/spaces/{name}` before any of this runs, so this route only ever
+# handles plain/project labels (and project labels redirect away too, to
+# `/projects/{name}`) -- there's no "which behavior applies to a Space"
+# ambiguity here.
+#
+# 2026-09-16: this section used to also define its own `_label_scope`
+# (every task/event/contact directly tagged with `name`) -- its output
+# was never actually rendered by label_detail.html even before this
+# session's Kanban/Agenda rework (dead context, same class of leftover as
+# the project-scope-section block removed from label_detail.html earlier
+# this session), and label_detail's new Kanban/Agenda context below builds
+# its own tasks/events directly rather than reusing it. Removed outright,
+# not left dead -- routers/spaces.py has its own separate `_label_scope`
+# (a materially different, membership-based query, unaffected by this).
 # --------------------------------------------------------------------- #
-
-
-def _label_scope(conn, name: str) -> dict:
-    """Every task/event/contact directly tagged with `name` -- the
-    "centralizes all tasks, events, contacts" behavior the old
-    project/space detail pages had, now driven off object_labels instead
-    of project_uid/task_lists/calendars/addressbooks.
-
-    2026-08-07: no more `databases` key here -- the Databases feature (and
-    Grades, which was built on it) is removed entirely, not just
-    unlinked.
-
-    2026-08-15: no more `classes` key here -- the Schedule module (and the
-    University module built on it) is removed entirely, see this file's
-    header comment."""
-    tasks = [t for t in db.list_tasks(conn) if name in (t.get("tags") or [])]
-    events = [e for e in db.list_events(conn) if name in (e.get("tags") or [])]
-    contacts = [c for c in db.list_contacts(conn) if name in (c.get("tags") or [])]
-
-    return {
-        "tasks": tasks,
-        "events": events,
-        "contacts": contacts,
-    }
 
 
 @router.get("/{name}")
@@ -596,38 +746,89 @@ def label_detail(name: str, request: Request, conn=Depends(get_db)):
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url=f"/projects/{name}", status_code=301)
 
-    dashboard_router._ensure_default_label_widgets(conn, name)
-    ctx = dashboard_router.widget_page_context(conn, project_uid=name)
-    scope = _label_scope(conn, name)
-    ctx.update(scope)
-    ctx.update(
-        {
-            "request": request,
-            # "label", not "labels": the manage page (/labels) lives inside
-            # Settings and must light the Settings rail icon, but a label's
-            # own generated page is an independent destination (base.html's
-            # Space rail link highlights itself via its own path match) --
-            # sharing "labels" here made the Settings icon light up next to
-            # the Space link on every Space/Project page.
-            "active_tab": "label",
-            "label": label,
-            "is_space": is_space,
-            "children": db.list_child_labels(conn, name),
-            "parent": db.effective_label_config(conn, label["parent_name"]) if label.get("parent_name") else None,
-            # Dashboard Header (Expanded) avatar (2026-08-29, sidebar
-            # redesign follow-up, direct request) -- see
-            # routers/dashboard.py::dashboard_view's own comment; a
-            # Project page (this route) is a "dashboard type" page too
-            # (same widget grid, same banner system), so it gets the same
-            # user avatar overlapping the banner's bottom-left.
-            "profile_photo": db.get_profile_photo(conn),
-            "display_name": db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY),
-        }
-    )
+    # 2026-09-16 (direct request: "plain labels should generate pages like
+    # projects, with agenda and kanban, not dashboards") -- a plain label
+    # (the only case left once the is_space/is_project redirects above
+    # have run) no longer gets the customizable widget-grid dashboard
+    # (_ensure_default_label_widgets/widget_page_context, both dropped
+    # here). Instead it gets a Kanban board (every non-archived task
+    # carrying this label, grouped by status) with an Agenda card above it
+    # -- the exact same shape routers/projects.py::project_detail rebuilt
+    # for Projects 2026-08-30, but a deliberately separate, independent
+    # implementation (own template label_kanban_detail.html, own context
+    # built here rather than calling into projects.py) -- direct choice:
+    # "similar but distinct," so the two pages can diverge later without
+    # one change rippling into the other. Spaces are unaffected -- the
+    # is_space redirect above still sends them to routers/spaces.py::
+    # space_detail, which still renders label_detail.html's widget grid.
+    now_iso = _now()
+    today_iso = date.today().isoformat()
+    tasks = [t for t in db.list_tasks_sharing_labels(conn, [name]) if t["status"] != "archived"]
+    board_statuses = [s for s in tasks_router.STATUSES if s != "archived"]
+    columns: dict[str, list] = {s: [] for s in board_statuses}
+    for t in tasks:
+        t["banner"] = db.banner_for_task(conn, t)
+        columns.setdefault(t["status"], []).append(t)
+
+    # Agenda card: every future event tagged with this label, plus every
+    # open task tagged with it that has a due date -- same "events +
+    # due-dated tasks, one chronological list" recipe project_detail.html
+    # uses (see routers/projects.py::project_detail's own comment for the
+    # full rationale). No project-deadline entry here: a plain label has
+    # no start_date/end_date the way a Project does, so that branch in
+    # label_kanban_detail.html simply never fires for this page.
+    events = [
+        e for e in db.list_events(conn, start=now_iso)
+        if name in (e.get("tags") or []) and e.get("start_at") and e["start_at"][:10] >= today_iso
+    ]
+    for t in tasks:
+        if t["status"] == "done" or not t.get("due_at") or t["due_at"][:10] < today_iso:
+            continue
+        events.append({"uid": t["uid"], "title": t["title"], "start_at": t["due_at"], "kind": "task"})
+    events.sort(key=lambda e: e["start_at"])
+    agenda_items = events[:8]
+
+    # Contacts card (2026-09-16, direct request: "the same plain label page
+    # should also show below the agenda and above the kanban a contacts
+    # list widget filtered for that label") -- every contact directly
+    # tagged with this label, same "fetch all, filter by tag membership in
+    # Python" approach the Dashboard's own Contact List widget uses
+    # (dashboard.py::_render_contact_list) -- db.list_contacts has no
+    # tag-filter parameter, there's nothing more specific to call. Not
+    # reusing _render_contact_list/_scope_child_names directly: that
+    # helper's Space-vs-plain-label scope resolution is moot here (this
+    # route only ever serves plain labels, is_space already redirected
+    # away above), so a plain tag-membership filter is exactly equivalent
+    # without pulling in the widget-config machinery this page doesn't
+    # otherwise use. Capped at 20, same limit that widget defaults to;
+    # db.list_contacts already sorts by full_name.
+    contacts = [c for c in db.list_contacts(conn) if name in (c.get("tags") or [])][:20]
+
+    ctx = {
+        "request": request,
+        # "label", not "labels": the manage page (/labels) lives inside
+        # Settings and must light the Settings rail icon, but a label's
+        # own generated page is an independent destination (base.html's
+        # Space rail link highlights itself via its own path match) --
+        # sharing "labels" here made the Settings icon light up next to
+        # the Space link on every Space/Project page.
+        "active_tab": "label",
+        "label": label,
+        "agenda_items": agenda_items,
+        "contacts": contacts,
+        "columns": columns,
+        "board_statuses": board_statuses,
+        "status_labels": tasks_router.STATUS_LABELS,
+        "status_colors": tasks_router.STATUS_COLORS,
+        "edit_mode": db.get_app_meta(conn, EDIT_MODE_KEY) == "1",
+        "profile_photo": db.get_profile_photo(conn),
+        "display_name": db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY),
+        "page_url": f"/settings/labels/{name}",
+    }
     # Page banner (2026-08-09, routers/banners.py; 2026-08-29 direct
     # request: falls back to the global Settings > Appearance default when
     # this page has no banner of its own) -- see
     # routers/dashboard.py::_page_banner_context's own comment.
     ctx.update(dashboard_router._page_banner_context(conn, name))
 
-    return templates.TemplateResponse("label_detail.html", ctx)
+    return templates.TemplateResponse("label_kanban_detail.html", ctx)

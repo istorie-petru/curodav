@@ -134,14 +134,35 @@
        "guaranteed-invalid," which doesn't just skip that one property --
        it makes the WHOLE `background` declaration on `.label-icon-tile`
        invalid at computed-value time, so it resets to transparent instead
-       of falling back to anything -- exactly the "not full opacity"
-       report, and it would have kept happening for any current/future
-       label with an unrecognized color, not just a one-off value to hunt
-       down and hand-fix in the database. The explicit fallback here
-       guarantees `--tile-swatch` is always a real color either way. #}
+       of falling back to anything -- a real cause worth keeping the
+       fallback for, but NOT the whole story behind that report, as
+       2026-09-15 found out (see below).
+
+       `data-style`, not a literal `style=` attribute (2026-09-15 direct
+       bug report, "the .label-icon-tile background-color still doesn't
+       follow the label's color") -- this span had used `style=` since
+       icon_tile shipped 2026-09-13, the same day as the "not full
+       opacity" fix just above, which happened to be diagnosing a real
+       but secondary bug (the missing fallback) while the actual, primary
+       cause was never caught: 2026-08-29's `security_headers.py` CSP
+       hardening (audit-fixes-2.0.md item 11) dropped `'unsafe-inline'`
+       from `style-src` app-wide, and a nonce only ever covers `<style>`
+       elements, never a `style=` HTML attribute -- so a real CSP-
+       enforcing browser was silently discarding this entire declaration
+       the whole time, fallback or no fallback. `dynamic_styles.js`'s own
+       header comment is the standing convention every OTHER dynamic-
+       value template in this app already followed for exactly this
+       reason; this span (and two more in `_labels_table_body.html`,
+       shipped one day later, same gap) were the ones that slipped
+       through. Confirmed via a headless-Chrome render with console
+       listening -- reading the raw attribute back out of the DOM or
+       viewing page source both looked correct throughout, since CSP
+       enforcement only shows up at paint/computed-style time in an
+       actual browser, which is exactly why this went unnoticed across
+       two direct reports of the same underlying symptom. #}
     <div class="page-banner-avatar-wrap">
         {% if icon_tile %}
-        <span class="label-icon-tile avatar-hero avatar-circle" style="--tile-swatch:var(--cal-bg-{{ icon_tile.color }}, var(--cal-bg-blue));">{{ icon(icon_tile.icon, 'icon-lg') }}</span>
+        <span class="label-icon-tile avatar-hero avatar-circle" data-style="--tile-swatch:var(--cal-bg-{{ icon_tile.color }}, var(--cal-bg-blue));">{{ icon(icon_tile.icon, 'icon-lg') }}</span>
         {% else %}
         {{ avatar({'photo_url': '/settings/profile-photo/image?v=' ~ profile_photo.version if profile_photo else None, 'photo_b64': profile_photo.photo_b64 if profile_photo else None, 'photo_type': profile_photo.photo_type if profile_photo else None, 'full_name': (display_name or 'U')}, 'avatar-hero') }}
         {% endif %}

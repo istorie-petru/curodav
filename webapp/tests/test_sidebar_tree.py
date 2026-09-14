@@ -220,9 +220,24 @@ class TestSidebarQuickAdd:
         db.upsert_label_config(conn, {"name": "Solo", "created_at": _now()})
         resp = labels_router.label_detail("Solo", _request("/settings/labels/Solo", conn), conn=conn)
         body = resp.body.decode()
-        assert 'href="/quick/add" data-modal class="tab-btn sidebar-quick-add"' in body
+        # label_detail's own active_tab is "label" (a single label's page,
+        # distinct from the "labels" manage table) -- 2026-09-14: this
+        # still defaults quick-add to the Label tab, same as the manage
+        # page, not the generic "task" fallback other pages get.
+        assert 'href="/quick/add?default_tab=label" data-modal class="tab-btn sidebar-quick-add"' in body
 
-    def test_contacts_page_points_quick_add_at_new_contact_modal(self, conn):
+    def test_contacts_page_points_quick_add_at_contact_tab(self, conn):
+        # 2026-09-14 (direct request, "the quick add should support both
+        # contacts and labels"): quick_add.html grew a Contact tab, so the
+        # sidebar's global "+" no longer special-cases Contacts into its
+        # own standalone /contacts/new modal -- it opens the same merged
+        # /quick/add modal as every other page, just pre-focused on
+        # Contact via `default_tab`.
         resp = contacts_router.list_contacts(_request("/contacts", conn), conn=conn)
         body = resp.body.decode()
-        assert 'href="/contacts/new" data-modal class="tab-btn sidebar-quick-add"' in body
+        assert 'href="/quick/add?default_tab=contact" data-modal class="tab-btn sidebar-quick-add"' in body
+
+    def test_labels_manage_page_points_quick_add_at_label_tab(self, conn):
+        resp = labels_router.manage_labels(_request("/settings/labels", conn), conn=conn)
+        body = resp.body.decode()
+        assert 'href="/quick/add?default_tab=label" data-modal class="tab-btn sidebar-quick-add"' in body

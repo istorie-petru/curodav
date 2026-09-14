@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from .. import db
 from ..deps import get_db, respond, templates
+from ..image_convert import to_webp
 from ..image_sniff import sniff_image_type
 from . import dashboard as dashboard_router
 
@@ -376,7 +377,25 @@ def contact_photo_image(uid: str, conn=Depends(get_db)):
     along in the HTML of every contact list row that has one, not just
     the one contact being viewed), same fix (a real, separately cacheable
     request), same immutable Cache-Control safety argument (the URL's own
-    `?v=` -- contacts.photo_version -- changes whenever the photo does)."""
+    `?v=` -- contacts.photo_version -- changes whenever the photo does).
+
+    2026-09-13 (direct request: "contact images should be resource
+    efficient (webp) -- I'd prefer the frontend to serve webp images, not
+    the one in vcf directly") -- `contact["photo_type"]` reflects whatever
+    format the photo actually arrived in (a web upload here is JPEG/PNG/
+    GIF/WEBP per `_read_photo`'s own allowlist, but a CardDAV-synced
+    contact's photo is whatever the *syncing client* chose, see
+    vcard_rows.py's own PHOTO-property handling -- completely
+    unconstrained). Every contact photo now transcodes to WebP on the way
+    out via `image_convert.to_webp`, regardless of the stored format, so
+    the served bytes are always WebP even though `photo_b64`/`photo_type`
+    on disk are untouched (still whatever format the source actually was
+    -- this is a serving-time re-encode, not a migration of stored data,
+    so a future vCard export of this same contact is unaffected and still
+    round-trips the original bytes). Falls back to serving the original
+    stored bytes/type verbatim -- the exact old behavior -- if `to_webp`
+    can't decode them (a corrupt or partial sync payload should still
+    serve *something* rather than 404 on a contact that has a photo)."""
     contact = db.get_contact(conn, uid)
     if not contact or not contact.get("photo_b64"):
         raise HTTPException(404)
@@ -387,6 +406,9 @@ def contact_photo_image(uid: str, conn=Depends(get_db)):
     image_type = str(contact.get("photo_type") or "").lower()
     if image_type not in ("jpeg", "png", "gif", "webp"):
         image_type = "jpeg"
+    webp_data = to_webp(data)
+    if webp_data is not None:
+        data, image_type = webp_data, "webp"
     return Response(
         content=data,
         media_type=f"image/{image_type}",

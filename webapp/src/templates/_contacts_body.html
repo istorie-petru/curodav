@@ -24,7 +24,7 @@
 <div class="card contact-list" id="contacts-list">
     {% for c in contacts %}
     <div class="contact-row-wrap" data-uid="{{ c.uid }}">
-        <input type="checkbox" class="row-select" data-uid="{{ c.uid }}" aria-label="Select {{ c.full_name }}">
+        <input type="checkbox" class="row-select" data-uid="{{ c.uid }}" aria-label="Select {{ c.full_name }}" autocomplete="off">
         <a class="contact-row" href="/contacts/{{ c.uid }}" data-modal>
             {{ avatar(c) }}
             <span class="contact-row-main">

@@ -146,10 +146,19 @@ class TestScopingBugFix:
         data = dashboard_router._render_agenda(conn, {"range": "today", "show": ["tasks"]})
         assert {t["uid"] for t in data["tasks"]} == {"t1", "t2"}
 
-    def test_effective_tags_filter_combines_explicit_tags_with_label_name(self, conn):
+    def test_effective_tags_filter_no_longer_folds_in_label_name(self, conn):
+        # 2026-09-14 (Spaces -- labels-as-membership rework slice 4):
+        # _effective_tags_filter used to fold config["label_name"]'s
+        # resolved scope into this same OR-matched list (the exact
+        # behavior this test used to assert) -- that's _scope_child_names/
+        # _passes_scope's job now, checked as a separate hard AND instead
+        # of unioned in here (see TestHardTopLevelScopeFilter in
+        # test_dashboard_router.py for the leak this split closes).
+        # _effective_tags_filter no longer takes `conn` either, since it
+        # no longer touches the database.
         _make_project(conn, "CS101")
-        tags_filter = dashboard_router._effective_tags_filter(conn, {"tags": ["urgent"], "label_name": "CS101"})
-        assert set(tags_filter) == {"urgent", "CS101"}
+        tags_filter = dashboard_router._effective_tags_filter({"tags": ["urgent"], "label_name": "CS101"})
+        assert set(tags_filter) == {"urgent"}
 
     def test_contact_list_behavior_unchanged_after_refactor(self, conn):
         # _render_contact_list now calls the shared helper too -- must
@@ -522,13 +531,20 @@ class TestQuickAddButtons:
         assert 'class="page-banner-actions"' in body
 
     def test_label_page_edit_mode_actions_present(self, conn):
+        # 2026-09-16 (direct request: "plain labels should generate pages
+        # like projects, with agenda and kanban, not dashboards") -- a
+        # plain label's page dropped the widget-grid dashboard (and with
+        # it, "New widget"/"Reset layout", which only ever controlled that
+        # grid); edit mode here now only adds the Add/Change banner
+        # control, same as project_detail.html's own edit-mode toolbar.
         _make_project(conn, "CS101")
         db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
         resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         assert "data-fab" not in body
-        assert 'New widget' in body
-        assert 'Reset layout' in body
+        assert 'New widget' not in body
+        assert 'Reset layout' not in body
+        assert 'Add banner' in body
         assert 'class="page-banner-actions"' in body
 
     def test_dashboard_html_no_longer_has_a_separate_quick_add_row(self, conn):
@@ -598,31 +614,88 @@ class TestQuickAddModal:
         assert ctx["prefill_start"] is None
 
 
-class TestLabelPageResetButton:
-    def test_reset_button_present_in_edit_mode(self, conn):
-        _make_project(conn, "CS101")
-        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
-        body = resp.body.decode()
-        assert '/dashboard/reset' in body
-        assert 'data-confirm-sheet' in body
+class TestQuickAddContactAndLabelTabs:
+    """2026-09-14 direct request: "the quick add should support both
+    contacts and labels." quick_add.html grew two more tabs/panels
+    (Contact, Label), sharing their field grids with the standalone
+    new/edit forms via the newly-extracted _contact_form_fields.html /
+    _label_form_fields.html partials, same one-markup-contract pattern
+    Task/Event already established."""
 
-    def test_new_widget_comes_before_reset_layout_in_edit_mode_toolbar(self, conn):
-        # 2026-08-07 (screenshot-driven toolbar rework) -- "creation
-        # actions before mode/utility actions", same principle already
-        # applied to the non-edit-mode row's New task/New event ordering.
+    def test_route_renders_all_four_forms(self, conn):
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), conn=conn)
+        body = resp.body.decode()
+        assert 'id="task-form"' in body
+        assert 'id="event-form"' in body
+        assert 'id="contact-form"' in body
+        assert 'id="label-form"' in body
+        # Contact-specific field present...
+        assert 'name="full_name"' in body
+        assert 'enctype="multipart/form-data"' in body
+        # ...and label-specific fields present.
+        assert 'name="new_name"' in body
+        assert 'name="parent_name"' in body
+
+    def test_contact_and_label_tabs_present(self, conn):
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), conn=conn)
+        body = resp.body.decode()
+        assert 'data-quick-add-tab="contact"' in body
+        assert 'data-quick-add-tab="label"' in body
+
+    def test_contact_and_label_forms_post_to_the_real_create_routes(self, conn):
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), conn=conn)
+        body = resp.body.decode()
+        assert 'id="contact-form" action="/contacts"' in body
+        assert 'id="label-form" action="/settings/labels/create"' in body
+
+    def test_default_tab_query_param_picks_the_active_panel_and_save_target(self, conn):
+        for tab, form_id in (("task", "task-form"), ("event", "event-form"), ("contact", "contact-form"), ("label", "label-form")):
+            resp = dashboard_router.quick_add_form(_request("/quick/add"), default_tab=tab, conn=conn)
+            body = resp.body.decode()
+            assert f'role="tab" aria-selected="true" data-quick-add-tab="{tab}"' in body
+            assert f'data-active="{tab}"' in body
+            assert f'form="{form_id}"' in body
+
+    def test_unknown_default_tab_falls_back_to_task(self, conn):
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), default_tab="bogus", conn=conn)
+        assert resp.context["default_tab"] == "task"
+        body = resp.body.decode()
+        assert 'data-active="task"' in body
+
+    def test_route_defaults_contact_and_label_state(self, conn):
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), conn=conn)
+        ctx = resp.context
+        assert ctx["contact"] is None
+        assert ctx["l"] is None
+        assert ctx["role"] == "none"
+
+
+class TestLabelPageResetButton:
+    # 2026-09-16 (direct request: "plain labels should generate pages like
+    # projects, with agenda and kanban, not dashboards") -- a plain
+    # label's page is no longer the widget-grid dashboard, so it never had
+    # a "Reset layout" control to begin with now (that control only ever
+    # made sense against a customizable widget grid). This class used to
+    # assert the Reset form was present in edit mode and ordered after
+    # "New widget"; both are asserted gone instead, matching
+    # project_detail.html's own edit-mode toolbar (Add/Change banner
+    # only, no widget-grid controls -- see test_project_detail.py).
+    def test_reset_layout_and_new_widget_are_gone_in_edit_mode(self, conn):
         _make_project(conn, "CS101")
         db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
         resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
-        assert body.index('New widget') < body.index('Reset layout')
+        assert '/dashboard/reset' not in body
+        assert 'New widget' not in body
+        assert 'Add banner' in body
 
     def test_reset_button_absent_outside_edit_mode(self, conn):
         _make_project(conn, "CS101")
         resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         # The reset form itself (posts to /dashboard/reset) shouldn't be
-        # present outside edit mode -- only the New/Customize links.
+        # present outside edit mode either -- it doesn't exist on this
+        # page at all any more, in or out of edit mode.
         assert '<form method="post" action="/dashboard/reset"' not in body
 
 

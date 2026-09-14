@@ -30,6 +30,33 @@
 // inline status pill uses (field=status) -- one endpoint, two UIs. Reverts
 // (reloads) only on a network/server failure, same failure handling as
 // tasks_table.js.
+//
+// 2026-09-13 (direct request, "easier drag and drop -- drag a card from any
+// point, drop anywhere in the column, even on its header"): dragging from
+// any point on the card was already true -- pointerdown below is bound to
+// the whole `.kanban-card`, not a handle -- so the only real gap was the
+// drop side. `columnAtPoint` used to resolve `.closest(".kanban-cards")`,
+// and `.kanban-column-head` is a SIBLING of `.kanban-cards` (not inside
+// it, see project_detail.html's markup) -- so a pointer over the header
+// resolved to nothing and a drop there was a silent no-op. Now resolves
+// `.closest(".kanban-column")` instead (covers the header too), and
+// `endDrag` looks up that column's own `.kanban-cards` child as the actual
+// append target -- `.kanban-column` itself also wraps the header, so
+// appending straight into it would put the card outside the card list.
+//
+// 2026-09-13 (direct request, "anywhere I click kanban-card to be able to
+// drag and drop it, also a double click anywhere on kanban-card should open
+// it, keep the click title to open modal window"): drag-from-anywhere was
+// already true (see the 09-10 note above -- pointerdown is bound to the
+// whole card, not a handle). What was missing was open-from-anywhere on
+// DOUBLE click while leaving the single click on `.kanban-card-title` alone.
+// Rather than duplicating modal.js's open logic, dblclick here just
+// re-dispatches a plain "click" at the card's own title link -- that bubbles
+// to document and modal.js's existing `[data-modal]` delegated listener
+// picks it up exactly as if the title had been clicked directly. Skipped
+// when the dblclick itself landed on `[data-modal]` (the title) since the
+// browser already delivered two real clicks there, each already opening the
+// modal on its own; re-dispatching a third would just reopen it.
 
 (function () {
   const board = document.getElementById("kanban-board");
@@ -47,7 +74,7 @@
     dragCard.style.visibility = "hidden"; // don't let the dragged card itself be the hit result
     const el = document.elementFromPoint(x, y);
     dragCard.style.visibility = "";
-    return el ? el.closest(".kanban-cards") : null;
+    return el ? el.closest(".kanban-column") : null;
   }
 
   function setHoverColumn(column) {
@@ -86,21 +113,22 @@
     if (hoverColumn) hoverColumn.classList.remove("drop-hover");
 
     if (drop && hoverColumn) {
-      const fromColumn = card.closest(".kanban-cards");
-      const column = hoverColumn;
+      const fromCards = card.closest(".kanban-cards");
+      const column = hoverColumn; // .kanban-column -- may have been dropped on its header
+      const toCards = column.querySelector(".kanban-cards");
       const newStatus = column.dataset.status;
       const uid = card.dataset.uid;
 
-      if (fromColumn !== column) {
-        const emptyEl = column.querySelector(".kanban-empty");
+      if (toCards && fromCards !== toCards) {
+        const emptyEl = toCards.querySelector(".kanban-empty");
         if (emptyEl) emptyEl.remove();
-        column.appendChild(card);
+        toCards.appendChild(card); // always append into the column's card list, even when dropped on its header
         updateCounts();
-        if (fromColumn && !fromColumn.querySelector(".kanban-card")) {
+        if (fromCards && !fromCards.querySelector(".kanban-card")) {
           const empty = document.createElement("div");
           empty.className = "kanban-empty";
           empty.textContent = "No tasks";
-          fromColumn.appendChild(empty);
+          fromCards.appendChild(empty);
         }
         persistMove(uid, newStatus);
       }
@@ -115,6 +143,13 @@
 
   board.querySelectorAll(".kanban-card").forEach((card) => {
     card.style.touchAction = "pan-y"; // let vertical scroll through until a drag actually starts
+
+    // Backstop for the banner `<img>`/title `<a>` (draggable="false" in
+    // project_detail.html already covers this) -- if either one is ever
+    // reached without that attribute (a stray copy-paste of the card
+    // markup, say), this stops the browser's native HTML5 drag from
+    // hijacking the press before pointerdown's own drag logic ever sees it.
+    card.addEventListener("dragstart", (e) => e.preventDefault());
 
     card.addEventListener("pointerdown", (e) => {
       if (e.button !== undefined && e.button !== 0) return; // left-click / primary touch only
@@ -166,6 +201,14 @@
       if (dragCard !== card) return;
       endDrag(card, false);
       card.style.touchAction = "pan-y";
+    });
+
+    card.addEventListener("dblclick", (e) => {
+      if (e.target.closest("[data-modal]")) return; // title's own two real clicks already opened it
+      const link = card.querySelector(".kanban-card-title");
+      if (!link) return;
+      e.preventDefault();
+      link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
   });
 })();

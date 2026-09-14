@@ -68,7 +68,7 @@
              tasks.py's bulk_action already no-ops harmlessly on a uid
              `db.get_task` can't find, so a habit row selected for one of
              those simply does nothing rather than erroring. -->
-        <input type="checkbox" class="row-select" data-uid="{{ item.uid }}" data-kind="{{ item.kind }}" aria-label="Select {{ item.title }}">
+        <input type="checkbox" class="row-select" data-uid="{{ item.uid }}" data-kind="{{ item.kind }}" aria-label="Select {{ item.title }}" autocomplete="off">
     </td>
     <td class="task-title-cell">
         {# 2026-08-29 (STATE.md backlog item 9 follow-up: "support inline

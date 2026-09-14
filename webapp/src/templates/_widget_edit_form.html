@@ -95,14 +95,20 @@
                  stored `0` back to blank/placeholder -- `is defined`
                  check keeps an explicitly-saved 0 showing as 0, not as an
                  empty field that reads as "unset" (10/20 default) again
-                 the next time this form loads. -->
+                 the next time this form loads.
+                 2026-09-13 direct request ("no limit should actually be 20
+                 maximum items"): `0` is no longer truly unlimited on the
+                 backend (_render_agenda/_render_contact_list now cap it at
+                 20), so the hint below was updated to match -- the field
+                 itself (name, min=0, stepper) is unchanged, only the label
+                 text. -->
             <label>Limit</label>
             <div class="stepper">
                 <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease limit">&minus;</button>
                 <input type="number" name="limit" class="stepper-input" min="0" value="{{ widget.config.limit if widget.config.limit is defined and widget.config.limit is not none else '' }}" placeholder="10">
                 <button type="button" class="stepper-btn stepper-inc" aria-label="Increase limit">+</button>
             </div>
-            <div class="field-hint">0 = unlimited</div>
+            <div class="field-hint">0 = up to 20</div>
         </div>
         <!-- Width (2026-08-30, reinstated -- see _widget_builder_fields.
              html's own header comment) -- every widget type, pre-selected

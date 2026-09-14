@@ -87,9 +87,23 @@
 {% macro bulk_count(id_prefix) %}
 <span id="{{ id_prefix }}-bulk-count" class="bulk-count"></span>
 {% endmacro %}
-{% macro bulk_actions_bar(id_prefix, delete_label='Delete') %}
+{# 2026-09-13 (direct request: "in the labels table bulk select i would
+   like an option to merge labels into one"): optional third button,
+   `merge_label` -- omitted (default) every existing call site keeps
+   Clear/Delete only, exactly as before. Labels' own call site is the only
+   one passing it so far. Sits between Clear and Delete (reading right-to-
+   left off the actions cluster's right edge per this file's own 2026-09-15
+   comment above: Delete is still the rightmost/most prominent action,
+   Merge next to it, Clear furthest from the edge) -- driven by
+   static/bulk_select.js's `mergeButtonId`/`mergeModalUrl` config, which
+   opens a modal (window.CCModal.open) instead of a confirm-sheet+fetch,
+   since picking a merge destination needs real UI, not just a yes/no. #}
+{% macro bulk_actions_bar(id_prefix, delete_label='Delete', merge_label=None) %}
 <div class="bulk-actions-bar" id="{{ id_prefix }}-bulk-bar">
     <button type="button" id="{{ id_prefix }}-bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
+    {% if merge_label %}
+    <button type="button" id="{{ id_prefix }}-bulk-merge" class="btn ghost btn-sm">{{ icon('git-pull-request', 'icon-sm') }} {{ merge_label }}</button>
+    {% endif %}
     <button type="button" id="{{ id_prefix }}-bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} {{ delete_label }}</button>
 </div>
 {% endmacro %}

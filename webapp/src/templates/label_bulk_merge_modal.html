@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Merge labels{% endblock %}
+{% block content %}
+<!-- Bulk-select "Merge" modal (direct request: "in the labels table bulk
+     select i would like an option to merge labels into one") -- same shape
+     as label_merge_modal.html's single-row Merge (a destination picker
+     posting to a merge endpoint), but for every currently-selected row at
+     once. Opened via static/bulk_select.js's Merge button
+     (window.CCModal.open) with the selected names carried in the URL, not
+     read from the DOM here -- the modal doesn't know about the table it
+     was opened from. Posts to /settings/labels/bulk-merge
+     (routers/labels.py::bulk_merge_labels), which loops the existing
+     db.merge_labels per selected name. -->
+<div id="modal-target">
+<div class="modal-header">
+<h1>Merge {{ selected_names|length }} label{{ '' if selected_names|length == 1 else 's' }}</h1>
+</div>
+<div class="modal-body">
+<div class="card">
+<p class="settings-hint">
+    Merging: {% for n in selected_names %}<span class="group-badge">{{ n }}</span>{% if not loop.last %} {% endif %}{% endfor %}
+</p>
+<p class="settings-hint">Every object tagged with any of these moves to the label you pick below, and the others are removed. This can't be undone.</p>
+<form method="post" id="label-bulk-merge-form" action="/settings/labels/bulk-merge" data-confirm-sheet="Merge {{ selected_names|length }} selected label{{ '' if selected_names|length == 1 else 's' }} into one? Every object tagged with any of them moves to the destination, and the rest are removed." data-cc-change="label" data-cc-action="merge">
+    {% for n in selected_names %}
+    <input type="hidden" name="uids" value="{{ n }}">
+    {% endfor %}
+    <div class="field">
+        <label>Merge into</label>
+        <select name="dest_name" required autofocus>
+            <option value="" disabled selected>Choose a label&hellip;</option>
+            {% for other_name in all_label_names %}
+            <option value="{{ other_name }}">{{ other_name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</form>
+</div>
+</div>
+{% set footer_back_url = '/settings/labels' %}
+{% set footer_back_label = 'Cancel' %}
+{% set footer_primary_form = 'label-bulk-merge-form' %}
+{% set footer_primary_label = 'Merge' %}
+{% set footer_primary_icon = 'git-pull-request' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

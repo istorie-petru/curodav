@@ -122,17 +122,21 @@
              own decrement (static/stepper.js clamps to the input's `min`)
              and a plain typed 0 in some browsers' native validation, so
              there was no way to reach it. _render_agenda/_render_contact_
-             list (routers/dashboard.py) already treat a stored `0` as
-             "no cap" -- only an absent config value falls back to the
-             10/20 default -- so this is purely a "let the field reach 0"
-             change, no template-side unlimited-specific handling needed. -->
+             list (routers/dashboard.py) originally treated a stored `0` as
+             "no cap" -- only an absent config value fell back to the
+             10/20 default -- so this was purely a "let the field reach 0"
+             change, no template-side unlimited-specific handling needed.
+             2026-09-13 direct request ("no limit should actually be 20
+             maximum items"): those two renderers now cap an explicit `0`
+             at 20 too, so only the hint text below changed to match --
+             field/min/stepper themselves are still unchanged. -->
         <label>Limit</label>
         <div class="stepper">
             <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease limit">&minus;</button>
             <input type="number" name="limit" class="widget-preview-field stepper-input" min="0" placeholder="10">
             <button type="button" class="stepper-btn stepper-inc" aria-label="Increase limit">+</button>
         </div>
-        <div class="field-hint">0 = unlimited</div>
+        <div class="field-hint">0 = up to 20</div>
     </div>
     <!-- Width (2026-08-30, reinstated -- see this file's own header
          comment) -- every widget type gets this, unlike Show/Style/Scope

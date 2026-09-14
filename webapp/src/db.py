@@ -3879,9 +3879,29 @@ def list_all_known_label_names(conn: sqlite3.Connection) -> list[str]:
     """Every label name known to the system -- the union of labels in use
     (object_labels) and labels with config (label_config). Used for the
     label picker dropdowns so a label created in the manage page appears
-    immediately even before it's applied to anything."""
+    immediately even before it's applied to anything.
+
+    2026-09-13 (direct request: "the Birthday label should be hidden, as
+    well for the habits one, because they are not intended to be applied
+    by the user directly") -- excludes the two system-managed labels this
+    app applies on its own: "Birthday" (hardcoded, see
+    sync_contact_birthday_event's own tags=["Birthday"]) and whichever
+    label name is currently configured as the habit marker
+    (task_habit_settings.habit_label -- user-renameable in Settings, so
+    this reads the live value via get_task_habit_settings rather than
+    matching a fixed "Habit" string). Scoped deliberately narrow, per a
+    follow-up clarification: this is the single choke point every "apply
+    a label to this task/event/contact" chip picker goes through
+    (list_tag_names_in_use), NOT db.list_labels (the Settings > Labels
+    management table) or db.list_all_label_names (used by that table and
+    by published-lists' own label filter) -- both of those still show
+    every label, including these two, so they stay visible/editable
+    wherever the user is configuring labels rather than applying one."""
     names = set(list_all_label_names(conn))
     names |= {r["name"] for r in conn.execute("SELECT name FROM label_config").fetchall()}
+    habit_label = get_task_habit_settings(conn)["habit_label"]
+    system_names = {"birthday", (habit_label or "").strip().lower()}
+    names = {n for n in names if n.lower() not in system_names}
     return sorted(names, key=str.lower)
 
 

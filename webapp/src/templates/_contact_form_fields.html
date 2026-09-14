@@ -1,0 +1,279 @@
+{# Shared contact create/edit field grid (2026-09-14) -- the exact inner
+   content of contact_form.html's #contact-form, extracted so the standalone
+   new/edit form AND the merged dashboard quick-add modal (quick_add.html)
+   render literally the same fields (one markup contract instead of two
+   copies that could drift), same pattern _task_form_fields.html/
+   _event_form_fields.html already established for Task/Event.
+
+   The surrounding <form> (with its own action/id/enctype) lives in the
+   parent template; this partial just fills it in. Parent must provide:
+     contact      -- the contact being edited, or None for a new contact
+     tag_name_items -- Labels multiselect items
+     phone_types, email_types, website_types, address_types, social_types
+                  -- db.CONTACT_*_TYPES vocab lists for each repeatable
+                     row's type picker
+   ms_form_id is set inside the partial (it's always this form's own id),
+   same as _task_form_fields.html's own convention. #}
+{% set ms_form_id = 'contact-form' %}
+{% from "_contact_type_picker.html" import contact_type_picker with context %}
+<div class="field-grid">
+    <!-- Photo + Full name share one row (2026-08-07 modal-input rework,
+         direct feedback) -- the avatar sits to the left with a
+         hover-to-reveal upload affordance directly on top of it
+         instead of a separate always-visible native file input/
+         "Browse" button below. The real `<input type="file">` is kept
+         in the DOM but visually hidden and stretched over the whole
+         avatar circle (`.avatar-upload-input`, see style.css) so a
+         plain click anywhere on the avatar opens the file picker --
+         zero JS needed, upload still posts as `name="photo"` exactly
+         as before. `.avatar-upload-overlay` is the dark circle +
+         camera icon that only becomes visible on hover/focus via
+         pure CSS (`.avatar-upload:hover`/`:focus-within`). Removing a
+         photo is a deliberate action, not a hover-discoverable one, so
+         that checkbox stays visible below the row rather than living
+         inside the hover overlay too. Scoped to the new `.avatar-upload`
+         wrapper class, not `.avatar-large`/the shared `avatar()` macro
+         itself, so contact_detail.html's own read-only avatar (also
+         `.avatar-large`) is untouched by any of this. -->
+    <div class="field field-wide">
+        <div class="photo-field-row">
+            <div class="avatar-upload" title="Change photo">
+                {{ avatar(contact, 'avatar-large') }}
+                <span class="avatar-upload-overlay" aria-hidden="true">{{ icon('camera', 'icon-sm') }}</span>
+                <input type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/webp" class="avatar-upload-input" aria-label="Change photo">
+            </div>
+            <div class="field">
+                <label>Full name</label>
+                <input type="text" name="full_name" required value="{{ contact.full_name if contact else '' }}">
+            </div>
+        </div>
+        {% if contact and contact.photo_b64 %}
+        <label class="field-toggle field avatar-remove-toggle"><input type="checkbox" name="remove_photo" value="1"> Remove current photo</label>
+        {% endif %}
+    </div>
+    <!-- Contacts field parity slice 2 of 6 (plans/open.md): phone/email
+         are multi-value now (contact_phones/contact_emails, db.py), each
+         row typed from the vCard/Nextcloud vocabulary
+         (db.CONTACT_PHONE_TYPES/CONTACT_EMAIL_TYPES). Rows post together
+         as parallel phone_type[]/phone_value[] form arrays on the same
+         Save button as the rest of the contact (list[str] = Form([]),
+         same shape tags_labels already uses on this router) rather than
+         through dedicated add-row endpoints like
+         _task_work_allocations.html's Work sessions card -- a phone/
+         email list is small and edited as a whole, so one submit is
+         simpler than a full page round trip per row. Rows are
+         added/removed purely client-side (static/
+         contact_phone_email_rows.js, clones a <template> row, same
+         wireContent() re-init idiom as label_role_picker.js) since
+         nothing is persisted until Save either way.
+         2026-09-10 (audit-fixes-2.1.md, "Contacts edit modal window
+         doesn't use the custom drop down menus"): the type field used
+         to be a plain native select element -- the one form control
+         left in the app still opening the browser's own unstylable
+         dropdown chrome instead of the app's `.multiselect` picker.
+         Now `_contact_type_picker.html`'s `contact_type_picker()`
+         macro -- see that file's own header comment for why this
+         couldn't just be a per-row
+         `{% include "_widget_list_multiselect.html" %}` (that partial
+         submits one shared field name across every row; a repeatable
+         group like this one needs a row-scoped picker that still
+         posts the SAME field name for every row, same as the old
+         select elements did). -->
+    <div class="field field-wide" data-repeatable-rows-scope>
+        <label>Phone</label>
+        <div id="phone-rows" class="contact-multi-rows">
+            {% for p in (contact.phones if contact else []) %}
+            <div class="contact-multi-row">
+                {{ contact_type_picker('phone_type', phone_types, p.type, loop.index) }}
+                <input type="text" name="phone_value" value="{{ p.value }}" placeholder="Phone number">
+                <button type="button" class="checklist-delete" data-repeatable-remove title="Remove phone" aria-label="Remove phone">{{ icon('x') }}</button>
+            </div>
+            {% endfor %}
+        </div>
+        <template id="phone-row-template">
+            <div class="contact-multi-row">
+                {{ contact_type_picker('phone_type', phone_types, 'Other', 'tmpl') }}
+                <input type="text" name="phone_value" value="" placeholder="Phone number">
+                <button type="button" class="checklist-delete" data-repeatable-remove title="Remove phone" aria-label="Remove phone">{{ icon('x') }}</button>
+            </div>
+        </template>
+        <button type="button" class="btn btn-sm" data-repeatable-add="phone-rows" data-repeatable-template="phone-row-template">{{ icon('plus', 'icon-sm') }} Add phone</button>
+    </div>
+    <div class="field field-wide" data-repeatable-rows-scope>
+        <label>Email</label>
+        <div id="email-rows" class="contact-multi-rows">
+            {% for e in (contact.emails if contact else []) %}
+            <div class="contact-multi-row">
+                {{ contact_type_picker('email_type', email_types, e.type, loop.index) }}
+                <input type="email" name="email_value" value="{{ e.value }}" placeholder="Email address">
+                <button type="button" class="checklist-delete" data-repeatable-remove title="Remove email" aria-label="Remove email">{{ icon('x') }}</button>
+            </div>
+            {% endfor %}
+        </div>
+        <template id="email-row-template">
+            <div class="contact-multi-row">
+                {{ contact_type_picker('email_type', email_types, 'Other', 'tmpl') }}
+                <input type="email" name="email_value" value="" placeholder="Email address">
+                <button type="button" class="checklist-delete" data-repeatable-remove title="Remove email" aria-label="Remove email">{{ icon('x') }}</button>
+            </div>
+        </template>
+        <button type="button" class="btn btn-sm" data-repeatable-add="email-rows" data-repeatable-template="email-row-template">{{ icon('plus', 'icon-sm') }} Add email</button>
+    </div>
+    <!-- Contacts field parity slice 3 of 6 (plans/open.md): Website,
+         same multi-value shape as Phone/Email above (db.CONTACT_
+         WEBSITE_TYPES -- Home/Work/Other, matching email/address per
+         the green-lit decision). No pre-existing single-value website
+         field ever existed on this app, so there's nothing to prefill
+         beyond `contact.websites` itself. Reuses
+         static/contact_phone_email_rows.js's generic `data-repeatable-
+         rows-scope`/`data-repeatable-add`/`data-repeatable-template`
+         add/remove wiring verbatim -- it was already written generic
+         enough for a third field group, no JS changes needed. Form
+         field is `website_url` (not `website_value`), matching db.py's
+         contact_websites.url column naming. -->
+    <div class="field field-wide" data-repeatable-rows-scope>
+        <label>Website</label>
+        <div id="website-rows" class="contact-multi-rows">
+            {% for w in (contact.websites if contact else []) %}
+            <div class="contact-multi-row">
+                {{ contact_type_picker('website_type', website_types, w.type, loop.index) }}
+                <input type="url" name="website_url" value="{{ w.url }}" placeholder="https://example.com">
+                <button type="button" class="checklist-delete" data-repeatable-remove title="Remove website" aria-label="Remove website">{{ icon('x') }}</button>
+            </div>
+            {% endfor %}
+        </div>
+        <template id="website-row-template">
+            <div class="contact-multi-row">
+                {{ contact_type_picker('website_type', website_types, 'Other', 'tmpl') }}
+                <input type="url" name="website_url" value="" placeholder="https://example.com">
+                <button type="button" class="checklist-delete" data-repeatable-remove title="Remove website" aria-label="Remove website">{{ icon('x') }}</button>
+            </div>
+        </template>
+        <button type="button" class="btn btn-sm" data-repeatable-add="website-rows" data-repeatable-template="website-row-template">{{ icon('plus', 'icon-sm') }} Add website</button>
+    </div>
+    <!-- Address book selector removed -- contacts now always live in
+         Active or Archived, toggled via the Archive/Unarchive button on
+         the contact detail page, not a dropdown on the edit form.
+         Category field removed (Phase 5, label-space rework) --
+         grouping is now purely via the Tags field below. -->
+    <div class="field">
+        <label>Title</label>
+        <input type="text" name="title" value="{{ contact.title if contact else '' }}">
+    </div>
+    <div class="field">
+        <label>Organization</label>
+        <input type="text" name="org" value="{{ contact.org if contact else '' }}">
+    </div>
+    <!-- Contacts field parity slice 5 of 6 (plans/open.md): Address is
+         now the full structured, multi-value vCard ADR (db.
+         CONTACT_ADDRESS_TYPES -- Home/Work/Other, same vocabulary as
+         email/website), not a single free-text line. Each row is its
+         own card (`.contact-address-row`, a taller variant of
+         `.contact-multi-row` -- see style.css) holding the type picker
+         (`_contact_type_picker.html`) plus the seven structured ADR
+         fields (PO Box,
+         Extended, Street, City, Region, Postal code, Country), laid out
+         in `.contact-address-fields`' own small 2-column grid rather
+         than the single-value phone/email/website rows' one-line flex
+         layout -- there's simply more to show per row here. Reuses
+         `static/contact_phone_email_rows.js`'s generic add/remove-row
+         wiring verbatim (data-repeatable-*, same as every other
+         repeatable field group on this form) since it clones whatever
+         `<template>` markup it's given, regardless of field count. -->
+    <div class="field field-wide" data-repeatable-rows-scope>
+        <label>Address</label>
+        <div id="address-rows" class="contact-multi-rows">
+            {% for a in (contact.addresses if contact else []) %}
+            <div class="contact-multi-row contact-address-row">
+                {{ contact_type_picker('address_type', address_types, a.type, loop.index) }}
+                <div class="contact-address-fields">
+                    <input type="text" name="address_po_box" value="{{ a.po_box }}" placeholder="PO Box">
+                    <input type="text" name="address_extended" value="{{ a.extended }}" placeholder="Extended address">
+                    <input type="text" name="address_street" value="{{ a.street }}" placeholder="Street" class="contact-address-full">
+                    <input type="text" name="address_city" value="{{ a.city }}" placeholder="City">
+                    <input type="text" name="address_region" value="{{ a.region }}" placeholder="Region / State">
+                    <input type="text" name="address_postal_code" value="{{ a.postal_code }}" placeholder="Postal code">
+                    <input type="text" name="address_country" value="{{ a.country }}" placeholder="Country">
+                </div>
+                <button type="button" class="checklist-delete" data-repeatable-remove title="Remove address" aria-label="Remove address">{{ icon('x') }}</button>
+            </div>
+            {% endfor %}
+        </div>
+        <template id="address-row-template">
+            <div class="contact-multi-row contact-address-row">
+                {{ contact_type_picker('address_type', address_types, 'Other', 'tmpl') }}
+                <div class="contact-address-fields">
+                    <input type="text" name="address_po_box" value="" placeholder="PO Box">
+                    <input type="text" name="address_extended" value="" placeholder="Extended address">
+                    <input type="text" name="address_street" value="" placeholder="Street" class="contact-address-full">
+                    <input type="text" name="address_city" value="" placeholder="City">
+                    <input type="text" name="address_region" value="" placeholder="Region / State">
+                    <input type="text" name="address_postal_code" value="" placeholder="Postal code">
+                    <input type="text" name="address_country" value="" placeholder="Country">
+                </div>
+                <button type="button" class="checklist-delete" data-repeatable-remove title="Remove address" aria-label="Remove address">{{ icon('x') }}</button>
+            </div>
+        </template>
+        <button type="button" class="btn btn-sm" data-repeatable-add="address-rows" data-repeatable-template="address-row-template">{{ icon('plus', 'icon-sm') }} Add address</button>
+    </div>
+    <!-- Contacts field parity slice 6 of 6 (plans/open.md): Social
+         network, round-tripped through the standard X-SOCIALPROFILE
+         vCard property. Same one-line multi-row shape as Phone/Email/
+         Website above (db.CONTACT_SOCIAL_TYPES -- network names, not
+         Home/Work/Other), reusing the same generic repeatable-row JS. -->
+    <div class="field field-wide" data-repeatable-rows-scope>
+        <label>Social network</label>
+        <div id="social-rows" class="contact-multi-rows">
+            {% for s in (contact.social_profiles if contact else []) %}
+            <div class="contact-multi-row">
+                {{ contact_type_picker('social_type', social_types, s.type, loop.index) }}
+                <input type="text" name="social_value" value="{{ s.value }}" placeholder="Profile URL or username">
+                <button type="button" class="checklist-delete" data-repeatable-remove title="Remove social profile" aria-label="Remove social profile">{{ icon('x') }}</button>
+            </div>
+            {% endfor %}
+        </div>
+        <template id="social-row-template">
+            <div class="contact-multi-row">
+                {{ contact_type_picker('social_type', social_types, 'Other', 'tmpl') }}
+                <input type="text" name="social_value" value="" placeholder="Profile URL or username">
+                <button type="button" class="checklist-delete" data-repeatable-remove title="Remove social profile" aria-label="Remove social profile">{{ icon('x') }}</button>
+            </div>
+        </template>
+        <button type="button" class="btn btn-sm" data-repeatable-add="social-rows" data-repeatable-template="social-row-template">{{ icon('plus', 'icon-sm') }} Add social network</button>
+    </div>
+    <!-- Contacts field parity slice 4 of 6 (plans/open.md): Birthday,
+         single-value (unlike Phone/Email/Website above -- a contact has
+         at most one, no add/remove rows). Plain text input rather than
+         a native `<input type="date">`, since a year-less birthday
+         (green-lit, AskUserQuestion, 2026-08-15) has no HTML date-input
+         equivalent -- a `<input type="date">` always requires a year.
+         `pattern` is a client-side hint only; routers/contacts.py's
+         `_parse_birthday_field` (db.parse_contact_birthday) is the real
+         validation, same "plain form, server validates" convention as
+         every other field on this form (see e.g. the phone/email type
+         pickers falling back to "Other" server-side rather than a
+         stricter client-only guard). -->
+    <div class="field">
+        <label>Birthday</label>
+        <input type="text" name="birthday" value="{{ contact.birthday if contact else '' }}" placeholder="YYYY-MM-DD or --MM-DD" pattern="\d{4}-\d{2}-\d{2}|--\d{2}-\d{2}">
+        <span class="field-hint">Full date, or --MM-DD if you don't know the year.</span>
+    </div>
+    <!-- Labels -- chip multiselect (2026-08-07, modal-input-design
+         Phase B), same pattern as task_form.html -- see that
+         template's own comment. -->
+    <div class="field field-wide">
+        {% set ms_name = 'tags_labels' %}
+        {% set ms_icon = 'tag' %}
+        {% set ms_label = 'Labels' %}
+        {% set ms_items = tag_name_items %}
+        {% set ms_selected = contact.tags if contact else [] %}
+        {% set ms_mode = 'select' %}
+        {% set ms_allow_new = true %}
+        {% set ms_pill = true %}
+        {% include "_widget_list_multiselect.html" %}
+    </div>
+    <div class="field field-wide">
+        <label>Notes</label>
+        <textarea name="notes" rows="3">{{ contact.notes if contact else '' }}</textarea>
+    </div>
+</div>

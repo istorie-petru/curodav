@@ -3,8 +3,6 @@
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_bulk_actions_bar.html" import bulk_actions_bar, bulk_count %}
-{% from "_row_action_buttons.html" import row_action_buttons %}
-{% from "_empty_state_row.html" import empty_state_row %}
 {# Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
    "bulk actions on tables... then Habits, Contacts, Labels, Holidays,
    Time blocks"). Same `.bulk-actions-bar` markup/CSS Tasks' own bar uses,
@@ -17,9 +15,15 @@
    relocated into the header's actions slot 2026-09-13
    (audit-fixes-2.1.md) -- see that partial's own header comment.
    2026-09-12: count span moved to title_extra -- see that partial's own
-   comment. #}
+   comment.
+   2026-09-13 (direct request: "bulk select ... option to merge labels
+   into one"): added Merge next to Clear/Delete -- opens
+   label_bulk_merge_modal.html (routers/labels.py::bulk_merge_modal/
+   bulk_merge_labels), a destination picker like the single-row Merge
+   modal but for every selected row at once, then loops the existing
+   db.merge_labels. #}
 {% call page_header_narrow("Labels", "tag", title_extra=bulk_count("labels")) %}
-{{ bulk_actions_bar("labels", delete_label="Remove from everything") }}
+{{ bulk_actions_bar("labels", delete_label="Remove from everything", merge_label="Merge") }}
 {% endcall %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <!-- 2026-09-08 (direct request, "check up ... it looks different
@@ -35,71 +39,24 @@
      remaining reason for it alone to scroll differently. -->
 <div id="modal-target">
 
-<!-- 2026-08-29 (STATE.md backlog item 7, direct request): wrapper markup
-     matches _tasks_body.html's exact "card table-scroll" single-div
-     convention now, instead of a card wrapping a separate table-scroll
-     div -- same row markup/spacing this table had been drifting from. -->
+{# 2026-08-29 (STATE.md backlog item 7, direct request): wrapper markup
+   matches _tasks_body.html's exact "card table-scroll" single-div
+   convention now, instead of a card wrapping a separate table-scroll
+   div -- same row markup/spacing this table had been drifting from.
+
+   2026-09-14 (Spaces -- labels-as-membership rework slice 2) grew this
+   into a plain div holding one table per Space plus an "Ungrouped" table;
+   2026-09-16 (direct request) collapsed it back to a single `<table>`
+   (_labels_table_body.html, shared with the async-CRUD `region=list`
+   refresh -- see that partial's own header comment for the current
+   rationale/markup contract). The "labels-table" id has stayed on this
+   wrapping div throughout both changes, unchanged for static/
+   bulk_select.js's `tableId: "labels-table"` config below -- it already
+   treats it as "any container," not literally a table element. #}
 <div class="card table-scroll" id="labels-table-wrapper">
-        <table id="labels-table">
-            <thead>
-                <tr>
-                    <th class="col-checkbox"></th>
-                    <th>Label</th>
-                    <th>Group</th>
-                    <th>Usage</th>
-                    <th class="col-actions-narrow">Actions</th>
-                </tr>
-            </thead>
-            <tbody id="labels-body">
-                {% if labels %}
-                    {% for l in labels %}
-                    <tr data-label-name="{{ l.name }}">
-                        <td>
-                            <input type="checkbox" class="row-select" data-uid="{{ l.name }}" aria-label="Select {{ l.name }}">
-                        </td>
-                        <td>
-                            <div class="label-cell">
-                                <span class="color-dot cal-{{ l.color or 'blue' }}"></span>
-                                <span class="label-name">{{ l.name }}</span>
-                            </div>
-                        </td>
-                        <td>
-                            {% if l.label_group %}
-                                <span class="group-badge">{{ l.label_group }}</span>
-                            {% else %}
-                                <span class="text-muted">—</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if l.usage_count and l.usage_count > 0 %}
-                                <span class="usage-badge">Used in {{ l.usage_count }} item{{ 's' if l.usage_count != 1 else '' }}</span>
-                            {% else %}
-                                <span class="text-muted">Not used</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {{ row_action_buttons(
-                                "/settings/labels/" ~ l.name ~ "/edit",
-                                "/settings/labels/" ~ l.name ~ "/delete",
-                                "label",
-                                'Remove "' ~ l.name ~ '" from every object that carries it? This doesn\'t delete the label config, just clears its usage.'
-                            ) }}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                {% else %}
-                    {{ empty_state_row(5, "No labels yet") }}
-                {% endif %}
-                <!-- 2026-08-29 (STATE.md backlog item 7): same full-row
-                     "+ Add X" convention as _tasks_body.html's
-                     .task-add-row (colored/hoverable like a normal row,
-                     not a bare icon button) -- was an icon-only button in
-                     its own cell before. -->
-                <tr class="task-add-row">
-                    <td colspan="5"><a href="/settings/labels/new" data-modal data-modal-size="wide">{{ icon('plus', 'icon-sm') }} Add label</a></td>
-                </tr>
-            </tbody>
-        </table>
+    <div id="labels-table">
+        {% include "_labels_table_body.html" %}
+    </div>
 </div>
 </div>
 {% endblock %}
@@ -115,6 +72,8 @@ document.addEventListener("DOMContentLoaded", function () {
         clearId: "labels-bulk-clear",
         deleteButtonId: "labels-bulk-delete",
         deleteUrl: "/settings/labels/bulk-delete",
+        mergeButtonId: "labels-bulk-merge",
+        mergeModalUrl: "/settings/labels/bulk-merge-modal",
         itemLabel: "label",
         confirmMessage: function (count) {
             return "Remove " + count + " selected label" + (count === 1 ? "" : "s") + " from every object that carries " + (count === 1 ? "it" : "them") + "? This doesn't delete the label config, just clears its usage.";

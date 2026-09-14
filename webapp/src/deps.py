@@ -260,8 +260,40 @@ def _avatar(contact: dict | None, cls: str = "") -> Markup:
         if photo_type not in ("jpeg", "png", "gif", "webp"):
             photo_type = "jpeg"
         return Markup(f'<img class="{classes}" src="data:image/{photo_type};base64,{escape(photo_b64)}" alt="">')
+    # 2026-09-13 (direct request: "contact's avatar-circle avatar-large
+    # avatar should be colored in backgrounds like for Projects and Spaces
+    # avatars") -- the no-photo initials fallback used to render on
+    # `.avatar-circle`'s own flat neutral-gray background regardless of
+    # who the contact was. Projects/Spaces already solve the exact same
+    # "no real color field" problem for their own icon tile
+    # (`_page_banner.html`'s `.label-icon-tile`, `--tile-swatch:var(--cal-
+    # bg-{color})`) by picking a color explicitly (label_config.color);
+    # contacts have no such field, so this reuses `stable_color()` --
+    # already used one call site over for this same contact's detail-cover
+    # accent -- seeded the same way (contact uid, stable across renames).
+    # Falls back to `full_name` when there's no uid at all (the shared
+    # user-profile-photo call sites in _page_banner.html/
+    # settings_your_profile.html pass a plain dict with no uid), and to a
+    # literal "?" only if neither is present, so this never breaks on a
+    # brand-new not-yet-saved contact. `avatar-colored` is a new class
+    # (style.css), not just the inline var alone, so the photo `<img>`
+    # branches above are untouched -- only the initials span opts into the
+    # colored-background rule.
+    seed = contact.get("uid") or contact.get("full_name") or "?"
+    color_name = _stable_color(str(seed))
     initial = escape((contact.get("full_name") or "?")[:1].upper())
-    return Markup(f'<span class="{classes}">{initial}</span>')
+    # `data-style`, not a literal `style=` attribute (2026-09-15 fix,
+    # direct bug report -- see _labels_table_body.html's own header
+    # comment for the full story). This function predates that report but
+    # has the exact same bug: CSP's style-src has no 'unsafe-inline' and a
+    # nonce never covers an HTML attribute, so a real browser silently
+    # drops this `style=` and every initials-fallback avatar renders the
+    # flat neutral background instead of its stable color.
+    # dynamic_styles.js applies `data-style` via the CSSOM at runtime,
+    # which style-src doesn't govern.
+    return Markup(
+        f'<span class="{classes} avatar-colored" data-style="--tile-swatch:var(--cal-bg-{color_name}, var(--cal-bg-blue));">{initial}</span>'
+    )
 
 
 templates.env.globals["avatar"] = _avatar

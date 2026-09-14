@@ -51,7 +51,7 @@
                     {% for b in time_blocks %}
                     <tr data-uid="{{ b.uid }}">
                         <td>
-                            <input type="checkbox" class="row-select" data-uid="{{ b.uid }}" aria-label="Select {{ b.label or (b.kind ~ ' time block') }}">
+                            <input type="checkbox" class="row-select" data-uid="{{ b.uid }}" aria-label="Select {{ b.label or (b.kind ~ ' time block') }}" autocomplete="off">
                         </td>
                         <td>
                             <div class="label-cell">

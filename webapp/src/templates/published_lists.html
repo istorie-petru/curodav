@@ -50,10 +50,13 @@
                         <span class="cell-tag tag-{{ l.entity_type }}">{{ entity_labels[l.entity_type] }}</span>
                     </td>
                     <td>
-                        {% if l.filter_labels %}
+                        {% if l.filter_labels or l.exclude_filter_labels %}
                             <span class="filter-labels">
                                 {% for label in l.filter_labels %}
                                 <span class="filter-label">{{ label }}</span>
+                                {% endfor %}
+                                {% for label in l.exclude_filter_labels %}
+                                <span class="filter-label filter-label-exclude">&minus;{{ label }}</span>
                                 {% endfor %}
                             </span>
                         {% else %}

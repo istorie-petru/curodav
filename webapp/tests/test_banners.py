@@ -223,13 +223,23 @@ class TestPageBannerAvatar:
         assert 'class="page-banner-avatar-wrap"' in body
         # No display name/photo set -- falls back to the "U" initial, same
         # convention as settings_your_profile.html's own avatar row.
-        assert '<span class="avatar-circle avatar-hero">U</span>' in body
+        # 2026-09-13 (direct request: "contact's avatar-circle avatar-large
+        # avatar should be colored... like Projects and Spaces avatars") --
+        # the initials fallback now also carries `avatar-colored` plus an
+        # inline `--tile-swatch` var (deps.py's avatar(), same mechanism
+        # _page_banner.html's own icon tile uses) -- asserted piecewise
+        # rather than as one exact tag string, since the color name itself
+        # is a stable_color() hash not worth hardcoding into this test.
+        assert 'class="avatar-circle avatar-hero avatar-colored"' in body
+        assert '--tile-swatch:var(--cal-bg-' in body
+        assert '>U</span>' in body
 
     def test_home_avatar_uses_display_name_initial(self, conn):
         db.set_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY, "Petru")
         _set_remote(conn, cached=True, scope="")
         body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
-        assert '<span class="avatar-circle avatar-hero">P</span>' in body
+        assert 'class="avatar-circle avatar-hero avatar-colored"' in body
+        assert '>P</span>' in body
 
     def test_home_avatar_renders_uploaded_photo(self, conn):
         # 2026-08-29 (direct request: "better cache these images") -- the
@@ -397,7 +407,8 @@ class TestLabelIconTile:
         _set_remote(conn, cached=True, scope="")
         body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
         assert "label-icon-tile" not in body
-        assert '<span class="avatar-circle avatar-hero">U</span>' in body
+        assert 'class="avatar-circle avatar-hero avatar-colored"' in body
+        assert '>U</span>' in body
 
 
 class TestPageBannerDefaultFallback:

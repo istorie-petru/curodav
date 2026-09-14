@@ -295,6 +295,27 @@
     updateBar();
   }
 
+  // 2026-09-13 (direct request: "row-select should not persist between
+  // page refresh") -- `selected` above is always a fresh, empty Set on
+  // every load (this whole file is one IIFE re-evaluated from scratch on
+  // a real page navigation/reload, no localStorage/sessionStorage
+  // involved anywhere in this module). The actual bug was the browser's
+  // own form-control state restoration: Chrome (and some other browsers)
+  // re-applies a checkbox's last `.checked` value across a plain reload
+  // purely from DOM position, independent of any app-level persistence
+  // and regardless of whether the checkbox sits inside a `<form>` --
+  // outside app code entirely, so nothing server-side or in this file's
+  // own state was ever "persisting" it. Left uncorrected, a bfcache/
+  // reload-restored checkbox could show visually checked while `selected`
+  // (rebuilt empty) has no matching uid -- no highlighted row, no bulk
+  // bar, a checkbox stuck showing a selection that no longer exists
+  // anywhere. Calling the same `reconcileAfterSwap()` region-swap already
+  // uses, once here at load against the still-empty `selected`, forces
+  // every checkbox back to unchecked and clears any stray `.is-selected`
+  // -- same reconciliation, just run once against the page's initial
+  // load instead of only after a later async swap.
+  reconcileAfterSwap();
+
   // Row-select checkbox clicks -- delegated (document) so they survive a
   // region swap; the checkbox list is re-queried per interaction so
   // shift-click range selection indexes the live rows.

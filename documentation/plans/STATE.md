@@ -17,6 +17,1719 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-16 (same-day follow-up to the Contacts-card entry
+  directly below) -- direct request: "the contacts widget should also
+  contain the contact's photo and on click should open a modal window,
+  not a page." `_widget_contact_list.html` (the shared partial both the
+  Dashboard's own Contact List widget and label_kanban_detail.html's new
+  Contacts card render through): each row now leads with `{{ avatar(c) }}`
+  (deps.py's existing global -- real photo if set, else an initials-on-
+  color fallback, same call shape `_contacts_body.html`'s own
+  `.contact-row` already uses), and the row link carries `data-modal`
+  instead of a plain navigation -- `/contacts/{uid}` already renders
+  correctly both standalone and inside a modal (contact_detail.html's own
+  header comment already documented this dual-purpose behavior), so no
+  route change was needed, just the link attribute. CSS: `.contact-list-
+  row` went from a flex-column text-only stack to flex-row (avatar +
+  nested `.contact-list-main` text column), mirroring `.contact-row`/
+  `.contact-row-main`'s existing shape at this widget's own compact scale
+  (plain `.avatar-circle`, not `.avatar-large`).
+
+  Applies uniformly to both callers of the shared partial (no flag
+  distinguishes them) -- consistent with, not a departure from, the
+  widget grid's own convention: every task/event row in this same card
+  area already opens via `data-modal` (`_widget_items.html`'s
+  `widget_link_row`), so contacts rows not doing the same was the actual
+  inconsistency.
+
+  **Tests**: new `test_contacts_card_rows_show_avatar_and_open_in_a_modal`
+  in `test_phase2_labels.py` -- asserts the rendered row carries `href=
+  "/contacts/c1" data-modal` and the initials-fallback avatar markup.
+  Full suite (92 files, `test_caldav_bridge_live.py` excluded as always,
+  four batches for the sandbox time-budget reason every recent session
+  has used): **2,301 passed, 0 failed** (2,300 prior + 1 new).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm the avatar renders at a sensible size next to the text
+  stack, and that clicking a contact row actually opens the modal instead
+  of navigating away, on both the label page and the Dashboard's own
+  Contact List widget (this change touches the one shared partial both
+  use).
+
+- **Shipped:** 2026-09-16 (same-day follow-up to the Kanban+Agenda entry
+  directly below) -- direct request: "the same plain label page should
+  also show below the agenda and above the kanban a contacts list widget
+  filtered for that label." `routers/labels.py::label_detail` now also
+  builds `contacts` (every contact directly tagged with the label --
+  `db.list_contacts` has no tag-filter param, so this is the same
+  fetch-all-then-filter-in-Python approach `dashboard.py::
+  _render_contact_list` already uses for its own Contact List widget;
+  capped at 20, same default that widget uses). Not reusing
+  `_render_contact_list`/`_scope_child_names` directly -- their Space-vs-
+  plain-label scope resolution is moot on a route that only ever serves
+  plain labels (is_space already redirected away before this runs), so a
+  plain `name in tags` filter is exactly equivalent without pulling in
+  widget-config machinery this page doesn't otherwise have.
+
+  `label_kanban_detail.html` renders it as a new `.card.widget-card-static`
+  between the existing Agenda card and the Kanban board, by `{% include
+  "_widget_contact_list.html" %}` with a `data = {'contacts': contacts}`
+  set just above it -- reuses the Dashboard's own Contact List widget
+  partial/CSS verbatim (Jinja `include` inherits the calling template's
+  context, so no widget-config plumbing was needed) rather than
+  duplicating its row markup.
+
+  **Tests**: new `test_plain_label_page_shows_contacts_tagged_with_it` in
+  `test_phase2_labels.py` -- a tagged contact appears in both
+  `resp.context["contacts"]` and the rendered body, an untagged contact
+  doesn't. Full suite (92 files, `test_caldav_bridge_live.py` excluded as
+  always, four batches for the sandbox time-budget reason every recent
+  session has used): **2,300 passed, 0 failed** (2,299 prior + 1 new).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm the Contacts card actually reads well sandwiched between
+  Agenda and the Kanban board (spacing/card rhythm), and that it's empty-
+  state message ("No contacts match this filter.", the shared widget's
+  own wording) reads sensibly on a label with no tagged contacts.
+
+- **Shipped:** 2026-09-16 -- direct request: "PLAIN LABELS SHOULD GENERATE
+  PAGES LIKE PROJECTS, WITH AGENDA AND KANBAN, NOT DASHBOARDS." Investigated
+  first (the premise sounded like it might need building from scratch, but
+  didn't): a Project (`is_project=1` label) already got exactly this,
+  rebuilt 2026-08-30 (`routers/projects.py::project_detail`,
+  `project_detail.html`) -- a Kanban board + Agenda card, no widget grid.
+  Plain labels (and Spaces) were the ones still falling through to
+  `label_detail.html`'s customizable widget-grid dashboard. Asked two
+  clarifying questions before touching code: (1) should a plain label
+  render the literal same Kanban+Agenda page a Project uses, or a
+  separate-but-similar implementation -- Peter chose "similar but
+  distinct," own template/route, so the two can diverge later; (2) should
+  Spaces switch too -- Peter chose no, Spaces keep the widget-grid
+  dashboard unchanged (an aggregation page, doesn't obviously fit a single
+  Kanban board). Also asked whether this warranted a written plan first
+  (matching how the Spaces rework was scoped) -- Peter chose to just
+  implement it this session.
+
+  `routers/labels.py::label_detail` (`GET /settings/labels/{name}`) --
+  the `is_space`/`is_project` redirects at the top are unchanged, so this
+  only ever runs for a plain label now. Replaced the
+  `_ensure_default_label_widgets`/`widget_page_context` widget-grid
+  rendering with an independent Kanban+Agenda context-build (own
+  `tasks`/`columns`/`board_statuses`/`agenda_items`, not a call into
+  `routers/projects.py`), rendering new `label_kanban_detail.html` --
+  same shape as `project_detail.html` (Kanban board grouped by status,
+  drag-and-drop via the existing `static/tasks_board.js`; an Agenda card
+  merging future events + open due-dated tasks, chronologically sorted,
+  capped at 8) but no deadline row (a plain label has no
+  `start_date`/`end_date` the way a Project does -- the template's
+  `is_deadline` branch is kept only so the row-shape stays a drop-in match
+  for the same `agenda_items` list, not because a plain label can produce
+  one). No "New widget"/"Reset layout" in edit mode either, matching
+  `project_detail.html`'s own "not a traditional dashboard" precedent --
+  only the Add/Change banner control remains.
+
+  Side cleanup, found while touching this: `labels.py`'s own
+  `_label_scope` helper (every task/event/contact directly tagged with the
+  label) had become fully dead code the moment this route stopped calling
+  it -- its output was never actually rendered by `label_detail.html`
+  even before this session (same class of leftover as the
+  project-scope-section block removed earlier today). Deleted outright,
+  not left dead; `routers/spaces.py` has its own separate `_label_scope`
+  (materially different, membership-based), untouched.
+
+  `label_detail.html` is now Space-only (only `routers/spaces.py::
+  space_detail` renders it) -- updated its own header comment to say so
+  rather than leave it describing a Space/Project split that no longer
+  exists.
+
+  **Tests**: `test_phase2_labels.py`'s `test_plain_label_page_shows_its_
+  own_direct_items` rewritten (old `is_space`/`tasks`/`events` context-key
+  assertions -> `columns["active"]`/`agenda_items`, the new shape).
+  `test_dashboard_usability_rework.py`: `test_label_page_edit_mode_
+  actions_present` updated (asserts "New widget"/"Reset layout" now
+  absent, "Add banner" present); `TestLabelPageResetButton` rewritten --
+  its old "Reset layout present in edit mode" test replaced with a "gone
+  entirely" test, its ordering test (New widget before Reset layout)
+  deleted outright since neither control exists any more to order.
+  `documentation/features/labels.md`'s "Generated page" section (already
+  stale before this session -- still described the pre-2026-08-30 "both
+  Project and plain label render the shared widget grid" state) and
+  `features/README.md`'s one-line Labels & Spaces summary both corrected
+  to the current three-way split (Space/Project/plain label), while
+  fixing `labels.md`'s Settings > Labels description to match this same
+  session's earlier single-table change too (was still describing the
+  superseded one-table-per-Space design). Full suite (92 files, `test_
+  caldav_bridge_live.py` excluded as always, four batches for the sandbox
+  time-budget reason every recent session has used): **2,299 passed, 0
+  failed** (2,300 prior, net -1 -- the ordering test above was deleted,
+  not replaced 1:1, since there's nothing left to order).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm a plain label's page now shows the Kanban board + Agenda
+  card (not the old widget grid), that drag-and-drop between columns
+  still works there (it's the same `tasks_board.js`, but worth confirming
+  against a second call site), and that a Space's own page is genuinely
+  unaffected (still the widget-grid dashboard it always was).
+
+- **Shipped:** 2026-09-16 -- direct request: "an ancient part of the app
+  appears, in the spaces pages, the project-scope-section. i don't want
+  it. it shouldn't exist. we already have spaces & projects widget."
+  `label_detail.html`'s `{% if is_space and children %}` block (a
+  hardcoded "Projects" card listing a Space's child labels/sub-Spaces,
+  linking to each) removed outright, along with its two CSS rules
+  (`.project-scope-section`/`.project-scope-section h2`, style.css).
+  Investigated first: this block read the exact same
+  `db.list_child_labels(conn, name)` data the Spaces & Projects widget
+  (`dashboard.py::_render_spaces_projects`) already renders through the
+  configurable widget system -- a leftover duplicate never cleaned up
+  after that widget was built, not something recently touched or
+  entangled with the current Settings > Labels work above. `is_space`/
+  `children` are left in `spaces.py::space_detail`/`labels.py::
+  label_detail`'s context dicts unchanged -- `is_space` also gates the
+  page banner's icon fallback, and `children` costs nothing to keep
+  computing even though this was its only template consumer.
+
+  **Known gap, accepted deliberately**: the Spaces & Projects widget is
+  not auto-seeded on new Space pages (`_ensure_default_label_widgets`'s
+  own docstring, since the 2026-08-07 default-layout rework) -- asked
+  Peter directly (AskUserQuestion: remove outright vs. also auto-seed the
+  widget), he chose remove outright. A Space page with no manually-added
+  widget now shows nothing for its child projects/sub-Spaces until one's
+  added; not fixed here, by choice.
+
+  **Tests**: none existed for this block (nothing in the suite set up a
+  Space with `parent_name`-linked children and then asserted on rendered
+  HTML for it), so none needed updating. Full suite (92 files, `test_
+  caldav_bridge_live.py` excluded as always, four batches for the sandbox
+  time-budget reason every recent session has used): **2,300 passed, 0
+  failed** (unchanged from before this session).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm a Space page with children no longer shows the old
+  "Projects" card, and that a Space page relying on it disappearing is
+  fine without a widget there yet (the accepted gap above).
+
+- **Shipped:** 2026-09-16 (same-day follow-up to the entry directly below
+  -- further direct feedback after seeing the first pass) -- "don't want
+  the header repeated for every group," "don't want separate behavior for
+  the labels that are not assigned," "rounded corners for both hover and
+  background color for spaces (like in mockup) -- this for all tables,"
+  "the .label-icon-tile for spaces is unnecessary, show only the icon
+  like for any plain label," "the table rows are not narrow enough for
+  desktop." Five changes to `_labels_table_body.html`/style.css, no
+  backend/context changes (routers/labels.py's `label_groups`/
+  `ungrouped_labels` shape is untouched):
+
+  1. Collapsed from one `<table>`/`<thead>` per Space (plus a separate
+     Ungrouped table) back to a single table/single header -- every row
+     (a Space's own row, its children, every ungrouped label) now flows
+     into one `<tbody>`, no per-group wrapper element at all (each row
+     keeps a bare `data-label-group` attribute instead, same "hook
+     nothing reads yet" status the removed wrapper divs had).
+  2. Ungrouped labels are now plain rows with nothing in front of them --
+     no heading, no different treatment from a Space's child row.
+  3. A Space's own row dropped `.label-icon-tile` (the colored squircle
+     carried over from the previous pass's heading-merge) for the same
+     plain `.label-cell-icon` glyph every label row uses.
+  4. The Space row's "card" look (light hue tint + rounded corners) is
+     now painted via one `data-style` per row setting `--row-tint`/
+     `--row-tint-fg` custom properties, consumed by plain CSS rules that
+     apply the background to each `<td>` individually (not the `<tr>`) --
+     `border-radius` only visibly clips a background painted on the same
+     box, so a `<tr>`-level background can't produce rounded corners no
+     matter what radius the cells get. Row hover for every *other* row
+     got the same per-`<td>`-background + first/last-child radius
+     treatment, scoped to `#labels-table-wrapper` only (not a global
+     `tbody tr:hover` change -- every other settings table is untouched).
+  5. Reintroduced compact 6px/8px row padding, scoped to
+     `#labels-table-wrapper` -- this deliberately reopens the 2026-09-08
+     decision that removed Labels' own denser padding ("no longer a real
+     reason for Labels alone to look denser than its own Settings
+     siblings"); noted in style.css's own comment as an intentional
+     reversal, not drift, since a future session diffing against that old
+     comment would otherwise read this as a regression.
+
+  **Tests**: `TestSettingsLabelsGroupedTables` in `test_phase2_labels.py`
+  updated in place (same class, no new tests) -- `test_manage_page_
+  renders_one_table_per_space_plus_ungrouped` ->
+  `test_manage_page_renders_a_single_table_with_no_repeated_headers`
+  (`<table>` count 2 -> 1, `<thead>` count asserted == 1), `test_space_
+  heading_gets_a_colored_icon_tile` -> `test_space_row_uses_a_plain_icon_
+  not_a_colored_tile` (asserts `label-icon-tile` is absent and the new
+  `--row-tint`/`--row-tint-fg` data-style is present instead), `test_
+  async_region_fragment_renders_the_same_grouped_tables` -> `..._single_
+  table` (`<table>` count 2 -> 1). Full suite (92 files, `test_caldav_
+  bridge_live.py` excluded as always, four batches for the sandbox
+  time-budget reason every recent session has used): **2,300 passed, 0
+  failed** (same total as before this session -- tests renamed/rewritten
+  in place, not added).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm the single table reads cleanly with no repeated headers,
+  that Space rows' rounded-corner tint and every other row's rounded
+  hover both look right in light and dark mode, and that the tighter row
+  padding actually reads as "narrow enough" on a real desktop viewport.
+
+- **Shipped:** 2026-09-16 -- direct request, mocked up interactively first
+  (several rounds in chat: a rowspan'd group *column* with cards was tried
+  and rejected as "looks broken" before landing on the Space's own row
+  becoming a card row instead) -- "the Settings > Labels table should be
+  more compact, without the redundancy of a Space's name appearing both
+  in its heading and again as its own first row underneath." Each Space's
+  separate `.labels-space-heading` (icon tile + `<h2>` sitting above its
+  `<table>`, shipped 2026-09-14 slice 2) is folded into the Space's own
+  row instead, via new `_group_row(group)` in `_labels_table_body.html`
+  (replaces that row's old plain `_label_row` rendering): same checkbox/
+  Edit/Delete the row always had, plus the icon tile relocated in from the
+  old heading (unchanged markup, so `test_space_heading_gets_a_colored_
+  icon_tile` needed no change), a light `var(--tag-<color>-bg)`/
+  `var(--tag-<color>-fg)` row tint (existing hue-keyed pill tokens, dark
+  mode already covered), and a Usage figure that's now the *total* across
+  the Space and every child (`group.labels | sum(attribute=
+  'usage_count')`) rather than just the Space's own direct usage, since
+  this row is the only visual anchor for the group now that the separate
+  heading is gone. Child rows unchanged. Ungrouped deliberately left as a
+  plain heading + flat rows -- it isn't a real editable label, nothing to
+  merge a heading into. New CSS: `.labels-space-row` (style.css, next to
+  the existing `.labels-space-group`/`.labels-space-heading` rules).
+
+  **Tests**: no test changes needed -- `test_phase2_labels.py`'s
+  `TestSettingsLabelsGroupedTables` already asserted table count/
+  `data-label-group`/no-Group-column/icon-tile markup/Edit-Delete URLs
+  without depending on the now-removed `<h2>` heading wrapper, and none
+  asserted a Space row's Usage text (so the own-usage -> total-usage
+  change wasn't a breaking assertion anywhere). Full suite (92 files,
+  `test_caldav_bridge_live.py` excluded as always, four batches for the
+  sandbox time-budget reason every recent session has used): **2,300
+  passed, 0 failed** (unchanged count from before this session -- no new
+  tests added, this was a markup/CSS-only change to an already-tested
+  contract).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm a Space's card row actually reads well (tint contrast,
+  icon-tile alignment against the lighter row background, the bold name)
+  in both light and dark mode, and that the row's Edit/Delete icons stay
+  legible against the tint.
+
+- **Fixed:** 2026-09-15 -- direct bug report, twice over: "the
+  .label-icon-tile background-color still doesn't follow the label's
+  color," a flat "no you are wrong" after a first response that (wrongly)
+  re-confirmed the markup was correct from curled HTML/attribute reads
+  alone. Root cause, found by actually installing a headless Chrome
+  (playwright + chromium, not available by default in this sandbox) and
+  reading `getComputedStyle()` with console listening: every one of these
+  elements sets its color via a literal `style="..."` HTML attribute, and
+  this app's CSP (`security_headers.py`, hardened 2026-09-07,
+  audit-fixes-2.0.md item 11) has `style-src 'self' 'nonce-<value>'` with
+  no `'unsafe-inline'` -- a nonce only ever covers a `<style>` *element*,
+  never a `style=` attribute, so a real CSP-enforcing browser silently
+  drops the whole declaration and falls back to plain blue every time,
+  regardless of what color was actually picked. The console literally
+  says so ("Applying inline style violates ... style-src ... The action
+  has been blocked"), but nothing short of a real enforcing browser
+  reveals it -- curl, reading the template source, and even reading the
+  live DOM's own `style` attribute value back out all look completely
+  correct, which is exactly why two direct reports of the same symptom
+  didn't get to the real cause (a 2026-09-13 pass diagnosed and fixed a
+  real but secondary bug -- an unrecognized legacy color name making the
+  whole `background` declaration invalid -- without ever discovering the
+  primary one underneath it).
+
+  This app already has the fix for exactly this class of bug:
+  `dynamic_styles.js` (shipped alongside the 2026-09-07 CSP hardening)
+  applies a `data-style="..."` attribute via the CSSOM at runtime, which
+  style-src doesn't restrict at all. Four call sites added *after* that
+  hardening landed had never been converted to it: `_page_banner.html`'s
+  `icon_tile` span, three in `_labels_table_body.html` (added one day
+  later, 2026-09-14, by this session's own Spaces rework slice 2), and
+  `deps.py::_avatar()`'s initials-fallback span (a plain Python f-string,
+  predates both, same bug). Mechanical `style=` -> `data-style=` rename at
+  all four, no other change. Verified against a real headless Chrome with
+  CSP enforced: computed `background-color` now matches the label's
+  actual color (e.g. purple -> `rgb(138, 86, 193)`, not blue), zero CSP
+  violations logged, on both Settings > Labels and a Space's own page
+  banner.
+
+  **New regression guard**, `tests/test_security_headers.py`'s
+  `TestNoRawInlineStyleWithDynamicValue`: scans every template for a
+  literal (non-`data-`) `style="..."` attribute containing a Jinja `{{ }}`
+  expression, plus a direct source check on `deps.py`'s f-string. Existing
+  tests in `test_phase2_labels.py`/`test_banners.py` that asserted the old
+  `style=` markup updated to `data-style=` (three assertions had the exact
+  attribute name baked in; the rest already checked a
+  `--tile-swatch:var(--cal-bg-...)` substring without the attribute name,
+  so those needed no change). Full suite (93 files, `test_
+  caldav_bridge_live.py` excluded as always): **2,300 passed, 0 failed**.
+
+  **Lesson for future sessions**: this sandbox has no browser by default,
+  which is exactly why a prior response in this same conversation
+  confidently re-confirmed broken behavior as correct from curl/attribute
+  reads alone -- CSP enforcement (like any browser-executed behavior) is
+  invisible to those. `playwright`/chromium can be installed on demand
+  (`pip install playwright --break-system-packages && python -m playwright
+  install chromium`, no sudo available so skip `install-deps` -- the
+  bundled chromium-headless-shell runs fine without it) when a report
+  persists after code-level verification looks clean; the whole
+  install+launch+check needs to happen inside a single tool call, since
+  this sandbox does not persist installed packages, `/tmp` files, or
+  background processes (e.g. a running `uvicorn`) across separate tool
+  calls despite outward appearances otherwise.
+
+- **Scoped:** 2026-09-14 -- direct request to rework how Space labels
+  aggregate: they can no longer be manually assigned to items; a Space's
+  page instead shows everything tagged with any label that belongs to it
+  (via `parent_name`), Settings > Labels gets one table per Space, the
+  Dashboard's per-Space widget grid gets a hard top-level filter instead
+  of each widget re-deriving it, and the Upcoming widget gains tasks
+  alongside events. Given the scope (data model, a migration, 3+ UI
+  surfaces, reverses a decision `open-priority.md` had marked
+  confirmed-shipped 2026-08-14), wrote it up as a plan instead of
+  attempting it as one slice, per Peter's own AskUserQuestion answer.
+  Full spec, acceptance line, and six ordered slices: `open.md` § "Spaces
+  — labels-as-membership rework". Pointers added from `roadmap.md` (2.0
+  section) and from `open-priority.md`'s "Spaces — context" section
+  (marks its "direct membership only" line superseded, doesn't delete it
+  -- still an accurate record of what shipped 2026-08-14 until the
+  remaining slices land).
+
+- **Shipped (slice 1 of 6):** 2026-09-14 -- "Label edit form: Space-link
+  dropdown replaces free-text Group," per `open.md`'s ordered slice list
+  above. `_label_form_fields.html`'s old `<input name="label_group">` is
+  now a `<select name="parent_name">` (new `space_options` context var --
+  deliberately not named `spaces`, which base.html's sidebar already sets
+  as a top-level template variable that would otherwise silently shadow
+  it), populated from `db.list_space_labels(conn)` plus a "No space"
+  option, hidden (`.label-parent-field[hidden]`, both server-rendered
+  initial state and `label_role_picker.js`'s live sync) whenever Role is
+  Space -- Spaces don't nest. All three render call sites
+  (`labels.py::edit_label_modal`/`new_label_modal`,
+  `dashboard.py::quick_add_form`) now pass `space_options`.
+
+  `labels.py::create_label`/`update_label` accept `parent_name: str =
+  Form("")` instead of `label_group`, validated by new
+  `_validate_parent_name` (400 if non-blank and not an existing
+  `generate_space=1` label's name; forced to `None` outright when the
+  submitted Role is itself Space, regardless of what a raw POST sends).
+  Both routes stopped writing `label_group` -- the column and any
+  existing values are untouched, per the slice spec (its fate is slice
+  6's call). `_labels_context`'s Settings-table sort key switched from
+  `label_group` to `parent_name` (same tuple-sort shape, just a different
+  primary key).
+
+  **Tests**: new `TestLabelParentNameDropdown` class in
+  `test_phase2_labels.py` (11 tests) -- valid/invalid/blank parent_name on
+  both create and update, Role=Space silently drops any submitted
+  parent_name on both routes, the edit modal renders a real `<select>`
+  (not the old text input) pre-selected on the label's current parent,
+  the dropdown is hidden when editing a Space itself, and the New Label
+  modal lists every existing Space as an option -- this last group of
+  three caught the `spaces`/`space_options` naming collision with
+  base.html's sidebar (see above) before it shipped. Updated every
+  existing `label_group=` call site across `test_phase2_labels.py`
+  (`TestIconPersistence`, `TestColorValidation`,
+  `TestReservedLabelNameGuard`) to `parent_name=`;
+  `TestSettingsLabelsTableSortOrder`'s `_label` helper now writes
+  `parent_name` instead of `label_group` (it calls `db.upsert_label_config`
+  directly, bypassing the router's new validation, so the grouping values
+  it uses don't need to be real Spaces). `test_dashboard_usability_rework.
+  py`'s quick-add field-presence assertion updated from
+  `name="label_group"` to `name="parent_name"`. Full suite (92 files,
+  `test_caldav_bridge_live.py` excluded as always, run in nine batches
+  since the whole suite exceeds this sandbox's per-command time budget):
+  **2,266 passed, 0 failed** (2,255 prior + 11 new).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm the Space dropdown renders/selects correctly in a live
+  browser, hides when switching Role to Space (and reappears switching
+  away), and that Settings > Labels' existing flat table still reads
+  sensibly sorted by `parent_name` (slice 2 is what actually splits it
+  into per-Space tables).
+
+- **Shipped (slice 2 of 6):** 2026-09-14 -- "Settings > Labels: one table
+  per Space," per `open.md`'s ordered slice list above.
+  `labels.py::_labels_context` now returns `label_groups` (one
+  `{space, labels}` per `generate_space=1` label -- `labels` is the
+  Space's own row followed by its children, `parent_name`-filtered from
+  the same flat sorted list the existing Settings-table sort already
+  produces, no re-sorting) and `ungrouped_labels` (everything else with
+  no `parent_name`, Spaces excluded -- they head their own group
+  instead). A label whose `parent_name` points at something that isn't a
+  real Space (stale data -- slice 1's `_validate_parent_name` only guards
+  the write path) falls back to Ungrouped rather than vanishing. The flat
+  `labels` list/sort itself is untouched, still what
+  `TestSettingsLabelsTableSortOrder` asserts against.
+
+  New shared partial `_labels_table_body.html` (rewritten, not just
+  renamed -- same "render once, include everywhere" contract
+  `_label_form_fields.html` established) renders one `<table>` per group
+  instead of the old single flat table + `label_group` text-badge
+  column; `labels_manage.html` now just `{% include %}`s it inside a
+  plain `<div id="labels-table">` (was `<table id="labels-table">` --
+  static/bulk_select.js's `tableId` config was already "any container,"
+  not literally a table element, so the multi-table swap needed zero
+  bulk-select changes). Each Space's heading is `.label-icon-tile
+  avatar-circle` (new CSS, style.css) -- the one new icon-tile spot
+  `open.md`'s slice list flagged, everywhere else already correct. The
+  Space's own row lives as the first row inside its own table (Spaces
+  don't nest, so it can never appear there via the `parent_name` filter
+  itself -- added explicitly) rather than only in the heading, so
+  Edit/Delete stay reachable from this page exactly like any other row;
+  a Space with zero children still gets its own (near-empty) table. The
+  Ungrouped table always renders, holding the "+ Add label" row (a new
+  label starts unassigned) and the "No labels yet" empty state when
+  nothing exists at all anywhere.
+
+  Side fix, not slice-2 scope creep: rewriting `labels_manage.js` to
+  match the new multi-table markup surfaced that its whole top half (a
+  `#label-search-input` filter) was already 100% dead code -- no
+  template has ever rendered that element, so its own top-of-file guard
+  (`if (!searchInput || !tableWrapper) return;`) skipped everything
+  below it too, INCLUDING the async-CRUD `cc-entity-changed` listener --
+  editing/creating/deleting a label through the modal has been silently
+  leaving Settings > Labels showing stale data until a manual reload
+  ever since that guard was written. Deleted the dead search block
+  outright (not adapted -- there was nothing working to adapt) and
+  un-gated the refresh listener on `tableWrapper` alone; the refresh
+  itself now swaps the whole `#labels-table` container's innerHTML
+  (was one `<tbody>`) since a label/Space CRUD can now change which/how
+  many tables exist, not just which rows are inside one. The
+  already-orphaned `static/label_search.js` (unreferenced by any
+  template already, predates this session) is untouched -- a separate,
+  pre-existing dead file, not this bug's cause.
+
+  Caught by the new tests below, twice: two `<!-- -->` HTML comments (in
+  `_labels_table_body.html` and `labels_manage.html`) that quoted literal
+  `<table ...>`/`color-dot` markup as prose leaked that literal text into
+  the rendered page (HTML comments ship to the client; only Jinja's
+  `{# #}` doesn't) -- both rewritten as `{# #}` comments once the count/
+  substring assertions below caught them.
+
+  **Tests**: new `TestSettingsLabelsGroupedTables` class in
+  `test_phase2_labels.py` (11 tests) -- `label_groups`/`ungrouped_labels`
+  shape, a childless Space still gets a group, groups sort alphabetically
+  by Space name, a stale/non-Space `parent_name` falls back to Ungrouped,
+  the manage page renders exactly one `<table>` per group with no Group
+  column and no leftover `label_group` input, the Space heading's
+  icon-tile carries the right color/icon, the Add-label row and empty
+  state render correctly, the async region fragment matches, and the
+  Space's own row keeps working Edit/Delete links. Full suite (92 files,
+  `test_caldav_bridge_live.py` excluded as always, nine batches for the
+  same sandbox time-budget reason as slice 1): **2,277 passed, 0 failed**
+  (2,266 prior + 11 new).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm the per-Space tables/icon-tile headings actually look
+  right stacked inside one `.card.table-scroll` (repeating `<thead>`s per
+  table, multiple tables' worth of row-select checkboxes/shift-click/
+  drag-paint all still behaving as one selection via bulk_select.js), and
+  that editing/creating/deleting a label now visibly refreshes the table
+  without a manual reload (the dead-code fix above).
+
+- **Shipped (slice 3 of 6):** 2026-09-14 -- "Space pages aggregate by
+  membership, not direct tagging," per `open.md`'s ordered slice list
+  above. `routers/spaces.py::_label_scope` dropped its `name in tags`
+  direct-membership filter -- a task/event/contact now shows on a Space's
+  page if it's tagged with any of that Space's *child* labels
+  (`db.list_child_labels(conn, name)`, the same helper
+  `dashboard.py::_child_label_names`/the widget grid already call
+  internally, not a new implementation), never the Space's own name
+  directly. A Space with no children now shows nothing, matching the
+  acceptance line ("Space labels can no longer be assigned to an item
+  themselves" -- see caveat below on what that line doesn't cover yet).
+
+  Investigated before changing anything (per this session's normal
+  practice): `routers/labels.py::_label_scope` -- the other function
+  `open.md`'s slice text named -- turned out to need NO change at all.
+  `labels.py::label_detail` already redirects any `generate_space=1`
+  label straight to `/spaces/{name}` before ever calling its own
+  `_label_scope`, so that function has been dead for Spaces in practice
+  since that redirect was added; it still runs, unchanged, for
+  plain/project labels, where direct-tag matching is still exactly
+  correct (a plain label's page is its own content, no membership
+  concept). Rewrote both files' stale header comments (still describing
+  a pre-redirect "both are the same underlying page" model) to record
+  this rather than leave them wrong. Also updated
+  `open-priority.md`'s "Spaces — context" section: the existing
+  "Superseded 2026-09-14" note (added at scoping time) now says slices
+  1-3 shipped and clarifies `labels.py::_label_scope` was never the
+  thing that line described losing accuracy.
+
+  **Real gap found, not fixed here (out of this slice's stated scope,
+  flagging for whoever picks up slice 4-6 or a future direct request)**:
+  the acceptance line says a Space "can no longer be assigned to items,"
+  but nothing in the tag-picker vocabulary
+  (`db.list_tag_names_in_use`/`list_all_known_label_names` -- checked,
+  neither excludes `generate_space=1` labels, same code path
+  "Birthday"/the habit label are already excluded from for an unrelated
+  reason) actually stops a task/event/contact from being directly tagged
+  with a Space's own name through the UI today. That tag now simply has
+  no effect on the Space's page (this slice's whole change), which
+  matches slice 6's own "unread but not gone" framing for the legacy
+  tags this same gap produces -- but removing Spaces from the picker
+  outright was never one of the six planned slices, so it's still
+  possible to create *new* such dead tags going forward, not just carry
+  forward old ones.
+
+  **Tests**: `TestGeneratedSpacePage` in `test_phase2_labels.py` --
+  replaced `test_space_page_aggregates_direct_membership_only` (asserted
+  the now-reversed old behavior) with
+  `test_space_page_aggregates_by_child_label_membership` (direct-Space-tag
+  task excluded, two different child-label tasks/an event/a contact all
+  included, verified across tasks/events/contacts) and a new
+  `test_space_with_no_children_shows_nothing`. Full suite (92 files,
+  `test_caldav_bridge_live.py` excluded as always, nine batches for the
+  same sandbox time-budget reason as slices 1-2): **2,278 passed, 0
+  failed** (2,277 prior + 1 net new).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm a Space's page now genuinely shows child-label-tagged
+  items and no longer shows anything tagged with the Space's own name
+  directly (easiest checked on a Space with real data already in it).
+
+- **Shipped (slice 4 of 6):** 2026-09-14 -- "Dashboard: hard top-level
+  filter," per `open.md`'s ordered slice list above. Investigated before
+  changing anything: `open.md`'s literal description (compute
+  `child_label_names` once in `widget_page_context`, thread it through
+  every widget signature) turned out to be the wrong shape for how this
+  code is actually built -- every widget's `_render_*(conn, config, nav)`
+  function already receives `config["label_name"]` (each widget's own
+  config carries its page's identity, seeded that way), so a value
+  "threaded down" from `widget_page_context` would just be a second copy
+  of what's already reachable through `config`. Implemented the same end
+  result (a hard, can't-forget scope check) a different way: new
+  `dashboard.py::_scope_child_names(conn, label_name)` is the one place
+  the Space-vs-plain-label resolution now lives (replaces three near-
+  identical inline copies -- the old `_effective_tags_filter`,
+  `_child_label_names` [deleted], and `_render_habit_checkin`'s own
+  branch), and new `_passes_scope(item_tags, scope_names)` is a hard,
+  unconditional AND-check every item-listing widget now goes through via
+  the shared choke-point functions (`_filtered_tasks`/`_filtered_events`/
+  `_render_contact_list`/`_render_habit_checkin`) -- any current or
+  future widget type built on those (the established convention every
+  existing one already follows) gets the hard filter automatically, with
+  nothing to remember.
+
+  This also fixed a real, demonstrable leak, not just a theoretical
+  "could forget" risk: pre-slice-4, `_effective_tags_filter` folded
+  `label_name`'s resolved scope into the SAME OR-matched list as the
+  widget's own optional `config["tags"]` filter -- so a widget on a
+  Space/Project page with its own tag filter selected could show items
+  from OUTSIDE that page's scope, as long as they matched the widget's
+  own filter (the union let either side win). `_render_contact_list`'s
+  own docstring already promised "intersection, not union" well before
+  this slice; the code never actually delivered it. `_passes_scope` is
+  now checked separately and unconditionally from `_passes_filters`
+  (the widget's own OR-matched narrowing, unchanged) -- genuinely AND'd
+  together for every item type, not just contacts. `_effective_tags_filter`
+  is simplified to just `config.get("tags")` (dropped the `conn` param,
+  nothing here touches the database anymore) now that scope resolution
+  lives elsewhere. `_render_habit_checkin` collapsed from a 3-way inline
+  branch to one `_scope_child_names` call plus a single `in` check.
+
+  **Tests**: new `TestScopeChildNames` (4 tests, the resolution function
+  in isolation) and `TestHardTopLevelScopeFilter` (5 tests, in
+  `test_dashboard_router.py`) -- the last directly seeds the leak
+  scenario (an in-scope-and-matching item, an out-of-scope item that
+  only matches the widget's own filter, an in-scope item that doesn't
+  match) for tasks, events, and contacts, on both a Space and a plain
+  label page, plus a Home/unscoped sanity check. Fixed one now-obsolete
+  test (`test_dashboard_usability_rework.py`'s
+  `test_effective_tags_filter_combines_explicit_tags_with_label_name`,
+  which asserted the old union behavior directly) to assert the new
+  split contract instead. Full suite (92 files, `test_caldav_bridge_
+  live.py` excluded as always, nine batches for the same sandbox time-
+  budget reason as slices 1-3): **2,287 passed, 0 failed** (2,278 prior +
+  9 new).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm a Space/Project page's widgets that have their own
+  Filters-panel tag selection no longer show anything from outside that
+  page (the closed leak) -- easiest to notice on a widget that previously
+  had a broad tag filter set on a Space page with real cross-Space data.
+
+- **Shipped (slice 5 of 6):** 2026-09-14 -- "Upcoming widget shows tasks
+  and events," per `open.md`'s ordered slice list above -- the smallest
+  slice of the six, config-only. `dashboard.py`'s
+  `_DEFAULT_STACK_MEMBER_TYPES` entry for the seeded "Upcoming" stack
+  member changed from `{"range": "all_upcoming", "show": ["events"]}` to
+  `"show": ["events", "tasks"]` -- `_render_agenda`'s all_upcoming branch
+  already fully supports a "tasks" show value (used this way by the
+  standalone Today's Agenda widget already), nothing else needed
+  changing. One-time seed only (`_ensure_default_widgets`/
+  `_ensure_default_label_widgets`'s own app_meta flag) -- an existing
+  install's already-seeded Upcoming widget keeps showing events-only
+  unless the user changes it themselves, same scoping the 2026-09-13
+  title/dedup change to this same constant already used.
+
+  **Tests**: updated `test_seeds_default_widgets_on_first_visit`'s
+  assertion from `["events"]` to `["events", "tasks"]`; new
+  `test_seeded_upcoming_widget_actually_renders_both_tasks_and_events`
+  (end-to-end -- seeds a real task and event, runs the seeded widget's
+  actual config through `_render_agenda`, confirms both come back, not
+  just that the config says so). Full suite (92 files, `test_caldav_
+  bridge_live.py` excluded as always, nine batches for the same sandbox
+  time-budget reason as slices 1-4): **2,288 passed, 0 failed** (2,287
+  prior + 1 new).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm a freshly-seeded Home/Space page's "Upcoming" card now
+  shows tasks alongside events.
+
+- **Shipped (slice 6 of 6 -- Spaces rework complete):** 2026-09-14,
+  "Migration: strip legacy direct Space-label tagging," per `open.md`'s
+  ordered slice list. New `scripts/migrate_spaces_direct_tags.py`
+  (`migrate_labels.py`'s own pattern: `run_migration(conn, dry_run=)` +
+  `main()`/argparse CLI, idempotent, `--dry-run` supported): for every
+  `generate_space=1` label, counts and removes every `object_labels` row
+  whose `label_name` is that Space's own name, via `db.clear_label` (the
+  same "remove from everything" primitive Settings > Labels' own per-row/
+  bulk Delete already uses) -- dead-but-visible data slice 3 stopped
+  reading but didn't clear. `db.clear_label` deletes by exact
+  `label_name` with no `object_type` filter, so this uniformly catches
+  tasks/events/contacts AND habits (a habit's `project_uid` is folded
+  into `object_labels` as a real tag, `db._apply_tags_and_project` --
+  confirmed by reading that code before assuming only three object types
+  needed covering) with zero type-specific branching. `label_group`'s
+  legacy stored text values are left alone, per the slice's own scope
+  note -- nothing reads that column after slice 2.
+
+  **Tests**: new `TestMigrateSpacesDirectTags` in `test_phase2_labels.py`
+  (10 tests) -- removes a direct tag from each object type including
+  habits, leaves child-label tags and a plain label's own direct tags
+  untouched, `--dry-run` writes nothing, a second run is a true no-op,
+  multiple Spaces reported independently, a Space with nothing to clean
+  is omitted from the report (not a zero-entry), `label_group` untouched,
+  and the CLI's own "no database" path. Full suite (92 files, `test_
+  caldav_bridge_live.py` excluded as always, nine batches for the same
+  sandbox time-budget reason as every slice this session): **2,298
+  passed, 0 failed** (2,288 prior + 10 new).
+
+  **Rework complete.** All six slices shipped 2026-09-14, same session.
+  `open.md`'s own "Spaces — labels-as-membership rework" section is
+  removed per that file's "how open work gets tracked" convention (ship
+  -> describe the outcome in `features/` -> remove the planning section);
+  the outcome is `features/labels.md`'s new "Spaces — labels-as-membership
+  rework" section, written as the current-state summary rather than a
+  slice-by-slice log (that log stays here in STATE.md).
+  `open-priority.md`'s "Spaces — context" superseded note updated to
+  reflect the full ship, pointing at `features/labels.md` instead of
+  `open.md` (which no longer has the section to point at). One real gap
+  the rework never closed, flagged three separate times across this
+  session's slice-3/slice-4/slice-6 notes and now recorded in `features/
+  labels.md` itself so it survives past this session: the tag-picker
+  vocabulary still offers a Space's own name as an assignable tag --
+  assigning one is inert (no effect on that Space's page, and this
+  slice's own migration would clean up a stale instance on a future run),
+  but nothing stops a *new* one from being created. Its own follow-up if
+  it ever becomes worth doing.
+
+  **Not visually verified**: sandbox can't reach a real browser --
+  Peter should run `python scripts/migrate_spaces_direct_tags.py
+  --dry-run` against the real database first to see what it would touch,
+  then without `--dry-run` to actually apply it, on whatever schedule
+  fits (it's idempotent and safe to run any time, not urgent).
+
+- **Shipped:** 2026-09-14 -- direct request: "the quick add should support
+  both contacts and labels." quick_add.html (2026-08-10) only ever rendered
+  Task/Event panels; base.html's own comment on the sidebar's global "+"
+  button explicitly flagged a Contacts tab as "a real follow-up, not done
+  here." Asked a clarifying AskUserQuestion up front (full field parity
+  with the standalone forms vs. a trimmed-down minimal set; universal
+  reachability vs. dashboard-only) -- Peter chose full parity + universal.
+
+  contact_form.html's and label_form_modal.html's field grids weren't
+  factored into reusable partials the way Task/Event already were, so
+  step one was extracting them: new `_contact_form_fields.html` (photo/
+  name, phone/email/website/address/social repeatable rows, title, org,
+  birthday, labels, notes) and `_label_form_fields.html` (name, color,
+  icon, group, role picker, project dates, banner-when-editing), each
+  hardcoding its own form id inside the partial (`contact-form`/
+  `label-form`) same as `_task_form_fields.html`'s own `ms_form_id`
+  convention. Both standalone templates now just `{% include %}` the
+  partial -- one markup contract each, no drift risk between the
+  standalone form and the quick-add panel.
+
+  quick_add.html grew two more segmented tabs/panels (Contact, Label) and
+  a `default_tab` context var (defaults `"task"`, validated against the
+  four known kinds) driving which tab/panel/footer-Save-target is active
+  server-side on first paint, not just after quick_add.js runs.
+  routers/dashboard.py::quick_add_form takes a `default_tab` query param
+  and now also passes the Contact/Label context unions new_contact_form/
+  new_label_modal pass (`COLORS`/`ICON_GROUPS` imported lazily from
+  `.labels`, same circular-import-avoidance the existing `.tasks` lazy
+  import already used). static/quick_add.js's hardcoded `kind === "event"
+  ? "event-form" : "task-form"` ternary became a `FORM_IDS` map covering
+  all four kinds.
+
+  base.html's sidebar "+" no longer special-cases Contacts into its own
+  `/contacts/new` modal -- every page opens the same `/quick/add` now,
+  with a small `_qa_defaults` dict keyed on `active_tab` picking
+  `default_tab=contact` on Contacts, `default_tab=label` on both Labels
+  pages (`"labels"` manage table and `"label"` single-label detail page),
+  `task` everywhere else -- same context-awareness the old branching href
+  gave Contacts alone, just generalized.
+
+  **Tests**: new `TestQuickAddContactAndLabelTabs` class in
+  `test_dashboard_usability_rework.py` (6 tests) -- all four forms render
+  with their real fields/ids, the Contact/Label tab buttons are present,
+  each form posts to its real create route (`/contacts`, `/settings/
+  labels/create`), `default_tab` picks the right active tab/panel/save-
+  target for all four kinds, and an unrecognized `default_tab` falls back
+  to `task`. Updated `TestSidebarQuickAdd` in `test_sidebar_tree.py` (was
+  2 tests, now 3) for the new universal `/quick/add?default_tab=...`
+  hrefs. Caught a real bug via the pre-existing Social-network contact
+  test suite (`test_contacts_field_parity_social.py`) failing after the
+  partial extraction: the Social network repeatable-row section was
+  dropped by mistake during the contact-fields extraction (present in the
+  original template, missing from the first cut of the new partial) --
+  fixed before this shipped, not left for a follow-up, since it would
+  have silently broken the standalone New/Edit Contact form too, not just
+  quick-add. Full suite: 10 chunks by filename, **2,255 passed, 0
+  failed** (2,242 + the 13 new/changed tests above, `test_caldav_bridge_
+  live.py` excluded as always).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm the Contact/Label tabs actually open and submit
+  correctly in a live browser (photo upload, repeatable phone/email/
+  website/address/social rows, the label color/icon/role pickers), that
+  the sidebar's "+" opens pre-focused on the right tab from Contacts and
+  both Labels pages, and that quick_add.js's tab switching (now four-way)
+  still smoothly retargets the footer Save button on every tab.
+
+  **Next slice**: nothing specific queued -- pick the next roadmap slice
+  from `roadmap.md`'s table / `open-priority.md` / `open.md` per the
+  normal session workflow below.
+
+- **Shipped:** 2026-09-14 -- direct bug report: archiving/un-archiving a
+  private Published List on the live deploy came back "Something went
+  wrong," but a page refresh showed the change had actually applied.
+  Root cause: `materialize()`/`teardown_collection()` do one synchronous
+  Radicale HTTP round-trip per member (no batch API in caldav_bridge.py)
+  and every mutating route in routers/published_lists.py used to call
+  them inline, blocking the HTTP response on however long that took.
+  Archiving tears the whole collection down and un-archiving rebuilds it
+  from scratch, so a List with many members takes real time. Locally,
+  Radicale is loopback with near-zero latency -- never slow enough to
+  notice. In production, behind a reverse proxy with its own read
+  timeout, a slow-enough materialize() let the proxy's timeout response
+  reach the browser before the (still-running) request thread actually
+  finished -- hence "errored, but a refresh shows it worked." Diagnosed
+  by asking Peter to reproduce and confirm the timing (his answer:
+  specifically the archive-then-back-to-private/public toggle, not a
+  plain edit), then reasoning from caldav_bridge.py's per-member-round-
+  trip design plus the nginx rate-limiting STATE.md already documents
+  elsewhere as evidence of a reverse proxy sitting in front of this app.
+
+  Fix (Peter chose the real fix over just raising the proxy timeout,
+  when offered both): `create_list`/`update_list`/`set_visibility`/
+  `delete_list` all gained an optional `background_tasks: BackgroundTasks
+  = None` param. New `_dispatch_materialize`/`_dispatch_teardown`
+  helpers use `background_tasks.add_task(...)` when a real instance is
+  given, else fall back to the old inline `_try_materialize`/
+  `_try_teardown` call -- so the HTTP response goes out right after the
+  DB write, and the Radicale sync finishes after. Safe to reuse `conn`
+  (from `Depends(get_db)`, a yield-dependency) inside the deferred call:
+  FastAPI (unlike plain Starlette) guarantees a yield-dependency's
+  cleanup runs *after* background tasks finish, confirmed by reading
+  fastapi/routing.py's response-then-background-then-exit-stack ordering
+  directly (installed version 0.141.1) rather than trusting recollection
+  of the docs. `background_tasks` defaults to `None` rather than being
+  required: FastAPI recognizes the `BackgroundTasks` type annotation and
+  auto-injects a real instance for actual HTTP requests regardless of
+  the default, but every one of this suite's many pre-existing tests
+  calls these route functions directly as plain Python functions (no
+  ASGI/TestClient) and never passes one -- the `None` fallback keeps
+  every one of those synchronous and unchanged, not requiring a single
+  edit to any of them. `update_list`'s internal call to `set_visibility`
+  now also threads `background_tasks` through so a rename-and-repause in
+  one submit defers consistently.
+
+  **Tests**: new `TestBackgroundTaskDeferral` class in
+  `test_phase6_published_lists.py` (3 tests) -- passing a real
+  `fastapi.BackgroundTasks()` defers materialize/teardown until the
+  queued task is actually run (`asyncio.run(bg())`), confirmed by
+  checking bridge state is untouched immediately after the route call
+  and correct afterward; a fourth guard test asserts the no-argument
+  case stays synchronous, the behavior the rest of this file's ~90
+  other Published Lists tests already depend on. Full suite: 6 parallel
+  chunks by filename, 2,248 passed (2,245 + 3 new tests), 0 failed
+  (`test_caldav_bridge_live.py` excluded as always).
+
+  **Not verified against the live timeout**: sandbox can't reproduce a
+  reverse-proxy timeout -- Peter should confirm archiving/un-archiving a
+  List with many members no longer errors on the live site after this
+  deploys, and that the change still actually lands (it always did;
+  only the response timing changes).
+
+- **Shipped:** 2026-09-14 -- direct request: "The table list of labels in
+  settings should instead of colored dots have the label icon, and both
+  the icon and string should be colored the label's color." The Name
+  cell in Settings > Labels (both `labels_manage.html`'s initial page
+  load and `_labels_table_body.html`'s async-CRUD region-refresh copy,
+  routers/labels.py's `/regions?region=list`) was a plain solid-color
+  dot (`.color-dot cal-{color}`) + default-colored text.
+
+  Replaced with the label's own `l.icon` (already available directly on
+  each row from `db.list_labels`/`effective_label_config` -- no need for
+  the request-scoped `label_icon()` Jinja global, which is gated behind
+  the separate "Show icons next to labels" Appearance toggle and meant
+  for label *pills* elsewhere in the app; this table is the page where
+  icons are configured, so it always shows them). Falls back to "tag"
+  (this page's own header icon) when a label has none, matching the old
+  dot's "always render something regardless of configuration" behavior.
+  Both the icon and the name text are painted with `var(--cal-accent-
+  {color})` inline -- the same mid-tone swatch variable `_detail_cover.
+  html` callers already use inline for "colored text/icon, no fill"
+  accents (contact/event/task covers), not a new palette. New
+  `.label-cell-icon` CSS class only handles sizing/alignment where the
+  dot used to sit; the per-row color comes from the inline style, not
+  the class, since color is per-row data no shared rule can know.
+
+  **Tests**: new `TestSettingsLabelsTableIconInsteadOfDot` class in
+  `test_phase2_labels.py` (3 tests) -- manage page renders the
+  configured icon (not a color-dot) with both icon and name text carrying
+  the label's accent color; falls back to the "tag" icon when none is
+  configured; the async region fragment gets the identical treatment.
+  Full suite: 6 parallel chunks by filename, 2,245 passed (2,242 + 3 new
+  tests), 0 failed (`test_caldav_bridge_live.py` excluded as always).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm the Labels table shows each label's icon (colored to
+  match) instead of a dot, that a label with no icon shows a colored
+  tag icon instead, and that the async refresh (after an edit/merge)
+  looks the same as the initial page load.
+
+- **Shipped:** 2026-09-14 -- direct request: "Published Lists should be
+  able to have negative filtering by labels (separate drop down)."
+  `evaluate_label_filter` (published_lists.py) already supported a
+  `none` exclude group from day one (§5 of the plan doc, `University AND
+  NOT Archived`) -- there was just no UI for it, per that function's own
+  pre-existing docstring aside. This slice is entirely UI/router wiring,
+  no filter-evaluation logic changed.
+
+  `routers/published_lists.py::_filter_from_form(labels, exclude_labels)`
+  now builds `{"any": [...], "none": [...]}` (`none` key omitted when
+  nothing's excluded, matching `all_names`/`any_names`'s existing "empty
+  list, not an empty-but-present key" convention). `create_list`/
+  `update_list` gained an `exclude_labels: list[str] = Form([])` param;
+  `edit_list_modal` now also passes `selected_exclude_labels` (from
+  `label_filter.get("none")`) into the template context.
+
+  `published_list_create_modal.html`: second, independent
+  `_widget_list_multiselect.html` dropdown ("Exclude labels") below the
+  existing "Filter by labels" one, submitting `exclude_labels`.
+  Deliberately `ms_mode="select"` rather than `"filter"` like the include
+  picker -- "filter" mode's empty-or-everything-checked-both-read-"All"
+  collapse is right for "no positive constraint" but wrong for an
+  exclude list (fully checking it would misleadingly say "All" too, when
+  it actually means "exclude everything labelled anything"); "select"
+  mode's "No labels"/"N selected" has no such collapse. No
+  `ms_allow_new` -- excluding by a label that doesn't exist yet isn't a
+  real action.
+
+  `published_lists.html`'s Filter column now also renders
+  `exclude_filter_labels` pills after the include ones, minus-prefixed
+  and tinted with the existing `--tag-red-bg`/`--tag-red-fg` theme
+  variables (new `.filter-label-exclude` class in style.css) so include
+  vs. exclude stay visually distinct rather than reading as one
+  undifferentiated group of pills.
+
+  **Tests**: new `TestNegativeLabelFilter` class in
+  `test_phase6_published_lists.py` (6 tests) -- `_filter_from_form`
+  persists the `none` group correctly (and omits the key when nothing's
+  excluded), exclude labels actually narrow `materialize()`'s member
+  set, `update_list` can add/change exclusions on an existing List, the
+  edit modal pre-checks the right exclude checkboxes, and `list_index`
+  exposes `exclude_filter_labels` with the new pill class rendered in
+  the table. Also had to add `exclude_labels=[]` to every *existing*
+  direct `router.create_list(...)`/`update_list(...)` call across
+  `test_phase6_published_lists.py` and `test_published_lists_visibility.
+  py` that didn't already specify it -- calling a FastAPI route function
+  directly (not through a real request) leaves any unspecified
+  `Form(...)`-defaulted param as the raw `fastapi.params.Form` sentinel
+  object rather than its resolved default value, which isn't iterable;
+  same reason every pre-existing test already always passed `labels=`
+  explicitly, just hadn't needed to for the newly-added parameter yet.
+  Full suite: 6 parallel chunks by filename, 2,242 passed (2,236 + 6 new
+  tests), 0 failed (`test_caldav_bridge_live.py` excluded as always).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm the "Exclude labels" dropdown shows up in the create/
+  edit modal below the existing label filter, that picking a label there
+  actually removes matching items from what gets published, and that the
+  table's Filter column shows the excluded labels in red with a minus
+  sign.
+
+- **Shipped:** 2026-09-14 -- direct bug report (DAVx5 showing extra/wrong
+  collections): "3 caldav when i have in publish list only 3, and 2
+  carddav while i only have 1 created in the app ... both 'Published-
+  tasks' and 'Tasks' ... 'Published-events' that is a calendar, tasks and
+  journal at the same time." Two independent root causes in
+  `caldav_bridge.py`, both pre-existing:
+
+  1. `CalDavBridge.__init__` eagerly created a default `"tasks"` calendar
+     and `"contacts"` addressbook on every startup -- a leftover from
+     before the 2026-08-06 move of the base task/contact pools to plain
+     SQL (per `sync.py`'s own docstring, there's no invisible default
+     Radicale collection for the base pool anymore). Nothing writes to a
+     bare `"tasks"`/`"contacts"` path any more -- `published_lists.py`
+     always passes a real list/addressbook path -- so these two
+     collections stayed permanently empty and just showed up as phantom
+     extras next to the real published ones (explains "Tasks" alongside
+     "Published-tasks", and the extra CardDAV collection). Removed the two
+     eager calls in `__init__`.
+
+  2. `_event_calendar` never passed `supported_calendar_component_set` to
+     `_get_or_create_calendar` (unlike `_task_calendar`, which already
+     passes `["VTODO"]`), so Radicale created event-type collections
+     accepting any component type -- DAVx5 correctly reported that as one
+     collection simultaneously offering calendar/tasks/journal. Now passes
+     `component_set=["VEVENT"]`.
+
+  **Caveat -- existing collections need a manual nudge, code fix alone
+  doesn't retroactively touch them**: `component_set` only applies at
+  *creation* time (`_get_or_create_calendar`'s `NotFoundError` branch);
+  an already-existing collection isn't altered on restart. So Peter's
+  live server still has the old unrestricted "Published-events" Radicale
+  collection until it's recreated -- toggling that Published List's
+  visibility to archived (tears down the collection via
+  `teardown_collection`) and back to private/public (next `materialize()`
+  recreates it, now VEVENT-only) should do it without needing a code
+  path added for this. The two vestigial empty `"tasks"`/`"contacts"`
+  collections aren't tracked in any db table (`calendars`/`task_lists`/
+  `addressbooks`), so there's no in-app route to delete them either --
+  they'll need a manual DELETE against Radicale directly (or removal from
+  Radicale's storage on disk) to disappear from DAVx5; not done as part
+  of this session since it touches the live deployment, not the repo.
+
+  **Tests**: no new tests added -- this is a startup-behavior/request-
+  shape fix with no test file covering `CalDavBridge.__init__` or
+  `_event_calendar`'s real Radicale calls directly (`test_caldav_bridge_
+  live.py`, excluded as always, is the only place that exercises a real
+  bridge). Ran the full suite instead to confirm nothing depended on the
+  removed eager defaults or the new component_set restriction: 6 parallel
+  chunks by filename, 2,236 passed, 0 failed (`test_caldav_bridge_live.py`
+  excluded as always).
+
+  **Not verified against live DAVx5**: sandbox has no access to Peter's
+  deployed Radicale instance -- Peter should confirm after restarting the
+  app and doing the archive/unarchive nudge above that DAVx5 now sees
+  exactly 2 CalDAV + 1 CardDAV (or however many real published lists
+  exist), and that "Published-events" shows as calendar-only.
+
+- **Shipped:** 2026-09-13 -- direct request: "in the labels table bulk
+  select i would like an option to merge labels into one." Asked a
+  clarifying question on how the destination should be chosen (Ask
+  UserQuestion: pick one of the selected rows / pick any existing label /
+  type any name); Peter chose "pick any existing label" -- same freedom
+  the pre-existing single-row Merge modal already gives (label_merge_modal.
+  html/routers/labels.py::merge_modal), just extended to a multi-select.
+
+  New `_bulk_actions_bar.html` `merge_label` param (optional, default
+  `None` -- every existing caller except Labels leaves it unset and is
+  unaffected) renders a third button between Clear and Delete. Labels'
+  own `CCBulkSelect.init` call gained `mergeButtonId`/`mergeModalUrl`;
+  `static/bulk_select.js` opens a modal (`window.CCModal.open`) instead of
+  a confirm-sheet+fetch for this action, since picking a destination needs
+  a real picker, not a yes/no -- requires >=2 rows selected first (a toast
+  otherwise). New `GET /settings/labels/bulk-merge-modal?uids=a,b,c` ->
+  `label_bulk_merge_modal.html` (lists the selected names + every label as
+  destination candidates) and `POST /settings/labels/bulk-merge` (form:
+  repeated `uids` + `dest_name`) -> `labels_router.bulk_merge_labels`, a
+  plain loop over the existing single-pair `db.merge_labels` (skips
+  `dest_name` if it's also among `uids`, same as merging a label into
+  itself already being a no-op). Reuses the async-CRUD `data-cc-change=
+  "label"` wiring the single-row Merge/Edit modals already have, so a
+  successful bulk merge refreshes just the table region instead of a full
+  reload.
+
+  Side note (not touched by this slice, just discovered while wiring this
+  up): the single-row Merge modal/route (`label_merge_modal.html`,
+  `routers/labels.py::merge_modal`/`merge_label`) has no live trigger
+  anywhere in the current UI -- `_row_action_buttons.html`'s per-row
+  actions are Edit/Delete only now, and the modal's own hardcoded form
+  action (`/labels/{name}/merge`) predates the router's `/settings/labels`
+  prefix and would 404 if it were ever opened. Left as-is; flagging in
+  case a future slice wants to either wire a trigger back in (with the
+  URL fixed) or remove the dead code.
+
+  **Tests**: new `TestLabelsBulkMerge` class in `test_bulk_actions_tables.
+  py` (5 tests) -- merges N selected labels into a destination and
+  confirms membership unions correctly and the merged-away names are gone
+  from `list_all_label_names`; confirms a destination that's also among
+  `uids` is skipped rather than merged into itself; confirms an empty/
+  whitespace-only or reserved `dest_name` raises (400); confirms the modal
+  GET endpoint's context carries both the selected names and the full
+  sorted label list. Ran the file alone first (22 passed), then full
+  suite in 12 chunks of ~8 files each (this session's per-bash-call ~45s
+  ceiling) -- 2,236 passed (2,231 + the 5 new tests), 0 failed
+  (`test_caldav_bridge_live.py` excluded as always).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm the Merge button shows up in Labels' bulk-actions bar
+  once 2+ rows are checked, that the modal opens with the right label
+  chips, and that a real merge redirects/refreshes the table correctly.
+
+- **Shipped:** 2026-09-13 -- direct request (9 of 9, closing out the
+  "before v2.2.0 release" batch): "the label table inside settings should
+  be sorted by Groups first, then by type (space first, then projects,
+  then plain), then alphabetically." Was flat alphabetical-by-name only --
+  `routers/labels.py::_labels_context` called `db.list_labels` (itself
+  just `sorted(names, key=str.lower)`) and then re-sorted by name again
+  anyway (`labels.sort(key=lambda l: l["name"].lower())`, a leftover from
+  an earlier table redesign per its own inline comment). Replaced that
+  second sort with a composite key: `(label_group or "", type rank, name)`
+  all lowercased. Type rank is a new `_ROLE_SORT_RANK = {"space": 0,
+  "project": 1, "none": 2}` dict, mapped through the existing
+  `_label_role(cfg)` helper (already encoded the right mutually-exclusive
+  space/project/none classification, just never used for ordering before)
+  -- deliberately a separate mapping from `_label_role`'s own internal
+  precedence rule ("is_project wins if both flags are somehow set", about
+  resolving an ambiguous row, unrelated to bucket sort order). Ungrouped
+  rows land before any named group purely because `"" < "Anything"` in
+  Python's default string comparison -- no direction was specified in the
+  request for that case, so this is `sorted()`'s natural behavior, not a
+  deliberate design choice. Table itself stays a flat `<tr>` list (both
+  `labels_manage.html` and the async-CRUD `_labels_table_body.html`
+  fragment already render that way, `label_group` shown only as a
+  per-row badge) -- this is a pure ordering change, no template/markup
+  edits needed.
+
+  **Tests**: new `TestSettingsLabelsTableSortOrder` class in
+  `test_phase2_labels.py` (4 tests, no prior test asserted row order
+  here) -- confirms type order within one group (space, then project,
+  then plain), alphabetical order within one group+type, that Group beats
+  type/name as the primary key (a plain label in an earlier group sorts
+  before a Space label in a later group), and an end-to-end check through
+  the real `manage_labels` route (not just the `_labels_context` helper).
+  Ran the file alone first (55 passed), then full suite in the same
+  12-chunk split as every entry above -- 2,231 passed (2,227 + the 4 new
+  tests), 0 failed (`test_caldav_bridge_live.py` excluded as always).
+
+  **Not visually verified**: same sandbox-can't-reach-a-real-browser
+  limitation noted elsewhere in this file -- Peter should open
+  Settings > Labels with a real mix of grouped/ungrouped and space/
+  project/plain labels to confirm the new ordering reads the way this
+  request intended.
+
+  **Batch note**: this closes the 9-item "before v2.2.0 release" request
+  Peter opened this session with (confirmed up front via
+  AskUserQuestion to run sequentially, one slice/commit/STATE.md update
+  each, matching this file's own discipline rather than batching). All 9
+  are now shipped or verified-already-working (see the 8 entries above
+  this one, same date). `pyproject.toml` was deliberately NOT bumped to
+  2.2.0 as part of this -- these were nine standalone direct requests
+  framed as "before the release," not a confirmation that the release
+  itself is scoped/complete; that call is Peter's to make.
+
+- **Shipped:** 2026-09-13 -- direct request (8 of 9 in the same "before
+  v2.2.0 release" batch): "the Birthday label should be hidden, as well
+  for the habits one, because they are not intended to be applied by the
+  user directly." Asked a follow-up clarifying question (AskUserQuestion)
+  on scope, since two genuinely separate label lists exist -- "hide from
+  the apply-to-object picker only" vs. "hide everywhere, including
+  Settings > Labels" -- Peter chose the narrower option: stays visible/
+  editable in Settings > Labels (so it can still be recolored/re-iconed,
+  and the habit label can still be renamed there), only disappears from
+  every chip picker used to apply a label to a task/event/contact/note.
+
+  Traced both system labels to their source: "Birthday" is a hardcoded
+  literal (`db.py::sync_contact_birthday_event`'s `tags=["Birthday"]`,
+  auto-applied to the synthetic yearly birthday event every contact save
+  upserts). The habit marker has no fixed name at all --
+  `task_habit_settings.habit_label` (default `"Habit"`, user-renameable
+  in Settings) -- so the exclusion has to read the LIVE configured value,
+  not match a fixed string.
+
+  Every picker (`_task_form_fields.html` and its event/contact/note/habit
+  equivalents) funnels through one shared function,
+  `db.list_tag_names_in_use` -> `db.list_all_known_label_names` -- the
+  single right place to filter once instead of once per caller. Added a
+  case-insensitive exclusion set there: `{"birthday", <live habit_label,
+  lowercased>}`. Deliberately does NOT touch `db.list_labels` (the
+  Settings > Labels admin table) or `db.list_all_label_names` (used by
+  that table and by published-lists' own label filter) -- both still show
+  every label including these two, matching the chosen scope.
+
+  **Tests**: new `TestSystemLabelsExcludedFromThePicker` class in
+  `test_phase2_labels.py` (5 tests) -- confirms Birthday is excluded even
+  while in use (but still present in the unfiltered
+  `list_all_label_names`), case-insensitively; confirms the default
+  "Habit" is excluded; confirms a *renamed* habit label tracks the live
+  config (excludes the new name, stops excluding the old "Habit" string
+  once it's no longer configured); confirms ordinary labels are
+  unaffected. Ran the file alone first (51 passed), then full suite in
+  the same 12-chunk split as the entries above -- 2,227 passed (2,222 +
+  the 5 new tests), 0 failed (`test_caldav_bridge_live.py` excluded as
+  always).
+
+  **Not visually verified**: same sandbox-can't-reach-a-real-browser
+  limitation noted elsewhere in this file -- Peter should confirm on a
+  real task/event/contact edit form that Birthday/Habit no longer appear
+  as addable chips, while Settings > Labels still lists both normally.
+
+- **Shipped:** 2026-09-13 -- direct request (7 of 9 in the same "before
+  v2.2.0 release" batch): "contact images should be resource efficient
+  (webp) -- I know they can be saved inline in the contacts thing [as
+  whatever format the syncing CardDAV client chose], I'd prefer the
+  frontend to serve webp images, not the one in vcf directly. Of course
+  they should be the same [visually]." A contact's stored photo format is
+  whatever a web upload's own allowlist picked (JPEG/PNG/GIF/WEBP,
+  `routers/contacts.py::_read_photo`) OR, for a CardDAV-synced contact,
+  whatever format the *external syncing client* chose for its vCard
+  PHOTO property (`vcard_rows.py`, completely unconstrained -- the actual
+  gap this request named).
+
+  This is the first real image-**decoding** dependency the app has ever
+  taken on -- `image_sniff.py` and multiple older comments in
+  `routers/contacts.py`/`banners.py` explicitly documented a "no Pillow"
+  stance, but that only ever held because nothing needed to decode pixels
+  before now (sniffing a signature and serving stored bytes verbatim
+  never did); re-encoding into a *different* format has no
+  byte-rearranging shortcut, it needs a real decoder. Added `pillow>=10`
+  to `webapp/pyproject.toml` and regenerated `uv.lock` (this sandbox had
+  no `uv` binary available by default -- installed both `pillow` and `uv`
+  itself into the project's own `.venv` via `pip`, then ran `uv lock`
+  from there; `uv lock` resolved cleanly, "Added pillow v12.3.0").
+
+  New `src/image_convert.py`, one function: `to_webp(data) -> bytes |
+  None` -- decodes with Pillow, `convert("RGBA")` (preserves a GIF/PNG's
+  transparency instead of flattening it, and normalizes odd source modes
+  like a JPEG's CMYK), re-encodes as WebP at quality 82 (a reasonable
+  avatar/thumbnail default, not a value derived from a specific
+  size/quality target in the request), returns `None` on any decode
+  failure (corrupt/truncated sync data) rather than raising.
+  `routers/contacts.py::contact_photo_image` now always attempts this on
+  the way out and switches `media_type` to `image/webp` when it succeeds
+  -- falling back to the exact old behavior (serve the original stored
+  bytes/type) when it can't decode them, so a contact with a genuinely
+  corrupt synced photo still serves *something* instead of 404ing.
+  Deliberately scoped to contacts only, per the request -- banners and the
+  user's own profile photo (`banners.py`/`settings.py`'s own photo
+  routes) are untouched. This transcodes at serve-time only; `photo_b64`/
+  `photo_type` on disk are unchanged, so a vCard export of the same
+  contact still round-trips the original bytes, not the WebP re-encode.
+
+  **Tests**: the two pre-existing route tests
+  (`test_serves_photo_bytes_with_immutable_cache_control`,
+  `test_webp_photo_type_served_correctly`) use fake, non-decodable bytes
+  and needed no changes -- `to_webp` correctly fails closed on them and
+  the route falls back to its old behavior, which is exactly what they
+  already asserted. Added two new tests using real Pillow-generated
+  JPEG/PNG fixtures to actually exercise the transcode path: confirms the
+  served bytes are real WebP (via `image_sniff.sniff_image_type`, not
+  just a claimed media_type), decode back to the right size/near-original
+  color (closeness, not exact equality -- lossy WebP at quality 82 shifts
+  channel values by a few units even on a flat swatch), and that a PNG's
+  alpha channel survives the round-trip rather than getting flattened.
+  Ran `test_image_caching.py` alone first (27 passed), then full suite in
+  the same 12-chunk split as the entries above -- 2,222 passed (2,220 +
+  the two new tests), 0 failed (`test_caldav_bridge_live.py` excluded as
+  always).
+
+  **Not visually verified**: same sandbox-can't-reach-a-real-browser
+  limitation noted elsewhere in this file -- Peter should confirm a real
+  synced (non-web-uploaded) contact photo still looks right once served
+  through this path, and that `uv sync`/a real deploy picks up the new
+  `pillow` dependency correctly from the regenerated lock file (this was
+  only verified via `uv lock`'s own resolution succeeding in-sandbox, not
+  a real deploy-image build).
+
+- **Shipped:** 2026-09-13 -- direct request (6 of 9 in the same "before
+  v2.2.0 release" batch): "row-select should not persist between page
+  refresh!" Audited every place selection state could plausibly survive a
+  reload first -- no localStorage/sessionStorage/query-param/server-side
+  session use anywhere near row-select in `static/*.js`, `templates/`, or
+  `routers/*.py`; both selection implementations (`tasks_table.js`'s
+  bespoke one, `bulk_select.js`'s shared `CCBulkSelect` used by Holidays/
+  Time Blocks/Labels/Contacts) keep selection purely in an in-memory `Set`
+  that's always empty on a fresh script evaluation.
+
+  The real cause is outside app-level "persistence" entirely: browsers
+  (Chrome in particular) restore a `<input type="checkbox">`'s last
+  `.checked` value across a plain reload from DOM position alone,
+  independent of any app state and regardless of `<form>` wrapping. Left
+  alone this produces exactly the reported symptom -- a checkbox visually
+  checked after a refresh -- even though the underlying `selected` Set
+  (rebuilt empty every load) has no matching uid, no `.is-selected`
+  highlight, no bulk-actions bar. Two-part fix: `autocomplete="off"` added
+  to all six `.row-select` checkbox render sites
+  (`_task_row.html`, `_habit_row.html`, `_contacts_body.html`,
+  `labels_manage.html`, `settings_time_blocks.html`,
+  `settings_holidays.html`) to stop the browser attempting the
+  restoration at all; and, as a guaranteed fallback regardless of browser
+  behavior, both JS modules now force every `.row-select` checkbox back
+  to unchecked (and clear stray `.is-selected`) once at load --
+  `tasks_table.js` reuses its own existing `reconcileAfterSwap()` (already
+  did exactly this after an async region swap, just never called once at
+  initial page load before now); `bulk_select.js`'s `init()` does the
+  equivalent inline since it has no separate reconcile function.
+
+  **Tests**: `test_bulk_actions_tables.py` plus every table-view test file
+  the six edited templates touch (Tasks, Habits, Contacts, Labels, Time
+  Blocks, Holidays) first -- 190 passed, no exact-checkbox-markup test
+  existed to update (none asserted the full `<input ...>` string). Then
+  full suite in the same 12-chunk split as the entries above -- 2,220
+  passed, 0 failed (`test_caldav_bridge_live.py` excluded as always).
+
+  **Not live-verified**: this is a browser-behavior fix with no
+  JS/CSS test harness in this suite (recurring note in this file) to
+  simulate a real reload's form-state restoration -- Peter should select
+  a few rows on Tasks and on one `CCBulkSelect` page (e.g. Contacts or
+  Labels), refresh, and confirm every checkbox comes back unchecked with
+  no stale bulk bar.
+
+- **Shipped:** 2026-09-13 -- direct request (5 of 9 in the same "before
+  v2.2.0 release" batch): "contact's avatar-circle avatar-large avatar
+  should be colored in backgrounds like for Projects and Spaces avatars."
+  Projects/Spaces get their color from `label_config.color`, applied via
+  `_page_banner.html`'s `.label-icon-tile` (`--tile-swatch:var(--cal-bg-
+  {color})`). Contacts have no color field of their own -- reused
+  `deps.py`'s existing `stable_color()` (a name/uid -> one-of-16-palette-
+  names MD5 hash, already used for this same contact's detail-cover accent,
+  `contact_detail.html:50`) instead of adding a real color field/picker.
+
+  `deps.py::_avatar()` (the one shared global every avatar-circle render
+  site goes through) now seeds `stable_color(contact.get("uid") or
+  contact.get("full_name") or "?")` for the no-photo initials-fallback
+  `<span>` only -- a real photo `<img class="avatar-circle">` is untouched,
+  it doesn't need a color fill. Adds a new `avatar-colored` class plus
+  inline `--tile-swatch:var(--cal-bg-{name}, var(--cal-bg-blue))` to that
+  span; new CSS rule `.avatar-circle.avatar-colored{background:var(--tile-
+  swatch, ...); color:#fff;}` in style.css. Stays a circle (`.avatar-
+  circle`'s own 50% radius) -- the request was for color, not
+  `.label-icon-tile`'s squircle shape. The `uid`-less fallback (`full_name`)
+  covers the two call sites that pass a plain profile-photo dict with no
+  `uid` at all (`_page_banner.html`'s Home-header avatar,
+  `settings_your_profile.html`'s own avatar row) -- both also now get a
+  colored initials fallback for free, not just contacts proper, since
+  they share the exact same `_avatar()` global.
+
+  **Tests**: three pre-existing tests asserted the old exact two-class
+  markup (`class="avatar-circle avatar-hero"` / `avatar-large"`, no
+  `avatar-colored`) and needed updating to substring/piecewise assertions
+  instead of hardcoding a specific `stable_color()`-derived color name
+  (`test_banners.py`'s `test_home_shows_avatar_initial_fallback_with_a_
+  banner`, `test_home_avatar_uses_display_name_initial`,
+  `test_home_still_shows_the_profile_avatar`; `test_detail_modals_
+  rework.py`'s `test_contact_header_shows_avatar_and_org`). Ran the four
+  affected files plus every contacts-field-parity file first (373 passed
+  combined), then full suite in the same 12-chunk split as the entries
+  above -- 2,220 passed, 0 failed (`test_caldav_bridge_live.py` excluded
+  as always).
+
+  **Not visually verified**: same sandbox-can't-reach-a-real-browser
+  limitation noted elsewhere in this file -- Peter should open the
+  Contacts list/detail/edit-form and Settings > Your profile to confirm
+  the colored initials fallback reads well against both themes, and that
+  white text has enough contrast on every one of the 16 `--cal-bg-*`
+  swatches (`--tile-swatch`'s fallback chain assumes it does, same
+  assumption `.label-icon-tile` already makes for Projects/Spaces, but
+  never independently re-verified here).
+
+- **Verified, no change needed:** 2026-09-13 -- direct request (4 of 9 in
+  the same "before v2.2.0 release" batch): "contacts should be able to be
+  created and edited even without a birthday attached to it." Already
+  true today, checked every layer that could plausibly block it:
+  `contact_form.html`'s birthday `<input>` (line ~267) has no `required`
+  attribute -- the only required field on that form is `full_name`; its
+  `pattern` attribute only rejects malformed *non-empty* input, an empty
+  value passes HTML5 validation. `routers/contacts.py::_parse_birthday_field`
+  (both `create_contact` and `update_contact` call it) treats a blank
+  string as "no birthday," returning `None`, not raising -- explicitly
+  documented in its own docstring as deliberate. The `contacts.birthday`
+  DB column (`db.py`, added via `_ensure_column`) is a plain nullable
+  `TEXT`, no `NOT NULL`/default. No JS file references "birthday" at all
+  (grepped `static/*.js`), so no client-side blocker either. Already
+  covered by two existing green tests in
+  `tests/test_contacts_field_parity_birthday.py`:
+  `test_create_contact_blank_birthday_stores_none` and
+  `test_update_contact_can_clear_birthday`. Ran that file alone to confirm
+  (46 passed) -- no code changed, so no full-suite run or commit beyond
+  this doc note; if Peter is hitting an actual blocker in the deployed
+  app, it isn't in this code path and is worth a fresh bug report with
+  the exact error/behavior seen (stale deploy vs. this branch, or a
+  different field being mistaken for birthday, are the likeliest
+  explanations).
+
+- **Shipped:** 2026-09-13 -- direct request (3 of 9 in the same "before
+  v2.2.0 release" batch): "widgets that don't have a time limit -- the
+  time limit shouldn't actually be infinite, it should always be 364 days
+  into the future. Also no limit should actually be 20 maximum items."
+  Only two widget types have either of these "unlimited" knobs (`agenda`,
+  `contact_list` in `routers/dashboard.py`'s `WIDGET_VIEWS`
+  `has_limit` set) -- confirmed via grep, no other widget type reads
+  `config["limit"]` or has a range concept.
+
+  Item count: `_render_agenda`/`_render_contact_list` used to treat a
+  stored `limit == 0` as "don't slice at all." Both now clamp `0` (or a
+  falsy value) to `20` right after resolving it, before any slicing
+  happens -- one `if not limit: limit = 20` each, rather than restructuring
+  the slice calls themselves. Two `_widget_*.html` templates' "0 =
+  unlimited" field-hints updated to "0 = up to 20" to match (the `limit`
+  input/stepper/min=0 markup itself is unchanged, just the label).
+
+  Date horizon: `_render_agenda`'s All upcoming range used to leave Tasks
+  with literally no upper bound (`task_end_iso = None`) and window Events
+  to a 730-day recurrence-expansion cap that, it turned out, was never
+  actually being enforced as a display bound in the first place (see
+  below) -- both now resolve to `today + 364 days`, matching Next 30
+  days' own shape (window end computed once, used for both Tasks and
+  Events) instead of the two having different semantics.
+
+  Found and fixed a related pre-existing bug while doing this: the Events
+  filter only ever checked `start_at >= today_iso` (a lower bound), never
+  an upper one, because `recurrence_expand.expand_events`'s own docstring
+  says "non-recurring rows pass through unchanged" -- `event_window_end`
+  only ever bounded a RECURRING row's expanded occurrences, so a plain
+  one-off event dated arbitrarily far in the future already leaked into
+  both Next 30 days and All upcoming with no real ceiling at all. Added
+  the missing `<= event_window_end` check to that same filter line --
+  without it, the new 364-day All upcoming horizon wouldn't have bounded
+  anything (caught by a new test seeding a 400-days-out event, which
+  still came back before this fix).
+
+  **Tests**: `test_dashboard_router.py` alone first (140 passed) -- both
+  existing `test_limit_zero_means_unlimited` tests renamed/rewritten to
+  assert a 20-item cap (25 seeded, 20 returned) instead of "returns
+  everything," and a new `test_all_upcoming_range_bounds_to_364_days_out`
+  added (360-days-out event included, 400-days-out excluded) which is
+  what surfaced the pre-existing Events-upper-bound bug above. Then full
+  suite in the same 12-chunk split as the two entries above -- 2,220
+  passed (2,219 + the one new test), 0 failed (`test_caldav_bridge_live.py`
+  excluded as always).
+
+  **Not visually verified**: the two field-hint label changes ("0 = up to
+  20") weren't screenshotted -- same sandbox-can't-reach-a-real-browser
+  limitation as elsewhere in this file, low risk since it's a one-line
+  text change in an already-tested template region.
+
+- **Shipped:** 2026-09-13 -- direct request (2 of 9 in the same "before
+  v2.2.0 release" batch as the entry below): "the kanban board should
+  allow for easier drag and drop (drag a card from any point, drop
+  anywhere in the column even on its header); columns shouldn't have a
+  fixed size, each should match the tallest column on the same row so
+  drag-and-drop within a row doesn't need vertical mouse movement."
+  "Drag from any point" turned out to already be true -- `tasks_board.js`'s
+  pointerdown is bound to the whole `.kanban-card`, never a handle -- no
+  code change needed there, just confirmed by reading the file.
+
+  The real gap was the drop side: `columnAtPoint` resolved
+  `.closest(".kanban-cards")`, and `.kanban-column-head` is a SIBLING of
+  `.kanban-cards` (not nested inside it), so hovering/dropping on a
+  column's header resolved to nothing and silently did nothing. Now
+  resolves `.closest(".kanban-column")` (covers the header), and `endDrag`
+  looks up that column's own `.kanban-cards` child as the actual append
+  target (`fromCards`/`toCards`, renamed from the old single
+  `fromColumn`/`column` pair for clarity) -- appending straight into
+  `.kanban-column` itself would've put the card outside the card list,
+  since the column also wraps the header.
+
+  Equal-height columns: `.kanban-board`'s `align-items:flex-start` was
+  overriding flex's own `stretch` default, which is why each column only
+  ever sized to its own content -- dropping that declaration (stretch
+  needs no explicit value) makes every column in the same flex line
+  (== each visual row, both before and after the two `@container`
+  wrap tiers) stretch to the tallest column in that row, for free, no new
+  rule needed. Added `flex:1` to `.kanban-cards` so the card list itself
+  fills the extra height (cosmetic -- the drop target was already the
+  whole stretched `.kanban-column` regardless). Moved the drop-highlight
+  rule from `.kanban-cards.drop-hover` to `.kanban-column.drop-hover` to
+  match the widened drop target, and moved its `transition:background`
+  onto `.kanban-column`'s own base rule (a transition only declared on
+  the hover-state rule doesn't reliably animate the state change).
+
+  **Tests**: `tests/test_project_detail.py` alone first (44 passed --
+  `test_board_markup_matches_the_scripts_own_selectors`'s
+  `.closest(".kanban-cards")` substring check still holds, that call
+  still exists in the file as `fromCards`), then full suite in the same
+  12-chunk split as the entry above -- 2,219 passed, 0 failed
+  (`test_caldav_bridge_live.py` excluded as always). No JS/CSS harness
+  exists in this suite (recurring note in this file) so the drag/drop and
+  stretch behavior itself is validated by source reasoning, not a
+  simulated-pointer-sequence or computed-style assertion.
+
+  **Not live-verified**: same sandbox-can't-reach-a-real-browser
+  limitation noted elsewhere in this file -- Peter should confirm on a
+  real board with an uneven column-length mix that (a) columns visibly
+  stretch to match the tallest in their row at all three `@container`
+  tiers, and (b) dropping directly on a column's header actually moves
+  the card.
+
+- **Shipped:** 2026-09-13 -- direct request (1 of 9 in a "before v2.2.0
+  release" batch, user confirmed sequential one-slice-per-session handling
+  for the whole batch): "the agenda for projects should be updated to the
+  newest dashboard widget style (date as pills)." `project_detail.html`'s
+  Agenda card had its own older row shape (date as plain leading-cell text,
+  title second) predating `_widget_agenda.html`'s 2026-09-13 "date as a
+  pill, title first, date second, circle dot" row rework -- this slice
+  brings the project page's card in line with that same shape: task rows
+  now use `widget_complete_button` in the leading `widget-row-icon` cell
+  (was plain relative-date text) with the date moved to the right cell;
+  event rows use `widget_event_dot()` leading with the date+time as a
+  right-aligned blue pill (was leading-cell text, no pill); the synthetic
+  project-deadline row keeps its non-clickable shape but now carries a
+  flag leading icon and a single red pill combining "Deadline · <date>"
+  (previously a bare "Deadline" pill with the date sitting outside it as
+  plain leading text) -- one pill rather than two since `widget_link_row`
+  only has one `right` slot. No CSS or macro changes needed --
+  `.pill-static`/`.pill-blue`/`.widget-row-icon`/`widget_event_dot()` etc.
+  all already existed from `_widget_agenda.html`'s own pass; this was a
+  markup-only change to `project_detail.html` (imports `widget_complete_button`,
+  `widget_event_dot` alongside the macros it already imported).
+
+  **Tests**: `tests/test_project_detail.py` alone first (44 passed --
+  existing assertions only check `resp.context["agenda_items"]`, backend
+  data unaffected by a template change, plus a substring check for
+  "Deadline" in the rendered body, still true inside the combined pill),
+  then full suite in 12 chunks by test file (this sandbox's per-bash-call
+  45s ceiling doesn't tolerate even ~10-file chunks reliably, smaller than
+  the 4-chunk split earlier sessions used) -- 2,219 passed, 0 failed
+  (`test_caldav_bridge_live.py` excluded as always).
+
+  **Not visually verified**: same sandbox-can't-reach-a-real-browser
+  limitation noted elsewhere in this file -- Peter should open a project
+  page with upcoming tasks/events/a deadline to confirm the pill layout
+  reads correctly, especially the combined "Deadline · <date>" pill text
+  wrapping at narrow widths.
+
+- **Shipped:** 2026-09-13 -- direct request: "a bigger library of icons that
+  fit the actual uses of the app," curated against the user's real label list
+  (University, Asociația de Dezbateri, Birthday, Creangă Debate, Debate,
+  Family, High School) -- none of these had anything more specific than
+  generic book/award/users glyphs to pick from. Added 30 hand-drawn icons
+  (24x24, stroke-width 2, round caps/joins, same spec as every other icon in
+  `templates/_icons_sprite.html`) across three new `ICON_GROUPS` categories
+  in `routers/labels.py`: "School & University" (graduation-cap, school,
+  backpack, pencil, ruler, calculator, id-card, chalkboard, notebook, atom),
+  "Debate & Speech" (message-circle, message-square, megaphone, podium,
+  gavel, trophy, medal, handshake, quote, scale), "Family & Celebrations"
+  (cake, balloon, party-popper, baby, family-tree, candle, confetti,
+  sparkles, ribbon, home-heart). Only message-circle/message-square have a
+  real Feather-set equivalent (reused as-is); everything else is original,
+  redrawn to match rather than pulled in as a dependency. `LABEL_ICONS`
+  derives from `ICON_GROUPS` automatically, so no other file needed
+  changes -- verified no id collisions with the existing ~140 symbols and
+  that every name in `ICON_GROUPS` resolves to a real sprite symbol
+  (regex cross-check, not just visual inspection).
+
+  **Tests**: full suite in 4 chunks (same reasoning as below -- this
+  sandbox's 45s per-bash-call ceiling), 2,219 passed, 0 failed
+  (`test_caldav_bridge_live.py` excluded as always).
+
+  **Not visually verified**: same sandbox-can't-reach-a-real-browser
+  limitation noted elsewhere in this file -- Peter should open the icon
+  picker (label/habit edit modal) once deployed to confirm the 30 new
+  glyphs render as intended, especially the more complex ones (gavel,
+  trophy, family-tree).
+
+- **Shipped:** 2026-09-13 -- direct report: "the mobile-nav-drawer doesn't
+  allow to be dragged down to close." (Same report also flagged two other
+  mobile-touch issues, deliberately NOT built this slice per direct
+  instruction to do one at a time: calendar drag-and-drop needs a
+  hold-before-drag gesture so events stop being nudged by accident --
+  confirmed the drag itself already works and doesn't fight page scroll,
+  it's just too easy to trigger; and table row-select checkboxes should be
+  hidden on mobile in favor of long-press-to-select. Both left as clear
+  follow-ups, not investigated further.)
+
+  Root cause (found by static analysis + comparing against `#modal-handle`,
+  the known-working reference the drawer's own code comments say it copies
+  -- no live device/browser was available in this sandbox to reproduce
+  directly: Claude in Chrome runs on a different machine than this
+  session's sandbox, so it can't reach the sandbox's `127.0.0.1:8000` dev
+  server, and the Chrome extension's `navigate` tool refuses `file://`
+  URLs outright ("Can't interact with browser internal pages"). Documented
+  here so a future session doesn't re-attempt the same dead end):
+  `#modal-handle` sits OUTSIDE its sheet's scrollable region (a sibling of
+  `.modal-body`, which alone scrolls), but `#mobile-nav-handle` is the
+  first child INSIDE `.tabbar` -- and `.tabbar` itself is the
+  `overflow-y:auto` scrollport for the whole drawer (Spaces/Projects tree
+  included, no separate inner wrapper exists to scroll instead). Two
+  consequences: the touchable box was a literal 36x4px sliver, much
+  smaller odds of a thumb landing on it than the equally-sized
+  `#modal-handle` gets since that one isn't also fighting a sibling
+  scroll gesture for the same pixels; and being a plain (non-sticky) flex
+  child, it scrolls away with the list the moment the Spaces tree is tall
+  enough to scroll -- "grab the top of the sheet" stops being reachable at
+  all past that point.
+
+  Fix is CSS-only, `.mobile-nav-handle` in `style.css`'s mobile breakpoint
+  -- no JS/markup change, `static/mobile_nav_drawer.js` still binds
+  pointerdown/move/up to the same `#mobile-nav-handle` id it always did:
+  `position:sticky;top:0` pins the handle to the scrollport's own top edge
+  regardless of scroll offset (`.tabbar` is the nearest scrolling
+  ancestor sticky needs), the box itself grows to a real 28px touch
+  target with the small visible pill drawn via `::before` instead of
+  being the box (affordance looks identical, only the invisible hit/drag
+  area grows), and an opaque `background:var(--bg-elevated)` plus
+  `z-index:1` (local to `.tabbar`'s own stacking context, unrelated to the
+  page-level z-index scale) keep scrolled-past list rows from showing
+  through or stacking above the now-pinned handle.
+
+  **Tests**: full suite run in 4 parallel chunks by test file (same
+  approach as the session below, this sandbox's per-bash-call 45s ceiling
+  makes the ~2,200-test full run time out otherwise) -- 2,219 passed, 0
+  failed (`test_caldav_bridge_live.py` excluded as always). No JS/CSS
+  harness exists in this suite (recurring note in this file), so the fix
+  itself is validated by source/cascade reasoning, not a computed-style or
+  drag-simulation assertion.
+
+  **Not live-verified**: same sandbox-can't-reach-a-real-browser
+  limitation as above -- next session (or Peter, on a real phone) should
+  confirm the drag-to-close gesture actually feels right once this is
+  deployed, before assuming the sticky/bigger-hit-target fix fully closes
+  the report.
+
+- **Shipped:** 2026-09-13 -- same-day follow-up direct request: "could you
+  continue with fixing the lack of brute force protection?" (Radicale's
+  own auth has none -- flagged but deliberately left out of the config-
+  visibility slice directly below this one.) Two approaches considered
+  and rejected before landing on the one that's actually wired in:
+  - **fail2ban watching Radicale's log, banning via iptables/ufw** --
+    doesn't work at all in this architecture: `firewall.sh` closes every
+    inbound port except SSH, and the only thing that ever connects to
+    nginx/Radicale is `cloudflared`, over loopback. There's no inbound
+    connection from a real attacker's IP for a local firewall rule to
+    ever block.
+  - **A Cloudflare WAF rate-limiting rule** on `/radicale/*` would
+    genuinely work (stops requests at Cloudflare's edge, before the
+    tunnel) but isn't automated: it needs a scoped Cloudflare API token
+    this tooling never collects (`cloudflared tunnel login`'s cert.pem
+    only authorizes tunnel/DNS operations, not zone-level WAF rules).
+    Documented as a manual option in `deploy/README.md`'s new "Rate
+    limiting Radicale's auth" section, not built.
+
+  What's actually shipped: **nginx's own `limit_req`**, applied only to
+  the `/radicale/` location. New `deploy/nginx/curodav-ratelimit.conf`
+  (installed to `/etc/nginx/conf.d/` by `install-nginx.sh` -- has to live
+  outside `sites-available/`, since `limit_req_zone` is only legal in
+  nginx's `http {}` context, and Debian's stock `nginx.conf` includes
+  `conf.d/*.conf` before `sites-enabled/*`, confirmed via web search
+  rather than assumed) defines a 10r/m-per-IP zone with a `map`-based
+  fallback bucket for requests with no client-IP header at all.
+  `curodav.nginx.conf.template`'s `/radicale/` block references it with
+  `burst=40 nodelay` -- enough to absorb one full DAVx5/Thunderbird/iOS
+  sync cycle's PROPFIND/REPORT/GET burst without any delay, while
+  capping a sustained guessing loop to ~14,400 attempts/day instead of
+  unlimited.
+
+  Keyed on Cloudflare's `CF-Connecting-IP` header, deliberately NOT
+  nginx's own `$remote_addr`/`$binary_remote_addr`: since cloudflared is
+  the only thing that ever connects to nginx (loopback), `$remote_addr`
+  is *always* 127.0.0.1 regardless of who's actually hitting the public
+  hostname -- rate-limiting on it would either bucket every real client
+  together or (set high enough to avoid that) not throttle an attacker
+  at all. `CF-Connecting-IP` is set by Cloudflare's edge from the real
+  TCP connection and can't be spoofed by a client-supplied header of the
+  same name.
+
+  `deploy/README.md` gained the full "Rate limiting Radicale's auth"
+  section (the two rejected approaches + why, what's actually wired in,
+  how to recognize a 429 and what to do about it) plus an updated
+  architecture diagram and files table.
+
+  **Tests**: none -- pure deploy/infra config, no Python touched this
+  slice; the app's own test suite (`pytest -q`) has nothing to exercise
+  here. Verification was: `bash -n` on the touched shell script (clean),
+  a directive-by-directive manual read of both nginx files against
+  nginx's own context rules (`map`/`limit_req_zone`/`limit_req_status`
+  all http-context-only, `limit_req` valid in the location block it's
+  used in), and a web search confirming the conf.d-before-sites-enabled
+  include order Debian's default `nginx.conf` uses (couldn't install
+  nginx in this sandbox to run `nginx -t` directly -- no apt access).
+
+  **Not live-verified**: no real host to actually run `install-nginx.sh`
+  against, hit the `/radicale/` endpoint past the burst limit, and
+  confirm a real 429 -- next session (or before relying on this in
+  production) should do that once a real deploy exists.
+
+- **Shipped:** 2026-09-13 -- same-day follow-up direct request: "the way
+  these env variables are set, I think they are a bit opaque and hard to
+  set or verify. I also don't know if they are set correctly if set in
+  app or in the app setup." Diagnosed first (see this session's earlier
+  turn): Radicale is the genuinely-different case from a sibling project's
+  SearXNG confusion (external CalDAV/CardDAV clients bypass curodav's own
+  frontend entirely and need direct DAV access), and the public route
+  (one hostname, nginx path-split, loopback-bound Radicale) was already
+  correctly wired from the prior DAV-automation slice below -- nothing
+  missing there. The actual gap was visibility: three places
+  (`CC_RADICALE_*` env vars / app_meta / the devuser/devpass dev default)
+  can supply the live connection, with an undocumented-outside-comments
+  precedence rule, no drift detection between an edited env file and the
+  running process, and no way to ask "does this actually work" short of
+  watching `journalctl` during a real phone sync.
+
+  Fixed, app-side (`routers/settings.py`, new "Radicale config
+  visibility" block above `_radicale_config_source`):
+  - `_radicale_config_source(settings, conn)` -- one-line readout of
+    which of the three sources is actually live right now.
+  - `_env_file_drift(settings)` -- compares the on-disk env file's
+    `CC_RADICALE_*` values against what this running process actually
+    loaded at startup; non-None only when they disagree (an edit since
+    the last restart).
+  - `_radicale_public_url_mismatch(settings)` -- flags when
+    `CC_RADICALE_PUBLIC_URL` and `CC_RADICALE_URL` name different
+    Radicale users (comparing only the last path segment; scheme/host
+    legitimately differ by design).
+  - `_check_radicale_connection(settings)` + new `POST
+    /settings/radicale/test-connection` route -- a live, authenticated
+    PROPFIND against the settings this process currently has loaded,
+    deliberately bypassing `app.state.bridge` (a startup-time snapshot
+    that's `None` forever if Radicale was unreachable at boot, so reading
+    it would repeat one stale verdict on every click).
+  All four feed Data & Maintenance's "CalDAV / Radicale sync" card
+  (`settings_data_maintenance.html`): current URL, source, public URL (if
+  set) + mismatch warning, drift warning, and a "Test connection" button
+  using the page's existing toast mechanism.
+
+  Fixed, deploy-side (`scripts/curodav-ctl`): new `curodav-ctl status`
+  subcommand -- no root needed, runs the existing
+  `radicale_reachability_check` (loopback/nginx/public-hostname tiers,
+  previously only a side effect of `install --dav`/`update`) plus a new
+  `radicale_env_consistency_check` (greps `ENV_FILE` directly, warns if
+  `CC_RADICALE_URL`/`CC_RADICALE_PUBLIC_URL` disagree on the Radicale
+  user) standalone, without triggering a deploy. Both checks also now run
+  at the end of `install --dav` and every `update`. `deploy/README.md`
+  gained a "Checking things are still set up correctly" section
+  documenting the split: `curodav-ctl status` (SSH, no browser) vs. the
+  new Settings card (browser, no SSH) as complementary, not competing,
+  answers to "is this actually working."
+
+  Deliberately NOT done this session (out of scope for "visibility," not
+  forgotten): Radicale itself still has no brute-force/rate-limit
+  protection on its htpasswd+bcrypt auth (flagged in the diagnosis, no
+  code change) -- a real gap, but a different kind of fix (fail2ban or a
+  Cloudflare rate-limit rule on `/radicale/*`) from what this slice
+  addressed.
+
+  **Tests**: `test_settings_radicale.py` gained
+  `TestRadicaleConfigSource`/`TestRadicaleEnvDrift`/
+  `TestRadicalePublicUrlMismatch`/`TestCheckRadicaleConnection` (15 new
+  tests total in that file, all passing) exercising all four helpers
+  directly plus the new route's failure path against an unreachable
+  local port (fails fast, no real Radicale/network needed). Found and
+  fixed one PRE-EXISTING bug while running the full suite as a
+  consequence of touching this area: `test_page_header_narrow.py`'s
+  shared `_request_with_app` fixture was missing
+  `radicale_public_base_url` entirely (a `SimpleNamespace`, not the real
+  `Settings` dataclass) -- `published_lists.list_index` reads that field
+  with a direct attribute access (no `getattr` guard, unlike most other
+  callers), so `test_published_lists` was failing with an `AttributeError`
+  before this fix; that field was added to `config.Settings` in the
+  DAV-automation slice below and this one fixture was missed. Full suite
+  (`PYTHONPATH=src ../.venv/bin/python -m pytest -q`, run in batches in
+  this sandbox since one shell call can't hold the ~70s the whole suite
+  takes): 2,224 tests, all green, `test_caldav_bridge_live.py` included
+  (auto-skips without a live `radicale` package install; ran clean here).
+
+  **Not live-verified**: no real server to click "Test connection"
+  against a genuinely public `DOMAIN_APP` or run `curodav-ctl status`
+  against a live systemd deploy from this session -- `bash -n`
+  syntax-checked `curodav-ctl`, and the connection-test/drift/mismatch
+  logic is covered by the unit tests above using an unreachable local
+  port and hand-built fixtures instead of a real Radicale server.
+
 - **Shipped:** 2026-09-13 -- direct request: automate the DAVx5/Radicale
   deploy story that `deploy/README.md` previously documented as a one-time
   manual walkthrough. `scripts/curodav-ctl` gained `install --dav`

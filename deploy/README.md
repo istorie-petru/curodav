@@ -46,6 +46,8 @@ cloudflared  (outbound tunnel from this host -- no inbound port opened)
 https://DOMAIN_APP  -->  localhost:8080 (nginx, ONE ingress rule, ONE hostname)
                             |
                             +-- /radicale/*  --> localhost:5232 (radicale)
+                            |     (rate-limited per real client IP -- see
+                            |      "Rate limiting Radicale's auth" below)
                             +-- everything else --> localhost:8000 (curodav)
 ```
 
@@ -62,6 +64,38 @@ stripping the prefix itself -- Radicale needs to know that prefix to
 generate correctly-prefixed links in its own WebDAV responses (see
 `nginx/curodav.nginx.conf.template`'s own comments for why getting this
 backwards silently breaks a DAVx5 client's follow-up requests).
+
+## How automated this is
+
+`curodav-ctl install --dav` (below) does essentially everything itself.
+Fully automated, no input needed: installing `cloudflared` from
+Cloudflare's apt repo, creating (or reusing, if one with that name
+already exists) the named Tunnel via the Cloudflare API, routing DNS for
+your domain at that tunnel (`cloudflared tunnel route dns` creates the
+actual CNAME record in your Cloudflare zone -- you never touch the DNS
+dashboard), rendering `cloudflared/config.yml`, creating dedicated
+unprivileged system users, installing/enabling all three systemd units,
+and locking the firewall down to SSH-only. Radicale and nginx get the
+same treatment: user, venv/package install, config, systemd unit, all
+scripted.
+
+Two things need a human, both one-time per host: your domain's
+nameservers have to already point at Cloudflare (see "Prerequisites"
+below -- the script can't register a domain or change nameservers for
+you), and the very first run pauses for `cloudflared tunnel login`,
+which prints a URL you open in a browser to authorize this host against
+your Cloudflare account. That authorization persists
+(`/root/.cloudflared/cert.pem`), so every later run skips straight past
+it.
+
+The rest is interactive but trivial: it prompts for the public hostname,
+tunnel name, and Radicale username (remembering your previous answers as
+defaults, so re-running to fix a typo doesn't mean retyping everything),
+plus a Radicale password the first time. The whole thing is safe to
+re-run any time -- it detects what already exists (repo, tunnel, DNS
+route, Radicale account, systemd units) and only does the work that's
+actually still missing, rather than tearing anything down and starting
+over.
 
 ## Prerequisites
 
@@ -191,6 +225,53 @@ resolves on this host.
    to see the actual request/auth failure rather than guessing which of
    the three hops it's failing at.
 
+## Rate limiting Radicale's auth
+
+Radicale's own auth (`htpasswd` + bcrypt, `radicale/config.template`) has
+no rate limiting or lockout of its own -- unlike curodav's own login
+(`src/auth.py`'s `login_rate_limited`, a 5-attempts-per-15-minutes per-IP
+throttle), nothing stops an unlimited number of password guesses. Two
+approaches that DON'T work here, and why, before the one that does:
+
+- **fail2ban watching Radicale's log, banning via iptables/ufw.** Doesn't
+  work at all in this setup: `firewall.sh` closes every inbound port
+  except SSH, and the only thing that ever connects to nginx/Radicale is
+  `cloudflared`, over loopback (see "Why Cloudflare Tunnel" above). There
+  is no inbound connection from the actual attacker's IP for a local
+  firewall rule to ever block -- banning an IP on this host blocks nothing
+  at Cloudflare's edge.
+- **A Cloudflare WAF rate-limiting rule**, scoped to `/radicale/*`, would
+  work and stop requests before they even reach the tunnel -- genuinely
+  the stronger fix. Not automated here: it needs a scoped Cloudflare API
+  token this tooling never collects (`cloudflared tunnel login`'s
+  cert.pem authorizes tunnel/DNS operations only, not zone-level WAF
+  rules), so it's a manual one-time step in the dashboard (Security >
+  WAF > Rate limiting rules on the zone that owns `DOMAIN_APP`) if you
+  want it in addition to what's below.
+
+What's actually wired in by default: **nginx's own `limit_req`**, applied
+to the `/radicale/` location only
+(`curodav.nginx.conf.template`/`curodav-ratelimit.conf`, installed by
+`install-nginx.sh`). This caps sustained request rate to ~10/minute per
+real client IP (a burst of 40 absorbed instantly -- one full DAVx5/
+Thunderbird/iOS sync cycle's PROPFIND/REPORT/GET requests -- before
+anything is throttled), turning an unattended guessing loop into "at most
+~14,400 attempts/day" instead of unlimited, on top of bcrypt's own
+per-attempt cost. Keyed on Cloudflare's `CF-Connecting-IP` header, not
+nginx's own `$remote_addr` -- the latter is *always* `127.0.0.1` here
+(cloudflared is the only thing that ever connects to nginx), so rate-
+limiting on it would either throttle every real client as one shared
+bucket or (set high enough to avoid that) not throttle an attacker at
+all. `CF-Connecting-IP` is set by Cloudflare's edge from the real TCP
+connection and can't be spoofed by a client-supplied header of the same
+name.
+
+A 429 response on `/radicale/*` (visible in a DAVx5 sync log, or via
+`sudo journalctl -u nginx | grep 'limiting requests'`) means this limit
+was hit -- either a real client syncing unusually often (raise the
+`rate=`/`burst=` values in `curodav-ratelimit.conf` and
+`systemctl reload nginx`), or exactly the abuse this exists to catch.
+
 ## Troubleshooting notes (unverified -- no live tunnel tested from this repo)
 
 - If DAVx5 can reach `DOMAIN_APP` fine but `DOMAIN_APP/radicale/...`
@@ -208,6 +289,25 @@ resolves on this host.
   hostname already exists and points somewhere else -- the script prints
   a warning and keeps going rather than aborting; check the Cloudflare
   DNS tab for that zone if the hostname doesn't resolve afterward.
+
+## Checking things are still set up correctly
+
+```bash
+curodav-ctl status
+```
+
+No `sudo` needed and touches nothing -- runs the same reachability checks
+`update`/`install --dav` already run as a side effect (loopback, the local
+nginx path-route, and the public hostname if `deploy.env` exists), plus a
+consistency check that `CC_RADICALE_URL` and `CC_RADICALE_PUBLIC_URL` in
+`/srv/curodav/shared/.env` still agree on which Radicale user they point
+at. Useful any time you've hand-edited the env file, rotated
+`RADICALE_USER`, or just want a "is this actually working" answer without
+digging through `journalctl`. The app's own Settings > Data & Maintenance
+page (2026-09-13) covers the complementary question -- which of env file /
+database / dev-default this *process* is actually running with right now,
+whether the env file has drifted from what's loaded, and a one-click live
+"Test connection" -- from inside the browser instead of SSH.
 
 ## Rotating the Radicale password
 
@@ -227,7 +327,8 @@ need to agree, there's no propagation between them.
 | `deploy.env.example`                 | Copy to `deploy.env`, fill in your real domain        |
 | `firewall.sh`                        | ufw lockdown: only ssh open externally                |
 | `nginx/curodav.nginx.conf.template`  | Local path router: `/radicale/*` -> :5232, `/` -> :8000 |
-| `nginx/install-nginx.sh`             | Installs nginx, drops in the site config, restarts    |
+| `nginx/curodav-ratelimit.conf`       | Rate-limit zone for `/radicale/*` (see "Rate limiting Radicale's auth" above) |
+| `nginx/install-nginx.sh`             | Installs nginx, drops in the site config + rate-limit zone, restarts |
 | `cloudflared/config.yml.template`    | Tunnel ingress rule (ONE hostname -> nginx's port)     |
 | `cloudflared/cloudflared.service`    | systemd unit for the tunnel daemon                     |
 | `cloudflared/install-cloudflared.sh` | Installs cloudflared, creates/reuses the tunnel, routes DNS, starts it |

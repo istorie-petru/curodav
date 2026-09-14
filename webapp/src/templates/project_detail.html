@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill %}
+{% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill, widget_complete_button, widget_event_dot %}
 {% from "_label_pill.html" import label_pill with context %}
 {% from "_page_banner.html" import page_banner with context %}
 {% block title %}{{ project.name }}{% endblock %}
@@ -60,18 +60,34 @@
 
      Three row shapes share this one list, `item.kind`/`item.is_deadline`
      telling them apart (routers/projects.py builds every entry with a
-     common `start_at` sort key regardless of shape):
+     common `start_at` sort key regardless of shape). 2026-09-13 (direct
+     request: "agenda for projects should be updated to the newest
+     dashboard widget style, date as pills") -- brought in line with
+     _widget_agenda.html's current row shape: leading cell is an icon/dot
+     (`widget-row-icon`, matches the Dashboard Agenda widget's column
+     rhythm), title is the main link text, and the date moves into a
+     right-aligned pill instead of sitting as plain leading-cell text:
        - a task (`item.kind == "task"`) -- links to /tasks/{uid}, leading
-         cell is its due date's relative_date, no time component (a task's
-         due_at has no meaningful clock time the way an event's start_at
-         does).
+         cell is the same `widget_complete_button` mark-done control the
+         Dashboard Agenda widget's Tasks rows use, date is a right-aligned
+         gray pill (no time component -- a task's due_at has no meaningful
+         clock time the way an event's start_at does). 2026-09-13 (direct
+         request, "agenda UI more neat" -- screenshot showed this date as
+         plain muted text while the event/deadline rows next to it were
+         already pills, the mismatch reading as visually unfinished): now
+         wrapped in `widget_pill(..., 'gray')` like the other two rows,
+         same fix applied to _widget_agenda.html's own Tasks/Overdue rows
+         for consistency across every Agenda surface.
        - the project's own deadline (`item.is_deadline`) -- a synthetic,
          non-clickable row (routers/projects.py's own comment on why it's
          built as a plain dict rather than a real `events`/task row), a
-         red "Deadline" pill instead of the usual leading cell doubling as
-         its own signal.
+         flag leading icon and a single red pill carrying both the
+         "Deadline" label and its date (kept as one pill rather than two,
+         since only one `right` slot needs the row's whole signal).
        - a plain event (neither of the above) -- links to /events/{uid},
-         leading cell is relative_date plus a time (unless all-day). -->
+         leading cell is `widget_event_dot()` (same dot the Dashboard
+         Agenda widget's Events rows use), date (+ time unless all-day) is
+         a right-aligned blue pill. -->
 <div class="card widget-card-static">
     <div class="widget-header"><h2>{{ icon('calendar', 'icon-sm') }} Agenda</h2></div>
     <div class="widget-content">
@@ -79,11 +95,11 @@
     <table>
         {% for item in agenda_items %}
         {% if item.kind == 'task' %}
-        {{ widget_link_row('/tasks/' ~ item.uid, item.title, leading=(item.start_at | relative_date), leading_class='widget-row-time') }}
+        {{ widget_link_row('/tasks/' ~ item.uid, item.title, leading=widget_complete_button(item.uid), leading_class='widget-row-icon', right=widget_pill((item.start_at | relative_date), 'gray')) }}
         {% elif item.is_deadline %}
-        {{ widget_link_row(none, item.title, leading=(item.start_at | relative_date), leading_class='widget-row-time', right=widget_pill('Deadline', 'red')) }}
+        {{ widget_link_row(none, item.title, leading=icon('flag', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill('Deadline · ' ~ (item.start_at | relative_date), 'red')) }}
         {% else %}
-        {{ widget_link_row('/events/' ~ item.uid, item.title, leading=((item.start_at | relative_date) ~ (' ' ~ (item.start_at | fmt_time) if not item.all_day else '')), leading_class='widget-row-time') }}
+        {{ widget_link_row('/events/' ~ item.uid, item.title, leading=widget_event_dot(), leading_class='widget-row-icon', right=widget_pill(((item.start_at | relative_date) ~ (' ' ~ (item.start_at | fmt_time) if not item.all_day else '')), 'blue')) }}
         {% endif %}
         {% endfor %}
     </table>
@@ -157,15 +173,26 @@
                    gates the served-bytes path the same way _page_banner.
                    html/banner_editor.html both do; a legacy hotlink-only
                    remote banner (no local bytes) falls back to its own
-                   image_url instead. #}
+                   image_url instead.
+                   2026-09-13 (direct request, "drag anywhere doesn't apply
+                   for the banner and the title") -- <img> and <a href> are
+                   natively draggable in every browser by default; a press
+                   starting on either one kicks off the browser's OWN HTML5
+                   drag-and-drop (dragstart) instead of ever reaching
+                   tasks_board.js's Pointer Events sequence, which is why
+                   only the plain card background responded before.
+                   draggable="false" on both turns that native drag off so
+                   the pointerdown they still bubble up to `.kanban-card`
+                   (tasks_board.js's own listener) is the only drag that
+                   fires. #}
                 {% if t.banner %}
                 {% if t.banner.version %}
-                <img class="kanban-card-banner" src="/banners/image?scope={{ t.banner.scope|urlencode }}&amp;v={{ t.banner.version }}" alt="">
+                <img class="kanban-card-banner" src="/banners/image?scope={{ t.banner.scope|urlencode }}&amp;v={{ t.banner.version }}" alt="" draggable="false">
                 {% else %}
-                <img class="kanban-card-banner" src="{{ t.banner.image_url }}" alt="" referrerpolicy="no-referrer">
+                <img class="kanban-card-banner" src="{{ t.banner.image_url }}" alt="" referrerpolicy="no-referrer" draggable="false">
                 {% endif %}
                 {% endif %}
-                <a class="kanban-card-title" href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>
+                <a class="kanban-card-title" href="/tasks/{{ t.uid }}" data-modal draggable="false">{{ t.title }}</a>
                 <div class="kanban-card-meta">
                     {% if t.due_at %}<span class="cell-tag tag-gray">{{ t.due_at | relative_date }}</span>{% endif %}
                     {% for tag in t.tags %}{% if tag != project.name %}{{ label_pill(tag) }}{% endif %}{% endfor %}

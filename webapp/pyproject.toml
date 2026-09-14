@@ -25,6 +25,13 @@ dependencies = [
     # unbootable outside the dev environment (ModuleNotFoundError on
     # import). See deploy/README.md.
     "httpx>=0.27",
+    # 2026-09-13: the first real image-DECODING dependency this app has
+    # taken on -- see src/image_convert.py's own header comment for why
+    # the prior "no Pillow" stance held until now (contact photos serving
+    # as WebP regardless of source format needs a real decoder/encoder,
+    # not just the magic-byte sniffing src/image_sniff.py already did
+    # without one).
+    "pillow>=10",
 ]
 
 [project.scripts]

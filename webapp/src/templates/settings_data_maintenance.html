@@ -280,13 +280,34 @@
      request, "merge the concept of radicale username to the app
      username"); this card just shows where that connection currently
      points. -->
+<!-- 2026-09-13 direct request: the env vars behind this connection were
+     "opaque and hard to set or verify" -- this card now says, in plain
+     language, WHERE the current values came from (source), whether the
+     on-disk env file and this running process have drifted apart, whether
+     the public/loopback URLs still agree on which user they point at, and
+     offers a live one-click "Test connection" instead of the only prior
+     way to know ("watch journalctl while a phone tries to sync"). -->
 <div class="settings-group">
     <div class="card">
         <p class="settings-hint">Current URL: <code>{{ radicale_url }}</code></p>
-        {% if radicale_env_configured %}
-        <p class="settings-hint">Set via environment variables (<code>CC_RADICALE_URL</code>).</p>
+        <p class="settings-hint">Source: {{ radicale_source }}</p>
+        {% if radicale_public_url %}
+        <p class="settings-hint">Public URL (Published Lists' subscribe links): <code>{{ radicale_public_url }}</code></p>
+        {% endif %}
+        {% if radicale_public_url_warning %}
+        <p class="settings-hint settings-hint-error">{{ radicale_public_url_warning }}</p>
+        {% endif %}
+        {% if radicale_env_drift %}
+        <p class="settings-hint settings-hint-error">{{ radicale_env_drift }}</p>
         {% endif %}
         <p class="settings-hint">Manage the connection (username, password, URL) from <a href="/settings/your-profile">Settings &gt; Your Profile</a>.</p>
+        <form class="settings-field-row" method="post" action="/settings/radicale/test-connection">
+            <span class="settings-field-label">Test connection
+                <span class="settings-field-hint">Sends a live, authenticated request to Radicale right now and reports what happens</span>
+            </span>
+            <span class="spacer"></span>
+            <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Test connection</button>
+        </form>
     </div>
 </div>
 
