@@ -33,7 +33,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
 from .. import db
@@ -139,6 +139,50 @@ def _try_teardown(bridge, entity_type: str, collection_path: str) -> None:
         )
 
 
+# 2026-09-14 (direct bug report: archiving/un-archiving a Published List on
+# the live deploy came back "Something went wrong," but a page refresh
+# showed the change had actually applied) -- every mutating route below
+# used to call _try_materialize/_try_teardown inline, blocking the HTTP
+# response on however many synchronous Radicale round-trips materialize()
+# needs (one PUT/DELETE per member -- caldav_bridge.py has no batch API).
+# Archiving tears the whole collection down and un-archiving rebuilds it
+# from scratch, so a List with many members can take a while. Locally,
+# Radicale is loopback with near-zero latency, so this was never slow
+# enough to notice; in production, behind a reverse proxy with its own
+# read timeout, a slow-enough materialize() got the proxy's timeout
+# response back to the browser before the (still-running) request
+# actually finished committing -- hence "errored, but a refresh shows it
+# worked."
+#
+# Fix: dispatch the Radicale work through FastAPI's BackgroundTasks so
+# the HTTP response goes out immediately after the DB write, and the
+# Radicale sync finishes after -- FastAPI (unlike plain Starlette)
+# guarantees a `Depends(get_db)`-style yield-dependency's cleanup runs
+# *after* background tasks finish, so `conn` stays open and usable
+# inside the deferred call. `background_tasks` defaults to `None` rather
+# than being required: FastAPI recognizes the `BackgroundTasks` type
+# annotation and auto-injects a real instance for actual HTTP requests
+# regardless of the default, but this suite's many pre-existing tests
+# call these route functions directly as plain Python functions (no
+# ASGI/TestClient) and never pass one -- the `None` fallback keeps every
+# one of those synchronous and unchanged, exercising the exact same code
+# path this feature has always been tested against.
+def _dispatch_materialize(background_tasks: BackgroundTasks | None, conn, bridge, list_id: str) -> None:
+    if background_tasks is not None:
+        background_tasks.add_task(_try_materialize, conn, bridge, list_id)
+    else:
+        _try_materialize(conn, bridge, list_id)
+
+
+def _dispatch_teardown(
+    background_tasks: BackgroundTasks | None, bridge, entity_type: str, collection_path: str
+) -> None:
+    if background_tasks is not None:
+        background_tasks.add_task(_try_teardown, bridge, entity_type, collection_path)
+    else:
+        _try_teardown(bridge, entity_type, collection_path)
+
+
 @router.get("")
 def list_index(request: Request, conn=Depends(get_db)):
     lists = db.list_published_lists(conn)
@@ -201,6 +245,7 @@ def create_list(
     visibility: str = Form("private"),
     conn=Depends(get_db),
     bridge=Depends(get_bridge),
+    background_tasks: BackgroundTasks = None,
 ):
     name = (name or "").strip()
     if not name or entity_type not in ENTITY_TYPES:
@@ -223,8 +268,10 @@ def create_list(
     db.upsert_published_list(conn, row)
     # Radicale is optional (module docstring) -- a List is saved and
     # shareable (if public) regardless of whether the bridge is up;
-    # materializing into Radicale is best-effort on top of that.
-    _try_materialize(conn, bridge, list_id)
+    # materializing into Radicale is best-effort on top of that, and
+    # deferred to a background task so the response doesn't wait on it
+    # (see _dispatch_materialize's own comment).
+    _dispatch_materialize(background_tasks, conn, bridge, list_id)
     return RedirectResponse(url="/published-lists", status_code=303)
 
 
@@ -265,6 +312,7 @@ def update_list(
     visibility: str = Form("private"),
     conn=Depends(get_db),
     bridge=Depends(get_bridge),
+    background_tasks: BackgroundTasks = None,
 ):
     """Save edits to an existing List -- Name, label filter, and
     Visibility (Type is immutable post-creation, see edit_list_modal's
@@ -310,22 +358,31 @@ def update_list(
 
     if not was_archived:
         if new_collection_path != old_collection_path:
-            _try_teardown(bridge, entity_type, old_collection_path)
-        _try_materialize(conn, bridge, list_id)
+            _dispatch_teardown(background_tasks, bridge, entity_type, old_collection_path)
+        _dispatch_materialize(background_tasks, conn, bridge, list_id)
 
     if visibility != (existing.get("visibility") or "private"):
-        set_visibility(list_id, visibility=visibility, conn=conn, bridge=bridge)
+        set_visibility(list_id, visibility=visibility, conn=conn, bridge=bridge, background_tasks=background_tasks)
 
     return RedirectResponse(url="/published-lists", status_code=303)
 
 
 @router.post("/{list_id}/visibility")
-def set_visibility(list_id: str, visibility: str = Form(...), conn=Depends(get_db), bridge=Depends(get_bridge)):
+def set_visibility(
+    list_id: str,
+    visibility: str = Form(...),
+    conn=Depends(get_db),
+    bridge=Depends(get_bridge),
+    background_tasks: BackgroundTasks = None,
+):
     """Change a List's visibility (private/public/archived, see the
     module docstring). The DB write always succeeds regardless of
     Radicale's reachability; the Radicale-side effect (tearing down the
     collection on archive, re-materializing on un-archive) is best-effort
-    on top of it, same reasoning as create_list."""
+    on top of it, same reasoning as create_list, and deferred the same
+    way (_dispatch_teardown/_dispatch_materialize's own comment) -- this
+    is specifically the route that used to time out archiving/
+    un-archiving a List with many members."""
     existing = db.get_published_list(conn, list_id)
     if existing is None or visibility not in VISIBILITIES:
         return RedirectResponse(url="/published-lists", status_code=303)
@@ -337,20 +394,24 @@ def set_visibility(list_id: str, visibility: str = Form(...), conn=Depends(get_d
     db.set_published_list_visibility(conn, list_id, visibility, public_token)
 
     if old_visibility != "archived" and visibility == "archived":
-        _try_teardown(bridge, existing["entity_type"], existing["radicale_collection_path"])
+        _dispatch_teardown(background_tasks, bridge, existing["entity_type"], existing["radicale_collection_path"])
     elif old_visibility == "archived" and visibility != "archived":
-        _try_materialize(conn, bridge, list_id)
+        _dispatch_materialize(background_tasks, conn, bridge, list_id)
 
     return RedirectResponse(url="/published-lists", status_code=303)
 
 
 @router.post("/{list_id}/delete")
-def delete_list(list_id: str, conn=Depends(get_db), bridge=Depends(get_bridge)):
+def delete_list(
+    list_id: str, conn=Depends(get_db), bridge=Depends(get_bridge), background_tasks: BackgroundTasks = None
+):
     """Permanently delete a published list and its Radicale collection
     (best-effort -- see the module docstring; the DB row is removed
-    either way)."""
+    either way). Teardown is deferred the same way as every other route
+    here (_dispatch_teardown's own comment) -- the DB row is gone by the
+    time this responds regardless of how long the Radicale side takes."""
     existing = db.get_published_list(conn, list_id)
     if existing is not None:
-        _try_teardown(bridge, existing["entity_type"], existing["radicale_collection_path"])
+        _dispatch_teardown(background_tasks, bridge, existing["entity_type"], existing["radicale_collection_path"])
         db.delete_published_list(conn, list_id)
     return RedirectResponse(url="/published-lists", status_code=303)

@@ -610,6 +610,98 @@ class TestNegativeLabelFilter:
         assert "Archived" in body
 
 
+class TestBackgroundTaskDeferral:
+    """2026-09-14 (direct bug report: archiving/un-archiving a Published
+    List on the live deploy came back "Something went wrong," but a
+    refresh showed the change had actually applied) -- materialize()/
+    teardown_collection() do one synchronous Radicale round-trip per
+    member, which used to run inline inside the request before it could
+    respond. A reverse proxy's own read timeout in production could give
+    up on a slow one before the request finished, even though the DB
+    write (and, moments later, the Radicale sync) completed regardless.
+
+    create_list/update_list/set_visibility/delete_list now accept an
+    optional `background_tasks: BackgroundTasks` and dispatch the
+    Radicale work through it when a real instance is given (via
+    `_dispatch_materialize`/`_dispatch_teardown`) -- these tests exercise
+    that deferred path directly (bridge state must NOT reflect the
+    change until the queued task is actually run), while every other
+    test in this file calls the routes with no `background_tasks` at
+    all, exercising the synchronous fallback that keeps them passing
+    unchanged (FastAPI auto-injects a real BackgroundTasks for actual
+    HTTP requests regardless of the `None` default; only these direct-
+    call tests need to construct one explicitly to see the deferred
+    behavior)."""
+
+    def test_create_list_defers_materialize_to_the_background_task(self, conn):
+        import asyncio
+
+        from fastapi import BackgroundTasks
+
+        from src.routers import published_lists as router
+
+        _make_task(conn, "t1", "A", ["University"])
+        bridge = FakeBridge()
+        bg = BackgroundTasks()
+        router.create_list(
+            name="Uni tasks", entity_type="task",
+            labels=["University"], exclude_labels=[],
+            conn=conn, bridge=bridge, background_tasks=bg,
+        )
+        # Not materialized yet -- the row exists, but nothing's been
+        # pushed to Radicale until the queued task actually runs.
+        row = db.list_published_lists(conn)[0]
+        assert row["radicale_collection_path"] not in bridge.task_collections
+        assert len(bg.tasks) == 1
+
+        asyncio.run(bg())
+        assert set(bridge.task_collections[row["radicale_collection_path"]]) == {"t1"}
+
+    def test_set_visibility_defers_teardown_to_the_background_task(self, conn):
+        import asyncio
+
+        from fastapi import BackgroundTasks
+
+        from src.routers import published_lists as router
+
+        _make_task(conn, "t1", "A", ["University"])
+        bridge = FakeBridge()
+        router.create_list(
+            name="Uni tasks", entity_type="task",
+            labels=["University"], exclude_labels=[],
+            conn=conn, bridge=bridge,
+        )
+        list_id = db.list_published_lists(conn)[0]["id"]
+        collection = db.list_published_lists(conn)[0]["radicale_collection_path"]
+        assert collection in bridge.task_collections
+
+        bg = BackgroundTasks()
+        router.set_visibility(list_id, visibility="archived", conn=conn, bridge=bridge, background_tasks=bg)
+        # Teardown queued, not yet run -- the collection is still there.
+        assert collection in bridge.task_collections
+        assert collection not in bridge.deleted_task_list_collections
+        assert len(bg.tasks) == 1
+
+        asyncio.run(bg())
+        assert collection in bridge.deleted_task_list_collections
+
+    def test_no_background_tasks_argument_stays_synchronous(self, conn):
+        # The behavior every other test in this file already relies on --
+        # asserted explicitly here as a guard against this fallback ever
+        # silently regressing.
+        from src.routers import published_lists as router
+
+        _make_task(conn, "t1", "A", ["University"])
+        bridge = FakeBridge()
+        router.create_list(
+            name="Uni tasks", entity_type="task",
+            labels=["University"], exclude_labels=[],
+            conn=conn, bridge=bridge,
+        )
+        row = db.list_published_lists(conn)[0]
+        assert set(bridge.task_collections[row["radicale_collection_path"]]) == {"t1"}
+
+
 class _FakeSettings:
     radicale_base_url = "http://127.0.0.1:5232/devuser/"
     radicale_public_base_url = None

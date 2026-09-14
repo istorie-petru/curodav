@@ -17,6 +17,67 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-14 -- direct bug report: archiving/un-archiving a
+  private Published List on the live deploy came back "Something went
+  wrong," but a page refresh showed the change had actually applied.
+  Root cause: `materialize()`/`teardown_collection()` do one synchronous
+  Radicale HTTP round-trip per member (no batch API in caldav_bridge.py)
+  and every mutating route in routers/published_lists.py used to call
+  them inline, blocking the HTTP response on however long that took.
+  Archiving tears the whole collection down and un-archiving rebuilds it
+  from scratch, so a List with many members takes real time. Locally,
+  Radicale is loopback with near-zero latency -- never slow enough to
+  notice. In production, behind a reverse proxy with its own read
+  timeout, a slow-enough materialize() let the proxy's timeout response
+  reach the browser before the (still-running) request thread actually
+  finished -- hence "errored, but a refresh shows it worked." Diagnosed
+  by asking Peter to reproduce and confirm the timing (his answer:
+  specifically the archive-then-back-to-private/public toggle, not a
+  plain edit), then reasoning from caldav_bridge.py's per-member-round-
+  trip design plus the nginx rate-limiting STATE.md already documents
+  elsewhere as evidence of a reverse proxy sitting in front of this app.
+
+  Fix (Peter chose the real fix over just raising the proxy timeout,
+  when offered both): `create_list`/`update_list`/`set_visibility`/
+  `delete_list` all gained an optional `background_tasks: BackgroundTasks
+  = None` param. New `_dispatch_materialize`/`_dispatch_teardown`
+  helpers use `background_tasks.add_task(...)` when a real instance is
+  given, else fall back to the old inline `_try_materialize`/
+  `_try_teardown` call -- so the HTTP response goes out right after the
+  DB write, and the Radicale sync finishes after. Safe to reuse `conn`
+  (from `Depends(get_db)`, a yield-dependency) inside the deferred call:
+  FastAPI (unlike plain Starlette) guarantees a yield-dependency's
+  cleanup runs *after* background tasks finish, confirmed by reading
+  fastapi/routing.py's response-then-background-then-exit-stack ordering
+  directly (installed version 0.141.1) rather than trusting recollection
+  of the docs. `background_tasks` defaults to `None` rather than being
+  required: FastAPI recognizes the `BackgroundTasks` type annotation and
+  auto-injects a real instance for actual HTTP requests regardless of
+  the default, but every one of this suite's many pre-existing tests
+  calls these route functions directly as plain Python functions (no
+  ASGI/TestClient) and never passes one -- the `None` fallback keeps
+  every one of those synchronous and unchanged, not requiring a single
+  edit to any of them. `update_list`'s internal call to `set_visibility`
+  now also threads `background_tasks` through so a rename-and-repause in
+  one submit defers consistently.
+
+  **Tests**: new `TestBackgroundTaskDeferral` class in
+  `test_phase6_published_lists.py` (3 tests) -- passing a real
+  `fastapi.BackgroundTasks()` defers materialize/teardown until the
+  queued task is actually run (`asyncio.run(bg())`), confirmed by
+  checking bridge state is untouched immediately after the route call
+  and correct afterward; a fourth guard test asserts the no-argument
+  case stays synchronous, the behavior the rest of this file's ~90
+  other Published Lists tests already depend on. Full suite: 6 parallel
+  chunks by filename, 2,248 passed (2,245 + 3 new tests), 0 failed
+  (`test_caldav_bridge_live.py` excluded as always).
+
+  **Not verified against the live timeout**: sandbox can't reproduce a
+  reverse-proxy timeout -- Peter should confirm archiving/un-archiving a
+  List with many members no longer errors on the live site after this
+  deploys, and that the change still actually lands (it always did;
+  only the response timing changes).
+
 - **Shipped:** 2026-09-14 -- direct request: "The table list of labels in
   settings should instead of colored dots have the label icon, and both
   the icon and string should be colored the label's color." The Name
