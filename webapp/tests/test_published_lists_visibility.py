@@ -146,7 +146,7 @@ class TestCreateListVisibility:
         from src.routers import published_lists as router
 
         bridge = FakeBridge()
-        router.create_list(name="Uni", entity_type="task", labels=["University"], conn=conn, bridge=bridge)
+        router.create_list(name="Uni", entity_type="task", labels=["University"], exclude_labels=[], conn=conn, bridge=bridge)
         row = db.list_published_lists(conn)[0]
         assert row["visibility"] == "private"
         assert row["public_token"] is None
@@ -157,7 +157,7 @@ class TestCreateListVisibility:
         _make_task(conn, "t1", "A", ["University"])
         bridge = FakeBridge()
         router.create_list(
-            name="Uni", entity_type="task", labels=["University"], visibility="public",
+            name="Uni", entity_type="task", labels=["University"], exclude_labels=[], visibility="public",
             conn=conn, bridge=bridge,
         )
         row = db.list_published_lists(conn)[0]
@@ -172,7 +172,7 @@ class TestCreateListVisibility:
         from src.routers import published_lists as router
 
         router.create_list(
-            name="Uni", entity_type="task", labels=["University"], visibility="public",
+            name="Uni", entity_type="task", labels=["University"], exclude_labels=[], visibility="public",
             conn=conn, bridge=None,
         )
         row = db.list_published_lists(conn)[0]
@@ -183,7 +183,7 @@ class TestCreateListVisibility:
         from src.routers import published_lists as router
 
         router.create_list(
-            name="Uni", entity_type="task", labels=["University"], visibility="nonsense",
+            name="Uni", entity_type="task", labels=["University"], exclude_labels=[], visibility="nonsense",
             conn=conn, bridge=FakeBridge(),
         )
         assert db.list_published_lists(conn)[0]["visibility"] == "private"
@@ -193,7 +193,7 @@ class TestSetVisibility:
     def _create(self, conn, bridge, visibility="private"):
         from src.routers import published_lists as router
 
-        router.create_list(name="Uni", entity_type="task", labels=["University"], visibility=visibility, conn=conn, bridge=bridge)
+        router.create_list(name="Uni", entity_type="task", labels=["University"], exclude_labels=[], visibility=visibility, conn=conn, bridge=bridge)
         return db.list_published_lists(conn)[0]["id"]
 
     def test_private_to_public_generates_token(self, conn):
@@ -294,8 +294,8 @@ class TestListIndexPublicUrl:
         from src.routers import published_lists as router
 
         bridge = FakeBridge()
-        router.create_list(name="Uni", entity_type="task", labels=["University"], visibility="public", conn=conn, bridge=bridge)
-        router.create_list(name="Priv", entity_type="task", labels=["University"], conn=conn, bridge=bridge)
+        router.create_list(name="Uni", entity_type="task", labels=["University"], exclude_labels=[], visibility="public", conn=conn, bridge=bridge)
+        router.create_list(name="Priv", entity_type="task", labels=["University"], exclude_labels=[], conn=conn, bridge=bridge)
 
         request = _fake_request("/published-lists")
         request.scope["app"] = _FakeApp()
@@ -326,7 +326,7 @@ class TestPublicListsFeed:
         from src.routers import published_lists as router
 
         _make_task(conn, "t1", "Buy milk", ["Shared"])
-        router.create_list(name="Shared", entity_type="task", labels=["Shared"], visibility="public", conn=conn, bridge=bridge)
+        router.create_list(name="Shared", entity_type="task", labels=["Shared"], exclude_labels=[], visibility="public", conn=conn, bridge=bridge)
         return db.list_published_lists(conn)[0]
 
     def test_valid_public_task_token_serves_ics(self, conn):
@@ -345,7 +345,7 @@ class TestPublicListsFeed:
         from src.routers import published_lists as router
 
         db.upsert_contact(conn, {"uid": "c1", "full_name": "Prof X", "tags": ["University"], "created_at": _now()})
-        router.create_list(name="Contacts", entity_type="contact", labels=["University"], visibility="public", conn=conn, bridge=None)
+        router.create_list(name="Contacts", entity_type="contact", labels=["University"], exclude_labels=[], visibility="public", conn=conn, bridge=None)
         row = db.list_published_lists(conn)[0]
         resp = pub.public_list_vcf(row["public_token"], conn=conn)
         assert resp.status_code == 200

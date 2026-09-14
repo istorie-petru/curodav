@@ -7270,6 +7270,16 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
     color: var(--fg-secondary);
 }
 
+/* 2026-09-14 (direct request: negative label filtering on Published
+   Lists) -- excluded labels render in the same Filter column as the
+   included ones, tinted red/minus-prefixed so "matches X" and "minus Y"
+   stay visually distinct at a glance instead of reading as one
+   undifferentiated group of pills. */
+.filter-label-exclude {
+    background: var(--tag-red-bg);
+    color: var(--tag-red-fg);
+}
+
 .tag-task { background: var(--tag-blue-bg); color: var(--tag-blue-fg); }
 .tag-event { background: var(--tag-green-bg); color: var(--tag-green-fg); }
 .tag-contact { background: var(--tag-purple-bg); color: var(--tag-purple-fg); }

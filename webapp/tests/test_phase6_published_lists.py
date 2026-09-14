@@ -293,6 +293,7 @@ class TestPublishedListsRouterCrud:
         router.create_list(
             name="Uni tasks", entity_type="task",
             labels=["University"],
+            exclude_labels=[],
             conn=conn, bridge=bridge,
         )
         rows = db.list_published_lists(conn)
@@ -312,8 +313,8 @@ class TestPublishedListsRouterCrud:
         from src.routers import published_lists as router
 
         bridge = FakeBridge()
-        router.create_list(name="My List!!", entity_type="task", labels=[], conn=conn, bridge=bridge)
-        router.create_list(name="My List!!", entity_type="task", labels=[], conn=conn, bridge=bridge)
+        router.create_list(name="My List!!", entity_type="task", labels=[], exclude_labels=[], conn=conn, bridge=bridge)
+        router.create_list(name="My List!!", entity_type="task", labels=[], exclude_labels=[], conn=conn, bridge=bridge)
         rows = db.list_published_lists(conn)
         paths = {r["radicale_collection_path"] for r in rows}
         assert paths == {"published-my-list", "published-my-list-2"}
@@ -324,7 +325,7 @@ class TestPublishedListsRouterCrud:
         from src.routers import published_lists as router
 
         bridge = FakeBridge()
-        router.create_list(name="Uni", entity_type="task", labels=["University"], conn=conn, bridge=bridge)
+        router.create_list(name="Uni", entity_type="task", labels=["University"], exclude_labels=[], conn=conn, bridge=bridge)
 
         request = Request(
             {
@@ -350,7 +351,7 @@ class TestPublishedListsRouterCrud:
         from src.routers import published_lists as router
 
         bridge = FakeBridge()
-        router.create_list(name="Uni", entity_type="task", labels=["University"], conn=conn, bridge=bridge)
+        router.create_list(name="Uni", entity_type="task", labels=["University"], exclude_labels=[], conn=conn, bridge=bridge)
 
         class _FakeSettingsWithPublicUrl:
             radicale_base_url = "http://127.0.0.1:5232/devuser/"
@@ -407,7 +408,7 @@ class TestNoLabelsPresent:
         _make_task(conn, "t2", "B", [])
         bridge = FakeBridge()
 
-        router.create_list(name="All my tasks", entity_type="task", labels=[], conn=conn, bridge=bridge)
+        router.create_list(name="All my tasks", entity_type="task", labels=[], exclude_labels=[], conn=conn, bridge=bridge)
         rows = db.list_published_lists(conn)
         assert len(rows) == 1
         assert set(bridge.task_collections[rows[0]["radicale_collection_path"]]) == {"t1", "t2"}
@@ -476,6 +477,139 @@ class TestCreateModalDropdownsAreCustomStyled:
         assert '<span class="ms-summary">Private</span>' in body
 
 
+class TestNegativeLabelFilter:
+    """2026-09-14 (direct request: "Published Lists should be able to
+    have negative filtering by labels (separate drop down)") --
+    `evaluate_label_filter` already supported a `none` exclude group
+    (TestEvaluateLabelFilter above), this covers the router/UI wiring
+    that turns a submitted `exclude_labels` form field into that group,
+    round-trips it through create/edit, and materializes correctly."""
+
+    def test_create_list_persists_exclude_labels_as_none_group(self, conn):
+        from src.routers import published_lists as router
+
+        bridge = FakeBridge()
+        router.create_list(
+            name="Uni tasks", entity_type="task",
+            labels=["University"], exclude_labels=["Archived"],
+            conn=conn, bridge=bridge,
+        )
+        row = db.list_published_lists(conn)[0]
+        assert row["label_filter"] == {"any": ["University"], "none": ["Archived"]}
+
+    def test_create_list_omits_none_key_when_nothing_excluded(self, conn):
+        from src.routers import published_lists as router
+
+        bridge = FakeBridge()
+        router.create_list(
+            name="Uni tasks", entity_type="task",
+            labels=["University"], exclude_labels=[],
+            conn=conn, bridge=bridge,
+        )
+        row = db.list_published_lists(conn)[0]
+        assert row["label_filter"] == {"any": ["University"]}
+        assert "none" not in row["label_filter"]
+
+    def test_exclude_labels_actually_narrows_materialized_membership(self, conn):
+        from src.routers import published_lists as router
+
+        _make_task(conn, "t1", "A", ["University"])
+        _make_task(conn, "t2", "B", ["University", "Archived"])
+        bridge = FakeBridge()
+        router.create_list(
+            name="Uni tasks", entity_type="task",
+            labels=["University"], exclude_labels=["Archived"],
+            conn=conn, bridge=bridge,
+        )
+        collection = db.list_published_lists(conn)[0]["radicale_collection_path"]
+        assert set(bridge.task_collections[collection]) == {"t1"}
+
+    def test_update_list_changes_exclude_labels(self, conn):
+        from src.routers import published_lists as router
+
+        _make_task(conn, "t1", "A", ["University"])
+        _make_task(conn, "t2", "B", ["University", "Archived"])
+        bridge = FakeBridge()
+        router.create_list(
+            name="Uni tasks", entity_type="task",
+            labels=["University"], exclude_labels=[],
+            conn=conn, bridge=bridge,
+        )
+        list_id = db.list_published_lists(conn)[0]["id"]
+        collection = db.list_published_lists(conn)[0]["radicale_collection_path"]
+        assert set(bridge.task_collections[collection]) == {"t1", "t2"}
+
+        router.update_list(
+            list_id, name="Uni tasks",
+            labels=["University"], exclude_labels=["Archived"],
+            visibility="private", conn=conn, bridge=bridge,
+        )
+        row = db.get_published_list(conn, list_id)
+        assert row["label_filter"] == {"any": ["University"], "none": ["Archived"]}
+        assert set(bridge.task_collections[row["radicale_collection_path"]]) == {"t1"}
+
+    def test_edit_modal_prefills_selected_exclude_labels(self, conn):
+        from starlette.requests import Request
+
+        from src.routers import published_lists as router
+
+        # Both labels need to exist in the account first (db.list_all_
+        # label_names, which all_labels/the dropdown's options come from,
+        # only lists labels actually applied somewhere) -- otherwise the
+        # template's `{% if all_labels %}` gate hides both the include
+        # AND exclude dropdowns entirely, same "no labels yet" empty
+        # state TestNoLabelsPresent covers.
+        _make_task(conn, "t1", "A", ["University", "Archived"])
+        bridge = FakeBridge()
+        router.create_list(
+            name="Uni tasks", entity_type="task",
+            labels=["University"], exclude_labels=["Archived"],
+            conn=conn, bridge=bridge,
+        )
+        list_id = db.list_published_lists(conn)[0]["id"]
+
+        request = Request(
+            {
+                "type": "http", "method": "GET", "path": f"/published-lists/{list_id}/edit",
+                "query_string": b"", "scheme": "http", "server": ("testserver", 80),
+                "root_path": "", "headers": [],
+            }
+        )
+        resp = router.edit_list_modal(list_id, request, conn=conn)
+        assert resp.context["selected_exclude_labels"] == ["Archived"]
+        body = resp.body.decode()
+        assert 'name="exclude_labels" value="Archived"' in body
+        # Up to the closing `>` of this same <input> tag (attributes span
+        # multiple lines, see _widget_list_multiselect.html's markup).
+        after = body.split('name="exclude_labels" value="Archived"')[1]
+        assert 'checked' in after.split('>')[0]
+
+    def test_list_index_exposes_exclude_filter_labels_for_the_table(self, conn):
+        from starlette.requests import Request
+
+        from src.routers import published_lists as router
+
+        bridge = FakeBridge()
+        router.create_list(
+            name="Uni tasks", entity_type="task",
+            labels=["University"], exclude_labels=["Archived"],
+            conn=conn, bridge=bridge,
+        )
+        request = Request(
+            {
+                "type": "http", "method": "GET", "path": "/published-lists",
+                "query_string": b"", "scheme": "http", "server": ("testserver", 80),
+                "root_path": "", "headers": [],
+                "app": _FakeApp(),
+            }
+        )
+        resp = router.list_index(request, conn=conn)
+        assert resp.context["lists"][0]["exclude_filter_labels"] == ["Archived"]
+        body = resp.body.decode()
+        assert 'filter-label-exclude' in body
+        assert "Archived" in body
+
+
 class _FakeSettings:
     radicale_base_url = "http://127.0.0.1:5232/devuser/"
     radicale_public_base_url = None
@@ -500,7 +634,7 @@ class TestReadOnlyness:
         from src.routers import published_lists as router
 
         bridge = FakeBridge()
-        router.create_list(name="Uni", entity_type="task", labels=["University"], conn=conn, bridge=bridge)
+        router.create_list(name="Uni", entity_type="task", labels=["University"], exclude_labels=[], conn=conn, bridge=bridge)
         row = db.list_published_lists(conn)[0]
         assert row["sync_direction"] == "read_only"
 

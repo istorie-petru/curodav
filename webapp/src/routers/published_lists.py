@@ -81,9 +81,21 @@ def _unique_collection_path(conn, name: str, existing_id: str | None = None) -> 
     return candidate
 
 
-def _filter_from_form(labels: list[str]) -> dict:
-    """Simple filter: items matching ANY selected label."""
-    return {"any": [n for n in labels if n]}
+def _filter_from_form(labels: list[str], exclude_labels: list[str] | None = None) -> dict:
+    """Simple filter: items matching ANY selected label, minus anything
+    carrying any of the excluded labels. `evaluate_label_filter`
+    (published_lists.py) already supported a `none` exclude group from
+    day one -- this is just the first UI wiring it up (2026-09-14 direct
+    request: "Published Lists should be able to have negative filtering
+    by labels (separate drop down)"). `none` key is only set when there's
+    something to exclude, matching `all_names`/`any_names`'s existing
+    "empty list, not an empty-but-present key" convention for the
+    unused groups."""
+    result: dict[str, list[str]] = {"any": [n for n in labels if n]}
+    excluded = [n for n in (exclude_labels or []) if n]
+    if excluded:
+        result["none"] = excluded
+    return result
 
 
 def _public_feed_url(request: Request, row: dict) -> str | None:
@@ -142,11 +154,13 @@ def list_index(request: Request, conn=Depends(get_db)):
     for row in lists:
         row["subscribe_url"] = collection_url(base_url, row["entity_type"], row["radicale_collection_path"])
         row["public_url"] = _public_feed_url(request, row)
-        # Convert label_filter to simple label list for display
+        # Convert label_filter to simple label lists for display
         if "label_filter" in row and isinstance(row["label_filter"], dict):
             row["filter_labels"] = row["label_filter"].get("any", [])
+            row["exclude_filter_labels"] = row["label_filter"].get("none", [])
         else:
             row["filter_labels"] = []
+            row["exclude_filter_labels"] = []
     return templates.TemplateResponse(
         "published_lists.html",
         {
@@ -183,6 +197,7 @@ def create_list(
     name: str = Form(...),
     entity_type: str = Form(...),
     labels: list[str] = Form([]),
+    exclude_labels: list[str] = Form([]),
     visibility: str = Form("private"),
     conn=Depends(get_db),
     bridge=Depends(get_bridge),
@@ -198,7 +213,7 @@ def create_list(
         "id": list_id,
         "name": name,
         "entity_type": entity_type,
-        "label_filter": _filter_from_form(labels),
+        "label_filter": _filter_from_form(labels, exclude_labels),
         "radicale_collection_path": collection_path,
         "sync_direction": "read_only",
         "created_at": _now(),
@@ -226,6 +241,7 @@ def edit_list_modal(list_id: str, request: Request, conn=Depends(get_db)):
         return RedirectResponse(url="/published-lists", status_code=303)
     label_filter = existing.get("label_filter")
     selected_labels = label_filter.get("any", []) if isinstance(label_filter, dict) else []
+    selected_exclude_labels = label_filter.get("none", []) if isinstance(label_filter, dict) else []
     return templates.TemplateResponse(
         "published_list_create_modal.html",
         {
@@ -235,6 +251,7 @@ def edit_list_modal(list_id: str, request: Request, conn=Depends(get_db)):
             "entity_labels": ENTITY_LABELS,
             "editing": existing,
             "selected_labels": selected_labels,
+            "selected_exclude_labels": selected_exclude_labels,
         },
     )
 
@@ -244,6 +261,7 @@ def update_list(
     list_id: str,
     name: str = Form(...),
     labels: list[str] = Form([]),
+    exclude_labels: list[str] = Form([]),
     visibility: str = Form("private"),
     conn=Depends(get_db),
     bridge=Depends(get_bridge),
@@ -286,7 +304,7 @@ def update_list(
 
     row = dict(existing)
     row["name"] = name
-    row["label_filter"] = _filter_from_form(labels)
+    row["label_filter"] = _filter_from_form(labels, exclude_labels)
     row["radicale_collection_path"] = new_collection_path
     db.upsert_published_list(conn, row)
 

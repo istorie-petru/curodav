@@ -17,6 +17,67 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-14 -- direct request: "Published Lists should be
+  able to have negative filtering by labels (separate drop down)."
+  `evaluate_label_filter` (published_lists.py) already supported a
+  `none` exclude group from day one (§5 of the plan doc, `University AND
+  NOT Archived`) -- there was just no UI for it, per that function's own
+  pre-existing docstring aside. This slice is entirely UI/router wiring,
+  no filter-evaluation logic changed.
+
+  `routers/published_lists.py::_filter_from_form(labels, exclude_labels)`
+  now builds `{"any": [...], "none": [...]}` (`none` key omitted when
+  nothing's excluded, matching `all_names`/`any_names`'s existing "empty
+  list, not an empty-but-present key" convention). `create_list`/
+  `update_list` gained an `exclude_labels: list[str] = Form([])` param;
+  `edit_list_modal` now also passes `selected_exclude_labels` (from
+  `label_filter.get("none")`) into the template context.
+
+  `published_list_create_modal.html`: second, independent
+  `_widget_list_multiselect.html` dropdown ("Exclude labels") below the
+  existing "Filter by labels" one, submitting `exclude_labels`.
+  Deliberately `ms_mode="select"` rather than `"filter"` like the include
+  picker -- "filter" mode's empty-or-everything-checked-both-read-"All"
+  collapse is right for "no positive constraint" but wrong for an
+  exclude list (fully checking it would misleadingly say "All" too, when
+  it actually means "exclude everything labelled anything"); "select"
+  mode's "No labels"/"N selected" has no such collapse. No
+  `ms_allow_new` -- excluding by a label that doesn't exist yet isn't a
+  real action.
+
+  `published_lists.html`'s Filter column now also renders
+  `exclude_filter_labels` pills after the include ones, minus-prefixed
+  and tinted with the existing `--tag-red-bg`/`--tag-red-fg` theme
+  variables (new `.filter-label-exclude` class in style.css) so include
+  vs. exclude stay visually distinct rather than reading as one
+  undifferentiated group of pills.
+
+  **Tests**: new `TestNegativeLabelFilter` class in
+  `test_phase6_published_lists.py` (6 tests) -- `_filter_from_form`
+  persists the `none` group correctly (and omits the key when nothing's
+  excluded), exclude labels actually narrow `materialize()`'s member
+  set, `update_list` can add/change exclusions on an existing List, the
+  edit modal pre-checks the right exclude checkboxes, and `list_index`
+  exposes `exclude_filter_labels` with the new pill class rendered in
+  the table. Also had to add `exclude_labels=[]` to every *existing*
+  direct `router.create_list(...)`/`update_list(...)` call across
+  `test_phase6_published_lists.py` and `test_published_lists_visibility.
+  py` that didn't already specify it -- calling a FastAPI route function
+  directly (not through a real request) leaves any unspecified
+  `Form(...)`-defaulted param as the raw `fastapi.params.Form` sentinel
+  object rather than its resolved default value, which isn't iterable;
+  same reason every pre-existing test already always passed `labels=`
+  explicitly, just hadn't needed to for the newly-added parameter yet.
+  Full suite: 6 parallel chunks by filename, 2,242 passed (2,236 + 6 new
+  tests), 0 failed (`test_caldav_bridge_live.py` excluded as always).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm the "Exclude labels" dropdown shows up in the create/
+  edit modal below the existing label filter, that picking a label there
+  actually removes matching items from what gets published, and that the
+  table's Filter column shows the excluded labels in red with a minus
+  sign.
+
 - **Shipped:** 2026-09-14 -- direct bug report (DAVx5 showing extra/wrong
   collections): "3 caldav when i have in publish list only 3, and 2
   carddav while i only have 1 created in the app ... both 'Published-

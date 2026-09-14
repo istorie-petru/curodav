@@ -170,6 +170,36 @@
                 {% set ms_pill = true %}
                 {% set ms_form_id = _form_id %}
                 {% include "_widget_list_multiselect.html" %}
+
+                {# 2026-09-14 (direct request: "Published Lists should be
+                   able to have negative filtering by labels (separate
+                   drop down)") -- second, independent dropdown for the
+                   `none` exclude group `evaluate_label_filter`
+                   (published_lists.py) already supported but had no UI
+                   for. Deliberately "select" mode, not "filter" mode
+                   like the include picker above: "filter" mode's empty-
+                   or-everything-checked-both-read-"All" collapse is
+                   right for "no positive constraint," but wrong here --
+                   a fully-checked exclude list would misleadingly say
+                   "All" too, when it actually means "exclude everything
+                   labelled anything." "select" mode's "No labels"/"N
+                   selected" reading has no such collapse and matches
+                   this field's real semantics (nothing checked = nothing
+                   excluded). No `ms_allow_new` -- excluding by a label
+                   that doesn't exist yet isn't a real action, unlike the
+                   include filter which doubles as this feature's only
+                   label-creation entry point elsewhere in the app. #}
+                {% set ms_name = 'exclude_labels' %}
+                {% set ms_mode = 'select' %}
+                {% set ms_label = 'Exclude labels' %}
+                {% set ms_items = [] %}
+                {% for name in all_labels %}{% set _ = ms_items.append({'uid': name, 'name': name}) %}{% endfor %}
+                {% set ms_selected = selected_exclude_labels | default([]) %}
+                {% set ms_wide = true %}
+                {% set ms_pill = true %}
+                {% set ms_allow_new = false %}
+                {% set ms_form_id = _form_id %}
+                {% include "_widget_list_multiselect.html" %}
                 {% else %}
                 <div class="field field-wide">
                     <label>Filter by labels <span class="text-muted">(optional)</span></label>
