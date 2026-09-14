@@ -49,9 +49,11 @@ these pieces fit together.
 - **Notes** — free-text notes with labels, the fourth thing Quick Capture
   (`!n` in the command palette) can create.
 - **Labels & Spaces** — one consistent way to organize everything: tag any
-  task, event, or contact; labels become filterable pages, and "Spaces" group
-  labels into projects with their own dashboard, course info, and homework
-  table.
+  task, event, or contact. A plain label gets its own Kanban+Agenda page
+  (like a Project's); "Project" labels get the same shape plus a bounded
+  date range; "Spaces" aggregate child labels/Projects under a customizable
+  widget-grid dashboard. See `features/labels.md` for the current-state
+  detail.
 - **Schedule** — your class timetable by day of week and week parity; it
   turns into real calendar events automatically, flags conflicts, counts
   credits, and links each class to its professor contact.

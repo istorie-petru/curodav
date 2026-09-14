@@ -17,6 +17,85 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-16 -- direct request: "PLAIN LABELS SHOULD GENERATE
+  PAGES LIKE PROJECTS, WITH AGENDA AND KANBAN, NOT DASHBOARDS." Investigated
+  first (the premise sounded like it might need building from scratch, but
+  didn't): a Project (`is_project=1` label) already got exactly this,
+  rebuilt 2026-08-30 (`routers/projects.py::project_detail`,
+  `project_detail.html`) -- a Kanban board + Agenda card, no widget grid.
+  Plain labels (and Spaces) were the ones still falling through to
+  `label_detail.html`'s customizable widget-grid dashboard. Asked two
+  clarifying questions before touching code: (1) should a plain label
+  render the literal same Kanban+Agenda page a Project uses, or a
+  separate-but-similar implementation -- Peter chose "similar but
+  distinct," own template/route, so the two can diverge later; (2) should
+  Spaces switch too -- Peter chose no, Spaces keep the widget-grid
+  dashboard unchanged (an aggregation page, doesn't obviously fit a single
+  Kanban board). Also asked whether this warranted a written plan first
+  (matching how the Spaces rework was scoped) -- Peter chose to just
+  implement it this session.
+
+  `routers/labels.py::label_detail` (`GET /settings/labels/{name}`) --
+  the `is_space`/`is_project` redirects at the top are unchanged, so this
+  only ever runs for a plain label now. Replaced the
+  `_ensure_default_label_widgets`/`widget_page_context` widget-grid
+  rendering with an independent Kanban+Agenda context-build (own
+  `tasks`/`columns`/`board_statuses`/`agenda_items`, not a call into
+  `routers/projects.py`), rendering new `label_kanban_detail.html` --
+  same shape as `project_detail.html` (Kanban board grouped by status,
+  drag-and-drop via the existing `static/tasks_board.js`; an Agenda card
+  merging future events + open due-dated tasks, chronologically sorted,
+  capped at 8) but no deadline row (a plain label has no
+  `start_date`/`end_date` the way a Project does -- the template's
+  `is_deadline` branch is kept only so the row-shape stays a drop-in match
+  for the same `agenda_items` list, not because a plain label can produce
+  one). No "New widget"/"Reset layout" in edit mode either, matching
+  `project_detail.html`'s own "not a traditional dashboard" precedent --
+  only the Add/Change banner control remains.
+
+  Side cleanup, found while touching this: `labels.py`'s own
+  `_label_scope` helper (every task/event/contact directly tagged with the
+  label) had become fully dead code the moment this route stopped calling
+  it -- its output was never actually rendered by `label_detail.html`
+  even before this session (same class of leftover as the
+  project-scope-section block removed earlier today). Deleted outright,
+  not left dead; `routers/spaces.py` has its own separate `_label_scope`
+  (materially different, membership-based), untouched.
+
+  `label_detail.html` is now Space-only (only `routers/spaces.py::
+  space_detail` renders it) -- updated its own header comment to say so
+  rather than leave it describing a Space/Project split that no longer
+  exists.
+
+  **Tests**: `test_phase2_labels.py`'s `test_plain_label_page_shows_its_
+  own_direct_items` rewritten (old `is_space`/`tasks`/`events` context-key
+  assertions -> `columns["active"]`/`agenda_items`, the new shape).
+  `test_dashboard_usability_rework.py`: `test_label_page_edit_mode_
+  actions_present` updated (asserts "New widget"/"Reset layout" now
+  absent, "Add banner" present); `TestLabelPageResetButton` rewritten --
+  its old "Reset layout present in edit mode" test replaced with a "gone
+  entirely" test, its ordering test (New widget before Reset layout)
+  deleted outright since neither control exists any more to order.
+  `documentation/features/labels.md`'s "Generated page" section (already
+  stale before this session -- still described the pre-2026-08-30 "both
+  Project and plain label render the shared widget grid" state) and
+  `features/README.md`'s one-line Labels & Spaces summary both corrected
+  to the current three-way split (Space/Project/plain label), while
+  fixing `labels.md`'s Settings > Labels description to match this same
+  session's earlier single-table change too (was still describing the
+  superseded one-table-per-Space design). Full suite (92 files, `test_
+  caldav_bridge_live.py` excluded as always, four batches for the sandbox
+  time-budget reason every recent session has used): **2,299 passed, 0
+  failed** (2,300 prior, net -1 -- the ordering test above was deleted,
+  not replaced 1:1, since there's nothing left to order).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm a plain label's page now shows the Kanban board + Agenda
+  card (not the old widget grid), that drag-and-drop between columns
+  still works there (it's the same `tasks_board.js`, but worth confirming
+  against a second call site), and that a Space's own page is genuinely
+  unaffected (still the widget-grid dashboard it always was).
+
 - **Shipped:** 2026-09-16 -- direct request: "an ancient part of the app
   appears, in the spaces pages, the project-scope-section. i don't want
   it. it shouldn't exist. we already have spaces & projects widget."

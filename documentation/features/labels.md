@@ -25,20 +25,24 @@ condensed, current-state summary.
   when the label being edited is itself a Space — Spaces don't nest. The
   old free-text `label_group` field/column still exists in the schema but
   is no longer written or read anywhere in the UI.
-- **Settings > Labels** (`/settings/labels`) renders one `<table>` per
-  Space (heading = a `.label-icon-tile avatar-circle` in the Space's own
-  color/icon + its name) plus one "Ungrouped" table holding every label
-  with no parent and the "+ Add label" row — replaces the old flat
-  sortable table with a text Group badge. A Space's own row is the first
-  row inside its own table (still individually Edit/Delete-able there,
-  same as any label) rather than a second, separate mechanism.
+- **Settings > Labels** (`/settings/labels`) renders one single `<table>`
+  (2026-09-16, direct feedback superseded the original one-`<table>`-per-
+  Space design below) — a Space's own row is a colored "card" row (light
+  `var(--tag-<color>-bg)` tint, rounded corners, plain `.label-cell-icon`
+  like any label) with a Usage figure totaled across itself and every
+  child, followed by its children as plain rows, then every ungrouped
+  label as a plain row with no heading in front of it — no repeated
+  per-group header, no special-cased Ungrouped section. (Superseded
+  history: 2026-09-14 slice 2 originally shipped one `<table>` per Space,
+  each with its own `.label-icon-tile avatar-circle` heading, plus a
+  separate "Ungrouped" table.)
 - **A Space's own page** (`/spaces/{name}`, `routers/spaces.py::_label_scope`)
   aggregates tasks/events/contacts tagged with any of its child labels
   (`db.list_child_labels`) — a Space's own name carries no aggregation
-  meaning any more. A plain/project label's own page
-  (`routers/labels.py::_label_scope`) is unaffected: still direct
-  `object_labels` membership only, since there's no membership concept for
-  a page that isn't a Space.
+  meaning any more. A plain/project label's own page is unaffected by the
+  Spaces rework (still direct `object_labels` membership only), but see
+  "Generated page" below for a separate, later change to what kind of
+  page a plain label gets.
 - **Dashboard widget grid**, on a Space/Project page, applies this as one
   hard, unconditional scope check (`dashboard.py::_scope_child_names` +
   `_passes_scope`) every item-listing widget goes through via the shared
@@ -73,15 +77,45 @@ today (`static/label_search.js` is unreferenced by any template — a
 leftover from an earlier, reverted list-based design, not wired to the
 current table markup).
 
-## Generated page (`/labels/{name}` / `/spaces/{name}`)
+## Generated page (`/settings/labels/{name}` / `/spaces/{name}` / `/projects/{name}`)
 
-A `generate_space=1` label's URL (`/labels/{name}`, `/settings/labels/{name}`)
-redirects (301) to `/spaces/{name}` — `routers/spaces.py` owns a Space's
-own page entirely, `routers/labels.py::label_detail`/`_label_scope` only
-ever run for a plain/project label now. Both render the shared widget grid
-(`_widget_workspace.html`, scoped to the label), plus a "Projects" section
-listing child labels (Spaces only) and the page's own banner. The
-University module (Course info/Homework, schedule-linked) described in
-earlier revisions of this doc is removed entirely — see `plans/STATE.md`'s
-2026-08-15 removal entry; a label's page is just tasks/events/contacts
-again.
+Three different pages now, by role — `routers/labels.py::label_detail`
+(`GET /settings/labels/{name}`) redirects a `generate_space=1` label to
+`/spaces/{name}` and an `is_project=1` label to `/projects/{name}`; only
+a plain label renders at this URL directly.
+
+- **Space** (`/spaces/{name}`, `routers/spaces.py::space_detail`) — the
+  customizable widget grid (`label_detail.html`/`_widget_workspace.html`),
+  unchanged: "New widget"/"Reset layout" in edit mode, seeded default
+  widgets, the Spaces & Projects widget for its child labels/sub-Spaces.
+  The old hardcoded "Projects" section this page used to show above the
+  widget grid was removed outright 2026-09-16 (direct request: it
+  duplicated the Spaces & Projects widget) — a Space page with no
+  manually-added widget instance shows nothing for its children until one
+  is added; the widget grid isn't auto-seeded by default (see
+  `dashboard.py::_ensure_default_label_widgets`'s own docstring).
+- **Project** (`/projects/{name}`, `routers/projects.py::project_detail`)
+  — rebuilt 2026-08-30 away from the widget grid: a Kanban board (every
+  non-archived task carrying the label, grouped by status, drag-and-drop
+  via `static/tasks_board.js`) with an Agenda card above it (future
+  events + open due-dated tasks tagged with the label, plus a synthetic
+  "Project deadline" row from `label_config.end_date`). No "New
+  widget"/"Reset layout" — edit mode only adds the Add/Change banner
+  control.
+- **Plain label** (`/settings/labels/{name}`, `routers/labels.py::
+  label_detail`, template `label_kanban_detail.html`) — 2026-09-16,
+  direct request: "plain labels should generate pages like projects, with
+  agenda and kanban, not dashboards." Same Kanban+Agenda shape as a
+  Project's page, but a deliberately separate, independent
+  implementation (own template, own context-building in `labels.py`
+  rather than calling into `routers/projects.py`) — direct choice:
+  "similar but distinct," so the two can diverge later. No deadline row
+  (a plain label has no `start_date`/`end_date`). The widget grid is no
+  longer used for plain labels at all; `labels.py`'s own `_label_scope`
+  helper (direct `object_labels` membership) was removed as dead code in
+  the same pass — nothing called it any more once this page stopped using
+  it.
+
+The University module (Course info/Homework, schedule-linked) described
+in earlier revisions of this doc is removed entirely — see
+`plans/STATE.md`'s 2026-08-15 removal entry.

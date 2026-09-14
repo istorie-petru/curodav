@@ -531,13 +531,20 @@ class TestQuickAddButtons:
         assert 'class="page-banner-actions"' in body
 
     def test_label_page_edit_mode_actions_present(self, conn):
+        # 2026-09-16 (direct request: "plain labels should generate pages
+        # like projects, with agenda and kanban, not dashboards") -- a
+        # plain label's page dropped the widget-grid dashboard (and with
+        # it, "New widget"/"Reset layout", which only ever controlled that
+        # grid); edit mode here now only adds the Add/Change banner
+        # control, same as project_detail.html's own edit-mode toolbar.
         _make_project(conn, "CS101")
         db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
         resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         assert "data-fab" not in body
-        assert 'New widget' in body
-        assert 'Reset layout' in body
+        assert 'New widget' not in body
+        assert 'Reset layout' not in body
+        assert 'Add banner' in body
         assert 'class="page-banner-actions"' in body
 
     def test_dashboard_html_no_longer_has_a_separate_quick_add_row(self, conn):
@@ -664,30 +671,31 @@ class TestQuickAddContactAndLabelTabs:
 
 
 class TestLabelPageResetButton:
-    def test_reset_button_present_in_edit_mode(self, conn):
+    # 2026-09-16 (direct request: "plain labels should generate pages like
+    # projects, with agenda and kanban, not dashboards") -- a plain
+    # label's page is no longer the widget-grid dashboard, so it never had
+    # a "Reset layout" control to begin with now (that control only ever
+    # made sense against a customizable widget grid). This class used to
+    # assert the Reset form was present in edit mode and ordered after
+    # "New widget"; both are asserted gone instead, matching
+    # project_detail.html's own edit-mode toolbar (Add/Change banner
+    # only, no widget-grid controls -- see test_project_detail.py).
+    def test_reset_layout_and_new_widget_are_gone_in_edit_mode(self, conn):
         _make_project(conn, "CS101")
         db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
         resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
-        assert '/dashboard/reset' in body
-        assert 'data-confirm-sheet' in body
-
-    def test_new_widget_comes_before_reset_layout_in_edit_mode_toolbar(self, conn):
-        # 2026-08-07 (screenshot-driven toolbar rework) -- "creation
-        # actions before mode/utility actions", same principle already
-        # applied to the non-edit-mode row's New task/New event ordering.
-        _make_project(conn, "CS101")
-        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
-        body = resp.body.decode()
-        assert body.index('New widget') < body.index('Reset layout')
+        assert '/dashboard/reset' not in body
+        assert 'New widget' not in body
+        assert 'Add banner' in body
 
     def test_reset_button_absent_outside_edit_mode(self, conn):
         _make_project(conn, "CS101")
         resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         # The reset form itself (posts to /dashboard/reset) shouldn't be
-        # present outside edit mode -- only the New/Customize links.
+        # present outside edit mode either -- it doesn't exist on this
+        # page at all any more, in or out of edit mode.
         assert '<form method="post" action="/dashboard/reset"' not in body
 
 

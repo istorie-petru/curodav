@@ -29,7 +29,7 @@ routers/schedule.py.
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -460,16 +460,23 @@ class TestGeneratedSpacePage:
         resp = spaces_router.space_detail("Empty Space", _request("/spaces/Empty Space"), conn=conn)
         assert resp.context["tasks"] == []
 
-    def test_plain_label_page_shows_its_own_direct_items(self, conn):
+    def test_plain_label_page_shows_its_own_kanban_task_and_agenda_event(self, conn):
+        # 2026-09-16 (direct request: "plain labels should generate pages
+        # like projects, with agenda and kanban, not dashboards") -- a
+        # plain label's page is no longer the widget-grid dashboard (no
+        # more `is_space`/`tasks`/`events` context keys), it's the same
+        # Kanban+Agenda shape a Project's page uses: a task tagged with
+        # the label lands in its status column on the board, a future
+        # event tagged with it lands in the Agenda list.
         db.upsert_label_config(conn, {"name": "CS101", "created_at": _now()})
         db.upsert_task(conn, {"uid": "t1", "title": "HW", "description": "", "status": "active",
                                "tags": ["CS101"], "created_at": _now()})
+        future = (date.today() + timedelta(days=1)).isoformat()
         db.upsert_event(conn, {"uid": "e1", "title": "Lecture", "description": "", "status": "active",
-                                "all_day": 0, "tags": ["CS101"], "created_at": _now()})
+                                "all_day": 0, "start_at": f"{future}T10:00:00", "tags": ["CS101"], "created_at": _now()})
         resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
-        assert resp.context["is_space"] is False
-        assert {t["uid"] for t in resp.context["tasks"]} == {"t1"}
-        assert {e["uid"] for e in resp.context["events"]} == {"e1"}
+        assert {t["uid"] for t in resp.context["columns"]["active"]} == {"t1"}
+        assert {e["uid"] for e in resp.context["agenda_items"]} == {"e1"}
 
     def test_label_with_no_config_row_still_renders(self, conn):
         db.upsert_task(conn, {"uid": "t1", "title": "X", "description": "", "status": "active",

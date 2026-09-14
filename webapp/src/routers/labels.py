@@ -46,14 +46,15 @@ pointing at it; that's harmless and expected, not cleaned up here.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import db
-from ..deps import get_db, templates
+from ..deps import EDIT_MODE_KEY, get_db, templates
 from . import dashboard as dashboard_router
+from . import tasks as tasks_router
 
 router = APIRouter(prefix="/settings/labels", tags=["labels"])
 
@@ -708,40 +709,23 @@ def set_label(
 
 # --------------------------------------------------------------------- #
 # Generated label page -- a plain label's own page (the former Project
-# page). Direct object_labels membership only, never transitive through
-# parent_name/child labels (§2/§5) -- unlike routers/spaces.py's own
-# `_label_scope` for a Space's page (2026-09-14, Spaces --
-# labels-as-membership rework slice 3), which is the opposite: membership
-# only, direct tagging no longer read at all. `label_detail` below
-# redirects a generate_space=1 label to `/spaces/{name}` before this
-# function is ever called for one, so there's no "which behavior applies
-# to a Space" ambiguity here -- this one only ever runs for plain/project
-# labels.
+# page, now a Kanban+Agenda page -- see label_detail's own comment,
+# 2026-09-16). `label_detail` below redirects a generate_space=1 label to
+# `/spaces/{name}` before any of this runs, so this route only ever
+# handles plain/project labels (and project labels redirect away too, to
+# `/projects/{name}`) -- there's no "which behavior applies to a Space"
+# ambiguity here.
+#
+# 2026-09-16: this section used to also define its own `_label_scope`
+# (every task/event/contact directly tagged with `name`) -- its output
+# was never actually rendered by label_detail.html even before this
+# session's Kanban/Agenda rework (dead context, same class of leftover as
+# the project-scope-section block removed from label_detail.html earlier
+# this session), and label_detail's new Kanban/Agenda context below builds
+# its own tasks/events directly rather than reusing it. Removed outright,
+# not left dead -- routers/spaces.py has its own separate `_label_scope`
+# (a materially different, membership-based query, unaffected by this).
 # --------------------------------------------------------------------- #
-
-
-def _label_scope(conn, name: str) -> dict:
-    """Every task/event/contact directly tagged with `name` -- the
-    "centralizes all tasks, events, contacts" behavior the old
-    project/space detail pages had, now driven off object_labels instead
-    of project_uid/task_lists/calendars/addressbooks.
-
-    2026-08-07: no more `databases` key here -- the Databases feature (and
-    Grades, which was built on it) is removed entirely, not just
-    unlinked.
-
-    2026-08-15: no more `classes` key here -- the Schedule module (and the
-    University module built on it) is removed entirely, see this file's
-    header comment."""
-    tasks = [t for t in db.list_tasks(conn) if name in (t.get("tags") or [])]
-    events = [e for e in db.list_events(conn) if name in (e.get("tags") or [])]
-    contacts = [c for c in db.list_contacts(conn) if name in (c.get("tags") or [])]
-
-    return {
-        "tasks": tasks,
-        "events": events,
-        "contacts": contacts,
-    }
 
 
 @router.get("/{name}")
@@ -762,38 +746,72 @@ def label_detail(name: str, request: Request, conn=Depends(get_db)):
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url=f"/projects/{name}", status_code=301)
 
-    dashboard_router._ensure_default_label_widgets(conn, name)
-    ctx = dashboard_router.widget_page_context(conn, project_uid=name)
-    scope = _label_scope(conn, name)
-    ctx.update(scope)
-    ctx.update(
-        {
-            "request": request,
-            # "label", not "labels": the manage page (/labels) lives inside
-            # Settings and must light the Settings rail icon, but a label's
-            # own generated page is an independent destination (base.html's
-            # Space rail link highlights itself via its own path match) --
-            # sharing "labels" here made the Settings icon light up next to
-            # the Space link on every Space/Project page.
-            "active_tab": "label",
-            "label": label,
-            "is_space": is_space,
-            "children": db.list_child_labels(conn, name),
-            "parent": db.effective_label_config(conn, label["parent_name"]) if label.get("parent_name") else None,
-            # Dashboard Header (Expanded) avatar (2026-08-29, sidebar
-            # redesign follow-up, direct request) -- see
-            # routers/dashboard.py::dashboard_view's own comment; a
-            # Project page (this route) is a "dashboard type" page too
-            # (same widget grid, same banner system), so it gets the same
-            # user avatar overlapping the banner's bottom-left.
-            "profile_photo": db.get_profile_photo(conn),
-            "display_name": db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY),
-        }
-    )
+    # 2026-09-16 (direct request: "plain labels should generate pages like
+    # projects, with agenda and kanban, not dashboards") -- a plain label
+    # (the only case left once the is_space/is_project redirects above
+    # have run) no longer gets the customizable widget-grid dashboard
+    # (_ensure_default_label_widgets/widget_page_context, both dropped
+    # here). Instead it gets a Kanban board (every non-archived task
+    # carrying this label, grouped by status) with an Agenda card above it
+    # -- the exact same shape routers/projects.py::project_detail rebuilt
+    # for Projects 2026-08-30, but a deliberately separate, independent
+    # implementation (own template label_kanban_detail.html, own context
+    # built here rather than calling into projects.py) -- direct choice:
+    # "similar but distinct," so the two pages can diverge later without
+    # one change rippling into the other. Spaces are unaffected -- the
+    # is_space redirect above still sends them to routers/spaces.py::
+    # space_detail, which still renders label_detail.html's widget grid.
+    now_iso = _now()
+    today_iso = date.today().isoformat()
+    tasks = [t for t in db.list_tasks_sharing_labels(conn, [name]) if t["status"] != "archived"]
+    board_statuses = [s for s in tasks_router.STATUSES if s != "archived"]
+    columns: dict[str, list] = {s: [] for s in board_statuses}
+    for t in tasks:
+        t["banner"] = db.banner_for_task(conn, t)
+        columns.setdefault(t["status"], []).append(t)
+
+    # Agenda card: every future event tagged with this label, plus every
+    # open task tagged with it that has a due date -- same "events +
+    # due-dated tasks, one chronological list" recipe project_detail.html
+    # uses (see routers/projects.py::project_detail's own comment for the
+    # full rationale). No project-deadline entry here: a plain label has
+    # no start_date/end_date the way a Project does, so that branch in
+    # label_kanban_detail.html simply never fires for this page.
+    events = [
+        e for e in db.list_events(conn, start=now_iso)
+        if name in (e.get("tags") or []) and e.get("start_at") and e["start_at"][:10] >= today_iso
+    ]
+    for t in tasks:
+        if t["status"] == "done" or not t.get("due_at") or t["due_at"][:10] < today_iso:
+            continue
+        events.append({"uid": t["uid"], "title": t["title"], "start_at": t["due_at"], "kind": "task"})
+    events.sort(key=lambda e: e["start_at"])
+    agenda_items = events[:8]
+
+    ctx = {
+        "request": request,
+        # "label", not "labels": the manage page (/labels) lives inside
+        # Settings and must light the Settings rail icon, but a label's
+        # own generated page is an independent destination (base.html's
+        # Space rail link highlights itself via its own path match) --
+        # sharing "labels" here made the Settings icon light up next to
+        # the Space link on every Space/Project page.
+        "active_tab": "label",
+        "label": label,
+        "agenda_items": agenda_items,
+        "columns": columns,
+        "board_statuses": board_statuses,
+        "status_labels": tasks_router.STATUS_LABELS,
+        "status_colors": tasks_router.STATUS_COLORS,
+        "edit_mode": db.get_app_meta(conn, EDIT_MODE_KEY) == "1",
+        "profile_photo": db.get_profile_photo(conn),
+        "display_name": db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY),
+        "page_url": f"/settings/labels/{name}",
+    }
     # Page banner (2026-08-09, routers/banners.py; 2026-08-29 direct
     # request: falls back to the global Settings > Appearance default when
     # this page has no banner of its own) -- see
     # routers/dashboard.py::_page_banner_context's own comment.
     ctx.update(dashboard_router._page_banner_context(conn, name))
 
-    return templates.TemplateResponse("label_detail.html", ctx)
+    return templates.TemplateResponse("label_kanban_detail.html", ctx)

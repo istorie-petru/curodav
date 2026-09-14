@@ -1,14 +1,24 @@
 {% extends "base.html" %}
 {% from "_page_banner.html" import page_banner with context %}
 {% block title %}{{ label.name if label else "Label" }}{% endblock %}
-<!-- 2026-08-08: opt out of the default 1120px-max-width centered column,
+<!-- 2026-09-16: Space-only now. This used to be shared by Spaces, Projects,
+     and plain labels alike; Projects moved to their own Kanban+Agenda page
+     2026-08-30 (routers/projects.py::project_detail/project_detail.html),
+     and plain labels followed the same way 2026-09-16 (routers/labels.py::
+     label_detail/label_kanban_detail.html, direct request: "plain labels
+     should generate pages like projects, with agenda and kanban, not
+     dashboards"). Only routers/spaces.py::space_detail renders this
+     template now -- `is_space` is always true here, kept as a context key
+     mainly because the icon-tile fallback below still branches on it.
+
+     2026-08-08: opt out of the default 1120px-max-width centered column,
      same fix dashboard.html already applies (see that template's own
      comment) -- this page includes the exact same widget grid
      (_widget_workspace.html) as Home, and app.js's masonry layout sizes
-     its 6 virtual columns off the grid's own rendered width, so a Space/
-     Project page left in the boxed column reproduces the identical
-     "permanent empty region on the right, widgets crowded into less
-     width than the page actually has" bug Home was already fixed for. -->
+     its 6 virtual columns off the grid's own rendered width, so a Space
+     page left in the boxed column reproduces the identical "permanent
+     empty region on the right, widgets crowded into less width than the
+     page actually has" bug Home was already fixed for. -->
 {% block main_class %}main-full-width{% endblock %}
 {% block content %}
 <!-- Header banner + one page-action bar (2026-08-10) -- same merged
@@ -65,10 +75,10 @@
      the spaces pages, the project-scope-section. i don't want it. it
      shouldn't exist. we already have spaces & projects widget.") -- this
      used to be a hardcoded "Projects" card listing a Space's child
-     labels/sub-Spaces (is_space and children, both still passed by
-     routers/spaces.py::space_detail/routers/labels.py::label_detail --
-     left as-is since `is_space` also gates the banner's icon fallback
-     above, and `children` costs nothing to keep computing). Removed
+     labels/sub-Spaces (`is_space`/`children`, still passed by
+     routers/spaces.py::space_detail -- the only route left rendering this
+     template, see this file's own header comment; `children` costs
+     nothing to keep computing even with this block gone). Removed
      outright, not replaced -- the Spaces & Projects widget
      (dashboard.py::_render_spaces_projects, _widget_spaces_projects.html)
      reads the exact same db.list_child_labels(conn, name) data and is the
