@@ -921,9 +921,14 @@ class TestSettingsLabelsTableIconInsteadOfDot:
         assert "color-dot" not in body
         assert "#icon-alert-triangle" in body
         # Both the icon wrapper and the name text carry the label's own
-        # accent color, not a shared default.
-        assert 'class="label-cell-icon" style="color: var(--cal-accent-red)"' in body
-        assert 'class="label-name" style="color: var(--cal-accent-red)">Urgent<' in body
+        # accent color, not a shared default. `data-style`, not `style=`
+        # (2026-09-15 fix, see _labels_table_body.html's own header
+        # comment) -- CSP's style-src silently drops a literal `style=`
+        # attribute in a real browser; dynamic_styles.js applies
+        # `data-style` via the CSSOM instead, which style-src doesn't
+        # govern at all.
+        assert 'class="label-cell-icon" data-style="color: var(--cal-accent-red)"' in body
+        assert 'class="label-name" data-style="color: var(--cal-accent-red)">Urgent<' in body
 
     def test_manage_page_falls_back_to_tag_icon_when_none_configured(self, conn):
         # Same "always render *something*" behavior the old color-dot had
@@ -934,7 +939,7 @@ class TestSettingsLabelsTableIconInsteadOfDot:
         resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
         body = resp.body.decode()
         assert "#icon-tag" in body
-        assert 'style="color: var(--cal-accent-blue)"' in body
+        assert 'data-style="color: var(--cal-accent-blue)"' in body
 
     def test_async_region_fragment_matches_the_same_treatment(self, conn):
         self._label(conn, "Focus", color="purple", icon_name="target")
@@ -942,8 +947,8 @@ class TestSettingsLabelsTableIconInsteadOfDot:
         body = resp.body.decode()
         assert "color-dot" not in body
         assert "#icon-target" in body
-        assert 'class="label-cell-icon" style="color: var(--cal-accent-purple)"' in body
-        assert 'class="label-name" style="color: var(--cal-accent-purple)">Focus<' in body
+        assert 'class="label-cell-icon" data-style="color: var(--cal-accent-purple)"' in body
+        assert 'class="label-name" data-style="color: var(--cal-accent-purple)">Focus<' in body
 
 
 # --------------------------------------------------------------------- #
@@ -1028,7 +1033,19 @@ class TestSettingsLabelsGroupedTables:
         self._space(conn, "University", color="teal", icon_name="graduation-cap")
         resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
         body = resp.body.decode()
-        assert 'class="label-icon-tile avatar-circle" style="--tile-swatch:var(--cal-bg-teal, var(--cal-bg-blue));"' in body
+        # `data-style`, not `style=` (2026-09-15 fix, direct bug report --
+        # "the .label-icon-tile background-color still doesn't follow the
+        # label's color"). A literal `style=` attribute is silently
+        # dropped by this app's CSP (style-src has no 'unsafe-inline', and
+        # a nonce only ever covers <style> elements, never an attribute);
+        # dynamic_styles.js applies `data-style` via the CSSOM instead,
+        # which style-src doesn't restrict at all. Confirmed with a real
+        # headless-Chrome render (console listening for the CSP violation
+        # message) -- a plain HTML-source assertion like this one can't
+        # catch a CSP-enforcement bug by itself, since the attribute looks
+        # identical in the markup either way; this test only proves the
+        # markup is right, not that a browser will actually apply it.
+        assert 'class="label-icon-tile avatar-circle" data-style="--tile-swatch:var(--cal-bg-teal, var(--cal-bg-blue));"' in body
         assert "#icon-graduation-cap" in body
 
     def test_add_label_row_always_present_in_ungrouped_table(self, conn):

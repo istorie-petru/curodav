@@ -17,6 +17,70 @@ session start.
 
 ## Right now
 
+- **Fixed:** 2026-09-15 -- direct bug report, twice over: "the
+  .label-icon-tile background-color still doesn't follow the label's
+  color," a flat "no you are wrong" after a first response that (wrongly)
+  re-confirmed the markup was correct from curled HTML/attribute reads
+  alone. Root cause, found by actually installing a headless Chrome
+  (playwright + chromium, not available by default in this sandbox) and
+  reading `getComputedStyle()` with console listening: every one of these
+  elements sets its color via a literal `style="..."` HTML attribute, and
+  this app's CSP (`security_headers.py`, hardened 2026-09-07,
+  audit-fixes-2.0.md item 11) has `style-src 'self' 'nonce-<value>'` with
+  no `'unsafe-inline'` -- a nonce only ever covers a `<style>` *element*,
+  never a `style=` attribute, so a real CSP-enforcing browser silently
+  drops the whole declaration and falls back to plain blue every time,
+  regardless of what color was actually picked. The console literally
+  says so ("Applying inline style violates ... style-src ... The action
+  has been blocked"), but nothing short of a real enforcing browser
+  reveals it -- curl, reading the template source, and even reading the
+  live DOM's own `style` attribute value back out all look completely
+  correct, which is exactly why two direct reports of the same symptom
+  didn't get to the real cause (a 2026-09-13 pass diagnosed and fixed a
+  real but secondary bug -- an unrecognized legacy color name making the
+  whole `background` declaration invalid -- without ever discovering the
+  primary one underneath it).
+
+  This app already has the fix for exactly this class of bug:
+  `dynamic_styles.js` (shipped alongside the 2026-09-07 CSP hardening)
+  applies a `data-style="..."` attribute via the CSSOM at runtime, which
+  style-src doesn't restrict at all. Four call sites added *after* that
+  hardening landed had never been converted to it: `_page_banner.html`'s
+  `icon_tile` span, three in `_labels_table_body.html` (added one day
+  later, 2026-09-14, by this session's own Spaces rework slice 2), and
+  `deps.py::_avatar()`'s initials-fallback span (a plain Python f-string,
+  predates both, same bug). Mechanical `style=` -> `data-style=` rename at
+  all four, no other change. Verified against a real headless Chrome with
+  CSP enforced: computed `background-color` now matches the label's
+  actual color (e.g. purple -> `rgb(138, 86, 193)`, not blue), zero CSP
+  violations logged, on both Settings > Labels and a Space's own page
+  banner.
+
+  **New regression guard**, `tests/test_security_headers.py`'s
+  `TestNoRawInlineStyleWithDynamicValue`: scans every template for a
+  literal (non-`data-`) `style="..."` attribute containing a Jinja `{{ }}`
+  expression, plus a direct source check on `deps.py`'s f-string. Existing
+  tests in `test_phase2_labels.py`/`test_banners.py` that asserted the old
+  `style=` markup updated to `data-style=` (three assertions had the exact
+  attribute name baked in; the rest already checked a
+  `--tile-swatch:var(--cal-bg-...)` substring without the attribute name,
+  so those needed no change). Full suite (93 files, `test_
+  caldav_bridge_live.py` excluded as always): **2,300 passed, 0 failed**.
+
+  **Lesson for future sessions**: this sandbox has no browser by default,
+  which is exactly why a prior response in this same conversation
+  confidently re-confirmed broken behavior as correct from curl/attribute
+  reads alone -- CSP enforcement (like any browser-executed behavior) is
+  invisible to those. `playwright`/chromium can be installed on demand
+  (`pip install playwright --break-system-packages && python -m playwright
+  install chromium`, no sudo available so skip `install-deps` -- the
+  bundled chromium-headless-shell runs fine without it) when a report
+  persists after code-level verification looks clean; the whole
+  install+launch+check needs to happen inside a single tool call, since
+  this sandbox does not persist installed packages, `/tmp` files, or
+  background processes (e.g. a running `uvicorn`) across separate tool
+  calls despite outward appearances otherwise.
+
 - **Scoped:** 2026-09-14 -- direct request to rework how Space labels
   aggregate: they can no longer be manually assigned to items; a Space's
   page instead shows everything tagged with any label that belongs to it

@@ -282,8 +282,17 @@ def _avatar(contact: dict | None, cls: str = "") -> Markup:
     seed = contact.get("uid") or contact.get("full_name") or "?"
     color_name = _stable_color(str(seed))
     initial = escape((contact.get("full_name") or "?")[:1].upper())
+    # `data-style`, not a literal `style=` attribute (2026-09-15 fix,
+    # direct bug report -- see _labels_table_body.html's own header
+    # comment for the full story). This function predates that report but
+    # has the exact same bug: CSP's style-src has no 'unsafe-inline' and a
+    # nonce never covers an HTML attribute, so a real browser silently
+    # drops this `style=` and every initials-fallback avatar renders the
+    # flat neutral background instead of its stable color.
+    # dynamic_styles.js applies `data-style` via the CSSOM at runtime,
+    # which style-src doesn't govern.
     return Markup(
-        f'<span class="{classes} avatar-colored" style="--tile-swatch:var(--cal-bg-{color_name}, var(--cal-bg-blue));">{initial}</span>'
+        f'<span class="{classes} avatar-colored" data-style="--tile-swatch:var(--cal-bg-{color_name}, var(--cal-bg-blue));">{initial}</span>'
     )
 
 
