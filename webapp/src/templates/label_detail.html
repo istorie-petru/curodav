@@ -61,21 +61,20 @@
 
 {% if label.description %}<p>{{ label.description }}</p>{% endif %}
 
-{% if is_space and children %}
-<div class="project-scope-section">
-<h2>{{ icon('folder', 'icon-sm') }} Projects <span class="tag-usage-count">{{ children|length }}</span></h2>
-<div class="card">
-{% for child in children %}
-{% set child_is_space = child.generate_space %}
-<a class="calendar-row settings-row" href="{{ '/spaces/' ~ child.uid if child_is_space else '/settings/labels/' ~ child.uid }}">
-    <span class="cell-tag cal-{{ child.color }}">{{ icon(child.icon or 'folder', 'icon-sm') }} {{ child.name }}</span>
-    <span class="spacer"></span>
-    <span class="tag-usage-count">Open</span>
-</a>
-{% endfor %}
-</div>
-</div>
-{% endif %}
+<!-- 2026-09-16 (direct request: "an ancient part of the app appears, in
+     the spaces pages, the project-scope-section. i don't want it. it
+     shouldn't exist. we already have spaces & projects widget.") -- this
+     used to be a hardcoded "Projects" card listing a Space's child
+     labels/sub-Spaces (is_space and children, both still passed by
+     routers/spaces.py::space_detail/routers/labels.py::label_detail --
+     left as-is since `is_space` also gates the banner's icon fallback
+     above, and `children` costs nothing to keep computing). Removed
+     outright, not replaced -- the Spaces & Projects widget
+     (dashboard.py::_render_spaces_projects, _widget_spaces_projects.html)
+     reads the exact same db.list_child_labels(conn, name) data and is the
+     intended way to see this now; Peter confirmed no auto-seeding
+     fallback is wanted, a Space page with nothing manually added simply
+     shows no child-project list until one's added. -->
 
 <!-- Widget grid -- the exact same customizable system as Home
      (routers/dashboard.py's widget_page_context/WIDGET_TYPES), scoped to

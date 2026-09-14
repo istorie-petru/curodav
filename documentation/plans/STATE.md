@@ -17,6 +17,44 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-16 -- direct request: "an ancient part of the app
+  appears, in the spaces pages, the project-scope-section. i don't want
+  it. it shouldn't exist. we already have spaces & projects widget."
+  `label_detail.html`'s `{% if is_space and children %}` block (a
+  hardcoded "Projects" card listing a Space's child labels/sub-Spaces,
+  linking to each) removed outright, along with its two CSS rules
+  (`.project-scope-section`/`.project-scope-section h2`, style.css).
+  Investigated first: this block read the exact same
+  `db.list_child_labels(conn, name)` data the Spaces & Projects widget
+  (`dashboard.py::_render_spaces_projects`) already renders through the
+  configurable widget system -- a leftover duplicate never cleaned up
+  after that widget was built, not something recently touched or
+  entangled with the current Settings > Labels work above. `is_space`/
+  `children` are left in `spaces.py::space_detail`/`labels.py::
+  label_detail`'s context dicts unchanged -- `is_space` also gates the
+  page banner's icon fallback, and `children` costs nothing to keep
+  computing even though this was its only template consumer.
+
+  **Known gap, accepted deliberately**: the Spaces & Projects widget is
+  not auto-seeded on new Space pages (`_ensure_default_label_widgets`'s
+  own docstring, since the 2026-08-07 default-layout rework) -- asked
+  Peter directly (AskUserQuestion: remove outright vs. also auto-seed the
+  widget), he chose remove outright. A Space page with no manually-added
+  widget now shows nothing for its child projects/sub-Spaces until one's
+  added; not fixed here, by choice.
+
+  **Tests**: none existed for this block (nothing in the suite set up a
+  Space with `parent_name`-linked children and then asserted on rendered
+  HTML for it), so none needed updating. Full suite (92 files, `test_
+  caldav_bridge_live.py` excluded as always, four batches for the sandbox
+  time-budget reason every recent session has used): **2,300 passed, 0
+  failed** (unchanged from before this session).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm a Space page with children no longer shows the old
+  "Projects" card, and that a Space page relying on it disappearing is
+  fine without a widget there yet (the accepted gap above).
+
 - **Shipped:** 2026-09-16 (same-day follow-up to the entry directly below
   -- further direct feedback after seeing the first pass) -- "don't want
   the header repeated for every group," "don't want separate behavior for

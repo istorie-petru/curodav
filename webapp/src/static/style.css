@@ -5412,7 +5412,6 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   flex:1;
 }
 .project-progress-fill{height:100%; background:var(--accent-neutral);}
-.project-scope-section{margin-top:16px;}
 
 /* projects.html (side work, 2026-08-15 direct feedback: "square colored
    cards... open with click, not an open button"). The whole card is one
@@ -5459,8 +5458,6 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 @media (max-width:480px){
   .project-grid{grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));}
 }
-.project-scope-section h2{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
-
 /* habits: _habit_heatmap.html, habits_list.html, habit_detail.html.
    GitHub-contribution-graph layout: a row of month labels above a row of
    week-columns, each column a flex-stack of 7 day cells. No per-habit
