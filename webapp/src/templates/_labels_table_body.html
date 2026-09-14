@@ -22,16 +22,16 @@
    `<table>` elements live inside it, so multiple tables here needed zero
    bulk-select code changes; same for the checkbox-column's
    shift-click/drag-paint, both container-relative already. Each Space's
-   heading+table are wrapped in one `.labels-space-group[data-label-group]`
-   element (Ungrouped's own `data-label-group` is the empty string) -- not
-   read by any script today (this page has no search box to filter by
-   group, see static/labels_manage.js's own header comment), just a
-   natural, self-describing hook for whatever styles/scripts touch a
-   Space's section as a unit next.
+   table is wrapped in one `.labels-space-group[data-label-group]` element
+   (Ungrouped's own `data-label-group` is the empty string) -- not read by
+   any script today (this page has no search box to filter by group, see
+   static/labels_manage.js's own header comment), just a natural,
+   self-describing hook for whatever styles/scripts touch a Space's
+   section as a unit next.
 
    2026-09-15 direct bug report ("the .label-icon-tile background-color
-   still doesn't follow the label's color") -- this file's three
-   per-request-computed colors (`label-cell-icon`/`label-name`'s
+   still doesn't follow the label's color") -- this file's per-request-
+   computed colors (`label-cell-icon`/`label-name`'s
    `var(--cal-accent-...)`, and the Space heading's `--tile-swatch`) were
    all still using literal `style="..."` when this table was written
    2026-09-14, not `data-style` -- the CSP-strict convention
@@ -40,7 +40,7 @@
    hardening (audit-fixes-2.0.md item 11 dropped `'unsafe-inline'` from
    style-src). A nonce only covers `<style>` elements, never `style=`
    attributes, so a real CSP-enforcing browser silently drops every one of
-   these three declarations -- confirmed via a headless-Chrome render with
+   these declarations -- confirmed via a headless-Chrome render with
    console listening, which surfaced the browser's own "Applying inline
    style violates ... style-src" message; a plain curl/HTML-source check
    (or reading the attribute value back out of the DOM) can't catch this,
@@ -48,9 +48,65 @@
    in an actual browser -- the raw attribute is still right there in the
    markup either way. Fixed by the same mechanical `style=` ->
    `data-style=` rename every other dynamic-value template in this app
-   already used. #}
+   already used.
+
+   2026-09-16 (direct request, mocked up interactively first -- several
+   rounds: a per-group column with rowspan cards was tried and rejected as
+   "looks broken," settled on the Space's own row becoming a colored card
+   row instead): folded each Space's separate `.labels-space-heading`
+   (icon tile + `<h2>` sitting above its table) into the Space's own row.
+   That row already existed (`group.labels[0]`, previously rendered via
+   the plain `_label_row` macro like any child) -- the old layout showed
+   the Space's name twice, once in the heading and again as the first data
+   row underneath, since a Space's own label is literally named after
+   itself. New `_group_row(group)` replaces that first-row rendering: same
+   checkbox/Edit/Delete a Space row always had, but now also carries the
+   icon tile (moved in from the old heading, unchanged markup so
+   `test_space_heading_gets_a_colored_icon_tile` keeps passing without
+   modification), a light `var(--tag-<color>-bg)`/`var(--tag-<color>-fg)`
+   row tint (the same hue-keyed light-bg/dark-fg pair token every
+   `.cell-tag`/pill already reads, so dark mode needs no separate
+   handling here), and a Usage figure that's now the *total* across the
+   Space and every child (`group.labels | sum(attribute='usage_count')`)
+   rather than just the Space's own direct usage -- this row is the only
+   visual anchor for the group as a whole now that the separate heading
+   is gone, so "Used in 4 items" on it means the whole group, not just
+   the Space's own direct tag count. Child rows (`group.labels[1:]`) are
+   unchanged, still plain `_label_row` rows. Ungrouped is deliberately
+   left as a plain heading + flat rows, no card row -- it isn't a real
+   editable label, it's just a bucket with nothing to merge a heading
+   into. #}
 {% from "_row_action_buttons.html" import row_action_buttons %}
 {% from "_empty_state_row.html" import empty_state_row %}
+{% macro _group_row(group) %}
+{% set total_usage = group.labels | sum(attribute='usage_count') %}
+<tr class="labels-space-row" data-label-name="{{ group.space.name }}" data-style="background: var(--tag-{{ group.space.color or 'blue' }}-bg)">
+    <td>
+        <input type="checkbox" class="row-select" data-uid="{{ group.space.name }}" aria-label="Select {{ group.space.name }}" autocomplete="off">
+    </td>
+    <td>
+        <div class="label-cell">
+            <span class="label-icon-tile avatar-circle" data-style="--tile-swatch:var(--cal-bg-{{ group.space.color }}, var(--cal-bg-blue));">{{ icon(group.space.icon or 'layers', 'icon-sm') }}</span>
+            <span class="label-name" data-style="color: var(--tag-{{ group.space.color or 'blue' }}-fg)">{{ group.space.name }}</span>
+        </div>
+    </td>
+    <td>
+        {% if total_usage > 0 %}
+            <span class="usage-badge" data-style="color: var(--tag-{{ group.space.color or 'blue' }}-fg)">Used in {{ total_usage }} item{{ 's' if total_usage != 1 else '' }}</span>
+        {% else %}
+            <span class="text-muted" data-style="color: var(--tag-{{ group.space.color or 'blue' }}-fg)">Not used</span>
+        {% endif %}
+    </td>
+    <td>
+        {{ row_action_buttons(
+            "/settings/labels/" ~ group.space.name ~ "/edit",
+            "/settings/labels/" ~ group.space.name ~ "/delete",
+            "label",
+            'Remove "' ~ group.space.name ~ '" from every object that carries it? This doesn\'t delete the label config, just clears its usage.'
+        ) }}
+    </td>
+</tr>
+{% endmacro %}
 {% macro _label_row(l) %}
 <tr data-label-name="{{ l.name }}">
     <td>
@@ -85,16 +141,6 @@
 {% endmacro %}
 {% for group in label_groups %}
 <div class="labels-space-group" data-label-group="{{ group.space.name }}">
-    <!-- Space section heading -- 2026-09-14 slice 2's one new icon-tile
-         spot (see plans/open.md's slice list: this is the one place
-         `.label-icon-tile` didn't exist before this slice). `data-style`
-         (2026-09-15 fix, see this file's own header comment), not a
-         literal `style=` attribute -- CSP's style-src blocks the latter
-         in a real browser. -->
-    <div class="labels-space-heading">
-        <span class="label-icon-tile avatar-circle" data-style="--tile-swatch:var(--cal-bg-{{ group.space.color }}, var(--cal-bg-blue));">{{ icon(group.space.icon or 'layers', 'icon-sm') }}</span>
-        <h2>{{ group.space.name }}</h2>
-    </div>
     <table class="labels-space-table">
         <thead>
             <tr>
@@ -105,7 +151,8 @@
             </tr>
         </thead>
         <tbody>
-            {% for l in group.labels %}{{ _label_row(l) }}{% endfor %}
+            {{ _group_row(group) }}
+            {% for l in group.labels[1:] %}{{ _label_row(l) }}{% endfor %}
         </tbody>
     </table>
 </div>

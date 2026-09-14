@@ -17,6 +17,47 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-16 -- direct request, mocked up interactively first
+  (several rounds in chat: a rowspan'd group *column* with cards was tried
+  and rejected as "looks broken" before landing on the Space's own row
+  becoming a card row instead) -- "the Settings > Labels table should be
+  more compact, without the redundancy of a Space's name appearing both
+  in its heading and again as its own first row underneath." Each Space's
+  separate `.labels-space-heading` (icon tile + `<h2>` sitting above its
+  `<table>`, shipped 2026-09-14 slice 2) is folded into the Space's own
+  row instead, via new `_group_row(group)` in `_labels_table_body.html`
+  (replaces that row's old plain `_label_row` rendering): same checkbox/
+  Edit/Delete the row always had, plus the icon tile relocated in from the
+  old heading (unchanged markup, so `test_space_heading_gets_a_colored_
+  icon_tile` needed no change), a light `var(--tag-<color>-bg)`/
+  `var(--tag-<color>-fg)` row tint (existing hue-keyed pill tokens, dark
+  mode already covered), and a Usage figure that's now the *total* across
+  the Space and every child (`group.labels | sum(attribute=
+  'usage_count')`) rather than just the Space's own direct usage, since
+  this row is the only visual anchor for the group now that the separate
+  heading is gone. Child rows unchanged. Ungrouped deliberately left as a
+  plain heading + flat rows -- it isn't a real editable label, nothing to
+  merge a heading into. New CSS: `.labels-space-row` (style.css, next to
+  the existing `.labels-space-group`/`.labels-space-heading` rules).
+
+  **Tests**: no test changes needed -- `test_phase2_labels.py`'s
+  `TestSettingsLabelsGroupedTables` already asserted table count/
+  `data-label-group`/no-Group-column/icon-tile markup/Edit-Delete URLs
+  without depending on the now-removed `<h2>` heading wrapper, and none
+  asserted a Space row's Usage text (so the own-usage -> total-usage
+  change wasn't a breaking assertion anywhere). Full suite (92 files,
+  `test_caldav_bridge_live.py` excluded as always, four batches for the
+  sandbox time-budget reason every recent session has used): **2,300
+  passed, 0 failed** (unchanged count from before this session -- no new
+  tests added, this was a markup/CSS-only change to an already-tested
+  contract).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm a Space's card row actually reads well (tint contrast,
+  icon-tile alignment against the lighter row background, the bold name)
+  in both light and dark mode, and that the row's Edit/Delete icons stay
+  legible against the tint.
+
 - **Fixed:** 2026-09-15 -- direct bug report, twice over: "the
   .label-icon-tile background-color still doesn't follow the label's
   color," a flat "no you are wrong" after a first response that (wrongly)

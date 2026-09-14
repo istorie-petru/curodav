@@ -1486,6 +1486,19 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .labels-space-heading h2{margin:0;}
 .labels-space-table{margin-bottom:0;}
 
+/* 2026-09-16 (direct request, mocked up interactively first) -- the
+   Space's own row (`_group_row` in _labels_table_body.html) replaces the
+   separate `.labels-space-heading` a Space used to get above its table;
+   this is the one row of the four (Space row + up to N child rows) that
+   reads as a "card": a light hue-tinted background (`--tag-<color>-bg`,
+   set per-row via `data-style` -- see that file's own CSP comment) plus
+   a bigger colored `.label-icon-tile` (the same tile the old heading
+   used, just relocated) and a bold name, both painted in the matching
+   `--tag-<color>-fg`. Checkbox/Usage/Edit/Delete stay in the same
+   columns as every child row beneath it, just tinted to match. */
+.labels-space-row td{padding:var(--space-3) 8px;}
+.labels-space-row .label-name{font-weight:600;}
+
 .group-badge {
     display: inline-block; padding: 2px 8px; border-radius: var(--radius-pill);
     font-size: var(--text-caption); font-weight: 500;
