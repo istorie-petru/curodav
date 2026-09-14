@@ -552,9 +552,16 @@ membership only, never transitive through `parent_name`" line below is no
 longer the target design: Space labels can no longer be manually assigned,
 and a Space's page instead aggregates every label that belongs to it via
 `parent_name`. See `open.md` § "Spaces — labels-as-membership rework" for
-the full scoping (six ordered slices, not yet implemented). Left below
-verbatim as the record of what actually shipped 2026-08-14, which is still
-accurate until those slices land.
+the full scoping (six ordered slices). Slices 1-3 shipped 2026-09-14 --
+`routers/spaces.py::_label_scope` (a Space's own page) now reads exactly
+this way; `routers/labels.py::_label_scope` (unaffected -- only ever runs
+for a plain/project label, since a `generate_space=1` label redirects to
+`/spaces/{name}` before reaching it) still matches the "direct
+`object_labels` membership" line below, that was never the thing losing
+accuracy here. See `plans/STATE.md` for session-by-session detail, `open.
+md`'s slice list for what's left (4-6). Left below verbatim as the record
+of what actually shipped 2026-08-14, still accurate for a plain/project
+label's page.
 
 **Confirmed 2026-08-14, closing 1.7** — this surface was already fully built
 before 1.7 started (the `generate_space` label flag and its generated page

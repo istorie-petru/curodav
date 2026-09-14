@@ -421,22 +421,43 @@ class TestNoDeleteJustClear:
 
 
 class TestGeneratedSpacePage:
-    def test_space_page_aggregates_direct_membership_only(self, conn):
+    def test_space_page_aggregates_by_child_label_membership(self, conn):
+        # 2026-09-14 (Spaces -- labels-as-membership rework slice 3):
+        # reverses the direct-membership-only behavior this test used to
+        # assert (see git history for the pre-slice-3 version) -- a
+        # Space's page now shows items tagged with any of its child
+        # labels, and NO LONGER shows items tagged directly with the
+        # Space's own name (that tag still exists in the UI today, see
+        # spaces.py::_label_scope's own docstring on why, but has no
+        # effect here anymore).
         db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
         db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
-        # A task tagged with the child label only -- NOT directly tagged
-        # "Uni" -- must not show up in the Space page's own scope (direct
-        # assignment only, never transitive through parent_name).
+        db.upsert_label_config(conn, {"name": "MATH201", "parent_name": "Uni", "created_at": _now()})
         db.upsert_task(conn, {"uid": "t1", "title": "Direct", "description": "", "status": "active",
                                "tags": ["Uni"], "created_at": _now()})
         db.upsert_task(conn, {"uid": "t2", "title": "ChildOnly", "description": "", "status": "active",
                                "tags": ["CS101"], "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t3", "title": "OtherChild", "description": "", "status": "active",
+                               "tags": ["MATH201"], "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t4", "title": "Unrelated", "description": "", "status": "active",
+                               "tags": ["Groceries"], "created_at": _now()})
+        db.upsert_event(conn, {"uid": "e1", "title": "Lecture", "description": "", "status": "active",
+                                "all_day": 0, "tags": ["CS101"], "created_at": _now()})
+        db.upsert_contact(conn, {"uid": "c1", "full_name": "Prof", "tags": ["MATH201"], "created_at": _now()})
         resp = spaces_router.space_detail("Uni", _request("/spaces/Uni"), conn=conn)
         assert resp.status_code == 200
-        task_uids = {t["uid"] for t in resp.context["tasks"]}
-        assert task_uids == {"t1"}
+        assert {t["uid"] for t in resp.context["tasks"]} == {"t2", "t3"}
+        assert {e["uid"] for e in resp.context["events"]} == {"e1"}
+        assert {c["uid"] for c in resp.context["contacts"]} == {"c1"}
         assert resp.context["is_space"] is True
-        assert [c["name"] for c in resp.context["children"]] == ["CS101"]
+        assert [c["name"] for c in resp.context["children"]] == ["CS101", "MATH201"]
+
+    def test_space_with_no_children_shows_nothing(self, conn):
+        db.upsert_label_config(conn, {"name": "Empty Space", "generate_space": 1, "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t1", "title": "Direct", "description": "", "status": "active",
+                               "tags": ["Empty Space"], "created_at": _now()})
+        resp = spaces_router.space_detail("Empty Space", _request("/spaces/Empty Space"), conn=conn)
+        assert resp.context["tasks"] == []
 
     def test_plain_label_page_shows_its_own_direct_items(self, conn):
         db.upsert_label_config(conn, {"name": "CS101", "created_at": _now()})

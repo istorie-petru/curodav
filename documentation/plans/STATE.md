@@ -167,14 +167,75 @@ session start.
   that editing/creating/deleting a label now visibly refreshes the table
   without a manual reload (the dead-code fix above).
 
-  **Next slice**: slice 3, "Space pages aggregate by membership, not
-  direct tagging" -- `routers/spaces.py::_label_scope` and
-  `routers/labels.py::_label_scope`'s `generate_space` branch drop their
-  `name in tags` direct-membership filter and fold in every child label's
-  name via `dashboard.py::_child_label_names`/`db.list_child_labels`
-  instead. Also updates `open-priority.md`'s "Spaces — context" section
-  to mark its "direct membership only" line superseded. See `open.md`'s
-  slice list for the full description.
+- **Shipped (slice 3 of 6):** 2026-09-14 -- "Space pages aggregate by
+  membership, not direct tagging," per `open.md`'s ordered slice list
+  above. `routers/spaces.py::_label_scope` dropped its `name in tags`
+  direct-membership filter -- a task/event/contact now shows on a Space's
+  page if it's tagged with any of that Space's *child* labels
+  (`db.list_child_labels(conn, name)`, the same helper
+  `dashboard.py::_child_label_names`/the widget grid already call
+  internally, not a new implementation), never the Space's own name
+  directly. A Space with no children now shows nothing, matching the
+  acceptance line ("Space labels can no longer be assigned to an item
+  themselves" -- see caveat below on what that line doesn't cover yet).
+
+  Investigated before changing anything (per this session's normal
+  practice): `routers/labels.py::_label_scope` -- the other function
+  `open.md`'s slice text named -- turned out to need NO change at all.
+  `labels.py::label_detail` already redirects any `generate_space=1`
+  label straight to `/spaces/{name}` before ever calling its own
+  `_label_scope`, so that function has been dead for Spaces in practice
+  since that redirect was added; it still runs, unchanged, for
+  plain/project labels, where direct-tag matching is still exactly
+  correct (a plain label's page is its own content, no membership
+  concept). Rewrote both files' stale header comments (still describing
+  a pre-redirect "both are the same underlying page" model) to record
+  this rather than leave them wrong. Also updated
+  `open-priority.md`'s "Spaces — context" section: the existing
+  "Superseded 2026-09-14" note (added at scoping time) now says slices
+  1-3 shipped and clarifies `labels.py::_label_scope` was never the
+  thing that line described losing accuracy.
+
+  **Real gap found, not fixed here (out of this slice's stated scope,
+  flagging for whoever picks up slice 4-6 or a future direct request)**:
+  the acceptance line says a Space "can no longer be assigned to items,"
+  but nothing in the tag-picker vocabulary
+  (`db.list_tag_names_in_use`/`list_all_known_label_names` -- checked,
+  neither excludes `generate_space=1` labels, same code path
+  "Birthday"/the habit label are already excluded from for an unrelated
+  reason) actually stops a task/event/contact from being directly tagged
+  with a Space's own name through the UI today. That tag now simply has
+  no effect on the Space's page (this slice's whole change), which
+  matches slice 6's own "unread but not gone" framing for the legacy
+  tags this same gap produces -- but removing Spaces from the picker
+  outright was never one of the six planned slices, so it's still
+  possible to create *new* such dead tags going forward, not just carry
+  forward old ones.
+
+  **Tests**: `TestGeneratedSpacePage` in `test_phase2_labels.py` --
+  replaced `test_space_page_aggregates_direct_membership_only` (asserted
+  the now-reversed old behavior) with
+  `test_space_page_aggregates_by_child_label_membership` (direct-Space-tag
+  task excluded, two different child-label tasks/an event/a contact all
+  included, verified across tasks/events/contacts) and a new
+  `test_space_with_no_children_shows_nothing`. Full suite (92 files,
+  `test_caldav_bridge_live.py` excluded as always, nine batches for the
+  same sandbox time-budget reason as slices 1-2): **2,278 passed, 0
+  failed** (2,277 prior + 1 net new).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm a Space's page now genuinely shows child-label-tagged
+  items and no longer shows anything tagged with the Space's own name
+  directly (easiest checked on a Space with real data already in it).
+
+  **Next slice**: slice 4, "Dashboard: hard top-level filter" --
+  `routers/dashboard.py::widget_page_context` (line ~1868) should compute
+  the scope's `child_label_names` once at the top when
+  `project_uid`/`space_uid` is set and thread it down so every widget's
+  underlying query starts pre-filtered, instead of each widget
+  independently calling `_child_label_names`/`list_child_labels` itself
+  (a soft, per-widget filter a new widget type could forget to apply).
+  See `open.md`'s slice list for the full description.
 
 - **Shipped:** 2026-09-14 -- direct request: "the quick add should support
   both contacts and labels." quick_add.html (2026-08-10) only ever rendered

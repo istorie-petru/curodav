@@ -1,9 +1,13 @@
 """Spaces -- generated pages for labels with generate_space=1.
 
 A Space is a label with generate_space=1. Its page aggregates tasks,
-events, and contacts directly tagged with that label (same underlying
-page as the old Space/Project detail pages, now driven off object_labels
-+ label_config).
+events, and contacts (same underlying page as the old Space/Project
+detail pages, now driven off object_labels + label_config).
+
+2026-09-14 (Spaces -- labels-as-membership rework slice 3): that
+aggregation is membership through the Space's child labels
+(`parent_name`), not direct tagging of the Space's own name -- see
+`_label_scope`'s own docstring below for the full rationale/history.
 """
 
 from __future__ import annotations
@@ -18,10 +22,33 @@ router = APIRouter(prefix="/spaces", tags=["spaces"])
 
 
 def _label_scope(conn, name: str) -> dict:
-    """Every task/event/contact directly tagged with `name`."""
-    tasks = [t for t in db.list_tasks(conn) if name in (t.get("tags") or [])]
-    events = [e for e in db.list_events(conn) if name in (e.get("tags") or [])]
-    contacts = [c for c in db.list_contacts(conn) if name in (c.get("tags") or [])]
+    """Every task/event/contact tagged with any label that belongs to this
+    Space (`parent_name` pointing at it -- `db.list_child_labels`, the
+    same helper `dashboard.py::_child_label_names`/the widget grid already
+    call internally, not a new implementation) -- membership, not direct
+    tagging.
+
+    2026-09-14 (Spaces -- labels-as-membership rework slice 3, reverses
+    part of a decision `open-priority.md`'s "Spaces — context" section had
+    marked confirmed-shipped 2026-08-14): used to be `name in tags`, a
+    direct-membership-only filter -- items had to be tagged with the
+    Space's own label name itself, e.g. "University", never transitively
+    through a child like "Historiography". This slice is scoped to just
+    that query (per `open.md`'s own ordered slice list) -- it does NOT
+    also remove a Space's own name from the tag-picker vocabulary
+    (`db.list_tag_names_in_use`/`list_all_known_label_names` -- checked,
+    neither excludes `generate_space=1` labels today, same picker a plain
+    label uses), so a task/event/contact can still be directly tagged
+    with a Space's own name through the UI; that tag now simply has no
+    effect on this page, matching slice 6's own "unread but not gone"
+    framing for the legacy tags this same gap produces. Removing Spaces
+    from the tag picker outright isn't one of the six planned slices --
+    flagged here for STATE.md rather than silently assumed already
+    handled."""
+    child_names = {c["name"] for c in db.list_child_labels(conn, name)}
+    tasks = [t for t in db.list_tasks(conn) if child_names & set(t.get("tags") or [])]
+    events = [e for e in db.list_events(conn) if child_names & set(e.get("tags") or [])]
+    contacts = [c for c in db.list_contacts(conn) if child_names & set(c.get("tags") or [])]
 
     return {
         "tasks": tasks,

@@ -12,13 +12,18 @@ This router owns:
   1. The manage page (`/settings/labels`) -- rename/merge/recolor/icon/
      parent/generate_space/"clear" (strip from everywhere), same "flat row
      list" pattern tags.py/projects.py used to have.
-  2. The generated label page (`/settings/labels/{name}`) -- for a `generate_space`
-     label this is what used to be a Space's own page (aggregating its
-     child labels' content); for a plain label it's what used to be a
-     Project's own page (that label's own tasks/events/contacts/classes).
-     Both are the same underlying page now -- see `_label_scope` below --
-     driven off `label_config` + `object_labels` instead of
-     `project_groups`/`projects`.
+  2. The generated label page (`/settings/labels/{name}`) -- for a plain
+     label this is what used to be a Project's own page (that label's own
+     tasks/events/contacts), driven off `label_config` + `object_labels`
+     instead of `project_groups`/`projects`. A `generate_space=1` label
+     redirects straight to `/spaces/{name}` instead (`label_detail`
+     below) -- routers/spaces.py owns that page and its own `_label_scope`
+     now, a materially different query since 2026-09-14 (Spaces --
+     labels-as-membership rework slice 3, see that file's own docstring):
+     membership through child labels, not this router's direct-tag
+     `_label_scope` below, which a Space's page hasn't actually used in
+     practice since the redirect existed -- kept in this file only for
+     plain/project labels.
 
 2026-08-07: `databases` dropped from the object types a label can carry
 -- the Databases feature (and Grades, built on it) is removed entirely.
@@ -702,9 +707,16 @@ def set_label(
 
 
 # --------------------------------------------------------------------- #
-# Generated label page -- a Space (generate_space=1) or a plain label's
-# own page (the former Project page). Direct object_labels membership
-# only, never transitive through parent_name/child labels (§2/§5).
+# Generated label page -- a plain label's own page (the former Project
+# page). Direct object_labels membership only, never transitive through
+# parent_name/child labels (§2/§5) -- unlike routers/spaces.py's own
+# `_label_scope` for a Space's page (2026-09-14, Spaces --
+# labels-as-membership rework slice 3), which is the opposite: membership
+# only, direct tagging no longer read at all. `label_detail` below
+# redirects a generate_space=1 label to `/spaces/{name}` before this
+# function is ever called for one, so there's no "which behavior applies
+# to a Space" ambiguity here -- this one only ever runs for plain/project
+# labels.
 # --------------------------------------------------------------------- #
 
 
