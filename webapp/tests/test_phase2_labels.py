@@ -494,6 +494,19 @@ class TestGeneratedSpacePage:
         assert "Jane Doe" in body
         assert "No Tag" not in body
 
+    def test_contacts_card_rows_show_avatar_and_open_in_a_modal(self, conn):
+        # 2026-09-16 (direct follow-up request: "the contacts widget
+        # should also contain the contact's photo and on click should
+        # open a modal window, not a page") -- each row now leads with
+        # deps.py's avatar() (initials-on-color fallback here, no photo
+        # set) and the link carries data-modal instead of navigating away.
+        db.upsert_label_config(conn, {"name": "CS101", "created_at": _now()})
+        db.upsert_contact(conn, {"uid": "c1", "full_name": "Jane Doe", "tags": ["CS101"], "created_at": _now()})
+        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
+        body = resp.body.decode()
+        assert 'href="/contacts/c1" data-modal' in body
+        assert 'class="avatar-circle avatar-colored"' in body
+
     def test_label_with_no_config_row_still_renders(self, conn):
         db.upsert_task(conn, {"uid": "t1", "title": "X", "description": "", "status": "active",
                                "tags": ["adhoc"], "created_at": _now()})

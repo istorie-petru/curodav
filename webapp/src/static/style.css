@@ -5826,13 +5826,20 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .cal-agenda-time{color:var(--fg-tertiary); font-variant-numeric:tabular-nums; min-width:30px;}
 
 /* Contact List widget (_widget_contact_list.html) -- compact contact
-   rows for the Space widget grid, filtered by tags. */
+   rows for the Space widget grid, filtered by tags.
+   2026-09-16 (direct request: "should also contain the contact's photo")
+   -- row went from a flex-column text-only stack to flex-row (leading
+   avatar + a nested `.contact-list-main` text column), same shape as
+   `.contact-row`/`.contact-row-main` above (this file's own contacts-list
+   page rows) just reused at this widget's more compact scale -- plain
+   `.avatar-circle` (34px), no `.avatar-large`. */
 .contact-list-widget{display:flex; flex-direction:column; gap:2px;}
 .contact-list-row{
-  display:flex; flex-direction:column; gap:1px; padding:var(--space-2) var(--space-1);
+  display:flex; align-items:center; gap:var(--space-2); padding:var(--space-2) var(--space-1);
   border-radius:var(--radius-sm); text-decoration:none; color:inherit;
 }
 .contact-list-row:hover{background:var(--row-alt); text-decoration:none;}
+.contact-list-main{display:flex; flex-direction:column; gap:1px; min-width:0; flex:1;}
 .contact-list-name{font-size:var(--text-body); font-weight:500; color:var(--fg-primary);}
 .contact-list-org{font-size:var(--text-footnote); color:var(--fg-secondary);}
 .contact-list-detail{font-size:var(--text-footnote); color:var(--fg-tertiary);}

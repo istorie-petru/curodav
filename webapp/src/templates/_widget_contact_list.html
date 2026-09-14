@@ -2,7 +2,9 @@
      -- contacts filtered by tags matching the space's group project names
      (when group_uid is set) or by explicit config["tags"]. Designed for
      the Space widget grid so, e.g., a University space automatically shows
-     contacts tagged with its course/project names.
+     contacts tagged with its course/project names. Also included directly
+     by label_kanban_detail.html (2026-09-16, a plain label's own page) --
+     same partial, no distinguishing context between the two callers.
 
      data.contacts is a list of contact dicts (full_name, org, phones,
      emails, tags). §2 Spaces v2, 2026-08-03; `category` dropped Phase 5
@@ -11,16 +13,40 @@
      widget, like contacts_list.html's row subtitle, shows only the first
      (lowest-position) entry of each, same "concise, one line" convention.
      The empty state renders through the shared widget_empty macro
-     (_widget_items.html). -->
+     (_widget_items.html).
+
+     2026-09-16 (direct request: "the contacts widget should also contain
+     the contact's photo and on click should open a modal window, not a
+     page") -- `{{ avatar(c) }}` (deps.py's global, same call shape
+     _contacts_body.html's own `.contact-row` already uses: real photo if
+     set, else an initials-on-color fallback) is now a leading element
+     inside each row, with the existing three text lines wrapped in a new
+     `.contact-list-main` so the row can go flex-row (avatar + text
+     column) instead of flex-column -- mirrors `.contact-row`/
+     `.contact-row-main`'s exact shape (style.css), just at this widget's
+     own compact size (plain `.avatar-circle`, no `avatar-large`). `data-
+     modal` added to the row link -- `/contacts/{uid}` already renders
+     correctly both standalone and inside a modal (contact_detail.html's
+     own header comment), same as `_contacts_body.html`'s row; no route
+     change needed. This applies uniformly to both callers of this
+     partial (the Dashboard widget and the label page) since neither
+     passes a flag to distinguish them -- consistent with, not a
+     departure from, the widget grid's existing convention of every task/
+     event row opening in a modal too (_widget_items.html's
+     `widget_link_row`, used right above this card on label_kanban_
+     detail.html's own Agenda list). -->
 {% from "_widget_items.html" import widget_empty %}
 {% if data.contacts %}
 <div class="contact-list-widget">
     {% for c in data.contacts %}
-    <a class="contact-list-row" href="/contacts/{{ c.uid }}">
-        <span class="contact-list-name">{{ c.full_name or c.org or '(no name)' }}</span>
-        {% if c.org and c.full_name %}<span class="contact-list-org">{{ c.org }}</span>{% endif %}
-        {% if c.emails %}<span class="contact-list-detail">{{ c.emails[0].value }}</span>{% endif %}
-        {% if c.phones %}<span class="contact-list-detail">{{ c.phones[0].value }}</span>{% endif %}
+    <a class="contact-list-row" href="/contacts/{{ c.uid }}" data-modal>
+        {{ avatar(c) }}
+        <span class="contact-list-main">
+            <span class="contact-list-name">{{ c.full_name or c.org or '(no name)' }}</span>
+            {% if c.org and c.full_name %}<span class="contact-list-org">{{ c.org }}</span>{% endif %}
+            {% if c.emails %}<span class="contact-list-detail">{{ c.emails[0].value }}</span>{% endif %}
+            {% if c.phones %}<span class="contact-list-detail">{{ c.phones[0].value }}</span>{% endif %}
+        </span>
     </a>
     {% endfor %}
 </div>

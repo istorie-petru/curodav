@@ -17,6 +17,45 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-16 (same-day follow-up to the Contacts-card entry
+  directly below) -- direct request: "the contacts widget should also
+  contain the contact's photo and on click should open a modal window,
+  not a page." `_widget_contact_list.html` (the shared partial both the
+  Dashboard's own Contact List widget and label_kanban_detail.html's new
+  Contacts card render through): each row now leads with `{{ avatar(c) }}`
+  (deps.py's existing global -- real photo if set, else an initials-on-
+  color fallback, same call shape `_contacts_body.html`'s own
+  `.contact-row` already uses), and the row link carries `data-modal`
+  instead of a plain navigation -- `/contacts/{uid}` already renders
+  correctly both standalone and inside a modal (contact_detail.html's own
+  header comment already documented this dual-purpose behavior), so no
+  route change was needed, just the link attribute. CSS: `.contact-list-
+  row` went from a flex-column text-only stack to flex-row (avatar +
+  nested `.contact-list-main` text column), mirroring `.contact-row`/
+  `.contact-row-main`'s existing shape at this widget's own compact scale
+  (plain `.avatar-circle`, not `.avatar-large`).
+
+  Applies uniformly to both callers of the shared partial (no flag
+  distinguishes them) -- consistent with, not a departure from, the
+  widget grid's own convention: every task/event row in this same card
+  area already opens via `data-modal` (`_widget_items.html`'s
+  `widget_link_row`), so contacts rows not doing the same was the actual
+  inconsistency.
+
+  **Tests**: new `test_contacts_card_rows_show_avatar_and_open_in_a_modal`
+  in `test_phase2_labels.py` -- asserts the rendered row carries `href=
+  "/contacts/c1" data-modal` and the initials-fallback avatar markup.
+  Full suite (92 files, `test_caldav_bridge_live.py` excluded as always,
+  four batches for the sandbox time-budget reason every recent session
+  has used): **2,301 passed, 0 failed** (2,300 prior + 1 new).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm the avatar renders at a sensible size next to the text
+  stack, and that clicking a contact row actually opens the modal instead
+  of navigating away, on both the label page and the Dashboard's own
+  Contact List widget (this change touches the one shared partial both
+  use).
+
 - **Shipped:** 2026-09-16 (same-day follow-up to the Kanban+Agenda entry
   directly below) -- direct request: "the same plain label page should
   also show below the agenda and above the kanban a contacts list widget
