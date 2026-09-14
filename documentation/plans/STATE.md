@@ -289,12 +289,46 @@ session start.
   page (the closed leak) -- easiest to notice on a widget that previously
   had a broad tag filter set on a Space page with real cross-Space data.
 
-  **Next slice**: slice 5, "Upcoming widget shows tasks and events" --
-  `dashboard.py`'s `_DEFAULT_STACK_MEMBER_TYPES` entry `("agenda", {"range":
-  "all_upcoming", "show": ["events"]}, "Upcoming")` becomes `"show":
-  ["events", "tasks"]`. Config-only, the agenda widget's `show` list
-  already supports both. See `open.md`'s slice list for the full
-  description.
+- **Shipped (slice 5 of 6):** 2026-09-14 -- "Upcoming widget shows tasks
+  and events," per `open.md`'s ordered slice list above -- the smallest
+  slice of the six, config-only. `dashboard.py`'s
+  `_DEFAULT_STACK_MEMBER_TYPES` entry for the seeded "Upcoming" stack
+  member changed from `{"range": "all_upcoming", "show": ["events"]}` to
+  `"show": ["events", "tasks"]` -- `_render_agenda`'s all_upcoming branch
+  already fully supports a "tasks" show value (used this way by the
+  standalone Today's Agenda widget already), nothing else needed
+  changing. One-time seed only (`_ensure_default_widgets`/
+  `_ensure_default_label_widgets`'s own app_meta flag) -- an existing
+  install's already-seeded Upcoming widget keeps showing events-only
+  unless the user changes it themselves, same scoping the 2026-09-13
+  title/dedup change to this same constant already used.
+
+  **Tests**: updated `test_seeds_default_widgets_on_first_visit`'s
+  assertion from `["events"]` to `["events", "tasks"]`; new
+  `test_seeded_upcoming_widget_actually_renders_both_tasks_and_events`
+  (end-to-end -- seeds a real task and event, runs the seeded widget's
+  actual config through `_render_agenda`, confirms both come back, not
+  just that the config says so). Full suite (92 files, `test_caldav_
+  bridge_live.py` excluded as always, nine batches for the same sandbox
+  time-budget reason as slices 1-4): **2,288 passed, 0 failed** (2,287
+  prior + 1 new).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm a freshly-seeded Home/Space page's "Upcoming" card now
+  shows tasks alongside events.
+
+  **Next slice**: slice 6, "Migration: strip legacy direct Space-label
+  tagging" -- new one-off script (`scripts/migrate_labels.py`'s own
+  pattern): for every `generate_space=1` label, find `object_labels` rows
+  directly tagging that Space's own name and remove them
+  (`db.clear_label`, scoped to just the Space's own name). Idempotent,
+  logs a per-Space removed count. `label_group`'s now-unused legacy text
+  values are left alone deliberately (no UI reads them after slice 2).
+  This is the last of the six planned slices -- see `open.md`'s
+  acceptance line for what "done" looks like across all six, and this
+  session's slice-3/slice-4 notes above for the one still-open gap
+  (Space labels remain directly assignable through the tag picker) that
+  isn't covered by any of the six and would need its own follow-up.
 
 - **Shipped:** 2026-09-14 -- direct request: "the quick add should support
   both contacts and labels." quick_add.html (2026-08-10) only ever rendered

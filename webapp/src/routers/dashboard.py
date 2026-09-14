@@ -1486,7 +1486,16 @@ _DEFAULT_STACK_CONFIG: dict = {"width": "half"}
 # they change it themselves.
 _DEFAULT_STACK_MEMBER_TYPES: list[tuple[str, dict, str]] = [
     ("at_a_glance", {}, "At a glance"),
-    ("agenda", {"range": "all_upcoming", "show": ["events"]}, "Upcoming"),
+    # 2026-09-14 (Spaces -- labels-as-membership rework slice 5, open.md's
+    # ordered slice list): "show" grew from events-only to
+    # events+tasks -- config-only, AGENDA_SHOWS/_agenda_show already
+    # support "tasks" as a value here (used this way elsewhere, e.g. the
+    # standalone Today's Agenda widget above), this just changes what the
+    # seeded Upcoming pane defaults to showing. Existing installs aren't
+    # touched (this is the one-time seed, not a live migration -- same
+    # "someone who already has the old layout keeps it as-is" scoping the
+    # 2026-09-13 title/dedup change right above already used).
+    ("agenda", {"range": "all_upcoming", "show": ["events", "tasks"]}, "Upcoming"),
 ]
 
 _MINI_CALENDAR_BACKFILL_KEY = "dashboard_mini_calendar_backfilled_v1"

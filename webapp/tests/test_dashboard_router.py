@@ -53,8 +53,8 @@ def _seed_recurring_event(conn, uid, start_at, end_at=None, recurrence=None, tag
 class TestDefaultWidgetSeeding:
     def test_seeds_default_widgets_on_first_visit(self, conn):
         # 2026-08-15 widget consolidation: default seed is Agenda (range=
-        # today) + a stack of At a Glance / Agenda (all_upcoming, events
-        # only) -- see dashboard_router._seed_agenda_stack_layout.
+        # today) + a stack of At a Glance / Agenda (all_upcoming) -- see
+        # dashboard_router._seed_agenda_stack_layout.
         # 2026-09-13: dropped the stack's former third member (another
         # today-range Agenda, overdue+tasks+events) -- it duplicated the
         # standalone widget's own content almost exactly, a side effect of
@@ -62,6 +62,10 @@ class TestDefaultWidgetSeeding:
         # widgets also get explicit titles now ("Today"/"At a
         # glance"/"Upcoming") instead of falling back to the generic
         # "Agenda" spec label three separate times.
+        # 2026-09-14 (Spaces -- labels-as-membership rework slice 5): the
+        # Upcoming member's Show list grew from events-only to
+        # events+tasks -- config-only, see _DEFAULT_STACK_MEMBER_TYPES's
+        # own comment.
         dashboard_router._ensure_default_widgets(conn)
         widgets = db.list_dashboard_widgets(conn)
         top_level = sorted((w for w in widgets if not w.get("group_uid")), key=lambda w: w["position"])
@@ -72,7 +76,24 @@ class TestDefaultWidgetSeeding:
         members = sorted((w for w in widgets if w.get("group_uid") == stack["uid"]), key=lambda w: w["position"])
         assert [w["type"] for w in members] == ["at_a_glance", "agenda"]
         assert [w["title"] for w in members] == ["At a glance", "Upcoming"]
-        assert members[1]["config"]["show"] == ["events"]
+        assert members[1]["config"]["show"] == ["events", "tasks"]
+
+    def test_seeded_upcoming_widget_actually_renders_both_tasks_and_events(self, conn):
+        # 2026-09-14 (Spaces -- labels-as-membership rework slice 5):
+        # end-to-end check, not just the config-seeding assertion above --
+        # the seeded Upcoming member's config, run through the real
+        # renderer, must surface a task alongside an event, not just
+        # events (its pre-slice-5 default).
+        dashboard_router._ensure_default_widgets(conn)
+        widgets = db.list_dashboard_widgets(conn)
+        stack = next(w for w in widgets if w["type"] == "stack")
+        upcoming = next(w for w in widgets if w.get("group_uid") == stack["uid"] and w["title"] == "Upcoming")
+        today = date.today()
+        _seed_task(conn, "t1", due_at=(today + timedelta(days=2)).isoformat())
+        _seed_event(conn, "e1", start_at=f"{(today + timedelta(days=3)).isoformat()}T09:00:00")
+        data = dashboard_router._render_agenda(conn, upcoming["config"])
+        assert {t["uid"] for t in data["tasks"]} == {"t1"}
+        assert {e["uid"] for e in data["events"]} == {"e1"}
 
     def test_default_seed_sets_width_on_paired_widgets(self, conn):
         # The main Agenda widget and the stack share the width split
