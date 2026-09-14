@@ -24,9 +24,10 @@ router = APIRouter(prefix="/spaces", tags=["spaces"])
 def _label_scope(conn, name: str) -> dict:
     """Every task/event/contact tagged with any label that belongs to this
     Space (`parent_name` pointing at it -- `db.list_child_labels`, the
-    same helper `dashboard.py::_child_label_names`/the widget grid already
-    call internally, not a new implementation) -- membership, not direct
-    tagging.
+    same call `dashboard.py::_scope_child_names`/the widget grid's hard
+    top-level filter already makes internally, Spaces -- labels-as-
+    membership rework slice 4, not a new implementation here) --
+    membership, not direct tagging.
 
     2026-09-14 (Spaces -- labels-as-membership rework slice 3, reverses
     part of a decision `open-priority.md`'s "Spaces — context" section had

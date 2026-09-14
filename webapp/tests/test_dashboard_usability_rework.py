@@ -146,10 +146,19 @@ class TestScopingBugFix:
         data = dashboard_router._render_agenda(conn, {"range": "today", "show": ["tasks"]})
         assert {t["uid"] for t in data["tasks"]} == {"t1", "t2"}
 
-    def test_effective_tags_filter_combines_explicit_tags_with_label_name(self, conn):
+    def test_effective_tags_filter_no_longer_folds_in_label_name(self, conn):
+        # 2026-09-14 (Spaces -- labels-as-membership rework slice 4):
+        # _effective_tags_filter used to fold config["label_name"]'s
+        # resolved scope into this same OR-matched list (the exact
+        # behavior this test used to assert) -- that's _scope_child_names/
+        # _passes_scope's job now, checked as a separate hard AND instead
+        # of unioned in here (see TestHardTopLevelScopeFilter in
+        # test_dashboard_router.py for the leak this split closes).
+        # _effective_tags_filter no longer takes `conn` either, since it
+        # no longer touches the database.
         _make_project(conn, "CS101")
-        tags_filter = dashboard_router._effective_tags_filter(conn, {"tags": ["urgent"], "label_name": "CS101"})
-        assert set(tags_filter) == {"urgent", "CS101"}
+        tags_filter = dashboard_router._effective_tags_filter({"tags": ["urgent"], "label_name": "CS101"})
+        assert set(tags_filter) == {"urgent"}
 
     def test_contact_list_behavior_unchanged_after_refactor(self, conn):
         # _render_contact_list now calls the shared helper too -- must

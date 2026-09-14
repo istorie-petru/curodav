@@ -117,41 +117,69 @@ def _greeting_for_hour(hour: int, display_name: str | None = None) -> str:
 # --------------------------------------------------------------------- #
 
 
-def _effective_tags_filter(conn, config: dict) -> list[str]:
-    """The *actual* tag filter a widget's config resolves to, folding in
-    `config["label_name"]` (a label page's own page-scope identity) the
-    same way `_render_contact_list`/`_render_habit_checkin`/
-    `_render_project_preview` already each did inline, independently, for
-    their own item types -- a Space label pools its child labels' names in
-    (db.list_child_labels, direct assignment only), a plain label folds
-    itself in directly. This is the one shared place that translation now
-    lives; every filterer below should go through this rather than reading
-    `config["tags"]`/`config["label_name"]` separately.
+def _scope_child_names(conn, label_name: str | None) -> set[str] | None:
+    """The Dashboard's hard, page-level tag-membership scope for
+    `label_name` (a Space/Project page's own identity, `config["label_name"]`
+    on every widget seeded there) -- child labels for a Space
+    (`generate_space=1`, `db.list_child_labels`, the same query
+    `routers/spaces.py::_label_scope` uses for that Space's own page,
+    Spaces -- labels-as-membership rework slice 3), or the label's own
+    name for a plain/project label (direct membership, same rule
+    `routers/labels.py::_label_scope` uses for a plain label's page).
+    `None` means "no scope restriction" (Home, unscoped) -- NOT "matches
+    nothing"; see `_passes_scope` below, the only thing that should ever
+    interpret this return value.
 
-    2026-08-07 bug fix: `_passes_filters` (used by `_filtered_tasks`/
-    `_filtered_events`, which back `_render_today_agenda`,
-    `_render_weekly_overview`, `_render_overdue_tasks`,
-    `_render_upcoming_events`, `_render_mini_month_calendar`,
-    `_render_calendar_agenda`) never called this translation at all before
-    today -- it only ever looked at `config["tags"]`. A Space/Project
-    page's widgets ARE seeded with `config["label_name"]` set (see
-    `_ensure_default_label_widgets`), so every one of those widget types
-    was silently unscoped on a label page: a Project's "Today's Agenda"
-    showed every task due today across the *entire* app, not just that
-    project's own tasks, because nothing ever translated `label_name` into
-    a tag filter for the tasks/events path. Pre-existing bug, not
-    introduced here -- see features/dashboard.md's follow-up
-    notes for the finding."""
-    tags_filter = list(config.get("tags") or [])
-    label_name = config.get("label_name")
-    if label_name:
-        cfg = db.get_label_config(conn, label_name)
-        if cfg and cfg.get("generate_space"):
-            child_names = {c["name"] for c in db.list_child_labels(conn, label_name)}
-            tags_filter = list(set(tags_filter) | child_names)
-        else:
-            tags_filter = list(set(tags_filter) | {label_name})
-    return tags_filter
+    2026-09-14 (Spaces -- labels-as-membership rework slice 4): the one
+    place this resolution now lives, replacing three near-identical inline
+    copies that used to each independently re-derive it (the old
+    `_effective_tags_filter`'s own label_name-folding block below,
+    `_child_label_names`, and `_render_habit_checkin`'s own inline
+    generate_space branch)."""
+    if not label_name:
+        return None
+    cfg = db.get_label_config(conn, label_name)
+    if cfg and cfg.get("generate_space"):
+        return {c["name"] for c in db.list_child_labels(conn, label_name)}
+    return {label_name}
+
+
+def _passes_scope(item_tags: list[str] | None, scope_names: set[str] | None) -> bool:
+    """The hard top-level page-scope check every item-listing widget now
+    goes through (`_filtered_tasks`/`_filtered_events`/`_render_contact_
+    list`/`_render_habit_checkin`) -- `scope_names` is `_scope_child_names`'s
+    return value, resolved once per call from `config["label_name"]`.
+    `None` (Home, unscoped) always passes; otherwise an item must carry at
+    least one of `scope_names`' tags.
+
+    2026-09-14 (Spaces -- labels-as-membership rework slice 4): this is
+    deliberately a separate, unconditional AND-check from `_passes_filters`
+    below (the widget's own OPTIONAL `config["tags"]` narrowing, OR-matched)
+    -- before this slice, `_effective_tags_filter` folded page scope into
+    the same OR-matched list `_passes_filters` checks, which meant a
+    widget with its own tag filter selected on a Space/Project page could
+    show items matching that filter from OUTSIDE the page's own scope (the
+    union let either side of the OR win). Splitting the two closes that
+    leak: an item must now be IN SCOPE (this function) *and* match
+    whatever the widget's own filter additionally asks for (unchanged
+    `_passes_filters`), not either/or. `_render_contact_list`'s own
+    docstring already documented "intersection, not union" as the
+    intended behavior well before this slice -- this is what actually
+    delivers it, for every item type, not just contacts."""
+    if scope_names is None:
+        return True
+    return bool(set(item_tags or []) & scope_names)
+
+
+def _effective_tags_filter(config: dict) -> list[str]:
+    """A widget's own OPTIONAL extra tag narrowing -- just `config["tags"]`
+    now (2026-09-14, Spaces -- labels-as-membership rework slice 4: used
+    to also fold in `config["label_name"]`'s resolved scope here, OR'd
+    together with these tags; that's `_passes_scope`'s job now, checked
+    separately and unconditionally -- see its own docstring for why the
+    split matters). No longer takes `conn` -- nothing here touches the
+    database anymore."""
+    return list(config.get("tags") or [])
 
 
 # Sentinel stored in config["tags"]/submitted via the Labels chip
@@ -180,10 +208,13 @@ def _passes_filters(item_tags: list[str], tags_filter: list[str]) -> bool:
     in Phase 2/3 as a label filter once object_labels is backfilled and
     routers/labels.py exists; any `project_uid`/`group_uid`/`list_uids`
     already saved in an old widget's config is now silently ignored
-    rather than excluding everything. `tags_filter` is the already-
-    resolved list from `_effective_tags_filter` (config["tags"] plus
-    whatever `label_name` folds in), computed once per `_filtered_tasks`/
-    `_filtered_events` call rather than per item.
+    rather than excluding everything. `tags_filter` is `_effective_tags_
+    filter`'s return value (2026-09-14, Spaces -- labels-as-membership
+    rework slice 4: just `config["tags"]` now, no longer also folds in
+    `label_name`'s resolved scope -- see that function's own docstring
+    and `_passes_scope`, the separate hard check that replaced the fold-
+    in), computed once per `_filtered_tasks`/`_filtered_events` call
+    rather than per item.
 
     NO_LABEL_SENTINEL (2026-08-31) is an OR'd-in alternative match, not a
     real tag: an item passes if it has no tags at all AND the sentinel is
@@ -201,26 +232,15 @@ def _passes_filters(item_tags: list[str], tags_filter: list[str]) -> bool:
     return bool(real_tags and (item_tags_set & real_tags))
 
 
-def _child_label_names(conn, config: dict) -> set[str] | None:
-    """Phase 2 (label-space rework): the old `group_uid` config key pooled
-    every project under a Space; a Space is just a label with
-    generate_space=1 now, and its "projects" are labels whose parent_name
-    points at it (db.list_child_labels) -- direct assignment only, same
-    scoping list_child_labels already documents. `label_name` is the
-    replacement config key (also doubles as the widget's own page-scope
-    identity, see dashboard_widgets.label_name)."""
-    label_name = config.get("label_name")
-    if not label_name:
-        return None
-    return {c["name"] for c in db.list_child_labels(conn, label_name)}
-
-
 def _filtered_tasks(conn, config: dict, open_only: bool = True) -> list[dict]:
-    tags_filter = _effective_tags_filter(conn, config)
+    tags_filter = _effective_tags_filter(config)
+    scope_names = _scope_child_names(conn, config.get("label_name"))
     tasks = db.list_tasks(conn)
     out = []
     for t in tasks:
         if open_only and t["status"] in ("done", "archived"):
+            continue
+        if not _passes_scope(t.get("tags"), scope_names):
             continue
         if not _passes_filters(t.get("tags"), tags_filter):
             continue
@@ -229,10 +249,13 @@ def _filtered_tasks(conn, config: dict, open_only: bool = True) -> list[dict]:
 
 
 def _filtered_events(conn, config: dict, start: str | None = None, end: str | None = None) -> list[dict]:
-    tags_filter = _effective_tags_filter(conn, config)
+    tags_filter = _effective_tags_filter(config)
+    scope_names = _scope_child_names(conn, config.get("label_name"))
     events = db.list_events(conn, start=start, end=end)
     out = []
     for e in events:
+        if not _passes_scope(e.get("tags"), scope_names):
+            continue
         if not _passes_filters(e.get("tags"), tags_filter):
             continue
         out.append(e)
@@ -844,10 +867,23 @@ def _render_contact_list(conn, config: dict, nav: dict | None = None) -> dict:
     shared `_effective_tags_filter` (see its own docstring for why -- the
     same logic used to be duplicated here, in `_render_habit_checkin`, and
     in `_render_project_preview`, and was missing entirely from the
-    tasks/events path). Behavior here is unchanged, just de-duplicated."""
-    tags_filter = _effective_tags_filter(conn, config)
+    tasks/events path).
+
+    2026-09-14 (Spaces -- labels-as-membership rework slice 4): split
+    into two separate checks -- `_passes_scope` (the page's hard,
+    unconditional membership scope, via `_scope_child_names`) and
+    `_effective_tags_filter`/the OR-match below (the widget's own
+    OPTIONAL extra narrowing). This is what actually delivers the
+    "intersection, not union" behavior this docstring already promised
+    above -- the pre-slice-4 version folded both into one OR-matched
+    list (`_effective_tags_filter` used to take `conn` and fold
+    `label_name` in itself), so an explicit `config["tags"]` filter could
+    match an out-of-scope contact instead of narrowing within scope."""
+    scope_names = _scope_child_names(conn, config.get("label_name"))
+    tags_filter = _effective_tags_filter(config)
 
     contacts = db.list_contacts(conn)
+    contacts = [c for c in contacts if _passes_scope(c.get("tags"), scope_names)]
 
     if tags_filter:
         tags_lower = {t.lower() for t in tags_filter}
@@ -881,18 +917,24 @@ def _render_habit_checkin(conn, config: dict, nav: dict | None = None) -> dict:
     partial amount. `next_value` is pre-computed here (not left to
     client-side JS) so the "+1" button is a plain no-JS form post to the
     existing /habits/{uid}/entries endpoint, same no-JS-required
-    philosophy as the heatmap toggle cells it sits next to conceptually."""
-    label_name = config.get("label_name")
-    if label_name:
-        cfg = db.get_label_config(conn, label_name)
-        if cfg and cfg.get("generate_space"):
-            # A Space's habits widget pools every habit under any of the
-            # Space's child (project) labels -- same "pool every project
-            # under it" behavior as _render_project_preview.
-            child_names = _child_label_names(conn, config) or set()
-            habits = [h for h in db.list_habits(conn) if h.get("project_uid") in child_names]
-        else:
-            habits = db.list_habits(conn, project_uid=label_name)
+    philosophy as the heatmap toggle cells it sits next to conceptually.
+
+    2026-09-14 (Spaces -- labels-as-membership rework slice 4): scope
+    resolution goes through the shared `_scope_child_names` now (was an
+    inline generate_space branch here, duplicated with the pre-slice-4
+    `_effective_tags_filter` and `_child_label_names`). Habits use
+    `project_uid`, not tags, so this still can't share `_passes_scope`/
+    `_filtered_tasks`/`_filtered_events` directly -- but the *resolution*
+    of what counts as "in scope" is the one shared function every other
+    item type also uses: a Space's habits widget pools every habit under
+    any of the Space's child (project) labels; a plain label's own habits
+    widget shows just its own `project_uid`'s habits (`scope_names ==
+    {label_name}` for a plain label, so `in scope_names` collapses to
+    exactly `== label_name`, same as the old direct `project_uid=label_name`
+    query it replaces)."""
+    scope_names = _scope_child_names(conn, config.get("label_name"))
+    if scope_names is not None:
+        habits = [h for h in db.list_habits(conn) if h.get("project_uid") in scope_names]
     else:
         habits = db.list_habits(conn)
     today_iso = date.today().isoformat()
@@ -1552,7 +1594,7 @@ def _ensure_default_widgets(conn) -> None:
 # dashboard_widgets rows via `label_name` instead of the default NULL
 # ("Home"). Every widget seeded here is pre-configured with
 # config["label_name"] = this label's own name so it's useful immediately
-# with no setup -- see _child_label_names/_render_project_preview/
+# with no setup -- see _scope_child_names/_render_spaces_projects/
 # _render_habit_checkin, which all already know how to resolve that key.
 # A Space label (generate_space=1) gets the "overview of my projects"
 # defaults; a plain label gets the "this label's own items" defaults --

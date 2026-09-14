@@ -228,14 +228,73 @@ session start.
   items and no longer shows anything tagged with the Space's own name
   directly (easiest checked on a Space with real data already in it).
 
-  **Next slice**: slice 4, "Dashboard: hard top-level filter" --
-  `routers/dashboard.py::widget_page_context` (line ~1868) should compute
-  the scope's `child_label_names` once at the top when
-  `project_uid`/`space_uid` is set and thread it down so every widget's
-  underlying query starts pre-filtered, instead of each widget
-  independently calling `_child_label_names`/`list_child_labels` itself
-  (a soft, per-widget filter a new widget type could forget to apply).
-  See `open.md`'s slice list for the full description.
+- **Shipped (slice 4 of 6):** 2026-09-14 -- "Dashboard: hard top-level
+  filter," per `open.md`'s ordered slice list above. Investigated before
+  changing anything: `open.md`'s literal description (compute
+  `child_label_names` once in `widget_page_context`, thread it through
+  every widget signature) turned out to be the wrong shape for how this
+  code is actually built -- every widget's `_render_*(conn, config, nav)`
+  function already receives `config["label_name"]` (each widget's own
+  config carries its page's identity, seeded that way), so a value
+  "threaded down" from `widget_page_context` would just be a second copy
+  of what's already reachable through `config`. Implemented the same end
+  result (a hard, can't-forget scope check) a different way: new
+  `dashboard.py::_scope_child_names(conn, label_name)` is the one place
+  the Space-vs-plain-label resolution now lives (replaces three near-
+  identical inline copies -- the old `_effective_tags_filter`,
+  `_child_label_names` [deleted], and `_render_habit_checkin`'s own
+  branch), and new `_passes_scope(item_tags, scope_names)` is a hard,
+  unconditional AND-check every item-listing widget now goes through via
+  the shared choke-point functions (`_filtered_tasks`/`_filtered_events`/
+  `_render_contact_list`/`_render_habit_checkin`) -- any current or
+  future widget type built on those (the established convention every
+  existing one already follows) gets the hard filter automatically, with
+  nothing to remember.
+
+  This also fixed a real, demonstrable leak, not just a theoretical
+  "could forget" risk: pre-slice-4, `_effective_tags_filter` folded
+  `label_name`'s resolved scope into the SAME OR-matched list as the
+  widget's own optional `config["tags"]` filter -- so a widget on a
+  Space/Project page with its own tag filter selected could show items
+  from OUTSIDE that page's scope, as long as they matched the widget's
+  own filter (the union let either side win). `_render_contact_list`'s
+  own docstring already promised "intersection, not union" well before
+  this slice; the code never actually delivered it. `_passes_scope` is
+  now checked separately and unconditionally from `_passes_filters`
+  (the widget's own OR-matched narrowing, unchanged) -- genuinely AND'd
+  together for every item type, not just contacts. `_effective_tags_filter`
+  is simplified to just `config.get("tags")` (dropped the `conn` param,
+  nothing here touches the database anymore) now that scope resolution
+  lives elsewhere. `_render_habit_checkin` collapsed from a 3-way inline
+  branch to one `_scope_child_names` call plus a single `in` check.
+
+  **Tests**: new `TestScopeChildNames` (4 tests, the resolution function
+  in isolation) and `TestHardTopLevelScopeFilter` (5 tests, in
+  `test_dashboard_router.py`) -- the last directly seeds the leak
+  scenario (an in-scope-and-matching item, an out-of-scope item that
+  only matches the widget's own filter, an in-scope item that doesn't
+  match) for tasks, events, and contacts, on both a Space and a plain
+  label page, plus a Home/unscoped sanity check. Fixed one now-obsolete
+  test (`test_dashboard_usability_rework.py`'s
+  `test_effective_tags_filter_combines_explicit_tags_with_label_name`,
+  which asserted the old union behavior directly) to assert the new
+  split contract instead. Full suite (92 files, `test_caldav_bridge_
+  live.py` excluded as always, nine batches for the same sandbox time-
+  budget reason as slices 1-3): **2,287 passed, 0 failed** (2,278 prior +
+  9 new).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm a Space/Project page's widgets that have their own
+  Filters-panel tag selection no longer show anything from outside that
+  page (the closed leak) -- easiest to notice on a widget that previously
+  had a broad tag filter set on a Space page with real cross-Space data.
+
+  **Next slice**: slice 5, "Upcoming widget shows tasks and events" --
+  `dashboard.py`'s `_DEFAULT_STACK_MEMBER_TYPES` entry `("agenda", {"range":
+  "all_upcoming", "show": ["events"]}, "Upcoming")` becomes `"show":
+  ["events", "tasks"]`. Config-only, the agenda widget's `show` list
+  already supports both. See `open.md`'s slice list for the full
+  description.
 
 - **Shipped:** 2026-09-14 -- direct request: "the quick add should support
   both contacts and labels." quick_add.html (2026-08-10) only ever rendered
