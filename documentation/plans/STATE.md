@@ -17,36 +17,81 @@ session start.
 
 ## Right now
 
-- **Scoped, not implemented:** 2026-09-14 -- direct request to rework how
-  Space labels aggregate: they can no longer be manually assigned to
-  items; a Space's page instead shows everything tagged with any label
-  that belongs to it (via `parent_name`), Settings > Labels gets one table
-  per Space, the Dashboard's per-Space widget grid gets a hard top-level
-  filter instead of each widget re-deriving it, and the Upcoming widget
-  gains tasks alongside events. Given the scope (data model, a migration,
-  3+ UI surfaces, reverses a decision `open-priority.md` had marked
+- **Scoped:** 2026-09-14 -- direct request to rework how Space labels
+  aggregate: they can no longer be manually assigned to items; a Space's
+  page instead shows everything tagged with any label that belongs to it
+  (via `parent_name`), Settings > Labels gets one table per Space, the
+  Dashboard's per-Space widget grid gets a hard top-level filter instead
+  of each widget re-deriving it, and the Upcoming widget gains tasks
+  alongside events. Given the scope (data model, a migration, 3+ UI
+  surfaces, reverses a decision `open-priority.md` had marked
   confirmed-shipped 2026-08-14), wrote it up as a plan instead of
   attempting it as one slice, per Peter's own AskUserQuestion answer.
-  Investigated the actual current code first (no `groups` table exists;
-  `parent_name` is a real but unwritten FK, `label_group` is a free-text
-  decorative field with no aggregation effect). Also checked the reported
-  "label-icon-tile background isn't the label's color" bug and couldn't
-  reproduce it -- already correct everywhere `.label-icon-tile` is used
-  today; folded into the new spec as a forward requirement for the one
-  place it doesn't exist yet (Space section headings in the new
-  per-Space Settings tables) rather than a fix.
-
   Full spec, acceptance line, and six ordered slices: `open.md` § "Spaces
   — labels-as-membership rework". Pointers added from `roadmap.md` (2.0
-  section, alongside the Calendar FullCalendar-parity queue) and from
-  `open-priority.md`'s "Spaces — context" section (marks its "direct
-  membership only" line superseded, doesn't delete it -- still an
-  accurate record of what shipped 2026-08-14 until the new slices land).
+  section) and from `open-priority.md`'s "Spaces — context" section
+  (marks its "direct membership only" line superseded, doesn't delete it
+  -- still an accurate record of what shipped 2026-08-14 until the
+  remaining slices land).
 
-  **Next slice**: slice 1 of the Spaces rework (`_label_form_fields.html`'s
-  Space-link dropdown + `labels.py::create_label`/`update_label` accepting
-  `parent_name`) is the natural next session, or pick anything else from
-  `roadmap.md`/`open-priority.md`/`open.md` per the normal workflow.
+- **Shipped (slice 1 of 6):** 2026-09-14 -- "Label edit form: Space-link
+  dropdown replaces free-text Group," per `open.md`'s ordered slice list
+  above. `_label_form_fields.html`'s old `<input name="label_group">` is
+  now a `<select name="parent_name">` (new `space_options` context var --
+  deliberately not named `spaces`, which base.html's sidebar already sets
+  as a top-level template variable that would otherwise silently shadow
+  it), populated from `db.list_space_labels(conn)` plus a "No space"
+  option, hidden (`.label-parent-field[hidden]`, both server-rendered
+  initial state and `label_role_picker.js`'s live sync) whenever Role is
+  Space -- Spaces don't nest. All three render call sites
+  (`labels.py::edit_label_modal`/`new_label_modal`,
+  `dashboard.py::quick_add_form`) now pass `space_options`.
+
+  `labels.py::create_label`/`update_label` accept `parent_name: str =
+  Form("")` instead of `label_group`, validated by new
+  `_validate_parent_name` (400 if non-blank and not an existing
+  `generate_space=1` label's name; forced to `None` outright when the
+  submitted Role is itself Space, regardless of what a raw POST sends).
+  Both routes stopped writing `label_group` -- the column and any
+  existing values are untouched, per the slice spec (its fate is slice
+  6's call). `_labels_context`'s Settings-table sort key switched from
+  `label_group` to `parent_name` (same tuple-sort shape, just a different
+  primary key).
+
+  **Tests**: new `TestLabelParentNameDropdown` class in
+  `test_phase2_labels.py` (11 tests) -- valid/invalid/blank parent_name on
+  both create and update, Role=Space silently drops any submitted
+  parent_name on both routes, the edit modal renders a real `<select>`
+  (not the old text input) pre-selected on the label's current parent,
+  the dropdown is hidden when editing a Space itself, and the New Label
+  modal lists every existing Space as an option -- this last group of
+  three caught the `spaces`/`space_options` naming collision with
+  base.html's sidebar (see above) before it shipped. Updated every
+  existing `label_group=` call site across `test_phase2_labels.py`
+  (`TestIconPersistence`, `TestColorValidation`,
+  `TestReservedLabelNameGuard`) to `parent_name=`;
+  `TestSettingsLabelsTableSortOrder`'s `_label` helper now writes
+  `parent_name` instead of `label_group` (it calls `db.upsert_label_config`
+  directly, bypassing the router's new validation, so the grouping values
+  it uses don't need to be real Spaces). `test_dashboard_usability_rework.
+  py`'s quick-add field-presence assertion updated from
+  `name="label_group"` to `name="parent_name"`. Full suite (92 files,
+  `test_caldav_bridge_live.py` excluded as always, run in nine batches
+  since the whole suite exceeds this sandbox's per-command time budget):
+  **2,266 passed, 0 failed** (2,255 prior + 11 new).
+
+  **Not visually verified**: sandbox can't reach a real browser -- Peter
+  should confirm the Space dropdown renders/selects correctly in a live
+  browser, hides when switching Role to Space (and reappears switching
+  away), and that Settings > Labels' existing flat table still reads
+  sensibly sorted by `parent_name` (slice 2 is what actually splits it
+  into per-Space tables).
+
+  **Next slice**: slice 2, "Settings > Labels: one table per Space" --
+  `labels.py::_labels_context` groups by `parent_name` into per-Space
+  buckets + an "Ungrouped" bucket; `labels_manage.html`/
+  `_labels_table_body.html` render one `<table>` per Space with a colored
+  icon-tile heading. See `open.md`'s slice list for the full description.
 
 - **Shipped:** 2026-09-14 -- direct request: "the quick add should support
   both contacts and labels." quick_add.html (2026-08-10) only ever rendered

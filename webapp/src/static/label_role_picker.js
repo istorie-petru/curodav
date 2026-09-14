@@ -14,6 +14,10 @@
 //     selected option -- `hidden` toggled on `.label-project-fields`, no
 //     server round trip, same "reveal on selection" idiom
 //     task_habit_field_toggle.js already established for this app's forms.
+//     The same toggle hides `.label-parent-field` (the Space-link
+//     dropdown, 2026-09-14 Spaces -- labels-as-membership rework slice 1)
+//     whenever "Space" is selected -- Spaces don't nest, so a label that
+//     is itself becoming a Space has no Space of its own to belong to.
 //
 //  2. Warn before actually losing something. `data-warn-role` (set by
 //     routers/labels.py::edit_label_modal) is the ORIGINAL role only if
@@ -50,6 +54,7 @@
       const radios = Array.from(wrap.querySelectorAll('input[name="role"]'));
       const form = wrap.closest("form");
       const fields = form ? form.querySelector(".label-project-fields") : null;
+      const parentField = form ? form.querySelector(".label-parent-field") : null;
 
       const MESSAGES = {
         project:
@@ -66,6 +71,7 @@
       function sync() {
         const value = selectedRole();
         if (fields) fields.hidden = value !== "project";
+        if (parentField) parentField.hidden = value === "space";
         if (!form) return;
         if (value !== originalRole && warnRole && warnRole === originalRole) {
           form.setAttribute("data-confirm-sheet", MESSAGES[warnRole]);

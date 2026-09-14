@@ -70,6 +70,24 @@ def _reject_reserved_label_name(name: str) -> None:
     if name in reserved:
         raise HTTPException(400, f'"{name}" is a reserved name and can\'t be used for a label.')
 
+
+def _validate_parent_name(conn, parent_name: str) -> str | None:
+    """2026-09-14 (Spaces -- labels-as-membership rework slice 1): the
+    label edit/create forms' old free-text `label_group` input is replaced
+    by a real Space-link dropdown (`parent_name`) -- unlike the free text
+    it replaces, this is a real FK into `label_config` and must actually
+    name a Space (`generate_space=1`), same "reject, don't silently
+    coerce" validation style `create_label`/`update_label` already use for
+    a required new_name/project dates. Blank collapses to None (no
+    space)."""
+    parent_name = (parent_name or "").strip()
+    if not parent_name:
+        return None
+    space_names = {s["name"] for s in db.list_space_labels(conn)}
+    if parent_name not in space_names:
+        raise HTTPException(400, f'"{parent_name}" is not a Space.')
+    return parent_name
+
 # 2026-08-08: grew from 8 to 16 -- direct feedback ("more colors options
 # (16) with small label under each color"). Order is a rough rainbow
 # sweep (warm to cool) ending in the two neutrals, so the picker grid
@@ -271,15 +289,18 @@ def _labels_context(conn, request: Request) -> dict:
     # ordering (deliberately not the same order `_label_role` computes
     # its own precedence in -- that function's "is_project wins if both
     # flags are somehow set" is about resolving ambiguity, unrelated to
-    # what order the three buckets should sort in here). `label_group` is
-    # the primary key ("Groups first"), so every label sharing a group
-    # sits together, sub-sorted by type then name within it; ungrouped
-    # rows (`label_group` empty/None) happen to land before any named
-    # group purely because `"" < "Anything"` in Python's default string
-    # ordering -- no direction ("ungrouped first" vs "last") was specified
-    # in the request, this is just `sorted()`'s natural behavior for the
-    # tuple key below, not a deliberate call either way.
-    labels.sort(key=lambda l: ((l.get("label_group") or "").lower(), _ROLE_SORT_RANK[_label_role(l)], l["name"].lower()))
+    # what order the three buckets should sort in here). `parent_name` is
+    # the primary key ("Groups first", 2026-09-14: was `label_group`, a
+    # free-text field with no real membership meaning -- the Spaces --
+    # labels-as-membership rework slice 1 makes `parent_name`, the real
+    # Space-link FK, the one grouping mechanism), so every label sharing a
+    # Space sits together, sub-sorted by type then name within it;
+    # unparented rows (`parent_name` empty/None) happen to land before any
+    # named Space purely because `"" < "Anything"` in Python's default
+    # string ordering -- no direction ("ungrouped first" vs "last") was
+    # specified in the request, this is just `sorted()`'s natural
+    # behavior for the tuple key below, not a deliberate call either way.
+    labels.sort(key=lambda l: ((l.get("parent_name") or "").lower(), _ROLE_SORT_RANK[_label_role(l)], l["name"].lower()))
 
     return {
         "request": request,
@@ -327,6 +348,7 @@ def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
             "colors": COLORS,
             "icon_groups": ICON_GROUPS,
             "role": _label_role(cfg),
+            "space_options": db.list_space_labels(conn),
             # 2026-08-30 (direct request): a label's banner used to be
             # reachable only through a dashboard page's own edit-mode "Add/
             # Change banner" button (routers/banners.py, generate_space/
@@ -360,7 +382,7 @@ def update_label(
     new_name: str = Form(""),
     color: str = Form("blue"),
     icon: str = Form(""),
-    label_group: str = Form(""),
+    parent_name: str = Form(""),
     description: str = Form(""),
     role: str = Form("none"),
     start_date: str = Form(""),
@@ -390,13 +412,18 @@ def update_label(
     or None` pattern; mirrored here."""
     new_name = (new_name or "").strip() or name
     icon = (icon or "").strip() or None
-    label_group = (label_group or "").strip() or None
     start_date = start_date.strip() if isinstance(start_date, str) else ""
     end_date = end_date.strip() if isinstance(end_date, str) else ""
 
     role = role if role in ("none", "space", "project") else "none"
     generate_space = 1 if role == "space" else 0
     is_project = 1 if role == "project" else 0
+
+    # Spaces don't nest (list_child_labels is non-recursive, one level) --
+    # a label becoming a Space has no Space of its own to belong to, so any
+    # parent_name submitted alongside role=space is ignored rather than
+    # validated. Otherwise validate it names a real, existing Space.
+    parent_name = None if generate_space else _validate_parent_name(conn, parent_name)
 
     if is_project and (not start_date or not end_date):
         raise HTTPException(400, "A project needs both a start and end date.")
@@ -411,7 +438,7 @@ def update_label(
         "name": name,
         "color": color if color in COLORS else "blue",
         "icon": icon,
-        "label_group": label_group,
+        "parent_name": parent_name,
         "description": description,
         "generate_space": generate_space,
         "is_project": is_project,
@@ -469,6 +496,7 @@ def new_label_modal(request: Request, conn=Depends(get_db)):
             "colors": COLORS,
             "icon_groups": ICON_GROUPS,
             "role": "none",
+            "space_options": db.list_space_labels(conn),
         },
     )
 
@@ -478,7 +506,7 @@ def create_label(
     new_name: str = Form(...),
     color: str = Form("blue"),
     icon: str = Form(""),
-    label_group: str = Form(""),
+    parent_name: str = Form(""),
     role: str = Form("none"),
     start_date: str = Form(""),
     end_date: str = Form(""),
@@ -499,8 +527,9 @@ def create_label(
     _reject_reserved_label_name(new_name)
 
     icon = (icon or "").strip() or None
-    label_group = label_group.strip() or None
     role = role if role in ("none", "space", "project") else "none"
+    # Spaces don't nest -- see update_label's identical guard right above.
+    parent_name = None if role == "space" else _validate_parent_name(conn, parent_name)
 
     if role == "project" and (not start_date or not end_date):
         raise HTTPException(400, "A project needs both a start and end date.")
@@ -509,7 +538,7 @@ def create_label(
         "name": new_name,
         "color": color if color in COLORS else "blue",
         "icon": icon,
-        "label_group": label_group,
+        "parent_name": parent_name,
         "generate_space": 1 if role == "space" else 0,
         "is_project": 1 if role == "project" else 0,
         "created_at": _now(),

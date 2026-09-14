@@ -12,6 +12,14 @@
      colors       -- COLORS list for the color swatch picker
      icon_groups  -- ICON_GROUPS for the icon swatch picker
      role         -- 'none'/'space'/'project', the label's current role
+     space_options -- db.list_space_labels(conn) result, populates the
+                      Space-link dropdown below (2026-09-14, Spaces --
+                      labels-as-membership rework slice 1). Deliberately
+                      NOT named `spaces` -- base.html's own sidebar sets a
+                      top-level `{% set spaces = sidebar_spaces(request) %}`
+                      that would otherwise silently shadow it for every
+                      page this partial renders into (label_form_modal.html/
+                      quick_add.html both extend base.html).
      banner       -- only read inside the `{% if l %}` branch (edit-only,
                      a brand-new label has no saved name yet to key a
                      banner off of) -- callers creating a new label
@@ -38,9 +46,21 @@
         {% set ip_default_icon = 'tag' %}
         {% include "_icon_swatch_picker.html" %}
     </div>
-    <div class="field">
-        <label>Group</label>
-        <input type="text" name="label_group" value="{{ l.label_group if l else '' }}" placeholder="e.g. Work, Priority">
+    {# 2026-09-14 (Spaces -- labels-as-membership rework slice 1): the old
+       free-text Group input (`label_group`) is replaced by a real
+       Space-link dropdown (`parent_name`, a real FK column read by
+       db.list_child_labels but previously never written by any
+       template). Hidden entirely when editing a Space itself -- Spaces
+       don't nest, matches list_child_labels's existing non-recursive,
+       one-level design. #}
+    <div class="field label-parent-field" {% if role == 'space' %}hidden{% endif %}>
+        <label>Space</label>
+        <select name="parent_name">
+            <option value="">No space</option>
+            {% for s in space_options %}
+            <option value="{{ s.name }}" {% if l and l.parent_name == s.name %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+        </select>
     </div>
     <!-- Role -- 2026-08-29 fix (STATE.md backlog item 6, direct
          feedback: "better visual picker for Space / Project / None

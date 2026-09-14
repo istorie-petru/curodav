@@ -618,7 +618,7 @@ class TestQuickAddContactAndLabelTabs:
         assert 'enctype="multipart/form-data"' in body
         # ...and label-specific fields present.
         assert 'name="new_name"' in body
-        assert 'name="label_group"' in body
+        assert 'name="parent_name"' in body
 
     def test_contact_and_label_tabs_present(self, conn):
         resp = dashboard_router.quick_add_form(_request("/quick/add"), conn=conn)

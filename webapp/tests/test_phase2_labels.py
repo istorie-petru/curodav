@@ -87,7 +87,7 @@ def _request(path="/labels"):
 class TestIconPersistence:
     # Every Form(...) param is passed explicitly here, including ones this
     # test doesn't otherwise care about (role/start_date/end_date/
-    # description/label_group) -- calling a FastAPI route function
+    # description/parent_name) -- calling a FastAPI route function
     # directly (not through the app) bypasses Form()'s normal request-body
     # resolution, so any parameter left at its Python default literally
     # holds FastAPI's own `Form(...)` marker object, not the string a real
@@ -95,36 +95,38 @@ class TestIconPersistence:
     # `set_label`/`create_label` already document for `abbreviation`).
 
     def test_create_label_saves_the_chosen_icon(self, conn):
-        labels_router.create_label(new_name="Garden", color="green", icon="  leaf  ", label_group="", role="none", start_date="", end_date="", conn=conn)
+        labels_router.create_label(new_name="Garden", color="green", icon="  leaf  ", parent_name="", role="none", start_date="", end_date="", conn=conn)
         cfg = db.get_label_config(conn, "Garden")
         assert cfg["icon"] == "leaf"
 
     def test_update_label_saves_a_newly_chosen_icon(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
-        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="leaf", label_group="", description="", role="none", start_date="", end_date="", conn=conn)
+        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="leaf", parent_name="", description="", role="none", start_date="", end_date="", conn=conn)
         assert db.get_label_config(conn, "Garden")["icon"] == "leaf"
 
     def test_update_label_changes_an_existing_icon(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "icon": "leaf", "created_at": _now()})
-        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="flag", label_group="", description="", role="none", start_date="", end_date="", conn=conn)
+        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="flag", parent_name="", description="", role="none", start_date="", end_date="", conn=conn)
         assert db.get_label_config(conn, "Garden")["icon"] == "flag"
 
     def test_update_label_no_icon_radio_clears_it(self, conn):
         # The picker's "No icon" option submits icon="" (_icon_swatch_
         # picker.html) -- an explicit clear, not "leave unchanged".
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "icon": "leaf", "created_at": _now()})
-        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="", label_group="", description="", role="none", start_date="", end_date="", conn=conn)
+        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="", parent_name="", description="", role="none", start_date="", end_date="", conn=conn)
         assert db.get_label_config(conn, "Garden")["icon"] is None
 
-    def test_update_label_still_saves_color_and_group_alongside_icon(self, conn):
+    def test_update_label_still_saves_color_and_parent_alongside_icon(self, conn):
         # Regression guard: adding the new `icon` param shouldn't disturb
-        # the fields that already worked.
+        # the fields that already worked. `parent_name` (2026-09-14,
+        # replaces the old free-text `label_group`) must name a real Space.
+        db.upsert_label_config(conn, {"name": "Home", "generate_space": 1, "created_at": _now()})
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
-        labels_router.update_label(name="Garden", new_name="Garden", color="purple", icon="leaf", label_group="Home", description="", role="none", start_date="", end_date="", conn=conn)
+        labels_router.update_label(name="Garden", new_name="Garden", color="purple", icon="leaf", parent_name="Home", description="", role="none", start_date="", end_date="", conn=conn)
         cfg = db.get_label_config(conn, "Garden")
         assert cfg["icon"] == "leaf"
         assert cfg["color"] == "purple"
-        assert cfg["label_group"] == "Home"
+        assert cfg["parent_name"] == "Home"
 
 
 # --------------------------------------------------------------------- #
@@ -139,16 +141,16 @@ class TestIconPersistence:
 
 class TestColorValidation:
     def test_create_label_rejects_an_unknown_color(self, conn):
-        labels_router.create_label(new_name="Garden", color="not-a-real-color", icon="", label_group="", role="none", start_date="", end_date="", conn=conn)
+        labels_router.create_label(new_name="Garden", color="not-a-real-color", icon="", parent_name="", role="none", start_date="", end_date="", conn=conn)
         assert db.get_label_config(conn, "Garden")["color"] == "blue"
 
     def test_create_label_accepts_a_real_color(self, conn):
-        labels_router.create_label(new_name="Garden", color="teal", icon="", label_group="", role="none", start_date="", end_date="", conn=conn)
+        labels_router.create_label(new_name="Garden", color="teal", icon="", parent_name="", role="none", start_date="", end_date="", conn=conn)
         assert db.get_label_config(conn, "Garden")["color"] == "teal"
 
     def test_update_label_rejects_an_unknown_color(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
-        labels_router.update_label(name="Garden", new_name="Garden", color="<script>", icon="", label_group="", description="", role="none", start_date="", end_date="", conn=conn)
+        labels_router.update_label(name="Garden", new_name="Garden", color="<script>", icon="", parent_name="", description="", role="none", start_date="", end_date="", conn=conn)
         assert db.get_label_config(conn, "Garden")["color"] == "blue"
 
     def test_set_label_rejects_an_unknown_color(self, conn):
@@ -160,19 +162,19 @@ class TestColorValidation:
 class TestReservedLabelNameGuard:
     def test_create_label_rejects_the_page_header_scope_name(self, conn):
         with pytest.raises(Exception) as excinfo:
-            labels_router.create_label(new_name=db.PAGE_HEADER_BANNER_SCOPE, color="blue", icon="", label_group="", role="none", start_date="", end_date="", conn=conn)
+            labels_router.create_label(new_name=db.PAGE_HEADER_BANNER_SCOPE, color="blue", icon="", parent_name="", role="none", start_date="", end_date="", conn=conn)
         assert excinfo.value.status_code == 400
         assert db.get_label_config(conn, db.PAGE_HEADER_BANNER_SCOPE) is None
 
     def test_create_label_rejects_a_season_scope_name(self, conn):
         with pytest.raises(Exception) as excinfo:
-            labels_router.create_label(new_name=db.SEASON_BANNER_SCOPES["summer"], color="blue", icon="", label_group="", role="none", start_date="", end_date="", conn=conn)
+            labels_router.create_label(new_name=db.SEASON_BANNER_SCOPES["summer"], color="blue", icon="", parent_name="", role="none", start_date="", end_date="", conn=conn)
         assert excinfo.value.status_code == 400
 
     def test_update_label_rejects_renaming_into_a_reserved_name(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
         with pytest.raises(Exception) as excinfo:
-            labels_router.update_label(name="Garden", new_name=db.PAGE_HEADER_BANNER_SCOPE, color="green", icon="", label_group="", description="", role="none", start_date="", end_date="", conn=conn)
+            labels_router.update_label(name="Garden", new_name=db.PAGE_HEADER_BANNER_SCOPE, color="green", icon="", parent_name="", description="", role="none", start_date="", end_date="", conn=conn)
         assert excinfo.value.status_code == 400
         # Rejected before the rename happened -- the label is untouched.
         assert db.get_label_config(conn, "Garden") is not None
@@ -181,7 +183,7 @@ class TestReservedLabelNameGuard:
         # Sanity check the guard only fires on an actual name *change* --
         # every ordinary edit (new_name == name) must keep working.
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
-        labels_router.update_label(name="Garden", new_name="Garden", color="teal", icon="", label_group="", description="", role="none", start_date="", end_date="", conn=conn)
+        labels_router.update_label(name="Garden", new_name="Garden", color="teal", icon="", parent_name="", description="", role="none", start_date="", end_date="", conn=conn)
         assert db.get_label_config(conn, "Garden")["color"] == "teal"
 
     def test_rename_endpoint_rejects_a_reserved_destination(self, conn):
@@ -203,6 +205,90 @@ class TestReservedLabelNameGuard:
             labels_router.set_label(name=db.PAGE_HEADER_BANNER_SCOPE, color="blue", icon="", description="", parent_name="", generate_space="", abbreviation="", return_to="", conn=conn)
         assert excinfo.value.status_code == 400
         assert db.get_label_config(conn, db.PAGE_HEADER_BANNER_SCOPE) is None
+
+
+# --------------------------------------------------------------------- #
+# Space-link dropdown (Spaces -- labels-as-membership rework slice 1,
+# 2026-09-14): _label_form_fields.html's old free-text `label_group`
+# input is replaced by a `parent_name` <select> populated from
+# db.list_space_labels; create_label/update_label validate it against
+# that same set instead of accepting arbitrary text.
+# --------------------------------------------------------------------- #
+
+
+class TestLabelParentNameDropdown:
+    def test_create_label_writes_a_valid_parent_name(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        labels_router.create_label(new_name="Homework", color="blue", icon="", parent_name="University", role="none", start_date="", end_date="", conn=conn)
+        assert db.get_label_config(conn, "Homework")["parent_name"] == "University"
+
+    def test_create_label_rejects_a_parent_name_that_is_not_a_space(self, conn):
+        # "Homework" exists but isn't generate_space=1 -- not a valid Space
+        # to link under.
+        db.upsert_label_config(conn, {"name": "Homework", "created_at": _now()})
+        with pytest.raises(Exception) as excinfo:
+            labels_router.create_label(new_name="Essay", color="blue", icon="", parent_name="Homework", role="none", start_date="", end_date="", conn=conn)
+        assert excinfo.value.status_code == 400
+        assert db.get_label_config(conn, "Essay") is None
+
+    def test_create_label_rejects_a_parent_name_naming_nothing_at_all(self, conn):
+        with pytest.raises(Exception) as excinfo:
+            labels_router.create_label(new_name="Essay", color="blue", icon="", parent_name="Nonexistent Space", role="none", start_date="", end_date="", conn=conn)
+        assert excinfo.value.status_code == 400
+
+    def test_create_label_blank_parent_name_is_ungrouped(self, conn):
+        labels_router.create_label(new_name="Essay", color="blue", icon="", parent_name="", role="none", start_date="", end_date="", conn=conn)
+        assert db.get_label_config(conn, "Essay")["parent_name"] is None
+
+    def test_create_label_role_space_ignores_any_submitted_parent_name(self, conn):
+        # Spaces don't nest -- a label becoming a Space can't also carry a
+        # parent, regardless of what a raw POST submits alongside role=space.
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        labels_router.create_label(new_name="Work", color="blue", icon="", parent_name="University", role="space", start_date="", end_date="", conn=conn)
+        assert db.get_label_config(conn, "Work")["parent_name"] is None
+
+    def test_update_label_writes_a_valid_parent_name(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Homework", "created_at": _now()})
+        labels_router.update_label(name="Homework", new_name="Homework", color="blue", icon="", parent_name="University", description="", role="none", start_date="", end_date="", conn=conn)
+        assert db.get_label_config(conn, "Homework")["parent_name"] == "University"
+
+    def test_update_label_rejects_a_parent_name_that_is_not_a_space(self, conn):
+        db.upsert_label_config(conn, {"name": "Homework", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Essay", "created_at": _now()})
+        with pytest.raises(Exception) as excinfo:
+            labels_router.update_label(name="Essay", new_name="Essay", color="blue", icon="", parent_name="Homework", description="", role="none", start_date="", end_date="", conn=conn)
+        assert excinfo.value.status_code == 400
+
+    def test_update_label_role_space_ignores_any_submitted_parent_name(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Work", "created_at": _now()})
+        labels_router.update_label(name="Work", new_name="Work", color="blue", icon="", parent_name="University", description="", role="space", start_date="", end_date="", conn=conn)
+        assert db.get_label_config(conn, "Work")["parent_name"] is None
+
+    def test_edit_modal_renders_a_space_dropdown_not_a_text_input(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Homework", "parent_name": "University", "created_at": _now()})
+        resp = labels_router.edit_label_modal("Homework", _request("/settings/labels/Homework/edit"), conn=conn)
+        body = resp.body.decode()
+        assert '<select name="parent_name">' in body
+        assert 'name="label_group"' not in body
+        assert '<option value="University" selected>University</option>' in body
+        assert '<option value="">No space</option>' in body
+
+    def test_edit_modal_hides_the_dropdown_when_editing_a_space_itself(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        resp = labels_router.edit_label_modal("University", _request("/settings/labels/University/edit"), conn=conn)
+        body = resp.body.decode()
+        assert 'class="field label-parent-field" hidden' in body
+
+    def test_new_label_modal_renders_every_space_as_an_option(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Home", "generate_space": 1, "created_at": _now()})
+        resp = labels_router.new_label_modal(_request("/settings/labels/new"), conn=conn)
+        body = resp.body.decode()
+        assert '<option value="University"' in body
+        assert '<option value="Home"' in body
 
 
 # --------------------------------------------------------------------- #
@@ -629,12 +715,20 @@ class TestSettingsLabelsTableSortOrder:
     type (space first, then projects, then plain), then alphabetically."
     Was flat-alphabetical-by-name only (routers/labels.py::_labels_context
     used to override db.list_labels's own name-only sort with an
-    identical one). No prior test asserted row order here."""
+    identical one). No prior test asserted row order here.
+
+    2026-09-14 (Spaces -- labels-as-membership rework slice 1): the sort's
+    primary key moved from the old free-text `label_group` to the real
+    `parent_name` FK -- `_label` below writes directly via
+    db.upsert_label_config (bypassing the router's now-added "must name a
+    real Space" validation), so the `group` param here is just an
+    arbitrary string in `parent_name`, same as it always was in
+    `label_group`; the sort itself doesn't validate what it points at."""
 
     def _label(self, conn, name, group="", role="none"):
         db.upsert_label_config(conn, {
             "name": name,
-            "label_group": group or None,
+            "parent_name": group or None,
             "generate_space": 1 if role == "space" else 0,
             "is_project": 1 if role == "project" else 0,
             "created_at": _now(),

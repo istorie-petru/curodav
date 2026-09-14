@@ -2072,6 +2072,7 @@ def quick_add_form(request: Request, default_tab: str = "task", conn=Depends(get
             "colors": COLORS,
             "icon_groups": ICON_GROUPS,
             "role": "none",
+            "space_options": db.list_space_labels(conn),
         },
     )
 
