@@ -17,6 +17,37 @@ session start.
 
 ## Right now
 
+- **Scoped, not implemented:** 2026-09-14 -- direct request to rework how
+  Space labels aggregate: they can no longer be manually assigned to
+  items; a Space's page instead shows everything tagged with any label
+  that belongs to it (via `parent_name`), Settings > Labels gets one table
+  per Space, the Dashboard's per-Space widget grid gets a hard top-level
+  filter instead of each widget re-deriving it, and the Upcoming widget
+  gains tasks alongside events. Given the scope (data model, a migration,
+  3+ UI surfaces, reverses a decision `open-priority.md` had marked
+  confirmed-shipped 2026-08-14), wrote it up as a plan instead of
+  attempting it as one slice, per Peter's own AskUserQuestion answer.
+  Investigated the actual current code first (no `groups` table exists;
+  `parent_name` is a real but unwritten FK, `label_group` is a free-text
+  decorative field with no aggregation effect). Also checked the reported
+  "label-icon-tile background isn't the label's color" bug and couldn't
+  reproduce it -- already correct everywhere `.label-icon-tile` is used
+  today; folded into the new spec as a forward requirement for the one
+  place it doesn't exist yet (Space section headings in the new
+  per-Space Settings tables) rather than a fix.
+
+  Full spec, acceptance line, and six ordered slices: `open.md` § "Spaces
+  — labels-as-membership rework". Pointers added from `roadmap.md` (2.0
+  section, alongside the Calendar FullCalendar-parity queue) and from
+  `open-priority.md`'s "Spaces — context" section (marks its "direct
+  membership only" line superseded, doesn't delete it -- still an
+  accurate record of what shipped 2026-08-14 until the new slices land).
+
+  **Next slice**: slice 1 of the Spaces rework (`_label_form_fields.html`'s
+  Space-link dropdown + `labels.py::create_label`/`update_label` accepting
+  `parent_name`) is the natural next session, or pick anything else from
+  `roadmap.md`/`open-priority.md`/`open.md` per the normal workflow.
+
 - **Shipped:** 2026-09-14 -- direct request: "the quick add should support
   both contacts and labels." quick_add.html (2026-08-10) only ever rendered
   Task/Event panels; base.html's own comment on the sidebar's global "+"
