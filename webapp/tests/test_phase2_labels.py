@@ -1335,7 +1335,7 @@ class TestSettingsLabelsGroupedTables:
         body = resp.body.decode()
         assert "label-icon-tile" not in body
         assert 'class="labels-space-row"' in body
-        assert 'data-style="--row-tint: var(--tag-teal-bg); --row-tint-fg: var(--tag-teal-fg)"' in body
+        assert 'data-style="--row-tint: var(--tag-teal-bg)"' in body
         assert "#icon-graduation-cap" in body
 
     def test_add_label_row_always_present(self, conn):
@@ -1387,10 +1387,10 @@ class TestSettingsLabelsGroupedTables:
         # Follow-up direct request -- first tried a colored left bar,
         # direct feedback "I don't like this, I like the background color
         # more": a row grouped under a Space now shares the exact same
-        # tinted-background treatment the Space's own row gets
-        # (--row-tint/--row-tint-fg), in the group's own (already
-        # Space-inherited) color. An ungrouped label has no group color
-        # to link to, so it gets neither the class nor the tint.
+        # tinted-background treatment (--row-tint) the Space's own row
+        # gets, in the group's own (already Space-inherited) color. An
+        # ungrouped label has no group color to link to, so it gets
+        # neither the class nor the tint.
         self._space(conn, "University", color="green")
         db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "color": "red", "created_at": _now()})
         self._label(conn, "Groceries")
@@ -1399,10 +1399,19 @@ class TestSettingsLabelsGroupedTables:
         # "red" (Historiography's own stored color) never appears -- a
         # grouped row's l.color is already resolved to the Space's own
         # color (db.effective_label_config's _resolve_inherited_color).
-        assert (
-            'class="labels-child-row" data-style="--row-tint: var(--tag-green-bg); '
-            '--row-tint-fg: var(--tag-green-fg)"' in body
-        )
+        assert 'class="labels-child-row" data-style="--row-tint: var(--tag-green-bg)"' in body
         groceries_row = body.split('data-label-name="Groceries"')[0].rsplit("<tr", 1)[1]
         assert "labels-child-row" not in groceries_row
+
+    def test_grouped_row_text_stays_the_default_color_not_a_tag_fg_pairing(self, conn):
+        # Direct request, same-day follow-up: "the font color should be
+        # the default one or one that contrasts with the bg color" --
+        # --row-tint-fg (a small-pill-tuned color, read low-contrast at
+        # full-row size) is gone; text/icon simply inherit the app's own
+        # default color, no override at all.
+        self._space(conn, "University", color="green")
+        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "color": "red", "created_at": _now()})
+        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
+        body = resp.body.decode()
+        assert "--row-tint-fg" not in body
 

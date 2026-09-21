@@ -1513,18 +1513,17 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 
    `.labels-space-row` is the one row per Space that reads as a "card":
    a light hue-tinted background and rounded corners. Painted via a
-   single `data-style` on the `<tr>` that sets two custom properties
-   (`--row-tint`/`--row-tint-fg`, see _labels_table_body.html) rather than
-   one `data-style` per inner span -- plain CSS below applies them to
-   each `<td>`'s own background (not the `<tr>`'s) specifically so
-   `border-radius` on the first/last cell actually clips visible
-   background, which it can't do if the color is painted on the parent
-   `<tr>` instead. A Space's row used to also get a colored
-   `.label-icon-tile` squircle; direct feedback ("the .label-icon-tile
-   for spaces is unnecessary, show only the icon like for any plain
-   label") dropped that -- a Space's row now uses the same
-   `.label-cell-icon` glyph every plain label row uses, just bold and
-   tinted along with the rest of the row via `--row-tint-fg`.
+   single `data-style` on the `<tr>` that sets a `--row-tint` custom
+   property (see _labels_table_body.html) rather than one `data-style`
+   per inner span -- plain CSS below applies it to each `<td>`'s own
+   background (not the `<tr>`'s) specifically so `border-radius` on the
+   first/last cell actually clips visible background, which it can't do
+   if the color is painted on the parent `<tr>` instead. A Space's row
+   used to also get a colored `.label-icon-tile` squircle; direct
+   feedback ("the .label-icon-tile for spaces is unnecessary, show only
+   the icon like for any plain label") dropped that -- a Space's row now
+   uses the same `.label-cell-icon` glyph every plain label row uses,
+   just bold, sitting over the tinted row like everything else in it.
 
    Rounded-corner hover follows the same per-`<td>`-background technique,
    scoped to this table only (not the global `tbody tr:hover` rule
@@ -1534,22 +1533,34 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    bar on a grouped label's own row, direct feedback "I don't like this,
    I like the background color more"): `.labels-child-row` (a grouped
    label/project's row) now shares this exact same tint/rounded-corner
-   treatment via the same `--row-tint`/`--row-tint-fg` custom properties
-   (_labels_table_body.html sets them identically for both row kinds,
-   just off the row's own -- already Space-inherited -- color), not a
+   treatment via the same `--row-tint` custom property
+   (_labels_table_body.html sets it identically for both row kinds, just
+   off the row's own -- already Space-inherited -- color), not a
    separate lighter-weight rule. Only the bold name stays exclusive to
    `.labels-space-row`, so the two still read as parent/child at a
-   glance despite sharing a color family. */
+   glance despite sharing a color family.
+
+   2026-09-21, same day, second follow-up (direct request: "the font
+   color should be the default one or one that contrasts with the bg
+   color") -- text/icon color used to also be repainted via a paired
+   `--row-tint-fg` custom property (a `--tag-<color>-fg`/`-bg` pill pair,
+   e.g. `.cell-tag`'s own color scheme) -- dropped outright, `--row-tint-
+   fg` no longer set or read anywhere: that pairing is tuned for a small
+   pill chip, not a full-row wash at this size, and read low-contrast
+   against its own `--row-tint` for several of the 16 colors. The row's
+   own default text color (`.label-name`/`.label-cell-icon`'s own
+   already-contrast-checked `--fg-primary`, simply left unset here now)
+   is reliably readable against `--row-tint` in both themes and every
+   color -- the tint itself is deliberately pale/translucent (see this
+   comment block's own opening paragraph) specifically so the app's
+   normal foreground colors still read fine over it, no per-color
+   contrast pairing needed. */
 .labels-space-row td,
 .labels-child-row td{background:var(--row-tint);}
 .labels-space-row td:first-child,
 .labels-child-row td:first-child{border-radius:var(--radius-sm) 0 0 var(--radius-sm);}
 .labels-space-row td:last-child,
 .labels-child-row td:last-child{border-radius:0 var(--radius-sm) var(--radius-sm) 0;}
-.labels-space-row .label-cell-icon, .labels-child-row .label-cell-icon,
-.labels-space-row .label-name, .labels-child-row .label-name,
-.labels-space-row .usage-badge, .labels-child-row .usage-badge,
-.labels-space-row .text-muted, .labels-child-row .text-muted{color:var(--row-tint-fg);}
 .labels-space-row .label-name{font-weight:600;}
 
 #labels-table-wrapper tbody tr:not(.labels-space-row):not(.labels-child-row):hover{background:none;}
