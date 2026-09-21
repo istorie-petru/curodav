@@ -26,7 +26,7 @@
     <div class="contact-row-wrap" data-uid="{{ c.uid }}">
         <input type="checkbox" class="row-select" data-uid="{{ c.uid }}" aria-label="Select {{ c.full_name }}" autocomplete="off">
         <a class="contact-row" href="/contacts/{{ c.uid }}" data-modal>
-            {{ avatar(c) }}
+            {{ avatar(c, lazy=True) }}
             <span class="contact-row-main">
                 <span class="contact-row-name">{{ c.full_name }}</span>
                 <!-- Contacts field parity slice 2 of 6: c.phone/c.email are

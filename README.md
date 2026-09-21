@@ -14,8 +14,10 @@ no subscription.
   over that pool, never a new kind of object.
 - **Runs entirely from one tree** with no external services beyond the optional
   Radicale sync server. Self-host it where you like.
-- **The current version is 2.0.0** — the first full, stable release. The
-  app's history (phases 0.1 → 1.9) and the versioning rules are in
+- **The current version is 2.1.2** — tracked in [`VERSION`](VERSION) at the
+  repository root, the authoritative source (see
+  [Versioning](#versioning) below). The app's earlier phase history
+  (0.1 → 2.0) is in
   [`plans/abandoned.md`](documentation/plans/abandoned.md).
 
 ## Is this for you?
@@ -107,7 +109,18 @@ The app deploys as a systemd service via
 [`scripts/curodav-ctl`](scripts/curodav-ctl). Each deploy builds a fresh,
 isolated release and atomically swaps a symlink over to it; nothing is ever
 edited in place, and a deploy that fails its own health check rolls itself
-back automatically — the site never goes down mid-upgrade.
+back automatically -- the site never goes down mid-upgrade.
+
+`curodav-ctl` at a glance:
+
+| Command | What it does |
+|---|---|
+| `install` | First install: system user, `/srv/curodav` layout, `.env`, the systemd unit, builds and starts the first release. Prompts to set an admin login and, optionally, DAV. |
+| `install --dav [--proxy=cloudflare\|manual] [--reconfigure]` | Adds/reconfigures public CalDAV/CardDAV (Radicale + nginx, optionally Cloudflare Tunnel). Reuses prior answers on re-run unless `--reconfigure` is passed; `--proxy=manual` skips Cloudflare Tunnel for your own reverse proxy. |
+| `update` | Deploys the latest `main`, atomic symlink swap, health-checked, auto-rolls-back on failure. |
+| `revert` | Swaps `current` back to `previous` locally, restarts, health-checks -- a manual escape hatch independent of `update`'s own auto-rollback. |
+| `status` | Reachability/consistency checks only (Radicale loopback, nginx path-route, public hostname, env-var agreement) -- no deploy, no root needed. |
+| `remove` | Tears down the service, system user, and `/srv/curodav` entirely -- destructive, confirms first. |
 
 #### First install (fresh host)
 
@@ -162,6 +175,19 @@ previous release, restarts again, and exits non-zero — the bad release
 never stays live. Releases beyond the last 5 are pruned automatically.
 Config in `shared/.env` and data in `shared/data/` live outside every
 release directory, so neither is touched by a swap.
+
+#### Reverting a bad deploy
+
+```bash
+sudo curodav-ctl revert
+```
+
+For when something's wrong that `update`'s own auto-rollback didn't catch
+(a health check that passes but the app still misbehaves, say). Points
+`current` back at whatever `previous` currently is, restarts, and
+health-checks it the same way `update` does. One-way, not a redo stack --
+running it twice in a row doesn't "revert the revert," it just re-points
+`current` at the same release again.
 
 #### Continuous deployment
 
@@ -278,10 +304,17 @@ being re-litigated.
 
 ## Versioning
 
-Versions track the phases the app has gone through, not semantic versioning: a
-`0.x` version was a development phase, `x.0` is a full release, and minor
-releases within a major version are numbered `1.1` … `1.9`. The app is at
-**1.9.0**; the next full release, once all roadmap work is implemented, is
-**2.0**. The full phase table (0.1 → 1.0) is in
+**The current version is tracked in [`VERSION`](VERSION) at the repository
+root (currently 2.1.2)** — that file, and the matching `vX.Y.Z` git tag, are
+authoritative; nothing else in this repo's prose should be treated as the
+source of truth if it ever drifts. [`CHANGELOG.md`](CHANGELOG.md) has one
+entry per tagged release going forward. `git-push.sh` (personal tooling, not
+tracked in this repo — see its own header comment) is what bumps `VERSION`,
+promotes `CHANGELOG.md`, and tags a release.
+
+Historically, before `VERSION` existed, releases tracked development phases
+rather than semantic versioning: a `0.x` version was a development phase,
+`x.0` a full release, and minor releases within a major version were numbered
+`x.1` … `x.9`. The full phase table (0.1 → 2.0) is in
 [`documentation/plans/abandoned.md`](documentation/plans/abandoned.md); the
 release order is in [`documentation/plans/roadmap.md`](documentation/plans/roadmap.md).

@@ -20,6 +20,7 @@ from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 from starlette.requests import Request
 
 from src import db, deps
@@ -646,6 +647,57 @@ class TestSettingsAppearanceEditMode:
         resp = settings_router.set_edit_mode(enabled="", x_requested_with="fetch", conn=conn)
         assert _json.loads(resp.body) == {"ok": True, "edit_mode": False}
         assert db.get_app_meta(conn, deps.EDIT_MODE_KEY) == ""
+
+
+class TestSettingsAppearanceAccentColor:
+    """2026-09-17 (design-system unification pass, shared spec at
+    /home/peter/Claude/Projects/DESIGN_SYSTEM.md) -- "Accent color", a
+    fixed 8-preset swatch grid (deps.py's ACCENT_PRESETS), not a free
+    color picker. Stores one of the 8 preset keys in app_meta, same
+    pattern as the toggles above but validated against an allowlist
+    instead of a plain "1"/"" on/off."""
+
+    def test_renders_swatch_grid_defaulting_to_blue(self, conn):
+        resp = settings_router.settings_appearance(_settings_request("/settings/appearance"), conn=conn)
+        body = resp.body.decode()
+        assert 'action="/settings/appearance/accent"' in body
+        assert resp.context["current_accent_color"] == "blue"
+        for preset in deps.ACCENT_PRESETS:
+            assert f'value="{preset["key"]}"' in body
+
+    def test_current_preset_renders_checked(self, conn):
+        db.set_app_meta(conn, deps.ACCENT_COLOR_KEY, "teal")
+        resp = settings_router.settings_appearance(_settings_request("/settings/appearance"), conn=conn)
+        assert resp.context["current_accent_color"] == "teal"
+
+    def test_set_accent_color_route_stores_key(self, conn):
+        resp = settings_router.set_accent_color(color="purple", conn=conn)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/settings/appearance"
+        assert db.get_app_meta(conn, deps.ACCENT_COLOR_KEY) == "purple"
+
+    def test_set_accent_color_route_rejects_unknown_key(self, conn):
+        with pytest.raises(HTTPException):
+            settings_router.set_accent_color(color="not-a-real-preset", conn=conn)
+        assert db.get_app_meta(conn, deps.ACCENT_COLOR_KEY) is None
+
+    def test_rendered_page_carries_the_chosen_preset_hex(self, tmp_path):
+        # base.html injects accent_color_hex(request) as an inline <style>
+        # override on every page, not just Settings > Appearance -- confirm
+        # it actually reaches a plain, unrelated page (Tasks).
+        db_path = tmp_path / "cache.sqlite"
+        with db.connect(db_path) as c:
+            db.set_app_meta(c, deps.ACCENT_COLOR_KEY, "indigo")
+            resp = tasks_router.list_tasks(_request_with_app("/tasks", db_path), conn=c)
+        body = resp.body.decode()
+        assert ":root{--accent:#4c51bf;}" in body
+
+    def test_rendered_page_falls_back_to_blue_when_unset(self, tmp_path):
+        db_path = tmp_path / "cache.sqlite"
+        with db.connect(db_path) as c:
+            resp = tasks_router.list_tasks(_request_with_app("/tasks", db_path), conn=c)
+        body = resp.body.decode()
+        assert ":root{--accent:#0070eb;}" in body
 
 
 class TestFmtDtFilter:

@@ -117,10 +117,9 @@ over.
 sudo curodav-ctl install --dav
 ```
 
-This is `scripts/curodav-ctl`'s own orchestration of everything below: it
-interactively asks for `DOMAIN_APP`/`TUNNEL_NAME`/`RADICALE_USER` and a
-Radicale password (reusing whatever you answered last time as defaults if
-you're re-running it), then runs `firewall.sh`,
+This is `scripts/curodav-ctl`'s own orchestration of everything below: the
+first time it runs, it asks for `DOMAIN_APP`/`TUNNEL_NAME`/`RADICALE_USER`
+and a Radicale password, then runs `firewall.sh`,
 `radicale/install-radicale.sh`, `nginx/install-nginx.sh`, and
 `cloudflared/install-cloudflared.sh` in that order, then writes
 `CC_RADICALE_URL`/`CC_RADICALE_USER`/`CC_RADICALE_PASSWORD`/
@@ -133,9 +132,24 @@ route, and the public hostname once this has been run once) as a
 warn-only, non-blocking step.
 
 Values are persisted to `/srv/curodav/shared/deploy.env` (outside any
-release directory, so they survive `update`'s disposable git clones) --
-`--dav` is safe to re-run any time to change the domain or rotate the
-setup, and touches nothing app-related.
+release directory, so they survive `update`'s disposable git clones).
+**Re-running `install --dav` later is a no-op on the prompts** -- it
+reuses `DOMAIN_APP`/`TUNNEL_NAME`/`RADICALE_USER` and leaves an already-set
+Radicale password untouched, rather than asking again every time. Pass
+`--reconfigure` when you actually want to change any of those (including
+rotating the password):
+
+```bash
+sudo curodav-ctl install --dav --reconfigure
+```
+
+`--proxy=manual` skips the Cloudflare-specific step entirely (installing
+`cloudflared`, creating a tunnel, routing DNS) while still setting up
+Radicale and the local nginx path-router -- for anyone fronting this host
+with their own reverse proxy, tunnel provider, or Caddy/nginx instead. See
+"Bringing your own reverse proxy" below for the walkthrough. Default is
+`--proxy=cloudflare`, i.e. today's behavior, unchanged if you never pass
+the flag.
 
 `cloudflared/install-cloudflared.sh` will still pause partway through and
 print a URL the first time it runs (`cloudflared tunnel login`) -- open
@@ -185,6 +199,52 @@ if you never expose Radicale publicly. Then:
 ```bash
 sudo systemctl restart curodav
 ```
+
+## Bringing your own reverse proxy
+
+`--proxy=manual` (2026-09-18, direct request: "a clearer way to integrate
+Cloudflare Tunnel or any other fix into that installer, because some users
+might install it manually") is for anyone who doesn't want Cloudflare
+Tunnel specifically -- their own Caddy/nginx + Let's Encrypt, a different
+tunnel provider (Tailscale Funnel, ngrok, etc.), or a proxy on a separate
+box entirely.
+
+```bash
+sudo curodav-ctl install --dav --proxy=manual
+```
+
+This still runs `firewall.sh`, `radicale/install-radicale.sh`, and
+`nginx/install-nginx.sh` -- Radicale and the local nginx path-router are
+proxy-agnostic, nginx just listens on `127.0.0.1:8080` and doesn't care
+what connects to it. Only `cloudflared/install-cloudflared.sh` is skipped.
+Everything else (writing `CC_RADICALE_*` into `/srv/curodav/shared/.env`,
+restarting `curodav.service`) still happens exactly as it does with
+`--proxy=cloudflare`.
+
+What you need to do yourself afterward:
+
+1. **Point your reverse proxy at `127.0.0.1:8080`** for both `/` and
+   `/radicale/` under whatever public hostname you're using -- that's the
+   one address nginx listens on here regardless of what sits in front of
+   it. If your proxy runs on a *different* host than this one, you'll need
+   to either open a port to it specifically (not `:8080` to the whole
+   internet) or run your proxy on this same host.
+2. **Terminate TLS yourself** -- Cloudflare Tunnel did that for you in the
+   default flow; a manual setup needs its own certificate (Let's Encrypt
+   via your proxy of choice is the usual answer).
+3. **Check the rate-limit zone's IP source.** `install-nginx.sh` sets
+   `/etc/nginx/conf.d/curodav-ratelimit.conf`'s client-IP source to
+   `$remote_addr` in `--proxy=manual` mode (rather than Cloudflare's
+   `CF-Connecting-IP` header) -- correct if your proxy also runs on this
+   host and connects to nginx over loopback without spoofing forwarding
+   headers. If your setup is different (e.g. your proxy sets its own
+   `X-Real-IP`/`X-Forwarded-For` and you want to key off that instead),
+   hand-edit that file's `map` block and `systemctl reload nginx` -- see
+   "Rate limiting Radicale's auth" below for what it's protecting against.
+4. **`CC_RADICALE_PUBLIC_URL`** is still built from the `DOMAIN_APP` you
+   gave the installer (`https://DOMAIN_APP/radicale/RADICALE_USER/`) --
+   make sure that's the actual public hostname your own proxy answers on,
+   not a placeholder.
 
 ## Configuring DAVx5 on the phone
 
@@ -251,7 +311,7 @@ approaches that DON'T work here, and why, before the one that does:
 
 What's actually wired in by default: **nginx's own `limit_req`**, applied
 to the `/radicale/` location only
-(`curodav.nginx.conf.template`/`curodav-ratelimit.conf`, installed by
+(`curodav.nginx.conf.template`/`curodav-ratelimit.conf.template`, installed by
 `install-nginx.sh`). This caps sustained request rate to ~10/minute per
 real client IP (a burst of 40 absorbed instantly -- one full DAVx5/
 Thunderbird/iOS sync cycle's PROPFIND/REPORT/GET requests -- before
@@ -269,8 +329,9 @@ name.
 A 429 response on `/radicale/*` (visible in a DAVx5 sync log, or via
 `sudo journalctl -u nginx | grep 'limiting requests'`) means this limit
 was hit -- either a real client syncing unusually often (raise the
-`rate=`/`burst=` values in `curodav-ratelimit.conf` and
-`systemctl reload nginx`), or exactly the abuse this exists to catch.
+`rate=`/`burst=` values in `/etc/nginx/conf.d/curodav-ratelimit.conf` --
+the file `install-nginx.sh` generates from `nginx/curodav-ratelimit.conf.template` --
+and `systemctl reload nginx`), or exactly the abuse this exists to catch.
 
 ## Troubleshooting notes (unverified -- no live tunnel tested from this repo)
 
@@ -327,7 +388,7 @@ need to agree, there's no propagation between them.
 | `deploy.env.example`                 | Copy to `deploy.env`, fill in your real domain        |
 | `firewall.sh`                        | ufw lockdown: only ssh open externally                |
 | `nginx/curodav.nginx.conf.template`  | Local path router: `/radicale/*` -> :5232, `/` -> :8000 |
-| `nginx/curodav-ratelimit.conf`       | Rate-limit zone for `/radicale/*` (see "Rate limiting Radicale's auth" above) |
+| `nginx/curodav-ratelimit.conf.template` | Rate-limit zone for `/radicale/*` (see "Rate limiting Radicale's auth" above) |
 | `nginx/install-nginx.sh`             | Installs nginx, drops in the site config + rate-limit zone, restarts |
 | `cloudflared/config.yml.template`    | Tunnel ingress rule (ONE hostname -> nginx's port)     |
 | `cloudflared/cloudflared.service`    | systemd unit for the tunnel daemon                     |

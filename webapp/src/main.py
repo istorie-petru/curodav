@@ -295,6 +295,18 @@ def create_app() -> FastAPI:
     # the earlier /calendar/timetable retirement).
     from .routers import auth, banners, calendar, contacts, dashboard, export, habits, labels, notes, projects, public_lists, published_lists, pwa, quick_capture, search, settings, spaces, sync_api, tasks, timeline
 
+    # Health check (design-system unification pass, 2026-09-17, deploy
+    # alignment with sibling app Pineart's own GET /api/health) -- exempted
+    # from auth via auth.py's PUBLIC_PATHS, since scripts/curodav-ctl polls
+    # this as a plain unauthenticated curl right after every deploy/
+    # rollback, not from a logged-in browser. Previously curodav-ctl
+    # health-checked plain `/`, which happened to work (any 2xx/3xx counts)
+    # but isn't a real "is the app actually up" signal -- `/` can succeed
+    # off a half-broken app that still renders a page shell.
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}
+
     app.include_router(auth.router)
     # Published Lists' standalone public feed (2026-08-29) -- no login, no
     # Radicale account, see routers/public_lists.py's module docstring and

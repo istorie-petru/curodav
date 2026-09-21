@@ -41,6 +41,7 @@ def _settings(**overrides) -> Settings:
         db_path=Path("/tmp/cc-secheaders-test.sqlite"),
         sync_interval_seconds=60,
         backup_dir=Path("/tmp/cc-secheaders-test-backups"),
+        photo_cache_dir=Path("/tmp/cc-secheaders-test-photo-cache"),
         auth_username="alice",
         auth_password="s3cret",
         auth_session_secret="test-signing-secret",

@@ -157,22 +157,39 @@ palette, not a new bespoke chip design.
 
 ## 7. Toolbars & page headers
 
-Canonical: `.toolbar` (or `.toolbar-2row` when filters need a second row)
-at the top of a page — page title, then a `.spacer`, then the page's
-actions, ending with the page's one primary button if it has one.
+Canonical (updated 2026-09-17 — this section previously described
+`.toolbar.top-app-bar` as the page header; the sidebar redesign
+(2026-08-29) replaced that with the shared "Standard Page Header" macro
+below on every top-level page, but this doc was never updated to match.
+`.toolbar.top-app-bar` still exists, but only as a *secondary* row —
+filters/search/subnav — rendered below the real header on pages that need
+one; it is not itself the header):
 
-```html
-<div class="toolbar top-app-bar">
-  <h1>Notes</h1>
-  <div class="spacer"></div>
-  <a class="btn primary" href="/notes/new">New</a>
-</div>
+`_page_header_narrow.html`'s `page_header_narrow()` macro — an icon +
+title strip, optional right-aligned page-specific actions, optional
+Settings-style back arrow (via `crumbs`), optional background banner
+image (Settings > Appearance).
+
+```jinja
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("Notes", "sticky-note") }}
 ```
 
-Every top-level page (Tasks, Notes, Contacts, Habits, each Settings
-category...) should open with this same shape — title left, actions right
-— so a user's eyes learn one place to look for "what can I do here,"
-regardless of which page they're on.
+or, with page-specific actions in the slot:
+
+```jinja
+{% call page_header_narrow("Calendar", "calendar") %}
+  <!-- date-range nav, view-switcher, filters, etc. -->
+{% endcall %}
+```
+
+Every top-level page (Tasks, Calendar, Notes, Contacts, Habits, each
+Settings category, Project/Label detail...) opens with this same macro —
+icon + title left, actions right — so a user's eyes learn one place to
+look for "what can I do here," regardless of which page they're on. See
+the macro's own header comment in `_page_header_narrow.html` for what it
+deliberately doesn't cover (Home's own full hero banner, entity detail
+pages).
 
 ## 8. Empty states
 

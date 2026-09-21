@@ -44,9 +44,35 @@
 :root{
   color-scheme:light;
 
-  --accent:#007aff;--accent-hover:#0071e3;--accent-active:#0062cc;--accent-subtle:rgba(0,122,255,.12);--accent-subtle-strong:rgba(0,122,255,.2);
+  /* --accent's default here is the "Blue" accent preset (Settings >
+     Appearance) -- overridden per-request by a small inline <style> block
+     base.html injects from the signed-in user's app_meta choice (see
+     deps.py's ACCENT_PRESETS/ACCENT_COLOR_KEY), server-side, before first
+     paint (no FOUC risk the way the client-only theme choice has, since
+     this is plain SSR). Same single value in light and dark (not
+     redeclared in [data-theme="dark"] below) -- all 8 presets were chosen
+     to clear 4.5:1 contrast against white text (used for filled-button
+     labels in both themes), so one value works everywhere. Hover/active/
+     subtle variants are derived from it via color-mix() instead of 4
+     hardcoded literals, so any preset "just works" without its own
+     hand-tuned variant set. */
+  --accent:#0070eb;
+  --accent-hover:color-mix(in srgb, var(--accent) 85%, black);
+  --accent-active:color-mix(in srgb, var(--accent) 75%, black);
+  --accent-subtle:color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-subtle-strong:color-mix(in srgb, var(--accent) 20%, transparent);
   --accent-neutral:#efefef;--accent-neutral-hover:#e2e2e2;--accent-neutral-active:#d4d4d4;--accent-neutral-subtle:rgba(130,130,135,.1);--accent-neutral-subtle-strong:rgba(130,130,135,.18);
   --success:#34c759;--warning:#ff9500;--danger:#ff3b30;--info:#5ac8fa;
+
+  /* Accent preset swatches (Settings > Appearance) -- fixed reference
+     colors for the picker UI itself, same 8 values/order as Pineart's own
+     accent picker (DESIGN_SYSTEM.md), each pre-adjusted to clear 4.5:1
+     contrast against white text. Not theme-dependent (shown identically
+     in light/dark so the swatch always matches what --accent above will
+     become if picked). */
+  --accent-preset-blue:#0070eb;--accent-preset-red:#e42735;--accent-preset-purple:#7857ff;
+  --accent-preset-green:#1b8849;--accent-preset-teal:#0d8177;--accent-preset-orange:#b95d18;
+  --accent-preset-pink:#d6336c;--accent-preset-indigo:#4c51bf;
   --bg-base:#f2f4f7;--bg-elevated:#ffffff;--bg-secondary:#eaecf0;--bg-tertiary:#e2e4e8;--bg-sidebar:#f7f8fa;
   --fg-primary:#1d1d1f;--fg-secondary:#6e6e73;--fg-tertiary:#737378;--fg-on-accent:#ffffff;--fg-on-accent-neutral:#2c2c2e;
   /* --fg-tertiary darkened 2026-09-07 (audit-fixes-2.0.md slice 6, light
@@ -58,7 +84,7 @@
      while staying visibly a step lighter than --fg-secondary (#6e6e73). */
   --border:rgba(0,0,0,.1);--border-strong:rgba(0,0,0,.18);--separator:rgba(0,0,0,.08);--row-alt:rgba(0,0,0,.025);
   --control-bg:#ffffff;--control-bg-hover:#f5f5f7;--control-border:rgba(0,0,0,.14);
-  --overlay-scrim:rgba(0,0,0,.35);--shadow-window:0 16px 44px rgba(0,0,0,.18);
+  --overlay-scrim:rgba(0,0,0,.35);
 
   /* Status/priority/category/credit pill colors (.tag-*, .pill-*,
      .credit-pill.*) -- light-mode values are pastel-on-white; see the
@@ -133,14 +159,10 @@
   --cal-accent-pink:var(--cal-bg-pink);--cal-accent-brown:var(--cal-bg-brown);--cal-accent-gray:var(--cal-bg-gray);--cal-accent-slate:var(--cal-bg-slate);
 
   --font-system:"Noto Sans","Segoe UI",Cantarell,Ubuntu,Roboto,"Helvetica Neue",Arial,sans-serif;
-  --text-caption:13px;--text-footnote:14px;--text-body:15px;--text-callout:15.5px;
-  --text-headline:17px;--text-title3:18px;--text-title2:21px;--text-title1:26px;
+  --text-xs:13px;--text-sm:14px;--text-base:15px;--text-md:15.5px;
+  --text-lg:17px;--text-xl:18px;--text-2xl:21px;--text-3xl:26px;
 
-  --radius-control:12px;--radius-sm:8px;--radius-md:10px;--radius-lg:14px;--radius-pill:999px;
-
-  --shadow-control:0 1px 1px rgba(0,0,0,.05);
-  --shadow-card:0 1px 2px rgba(0,0,0,.05),0 1px 6px rgba(0,0,0,.04);
-  --shadow-popover:0 4px 16px rgba(0,0,0,.14),0 1px 3px rgba(0,0,0,.08);
+  --radius-control:12px;--radius-sm:8px;--radius-md:12px;--radius-lg:16px;--radius-pill:999px;
 
   --ease-standard:cubic-bezier(.25,.1,.25,1);
   --dur-fast:100ms;
@@ -209,14 +231,13 @@
 [data-theme="dark"]{
   color-scheme:dark;
 
-  --accent:#0a84ff;--accent-hover:#3396ff;--accent-active:#0a6fd6;--accent-subtle:rgba(10,132,255,.22);--accent-subtle-strong:rgba(10,132,255,.32);
   --accent-neutral:#414141;--accent-neutral-hover:#4b4b4b;--accent-neutral-active:#3a3a3a;--accent-neutral-subtle:rgba(255,255,255,.08);--accent-neutral-subtle-strong:rgba(255,255,255,.14);
   --success:#30d158;--warning:#ff9f0a;--danger:#ff453a;--info:#64d2ff;
   --bg-base:#363636;--bg-elevated:#3e3e3e;--bg-secondary:#383838;--bg-tertiary:#303030;--bg-sidebar:#3b3b3b;
   --fg-primary:#f5f5f7;--fg-secondary:#b0b0b6;--fg-tertiary:#a3a3a8;--fg-on-accent:#ffffff;--fg-on-accent-neutral:#d1d1d6;
   --border:rgba(255,255,255,.13);--border-strong:rgba(255,255,255,.22);--separator:rgba(255,255,255,.09);--row-alt:rgba(255,255,255,.03);
   --control-bg:#414141;--control-bg-hover:#494949;--control-border:rgba(255,255,255,.14);
-  --overlay-scrim:rgba(0,0,0,.55);--shadow-window:0 16px 44px rgba(0,0,0,.5);
+  --overlay-scrim:rgba(0,0,0,.55);
 
   /* Previously *not* overridden at all -- every pill in the app (status,
      priority, category, credit) kept its light-mode pastel-on-white
@@ -272,12 +293,12 @@ html, body{height:100%;}
 html{background:var(--bg-base);}
 body{
   margin:0; font-family:var(--font-system); color:var(--fg-primary); background:var(--bg-base);
-  font-size:var(--text-body); -webkit-font-smoothing:antialiased;
+  font-size:var(--text-base); -webkit-font-smoothing:antialiased;
 }
 a{color:var(--fg-primary); text-decoration:none;}
 a:hover{text-decoration:underline;}
-h1{font-size:var(--text-title2); margin:0 0 14px;}
-h2{font-size:var(--text-headline); margin:20px 0 8px;}
+h1{font-size:var(--text-2xl); margin:0 0 14px;}
+h2{font-size:var(--text-lg); margin:20px 0 8px;}
 
 /* Keyboard-focus ring, global. Nothing in this file styled :focus-visible
    before -- buttons, tab/segmented links, icon buttons all fell back to
@@ -411,7 +432,7 @@ button.btn:focus-visible, a.btn:focus-visible, .cell-tag:focus-visible{
 button, input, select, textarea{font-family:inherit;}
 
 input, select, textarea{
-  font-size:var(--text-callout); color:var(--fg-primary); background:var(--control-bg);
+  font-size:var(--text-md); color:var(--fg-primary); background:var(--control-bg);
   border:1.5px solid var(--control-border); border-radius:var(--radius-control); padding:10px 14px;
 }
 input::placeholder, textarea::placeholder{color:var(--fg-tertiary); opacity:1;}
@@ -456,7 +477,7 @@ input[type="range"]{
 input[type="color"]{padding:2px; height:32px; cursor:pointer;}
 input[type="file"]{
   background:var(--bg-secondary); border:1px dashed var(--control-border);
-  font-size:var(--text-footnote); color:var(--fg-secondary); cursor:pointer;
+  font-size:var(--text-sm); color:var(--fg-secondary); cursor:pointer;
 }
 /* Import file inputs (settings_advanced.html's Restore/Import forms,
    2026-08-08) -- the native `<input type="file">` draws its own
@@ -473,7 +494,7 @@ input[type="file"]{
 }
 label.file-btn{
   background:var(--control-bg); border:1px solid var(--control-border); border-radius:var(--radius-control);
-  padding:var(--space-2) var(--space-4); cursor:pointer; font-size:var(--text-footnote); font-weight:500; color:var(--fg-primary);
+  padding:var(--space-2) var(--space-4); cursor:pointer; font-size:var(--text-sm); font-weight:500; color:var(--fg-primary);
   display:inline-flex; align-items:center; gap:var(--space-1);
   transition:background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
 }
@@ -496,7 +517,7 @@ label.file-btn:focus-within{
 
 button.btn, a.btn{
    background:var(--control-bg); border:1px solid var(--control-border); border-radius:var(--radius-control);
-   padding:var(--space-2) var(--space-4); cursor:pointer; font-size:var(--text-footnote); font-weight:500; color:var(--fg-primary);
+   padding:var(--space-2) var(--space-4); cursor:pointer; font-size:var(--text-sm); font-weight:500; color:var(--fg-primary);
    display:inline-flex; align-items:center; gap:var(--space-1);
    text-decoration:none; position:relative; overflow:hidden;
    transition:background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard),
@@ -1038,7 +1059,7 @@ main.main-full-width{max-width:none;}
    border-radius:var(--radius-lg); box-shadow:var(--elevation-1); margin-bottom:var(--space-4);
    display:flex; align-items:center; gap:var(--space-2);
 }
-.top-app-bar h1{font-size:var(--text-title3); margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.top-app-bar h1{font-size:var(--text-xl); margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .toolbar .spacer{flex:1;}
 /* Generic fallback so `.spacer` also works inside any other flex row
    (2026-08-02, projects_manage.html's archived-project row) without
@@ -1056,10 +1077,10 @@ main.main-full-width{max-width:none;}
    compaction pass -- this is the single biggest contributor to toolbar
    height on Calendar/Tasks, since every row-1 toolbar has one of these. */
 .seg-btn{
-  position:relative; z-index:1; border:none; background:transparent; padding:6px 12px; font-size:var(--text-footnote);
+  position:relative; z-index:1; border:none; background:transparent; padding:6px 12px; font-size:var(--text-sm);
   font-weight:500; border-radius:18px; cursor:pointer; color:var(--fg-secondary); text-decoration:none; display:inline-block;
 }
-.seg-btn.active{color:var(--fg-primary); font-weight:600; background:var(--bg-elevated); box-shadow:var(--shadow-control);}
+.seg-btn.active{color:var(--fg-primary); font-weight:600; background:var(--bg-elevated); box-shadow:var(--elevation-1);}
 .seg-btn:hover{text-decoration:none;}
 .seg-btn:active{opacity:.7;}
 /* Radio-backed .seg-btn (2026-08-07, modal-input-design Phase A -- widget
@@ -1074,7 +1095,7 @@ main.main-full-width{max-width:none;}
    elsewhere in this file. */
 .seg-radio{position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;}
 label.seg-btn{display:inline-flex; align-items:center; gap:0;}
-label.seg-btn:has(.seg-radio:checked){color:var(--fg-primary); font-weight:600; background:var(--bg-elevated); box-shadow:var(--shadow-control);}
+label.seg-btn:has(.seg-radio:checked){color:var(--fg-primary); font-weight:600; background:var(--bg-elevated); box-shadow:var(--elevation-1);}
 label.seg-btn[hidden]{display:none;}
 .segmented{flex-wrap:wrap;}
 /* Vertical variant (2026-08-07 follow-up) -- .segmented's compact pill
@@ -1141,10 +1162,10 @@ label.seg-btn[hidden]{display:none;}
    color is needed instead of restating the variable every time. */
 .text-muted{color:var(--fg-tertiary);}
 .text-muted-secondary{color:var(--fg-secondary);}
-.text-caption{font-size:var(--text-caption);}
+.text-caption{font-size:var(--text-xs);}
 /* _empty_state_row.html's text-muted empty-state cells (Labels/Holidays/
    Sleep&Leisure's own "No X yet" row) -- every real call site passes the
-   macro's own default `style='font-size: var(--text-footnote);'`
+   macro's own default `style='font-size: var(--text-sm);'`
    unchanged (verified across every call site, 2026-09-07), so this
    replaces that per-call inline `style=` parameter with one static rule
    scoped to the row's own existing id + class hooks (audit-fixes-2.0.md
@@ -1152,7 +1173,7 @@ label.seg-btn[hidden]{display:none;}
    used the shared `.empty-state` class instead (_labels_table_body.html)
    already gets its own font-size from that class, so it's unaffected --
    this only matches the `.text-muted` variant. */
-#empty-state-row .text-muted{font-size:var(--text-footnote);}
+#empty-state-row .text-muted{font-size:var(--text-sm);}
 
 /* Bulk-select checkbox column / narrow Actions column -- identical
    `style="width:26px"`/`style="width: 100px;"` `<th>`s hand-copied across
@@ -1191,7 +1212,7 @@ label.seg-btn[hidden]{display:none;}
    this exact same one-line link row. Reuses .breadcrumb (below): visually
    the same "small nav trail above the title" component, whether it's one
    link or the full Home > Space > Project trail. */
-.breadcrumb{margin:0 0 10px; font-size:var(--text-footnote);}
+.breadcrumb{margin:0 0 10px; font-size:var(--text-sm);}
 .breadcrumb + .breadcrumb{margin-top:-4px;}
 
 /* Detail-view modals (event_detail.html/task_detail.html/contact_detail.
@@ -1219,12 +1240,12 @@ label.seg-btn[hidden]{display:none;}
    normal small pill everywhere else in the app uses this exact class. */
 .detail-meta-item{display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-width:0;}
 .detail-meta-item.detail-meta-wide{grid-column:1 / -1;}
-.detail-meta-label{font-size:var(--text-caption); color:var(--fg-tertiary);}
+.detail-meta-label{font-size:var(--text-xs); color:var(--fg-tertiary);}
 .detail-meta-description{margin-top:var(--space-3); padding-top:var(--space-3); border-top:1px solid var(--separator);}
 /* Description/Notes value -- crisp like the rest of the .detail-meta-value
    typography (primary color, callout size) while keeping its pre-wrap
    prose layout. */
-.detail-meta-description p{margin:4px 0 0; white-space:pre-wrap; color:var(--fg-primary); font-size:var(--text-callout);}
+.detail-meta-description p{margin:4px 0 0; white-space:pre-wrap; color:var(--fg-primary); font-size:var(--text-md);}
 /* 2026-08-08 fix -- task_detail.html's meta card and its Subtasks card
    right below it visually ran together with zero gap when opened as a
    modal: .modal-body .card{margin-bottom:0} (deliberate, elsewhere --
@@ -1255,7 +1276,7 @@ label.seg-btn[hidden]{display:none;}
    weight and tighter tracking that makes the entity's name the dominant
    thing in the dialog. */
 .detail-heading-row .detail-title{font-weight:700; letter-spacing:-0.3px;}
-.detail-heading-sub{margin-top:2px; font-size:var(--text-caption); color:var(--fg-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.detail-heading-sub{margin-top:2px; font-size:var(--text-xs); color:var(--fg-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 
 /* The elevated "panel" every detail modal's body is wrapped in -- a
    tonal surface (--surface-container, deliberately one step below the
@@ -1328,7 +1349,7 @@ label.seg-btn[hidden]{display:none;}
 .detail-meta-value{
   display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;
   min-width:0; line-height:1.35;
-  font-size:var(--text-callout); font-weight:600; color:var(--fg-primary);
+  font-size:var(--text-md); font-weight:600; color:var(--fg-primary);
 }
 .detail-meta-value a{font-weight:600;}
 /* Contacts field parity slice 5 of 6 -- Address's fmt_address filter
@@ -1347,7 +1368,7 @@ label.seg-btn[hidden]{display:none;}
 .detail-delete-link{
   display:inline-flex; align-items:center; gap:5px;
   background:none; border:none; padding:var(--space-2); cursor:pointer;
-  font-family:inherit; font-size:var(--text-footnote); font-weight:500;
+  font-family:inherit; font-size:var(--text-sm); font-weight:500;
   color:var(--fg-tertiary);
   border-radius:var(--radius-control);
   transition:color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard);
@@ -1379,13 +1400,13 @@ label.seg-btn[hidden]{display:none;}
   display:flex; flex-direction:column; gap:var(--space-2);
 }
 .filled-card-title{
-  font-size:var(--text-title3); font-weight:600; line-height:1.2;
+  font-size:var(--text-xl); font-weight:600; line-height:1.2;
 }
 .filled-card-description{
-  font-size:var(--text-footnote); opacity:.85; line-height:1.3; margin-top:auto;
+  font-size:var(--text-sm); opacity:.85; line-height:1.3; margin-top:auto;
 }
 .filled-card-meta{
-  font-size:var(--text-caption); opacity:.7; margin-top:auto;
+  font-size:var(--text-xs); opacity:.7; margin-top:auto;
 }
 
 /* Color variants for filled cards */
@@ -1414,7 +1435,7 @@ label.seg-btn[hidden]{display:none;}
   background-size:20px 100%, 20px 100%, 20px 100%, 20px 100%;
   background-attachment:local, local, scroll, scroll;
 }
-table{width:100%; border-collapse:collapse; font-size:var(--text-callout);}
+table{width:100%; border-collapse:collapse; font-size:var(--text-md);}
 /* 2026-08-30: the Tasks table's per-group `.task-table`s (_tasks_body.
    html) went through several same-day rounds of `<colgroup>` +
    `table-layout:fixed` to force pixel-identical Status/Date/Labels
@@ -1526,13 +1547,13 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 
 .group-badge {
     display: inline-block; padding: 2px 8px; border-radius: var(--radius-pill);
-    font-size: var(--text-caption); font-weight: 500;
+    font-size: var(--text-xs); font-weight: 500;
     background: var(--accent-neutral-subtle); color: var(--fg-secondary);
     border: 1px solid var(--separator);
 }
 
 /* 2026-08-29 fix (STATE.md backlog item 6): this used to set
-   font-size: var(--text-caption), a size smaller than the table's own
+   font-size: var(--text-xs), a size smaller than the table's own
    base text -- visibly mismatched against both the "Not used" fallback
    (.text-muted, no size override, inherits the table's size) in the same
    column and every other cell in #labels-table. Just inherit now, same
@@ -1546,10 +1567,6 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .action-buttons .icon-btn.danger { color: var(--danger); }
 .action-buttons .icon-btn.danger:hover { background: var(--tag-red-bg); color: var(--danger); }
 
-.empty-state {
-    text-align: center; padding: var(--space-8) var(--space-4) !important;
-    color: var(--fg-tertiary); font-size: var(--text-footnote);
-}
 #empty-state-row:hover { background: none !important; }
 
 /* .add-row/.add-row-btn (icon-only "+" add row) removed 2026-08-29 --
@@ -1567,7 +1584,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 
 .cell-tag{
   display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border-radius:var(--radius-sm);
-  font-size:var(--text-caption); font-weight:600; white-space:nowrap;
+  font-size:var(--text-xs); font-weight:600; white-space:nowrap;
 }
 /* Wherever multiple tags sit back-to-back in the same cell (Tasks table's
    Tags column, task/contact detail's Tags row) -- a CSS rule instead of
@@ -1631,7 +1648,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .warnings-strip{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0;}
 .credit-pill{
   display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:var(--radius-pill);
-  font-size:var(--text-caption); font-weight:600;
+  font-size:var(--text-xs); font-weight:600;
 }
 .credit-pill.ok{background:var(--tag-green-bg); color:var(--tag-green-fg);}
 .credit-pill.warn{background:var(--tag-orange-bg); color:var(--tag-orange-fg);}
@@ -1647,7 +1664,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
   display:flex; flex-wrap:wrap; gap:var(--space-4); margin:0 0 var(--space-4); padding:0 var(--space-1);
 }
 .settings-subnav-links a{
-  display:inline-flex; align-items:center; gap:5px; font-size:var(--text-footnote); color:var(--fg-secondary);
+  display:inline-flex; align-items:center; gap:5px; font-size:var(--text-sm); color:var(--fg-secondary);
 }
 .settings-subnav-links a:hover{color:var(--fg-primary); text-decoration:none;}
 
@@ -1657,8 +1674,8 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 /* --------------------------------------------------------------------- */
 
 .filter-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
-.filter-bar input[type="search"]{width:180px; font-size:var(--text-footnote); padding:6px 10px;}
-.filter-select{max-width:150px; font-size:var(--text-footnote); padding:6px 26px 6px 10px;}
+.filter-bar input[type="search"]{width:180px; font-size:var(--text-sm); padding:6px 10px;}
+.filter-select{max-width:150px; font-size:var(--text-sm); padding:6px 26px 6px 10px;}
 
 /* --------------------------------------------------------------------- */
 /* Two-row toolbar (Phase 9b toolbar rework) -- Tasks (Table/Timeline/    */
@@ -1675,13 +1692,13 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 /* Row-1 title matches the compacted .top-app-bar h1 above -- kept as its
    own rule (rather than folded into that one) since a couple of pages
    still use .toolbar-row outside a .top-app-bar. */
-.toolbar-row h1{font-size:var(--text-title3); margin:0;}
+.toolbar-row h1{font-size:var(--text-xl); margin:0;}
 /* 2026-08-07 compaction pass: row-1 buttons/inputs run smaller than the
    app-wide .btn/.filter-bar defaults (which stay full-size everywhere
    else, e.g. forms/modals) -- a toolbar is scanned, not read, so it gets
    the tightest, most icon-forward treatment in the app. Prev/Next go
    icon-only (see calendar_*.html) using the existing .icon-btn size. */
-.toolbar-row .btn{height:40px; padding:0 12px; font-size:var(--text-caption);}
+.toolbar-row .btn{height:40px; padding:0 12px; font-size:var(--text-xs);}
 .toolbar-row .filter-bar input[type="search"]{width:160px; height:40px; padding:0 9px;}
 /* 2026-08-07, revised same day (2026-08-07 evening) after the first
    version visibly broke: putting the whole <details> (summary + body)
@@ -1738,7 +1755,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .multiselect-trigger{display:inline-flex; align-items:center; gap:6px;}
 .multiselect-count{
   background:var(--bg-secondary); color:var(--fg-secondary); border-radius:var(--radius-pill);
-  padding:1px 7px; font-size:var(--text-caption); font-weight:600;
+  padding:1px 7px; font-size:var(--text-xs); font-weight:600;
 }
 /* 2026-08-08: position:fixed, not :absolute -- static/app.js now always
    moves this into #multiselect-portal (base.html) on open and positions it
@@ -1790,7 +1807,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
      48 - 16(padding) - 2(border) = 30px, so this is 30px now, not 32. */
   height:30px; padding:0 14px; border:1px solid transparent; border-radius:var(--radius-control);
   background:var(--bg-secondary); color:var(--fg-secondary);
-  font-family:inherit; font-size:var(--text-footnote); font-weight:600;
+  font-family:inherit; font-size:var(--text-sm); font-weight:600;
   cursor:pointer; white-space:nowrap;
   transition:background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
 }
@@ -1802,7 +1819,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .multiselect-option-form{display:block;}
 .multiselect-option{
   display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:var(--radius-sm);
-  font-size:var(--text-callout); cursor:pointer; white-space:nowrap;
+  font-size:var(--text-md); cursor:pointer; white-space:nowrap;
 }
 .multiselect-option:hover{background:var(--bg-secondary);}
 /* Direct feedback, 2026-08-15: "depending on the data source, some Views
@@ -1835,13 +1852,13 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .multiselect-new-option:hover{background:none;}
 .multiselect-new-input{
   flex:1; border:1px solid var(--border); border-radius:var(--radius-sm);
-  padding:4px 8px; font-size:var(--text-callout); background:var(--bg-elevated); color:var(--fg-primary);
+  padding:4px 8px; font-size:var(--text-md); background:var(--bg-elevated); color:var(--fg-primary);
   min-width:0;
 }
 .multiselect-divider{height:1px; background:var(--separator); margin:6px 2px;}
 .multiselect-manage{
   display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:var(--radius-sm);
-  font-size:var(--text-footnote); color:var(--fg-secondary); text-decoration:none;
+  font-size:var(--text-sm); color:var(--fg-secondary); text-decoration:none;
 }
 .multiselect-manage:hover{background:var(--bg-secondary); text-decoration:none; color:var(--fg-primary);}
 
@@ -1877,7 +1894,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .action-menu-item{
   display:flex; align-items:center; gap:var(--space-2); width:100%;
   padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm);
-  background:none; border:none; font-family:inherit; font-size:var(--text-footnote);
+  background:none; border:none; font-family:inherit; font-size:var(--text-sm);
   font-weight:400; /* pinned: never inherit a heavier weight from a host surface */
   color:var(--fg-primary); cursor:pointer; text-align:left; white-space:nowrap;
   transition:background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
@@ -1927,12 +1944,12 @@ tbody td{padding:10px 8px; vertical-align:middle;}
   display:flex; align-items:flex-start; justify-content:space-between; gap:var(--space-2);
 }
 .status-card-title{
-  font-size:var(--text-headline); font-weight:600; color:var(--fg-primary);
+  font-size:var(--text-lg); font-weight:600; color:var(--fg-primary);
   line-height:1.2; flex:1; min-width:0;
 }
 .status-card-status{
   display:flex; align-items:center; gap:var(--space-1);
-  font-size:var(--text-body); font-weight:500; color:var(--fg-primary);
+  font-size:var(--text-base); font-weight:500; color:var(--fg-primary);
   margin-top:var(--space-1);
 }
 .status-card-status .icon{width:10px; height:10px; flex-shrink:0;}
@@ -1943,7 +1960,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 
 .status-card-meta{
   display:flex; flex-direction:column; gap:2px;
-  font-size:var(--text-caption); color:var(--fg-secondary); line-height:1.35;
+  font-size:var(--text-xs); color:var(--fg-secondary); line-height:1.35;
 }
 .status-card-meta .text-muted{color:var(--fg-tertiary);}
 
@@ -1975,7 +1992,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    bordered field box instead of a borderless pill/tag-pills-as-button. */
 .task-status-select .multiselect-trigger.pill-select-trigger{
   width:auto; background:none; border:none; border-radius:var(--radius-sm);
-  padding:3px 8px; font-size:var(--text-caption); font-weight:600; font-family:inherit; cursor:pointer;
+  padding:3px 8px; font-size:var(--text-xs); font-weight:600; font-family:inherit; cursor:pointer;
 }
 /* Direct follow-up ("status pills but they don't display as pills in the
    inline table"): the `background:none` above -- needed to beat `.widget-
@@ -2117,7 +2134,7 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
      a row gets selected. */
   display:none; align-items:center; gap:var(--space-2); flex-wrap:wrap;
 }
-.bulk-count{font-weight:600; font-size:var(--text-footnote); white-space:nowrap;}
+.bulk-count{font-weight:600; font-size:var(--text-sm); white-space:nowrap;}
 /* 2026-09-12 (direct feedback: "the bulk count should be allowed to sit
    on the first row" -- the mobile two-row wrap above forces the whole
    actions cluster, Clear/Delete/any filter dropdown, onto row two, but
@@ -2184,7 +2201,7 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
       #labels-table's own scoped override above already documents -- a bare
       `tbody td` rule would have shrunk every other table in the app too. */
 .task-table thead th{padding:8px 8px;}
-.task-table tbody td{padding:8px 8px; font-size:var(--text-footnote);}
+.task-table tbody td{padding:8px 8px; font-size:var(--text-sm);}
 /* 2. Groups -- 2026-09-03 direct follow-up ("I want the white background
    of the card div back"): the flattened/borderless treatment this rule
    used to apply (`background:none`, no shadow, no hover-lift -- shipped
@@ -2199,7 +2216,7 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
    its own ordinary card spacing from `.card`'s own `margin-bottom`. */
 /* 3. Title dominant -- the one piece of every row that should actually
    read as the primary content, not tied visually with Status/Date/Labels. */
-.task-title-cell a{font-weight:600; font-size:var(--text-body); color:var(--fg-primary);}
+.task-title-cell a{font-weight:600; font-size:var(--text-base); color:var(--fg-primary);}
 /* Title column's floor width used to be 140px unconditionally (see that
    rule's own long history above) -- enough that a one-character title like
    "h" left a wide dead gap before the Status pill started, exactly the
@@ -2260,7 +2277,7 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
    read-only tag display uses). What's new this round: the Labels pill and
    the Status chip right next to it now share the exact same shape.
    `.cell-tag`'s app-wide default (`var(--radius-sm)`, 8px corners /
-   `var(--text-caption)`, 13px) never matched the Status trigger's own
+   `var(--text-xs)`, 13px) never matched the Status trigger's own
    compact-chip override just above (`var(--radius-pill)` fully rounded) --
    that mismatch is what read as "not all pills have the same rounded
    corners." Scoped to `.cell-tags` -- the wrapping span every row's
@@ -2331,7 +2348,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    follow-up, moved to an icon button on the divider row instead, see
    above) -- Labels/Holidays/Time blocks still do. */
 .task-add-row td{padding:8px 10px; border-bottom:1px solid var(--separator);}
-.task-add-row a{display:flex; align-items:center; gap:6px; color:var(--fg-secondary); text-decoration:none; font-size:var(--text-caption);}
+.task-add-row a{display:flex; align-items:center; gap:6px; color:var(--fg-secondary); text-decoration:none; font-size:var(--text-xs);}
 .task-add-row:hover td{background:var(--bg-hover, var(--bg-secondary));}
 /* Habits-group check-in control (_habit_row.html) reuses the Dashboard
    widget's own .habit-checkin-row layout (_widget_habit_checkin.html) but
@@ -2345,7 +2362,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    .inline-edit-cell -- see the .inline-edit-* rules below for the actual
    click-to-edit look. This just lays out the form/target-suffix. */
 .habit-checkin-value{display:flex; align-items:center; gap:4px;}
-.habit-checkin-target{font-size:var(--text-caption); white-space:nowrap;}
+.habit-checkin-target{font-size:var(--text-xs); white-space:nowrap;}
 /* Notion-style click-to-edit cell (static/inline_edit.js, 2026-08-28,
    direct feedback: "just text and colored pills... click two times on an
    element and it becomes editable in a non-discrete way"). Deliberately
@@ -2426,7 +2443,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    field instead of centering a few characters. */
 .inline-edit-input.inline-edit-input--text{width:100% !important; text-align:left;}
 .pill-select{
-  border:none; border-radius:var(--radius-sm); padding:3px 22px 3px 8px; font-size:var(--text-caption);
+  border:none; border-radius:var(--radius-sm); padding:3px 22px 3px 8px; font-size:var(--text-xs);
   font-weight:600; background-position:right 6px center; background-size:9px;
 }
 /* Read-only sibling of .pill-select (side work, post-1.1) -- for values
@@ -2435,7 +2452,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    .pill-select minus the dropdown-chrome padding/background-position, so
    the column doesn't visibly shift width next to other pill-selects. */
 .pill-static{
-  display:inline-flex; align-items:center; gap:5px; border-radius:var(--radius-sm); padding:3px 8px; font-size:var(--text-caption);
+  display:inline-flex; align-items:center; gap:5px; border-radius:var(--radius-sm); padding:3px 8px; font-size:var(--text-xs);
   font-weight:600;
 }
 .pill-gray{background-color:var(--tag-gray-bg); color:var(--tag-gray-fg);}
@@ -2458,11 +2475,11 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 .pill-indigo{background-color:var(--tag-indigo-bg); color:var(--tag-indigo-fg);}
 .pill-magenta{background-color:var(--tag-magenta-bg); color:var(--tag-magenta-fg);}
 .pill-slate{background-color:var(--tag-slate-bg); color:var(--tag-slate-fg);}
-.inline-date{border-color:transparent; padding:3px 6px; font-size:var(--text-caption); width:128px;}
+.inline-date{border-color:transparent; padding:3px 6px; font-size:var(--text-xs); width:128px;}
 .inline-date:hover{border-color:var(--control-border);}
 /* Holidays table (settings_holidays.html) -- title cell, same idea as
    .inline-date above but a plain text input instead of a date picker. */
-.inline-text{border-color:transparent; padding:3px 6px; font-size:var(--text-caption); width:100%; min-width:120px;}
+.inline-text{border-color:transparent; padding:3px 6px; font-size:var(--text-xs); width:100%; min-width:120px;}
 .inline-text:hover{border-color:var(--control-border);}
 .holiday-calendar-select{margin:0;}
 .th-sort{color:inherit; text-decoration:none;}
@@ -2512,7 +2529,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
   transition:background var(--dur-fast) var(--ease-standard);
 }
 .kanban-column-head{display:flex; align-items:center; justify-content:space-between; padding:2px 2px var(--space-1);}
-.kanban-count{font-size:var(--text-caption); color:var(--fg-tertiary); font-weight:600;}
+.kanban-count{font-size:var(--text-xs); color:var(--fg-tertiary); font-weight:600;}
 /* flex:1 (added alongside the equal-height column change above) lets the
    card list itself fill a column stretched taller than its own content --
    without it the drop-hover highlight below would leave a plain unhovered
@@ -2544,10 +2561,10 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
   height:56px; object-fit:cover; display:block;
   border-radius:var(--radius-control) var(--radius-control) 0 0;
 }
-.kanban-card-title{color:var(--fg-primary); font-size:var(--text-callout); font-weight:600; text-decoration:none;}
+.kanban-card-title{color:var(--fg-primary); font-size:var(--text-md); font-weight:600; text-decoration:none;}
 .kanban-card-title:hover{text-decoration:underline;}
 .kanban-card-meta{display:flex; flex-wrap:wrap; gap:4px;}
-.kanban-empty{color:var(--fg-tertiary); font-size:var(--text-caption); text-align:center; padding:14px 0;}
+.kanban-empty{color:var(--fg-tertiary); font-size:var(--text-xs); text-align:center; padding:14px 0;}
 /* 2026-09-02: the per-card status `<select>` (.kanban-status-select) is
    gone -- "no inline editing", direct request -- status now only changes
    by opening the card's own task (its title link already does that). No
@@ -2596,7 +2613,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 }
 
 /* Checklist (task_detail.html) */
-.checklist-progress{font-size:var(--text-caption); font-weight:600; color:var(--fg-tertiary); margin-left:6px;}
+.checklist-progress{font-size:var(--text-xs); font-weight:600; color:var(--fg-tertiary); margin-left:6px;}
 .checklist{display:flex; flex-direction:column; margin-bottom:8px;}
 .checklist-row{display:flex; align-items:center; gap:var(--space-2); padding:var(--space-1) 0; border-bottom:1px solid var(--separator);}
 .checklist-row:last-child{border-bottom:none;}
@@ -2630,7 +2647,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    before the remove button). */
 .work-sessions-head{display:flex; align-items:center; gap:6px;}
 .work-sessions-head .work-session-add{margin-left:auto;}
-.session-when{color:var(--fg-secondary); font-size:var(--text-caption); white-space:nowrap;}
+.session-when{color:var(--fg-secondary); font-size:var(--text-xs); white-space:nowrap;}
 /* 2026-09-03 direct follow-up ("could we also rework the work sessions")
    -- a .work-session-row modifier (not a change to the shared
    .checklist-row itself, which contact_form.html/search.html/etc. also
@@ -2730,7 +2747,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 .contact-row:hover{text-decoration:none;}
 .contact-row-main{display:flex; flex-direction:column; flex:1; min-width:0;}
 .contact-row-name{font-weight:600; color:var(--fg-primary);}
-.contact-row-sub{font-size:var(--text-caption); color:var(--fg-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.contact-row-sub{font-size:var(--text-xs); color:var(--fg-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .avatar-circle{
   flex:none; width:34px; height:34px; border-radius:50%; background:var(--accent-neutral-subtle); color:var(--fg-primary);
   display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px;
@@ -2805,7 +2822,7 @@ img.avatar-circle{object-fit:cover;}
 /* --------------------------------------------------------------------- */
 
 .field{display:flex; flex-direction:column; gap:var(--space-1); margin-bottom:var(--space-3);}
-.field label{font-size:var(--text-caption); font-weight:600; color:var(--fg-secondary); text-transform:uppercase; letter-spacing:.02em;}
+.field label{font-size:var(--text-xs); font-weight:600; color:var(--fg-secondary); text-transform:uppercase; letter-spacing:.02em;}
 /* Text-like fields (and select/textarea) fill the field's width -- but
    checkbox/radio/file are fixed-size controls, not text fields, and
    should never stretch. Without this exclusion, `width:100%` on a
@@ -2815,8 +2832,17 @@ img.avatar-circle{object-fit:cover;}
    the way to the far right with a large empty gap in between instead of
    sitting right next to the checkbox. */
 .field input:not([type="checkbox"], [type="radio"], [type="file"]), .field select, .field textarea{width:100%;}
+/* Inline field-level validation (design-system unification pass,
+   2026-09-17, shared spec at /home/peter/Claude/Projects/DESIGN_SYSTEM.md)
+   -- modal.js's applyFieldErrors marks the field that a 422 response
+   actually named, instead of only a global toast with no way to tell
+   which input on a long form is wrong. */
+.field.has-error input:not([type="checkbox"], [type="radio"], [type="file"]),
+.field.has-error select,
+.field.has-error textarea{border-color:var(--danger);}
+.field-error{display:block; font-size:var(--text-xs); color:var(--danger); margin-top:2px;}
 .field-toggle{flex-direction:row; align-items:center; gap:8px;}
-.field-toggle label{text-transform:none; font-weight:500; font-size:var(--text-body);}
+.field-toggle label{text-transform:none; font-weight:500; font-size:var(--text-base);}
 /* An arbitrary-length set of checkboxes (e.g. published_lists.html's
    label-filter editor): a wrapping row of .field-toggle pairs instead of
    one long vertical stack, same idea as .field-grid but for checkboxes
@@ -3023,14 +3049,14 @@ img.avatar-circle{object-fit:cover;}
   color:var(--fg-tertiary); margin-bottom:var(--space-3);
 }
 .empty-state-icon .icon{width:22px; height:22px;}
-.empty-state-title{font-size:var(--text-headline); font-weight:600; color:var(--fg-primary); margin-bottom:4px;}
-.empty-state-text{font-size:var(--text-callout); color:var(--fg-tertiary); max-width:380px; margin:0 auto; line-height:1.5;}
+.empty-state-title{font-size:var(--text-lg); font-weight:600; color:var(--fg-primary); margin-bottom:4px;}
+.empty-state-text{font-size:var(--text-md); color:var(--fg-tertiary); max-width:380px; margin:0 auto; line-height:1.5;}
 .empty-state-rich .btn{margin-top:16px;}
 
 /* Weekly schedule grid */
 .week-grid{padding:8px 4px 10px;}
 .week-head{display:grid; grid-template-columns:52px repeat(7,1fr); padding-left:2px;}
-.week-head .wd{text-align:center; font-size:var(--text-caption); font-weight:600; color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.03em; padding:6px 2px;}
+.week-head .wd{text-align:center; font-size:var(--text-xs); font-weight:600; color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.03em; padding:6px 2px;}
 .week-body{display:grid; grid-template-columns:52px repeat(7,1fr); position:relative;}
 .week-gutter{position:relative;}
 .week-gutter .hr-label{position:absolute; right:8px; transform:translateY(-50%); font-size:11px; color:var(--fg-tertiary);}
@@ -3170,7 +3196,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .time-grid-head{display:grid; padding-left:52px;}
 .time-grid-head.week{grid-template-columns:repeat(7,1fr);}
 .time-grid-head.day{grid-template-columns:1fr;}
-.time-grid-head .thd{text-align:center; padding:8px 4px; font-size:var(--text-footnote); font-weight:600; border-bottom:1px solid var(--separator);}
+.time-grid-head .thd{text-align:center; padding:8px 4px; font-size:var(--text-sm); font-weight:600; border-bottom:1px solid var(--separator);}
 .time-grid-head .thd.is-today{color:var(--fg-primary); font-weight:700;}
 /* 2026-08-31 -- same past-day dimming as Month's .month-day-cell.is-past,
    applied per-column here since Week/Day split a day across three
@@ -3633,7 +3659,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    survives. */
 :root{--month-daynum-h:22px;}
 .month-weekday-row{display:grid; grid-template-columns:repeat(7,1fr); padding:0 0 4px;}
-.month-weekday-row span{text-align:left; font-size:var(--text-caption); font-weight:600; color:var(--fg-tertiary); padding-left:4px;}
+.month-weekday-row span{text-align:left; font-size:var(--text-xs); font-weight:600; color:var(--fg-tertiary); padding-left:4px;}
 .month-week-grid{
   position:relative; display:grid; grid-template-columns:repeat(7,1fr);
   /* Day number row + one auto row for the flat item list that follows. */
@@ -3706,7 +3732,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    days strictly before today, but keeping the rule order today-safe
    costs nothing). */
 .month-day-cell.is-past{opacity:.55;}
-.month-day-num{font-weight:600; font-size:var(--text-caption); color:var(--fg-tertiary); text-decoration:none; height:var(--month-daynum-h); display:flex; align-items:center; margin-bottom:2px;}
+.month-day-num{font-weight:600; font-size:var(--text-xs); color:var(--fg-tertiary); text-decoration:none; height:var(--month-daynum-h); display:flex; align-items:center; margin-bottom:2px;}
 .month-day-num span{display:flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; line-height:1;}
 /* Today's day number, circled in the accent color -- same convention
    `.mini-cal-day.is-today .mini-cal-day-num` already established for the
@@ -4005,10 +4031,10 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    token anywhere in this file) that made Timeline look like a different
    tool from the rest of the app -- Calendar's own grid (.month-week-grid
    etc.) uses the normal system font like everything else. Font-size
-   switched to the real type-scale token (--text-caption, 11px --
+   switched to the real type-scale token (--text-xs, 11px --
    numerically identical to the old hardcoded value, just no longer a
    magic number disconnected from the rest of the scale). */
-.timeline-canvas{position:relative; font-family:var(--font-system); font-size:var(--text-caption);}
+.timeline-canvas{position:relative; font-family:var(--font-system); font-size:var(--text-xs);}
 
 .timeline-gutter-sep{
   position:absolute; top:0; width:2px; background:var(--separator); cursor:col-resize; z-index:4;
@@ -4429,7 +4455,7 @@ main.main-shell > .toolbar.top-app-bar{
 .toast{
   pointer-events:auto; position:relative; overflow:hidden; display:flex; align-items:flex-start; gap:var(--space-3);
   background:var(--bg-elevated); color:var(--fg-primary); border:1px solid var(--border);
-  padding:var(--space-3); border-radius:var(--radius-md); box-shadow:var(--shadow-popover);
+  padding:var(--space-3); border-radius:var(--radius-md); box-shadow:var(--elevation-3);
   max-width:420px; opacity:0; transform:translateY(8px) scale(.98);
   transition:opacity var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard);
 }
@@ -4452,11 +4478,11 @@ main.main-shell > .toolbar.top-app-bar{
 .toast-error .toast-icon{background:var(--tag-red-bg); color:var(--tag-red-fg);}
 .toast-warning .toast-icon{background:var(--tag-orange-bg); color:var(--tag-orange-fg);}
 .toast-content{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; padding-top:5px;}
-.toast-title{font-size:var(--text-footnote); font-weight:600; color:var(--fg-primary);}
-.toast-body{font-size:var(--text-caption); color:var(--fg-secondary); line-height:1.35;}
+.toast-title{font-size:var(--text-sm); font-weight:600; color:var(--fg-primary);}
+.toast-body{font-size:var(--text-xs); color:var(--fg-secondary); line-height:1.35;}
 .toast-action{
   flex:none; align-self:center; background:none; border:none; color:var(--accent); font-weight:600;
-  font-size:var(--text-footnote); cursor:pointer; padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm);
+  font-size:var(--text-sm); cursor:pointer; padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm);
 }
 .toast-action:hover{background:var(--accent-subtle);}
 .toast-close{
@@ -4478,7 +4504,7 @@ main.main-shell > .toolbar.top-app-bar{
    (red alert icon chip), plus the Cancel / confirmLabel button row. */
 .toast-confirm{max-width:380px;}
 .toast-confirm .toast-action{
-  font-size:var(--text-footnote); padding:5px 14px; border-radius:var(--radius-sm); align-self:center;
+  font-size:var(--text-sm); padding:5px 14px; border-radius:var(--radius-sm); align-self:center;
 }
 .toast-confirm .toast-action.toast-confirm-cancel{
   background:none; border:1px solid var(--border); color:var(--fg-secondary);
@@ -4499,7 +4525,7 @@ main.main-shell > .toolbar.top-app-bar{
 .toast-typed-confirm{display:block; margin-top:var(--space-2);}
 .toast-typed-input{
   width:100%; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing:.08em; font-size:var(--text-caption);
+  letter-spacing:.08em; font-size:var(--text-xs);
 }
 /* This variant's two buttons stretch to fill the row edge-to-edge (equal
    width each) instead of the plain confirm toast's flex-end pair -- lines
@@ -4637,7 +4663,7 @@ main.main-shell > .toolbar.top-app-bar{
    border-bottom:1px solid var(--separator);
    flex:none;
 }
-.modal-header h1{margin:0; font-size:var(--text-title2); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.modal-header h1{margin:0; font-size:var(--text-2xl); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 /* Wrapper for the 4 detail-view templates' cover+title combo, the single
     child that replaces a bare <h1> inside .modal-header for those pages
     only. Negative margins exactly matching .modal-header's own padding
@@ -4698,7 +4724,7 @@ main.main-shell > .toolbar.top-app-bar{
     re-check that padding too. */
 .detail-cover-icon{
    position:absolute; left:var(--space-5); bottom:-18px; width:44px; height:44px;
-   border-radius:var(--radius-md); background:var(--bg-elevated); box-shadow:var(--shadow-card);
+   border-radius:var(--radius-md); background:var(--bg-elevated); box-shadow:var(--elevation-1);
    border:1px solid var(--separator);
    display:flex; align-items:center; justify-content:center;
 }
@@ -4711,7 +4737,7 @@ main.main-shell > .toolbar.top-app-bar{
 .detail-cover-icon-avatar{background:none; border:none; box-shadow:none;}
 .detail-cover-icon-avatar .avatar-circle{
    width:100%; height:100%; font-size:16px;
-   box-shadow:0 0 0 3px var(--bg-elevated), var(--shadow-card);
+   box-shadow:0 0 0 3px var(--bg-elevated), var(--elevation-1);
 }
 /* Title row below the cover, inside .detail-header-inner -- re-adds the
     side/bottom padding .detail-header-inner's negative margins stripped
@@ -4723,7 +4749,7 @@ main.main-shell > .toolbar.top-app-bar{
    padding:24px var(--space-5) var(--space-3);
    padding-right:44px;
 }
-.detail-heading-row h1{margin:0; font-size:var(--text-title2); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.detail-heading-row h1{margin:0; font-size:var(--text-2xl); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .modal-close{
    position:absolute; top:12px; right:12px; width:28px; height:28px; display:flex; align-items:center;
    justify-content:center; border-radius:var(--radius-control); background:transparent; border:none;
@@ -4816,7 +4842,7 @@ body.command-palette-open{overflow:hidden;}
 .command-palette-pill{
   display:flex; align-items:center; gap:4px;
   padding:4px var(--space-3); border-radius:999px; border:1px solid var(--border);
-  background:transparent; color:var(--fg-secondary); font-size:var(--text-footnote); cursor:pointer;
+  background:transparent; color:var(--fg-secondary); font-size:var(--text-sm); cursor:pointer;
 }
 .command-palette-pill .icon{color:inherit;}
 .command-palette-pill:hover{background:var(--bg-secondary);}
@@ -4831,7 +4857,7 @@ body.command-palette-open{overflow:hidden;}
    only collects .command-palette-row elements). */
 .command-palette-group-header{
   margin-top:var(--space-3); padding:var(--space-1) var(--space-3);
-  font-size:var(--text-caption); color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.02em;
+  font-size:var(--text-xs); color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.02em;
 }
 .command-palette-group-header:first-child{margin-top:0;}
 
@@ -4846,16 +4872,16 @@ body.command-palette-open{overflow:hidden;}
   padding:var(--space-2) var(--space-4); border-top:1px solid var(--separator); flex:none;
 }
 .command-palette-footer-hints{display:flex; align-items:center; gap:var(--space-4);}
-.command-palette-footer-hints span{display:flex; align-items:center; gap:6px; font-size:var(--text-caption); color:var(--fg-tertiary);}
+.command-palette-footer-hints span{display:flex; align-items:center; gap:6px; font-size:var(--text-xs); color:var(--fg-tertiary);}
 .command-palette-footer-hints kbd{
   border:1px solid var(--border); border-radius:4px; padding:1px 5px;
-  font:inherit; font-size:var(--text-caption); color:var(--fg-tertiary); background:var(--bg-secondary);
+  font:inherit; font-size:var(--text-xs); color:var(--fg-tertiary); background:var(--bg-secondary);
 }
 .command-palette-footer-actions{display:flex; gap:var(--space-2);}
 .command-palette-footer-btn{
   display:flex; align-items:center; gap:6px;
   padding:4px var(--space-3); border-radius:var(--radius-control); border:1px solid var(--border);
-  background:transparent; color:var(--fg-primary); font-size:var(--text-footnote); cursor:pointer;
+  background:transparent; color:var(--fg-primary); font-size:var(--text-sm); cursor:pointer;
 }
 .command-palette-footer-btn:hover{background:var(--bg-secondary);}
 .command-palette-footer-btn .icon{color:var(--fg-tertiary);}
@@ -4869,8 +4895,8 @@ body.command-palette-open{overflow:hidden;}
 .command-palette-row:hover, .command-palette-row.is-active{background:var(--bg-secondary);}
 .command-palette-row-text{display:flex; flex-direction:column; min-width:0;}
 .command-palette-row-title{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.command-palette-row-subtitle{font-size:var(--text-caption); color:var(--fg-tertiary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.command-palette-empty{padding:var(--space-4); color:var(--fg-tertiary); font-size:var(--text-footnote); text-align:center;}
+.command-palette-row-subtitle{font-size:var(--text-xs); color:var(--fg-tertiary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.command-palette-empty{padding:var(--space-4); color:var(--fg-tertiary); font-size:var(--text-sm); text-align:center;}
 
 /* Command palette actions (open.md § Command palette actions) -- a result
    row can now carry per-type action buttons (complete/label/delete)
@@ -4940,9 +4966,9 @@ body.command-palette-open{overflow:hidden;}
 .search-page-form{margin-bottom:var(--space-4);}
 .search-page-input{
   width:100%; padding:var(--space-3) var(--space-4); border-radius:var(--radius-control);
-  border:1px solid var(--border); background:var(--bg-secondary); color:var(--fg-primary); font-size:var(--text-body);
+  border:1px solid var(--border); background:var(--bg-secondary); color:var(--fg-primary); font-size:var(--text-base);
 }
-.search-result-subtitle{display:block; font-size:var(--text-caption); color:var(--fg-tertiary);}
+.search-result-subtitle{display:block; font-size:var(--text-xs); color:var(--fg-tertiary);}
 
 /* --------------------------------------------------------------------- */
 /* Photo crop/resize/rotate editor (static/avatar_cropper.js,            */
@@ -4968,7 +4994,7 @@ body.command-palette-open{overflow:hidden;}
   display:flex; align-items:center; gap:var(--space-3);
   padding:var(--space-4) var(--space-5) var(--space-3); border-bottom:1px solid var(--separator);
 }
-.cropper-header h2{margin:0; font-size:var(--text-title3); flex:1;}
+.cropper-header h2{margin:0; font-size:var(--text-xl); flex:1;}
 .cropper-stage{
   position:relative; margin:var(--space-4) auto 0; background:var(--bg-tertiary);
   border-radius:var(--radius-sm); overflow:hidden; touch-action:none;
@@ -5187,6 +5213,20 @@ body.command-palette-open{overflow:hidden;}
 }
 .color-swatch:checked{border-color:var(--fg-primary);}
 .color-swatch-label:has(.color-swatch:checked) .color-swatch-name{color:var(--fg-primary); font-weight:600;}
+
+/* Accent color picker (Settings > Appearance) -- an inline swatch grid,
+   not a popover (the settings page already has room), reusing
+   .color-swatch's own appearance:none-circle-radio base + checked-ring
+   styling above rather than a one-off. */
+.accent-swatch-picker{display:flex; flex-wrap:wrap; gap:8px;}
+.accent-swatch-blue{background:var(--accent-preset-blue);}
+.accent-swatch-red{background:var(--accent-preset-red);}
+.accent-swatch-purple{background:var(--accent-preset-purple);}
+.accent-swatch-green{background:var(--accent-preset-green);}
+.accent-swatch-teal{background:var(--accent-preset-teal);}
+.accent-swatch-orange{background:var(--accent-preset-orange);}
+.accent-swatch-pink{background:var(--accent-preset-pink);}
+.accent-swatch-indigo{background:var(--accent-preset-indigo);}
 
 /* Icon picker -- same shared-popover mechanism as .color-picker above
    (2026-08-02, Projects manage page; revised same day to draw from the
@@ -5632,14 +5672,14 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    shadow-only edge (no border) looks soft next to the app's other flatter,
    hairline-bordered surfaces (sidebar rail, table rows). Direct feedback:
    "archaic... not minimalist," macOS/Material-3-hybrid direction requested.
-   Flattened to a quiet hairline border + the smaller --shadow-card (already
+   Flattened to a quiet hairline border + the smaller --elevation-1 (already
    used for the app's other quiet surfaces, e.g. .table-scroll's bg), static
    on hover -- still reads as a distinct surface via the border alone,
    without the constant-motion feel at grid scale. Declared after .card's
    own rules (this file's general-to-specific ordering) so it wins on equal
    specificity without needing !important. */
-.widget-card{border:1px solid var(--separator); box-shadow:var(--shadow-card);}
-.widget-card:hover{box-shadow:var(--shadow-card); transform:none;}
+.widget-card{border:1px solid var(--separator); box-shadow:var(--elevation-1);}
+.widget-card:hover{box-shadow:var(--elevation-1); transform:none;}
 /* "Bare" tile-grid widgets (2026-08-30, direct feedback -- see routers/
    dashboard.py::_is_bare_tile_widget's own comment for which widgets this
    applies to: Spaces & Projects when its own `style` config is "cards" --
@@ -5670,14 +5710,14 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    geometry it collapsed to (0,0) and overlapped the content below it
    (visual bug, live report). This repeats only the flattened visual
    treatment from the 2026-08-30 design pass above (hairline border +
-   `--shadow-card`, static on hover) on top of plain `.card`'s own normal-
+   `--elevation-1`, static on hover) on top of plain `.card`'s own normal-
    flow box, not `.widget-card`'s positioning. */
-.widget-card-static{border:1px solid var(--separator); box-shadow:var(--shadow-card);}
-.widget-card-static:hover{box-shadow:var(--shadow-card); transform:none;}
+.widget-card-static{border:1px solid var(--separator); box-shadow:var(--elevation-1);}
+.widget-card-static:hover{box-shadow:var(--elevation-1); transform:none;}
 /* Widget drag-to-reorder (static/app.js), edit-mode only */
 .widget-drag-handle{cursor:grab; touch-action:none; margin-right:var(--space-1);}
 .widget-drag-handle:active{cursor:grabbing;}
-.widget-card.is-dragging{opacity:.5; box-shadow:var(--shadow-popover); transition:none; z-index:20;}
+.widget-card.is-dragging{opacity:.5; box-shadow:var(--elevation-3); transition:none; z-index:20;}
 /* Reordering *within* a stack (2026-08-02) -- same look as the top-level
    handle, separate class since it drives a separate, simpler
    vertical-only drag (static/app.js). .widget-stack-item needs its own
@@ -5728,7 +5768,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    (7px, down from the generic table's 10px) -- quieter and denser, closer
    to how the app's other markup-light lists already read (.contact-list-
    row, .project-preview-row: no separators, a plain hover tint). font-size
-   drops one notch to --text-footnote (14px, was --text-callout's 15.5px)
+   drops one notch to --text-sm (14px, was --text-md's 15.5px)
    to match the compact scale the rest of a widget's body already uses
    (.widget-section-label, stat captions).
 
@@ -5739,7 +5779,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    pieces of the same mockup (see `.at-a-glance-stat`'s own 2026-09-13
    comment) specifically because of the "archaic" feedback this comment
    already documents. */
-.widget-content table{font-size:var(--text-footnote);}
+.widget-content table{font-size:var(--text-sm);}
 .widget-content tbody tr{border-bottom:none;}
 .widget-content tbody td{padding:7px 4px;}
 .widget-content tbody tr:first-child td{padding-top:2px;}
@@ -5779,7 +5819,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    column's actual width) centered inside its cell instead -- the cell
    itself stays a plain rectangle, only the badge is round. */
 .mini-cal-label-row{display:flex; align-items:center; justify-content:space-between; margin-bottom:var(--space-2);}
-.mini-cal-label{font-size:var(--text-footnote); font-weight:600; color:var(--fg-secondary);}
+.mini-cal-label{font-size:var(--text-sm); font-weight:600; color:var(--fg-secondary);}
 .mini-cal-nav{width:24px; height:24px;}
 .mini-cal-weekdays, .mini-cal-grid{display:grid; grid-template-columns:repeat(7,1fr);}
 .mini-cal-weekdays span{
@@ -5788,7 +5828,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 }
 .mini-cal-day{
   position:relative; display:flex; align-items:center; justify-content:center; padding:3px 0;
-  font-size:var(--text-caption); color:var(--fg-primary); text-decoration:none;
+  font-size:var(--text-xs); color:var(--fg-primary); text-decoration:none;
 }
 .mini-cal-day-num{
   position:relative; display:flex; align-items:center; justify-content:center;
@@ -5816,9 +5856,9 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .cal-agenda-days{display:flex; flex-direction:column; gap:var(--space-1);}
 .cal-agenda-day{display:flex; flex-direction:column; gap:2px;}
 .cal-agenda-day.is-today .cal-agenda-day-label{color:var(--fg-primary); font-weight:700;}
-.cal-agenda-day-label{font-size:var(--text-caption); font-weight:600; color:var(--fg-tertiary); margin-bottom:1px;}
+.cal-agenda-day-label{font-size:var(--text-xs); font-weight:600; color:var(--fg-tertiary); margin-bottom:1px;}
 .cal-agenda-item{
-  display:flex; align-items:center; gap:4px; font-size:var(--text-caption);
+  display:flex; align-items:center; gap:4px; font-size:var(--text-xs);
   color:var(--fg-primary); text-decoration:none; padding:1px 0;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
@@ -5840,9 +5880,9 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 }
 .contact-list-row:hover{background:var(--row-alt); text-decoration:none;}
 .contact-list-main{display:flex; flex-direction:column; gap:1px; min-width:0; flex:1;}
-.contact-list-name{font-size:var(--text-body); font-weight:500; color:var(--fg-primary);}
-.contact-list-org{font-size:var(--text-footnote); color:var(--fg-secondary);}
-.contact-list-detail{font-size:var(--text-footnote); color:var(--fg-tertiary);}
+.contact-list-name{font-size:var(--text-base); font-weight:500; color:var(--fg-primary);}
+.contact-list-org{font-size:var(--text-sm); color:var(--fg-secondary);}
+.contact-list-detail{font-size:var(--text-sm); color:var(--fg-tertiary);}
 
 /* Project Preview widget (_widget_project_preview.html) -- reuses
    .project-progress-bar/-fill (already defined for project_detail.html)
@@ -5910,7 +5950,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    previously fell through to the app's generic `h2` rule (17px,
    browser-default bold weight, 20px top margin meant for a page-body
    heading) -- oversized and heavier than the small card it actually
-   titles, direct "typography" feedback. Sized down to --text-body (15px)
+   titles, direct "typography" feedback. Sized down to --text-base (15px)
    with an explicit 600 weight instead of relying on browser-default bold,
    and a hairline border-bottom now separates the header from the content
    below it (was spacing-only before) -- a quieter macOS-style group-box
@@ -5923,7 +5963,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   display:flex; align-items:center; gap:6px; margin-bottom:var(--space-3);
   padding-bottom:var(--space-2); border-bottom:1px solid var(--separator);
 }
-.widget-header h2{margin:0; font-size:var(--text-body); font-weight:600; letter-spacing:-.1px; color:var(--fg-primary);}
+.widget-header h2{margin:0; font-size:var(--text-base); font-weight:600; letter-spacing:-.1px; color:var(--fg-primary);}
 .widget-section-label{
   font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
   margin:10px 0 4px;
@@ -6028,7 +6068,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .widget-list-multiselect .multiselect-trigger{
    width:100%; justify-content:flex-start; background:var(--control-bg);
    border:1.5px solid var(--control-border); border-radius:var(--radius-control);
-    padding:10px 14px; font-size:var(--text-body); font-weight:400; color:var(--fg-primary);
+    padding:10px 14px; font-size:var(--text-base); font-weight:400; color:var(--fg-primary);
    font-family:inherit; cursor:pointer;
 }
 .widget-list-multiselect .multiselect-trigger:hover{
@@ -6151,7 +6191,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    display:flex; align-items:center; gap:var(--space-3);
    padding:var(--space-2) 0;
 }
-.widget-customize-card-header .widget-customize-name{flex:1; font-size:var(--text-body); font-weight:500;}
+.widget-customize-card-header .widget-customize-name{flex:1; font-size:var(--text-base); font-weight:500;}
 .widget-customize-card-actions{display:flex; gap:2px; flex:none;}
 
 /* Section divider inside the customize modal -- a subtle
@@ -6164,7 +6204,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    content:""; flex:1; height:1px; background:var(--separator);
 }
 .widget-customize-divider-label{
-   font-size:var(--text-caption); font-weight:600; color:var(--fg-tertiary);
+   font-size:var(--text-xs); font-weight:600; color:var(--fg-tertiary);
    text-transform:uppercase; letter-spacing:.04em; white-space:nowrap;
 }
 
@@ -6196,7 +6236,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    task-model decision dropped the subtasks half, so the class that began
    life as .task-form-subtasks is now named for what it actually holds. */
 .relations-section{margin-top:var(--space-4); padding-top:var(--space-4); border-top:1px solid var(--separator);}
-.relations-section h2{margin:0 0 var(--space-2); font-size:var(--text-headline);}
+.relations-section h2{margin:0 0 var(--space-2); font-size:var(--text-lg);}
 .widget-save-status.is-error{color:var(--danger);}
 
 .week-overview-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:8px;}
@@ -6262,7 +6302,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    lets each radio live normally inside its own <label> (so clicking the
    text also toggles it) instead of needing the input to be a flat
    sibling of .mode-fields for a `~` selector to reach it. */
-.export-mode-option{display:flex; align-items:center; gap:8px; font-size:var(--text-callout); cursor:pointer; padding:4px 0;}
+.export-mode-option{display:flex; align-items:center; gap:8px; font-size:var(--text-md); cursor:pointer; padding:4px 0;}
 .export-form .mode-fields{display:none; margin:2px 0 16px 24px;}
 .export-form:has(#mode-existing:checked) .mode-existing-fields{display:block;}
 .export-form:has(#mode-new:checked) .mode-new-fields{display:flex; align-items:flex-start; gap:10px;}
@@ -6317,8 +6357,8 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .settings-hub-row{padding:var(--space-3) var(--space-2);}
 .settings-hub-row .settings-row-icon{width:32px; height:32px; border-radius:var(--radius-md); background:var(--bg-secondary); align-items:center; justify-content:center; flex:none;}
 .settings-hub-row .settings-row-text{display:flex; flex-direction:column; gap:2px; min-width:0;}
-.settings-hub-row .settings-row-name{font-size:var(--text-headline); font-weight:600; color:var(--fg-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.settings-hub-row .settings-row-desc{color:var(--fg-tertiary); font-size:var(--text-footnote);}
+.settings-hub-row .settings-row-name{font-size:var(--text-lg); font-weight:600; color:var(--fg-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.settings-hub-row .settings-row-desc{color:var(--fg-tertiary); font-size:var(--text-sm);}
 .settings-hub-row .settings-row-chevron{color:var(--fg-tertiary); flex:none;}
 .settings-hub-row:hover .settings-row-chevron{color:var(--fg-primary);}
 
@@ -6343,7 +6383,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    row it wants, leaving the control (segmented/select) whatever sliver is
    left over at any width where the row is tight, not just narrow ones. */
 .settings-field-row .settings-field-label{font-weight:500; max-width:55%;}
-.settings-field-row .settings-field-hint{display:block; font-weight:400; color:var(--fg-tertiary); font-size:var(--text-footnote); margin-top:2px;}
+.settings-field-row .settings-field-hint{display:block; font-weight:400; color:var(--fg-tertiary); font-size:var(--text-sm); margin-top:2px;}
 .settings-field-row .spacer{flex:1;}
 .settings-field-row input[type="text"]{max-width:220px;}
 
@@ -6379,7 +6419,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    icon + name + usage count now; role/color still live in the Edit
    modal. */
 .label-list-group-header{
-  padding:10px 8px 4px; font-size:var(--text-caption); font-weight:600;
+  padding:10px 8px 4px; font-size:var(--text-xs); font-weight:600;
   color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.03em;
 }
 [data-label-group] + [data-label-group] .label-list-group-header{margin-top:6px;}
@@ -6745,7 +6785,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    pushed right, mimicking the old toolbar's title + spacer layout. */
 .page-banner-actions .page-banner-title-plain{
   flex:1; min-width:0; margin:0; font-weight:700; letter-spacing:-0.3px;
-  font-size:var(--text-title2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-size:var(--text-2xl); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 /* Buttons pinned over a photo need to read against whatever image is
    behind them, not a page background -- the ghost buttons become
@@ -6852,7 +6892,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .page-header-narrow-icon .icon{width:1.15em; height:1.15em;}
 .page-header-narrow-title{
   margin:0; font-weight:700; letter-spacing:-0.3px;
-  font-size:var(--text-title3); line-height:1.2;
+  font-size:var(--text-xl); line-height:1.2;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 .page-header-narrow-actions{
@@ -6992,7 +7032,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    long range can't push the prev/next arrows or the label filter out of
    the header's fixed 48px-tall strip. */
 .cal-nav-label{
-  font-weight:600; font-size:var(--text-body); color:var(--fg-secondary);
+  font-weight:600; font-size:var(--text-base); color:var(--fg-secondary);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   max-width:180px;
 }
@@ -7009,7 +7049,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    5:1 aspect ratio and the in-body Remove/Upload buttons are gone; those
    two actions live in the modal footer instead, see .banner-upload-btn
    below). */
-.banner-editor-empty{color:var(--fg-tertiary); font-size:var(--text-footnote); margin:0;}
+.banner-editor-empty{color:var(--fg-tertiary); font-size:var(--text-sm); margin:0;}
 /* Upload button now sits in .modal-footer, styled like any other
    primary/ghost footer button -- .banner-upload-btn only adds the
    file-input-hiding-label behavior (hidden input sits inside the label;
@@ -7033,7 +7073,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    Contacts field parity slice 4 of 6) -- same footnote-size/tertiary-color
    shape as .settings-field-hint/.banner-upload-hint above, just not scoped
    to Settings or the banner uploader specifically. */
-.field-hint{display:block; font-size:var(--text-footnote); color:var(--fg-tertiary); margin-top:2px;}
+.field-hint{display:block; font-size:var(--text-sm); color:var(--fg-tertiary); margin-top:2px;}
 
 /* Profile picture row (settings_general.html, 2026-08-09) -- the avatar
    upload circle (autosaves via data-autosubmit, see avatar_cropper.js) and,
@@ -7069,14 +7109,14 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 }
 .auth-brand{
   display:flex; align-items:center; gap:8px;
-  font-size:var(--text-title2); margin:0 0 2px;
+  font-size:var(--text-2xl); margin:0 0 2px;
 }
 .login-brand{margin-bottom:var(--space-4);}
 .auth-brand .icon{width:22px; height:22px; color:var(--accent);}
 .auth-subtitle{margin:0 0 var(--space-4);}
 .auth-error{
   margin:0 0 var(--space-3); padding:8px 10px; border-radius:var(--radius-sm);
-  background:var(--tag-red-bg); color:var(--danger); font-size:var(--text-caption);
+  background:var(--tag-red-bg); color:var(--danger); font-size:var(--text-xs);
 }
 .auth-submit{width:100%; margin-top:var(--space-2);}
 
@@ -7095,7 +7135,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   display:flex; align-items:center; justify-content:flex-start; gap:8px;
   width:100%; background:var(--control-bg);
   border:1.5px solid var(--control-border); border-radius:var(--radius-control);
-  padding:10px 14px; font-size:var(--text-body); font-weight:400; color:var(--fg-primary);
+  padding:10px 14px; font-size:var(--text-base); font-weight:400; color:var(--fg-primary);
   font-family:inherit; cursor:pointer;
 }
 .dtp-trigger:hover{background:var(--bg-secondary); border-color:var(--border-strong);}
@@ -7121,7 +7161,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    just above went borderless for. */
 .dtp--compact{display:inline-flex;}
 .dtp--compact .dtp-trigger{
-  width:auto; background:none; border:none; padding:3px 8px; font-size:var(--text-caption); border-radius:var(--radius-sm);
+  width:auto; background:none; border:none; padding:3px 8px; font-size:var(--text-xs); border-radius:var(--radius-sm);
 }
 .dtp--compact .dtp-trigger:hover{background:var(--bg-secondary); border-color:transparent;}
 .dtp--compact .dtp-trigger:focus-visible{border-color:transparent; box-shadow:0 0 0 2px var(--accent-neutral-subtle);}
@@ -7144,7 +7184,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .dtp-panel--date.is-open{display:flex; flex-direction:column;}
 .dtp-panel--date .dtp-panel-head{margin-bottom:var(--space-2);}
 .dtp-panel--date .dtp-cal-grid{flex:1; grid-template-rows:repeat(6,1fr);}
-.dtp-panel-title{font-size:var(--text-footnote); font-weight:600; color:var(--fg-secondary); flex:1; text-align:center; white-space:nowrap;}
+.dtp-panel-title{font-size:var(--text-sm); font-weight:600; color:var(--fg-secondary); flex:1; text-align:center; white-space:nowrap;}
 .dtp-month-nav{width:24px; height:24px;}
 /* Date and range modes' Clear (2026-08-29, STATE.md backlog item 9:
    "remove the Apply button entirely; Clear button loses its text label,
@@ -7165,7 +7205,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .dtp-cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
 .dtp-day{
   display:flex; align-items:center; justify-content:center;
-  width:100%; padding:3px 0; font-size:var(--text-caption); color:var(--fg-primary);
+  width:100%; padding:3px 0; font-size:var(--text-xs); color:var(--fg-primary);
   background:none; border:none; border-radius:var(--radius-pill); font-family:inherit; cursor:pointer;
 }
 .dtp-day:hover{background:var(--row-alt);}
@@ -7190,7 +7230,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   margin-top:var(--space-1); padding-top:var(--space-2); border-top:1px solid var(--separator);
 }
 .dtp-hour-chip{
-  display:inline-flex; align-items:center; padding:6px 10px; font-size:var(--text-caption); font-weight:500;
+  display:inline-flex; align-items:center; padding:6px 10px; font-size:var(--text-xs); font-weight:500;
   color:var(--fg-primary); background:var(--bg-secondary); border-radius:var(--radius-control);
   border:1.5px solid transparent; font-variant-numeric:tabular-nums; font-family:inherit; cursor:text;
 }
@@ -7201,7 +7241,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .dtp-hour-seg.is-active{background:var(--accent); color:var(--fg-on-accent);}
 .dtp-hour-seg-ampm{margin-left:4px; font-size:11px; color:var(--fg-tertiary);}
 .dtp-hour-seg-ampm.is-active{color:var(--fg-on-accent);}
-.dtp-hour-sep{color:var(--fg-tertiary); font-size:var(--text-caption);}
+.dtp-hour-sep{color:var(--fg-tertiary); font-size:var(--text-xs);}
 
 /* --------------------------------------------------------------------- */
 /* Data & Maintenance page (2026-08-26 redesign, third pass same day)     */
@@ -7221,9 +7261,9 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    server renders the default phrase; data_maintenance.js keeps it
    current on every selection change). */
 .dm-export-form{display:flex; flex-direction:column; align-items:stretch; gap:var(--space-4);}
-.dm-field{display:flex; flex-direction:column; gap:4px; font-size:var(--text-caption); color:var(--fg-secondary);}
+.dm-field{display:flex; flex-direction:column; gap:4px; font-size:var(--text-xs); color:var(--fg-secondary);}
 .dm-field select{width:100%;}
-.dm-count-hint{margin:0; font-size:var(--text-caption); font-style:italic; color:var(--fg-tertiary);}
+.dm-count-hint{margin:0; font-size:var(--text-xs); font-style:italic; color:var(--fg-tertiary);}
 
 .dm-dropzone{
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
@@ -7237,12 +7277,12 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .dm-dropzone-icon .icon{width:24px; height:24px; color:var(--fg-tertiary);}
 .dm-dropzone.is-dragover .dm-dropzone-icon .icon,
 .dm-dropzone:hover .dm-dropzone-icon .icon{color:var(--accent);}
-.dm-dropzone-title{font-size:var(--text-footnote); font-weight:500; color:var(--fg-primary);}
-.dm-dropzone-formats{font-size:var(--text-caption); color:var(--fg-tertiary);}
-.dm-status{margin:8px 0 0; font-size:var(--text-footnote); color:var(--success);}
+.dm-dropzone-title{font-size:var(--text-sm); font-weight:500; color:var(--fg-primary);}
+.dm-dropzone-formats{font-size:var(--text-xs); color:var(--fg-tertiary);}
+.dm-status{margin:8px 0 0; font-size:var(--text-sm); color:var(--success);}
 .dm-status-error{color:var(--danger);}
-.dm-merge{display:flex; align-items:center; gap:8px; margin-top:var(--space-3); font-size:var(--text-footnote); color:var(--fg-primary); cursor:pointer;}
-.dm-merge-hint{margin:4px 0 var(--space-3); font-size:var(--text-caption); color:var(--fg-tertiary);}
+.dm-merge{display:flex; align-items:center; gap:8px; margin-top:var(--space-3); font-size:var(--text-sm); color:var(--fg-primary); cursor:pointer;}
+.dm-merge-hint{margin:4px 0 var(--space-3); font-size:var(--text-xs); color:var(--fg-tertiary);}
 
 /* Reset-database confirmation used to be a modal dialog with its own
    .dm-danger-* typed-phrase input here -- 2026-09-09: replaced by a confirm
@@ -7297,7 +7337,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .truncated-url {
     flex: 1;
     min-width: 0;
-    font-size: var(--text-caption);
+    font-size: var(--text-xs);
     color: var(--fg-secondary);
     background: var(--bg-secondary);
     padding: 4px 8px;
@@ -7332,7 +7372,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
     align-items: center;
     padding: 2px 8px;
     border-radius: var(--radius-pill);
-    font-size: var(--text-caption);
+    font-size: var(--text-xs);
     font-weight: 500;
     background: var(--accent-neutral-subtle);
     color: var(--fg-secondary);

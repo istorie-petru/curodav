@@ -148,8 +148,12 @@ SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 
 # Paths that must never require a session. /login is the whole point;
 # /static is shared, cacheable, non-sensitive assets (a signed-out browser
-# still needs the CSS to render the login page itself).
-PUBLIC_PATHS = {"/login"}
+# still needs the CSS to render the login page itself); /health (design-
+# system unification pass, 2026-09-17 -- deploy alignment with sibling app
+# Pineart's own /api/health) is polled by scripts/curodav-ctl's health
+# check after every deploy/rollback, which runs as a plain unauthenticated
+# curl from the same host, not a logged-in browser.
+PUBLIC_PATHS = {"/login", "/health"}
 
 
 def auth_enabled(settings, conn=None) -> bool:

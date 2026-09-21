@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import uuid
 from datetime import datetime, timezone
 
@@ -9,7 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from .. import db
 from ..deps import get_db, respond, templates
-from ..image_convert import to_webp
+from ..image_convert import to_webp, write_cached_webp
 from ..image_sniff import sniff_image_type
 from . import dashboard as dashboard_router
 
@@ -368,7 +369,7 @@ def contact_detail(uid: str, request: Request, conn=Depends(get_db)):
 
 
 @router.get("/{uid}/photo")
-def contact_photo_image(uid: str, conn=Depends(get_db)):
+def contact_photo_image(uid: str, request: Request, conn=Depends(get_db)):
     """Serves a contact's decoded photo bytes for `<img src>` (2026-08-29,
     direct request: "better cache these images"). Exact mirror of
     routers/banners.py's banner_image / routers/settings.py's
@@ -395,7 +396,16 @@ def contact_photo_image(uid: str, conn=Depends(get_db)):
     round-trips the original bytes). Falls back to serving the original
     stored bytes/type verbatim -- the exact old behavior -- if `to_webp`
     can't decode them (a corrupt or partial sync payload should still
-    serve *something* rather than 404 on a contact that has a photo)."""
+    serve *something* rather than 404 on a contact that has a photo).
+
+    2026-09-18 (direct report: "contacts page is slow loading all the
+    photos") -- the WebP transcode above used to run fresh on every single
+    request; with N photo-having contacts, a cold page load meant N full
+    Pillow decode/encode cycles serialized behind N requests. Now
+    content-hash-keyed against `settings.photo_cache_dir`: an unchanged
+    photo's transcoded bytes are written once and served straight off disk
+    on every later request (by anyone, any session), and a changed photo
+    naturally gets a new hash -- no explicit cache invalidation needed."""
     contact = db.get_contact(conn, uid)
     if not contact or not contact.get("photo_b64"):
         raise HTTPException(404)
@@ -406,9 +416,18 @@ def contact_photo_image(uid: str, conn=Depends(get_db)):
     image_type = str(contact.get("photo_type") or "").lower()
     if image_type not in ("jpeg", "png", "gif", "webp"):
         image_type = "jpeg"
-    webp_data = to_webp(data)
-    if webp_data is not None:
-        data, image_type = webp_data, "webp"
+
+    cache_dir = request.app.state.settings.photo_cache_dir
+    cache_name = f"{hashlib.sha256(data).hexdigest()[:16]}.webp"
+    cache_path = cache_dir / cache_name
+    if cache_path.exists():
+        data, image_type = cache_path.read_bytes(), "webp"
+    else:
+        webp_data = to_webp(data)
+        if webp_data is not None:
+            write_cached_webp(cache_dir, cache_name, webp_data)
+            data, image_type = webp_data, "webp"
+
     return Response(
         content=data,
         media_type=f"image/{image_type}",

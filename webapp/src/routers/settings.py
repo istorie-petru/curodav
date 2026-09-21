@@ -112,6 +112,8 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from .. import auth, config, data_health, db, env_file, offline_sync
 from ..image_sniff import sniff_image_type
 from ..deps import (
+    ACCENT_COLOR_KEY,
+    ACCENT_PRESETS,
     EDIT_MODE_KEY,
     FOUR_WEEK_POSITION_KEY,
     HABIT_STREAK_TERMINOLOGY_KEY,
@@ -754,6 +756,13 @@ def settings_appearance(request: Request, conn=Depends(get_db)):
             # label page's own "Edit mode"/"Done" buttons -- see
             # EDIT_MODE_KEY's own comment in routers/dashboard.py.
             "current_edit_mode": db.get_app_meta(conn, EDIT_MODE_KEY) == "1",
+            # 2026-09-17 (design-system unification pass) -- "Accent color":
+            # see ACCENT_COLOR_KEY's own comment in deps.py. Named
+            # current_accent_color, not accent_color, for the same
+            # shadowing reason as current_show_label_icons/current_edit_
+            # mode above (deps.py's accent_color_hex() Jinja global).
+            "current_accent_color": db.get_app_meta(conn, ACCENT_COLOR_KEY) or "blue",
+            "accent_presets": ACCENT_PRESETS,
             # 2026-08-29 (sidebar redesign item 13e follow-up) -- the
             # Standard Page Header's own optional banner (deps.py's
             # PAGE_HEADER_BANNER_SCOPE); "Add"/"Change" label + the Remove
@@ -804,6 +813,23 @@ def set_edit_mode(enabled: str = Form(""), x_requested_with: str | None = Header
     new_value = enabled == "1"
     db.set_app_meta(conn, EDIT_MODE_KEY, "1" if new_value else "")
     return respond(x_requested_with, "/settings/appearance", edit_mode=new_value)
+
+
+@router.post("/settings/appearance/accent")
+def set_accent_color(color: str = Form(...), conn=Depends(get_db)):
+    """"Accent color" (Settings > Appearance, 2026-09-17 design-system
+    unification pass) -- one of the 8 fixed presets in deps.py's
+    ACCENT_PRESETS, never a raw hex (a free color picker was deliberately
+    rejected -- see ACCENT_COLOR_KEY's own comment). Rejects anything
+    outside that set instead of silently falling back, same as any other
+    allowlisted Form value elsewhere in this router -- a request that
+    isn't the settings page's own swatch grid (hand-crafted, a stale
+    client) shouldn't be able to wedge an unsupported key into app_meta
+    that accent_color_hex() would then have to paper over."""
+    if color not in {p["key"] for p in ACCENT_PRESETS}:
+        raise HTTPException(status_code=422, detail=f"Unknown accent color: {color!r}")
+    db.set_app_meta(conn, ACCENT_COLOR_KEY, color)
+    return RedirectResponse(url="/settings/appearance", status_code=303)
 
 
 # --------------------------------------------------------------------- #

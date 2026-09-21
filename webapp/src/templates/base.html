@@ -12,6 +12,14 @@
     <meta name="theme-color" content="#007aff">
     #}
     <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    <!-- Accent color (2026-09-17, design-system unification pass) -- style.
+         css's own --accent is just the "Blue" preset's default; this
+         overrides it with whichever preset the user actually picked in
+         Settings > Appearance (deps.py's accent_color_hex()). Unlike the
+         theme choice below, this needs no client-side script/localStorage
+         at all -- the app is server-rendered, so the right value is known
+         before the response even leaves the server, with zero FOUC risk. -->
+    <style nonce="{{ csp_nonce() }}">:root{--accent:{{ accent_color_hex(request) }};}</style>
     <!-- Theme must be applied before first paint, not after DOMContentLoaded
          (app.js used to do this at the bottom of <body>, which painted the
          light theme first and then flashed to dark once the script ran).

@@ -13,11 +13,23 @@ ExecStart=/usr/bin/cloudflared tunnel --config /etc/cloudflared/config.yml run
 Restart=on-failure
 RestartSec=3
 
+# Hardening. This process has one job -- dial out to Cloudflare's edge and
+# forward to loopback -- so it needs no write access anywhere and no
+# listening socket of its own. 2026-09-17 (design-system unification
+# pass): extended to match sibling app Pineart's own artboard-tunnel.
+# service.template, which had gone further than this file's original set.
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadOnlyPaths=/etc/cloudflared
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
 
 [Install]
 WantedBy=multi-user.target

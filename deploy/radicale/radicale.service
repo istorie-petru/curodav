@@ -14,11 +14,22 @@ ExecStart=/srv/radicale/venv/bin/python -m radicale --config /srv/radicale/confi
 Restart=on-failure
 RestartSec=3
 
+# Hardening. 2026-09-18 (image/deploy standardization pass): brought up to
+# the same baseline already applied to sibling app Pineart's artboard.service/
+# searxng.service and this app's own cloudflared.service -- this unit had
+# been left at the original, shallower set.
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=full
+ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/srv/radicale
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
 
 [Install]
 WantedBy=multi-user.target
