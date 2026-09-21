@@ -1337,6 +1337,14 @@ class TestSettingsLabelsGroupedTables:
         assert 'class="labels-space-row"' in body
         assert 'data-style="--row-tint: var(--tag-teal-bg)"' in body
         assert "#icon-graduation-cap" in body
+        # 2026-09-21 fix (direct report: "not just the space to be white,
+        # cmon") -- the icon/name span themselves must carry their own
+        # color (matching _label_row's own pre-existing convention), not
+        # rely solely on a row-level rule for it -- the previous commit's
+        # --row-tint-fg removal silently left this span at the plain
+        # default text color since it had no fallback of its own.
+        assert 'class="label-cell-icon" data-style="color: var(--cal-accent-teal)"' in body
+        assert 'class="label-name" data-style="color: var(--cal-accent-teal)"' in body
 
     def test_add_label_row_always_present(self, conn):
         self._space(conn, "University")

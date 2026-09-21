@@ -72,8 +72,19 @@
     </td>
     <td>
         <div class="label-cell">
-            <span class="label-cell-icon">{{ icon(group.space.icon or 'layers', 'icon-sm') }}</span>
-            <span class="label-name">{{ group.space.name }}</span>
+            {# 2026-09-21 fix (direct report: "not just the space to be
+               white, cmon") -- this span had NO color of its own, unlike
+               _label_row's own icon/name below, which have always
+               carried this exact same per-span data-style. It relied
+               entirely on the now-removed --row-tint-fg CSS rule for
+               color, so dropping that rule (previous commit) silently
+               left it at the plain default text color instead of the
+               Space's own. Matches _label_row exactly now -- both read
+               the same effective (Space) color, just via the same
+               per-span mechanism instead of one depending on a
+               row-level rule the other never used. #}
+            <span class="label-cell-icon" data-style="color: var(--cal-accent-{{ group.space.color or 'blue' }})">{{ icon(group.space.icon or 'layers', 'icon-sm') }}</span>
+            <span class="label-name" data-style="color: var(--cal-accent-{{ group.space.color or 'blue' }})">{{ group.space.name }}</span>
         </div>
     </td>
     <td>
