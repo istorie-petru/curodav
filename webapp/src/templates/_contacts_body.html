@@ -53,7 +53,7 @@
 {% else %}
 <div class="empty-state empty-state-rich">
     <div class="empty-state-icon">{{ icon('address-book') }}</div>
-    {% if q or active_tag %}
+    {% if contacts_filter_active %}
     <div class="empty-state-title">No contacts match</div>
     <div class="empty-state-text">Try clearing the search or label filter.</div>
     {% else %}

@@ -5,7 +5,7 @@ import hashlib
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from .. import db
@@ -165,26 +165,72 @@ def _social_profile_list(types: list[str], values: list[str]) -> list[dict]:
     ]
 
 
-def _contacts_list_context(conn, request: Request, q: str | None, tag: str | None) -> dict:
+#: The one top-level label with real, built-in behavior on Contacts --
+#: direct request: "Add functionality to the archived label as a top
+#: level label. This one is especially important to contacts -- archived
+#: labels should not be visible normally." Matched case-insensitively,
+#: same convention every other tag comparison on this page already uses.
+ARCHIVED_LABEL = "archived"
+
+
+def _contacts_list_context(conn, request: Request, q: str | None, tags: list[str], filtered: bool) -> dict:
     contacts = [_attach_photo_url(c) for c in db.list_contacts(conn, q=q)]
-    # Saved tag filter (Phase 7 rework; Phase 5 label-space rework --
-    # this is now the *only* grouping/filtering mechanism for contacts,
-    # `category` is gone) -- `?tag=` matches contacts.tags
-    # case-insensitively (a tag written both "University" and "university"
-    # is one filter), same matching the project People section uses.
-    active_tag = tag.lower() if tag else ""
-    if active_tag:
+    total_before_filtering = len(contacts)
+    # Multi-select Label filter (2026-09-21, direct request: "the label
+    # filter in the narrow header should be refactored as a checkbox drop
+    # down, that normally is filtered to show all labels and only the
+    # `archived` one is not checked") -- replaces the old single-select
+    # `?tag=` radio filter. `all_tags` is every label actually in use on
+    # a contact; `filtered` is true once the user has touched the filter
+    # form at all (contacts_list.html's hidden `contacts_filtered` field,
+    # submitted alongside every checkbox change) -- distinguishes "no
+    # `tag=` params because nothing was ever picked" (apply the Archived-
+    # excluded default) from "no `tag=` params because the user
+    # deliberately unchecked everything" (respect that literally, an
+    # empty visible set).
+    all_tags = db.list_contact_tag_names(conn)
+    if filtered:
+        selected = {t.lower() for t in tags}
+        # Explicit pick -- OR-inclusion, same as the old single-select
+        # filter generalized to multiple values: show a contact carrying
+        # at least one checked label. An empty selection (every checkbox
+        # deliberately unchecked) is respected literally -- nothing
+        # matches, not "no filter."
         contacts = [
             c for c in contacts
-            if any(t.lower() == active_tag for t in c.get("tags") or [])
+            if selected & {t.lower() for t in (c.get("tags") or [])}
+        ]
+    else:
+        # Untouched page load -- every real label counts as implicitly
+        # checked except Archived, but unlike an explicit pick this is
+        # NOT a narrowing OR-filter (an unlabeled contact, the common
+        # case, isn't hidden just for matching none of them) -- the
+        # Archived suppression pass below is the only thing that actually
+        # removes anything here.
+        selected = {t.lower() for t in all_tags if t.lower() != ARCHIVED_LABEL}
+    # Archived suppression -- applies on top of whichever branch ran
+    # above, in every filter state, not just the untouched default: "not
+    # visible normally" means checking some other label doesn't
+    # incidentally surface an Archived contact caught by that same
+    # OR-match. Only skipped once Archived itself is in the checked set.
+    if ARCHIVED_LABEL not in selected:
+        contacts = [
+            c for c in contacts
+            if ARCHIVED_LABEL not in {t.lower() for t in (c.get("tags") or [])}
         ]
     return {
         "request": request,
         "active_tab": "contacts",
         "contacts": contacts,
         "q": q or "",
-        "contact_tags": db.list_contact_tag_names(conn),
-        "active_tag": active_tag,
+        "contact_tags": all_tags,
+        "active_tags": selected,
+        # Whether the list actually got narrowed down right now -- true
+        # for an explicit pick, a search, or the default Archived
+        # exclusion actually removing someone -- so _contacts_body.html's
+        # empty state reads "No contacts match" (not "No contacts yet")
+        # whenever that's the real reason the list is empty.
+        "contacts_filter_active": bool(q) or filtered or len(contacts) != total_before_filtering,
     }
 
 
@@ -192,12 +238,13 @@ def _contacts_list_context(conn, request: Request, q: str | None, tag: str | Non
 def list_contacts(
     request: Request,
     q: str | None = None,
-    tag: str | None = None,
+    tag: list[str] = Query([]),
     conn=Depends(get_db),
 ):
+    filtered = "contacts_filtered" in request.query_params
     return templates.TemplateResponse(
         "contacts_list.html",
-        _contacts_list_context(conn, request, q, tag),
+        _contacts_list_context(conn, request, q, tag, filtered),
     )
 
 
@@ -230,7 +277,7 @@ def contacts_regions(
     request: Request,
     region: str = "list",
     q: str | None = None,
-    tag: str | None = None,
+    tag: list[str] = Query([]),
     conn=Depends(get_db),
 ):
     """Async-CRUD region fragment (features/async-crud.md): renders the
@@ -240,7 +287,8 @@ def contacts_regions(
     honors the active search/label filter."""
     if region != "list":
         return JSONResponse({"error": f"unknown region '{region}'"}, status_code=400)
-    ctx = _contacts_list_context(conn, request, q, tag)
+    filtered = "contacts_filtered" in request.query_params
+    ctx = _contacts_list_context(conn, request, q, tag, filtered)
     html = templates.env.get_template("_contacts_body.html").render(ctx)
     return HTMLResponse(html)
 
