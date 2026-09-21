@@ -5897,7 +5897,16 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    `.contact-row`/`.contact-row-main` above (this file's own contacts-list
    page rows) just reused at this widget's more compact scale -- plain
    `.avatar-circle` (34px), no `.avatar-large`. */
-.contact-list-widget{display:flex; flex-direction:column; gap:2px;}
+/* container-type:inline-size (2026-09-21, direct request: "allow data to
+   be displayed more horizontally rather than vertically, especially when
+   the view model allows for that") -- same pattern .kanban-board-wrap
+   already established: queries the widget's own rendered width, not the
+   viewport, so a full-width instance (label_kanban_detail.html's own
+   Contacts card, or a full-span Dashboard widget) gets the roomier
+   horizontal row while a quarter/half-width Dashboard instance keeps the
+   stacked layout unchanged -- no markup/Jinja change needed, the same
+   fields just reflow via the @container rule below. */
+.contact-list-widget{display:flex; flex-direction:column; gap:2px; container-type:inline-size; container-name:contact-list;}
 .contact-list-row{
   display:flex; align-items:center; gap:var(--space-2); padding:var(--space-2) var(--space-1);
   border-radius:var(--radius-sm); text-decoration:none; color:inherit;
@@ -5907,6 +5916,19 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .contact-list-name{font-size:var(--text-base); font-weight:500; color:var(--fg-primary);}
 .contact-list-org{font-size:var(--text-sm); color:var(--fg-secondary);}
 .contact-list-detail{font-size:var(--text-sm); color:var(--fg-tertiary);}
+/* Horizontal reflow once there's genuinely room for it -- name keeps its
+   own column (a fixed share of the row, ellipsized rather than crushed
+   by a long org/email next to it); org/email/phone become a wrapping
+   inline row with a hairline divider between entries instead of each
+   claiming its own text line. */
+@container contact-list (min-width:480px){
+  .contact-list-main{flex-direction:row; align-items:baseline; gap:0; flex-wrap:wrap;}
+  .contact-list-name{flex:0 1 auto; max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .contact-list-org, .contact-list-detail{
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    padding-left:var(--space-2); margin-left:var(--space-2); border-left:1px solid var(--separator);
+  }
+}
 
 /* Project Preview widget (_widget_project_preview.html) -- reuses
    .project-progress-bar/-fill (already defined for project_detail.html)
