@@ -16,10 +16,6 @@
             <label>Title</label>
             <input type="text" name="title" required value="{{ event.title if event else (prefill_title or '') }}">
         </div>
-        <div class="field field-wide">
-            <label>Description</label>
-            <textarea name="description" rows="3">{{ event.description if event else '' }}</textarea>
-        </div>
         <!-- Phase 1 (label-space rework, 2026-08-06) removed the Calendar
              picker here -- calendars is gone, every event lives in one
              universal pool now (see db.py's Phase 1 comments). -->
@@ -213,5 +209,14 @@
         <div class="field field-format-meeting">
             <label>Meeting URL</label>
             <input type="url" name="meeting_url" placeholder="e.g. https://meet.example.com/abc123" value="{{ event.meeting_url if event and event.meeting_url not in (None, 'None', 'Nothing') else '' }}">
+        </div>
+        <!-- Description -- last (2026-09-21 direct request: "prioritise
+             information better... description last") -- was the 2nd
+             field on this form, right after Title; moved behind every
+             other field for the same reason task_form.html's own
+             Description just moved. -->
+        <div class="field field-wide">
+            <label>Description</label>
+            <textarea name="description" rows="3">{{ event.description if event else '' }}</textarea>
         </div>
     </div>

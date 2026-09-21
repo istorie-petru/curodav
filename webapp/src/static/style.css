@@ -2883,6 +2883,17 @@ img.avatar-circle{object-fit:cover;}
 .reminders-custom-input{margin-bottom:0;}
 .field-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:0 var(--space-4);}
 .field-grid .field-wide{grid-column:span 2;}
+/* Task form's merged Start/Due date field (_task_form_fields.html,
+   2026-09-21 direct request: "always have a merged due and start
+   date") -- two independent date-only pickers side by side under one
+   label/field, same visual weight as .event-start-end-field's single
+   range picker without sharing its one-selection-drives-both-ends
+   behavior (a task's start and due are two separate dates). Each half
+   gets its own small "Start"/"Due" caption (.field-hint) above its
+   picker so the merged field doesn't read as one ambiguous date. */
+.task-start-due-row{display:flex; gap:var(--space-4);}
+.task-start-due-item{flex:1; min-width:0;}
+.task-start-due-item .field-hint{margin-top:0; margin-bottom:2px;}
 /* 2026-09-21 (direct report): this used to hide the WHOLE start/end
    picker -- date included -- the moment All day was checked, which made
    it impossible to pick which day an all-day event actually falls on
@@ -6525,6 +6536,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   .settings-grid{grid-template-columns:1fr 1fr;}
   .field-grid{grid-template-columns:1fr;}
   .field-grid .field-wide{grid-column:span 1;}
+  .task-start-due-row{flex-direction:column; gap:var(--space-2);}
   /* padding-bottom is set in the bottom-nav block above (80px) -- only override top/sides here */
   main{padding-top:14px; padding-left:12px; padding-right:12px;}
 
