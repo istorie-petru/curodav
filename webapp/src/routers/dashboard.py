@@ -2065,7 +2065,7 @@ def today_redirect():
 
 
 @router.get("/quick/add")
-def quick_add_form(request: Request, default_tab: str = "task", conn=Depends(get_db)):
+def quick_add_form(request: Request, default_tab: str = "task", scope: str = "", conn=Depends(get_db)):
     # Merged task/event/contact/label quick-add (2026-08-10, grew Contact/
     # Label tabs 2026-09-14) -- the sidebar's single global "+" button
     # opens this instead of four separate New task / New event / New
@@ -2085,6 +2085,20 @@ def quick_add_form(request: Request, default_tab: str = "task", conn=Depends(get
         default_tab = "task"
 
     tag_names = db.list_tag_names_in_use(conn)
+    # Direct request: "On space's dashboard, project pages or label's
+    # page, the label selector should only have labels from that group."
+    # `scope` is the current page's own label name (base.html's sidebar
+    # quick-add link, set only on a Space/Project/plain-label page --
+    # every other page omits it, leaving this unscoped exactly as
+    # before). Uses the group's full child list, not an intersection with
+    # "already in use" -- a freshly-added course label with zero tagged
+    # items yet must still be pickable here, same "offer it even though
+    # nothing points at it yet" reasoning `project` prefill just above
+    # this route's own new_task_form sibling already applies.
+    if scope:
+        allowed = db.label_selector_scope(conn, scope)
+        if allowed is not None:
+            tag_names = allowed
     return templates.TemplateResponse(
         "quick_add.html",
         {

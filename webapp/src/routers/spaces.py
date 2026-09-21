@@ -75,6 +75,12 @@ def space_detail(name: str, request: Request, conn=Depends(get_db)):
             "active_tab": "space",
             "label": label,
             "is_space": True,
+            # base.html's sidebar quick-add link reads this to restrict the
+            # Labels picker to this Space's own children -- direct request:
+            # "the label selector should only have labels from that
+            # group." Not `scope` (the dict this route's own `_label_scope`
+            # call above already assigned to that name).
+            "page_label_scope": name,
             "children": db.list_child_labels(conn, name),
             "parent": db.effective_label_config(conn, label["parent_name"]) if label.get("parent_name") else None,
             # Dashboard Header (Expanded) avatar (2026-08-29, sidebar

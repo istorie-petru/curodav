@@ -217,6 +217,43 @@ class TestReservedLabelNameGuard:
 # --------------------------------------------------------------------- #
 
 
+class TestLabelSelectorScope:
+    """Direct request: "On space's dashboard, project pages or label's
+    page, the label selector should only have labels from that group...
+    this should work for any space > labels grouped under it"."""
+
+    def test_a_space_scopes_to_its_own_children(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Ancient History", "parent_name": "University", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Unrelated", "created_at": _now()})
+        assert db.label_selector_scope(conn, "University") == ["Ancient History", "Historiography"]
+
+    def test_a_project_grouped_under_a_space_scopes_to_its_siblings(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "is_project": 1, "parent_name": "University", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "created_at": _now()})
+        # Includes CS101 itself -- list_child_labels(University) returns
+        # every label grouped under it, siblings and self alike; a picker
+        # that dropped the page's own label while keeping every other
+        # sibling would be an arbitrary, unrequested exclusion.
+        assert db.label_selector_scope(conn, "CS101") == ["CS101", "Historiography"]
+
+    def test_a_plain_label_grouped_under_a_space_scopes_to_its_siblings(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Ancient History", "parent_name": "University", "created_at": _now()})
+        assert db.label_selector_scope(conn, "Historiography") == ["Ancient History", "Historiography"]
+
+    def test_a_standalone_project_with_no_parent_space_is_unscoped(self, conn):
+        db.upsert_label_config(conn, {"name": "Website Relaunch", "is_project": 1, "created_at": _now()})
+        assert db.label_selector_scope(conn, "Website Relaunch") is None
+
+    def test_a_standalone_plain_label_is_unscoped(self, conn):
+        db.upsert_label_config(conn, {"name": "Groceries", "created_at": _now()})
+        assert db.label_selector_scope(conn, "Groceries") is None
+
+
 class TestLabelParentNameDropdown:
     def test_create_label_writes_a_valid_parent_name(self, conn):
         db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
@@ -453,6 +490,15 @@ class TestGeneratedSpacePage:
         assert resp.context["is_space"] is True
         assert [c["name"] for c in resp.context["children"]] == ["CS101", "MATH201"]
 
+    def test_space_page_scopes_the_sidebar_quick_add_link_to_itself(self, conn):
+        # Direct request: "the label selector should only have labels
+        # from that group." base.html's quick-add link reads
+        # page_label_scope to append &scope=<name>.
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
+        resp = spaces_router.space_detail("Uni", _request("/spaces/Uni"), conn=conn)
+        assert resp.context["page_label_scope"] == "Uni"
+        assert "/quick/add?default_tab=task&amp;scope=Uni" in resp.body.decode()
+
     def test_space_with_no_children_shows_nothing(self, conn):
         db.upsert_label_config(conn, {"name": "Empty Space", "generate_space": 1, "created_at": _now()})
         db.upsert_task(conn, {"uid": "t1", "title": "Direct", "description": "", "status": "active",
@@ -506,6 +552,19 @@ class TestGeneratedSpacePage:
         body = resp.body.decode()
         assert 'href="/contacts/c1" data-modal' in body
         assert 'class="avatar-circle avatar-colored"' in body
+
+    def test_plain_label_grouped_under_a_space_scopes_the_quick_add_link(self, conn):
+        # Direct request: "the label selector should only have labels
+        # from that group." A plain label with a parent Space passes its
+        # own name as page_label_scope (db.label_selector_scope then
+        # resolves that to the Space's other children).
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "University", "created_at": _now()})
+        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
+        assert resp.context["page_label_scope"] == "CS101"
+        # default_tab=label, not task -- this page's own active_tab is
+        # "label" (base.html's _qa_defaults maps that to the Label tab).
+        assert "/quick/add?default_tab=label&amp;scope=CS101" in resp.body.decode()
 
     def test_label_with_no_config_row_still_renders(self, conn):
         db.upsert_task(conn, {"uid": "t1", "title": "X", "description": "", "status": "active",

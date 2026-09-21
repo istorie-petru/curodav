@@ -519,3 +519,27 @@ class TestHeaderBannerAndAvatar:
         _promote(conn, "Trip")
         resp = projects_router.project_detail("Trip", _request(), conn=conn)
         assert resp.context["page_url"] == "/projects/Trip"
+
+
+class TestLabelSelectorScope:
+    """Direct request: "On space's dashboard, project pages or label's
+    page, the label selector should only have labels from that group."
+    base.html's sidebar quick-add link reads page_label_scope
+    (set here to the project's own name) to append &scope=<name>."""
+
+    def test_project_grouped_under_a_space_sets_page_label_scope(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(
+            conn, {"name": "Trip", "is_project": 1, "parent_name": "University", "start_date": "2026-01-01", "end_date": "2026-12-31", "created_at": _now()}
+        )
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        assert resp.context["page_label_scope"] == "Trip"
+        # default_tab=label, not task -- this page's own active_tab is
+        # "label" (base.html's _qa_defaults maps that to the Label tab).
+        assert "/quick/add?default_tab=label&amp;scope=Trip" in resp.body.decode()
+
+    def test_standalone_project_with_no_parent_space_is_unscoped(self, conn):
+        _promote(conn, "Trip")
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        assert resp.context["page_label_scope"] is None
+        assert "&amp;scope=" not in resp.body.decode()

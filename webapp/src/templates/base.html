@@ -215,7 +215,15 @@
         {% if not edit_mode %}
         {% set _qa_defaults = {'contacts': ('contact', 'New contact'), 'labels': ('label', 'New label'), 'label': ('label', 'New label')} %}
         {% set _qa_tab, _qa_title = _qa_defaults.get(active_tab, ('task', 'New task or event')) %}
-        <a href="/quick/add?default_tab={{ _qa_tab }}" data-modal class="tab-btn sidebar-quick-add" title="{{ _qa_title }}">{{ icon('plus') }}<span>New</span></a>
+        {# Direct request: "On space's dashboard, project pages or label's
+           page, the label selector should only have labels from that
+           group." A Space/Project/plain-label page sets `page_label_scope`
+           (routers/spaces.py, routers/projects.py, routers/labels.py) to
+           its own name; quick_add_form (routers/dashboard.py) resolves
+           that into the actual restricted label list via
+           db.label_selector_scope. Every other page never sets this key,
+           so the picker stays unscoped there, unchanged. #}
+        <a href="/quick/add?default_tab={{ _qa_tab }}{% if page_label_scope is defined and page_label_scope %}&amp;scope={{ page_label_scope|urlencode }}{% endif %}" data-modal class="tab-btn sidebar-quick-add" title="{{ _qa_title }}">{{ icon('plus') }}<span>New</span></a>
         {% endif %}
         <a href="/" data-tab="dashboard" class="tab-btn {% if active_tab == 'dashboard' %}active{% endif %}">{{ icon('home') }}<span>Home</span></a>
         {# Today (1.7, "Today -- execution") and Week (planning, 1.7 slice 2)

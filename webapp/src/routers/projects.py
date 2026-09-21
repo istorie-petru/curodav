@@ -183,6 +183,14 @@ def project_detail(name: str, request: Request, conn=Depends(get_db)):
         "request": request,
         "active_tab": "label",
         "project": label,
+        # base.html's sidebar quick-add link reads this to restrict the
+        # Labels picker to this project's own group -- direct request:
+        # "the label selector should only have labels from that group."
+        # Only set when there's an actual group to restrict to (a parent
+        # Space) -- a standalone project with no parent_name has nothing
+        # to scope by, same "None means unscoped" contract
+        # db.label_selector_scope itself returns.
+        "page_label_scope": name if label.get("parent_name") else None,
         "project_status": db.project_status(conn, label),
         "agenda_items": agenda_items,
         "columns": columns,

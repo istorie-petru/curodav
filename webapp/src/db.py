@@ -4147,6 +4147,35 @@ def list_child_labels(conn: sqlite3.Connection, parent_name: str) -> list[dict[s
     return [effective_label_config(conn, r["name"]) for r in rows]
 
 
+def label_selector_scope(conn: sqlite3.Connection, name: str) -> list[str] | None:
+    """The set of label names a Labels picker should offer while the user
+    is on `name`'s own generated page (a Space, a Project, or a plain
+    label's Kanban page) -- direct request: "On space's dashboard,
+    project pages or label's page, the label selector should only have
+    labels from that group... this should work for any space > labels
+    grouped under it." Returns None for "no restriction, show every
+    label" (a standalone Project/label with no parent Space -- today's
+    unscoped behavior, unchanged).
+
+    - A Space (`generate_space`): its own children (`list_child_labels`)
+      -- membership through a Space is already transitive-through-children
+      only (see routers/spaces.py::_label_scope's own docstring), so the
+      picker offering anything else would let someone tag an item with a
+      label that page's own aggregation then ignores.
+    - A Project or plain label grouped under a Space (`parent_name` set):
+      that Space's other children -- its own siblings -- same "everything
+      under this Space" grouping, just viewed from a child's own page.
+    - Anything else (no Space involved): None, unscoped."""
+    label = effective_label_config(conn, name)
+    if label.get("generate_space"):
+        parent = name
+    else:
+        parent = label.get("parent_name")
+    if not parent:
+        return None
+    return [c["name"] for c in list_child_labels(conn, parent)]
+
+
 def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None:
     """Renames a label everywhere in one transaction: every object_labels
     row that named it, the label_config row itself, and any child label's

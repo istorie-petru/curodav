@@ -614,6 +614,44 @@ class TestQuickAddModal:
         assert ctx["prefill_start"] is None
 
 
+class TestQuickAddLabelScope:
+    """Direct request: "On space's dashboard, project pages or label's
+    page, the label selector should only have labels from that group."
+    quick_add_form's new `scope` query param (threaded from base.html's
+    sidebar quick-add link, set only on a Space/Project/plain-label
+    page's own `page_label_scope` context key) restricts tag_name_items
+    to db.label_selector_scope's result."""
+
+    def test_no_scope_offers_every_label_unchanged(self, conn):
+        db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Anything"], "created_at": _now()})
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), conn=conn)
+        assert resp.context["tag_names"] == ["Anything"]
+
+    def test_space_scope_restricts_to_its_children(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Unrelated"], "created_at": _now()})
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), scope="University", conn=conn)
+        assert resp.context["tag_names"] == ["Historiography"]
+        assert [i["name"] for i in resp.context["tag_name_items"]] == ["Historiography"]
+
+    def test_space_scope_includes_a_not_yet_used_child_label(self, conn):
+        # A freshly-added course label with zero tagged items yet must
+        # still be offered -- the scoped list is the group's full child
+        # set, not an intersection with "already in use" (list_tag_names_
+        # in_use's own usual precondition).
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "2nd Semester", "parent_name": "University", "created_at": _now()})
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), scope="University", conn=conn)
+        assert resp.context["tag_names"] == ["2nd Semester"]
+
+    def test_scope_naming_an_unscoped_label_is_a_no_op(self, conn):
+        db.upsert_label_config(conn, {"name": "Groceries", "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Groceries"], "created_at": _now()})
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), scope="Groceries", conn=conn)
+        assert resp.context["tag_names"] == ["Groceries"]
+
+
 class TestQuickAddContactAndLabelTabs:
     """2026-09-14 direct request: "the quick add should support both
     contacts and labels." quick_add.html grew two more tabs/panels

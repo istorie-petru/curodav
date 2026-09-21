@@ -821,6 +821,14 @@ def label_detail(name: str, request: Request, conn=Depends(get_db)):
         # the Space link on every Space/Project page.
         "active_tab": "label",
         "label": label,
+        # base.html's sidebar quick-add link reads this to restrict the
+        # Labels picker to this label's own group -- direct request: "the
+        # label selector should only have labels from that group." Only
+        # set when there's an actual group to restrict to (a parent
+        # Space) -- a standalone plain label with no parent_name has
+        # nothing to scope by, same "None means unscoped" contract
+        # db.label_selector_scope itself returns.
+        "page_label_scope": name if label.get("parent_name") else None,
         "agenda_items": agenda_items,
         "contacts": contacts,
         "columns": columns,
