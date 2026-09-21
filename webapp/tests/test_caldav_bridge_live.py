@@ -81,6 +81,7 @@ def radicale_settings(tmp_path: Path) -> Settings:
             db_path=tmp_path / "cache.sqlite",
             sync_interval_seconds=9999,
             backup_dir=tmp_path / "backups",
+            photo_cache_dir=tmp_path / "photo_cache",
         )
     finally:
         proc.terminate()

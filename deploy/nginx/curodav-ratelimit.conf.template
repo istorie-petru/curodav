@@ -1,4 +1,6 @@
-# Installed to /etc/nginx/conf.d/curodav-ratelimit.conf by install-nginx.sh.
+# Installed to /etc/nginx/conf.d/curodav-ratelimit.conf by install-nginx.sh,
+# with {{IP_SOURCE}} substituted for the real nginx variable to key rate
+# limiting on -- see that script's own comment for how it picks the value.
 # `limit_req_zone` has to live in nginx's `http {}` context -- Debian's
 # stock /etc/nginx/nginx.conf already `include`s conf.d/*.conf from inside
 # that block, same as it includes sites-enabled/*, so this file just needs
@@ -14,24 +16,29 @@
 # this zone), throttling a sustained guessing loop without materially
 # affecting a real DAVx5/Thunderbird/iOS client's normal sync traffic.
 #
-# Why $http_cf_connecting_ip, not $binary_remote_addr: this whole stack
-# sits behind a Cloudflare Tunnel (deploy/README.md's "Why Cloudflare
-# Tunnel" section) -- the only thing that ever connects to nginx here is
-# cloudflared, over loopback, so nginx's own view of the client
+# {{IP_SOURCE}} (2026-09-18, was hardcoded to $http_cf_connecting_ip):
+# behind an actual Cloudflare Tunnel (the default, 'install --dav'
+# without --proxy=manual), the only thing that ever connects to nginx
+# here is cloudflared, over loopback, so nginx's own view of the client
 # (`$remote_addr`) is ALWAYS 127.0.0.1 regardless of who's actually
-# hitting the public hostname. Rate-limiting on that would either throttle
-# every real client as one bucket, or (with a high enough limit to avoid
-# that) not throttle a single attacker at all. `CF-Connecting-IP` is
-# Cloudflare's own header carrying the real, authoritative client IP --
-# Cloudflare's edge sets it from the actual TCP connection and overwrites
-# any client-supplied value of the same name before it ever reaches this
-# tunnel, so it can't be spoofed by a request claiming to be someone else.
+# hitting the public hostname -- `CF-Connecting-IP` is Cloudflare's own
+# header carrying the real, authoritative client IP instead (Cloudflare's
+# edge sets it from the actual TCP connection and overwrites any
+# client-supplied value of the same name before it ever reaches this
+# tunnel, so it can't be spoofed). A manual/non-Cloudflare reverse proxy
+# ('install --dav --proxy=manual') has no such header contract this
+# script can rely on, so install-nginx.sh substitutes $remote_addr there
+# instead -- correct as long as that proxy also reaches nginx over
+# loopback on this same host without faking `Host`/forwarding headers of
+# its own; a different setup may need to hand-edit the installed
+# /etc/nginx/conf.d/curodav-ratelimit.conf afterward (see deploy/README.md's
+# "Bringing your own reverse proxy" section).
 # `map` with a default keeps this from ever using an empty key (a request
 # that somehow arrives without the header, e.g. someone testing directly
 # against a leaked port) -- those all share one "unknown" bucket rather
 # than each getting their own unlimited free pass.
-map $http_cf_connecting_ip $curodav_ratelimit_key {
-    default $http_cf_connecting_ip;
+map {{IP_SOURCE}} $curodav_ratelimit_key {
+    default {{IP_SOURCE}};
     ""      "unknown";
 }
 

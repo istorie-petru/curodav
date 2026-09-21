@@ -17,6 +17,91 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
+  to "plow through all of them now" rather than the usual one-slice-per-
+  session split, explicitly agreed given how many of these were small/
+  independent). A batch of UI/UX fixes and reworks, each its own commit:
+  1. Contacts edit modal: fixed a real bug where a contact with no
+     birthday rendered the literal string "None" into the input
+     (Jinja stringifying a real `None`), silently failing the client
+     pattern check on save. "+Add phone/email/website/address/social"
+     buttons moved inline next to each field's label (small `.icon-btn`)
+     instead of a full-width button below the rows.
+  2. Contact list tags, and every Agenda-style widget's event dot
+     (Dashboard/Space/Project/plain-label Kanban pages), now render with
+     the item's real label color instead of a hardcoded gray/`var(--accent)`
+     default -- new `db.annotate_item_colors` (moved out of
+     `routers/calendar.py::_annotate_calendar_colors`, kept there as a
+     thin wrapper) so `routers/dashboard.py`/`routers/projects.py` can
+     reuse the same resolution without an import cycle through
+     `routers/calendar`.
+  3. Event "All day" no longer hides the date picker -- it used to hide
+     the whole start/end field (date included), making it impossible to
+     pick which day an all-day event falls on.
+  4. Sidebar quick-add's Labels picker is now scoped to the current
+     group when opened from a Space/Project/plain-label page (`db.
+     label_selector_scope`, `page_label_scope` context key, `&scope=`
+     query param) -- offers only that Space's own children instead of
+     every label in the app. Edit modals reached via a Kanban card still
+     use the unscoped picker (out of scope for this pass).
+  5. "Archived" is now a real top-level label on Contacts: hidden by
+     default everywhere a label filter applies, via a checkbox dropdown
+     (`_filter_dropdown.html`'s existing multi mode) that starts with
+     every label checked except Archived. Reverses the *visibility* half
+     of 2026-08-07's "Archived is just a normal label" decision, not the
+     "no second CRUD path" half (still true).
+  6. Dashboard widgets sharing a row now share one height (the tallest
+     among them) -- replaces the 2026-08-02..08-30 skyline best-fit
+     masonry packer with strict row-wrapping (`packRows`), a deliberate,
+     confirmed reversal of that packer's whole point (avoiding dead
+     space under a short widget).
+  7. Labels settings table: a new "go to page" action button
+     (Space/Project/plain-label's own generated page) alongside
+     Edit/Delete.
+  8. Final labels-page iteration: a label/Project grouped under a Space
+     (`parent_name` set) now always shows the Space's own color
+     (`db.effective_label_config`'s new `_resolve_inherited_color`) and
+     banner, and loses the ability to set its own -- `update_label`
+     preserves the prior stored color untouched rather than overwriting
+     it from the (now-hidden) picker.
+  9. Contacts widget (dashboard + label pages) reflows horizontally via
+     a container query once it has genuine width (>=480px) -- avatar
+     already existed from 2026-09-16.
+  10. Task/event add+edit modals: Start date and Due date merged into
+      one field ("Start & due date", two date-only pickers under one
+      label); Description moved to the very end of both forms (was the
+      2nd field, right after Title).
+  11. Modal header restyle: the close X gets a border and, when the
+      header shows a banner, the same frosted-chip background
+      `.page-header-narrow-actions` uses over a photo. Label edit modal
+      now shows its own (or an inherited, if grouped) banner in the
+      header, and moved Color/Icon/Banner out of the body into three
+      small circular header buttons next to the X (`appearance_in_header`
+      flag -- quick_add.html's Label tab, whose header has no per-tab
+      slot for these, keeps them inline). `banner_editor.html` gained
+      `from_modal`: the one caller reached from inside another modal
+      (label edit's own banner button) now says "Cancel" and swaps back
+      into that modal instead of "Done" closing to the plain labels list.
+  12. Confirmed already shipped, no new work needed: Projects already
+      had their own flat sidebar rail section (2026-08-29) -- verified
+      live rather than rebuilding it.
+
+  **Tests**: every commit ran the full suite (`PYTHONPATH=src
+  ../.venv/bin/python -m pytest -q`) before landing --
+  **2,349 passed, 0 failed** at the end of the session (2,306 at the
+  start). New regression tests per slice, notably `TestArchivedDefault
+  Exclusion`/`TestContactsTagFilter` (test_phase7_contacts_global.py),
+  `TestLabelSelectorScope`/`TestColorInheritance`/`TestBannerInheritance`/
+  `TestModalHeaderAppearanceButtons`/`TestBannerEditorFromModal`
+  (test_phase2_labels.py).
+
+  **Visually verified** (unusual for this file -- most sessions can't):
+  every item above was confirmed live via the Claude Preview tool against
+  `CC_DB_PATH=/tmp/curodav-preview/cache.sqlite` (never the real
+  `~/.command_center_web/cache.sqlite`), including the full nested-modal
+  Cancel-and-swap-back flow for item 11 and the grouped-label
+  color/banner inheritance for item 8.
+
 - **Shipped:** 2026-09-16 (same-day follow-up to the Contacts-card entry
   directly below) -- direct request: "the contacts widget should also
   contain the contact's photo and on click should open a modal window,

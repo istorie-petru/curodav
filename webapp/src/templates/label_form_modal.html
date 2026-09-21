@@ -8,9 +8,76 @@
      static/label_role_picker.js handles the client-side show/hide of
      Project date fields and the switch-away confirm when a real
      Space/Project is being turned off. -->
+{% set appearance_in_header = true %}
 <div id="modal-target" class="modal-height-lg">
 <div class="modal-header">
+{# Direct request, 2026-09-21: "I would also like the banner to continue
+   over to the edit modal" -- same .detail-cover-wrap/.detail-cover-img
+   cover treatment every detail (view) modal and banner_editor.html's own
+   header already use, not a one-off. Only ever set when editing an
+   existing label (`l`) that actually has a banner -- routers/labels.py::
+   edit_label_modal already resolves `banner` (and the image lookup
+   scope, `banner_grouped_under`) the same "follow the parent Space"
+   way _page_banner.html does, so a grouped label's header shows the
+   Space's own banner here too, same as everywhere else it's now shown
+   read-only. #}
+{% if l and banner %}
+<div class="detail-header-inner">
+    <div class="detail-cover-wrap">
+        <div class="detail-cover">
+            {% if banner.version %}
+            <img class="detail-cover-img" src="/banners/image?scope={{ (banner_grouped_under or l.name)|urlencode }}&amp;v={{ banner.version }}" alt="{{ banner.alt or '' }}">
+            {% else %}
+            <img class="detail-cover-img" src="{{ banner.image_url }}" alt="{{ banner.alt or '' }}" referrerpolicy="no-referrer">
+            {% endif %}
+        </div>
+    </div>
+    <div class="detail-heading-row">
+        <h1>{{ 'Edit label' if l else 'New Label' }}</h1>
+    </div>
+</div>
+{% else %}
 <h1>{{ 'Edit label' if l else 'New Label' }}</h1>
+{% endif %}
+{# Direct request, 2026-09-21: "I would also prefer to have the color,
+   icon, banner buttons in the header, as small circular buttons, that
+   look like the close 'X' button, that for pressing each opens each
+   menu" -- moves the three appearance controls out of the body's field
+   grid (_label_form_fields.html suppresses them here via
+   appearance_in_header, set above) into small `.icon-btn`-styled
+   triggers up top, next to the close X. Positioned absolutely (same
+   technique the close X itself uses) rather than flowed inline, since
+   the header's own layout differs between the plain-title and
+   cover-image branches above and this row needs to sit in the same
+   spot either way. Color/Icon reuse the exact same popover components
+   (_color_swatch_picker.html/_icon_swatch_picker.html) the body used to
+   include -- only their trigger button is restyled+relocated, the
+   popover panel/radios/form wiring (cp_form_id/ip_form_id="label-form")
+   are unchanged. A grouped label (parent_name set, not itself a Space)
+   shows a plain read-only color dot instead of the interactive
+   trigger -- same "nothing to pick, it follows the Space" rule the body
+   version enforced, see _resolve_inherited_color. Banner only renders
+   once the label actually exists (`l`) -- a brand-new label has no name
+   yet to key a banner off of, same guard the body's old Banner field
+   had. #}
+<div class="modal-header-actions">
+    {% if l and l.parent_name and role != 'space' %}
+    <span class="modal-header-swatch cal-{{ l.color }}" title="Follows {{ l.parent_name }}'s color"></span>
+    {% else %}
+    {% set cp_current = l.color if l else 'blue' %}
+    {% set cp_colors = colors %}
+    {% set cp_form_id = 'label-form' %}
+    {% include "_color_swatch_picker.html" %}
+    {% endif %}
+    {% set ip_current = l.icon %}
+    {% set ip_groups = icon_groups %}
+    {% set ip_form_id = 'label-form' %}
+    {% set ip_default_icon = 'tag' %}
+    {% include "_icon_swatch_picker.html" %}
+    {% if l and not (l.parent_name and role != 'space') %}
+    <a href="/banners/editor?scope={{ l.name|urlencode }}&amp;page_url={{ ('/settings/labels/' ~ l.name ~ '/edit')|urlencode }}&amp;from_modal=1" data-modal class="icon-btn" title="{{ 'Change banner' if banner else 'Add banner' }}">{{ icon('image', 'icon-sm') }}</a>
+    {% endif %}
+</div>
 </div>
 <div class="modal-body">
 <div class="card">

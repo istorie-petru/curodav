@@ -56,6 +56,54 @@
       return text.slice(0, 150);
     }
 
+    // 2026-09-17 (design-system unification pass, shared spec at
+    // /home/peter/Claude/Projects/DESIGN_SYSTEM.md) -- friendlyErrorMessage
+    // above turns a 422 into one readable toast line, but a toast still
+    // doesn't tell you *which* input on a long form (task/event/contact)
+    // is wrong. applyFieldErrors marks each error against its actual
+    // field (a red border + a .field-error line right under it, style.css)
+    // and focuses the first one, falling back to the toast only for
+    // whatever doesn't match a visible input (a nested/array loc path with
+    // no single form field to point at).
+    function clearFieldErrors(form) {
+      form.querySelectorAll(".field.has-error").forEach((f) => f.classList.remove("has-error"));
+      form.querySelectorAll(".field-error").forEach((e) => e.remove());
+    }
+
+    // Returns the messages that had no matching input (still need the
+    // toast), or null if `text` isn't the FastAPI/Pydantic detail shape at
+    // all (caller falls back to the unchanged raw-text toast in that case).
+    function applyFieldErrors(form, text) {
+      clearFieldErrors(form);
+      let detail;
+      try {
+        const body = JSON.parse(text);
+        detail = Array.isArray(body && body.detail) ? body.detail : null;
+      } catch (err) {
+        return null;
+      }
+      if (!detail) return null;
+      const unmatched = [];
+      let firstInvalid = null;
+      for (const d of detail) {
+        const fieldName = Array.isArray(d.loc) ? d.loc[d.loc.length - 1] : null;
+        const input = fieldName ? form.querySelector(`[name="${CSS.escape(String(fieldName))}"]`) : null;
+        const field = input ? input.closest(".field") : null;
+        if (!field) {
+          unmatched.push(fieldName ? fieldName + ": " + d.msg : d.msg);
+          continue;
+        }
+        field.classList.add("has-error");
+        const hint = document.createElement("span");
+        hint.className = "field-error";
+        hint.textContent = d.msg;
+        field.appendChild(hint);
+        if (!firstInvalid) firstInvalid = input;
+      }
+      if (firstInvalid) firstInvalid.focus();
+      return unmatched;
+    }
+
     const overlay = document.getElementById("modal-overlay");
     const dialog = document.getElementById("modal-dialog");
     const header = document.getElementById("modal-header");
@@ -340,6 +388,17 @@
     // still needs typing.
     wireColorPickers(body);
     wireIconPickers(body);
+    // Also on `header` (2026-09-21, same reasoning as the 2026-09-12
+    // CCAvatarCropper footer fix right above): label_form_modal.html
+    // moved its Color/Icon triggers into #modal-header (small circular
+    // buttons next to the close X, direct request) -- without this, a
+    // click there would silently do nothing, same "wired at boot on
+    // document, but never re-wired on the fragment that actually
+    // contains it" gap the footer fix already found and fixed once.
+    if (header) {
+      wireColorPickers(header);
+      wireIconPickers(header);
+    }
 
     // Widget Builder (dashboard_customize.html): add-widget form + live
     // preview live inside the modal, injected via innerHTML like Schedule's
@@ -437,7 +496,12 @@
             }
           } else {
             const text = await resp.text().catch(() => "");
-            window.ccToast({ message: "Could not save: " + friendlyErrorMessage(text), variant: "error" });
+            const unmatched = applyFieldErrors(form, text);
+            if (unmatched === null) {
+              window.ccToast({ message: "Could not save: " + friendlyErrorMessage(text), variant: "error" });
+            } else if (unmatched.length) {
+              window.ccToast({ message: "Could not save: " + unmatched.join("; ").slice(0, 150), variant: "error" });
+            }
             submitting = false;
             if (submitBtn) {
               submitBtn.disabled = false;

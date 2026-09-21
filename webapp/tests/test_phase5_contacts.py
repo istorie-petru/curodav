@@ -116,7 +116,7 @@ class TestFilterByLabelReplacesCategory:
         _make_contact(conn, uid="c2", full_name="Classmate B", tags=["Classmate"])
 
         resp = contacts_router.list_contacts(
-            request=_fake_request(), q=None, tag="Professor", conn=conn,
+            request=_fake_request(b"tag=Professor&contacts_filtered=1"), q=None, tag=["Professor"], conn=conn,
         )
         names = [c["full_name"] for c in resp.context["contacts"]]
         assert names == ["Prof A"]
@@ -142,11 +142,19 @@ class TestFilterByLabelReplacesCategory:
 
 class TestNoSpecialArchivedState:
     """2026-08-07: Active/Archived removed entirely -- Contacts has no
-    special "archived" state anymore, only labels, same as every other
+    dedicated *state*/endpoints for it, only a label, same as every other
     object type. `archive_contact`/`unarchive_contact`/the `view` query
-    param no longer exist; tagging a contact "Archived" is just a normal
-    label like any other -- it doesn't hide the contact from the list or
-    require any dedicated endpoint."""
+    param still don't exist -- there is no second CRUD path.
+
+    2026-09-21 direct request reverses the *visibility* half of this
+    decision specifically for Contacts: "archived labels should not be
+    visible normally." Tagging a contact "Archived" is still just a
+    label (no new column, no new endpoint) -- but routers/contacts.py's
+    own list/filter logic now gives that one label name a real, built-in
+    default-hidden behavior. See test_phase7_contacts_global.py's
+    TestArchivedDefaultExclusion for that behavior's own tests -- this
+    class only covers the "no second CRUD path exists" half, which is
+    still true."""
 
     def test_no_archive_endpoints_exist(self):
         assert not hasattr(contacts_router, "archive_contact")
@@ -157,19 +165,10 @@ class TestNoSpecialArchivedState:
 
         assert "view" not in inspect.signature(contacts_router.list_contacts).parameters
 
-    def test_tagging_a_contact_archived_is_just_a_normal_label(self, conn):
-        uid = _make_contact(conn, full_name="Old Contact", tags=["Archived"])
-        resp = contacts_router.list_contacts(
-            request=_fake_request(), q=None, tag=None, conn=conn,
-        )
-        # No hiding -- a contact tagged "Archived" shows up in the plain
-        # list exactly like any other tag would.
-        assert [c["uid"] for c in resp.context["contacts"]] == [uid]
-
     def test_context_has_no_view_key(self, conn):
         _make_contact(conn, uid="c1")
         resp = contacts_router.list_contacts(
-            request=_fake_request(), q=None, tag=None, conn=conn,
+            request=_fake_request(), q=None, tag=[], conn=conn,
         )
         assert "view" not in resp.context
 
@@ -213,14 +212,14 @@ class TestNoDanglingReferences:
         assert offenders == [], "\n".join(offenders)
 
 
-def _fake_request():
+def _fake_request(query_string=b""):
     from starlette.requests import Request
 
     return Request({
         "type": "http",
         "method": "GET",
         "path": "/contacts",
-        "query_string": b"",
+        "query_string": query_string,
         "scheme": "http",
         "server": ("testserver", 80),
         "root_path": "",

@@ -4,8 +4,15 @@
 #
 #   sudo /path/to/repo/scripts/curodav-ctl install   # first install (bootstrap from a clone)
 #   sudo curodav-ctl update                          # deploy latest main, atomic swap, auto-rollback
-#   sudo curodav-ctl install --dav                    # add/reconfigure public CalDAV/CardDAV (see deploy/README.md)
+#   sudo curodav-ctl install --dav [--proxy=cloudflare|manual] [--reconfigure]
+#                                                     # add/reconfigure public CalDAV/CardDAV (see deploy/README.md)
+#                                                     # --proxy=manual skips Cloudflare Tunnel entirely, for anyone
+#                                                     # fronting this with their own reverse proxy/tunnel instead
+#                                                     # --reconfigure re-prompts for DOMAIN_APP/TUNNEL_NAME/RADICALE_USER
+#                                                     # and rotates the Radicale password; without it, a re-run of
+#                                                     # 'install --dav' reuses whatever was set last time, no re-prompting
 #       curodav-ctl status                            # just the reachability/consistency checks below, no deploy
+#   sudo curodav-ctl revert                          # swap current -> previous locally, restart, health-check
 #   sudo curodav-ctl remove                          # tear down (destructive, confirms)
 #
 # Layout:
@@ -22,7 +29,12 @@ APP_NAME="curodav"
 APP_USER="curodav"
 GIT_BRANCH="main"
 TARGET_PORT=8000
-HEALTH_PATH="/"
+# 2026-09-17 (design-system unification pass, deploy alignment with
+# sibling app Pineart's artboard-ctl, which already checks /api/health):
+# was "/", which happened to work (any 2xx counts) but isn't a real
+# liveness signal -- a half-broken app can still render a page shell at
+# "/". src/main.py now exposes a dedicated GET /health for this.
+HEALTH_PATH="/health"
 KEEP_RELEASES=5
 UV_INSTALL_DIR="/usr/local/bin"
 INSTALLED_CTL="/usr/local/bin/${APP_NAME}-ctl"
@@ -39,6 +51,7 @@ UNIT_FILE="/etc/systemd/system/${APP_NAME}.service"
 
 DEPLOY_ENV_FILE="${SHARED_DIR}/deploy.env"
 RADICALE_PORT=5232
+RADICALE_USERS_FILE="/srv/radicale/users"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 log()  { echo -e "${GREEN}==>${NC} $*"; }
@@ -376,6 +389,20 @@ collect_deploy_env() {
     existing_radicale_user="${RADICALE_USER:-curodav}"
   fi
 
+  # 2026-09-18 (direct request: "not make to input the same variables 20
+  # times") -- every earlier run already persisted these three to
+  # DEPLOY_ENV_FILE and offered them back as defaults, but still forced
+  # pressing Enter through all three on every single re-run of
+  # 'install --dav'. Skip the prompts entirely once they're already set;
+  # --reconfigure is the explicit opt-in to change them.
+  if [ "${RECONFIGURE:-0}" -ne 1 ] && [ -n "$existing_domain_app" ]; then
+    log "Reusing existing DAV config from ${DEPLOY_ENV_FILE} (DOMAIN_APP=${existing_domain_app}) -- pass --reconfigure to change it."
+    DOMAIN_APP="$existing_domain_app"
+    TUNNEL_NAME="$existing_tunnel_name"
+    RADICALE_USER="$existing_radicale_user"
+    return
+  fi
+
   log "Public CalDAV/CardDAV access needs a few values (press Enter to keep a bracketed default)."
   local domain_app tunnel_name radicale_user
   while true; do
@@ -383,7 +410,13 @@ collect_deploy_env() {
     looks_like_hostname "$domain_app" && break
     warn "Doesn't look like a hostname (e.g. app.example.com) -- try again."
   done
-  tunnel_name="$(prompt_default "Cloudflare Tunnel name" "$existing_tunnel_name")"
+  # Irrelevant to a manual (non-Cloudflare) proxy setup -- skip asking for a
+  # value that install-cloudflared.sh will never be called with.
+  if [ "${PROXY_MODE:-cloudflare}" = "cloudflare" ]; then
+    tunnel_name="$(prompt_default "Cloudflare Tunnel name" "$existing_tunnel_name")"
+  else
+    tunnel_name="$existing_tunnel_name"
+  fi
   radicale_user="$(prompt_default "Radicale username" "$existing_radicale_user")"
 
   cat > "$DEPLOY_ENV_FILE" <<EOF
@@ -432,26 +465,66 @@ run_dav_setup() {
   #   sudo FIREWALL_SSH_PORT=<your-actual-ssh-port> curodav-ctl install --dav
   bash "${deploy_src}/firewall.sh"
 
-  collect_radicale_password
-  log "Installing Radicale..."
-  DEPLOY_ENV_FILE="$DEPLOY_ENV_FILE" RADICALE_PASSWORD="$RADICALE_PASSWORD" RADICALE_PASSWORD_CONFIRM="$RADICALE_PASSWORD_CONFIRM" \
-    bash "${deploy_src}/radicale/install-radicale.sh"
-
-  log "Installing the local nginx path-router (/radicale/* -> Radicale, everything else -> curodav)..."
-  bash "${deploy_src}/nginx/install-nginx.sh"
-
-  log "Setting up the Cloudflare Tunnel (this will pause for a browser login the first time)..."
-  DEPLOY_ENV_FILE="$DEPLOY_ENV_FILE" bash "${deploy_src}/cloudflared/install-cloudflared.sh"
-
   local radicale_user domain_app
   radicale_user="$(grep -E '^RADICALE_USER=' "$DEPLOY_ENV_FILE" | tail -n1 | cut -d= -f2-)"
   domain_app="$(grep -E '^DOMAIN_APP=' "$DEPLOY_ENV_FILE" | tail -n1 | cut -d= -f2-)"
+
+  # 2026-09-18 (direct request: "not make to input the same variables 20
+  # times") -- install-radicale.sh already leaves an existing user's
+  # password untouched unless it's told --reset-password; this only asks
+  # for a new one when there isn't one yet, or --reconfigure explicitly
+  # asked to rotate it. Mirrors collect_deploy_env's own skip-if-already-set
+  # behavior above.
+  local radicale_password_flag=()
+  RADICALE_PASSWORD=""
+  RADICALE_PASSWORD_CONFIRM=""
+  if [ "${RECONFIGURE:-0}" -eq 1 ] || ! grep -q "^${radicale_user}:" "$RADICALE_USERS_FILE" 2>/dev/null; then
+    collect_radicale_password
+    if [ "${RECONFIGURE:-0}" -eq 1 ]; then
+      radicale_password_flag=(--reset-password)
+    fi
+  else
+    log "Radicale user '${radicale_user}' already has a password set -- leaving it untouched (pass --reconfigure to rotate it)."
+  fi
+
+  log "Installing Radicale..."
+  DEPLOY_ENV_FILE="$DEPLOY_ENV_FILE" RADICALE_PASSWORD="$RADICALE_PASSWORD" RADICALE_PASSWORD_CONFIRM="$RADICALE_PASSWORD_CONFIRM" \
+    bash "${deploy_src}/radicale/install-radicale.sh" "${radicale_password_flag[@]}"
+
+  # 2026-09-18 (direct request: "a clearer way to integrate cloudflare
+  # tunnel or any other fix into that installer, because some users might
+  # install it manually") -- nginx + Radicale are proxy-agnostic (nginx
+  # only path-routes on loopback; whatever sits in front of it, Cloudflare
+  # Tunnel or otherwise, just needs to reach 127.0.0.1:8080), so only the
+  # Cloudflare-specific step is conditional. The rate-limit zone's IP
+  # source has to follow suit -- $http_cf_connecting_ip only means anything
+  # behind an actual Cloudflare Tunnel (see curodav-ratelimit.conf.template's
+  # own comment); a manual proxy on the same host gets $remote_addr instead.
+  local rate_limit_ip_source='$http_cf_connecting_ip'
+  if [ "${PROXY_MODE:-cloudflare}" != "cloudflare" ]; then
+    rate_limit_ip_source='$remote_addr'
+  fi
+  log "Installing the local nginx path-router (/radicale/* -> Radicale, everything else -> curodav)..."
+  RATE_LIMIT_IP_SOURCE="$rate_limit_ip_source" bash "${deploy_src}/nginx/install-nginx.sh"
+
+  if [ "${PROXY_MODE:-cloudflare}" = "cloudflare" ]; then
+    log "Setting up the Cloudflare Tunnel (this will pause for a browser login the first time)..."
+    DEPLOY_ENV_FILE="$DEPLOY_ENV_FILE" bash "${deploy_src}/cloudflared/install-cloudflared.sh"
+  else
+    log "--proxy=manual: skipping Cloudflare Tunnel setup."
+    log "nginx is listening on 127.0.0.1:8080 -- point your own reverse proxy, tunnel,"
+    log "or Caddy/other nginx at that address for both / and /radicale/, terminating"
+    log "TLS at ${domain_app:-<your DOMAIN_APP>} yourself. See deploy/README.md's"
+    log "\"Bringing your own reverse proxy\" section for the full walkthrough."
+  fi
 
   if [ -f "$ENV_FILE" ]; then
     log "Wiring Radicale into ${ENV_FILE}..."
     set_env_var CC_RADICALE_URL "http://127.0.0.1:${RADICALE_PORT}/${radicale_user}/"
     set_env_var CC_RADICALE_USER "$radicale_user"
-    set_env_var CC_RADICALE_PASSWORD "$RADICALE_PASSWORD"
+    if [ -n "$RADICALE_PASSWORD" ]; then
+      set_env_var CC_RADICALE_PASSWORD "$RADICALE_PASSWORD"
+    fi
     set_env_var CC_RADICALE_PUBLIC_URL "https://${domain_app}/radicale/${radicale_user}/"
     if systemctl list-unit-files 2>/dev/null | grep -q "^${APP_NAME}\.service"; then
       log "Restarting ${APP_NAME}.service to pick up Radicale config..."
@@ -461,7 +534,7 @@ run_dav_setup() {
     warn "${ENV_FILE} doesn't exist yet -- once you run 'curodav-ctl install', add:"
     warn "    CC_RADICALE_URL=http://127.0.0.1:${RADICALE_PORT}/${radicale_user}/"
     warn "    CC_RADICALE_USER=${radicale_user}"
-    warn "    CC_RADICALE_PASSWORD=${RADICALE_PASSWORD}"
+    warn "    CC_RADICALE_PASSWORD=<the password you just set>"
     warn "    CC_RADICALE_PUBLIC_URL=https://${domain_app}/radicale/${radicale_user}/"
   fi
   unset RADICALE_PASSWORD RADICALE_PASSWORD_CONFIRM
@@ -629,6 +702,38 @@ cmd_update() {
   fi
 }
 
+cmd_revert() {
+  require_root
+  # Local equivalent of .github/workflows/rollback.yml's remote SSH+symlink
+  # swap (2026-09-18, direct request: "have a revert command") -- same
+  # one-way semantic documented there: this points current at whatever
+  # previous currently resolves to, it doesn't maintain a redo stack, so a
+  # second consecutive run just re-points current at the same release
+  # again, not "undo the revert." Adds one thing the blunt remote version
+  # doesn't have: a real health check afterward, using the same
+  # health_check() 'update' already relies on.
+  if [ ! -L "$PREVIOUS_LINK" ]; then
+    err "No ${PREVIOUS_LINK} symlink -- nothing to revert to (only one deploy has happened, or 'remove' was already run)."
+    exit 1
+  fi
+  local target
+  target="$(readlink -f "$PREVIOUS_LINK")"
+  if [ ! -d "$target" ]; then
+    err "${PREVIOUS_LINK} points at ${target}, which no longer exists -- nothing to revert to."
+    exit 1
+  fi
+  log "Reverting current -> $(basename "$target")..."
+  atomic_symlink "$target" "$CURRENT_LINK"
+  systemctl restart "${APP_NAME}.service"
+  log "Health-checking http://127.0.0.1:${TARGET_PORT}${HEALTH_PATH} ..."
+  if health_check; then
+    log "Reverted to $(basename "$target") and healthy."
+  else
+    err "Reverted, but the health check still failed -- check 'journalctl -u ${APP_NAME} -e'."
+    exit 1
+  fi
+}
+
 cmd_remove() {
   require_root
   warn "This will stop ${APP_NAME}, delete its systemd unit, remove the"
@@ -655,15 +760,29 @@ cmd_remove() {
 case "${1:-}" in
   install)
     DAV_ONLY=0
+    RECONFIGURE=0
+    PROXY_MODE="cloudflare"
     if [ "${2:-}" = "--dav" ]; then
       DAV_ONLY=1
+      for arg in "${@:3}"; do
+        case "$arg" in
+          --reconfigure)   RECONFIGURE=1 ;;
+          --proxy=cloudflare) PROXY_MODE="cloudflare" ;;
+          --proxy=manual)  PROXY_MODE="manual" ;;
+          *)
+            echo "Usage: curodav-ctl install --dav [--proxy=cloudflare|manual] [--reconfigure]" >&2
+            exit 2
+            ;;
+        esac
+      done
     elif [ -n "${2:-}" ]; then
-      echo "Usage: curodav-ctl install [--dav]" >&2
+      echo "Usage: curodav-ctl install [--dav [--proxy=cloudflare|manual] [--reconfigure]]" >&2
       exit 2
     fi
     cmd_install
     ;;
   update)  cmd_update ;;
+  revert)  cmd_revert ;;
   status)
     # No require_root -- every check here (curl against loopback/nginx/
     # public hostname, grep-ing ENV_FILE) is a plain read, and the whole
@@ -677,7 +796,7 @@ case "${1:-}" in
     ;;
   remove)  cmd_remove ;;
   *)
-    echo "Usage: curodav-ctl {install [--dav]|update|status|remove}" >&2
+    echo "Usage: curodav-ctl {install [--dav [--proxy=cloudflare|manual] [--reconfigure]]|update|status|revert|remove}" >&2
     exit 2
     ;;
 esac

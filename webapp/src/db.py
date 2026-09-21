@@ -3940,7 +3940,7 @@ def effective_label_config(conn: sqlite3.Connection, name: str) -> dict[str, Any
     """A label's config with every default filled in -- a label with zero
     label_config rows (mentioned only via object_labels) still fully
     works, per the table's own "sparse, optional" contract."""
-    return _effective_label_config(get_label_config(conn, name), name)
+    return _resolve_inherited_color(conn, _effective_label_config(get_label_config(conn, name), name))
 
 
 def effective_label_config_ci(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
@@ -3953,7 +3953,55 @@ def effective_label_config_ci(conn: sqlite3.Connection, name: str) -> dict[str, 
     row = conn.execute(
         "SELECT * FROM label_config WHERE name = ? COLLATE NOCASE", (name,)
     ).fetchone()
-    return _effective_label_config(dict(row) if row else None, name)
+    return _resolve_inherited_color(conn, _effective_label_config(dict(row) if row else None, name))
+
+
+def _resolve_inherited_color(conn: sqlite3.Connection, cfg: dict[str, Any]) -> dict[str, Any]:
+    """Final labels-page iteration (direct request, 2026-09-21): "the
+    labels/projects grouped by space should follow the space's color...
+    remove the ability to have colors... for labels or projects grouped
+    under a space." A label/project with `parent_name` set has its own
+    stored `color` column overridden here with its parent Space's own
+    effective color -- every consumer already reads color through
+    `effective_label_config`/`_ci` (label_pill, the calendar/Agenda
+    `calendar_color` resolution, filled_card tiles, the Kanban board...),
+    so this is the one place that needs to change for the inheritance to
+    apply everywhere at once, rather than teaching every call site about
+    `parent_name`. Only one level -- a Space itself never has a
+    `parent_name` (`_validate_parent_name`/role=space form handling both
+    enforce "Spaces don't nest"), so there's nothing further to walk."""
+    parent = cfg.get("parent_name")
+    if parent and not cfg.get("generate_space"):
+        cfg["color"] = effective_label_config(conn, parent).get("color") or cfg["color"]
+    return cfg
+
+
+def annotate_item_colors(conn: sqlite3.Connection, items: list[dict[str, Any]], *, key: str = "calendar_color") -> list[dict[str, Any]]:
+    """A task/event row's display color is its first label's color
+    (alphabetical, for a stable pick when it carries more than one),
+    falling back to 'blue' for an unlabeled row -- moved here from
+    routers/calendar.py's `_annotate_calendar_colors` (2026-08-07 fix,
+    kept there as a thin wrapper for its own existing call sites/tests) so
+    routers/dashboard.py and routers/projects.py can reuse it too without
+    importing routers/calendar, which already imports routers/dashboard
+    (a real circular-import risk, not a style preference). Mutates and
+    returns the same list. `key` defaults to `calendar_color` (the name
+    every calendar template already reads via `cal-{{ e.calendar_color
+    }}`) but the Agenda-style widgets reuse this for a plain `.cal-*` dot
+    under the same key, direct request: "the color... of an event/task
+    should be as the label's, not default on blue or any other accent
+    color"."""
+    color_by_label: dict[str, str] = {}
+    for item in items:
+        tags = sorted(item.get("tags") or [], key=str.lower)
+        color = "blue"
+        for name in tags:
+            if name not in color_by_label:
+                color_by_label[name] = effective_label_config(conn, name).get("color") or "blue"
+            color = color_by_label[name]
+            break
+        item[key] = color
+    return items
 
 
 def _effective_label_config(row: dict[str, Any] | None, name: str) -> dict[str, Any]:
@@ -4117,6 +4165,35 @@ def list_child_labels(conn: sqlite3.Connection, parent_name: str) -> list[dict[s
         "SELECT * FROM label_config WHERE parent_name = ? ORDER BY name COLLATE NOCASE", (parent_name,)
     ).fetchall()
     return [effective_label_config(conn, r["name"]) for r in rows]
+
+
+def label_selector_scope(conn: sqlite3.Connection, name: str) -> list[str] | None:
+    """The set of label names a Labels picker should offer while the user
+    is on `name`'s own generated page (a Space, a Project, or a plain
+    label's Kanban page) -- direct request: "On space's dashboard,
+    project pages or label's page, the label selector should only have
+    labels from that group... this should work for any space > labels
+    grouped under it." Returns None for "no restriction, show every
+    label" (a standalone Project/label with no parent Space -- today's
+    unscoped behavior, unchanged).
+
+    - A Space (`generate_space`): its own children (`list_child_labels`)
+      -- membership through a Space is already transitive-through-children
+      only (see routers/spaces.py::_label_scope's own docstring), so the
+      picker offering anything else would let someone tag an item with a
+      label that page's own aggregation then ignores.
+    - A Project or plain label grouped under a Space (`parent_name` set):
+      that Space's other children -- its own siblings -- same "everything
+      under this Space" grouping, just viewed from a child's own page.
+    - Anything else (no Space involved): None, unscoped."""
+    label = effective_label_config(conn, name)
+    if label.get("generate_space"):
+        parent = name
+    else:
+        parent = label.get("parent_name")
+    if not parent:
+        return None
+    return [c["name"] for c in list_child_labels(conn, parent)]
 
 
 def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None:

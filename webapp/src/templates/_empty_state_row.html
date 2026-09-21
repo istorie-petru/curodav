@@ -39,7 +39,7 @@
 
    2026-09-07 (audit-fixes-2.0.md item 11, CSP `'unsafe-inline'`
    elimination): the `style` param is gone -- every real call site passed
-   the macro's own default (`font-size: var(--text-footnote);`) unchanged,
+   the macro's own default (`font-size: var(--text-sm);`) unchanged,
    so that's now a static style.css rule scoped to this row's own
    `#empty-state-row`/`.text-muted` hooks instead of a per-call inline
    `style=` attribute. #}

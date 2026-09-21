@@ -388,6 +388,15 @@ _ROLE_SORT_RANK = {"space": 0, "project": 1, "none": 2}
 def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
     """The label edit modal -- uses the unified label_form_modal.html."""
     cfg = db.effective_label_config(conn, name)
+    # Final labels-page iteration (direct request, 2026-09-21): "remove
+    # the ability to have... banners for labels or projects grouped
+    # under a space" -- a grouped label (parent_name set, and not itself
+    # a Space) shows its parent Space's own banner read-only instead of
+    # its own Add/Change control, same "follow the space" treatment
+    # db.effective_label_config's own _resolve_inherited_color already
+    # gives `color`.
+    grouped_under = cfg.get("parent_name") if not cfg.get("generate_space") else None
+    banner = db.get_page_banner(conn, grouped_under or name)
     return templates.TemplateResponse(
         "label_form_modal.html",
         {
@@ -406,7 +415,8 @@ def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
             # not only a Space/Project that happens to have a dashboard
             # page. See db.banner_for_task's priority chain (tasks/kanban
             # banner strip) for the other consumer of this same data.
-            "banner": db.get_page_banner(conn, name),
+            "banner": banner,
+            "banner_grouped_under": grouped_under,
         },
     )
 
@@ -482,9 +492,20 @@ def update_label(
         name = new_name
 
     existing = db.get_label_config(conn, name) or {}
+    # Final labels-page iteration (direct request, 2026-09-21): a label
+    # grouped under a Space has no color of its own to save -- the edit
+    # modal doesn't even render the picker for one (_label_form_fields.
+    # html), so `color` here is whatever that form's Form("blue") default
+    # falls back to, not a real user choice. Preserving the label's own
+    # prior stored value (not overwriting it with "blue") means its
+    # original color is still there, unchanged, if it's ever ungrouped
+    # from the Space later -- same "never force-drop/reset old data"
+    # convention this app already applies to every other removed-then-
+    # possibly-relevant-again field.
+    effective_color = (color if color in COLORS else "blue") if not parent_name else (existing.get("color") or "blue")
     row = {
         "name": name,
-        "color": color if color in COLORS else "blue",
+        "color": effective_color,
         "icon": icon,
         "parent_name": parent_name,
         "description": description,
@@ -781,6 +802,13 @@ def label_detail(name: str, request: Request, conn=Depends(get_db)):
         e for e in db.list_events(conn, start=now_iso)
         if name in (e.get("tags") or []) and e.get("start_at") and e["start_at"][:10] >= today_iso
     ]
+    # Direct request, 2026-09-21: "the color... of an event/task should be
+    # as the label's, not default on blue or any other accent color" --
+    # same db.annotate_item_colors call routers/projects.py::project_detail
+    # makes for its own identically-shaped Agenda card; before the
+    # due-dated-task synthetic dicts get appended below, which render
+    # through a different template branch that never reads this key.
+    db.annotate_item_colors(conn, events)
     for t in tasks:
         if t["status"] == "done" or not t.get("due_at") or t["due_at"][:10] < today_iso:
             continue
@@ -814,6 +842,14 @@ def label_detail(name: str, request: Request, conn=Depends(get_db)):
         # the Space link on every Space/Project page.
         "active_tab": "label",
         "label": label,
+        # base.html's sidebar quick-add link reads this to restrict the
+        # Labels picker to this label's own group -- direct request: "the
+        # label selector should only have labels from that group." Only
+        # set when there's an actual group to restrict to (a parent
+        # Space) -- a standalone plain label with no parent_name has
+        # nothing to scope by, same "None means unscoped" contract
+        # db.label_selector_scope itself returns.
+        "page_label_scope": name if label.get("parent_name") else None,
         "agenda_items": agenda_items,
         "contacts": contacts,
         "columns": columns,

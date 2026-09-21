@@ -27,11 +27,17 @@
    `_group_row` below). The row still reads as a distinct "card": a light
    `var(--tag-<color>-bg)` tint with rounded corners (style.css's
    `.labels-space-row`) and a bold name, painted via one `data-style`
-   setting `--row-tint`/`--row-tint-fg` custom properties that the CSS
-   consumes -- one attribute instead of one per inner span, still CSP-
-   safe (dynamic_styles.js applies `data-style` via the CSSOM, which
-   style-src doesn't restrict; see this file's own 2026-09-15 note below
-   for why a literal `style="..."` attribute can't be used here).
+   setting a `--row-tint` custom property that the CSS consumes -- one
+   attribute instead of one per inner span, still CSP-safe
+   (dynamic_styles.js applies `data-style` via the CSSOM, which style-src
+   doesn't restrict; see this file's own 2026-09-15 note below for why a
+   literal `style="..."` attribute can't be used here). Text/icon color
+   is deliberately left at the app's own default (2026-09-21 direct
+   request, "the font color should be the default one or one that
+   contrasts with the bg color") -- there used to be a paired
+   `--row-tint-fg` too, dropped for reading low-contrast against its own
+   tint at full-row size (see style.css's own comment on the rule that
+   used to consume it).
 
    Usage on a Space's row is still the *total* across the Space and every
    child (`group.labels | sum(attribute='usage_count')`), unchanged from
@@ -60,12 +66,24 @@
 {% from "_empty_state_row.html" import empty_state_row %}
 {% macro _group_row(group) %}
 {% set total_usage = group.labels | sum(attribute='usage_count') %}
-<tr class="labels-space-row" data-label-name="{{ group.space.name }}" data-label-group="{{ group.space.name }}" data-style="--row-tint: var(--tag-{{ group.space.color or 'blue' }}-bg); --row-tint-fg: var(--tag-{{ group.space.color or 'blue' }}-fg)">
+<tr class="labels-space-row" data-label-name="{{ group.space.name }}" data-label-group="{{ group.space.name }}" data-style="--row-tint: var(--tag-{{ group.space.color or 'blue' }}-bg)">
     <td>
         <input type="checkbox" class="row-select" data-uid="{{ group.space.name }}" aria-label="Select {{ group.space.name }}" autocomplete="off">
     </td>
     <td>
         <div class="label-cell">
+            {# 2026-09-21, final word (direct report, all caps: "MAKE THEM
+               THE DEFAULT TEXT COLOR NOT STUPID COLORFUL TEXT THAT I
+               CAN'T READ") -- no color override at all, on either span.
+               A colored-text-on-colored-tint combination is exactly what
+               reads badly; the tint alone (--row-tint on the <tr>)
+               already carries "this belongs to this Space" -- text does
+               not need to repeat that signal in a way that fights
+               readability. Same treatment _label_row's own icon/name get
+               below when grouped (see that macro's own comment) -- only
+               an UNGROUPED plain label's row (default, untinted
+               background) still colors its icon/name, unchanged, since
+               there's no tint there for colored text to clash with. #}
             <span class="label-cell-icon">{{ icon(group.space.icon or 'layers', 'icon-sm') }}</span>
             <span class="label-name">{{ group.space.name }}</span>
         </div>
@@ -82,24 +100,51 @@
             "/settings/labels/" ~ group.space.name ~ "/edit",
             "/settings/labels/" ~ group.space.name ~ "/delete",
             "label",
-            'Remove "' ~ group.space.name ~ '" from every object that carries it? This doesn\'t delete the label config, just clears its usage.'
+            'Remove "' ~ group.space.name ~ '" from every object that carries it? This doesn\'t delete the label config, just clears its usage.',
+            "/spaces/" ~ group.space.name
         ) }}
     </td>
 </tr>
 {% endmacro %}
 {% macro _label_row(l) %}
-<tr data-label-name="{{ l.name }}" data-label-group="{{ l.parent_name or '' }}">
+{# Direct request, 2026-09-21 follow-up (first tried a colored left bar,
+   direct feedback "I don't like this, I like the background color
+   more"): a row grouped under a Space gets the same tinted-background
+   "card" treatment the Space's own row (`.labels-space-row`) already
+   has, in the group's own color (l.color already IS the inherited Space
+   color for a grouped label -- db.effective_label_config's
+   _resolve_inherited_color, final labels-page iteration). Only grouped
+   rows (`l.parent_name` set) get it -- an ungrouped plain label has no
+   group color to link to. Reuses `.labels-space-row`'s own `--row-tint`
+   custom property (set via `data-style`, this file's own CSP-safe
+   convention -- see its header comment) so both row kinds share one CSS
+   rule for the tint itself; text/icon color is left at the default in
+   both (2026-09-21, same day, direct request: "the font color should be
+   the default one or one that contrasts with the bg color") -- only the
+   bold name stays exclusive to `.labels-space-row`, so the two still
+   read as parent/child despite sharing a color family. #}
+<tr {% if l.parent_name %}class="labels-child-row" data-style="--row-tint: var(--tag-{{ l.color or 'blue' }}-bg)"{% endif %} data-label-name="{{ l.name }}" data-label-group="{{ l.parent_name or '' }}">
     {# 2026-09-14: mirrors the row markup this table has used since the
        solid-color-dot -> icon swap (icon + name both painted with
        var(--cal-accent-{color})) -- unchanged by slice 2, just no
-       longer followed by a Group-badge cell (see below). #}
+       longer followed by a Group-badge cell (see below).
+
+       2026-09-21, final word (direct report, all caps: "MAKE THEM THE
+       DEFAULT TEXT COLOR NOT STUPID COLORFUL TEXT THAT I CAN'T READ") --
+       that per-span color is now conditional: a GROUPED row already
+       sits on its own tinted background (`.labels-child-row`'s
+       `--row-tint`, same color family), so colored text on top of it
+       reads badly -- default text color instead, same call as
+       `_group_row`'s own icon/name above. An UNGROUPED row has no tint
+       to clash with, so it keeps this coloring exactly as it's always
+       had it. #}
     <td>
         <input type="checkbox" class="row-select" data-uid="{{ l.name }}" aria-label="Select {{ l.name }}" autocomplete="off">
     </td>
     <td>
         <div class="label-cell">
-            <span class="label-cell-icon" data-style="color: var(--cal-accent-{{ l.color or 'blue' }})">{{ icon(l.icon or 'tag', 'icon-sm') }}</span>
-            <span class="label-name" data-style="color: var(--cal-accent-{{ l.color or 'blue' }})">{{ l.name }}</span>
+            <span class="label-cell-icon"{% if not l.parent_name %} data-style="color: var(--cal-accent-{{ l.color or 'blue' }})"{% endif %}>{{ icon(l.icon or 'tag', 'icon-sm') }}</span>
+            <span class="label-name"{% if not l.parent_name %} data-style="color: var(--cal-accent-{{ l.color or 'blue' }})"{% endif %}>{{ l.name }}</span>
         </div>
     </td>
     <td>
@@ -110,11 +155,18 @@
         {% endif %}
     </td>
     <td>
+        {# Same is_project/generate_space precedence base.html's own
+           sidebar tree uses for a child row's href (see that file's
+           child_href) -- a plain label's own generated page is still
+           /settings/labels/{name} (label_kanban_detail.html), same route
+           this row's Edit button already lives under. #}
+        {% set _view_url = ("/spaces/" ~ l.name) if l.generate_space else (("/projects/" ~ l.name) if l.is_project else ("/settings/labels/" ~ l.name)) %}
         {{ row_action_buttons(
             "/settings/labels/" ~ l.name ~ "/edit",
             "/settings/labels/" ~ l.name ~ "/delete",
             "label",
-            'Remove "' ~ l.name ~ '" from every object that carries it? This doesn\'t delete the label config, just clears its usage.'
+            'Remove "' ~ l.name ~ '" from every object that carries it? This doesn\'t delete the label config, just clears its usage.',
+            _view_url
         ) }}
     </td>
 </tr>

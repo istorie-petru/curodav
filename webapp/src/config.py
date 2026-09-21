@@ -30,6 +30,14 @@ class Settings:
     db_path: Path
     sync_interval_seconds: int
     backup_dir: Path
+    # Content-hash-keyed cache of contact photos already transcoded to WebP
+    # (2026-09-18, direct report: "contacts page is slow loading all the
+    # photos") -- routers/contacts.py's photo route used to run a full
+    # Pillow decode/re-encode on every single request, with nothing cached
+    # anywhere; a cold page load with N photo-having contacts meant N of
+    # those, serialized behind N requests. Same "next to the db by default,
+    # relocatable via its own env var" convention as backup_dir above.
+    photo_cache_dir: Path
     # Single-user authentication (2026-08-16, src/auth.py). Both
     # auth_username AND auth_password must be non-empty for login to be
     # enforced -- an unset pair keeps the app open exactly as it always
@@ -110,6 +118,9 @@ def load_settings() -> Settings:
         # relocatable (e.g. onto a different disk/mount) via CC_BACKUP_DIR.
         backup_dir=Path(
             os.environ.get("CC_BACKUP_DIR", str(db_path.parent / "backups"))
+        ),
+        photo_cache_dir=Path(
+            os.environ.get("CC_PHOTO_CACHE_DIR", str(db_path.parent / "photo_cache"))
         ),
         auth_username=os.environ.get("CC_AUTH_USERNAME") or None,
         auth_password=os.environ.get("CC_AUTH_PASSWORD") or None,

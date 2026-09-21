@@ -221,3 +221,23 @@ class TestFormatFieldCss:
         assert ".field.field-format-location,\n.field.field-format-meeting{display:none;}" in css
         assert "#event-form:has(#event_format_in_person:checked) .field-format-location{display:flex;}" in css
         assert "#event-form:has(#event_format_online:checked) .field-format-meeting{display:flex;}" in css
+
+
+class TestAllDayKeepsDatePickerVisible:
+    """2026-09-21 direct report: All day used to hide the WHOLE start/end
+    picker via `#event-form:has(#all_day:checked)
+    .event-start-end-field{display:none;}` -- date included, so there was
+    no way to pick which day an all-day event actually falls on. That
+    rule is gone; the date picker must stay reachable regardless of this
+    checkbox."""
+
+    def test_style_css_no_longer_hides_the_start_end_field_on_all_day(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        assert "#event-form:has(#all_day:checked) .event-start-end-field{display:none;}" not in css
+
+    def test_new_event_form_start_end_field_carries_no_hidden_state(self, conn):
+        from src.routers import calendar as calendar_router
+
+        resp = calendar_router.new_event_form(_request(), conn=conn)
+        body = resp.body.decode()
+        assert 'class="field field-wide event-start-end-field"' in body

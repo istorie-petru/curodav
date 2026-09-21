@@ -99,7 +99,16 @@
    `widget-row-icon` leading slot a task's checkbox does, so an Agenda
    widget's Overdue/Tasks/Events sections all line up in the same column
    rhythm, but a plain colored dot rather than a clickable control (an
-   event has no "mark done" action to offer here). #}
-{% macro widget_event_dot() -%}
-<span class="widget-event-dot"></span>
+   event has no "mark done" action to offer here).
+
+   Direct request: "the color and icon of an event/task should be as the
+   label's, not default on blue or any other accent color" -- used to be
+   a fixed `var(--accent)` dot regardless of the event's own labels.
+   `color` is the already-resolved `cal-*` swatch name -- callers pass
+   `e.calendar_color`, the same key/value calendar.py's own
+   `_annotate_calendar_colors` already computes and sets for every other
+   calendar surface in the app (first label alphabetically, 'blue'
+   default), reused here rather than a second color-resolution path. #}
+{% macro widget_event_dot(color='blue') -%}
+<span class="widget-event-dot cal-{{ color }}"></span>
 {%- endmacro %}

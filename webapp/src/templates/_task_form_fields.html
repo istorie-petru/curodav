@@ -22,23 +22,31 @@
             <label>Title</label>
             <input type="text" name="title" required value="{{ task.title if task else (prefill_title or '') }}">
         </div>
-        <div class="field field-wide">
-            <label>Description</label>
-            <textarea name="description" rows="3">{{ task.description if task else '' }}</textarea>
-        </div>
-        <div class="field">
-            <label>Due date</label>
-            {% from "_datetime_picker.html" import datetime_picker with context %}
-            {{ datetime_picker('due_at', '', task.due_at[:10] if task and task.due_at else '', '', 'date') }}
-        </div>
-        <!-- 2026-08-08 direct feedback: Start date is editable on the
-             new-task form now too, not just when editing -- defaults to
-             today (routers/tasks.py::create_task falls back to today if
-             left blank either way; this just prefills the visible value
-             so "today" reads as the default rather than a blank field). -->
-        <div class="field">
-            <label>Start date</label>
-            {{ datetime_picker('start_at', '', task.start_at[:10] if task and task.start_at else today, '', 'date') }}
+        {% from "_datetime_picker.html" import datetime_picker with context %}
+        <!-- Start + Due merged into one field (2026-09-21 direct request:
+             "always have a merged due and start date", "prioritise
+             information better") -- same single-labeled-field treatment
+             _event_form_fields.html's own Start & end range picker
+             already gets, just two independent date-only pickers side by
+             side under one field instead of one range control (a task's
+             start/due are two separate dates, not a start/end span of
+             one thing, so datetime_picker's own 'range' mode -- which
+             ties both ends to a single calendar selection -- doesn't fit
+             here; each keeps its own 'date' mode picker). 2026-08-08
+             direct feedback (still true): Start date defaults to today
+             on a brand-new task, same as before this merge. -->
+        <div class="field field-wide task-start-due-field">
+            <label>Start &amp; due date</label>
+            <div class="task-start-due-row">
+                <div class="task-start-due-item">
+                    <span class="field-hint">Start</span>
+                    {{ datetime_picker('start_at', '', task.start_at[:10] if task and task.start_at else today, '', 'date') }}
+                </div>
+                <div class="task-start-due-item">
+                    <span class="field-hint">Due</span>
+                    {{ datetime_picker('due_at', '', task.due_at[:10] if task and task.due_at else '', '', 'date') }}
+                </div>
+            </div>
         </div>
         <!-- Status -- 2026-08-08 direct feedback ("rework the drop down
              menus for priority, status, Recurrence to look the same as
@@ -100,7 +108,7 @@
              own header comment. routers/tasks.py's create_task/
              update_task still just pass this straight through unparsed,
              completely unchanged. -->
-        <div class="field field-wide">
+        <div class="field">
             <label>Recurrence</label>
             <input type="text" name="recurrence" class="recurrence-input" value="{{ task.recurrence if task else '' }}">
         </div>
@@ -159,5 +167,15 @@
                 <input type="number" name="target_per_day" class="stepper-input" min="1" step="1" value="{{ task.target_per_day|int if task and task.target_per_day else 1 }}">
                 <button type="button" class="stepper-btn stepper-inc" aria-label="Increase daily target">+</button>
             </div>
+        </div>
+        <!-- Description -- last (2026-09-21 direct request: "prioritise
+             information better... description last") -- was the 2nd
+             field on this form, right after Title; every other field
+             (dates, status, labels, recurrence...) is more decision-
+             relevant at a glance than free-text notes, so it now sorts
+             behind all of them instead of pushing them below the fold. -->
+        <div class="field field-wide">
+            <label>Description</label>
+            <textarea name="description" rows="3">{{ task.description if task else '' }}</textarea>
         </div>
     </div>

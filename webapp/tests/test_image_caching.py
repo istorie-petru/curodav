@@ -178,32 +178,32 @@ class TestProfilePhotoVersion:
 
 
 class TestContactPhotoRoute:
-    def test_serves_photo_bytes_with_immutable_cache_control(self, conn):
+    def test_serves_photo_bytes_with_immutable_cache_control(self, conn, tmp_path):
         data = b"real-photo-bytes"
         _make_contact(conn, photo_b64=base64.b64encode(data).decode("ascii"), photo_type="JPEG")
-        resp = contacts_router.contact_photo_image("c1", conn=conn)
+        resp = contacts_router.contact_photo_image("c1", _photo_request(tmp_path), conn=conn)
         assert resp.body == data
         assert resp.media_type == "image/jpeg"
         assert resp.headers["cache-control"] == "public, max-age=31536000, immutable"
 
-    def test_404_when_contact_has_no_photo(self, conn):
+    def test_404_when_contact_has_no_photo(self, conn, tmp_path):
         _make_contact(conn)
         with pytest.raises(HTTPException) as excinfo:
-            contacts_router.contact_photo_image("c1", conn=conn)
+            contacts_router.contact_photo_image("c1", _photo_request(tmp_path), conn=conn)
         assert excinfo.value.status_code == 404
 
-    def test_404_for_unknown_contact(self, conn):
+    def test_404_for_unknown_contact(self, conn, tmp_path):
         with pytest.raises(HTTPException) as excinfo:
-            contacts_router.contact_photo_image("nope", conn=conn)
+            contacts_router.contact_photo_image("nope", _photo_request(tmp_path), conn=conn)
         assert excinfo.value.status_code == 404
 
-    def test_webp_photo_type_served_correctly(self, conn):
+    def test_webp_photo_type_served_correctly(self, conn, tmp_path):
         data = b"webp-bytes"
         _make_contact(conn, photo_b64=base64.b64encode(data).decode("ascii"), photo_type="WEBP")
-        resp = contacts_router.contact_photo_image("c1", conn=conn)
+        resp = contacts_router.contact_photo_image("c1", _photo_request(tmp_path), conn=conn)
         assert resp.media_type == "image/webp"
 
-    def test_a_real_stored_jpeg_is_served_transcoded_to_webp(self, conn):
+    def test_a_real_stored_jpeg_is_served_transcoded_to_webp(self, conn, tmp_path):
         # 2026-09-13 direct request: "contact images should be resource
         # efficient (webp) -- I'd prefer the frontend to serve webp
         # images, not the one in vcf directly." The two tests above use
@@ -223,7 +223,7 @@ class TestContactPhotoRoute:
         Image.new("RGB", (2, 2), color=(200, 40, 40)).save(buf, format="JPEG")
         jpeg_bytes = buf.getvalue()
         _make_contact(conn, photo_b64=base64.b64encode(jpeg_bytes).decode("ascii"), photo_type="JPEG")
-        resp = contacts_router.contact_photo_image("c1", conn=conn)
+        resp = contacts_router.contact_photo_image("c1", _photo_request(tmp_path), conn=conn)
         assert resp.media_type == "image/webp"
         assert resp.body != jpeg_bytes
         assert sniff_image_type(resp.body) == "webp"
@@ -239,7 +239,7 @@ class TestContactPhotoRoute:
             r, g, b = decoded.convert("RGB").getpixel((0, 0))
             assert abs(r - 200) <= 8 and abs(g - 40) <= 8 and abs(b - 40) <= 8
 
-    def test_a_real_stored_png_with_transparency_is_served_transcoded_to_webp(self, conn):
+    def test_a_real_stored_png_with_transparency_is_served_transcoded_to_webp(self, conn, tmp_path):
         # Same as above, but confirms a source format with an alpha
         # channel (PNG) round-trips through image_convert.to_webp's own
         # `convert("RGBA")` step without losing transparency -- flattening
@@ -252,7 +252,7 @@ class TestContactPhotoRoute:
         Image.new("RGBA", (2, 2), color=(10, 20, 30, 128)).save(buf, format="PNG")
         png_bytes = buf.getvalue()
         _make_contact(conn, photo_b64=base64.b64encode(png_bytes).decode("ascii"), photo_type="PNG")
-        resp = contacts_router.contact_photo_image("c1", conn=conn)
+        resp = contacts_router.contact_photo_image("c1", _photo_request(tmp_path), conn=conn)
         assert resp.media_type == "image/webp"
         with Image.open(io.BytesIO(resp.body)) as decoded:
             assert decoded.mode == "RGBA"
@@ -262,6 +262,33 @@ class TestContactPhotoRoute:
             # survived the convert("RGBA")+WebP round-trip rather than
             # getting flattened to a fully opaque pixel.
             assert abs(a - 128) <= 8
+
+    def test_second_request_is_served_from_cache_without_re_transcoding(self, conn, tmp_path, monkeypatch):
+        # 2026-09-18 (direct report: "contacts page is slow loading all the
+        # photos") -- confirms the actual fix: a second request for the same
+        # (unchanged) photo must not call image_convert.to_webp again at all,
+        # it should be served straight off disk.
+        from PIL import Image
+
+        buf = io.BytesIO()
+        Image.new("RGB", (2, 2), color=(50, 60, 70)).save(buf, format="JPEG")
+        jpeg_bytes = buf.getvalue()
+        _make_contact(conn, photo_b64=base64.b64encode(jpeg_bytes).decode("ascii"), photo_type="JPEG")
+
+        request = _photo_request(tmp_path)
+        first = contacts_router.contact_photo_image("c1", request, conn=conn)
+        cache_dir = request.app.state.settings.photo_cache_dir
+        assert any(cache_dir.iterdir()), "expected a cache file to be written on first request"
+
+        calls = []
+        real_to_webp = contacts_router.to_webp
+        monkeypatch.setattr(
+            contacts_router, "to_webp", lambda *a, **kw: calls.append(1) or real_to_webp(*a, **kw)
+        )
+        second = contacts_router.contact_photo_image("c1", _photo_request(tmp_path), conn=conn)
+        assert not calls, "to_webp should not run again once the transcode is cached"
+        assert second.body == first.body
+        assert second.media_type == "image/webp"
 
 
 class TestProfilePhotoRoute:
@@ -334,5 +361,24 @@ def _bare_request(path="/"):
         {
             "type": "http", "method": "GET", "path": path, "query_string": b"",
             "scheme": "http", "server": ("testserver", 80), "root_path": "", "headers": [],
+        }
+    )
+
+
+def _photo_request(tmp_path):
+    """A Request carrying just enough of `app.state.settings` for
+    contact_photo_image's content-hash cache (settings.photo_cache_dir) --
+    other Settings fields aren't touched by that route, so a real
+    config.Settings instance isn't needed here."""
+    from types import SimpleNamespace
+
+    from starlette.requests import Request
+
+    app = SimpleNamespace(state=SimpleNamespace(settings=SimpleNamespace(photo_cache_dir=tmp_path / "photo_cache")))
+    return Request(
+        {
+            "type": "http", "method": "GET", "path": "/", "query_string": b"",
+            "scheme": "http", "server": ("testserver", 80), "root_path": "", "headers": [],
+            "app": app,
         }
     )

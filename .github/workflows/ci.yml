@@ -1,0 +1,30 @@
+name: CI
+
+# Design-system unification pass (2026-09-17): sibling app Pineart already
+# gates its merges on a real test run (.github/workflows/ci.yml there);
+# this app's tests were previously enforced only locally (CLAUDE.md's "all
+# tests green or a change isn't done"), with deploy.yml firing on every
+# push to main regardless of whether anyone actually ran them first. Cheap,
+# and doesn't block local development the way Pineart's own comment on its
+# ci.yml puts it -- it only gates what merges (deploy.yml is intentionally
+# not made to depend on this; branch protection is the place to wire that
+# up if desired).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        working-directory: webapp
+        run: uv sync
+      - name: Run tests
+        working-directory: webapp
+        run: PYTHONPATH=src uv run python -m pytest -q

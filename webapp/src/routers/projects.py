@@ -118,6 +118,14 @@ def project_detail(name: str, request: Request, conn=Depends(get_db)):
         e for e in db.list_events(conn, start=now_iso)
         if name in (e.get("tags") or []) and e.get("start_at") and e["start_at"][:10] >= today_iso
     ]
+    # Direct request, 2026-09-21: "the color... of an event/task should be
+    # as the label's, not default on blue or any other accent color" --
+    # widget_event_dot() (_widget_items.html) reads calendar_color, same
+    # key/resolution every calendar grid and the Dashboard Agenda widget
+    # already use (db.annotate_item_colors). Deliberately before the
+    # deadline/task synthetic dicts get appended below -- those render
+    # through a different template branch that never reads this key.
+    db.annotate_item_colors(conn, events)
     # 2026-09-10 fix (audit-fixes-2.1.md session, caught while touching this
     # filter for the tasks-merge below): the line above used to compare the
     # FULL `now_iso` timestamp (wall-clock precision) against `start_at` --
@@ -175,6 +183,14 @@ def project_detail(name: str, request: Request, conn=Depends(get_db)):
         "request": request,
         "active_tab": "label",
         "project": label,
+        # base.html's sidebar quick-add link reads this to restrict the
+        # Labels picker to this project's own group -- direct request:
+        # "the label selector should only have labels from that group."
+        # Only set when there's an actual group to restrict to (a parent
+        # Space) -- a standalone project with no parent_name has nothing
+        # to scope by, same "None means unscoped" contract
+        # db.label_selector_scope itself returns.
+        "page_label_scope": name if label.get("parent_name") else None,
         "project_status": db.project_status(conn, label),
         "agenda_items": agenda_items,
         "columns": columns,

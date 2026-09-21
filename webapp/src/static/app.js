@@ -567,35 +567,36 @@ document.addEventListener("submit", (event) => {
   document.querySelectorAll(".widget-list-multiselect").forEach(updateMsSummary);
 })();
 
-// Dashboard masonry layout (dashboard.html's #dashboard-grid, both edit
-// and view mode -- 2026-08-02) -- a plain `display:grid` column grid
-// sizes every *row* to its tallest occupant, so a short widget next to a
-// tall one always left dead space under itself instead of letting
-// whatever comes next start right where it actually ends. This computes
-// real positions instead: each card still claims a `data-span` out of
-// `maxCols` virtual columns (12 as of 2026-08-30, up from 6 -- see
-// routers/dashboard.py's WIDGET_WIDTHS own comment for why: a manual
-// Width override was reinstated that needs an exact 25%/75% option,
-// which 6 columns can't express; every span was doubled at the same
-// time, so real-world widths are unchanged -- quarter=3/half=6/
-// three_quarters=9/full=12, third=4/two_thirds=8), but its top is
-// wherever those columns are *actually* free, tracked per-column as
-// cards are placed -- the standard "skyline" packing masonry libraries
-// use, just handwritten here since the dependency isn't worth it for one
-// grid on one page. (2026-08-30, same day: placement itself is best-fit,
-// not strict DOM order -- see the loop below its own comment.)
+// Dashboard row layout (dashboard.html's #dashboard-grid, both edit and
+// view mode -- 2026-08-02, reworked 2026-09-21 direct request: "Dashboard
+// Widgets that are on the same row should have a shared height,
+// calculated as the biggest value between the widgets on that row").
+//
+// 2026-08-02..2026-08-30 this used to be a hand-written "skyline" best-fit
+// bin-packer: cards could start at whatever top a shorter neighbor left
+// free, specifically so a short widget's dead space below it wouldn't
+// block the next widget from starting there. That's the opposite of what
+// this rework asks for -- row-mates now share one explicit height, which
+// necessarily reintroduces dead space under a widget shorter than its
+// row-mates (a deliberate, confirmed tradeoff, not an oversight). Cards
+// still each claim a `data-span` out of `maxCols` virtual columns (12 as
+// of 2026-08-30 -- see routers/dashboard.py's WIDGET_WIDTHS own comment:
+// quarter=3/half=6/three_quarters=9/full=12, third=4/two_thirds=8), but
+// placement is now plain strict-DOM-order row wrapping (packRows below):
+// walk cards in order, start a new row whenever the next card's span
+// would overflow the current row's remaining columns, same as a normal
+// CSS grid/flex-wrap would place them -- no best-fit reordering.
 //
 // Runs unconditionally (not gated behind edit mode -- unlike every other
-// dashboard grid script below) because the gaps this fixes are exactly
-// as visible just looking at the dashboard as they are while rearranging
-// it. A MutationObserver on the grid re-runs it automatically after
-// anything that changes a card's size or order (drag reorder's
-// insertBefore, resize's data-span writes, a delete-undo hide/unhide) --
-// deliberately not threaded as an explicit call through every one of
-// those scripts individually, since that list would only grow and be
-// easy to miss one of. rAF-coalesced so a burst of mutations in one
-// frame (e.g. every pointermove during a drag) still only computes
-// layout once per frame.
+// dashboard grid script below) since row alignment matters just looking
+// at the dashboard as much as while rearranging it. A MutationObserver on
+// the grid re-runs it automatically after anything that changes a card's
+// size or order (drag reorder's insertBefore, resize's data-span writes,
+// a delete-undo hide/unhide) -- deliberately not threaded as an explicit
+// call through every one of those scripts individually, since that list
+// would only grow and be easy to miss one of. rAF-coalesced so a burst of
+// mutations in one frame (e.g. every pointermove during a drag) still
+// only computes layout once per frame.
 (function () {
   const grid = document.getElementById("dashboard-grid");
   if (!grid) return;
@@ -631,38 +632,30 @@ document.addEventListener("submit", (event) => {
     return card.style.display !== "none";
   }
 
-  // Skyline packing (shared by the dry-run and the real pass below) --
-  // takes a column count and returns, for each card in order, which
-  // column it starts in and how tall each column's skyline was left. Pure
+  // Strict row wrapping (shared by the dry-run and the real pass below) --
+  // walks cards in DOM order, starting a new row whenever the next card's
+  // span would overflow the current row's remaining columns out of
+  // `cols` (same wrapping a normal CSS grid/flex-wrap would do). Pure
   // index math, no pixel sizes or DOM involved, so it's cheap to run
   // twice: once just to find out how many of the `cols` virtual columns
-  // this particular set of cards actually ends up touching, and again for
-  // real once that number is known (see effectiveCols below).
-  function packColumns(cards, cols, spanOf) {
-    const colHeights = new Array(cols).fill(0);
-    const placements = [];
-    let maxTouched = 0;
+  // this particular set of cards actually ends up touching (see
+  // effectiveCols below), and again for real once that number is known.
+  function packRows(cards, cols, spanOf) {
+    const rows = [];
+    let row = [];
+    let rowWidth = 0;
     cards.forEach((card) => {
       const span = spanOf(card, cols);
-      let bestStart = 0;
-      let bestTop = Infinity;
-      for (let start = 0; start <= cols - span; start++) {
-        const top = Math.max(...colHeights.slice(start, start + span));
-        if (top < bestTop) {
-          bestTop = top;
-          bestStart = start;
-        }
+      if (row.length && rowWidth + span > cols) {
+        rows.push(row);
+        row = [];
+        rowWidth = 0;
       }
-      // Real height isn't known yet in the dry run (no DOM writes happen
-      // here), so column-height bookkeeping uses a placeholder of 1 per
-      // card -- enough to make the skyline algorithm's "shortest column"
-      // choice keep behaving the same way run to run, without needing to
-      // duplicate the real bottom/GAP math from the pixel pass below.
-      for (let i = bestStart; i < bestStart + span; i++) colHeights[i] += 1;
-      maxTouched = Math.max(maxTouched, bestStart + span);
-      placements.push({ card, span, bestStart });
+      row.push({ card, span });
+      rowWidth += span;
     });
-    return { placements, maxTouched };
+    if (row.length) rows.push(row);
+    return rows;
   }
 
   function layout() {
@@ -683,94 +676,62 @@ document.addEventListener("submit", (event) => {
     // untouched columns sat there as dead space on the right forever,
     // and every card's own pixel width was computed against a colWidth
     // narrower than the space actually available. Fix: a cheap dry run
-    // (packColumns, pure index math, no DOM) using the full column count
+    // (packRows, pure index math, no DOM) using the full column count
     // first, just to find out how many columns this actual set of cards
-    // ends up touching -- then the real pass below uses THAT as its
-    // column count, so colWidth (and therefore every card's width) is
-    // computed against the space genuinely in use, not an assumed max. A
-    // dashboard with enough widgets to fill every column anyway sees no
-    // change at all (effectiveCols === maxCols).
-    const dryRun = packColumns(cards, maxCols, effectiveSpan);
-    const cols = Math.max(1, dryRun.maxTouched);
+    // ends up touching (the widest row) -- then the real pass below uses
+    // THAT as its column count, so colWidth (and therefore every card's
+    // width) is computed against the space genuinely in use, not an
+    // assumed max. A dashboard with enough widgets to fill every column
+    // anyway sees no change at all (effectiveCols === maxCols).
+    const dryRows = packRows(cards, maxCols, effectiveSpan);
+    let cols = 1;
+    dryRows.forEach((row) => {
+      cols = Math.max(cols, row.reduce((sum, entry) => sum + entry.span, 0));
+    });
     const colWidth = (containerWidth - GAP * (cols - 1)) / cols;
 
-    // Width only ever depends on a card's own span (not on which column it
-    // lands in), so every card's width can be set -- and its real height
-    // measured -- up front, in one batched write-then-read pass (cheaper
-    // than the old interleaved write/measure/write/measure per card, and
-    // it's what the best-fit placement loop below needs anyway: it has to
-    // know every remaining card's height *before* choosing which one to
-    // place next, not just the next one in DOM order).
-    const remaining = cards.map((card) => {
-      const span = effectiveSpan(card, cols);
-      const width = span * colWidth + (span - 1) * GAP;
-      card.style.width = `${width}px`;
-      return { card, span };
-    });
-    remaining.forEach((entry) => {
-      // offsetHeight forces the width write above to actually apply before
-      // measuring -- same reason the old per-card version read it right
-      // after setting width.
-      entry.height = entry.card.offsetHeight;
+    // Re-pack against the real `cols` (not `maxCols`) -- effectiveSpan
+    // clamps to whichever column count it's given, so a span could clamp
+    // differently here than it did in the dry run above.
+    const rows = packRows(cards, cols, effectiveSpan);
+
+    // Width only ever depends on a card's own span, so every card's width
+    // can be set -- and its real natural height measured -- in one
+    // batched write-then-read pass per row (offsetHeight forces the width
+    // write to actually apply before measuring). Direct request,
+    // 2026-09-21 ("widgets on the same row should have a shared height,
+    // calculated as the biggest value between the widgets on that row"):
+    // every card in a row is then stretched to that row's tallest
+    // measured height, not left at its own natural height -- the one real
+    // behavior change from the masonry packer this replaced.
+    let top = 0;
+    rows.forEach((row) => {
+      let left = 0;
+      let rowHeight = 0;
+      const entries = row.map(({ card, span }) => {
+        const width = span * colWidth + (span - 1) * GAP;
+        card.style.width = `${width}px`;
+        return { card, span, width };
+      });
+      entries.forEach((entry) => {
+        entry.height = entry.card.offsetHeight;
+        rowHeight = Math.max(rowHeight, entry.height);
+      });
+      entries.forEach((entry) => {
+        entry.card.style.left = `${left}px`;
+        entry.card.style.top = `${top}px`;
+        entry.card.style.height = `${rowHeight}px`;
+        left += entry.width + GAP;
+      });
+      top += rowHeight + GAP;
     });
 
-    // Best-fit placement (2026-08-30, direct report: "the way widgets are
-    // aranged is not ok" -- a short widget (e.g. a bare Spaces & Projects
-    // cards instance with just a couple tiles) landing next to a much
-    // taller one left the short column dead for the rest of the page,
-    // because strict DOM-order placement could only ever offer that gap to
-    // *whichever widget happened to come next*, even when that widget was
-    // too wide to fit in it -- every valid starting position for a 3-wide
-    // widget touching a 2-wide gap next to a tall 4-wide neighbor is
-    // already tall, so it was forced to the very bottom regardless, and
-    // nothing narrower ever got a chance at the gap it *could* have filled).
-    // Rather than committing to cards in strict DOM order, every remaining
-    // card is re-considered on each iteration and whichever one achieves
-    // the single lowest `top` anywhere on the grid is placed next -- a
-    // standard best-fit bin-packing, not a rewrite of the packing model
-    // itself (still the same span/column math, still the same "shortest
-    // valid column range" search per card). Ties (the overwhelmingly
-    // common case -- no shorter alternative actually available to backfill
-    // with) resolve to whichever card comes first in `remaining`, i.e. DOM
-    // order -- `<` not `<=` below only ever replaces the current best on a
-    // strictly better fit, so a normal row with no gap-filling opportunity
-    // places identically to before, card by card, in order. Only ever
-    // reorders visually when doing so measurably reduces height; never
-    // touches the DOM itself (drag-to-reorder above reads real DOM order,
-    // untouched by this purely visual left/top).
-    const colHeights = new Array(cols).fill(0);
-    let maxBottom = 0;
-    while (remaining.length) {
-      let bestIdx = -1;
-      let bestStart = 0;
-      let bestTop = Infinity;
-      for (let idx = 0; idx < remaining.length; idx++) {
-        const span = remaining[idx].span;
-        for (let start = 0; start <= cols - span; start++) {
-          const top = Math.max(...colHeights.slice(start, start + span));
-          if (top < bestTop) {
-            bestTop = top;
-            bestStart = start;
-            bestIdx = idx;
-          }
-        }
-      }
-      const { card, span, height } = remaining[bestIdx];
-      remaining.splice(bestIdx, 1);
-      const left = bestStart * (colWidth + GAP);
-      card.style.left = `${left}px`;
-      card.style.top = `${bestTop}px`;
-      const bottom = bestTop + height;
-      maxBottom = Math.max(maxBottom, bottom);
-      // GAP is added here, not to `bottom` itself -- `bottom` (the real
-      // edge of this card) is what maxBottom/grid.style.height below
-      // needs, but the *next* card stacked under this one in the same
-      // column has to start GAP further down than that, or they touch
-      // with zero space between them.
-      for (let i = bestStart; i < bestStart + span; i++) colHeights[i] = bottom + GAP;
-    }
-
-    grid.style.height = `${maxBottom}px`;
+    // `top` already has one trailing GAP past the last row's bottom edge
+    // (added unconditionally inside the loop above, same as every other
+    // row-to-row gap) -- strip it back off so the grid's own height
+    // doesn't reserve an extra gap's worth of space past the real last
+    // card.
+    grid.style.height = `${Math.max(0, top - GAP)}px`;
   }
 
   let rafId = null;

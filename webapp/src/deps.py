@@ -72,6 +72,39 @@ HABIT_STREAK_TERMINOLOGY_KEY = "habit_streak_terminology"
 # per-request-memoized global registered here, unlike the other keys
 # above: nothing outside the three widget-grid pages needs it.
 EDIT_MODE_KEY = "edit_mode_enabled"
+# 2026-09-17 (design-system unification pass, shared spec at
+# /home/peter/Claude/Projects/DESIGN_SYSTEM.md) -- "Accent color" (Settings
+# > Appearance): one of 8 fixed presets (a free color picker was
+# deliberately rejected -- Pineart, the sibling app this pass unifies
+# with, offers the same 8 presets in its own Settings so a user picking
+# "Teal" gets the same color family in both). Stored as the preset's key
+# ("blue", "red", ...), not a raw hex -- validated against ACCENT_PRESETS
+# below on write (routers/settings.py's set_accent_color) so app_meta can
+# never hold a color outside the offered set. Read by base.html, which
+# injects the matching hex as a small inline <style> override for
+# style.css's own --accent (server-side, before first paint -- no FOUC
+# risk the way the client-only theme choice has, since this is plain
+# SSR). Default "blue" -- an existing install that's never touched this
+# gets exactly the accent it already had before this feature existed.
+ACCENT_COLOR_KEY = "accent_color"
+# Same 8 keys/names/hex values as Pineart's own accent picker -- see
+# DESIGN_SYSTEM.md for the shared spec and the contrast-ratio reasoning
+# (each hex is minimally darkened from the "obvious" brand color so it
+# clears 4.5:1 against white text, since both apps put white text on a
+# filled accent button). "blue" is this app's own pre-existing default
+# accent; "red" is Pineart's -- keeping both as options in both apps
+# means neither app's existing users see their color disappear.
+ACCENT_PRESETS = [
+    {"key": "blue", "name": "Blue", "hex": "#0070eb"},
+    {"key": "red", "name": "Red", "hex": "#e42735"},
+    {"key": "purple", "name": "Purple", "hex": "#7857ff"},
+    {"key": "green", "name": "Green", "hex": "#1b8849"},
+    {"key": "teal", "name": "Teal", "hex": "#0d8177"},
+    {"key": "orange", "name": "Orange", "hex": "#b95d18"},
+    {"key": "pink", "name": "Pink", "hex": "#d6336c"},
+    {"key": "indigo", "name": "Indigo", "hex": "#4c51bf"},
+]
+ACCENT_PRESET_BY_KEY = {p["key"]: p for p in ACCENT_PRESETS}
 # 2026-09-09 (direct request, Settings > General) -- "Hide sleep hours in
 # Planner": off by default ("", an existing install that's never touched
 # this), "1" when on. Only meaningful on the Week view's grid
@@ -212,7 +245,7 @@ def _stable_color(seed: str) -> str:
 templates.env.globals["stable_color"] = _stable_color
 
 
-def _avatar(contact: dict | None, cls: str = "") -> Markup:
+def _avatar(contact: dict | None, cls: str = "", lazy: bool = False) -> Markup:
     """Renders a contact's (or the app user's own profile) avatar -- their
     uploaded photo if they have one, otherwise the same initials-in-a-
     circle fallback every avatar spot used before photos existed. One
@@ -246,8 +279,14 @@ def _avatar(contact: dict | None, cls: str = "") -> Markup:
     classes = f"avatar-circle {cls}".strip()
     photo_url = contact.get("photo_url")
     photo_b64 = contact.get("photo_b64")
+    # `lazy=True` (2026-09-18, direct report: "contacts page is slow loading
+    # all the photos") -- only the two many-contacts-at-once call sites
+    # (_contacts_body.html, _widget_contact_list.html) pass this; every
+    # single-avatar call site (profile photo, contact detail/form) leaves it
+    # False, since there's nothing off-screen to defer there.
+    loading_attrs = ' loading="lazy" decoding="async"' if lazy else ""
     if photo_url:
-        return Markup(f'<img class="{classes}" src="{escape(photo_url)}" alt="">')
+        return Markup(f'<img class="{classes}" src="{escape(photo_url)}" alt=""{loading_attrs}>')
     if photo_b64:
         # `photo_type` is normally one of this app's own known-safe values
         # (routers/contacts.py's upload allowlist), but a contact synced in
@@ -487,6 +526,23 @@ def _edit_mode_enabled(request: Request) -> bool:
 
 
 templates.env.globals["edit_mode_enabled"] = _edit_mode_enabled
+
+
+def _accent_color_hex(request: Request) -> str:
+    """The hex value for the signed-in user's chosen accent preset
+    (Settings > Appearance's "Accent color", see ACCENT_COLOR_KEY's own
+    comment above). Same per-request-memoized app_meta pattern as
+    show_label_icons()/edit_mode_enabled() above. Falls back to "blue"
+    (this app's own pre-existing default) both when nothing's been chosen
+    yet and if app_meta somehow holds a key outside ACCENT_PRESETS (a
+    stale value from a since-removed preset, say) -- base.html calls this
+    on every page render, so it can never raise."""
+    key = _cached_app_meta(request, ACCENT_COLOR_KEY, "blue")
+    preset = ACCENT_PRESET_BY_KEY.get(key, ACCENT_PRESET_BY_KEY["blue"])
+    return preset["hex"]
+
+
+templates.env.globals["accent_color_hex"] = _accent_color_hex
 
 
 def _page_header_banner(request: Request) -> dict | None:

@@ -36,6 +36,29 @@
             <button type="button" class="seg-btn" data-theme-choice="dark">{{ icon('moon', 'icon-sm') }} Dark</button>
         </div>
     </div>
+    <!-- Accent color (2026-09-17, design-system unification pass) -- 8
+         fixed presets, not a free color picker (see deps.py's
+         ACCENT_COLOR_KEY comment and /home/peter/Claude/Projects/
+         DESIGN_SYSTEM.md for why) -- same swatch set Pineart's own
+         Settings > Appearance offers. Plain autosubmit form, same pattern
+         as "Show icons next to labels" below, posting straight to
+         routers/settings.py's set_accent_color. -->
+    <form class="settings-field-row" method="post" action="/settings/appearance/accent">
+        <span class="settings-field-label">Accent color
+            <span class="settings-field-hint">Used for buttons, links, and highlights throughout the app</span>
+        </span>
+        <span class="spacer"></span>
+        <div class="accent-swatch-picker" role="radiogroup" aria-label="Accent color">
+            {% for preset in accent_presets %}
+            <label class="color-swatch-label" title="{{ preset.name }}">
+                <input type="radio" name="color" value="{{ preset.key }}"
+                       class="color-swatch accent-swatch-{{ preset.key }}"
+                       {% if current_accent_color == preset.key %}checked{% endif %}
+                       data-change-submit aria-label="{{ preset.name }}">
+            </label>
+            {% endfor %}
+        </div>
+    </form>
     <!-- Show icons next to labels (2026-08-09) -- when on, every label pill
          in the app (task/event label pills, Tasks table/board, calendar
          chips) renders the label's assigned icon before its name. Same

@@ -88,6 +88,7 @@ def _settings(*, enabled=True, **overrides) -> Settings:
         db_path=Path(tempfile.gettempdir()) / f"cc-auth-test-{uuid.uuid4().hex}.sqlite",
         sync_interval_seconds=60,
         backup_dir=Path(tempfile.gettempdir()) / f"cc-auth-test-backups-{uuid.uuid4().hex}",
+        photo_cache_dir=Path(tempfile.gettempdir()) / f"cc-auth-test-photo-cache-{uuid.uuid4().hex}",
     )
     if enabled:
         base = replace(
@@ -556,6 +557,10 @@ def _auth_app(settings):
     def ping():
         return JSONResponse({"pong": True})
 
+    @app.get("/health")
+    def health():
+        return JSONResponse({"status": "ok"})
+
     app.add_middleware(auth.AuthMiddleware)
     return app
 
@@ -591,6 +596,15 @@ class TestAuthMiddleware:
         client = TestClient(_auth_app(_settings()), follow_redirects=False)
         assert client.get("/login").status_code != 401
         assert client.get("/login").status_code != 302
+
+    def test_health_is_public(self):
+        # 2026-09-17 (design-system unification pass, deploy alignment) --
+        # scripts/curodav-ctl polls this as a plain unauthenticated curl
+        # right after every deploy/rollback, same reasoning as /login.
+        client = TestClient(_auth_app(_settings()), follow_redirects=False)
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
 
     def test_disabled_auth_passes_everything(self):
         client = TestClient(_auth_app(_settings(enabled=False)), follow_redirects=False)

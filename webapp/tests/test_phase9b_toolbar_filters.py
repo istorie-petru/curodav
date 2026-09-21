@@ -105,6 +105,16 @@ def _radios(body: str, name: str) -> list[tuple[str, bool]]:
     return out
 
 
+def _checkboxes(body: str, name: str) -> list[tuple[str, bool]]:
+    """Same as _radios above, for a `type="checkbox"` filter (Contacts'
+    Label filter, 2026-09-21 rework: single-select radios -> multi-select
+    checkboxes)."""
+    out = []
+    for m in re.finditer(r'<input type="checkbox" name="%s" value="([^"]*)"[^>]*?>' % re.escape(name), body, re.S):
+        out.append((m.group(1), "checked" in m.group(0)))
+    return out
+
+
 def _toolbar_div_count(body: str) -> int:
     """Counts top-level `.toolbar` divs (a class attribute that starts
     with "toolbar", i.e. `class="toolbar"` or `class="toolbar ..."`) --
@@ -250,7 +260,12 @@ class TestActiveFilterShownInDropdown:
         body = resp.body.decode()
         assert ("", True) in _radios(body, "label")
 
-    def test_contacts_label_radio_checked_when_tag_filter_is_active(self, conn):
+    def test_contacts_label_checkbox_checked_when_tag_filter_is_active(self, conn):
+        # 2026-09-21 rework: single-select radios -> multi-select
+        # checkboxes (direct request, "refactored as a checkbox drop
+        # down"). contacts_filtered=1 must be present for an explicit
+        # ?tag= pick to actually apply -- see
+        # test_phase7_contacts_global.py's TestContactsTagFilter.
         db.upsert_contact(
             conn,
             {
@@ -261,19 +276,29 @@ class TestActiveFilterShownInDropdown:
                 "updated_at": _now(),
             },
         )
-        resp = contacts_router.list_contacts(_request("/contacts"), tag="Friends", conn=conn)
+        req = Request(
+            {
+                "type": "http", "method": "GET", "path": "/contacts",
+                "query_string": b"tag=Friends&contacts_filtered=1",
+                "scheme": "http", "server": ("testserver", 80), "root_path": "", "headers": [],
+            }
+        )
+        resp = contacts_router.list_contacts(req, tag=["Friends"], conn=conn)
         body = resp.body.decode()
-        # Radio values are lowercased (display name stays "Friends") so the
-        # router's case-insensitive match still highlights the right pick.
-        assert ("friends", True) in _radios(body, "tag")
-        assert ("", False) in _radios(body, "tag")
+        # Checkbox values are lowercased (display name stays "Friends")
+        # so the router's case-insensitive match still highlights the
+        # right pick.
+        assert ("friends", True) in _checkboxes(body, "tag")
         assert "toolbar-filters-checkbox" not in body
 
-    def test_contacts_no_tag_filter_selects_all_labels(self, conn):
+    def test_contacts_no_contacts_yet_renders_no_filter_dropdown(self, conn):
+        # No contacts seeded -> contact_tags is empty -> contacts_list.html's
+        # {% if contact_tags %} guard skips the filter dropdown entirely,
+        # same as before this was a checkbox filter.
         resp = contacts_router.list_contacts(_request("/contacts"), conn=conn)
         body = resp.body.decode()
         assert "toolbar-filters-checkbox" not in body
-        assert _radios(body, "tag") == []
+        assert _checkboxes(body, "tag") == []
 
 
 class TestIconOnlyFiltersNextToAdd:

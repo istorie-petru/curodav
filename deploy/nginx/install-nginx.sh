@@ -29,8 +29,16 @@ ln -sf "$SITE_FILE" /etc/nginx/sites-enabled/curodav
 # limit_req_zone directive it defines is only legal in nginx's http {}
 # context, and Debian's stock nginx.conf already includes conf.d/*.conf
 # from there (same mechanism it uses for sites-enabled/*).
+#
+# RATE_LIMIT_IP_SOURCE (2026-09-18, set by curodav-ctl based on --proxy=):
+# the nginx variable to key rate limiting on. Defaults to the Cloudflare
+# Tunnel header (curodav-ratelimit.conf.template's own comment explains
+# why); a manual/non-Cloudflare reverse proxy setup should pass
+# $remote_addr instead, since there's no CF-Connecting-IP header to trust
+# in that case.
 echo "==> Installing Radicale rate-limit zone..."
-cp "${SCRIPT_DIR}/curodav-ratelimit.conf" /etc/nginx/conf.d/curodav-ratelimit.conf
+IP_SOURCE="${RATE_LIMIT_IP_SOURCE:-\$http_cf_connecting_ip}"
+sed "s|{{IP_SOURCE}}|${IP_SOURCE}|g" "${SCRIPT_DIR}/curodav-ratelimit.conf.template" > /etc/nginx/conf.d/curodav-ratelimit.conf
 
 if [ -e /etc/nginx/sites-enabled/default ]; then
   echo "==> Removing the stock default site..."

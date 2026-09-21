@@ -276,13 +276,18 @@ def _filtered_events_expanded(conn, config: dict, window_start: date, window_end
     row in it; this just turns each one into 0+ real occurrence rows dated
     inside the window instead of leaving it as its own unexpanded anchor)."""
     events = _filtered_events(conn, config)
-    return recurrence_expand.expand_events(
+    expanded = recurrence_expand.expand_events(
         events,
         window_start,
         window_end,
         db.list_holidays_by_calendar(conn),
         db.list_event_occurrence_overrides_by_master(conn),
     )
+    # Direct request, 2026-09-21: "the color... of an event/task should be
+    # as the label's, not default on blue or any other accent color" --
+    # the Agenda widget's event dot (widget_event_dot(), _widget_items.
+    # html) reads calendar_color the same way every calendar grid does.
+    return db.annotate_item_colors(conn, expanded)
 
 
 # --------------------------------------------------------------------- #
@@ -1989,14 +1994,36 @@ def _page_banner_context(conn, scope: str) -> dict:
     is currently showing) so _page_banner.html's `/banners/image` URL
     points at the right stored image rather than looking up this page's
     own (unset) scope with the default banner's version hash."""
-    own_banner = db.get_page_banner(conn, scope)
+    # Final labels-page iteration (direct request, 2026-09-21): "remove
+    # the ability to have... banners for labels or projects grouped
+    # under a space" -- a grouped label/Project (parent_name set, and
+    # not itself a Space) always shows its parent Space's own banner
+    # instead of one of its own, same "follow the space" treatment
+    # db.effective_label_config's own _resolve_inherited_color already
+    # gives `color`. `banner_grouped_under` (the parent's name, or None)
+    # is what each caller's own Add/Change-banner button reads to hide
+    # itself -- Home (scope="") is never grouped, so this is a no-op there.
+    grouped_under = None
+    if scope:
+        label = db.effective_label_config(conn, scope)
+        if label.get("parent_name") and not label.get("generate_space"):
+            grouped_under = label["parent_name"]
+    banner_scope_lookup = grouped_under or scope
+    own_banner = db.get_page_banner(conn, banner_scope_lookup)
     if own_banner:
-        return {"banner": own_banner, "has_own_banner": True, "banner_scope": scope, "banner_image_scope": scope}
+        return {
+            "banner": own_banner,
+            "has_own_banner": not grouped_under,
+            "banner_scope": scope,
+            "banner_image_scope": banner_scope_lookup,
+            "banner_grouped_under": grouped_under,
+        }
     return {
         "banner": db.get_page_banner(conn, PAGE_HEADER_BANNER_SCOPE),
         "has_own_banner": False,
         "banner_scope": scope,
         "banner_image_scope": PAGE_HEADER_BANNER_SCOPE,
+        "banner_grouped_under": grouped_under,
     }
 
 
@@ -2060,7 +2087,7 @@ def today_redirect():
 
 
 @router.get("/quick/add")
-def quick_add_form(request: Request, default_tab: str = "task", conn=Depends(get_db)):
+def quick_add_form(request: Request, default_tab: str = "task", scope: str = "", conn=Depends(get_db)):
     # Merged task/event/contact/label quick-add (2026-08-10, grew Contact/
     # Label tabs 2026-09-14) -- the sidebar's single global "+" button
     # opens this instead of four separate New task / New event / New
@@ -2080,6 +2107,20 @@ def quick_add_form(request: Request, default_tab: str = "task", conn=Depends(get
         default_tab = "task"
 
     tag_names = db.list_tag_names_in_use(conn)
+    # Direct request: "On space's dashboard, project pages or label's
+    # page, the label selector should only have labels from that group."
+    # `scope` is the current page's own label name (base.html's sidebar
+    # quick-add link, set only on a Space/Project/plain-label page --
+    # every other page omits it, leaving this unscoped exactly as
+    # before). Uses the group's full child list, not an intersection with
+    # "already in use" -- a freshly-added course label with zero tagged
+    # items yet must still be pickable here, same "offer it even though
+    # nothing points at it yet" reasoning `project` prefill just above
+    # this route's own new_task_form sibling already applies.
+    if scope:
+        allowed = db.label_selector_scope(conn, scope)
+        if allowed is not None:
+            tag_names = allowed
     return templates.TemplateResponse(
         "quick_add.html",
         {

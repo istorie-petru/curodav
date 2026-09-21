@@ -44,15 +44,22 @@
      specifically for exactly this reason -- see that rule's own comment. -->
 <form method="get" action="/contacts" class="filter-bar" id="contacts-filters-form">
     {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+    {# Direct request: "the label filter... normally is filtered to show
+       all labels and only the `archived` one is not checked." Submitted
+       alongside every checkbox change (_filter_dropdown.html's
+       data-change-submit posts the whole form) so routers/contacts.py
+       can tell "no ?tag= params because nothing was ever touched" (apply
+       the Archived-excluded default) apart from "no ?tag= params because
+       the user unchecked everything" (respect that literally). #}
+    <input type="hidden" name="contacts_filtered" value="1">
 </form>
 {% if contact_tags %}
-{% set _lf_items = [{'value': '', 'name': 'All labels'}] %}
-{% for _t in contact_tags %}{% set _ = _lf_items.append({'value': _t|lower, 'name': _t}) %}{% endfor %}
 {% set fd_name = 'tag' %}
 {% set fd_label = 'Label' %}
-{% set fd_items = _lf_items %}
-{% set fd_selected = active_tag %}
-{% set fd_mode = 'single' %}
+{% set fd_items = [] %}
+{% for _t in contact_tags %}{% set _ = fd_items.append({'value': _t|lower, 'name': _t}) %}{% endfor %}
+{% set fd_selected = active_tags %}
+{% set fd_mode = 'multi' %}
 {% set fd_form_id = 'contacts-filters-form' %}
 {% include '_filter_dropdown.html' %}
 {% endif %}

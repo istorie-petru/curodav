@@ -40,7 +40,7 @@
 <div class="contact-list-widget">
     {% for c in data.contacts %}
     <a class="contact-list-row" href="/contacts/{{ c.uid }}" data-modal>
-        {{ avatar(c) }}
+        {{ avatar(c, lazy=True) }}
         <span class="contact-list-main">
             <span class="contact-list-name">{{ c.full_name or c.org or '(no name)' }}</span>
             {% if c.org and c.full_name %}<span class="contact-list-org">{{ c.org }}</span>{% endif %}
