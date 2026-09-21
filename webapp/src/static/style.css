@@ -1498,6 +1498,14 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    can know). */
 .label-cell-icon { display: inline-flex; flex-shrink: 0; }
 .label-name { font-weight: 500; color: var(--fg-primary); }
+/* Settings > Labels only (direct request, 2026-09-21: "remove the bold
+   from labels that are not spaces") -- this table's own rows drop back
+   to the plain body weight, not the base `.label-name` rule's 500
+   (medium) above, which still reads heavy enough to look bold at this
+   row size/on a tinted background. `.labels-space-row` (below) still
+   overrides back to 600 for a Space's own row -- same specificity, but
+   declared later in the cascade, so it wins for that one row kind. */
+.labels-table .label-name{font-weight:400;}
 
 /* Settings > Labels: a single table (2026-09-16, direct request --
    "don't want the header repeated for every group" / "don't want

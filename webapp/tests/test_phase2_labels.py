@@ -1441,3 +1441,18 @@ class TestSettingsLabelsGroupedTables:
         groceries_row = body.split('data-label-name="Groceries"')[1].split("</tr>")[0]
         assert 'data-style="color: var(--cal-accent-orange)"' in groceries_row
 
+    def test_only_the_space_row_is_bold(self):
+        # Direct request: "remove the bold from labels that are not
+        # spaces." .label-name's own base rule is font-weight:500, which
+        # still read bold-ish at this row size/on a tinted background --
+        # .labels-table scopes a plain 400 back in for every row, and
+        # .labels-space-row's own pre-existing 600 override (declared
+        # later in the cascade, same specificity) still wins for a
+        # Space's own row specifically.
+        css = (Path(__file__).resolve().parent.parent / "src" / "static" / "style.css").read_text()
+        assert ".labels-table .label-name{font-weight:400;}" in css
+        assert ".labels-space-row .label-name{font-weight:600;}" in css
+        table_rule_pos = css.index(".labels-table .label-name{font-weight:400;}")
+        space_rule_pos = css.index(".labels-space-row .label-name{font-weight:600;}")
+        assert table_rule_pos < space_rule_pos  # later wins at equal specificity
+
