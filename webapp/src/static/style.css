@@ -2877,10 +2877,21 @@ img.avatar-circle{object-fit:cover;}
 .reminders-custom-input{margin-bottom:0;}
 .field-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:0 var(--space-4);}
 .field-grid .field-wide{grid-column:span 2;}
-/* All-day events have no meaningful start/end time -- hiding the pair
-   while the All day checkbox is checked (event_form.html), same `:has()`
-   progressive-disclosure pattern the professor/class-type fields use. */
-#event-form:has(#all_day:checked) .event-start-end-field{display:none;}
+/* 2026-09-21 (direct report): this used to hide the WHOLE start/end
+   picker -- date included -- the moment All day was checked, which made
+   it impossible to pick which day an all-day event actually falls on
+   (the trigger button that opens the picker's popover lived inside
+   `.event-start-end-field`, so hiding the field hid the only way to open
+   it). An all-day event still needs a real date, just not a meaningful
+   time-of-day -- the date picker must stay reachable regardless of this
+   checkbox. datetime_picker.js's range-mode popover still renders an
+   hour row alongside the calendar even when All day is checked (no
+   "date-only range" mode exists yet to suppress it -- the popover is
+   portaled out to #multiselect-portal on open, outside #event-form
+   entirely, so this selector can't reach it to hide just that part); the
+   hour value submitted is simply not read anywhere all_day=1 events are
+   displayed (event_detail.html/_calendar_*_grid.html all branch on
+   `event.all_day` before ever formatting start_at as a time). */
 /* Holiday calendar / Exclude Saturday / Exclude Sunday (_event_form_fields.html,
    toggled via the `hidden` attribute by static/recurrence_picker.js's sync())
    -- `.field{display:flex}` above is author CSS of equal specificity to the
