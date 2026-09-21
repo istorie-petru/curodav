@@ -72,19 +72,20 @@
     </td>
     <td>
         <div class="label-cell">
-            {# 2026-09-21 fix (direct report: "not just the space to be
-               white, cmon") -- this span had NO color of its own, unlike
-               _label_row's own icon/name below, which have always
-               carried this exact same per-span data-style. It relied
-               entirely on the now-removed --row-tint-fg CSS rule for
-               color, so dropping that rule (previous commit) silently
-               left it at the plain default text color instead of the
-               Space's own. Matches _label_row exactly now -- both read
-               the same effective (Space) color, just via the same
-               per-span mechanism instead of one depending on a
-               row-level rule the other never used. #}
-            <span class="label-cell-icon" data-style="color: var(--cal-accent-{{ group.space.color or 'blue' }})">{{ icon(group.space.icon or 'layers', 'icon-sm') }}</span>
-            <span class="label-name" data-style="color: var(--cal-accent-{{ group.space.color or 'blue' }})">{{ group.space.name }}</span>
+            {# 2026-09-21, final word (direct report, all caps: "MAKE THEM
+               THE DEFAULT TEXT COLOR NOT STUPID COLORFUL TEXT THAT I
+               CAN'T READ") -- no color override at all, on either span.
+               A colored-text-on-colored-tint combination is exactly what
+               reads badly; the tint alone (--row-tint on the <tr>)
+               already carries "this belongs to this Space" -- text does
+               not need to repeat that signal in a way that fights
+               readability. Same treatment _label_row's own icon/name get
+               below when grouped (see that macro's own comment) -- only
+               an UNGROUPED plain label's row (default, untinted
+               background) still colors its icon/name, unchanged, since
+               there's no tint there for colored text to clash with. #}
+            <span class="label-cell-icon">{{ icon(group.space.icon or 'layers', 'icon-sm') }}</span>
+            <span class="label-name">{{ group.space.name }}</span>
         </div>
     </td>
     <td>
@@ -126,14 +127,24 @@
     {# 2026-09-14: mirrors the row markup this table has used since the
        solid-color-dot -> icon swap (icon + name both painted with
        var(--cal-accent-{color})) -- unchanged by slice 2, just no
-       longer followed by a Group-badge cell (see below). #}
+       longer followed by a Group-badge cell (see below).
+
+       2026-09-21, final word (direct report, all caps: "MAKE THEM THE
+       DEFAULT TEXT COLOR NOT STUPID COLORFUL TEXT THAT I CAN'T READ") --
+       that per-span color is now conditional: a GROUPED row already
+       sits on its own tinted background (`.labels-child-row`'s
+       `--row-tint`, same color family), so colored text on top of it
+       reads badly -- default text color instead, same call as
+       `_group_row`'s own icon/name above. An UNGROUPED row has no tint
+       to clash with, so it keeps this coloring exactly as it's always
+       had it. #}
     <td>
         <input type="checkbox" class="row-select" data-uid="{{ l.name }}" aria-label="Select {{ l.name }}" autocomplete="off">
     </td>
     <td>
         <div class="label-cell">
-            <span class="label-cell-icon" data-style="color: var(--cal-accent-{{ l.color or 'blue' }})">{{ icon(l.icon or 'tag', 'icon-sm') }}</span>
-            <span class="label-name" data-style="color: var(--cal-accent-{{ l.color or 'blue' }})">{{ l.name }}</span>
+            <span class="label-cell-icon"{% if not l.parent_name %} data-style="color: var(--cal-accent-{{ l.color or 'blue' }})"{% endif %}>{{ icon(l.icon or 'tag', 'icon-sm') }}</span>
+            <span class="label-name"{% if not l.parent_name %} data-style="color: var(--cal-accent-{{ l.color or 'blue' }})"{% endif %}>{{ l.name }}</span>
         </div>
     </td>
     <td>

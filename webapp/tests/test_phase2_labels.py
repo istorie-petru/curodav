@@ -1337,14 +1337,13 @@ class TestSettingsLabelsGroupedTables:
         assert 'class="labels-space-row"' in body
         assert 'data-style="--row-tint: var(--tag-teal-bg)"' in body
         assert "#icon-graduation-cap" in body
-        # 2026-09-21 fix (direct report: "not just the space to be white,
-        # cmon") -- the icon/name span themselves must carry their own
-        # color (matching _label_row's own pre-existing convention), not
-        # rely solely on a row-level rule for it -- the previous commit's
-        # --row-tint-fg removal silently left this span at the plain
-        # default text color since it had no fallback of its own.
-        assert 'class="label-cell-icon" data-style="color: var(--cal-accent-teal)"' in body
-        assert 'class="label-name" data-style="color: var(--cal-accent-teal)"' in body
+        # 2026-09-21, final word (direct report, all caps: "MAKE THEM THE
+        # DEFAULT TEXT COLOR NOT STUPID COLORFUL TEXT THAT I CAN'T READ")
+        # -- no per-span color at all on the Space row's own icon/name;
+        # the tinted background alone carries the "this is University"
+        # signal, colored text on top of it read badly.
+        assert 'class="label-cell-icon">' in body
+        assert 'class="label-name">University<' in body
 
     def test_add_label_row_always_present(self, conn):
         self._space(conn, "University")
@@ -1422,4 +1421,23 @@ class TestSettingsLabelsGroupedTables:
         resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
         body = resp.body.decode()
         assert "--row-tint-fg" not in body
+
+    def test_grouped_rows_own_icon_name_have_no_color_override_ungrouped_still_do(self, conn):
+        # Final word (direct report, all caps: "MAKE THEM THE DEFAULT
+        # TEXT COLOR NOT STUPID COLORFUL TEXT THAT I CAN'T READ") -- a
+        # grouped row's own tinted background already carries the color
+        # signal; colored text on top of it read badly, so neither
+        # _group_row's nor a grouped _label_row's icon/name spans get a
+        # per-span data-style color at all. An ungrouped row has no tint
+        # to clash with and keeps its pre-existing colored icon/name
+        # unchanged.
+        self._space(conn, "University", color="green")
+        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "color": "red", "created_at": _now()})
+        self._label(conn, "Groceries", color="orange")
+        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
+        body = resp.body.decode()
+        historiography_row = body.split('data-label-name="Historiography"')[1].split("</tr>")[0]
+        assert "data-style" not in historiography_row.split("</td>")[1]  # the label-cell <td>
+        groceries_row = body.split('data-label-name="Groceries"')[1].split("</tr>")[0]
+        assert 'data-style="color: var(--cal-accent-orange)"' in groceries_row
 
