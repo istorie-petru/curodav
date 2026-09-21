@@ -24,9 +24,21 @@
                          attribute-escaping, which a browser decodes back
                          to `"` when JS reads the attribute -- same
                          rendered/observed text as the un-extracted markup,
-                         now valid HTML instead of a raw embedded quote. #}
-{% macro row_action_buttons(edit_url, delete_url, noun, confirm_message) %}
+                         now valid HTML instead of a raw embedded quote.
+     view_url         -- optional href to the row's own generated page
+                         (a Space/Project/plain-label's /spaces/.../
+                         /projects/.../.settings/labels/... destination,
+                         direct request 2026-09-21: "a button that allows
+                         the user to navigate to that label's page").
+                         Rendered first, before Edit, only when given --
+                         holidays/time blocks (this macro's other two
+                         callers) have no such page and just omit it, same
+                         shape as every other optional param elsewhere in
+                         this app's shared partials. A real navigation
+                         (no data-modal), not a modal trigger. #}
+{% macro row_action_buttons(edit_url, delete_url, noun, confirm_message, view_url=none) %}
 <div class="action-buttons">
+    {% if view_url %}<a href="{{ view_url }}" class="icon-btn" title="Open {{ noun }} page">{{ icon('external-link', 'icon-sm') }}</a>{% endif %}
     <a href="{{ edit_url }}" class="icon-btn" data-modal title="Edit {{ noun }}">{{ icon('edit', 'icon-sm') }}</a>
     <form method="post" action="{{ delete_url }}" data-confirm-sheet="{{ confirm_message }}">
         <button type="submit" class="icon-btn danger" title="Delete {{ noun }}">{{ icon('trash', 'icon-sm') }}</button>

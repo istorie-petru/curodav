@@ -1185,6 +1185,12 @@ label.seg-btn[hidden]{display:none;}
    elimination). */
 .col-checkbox{width:26px;}
 .col-actions-narrow{width:100px;}
+/* Labels table's Actions cell can carry a third button (the "go to page"
+   link, direct request 2026-09-21) on top of Edit/Delete -- holidays/
+   time blocks (the other two `.col-actions-narrow` users, still only
+   ever two buttons) are unaffected, `.labels-table` scoping this wider
+   value to just their own column. */
+.labels-table .col-actions-narrow{width:128px;}
 
 /* _icons_sprite.html's wrapper -- was `style="display:none"` (this app's
    local icon sprite is never meant to be visible itself, only referenced

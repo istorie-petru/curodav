@@ -1179,3 +1179,18 @@ class TestSettingsLabelsGroupedTables:
         assert 'href="/settings/labels/University/edit"' in body
         assert 'action="/settings/labels/University/delete"' in body
 
+    def test_actions_column_links_to_each_rows_own_generated_page(self, conn):
+        # Direct request: "in the actions column, I would like a button
+        # that allows the user to navigate to that label's page (either
+        # it a space, project or plain label)."
+        self._space(conn, "University")
+        db.upsert_label_config(
+            conn, {"name": "CS101", "is_project": 1, "parent_name": "University", "start_date": "2026-01-01", "end_date": "2026-12-31", "created_at": _now()}
+        )
+        self._label(conn, "Groceries")
+        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
+        body = resp.body.decode()
+        assert 'href="/spaces/University" class="icon-btn" title="Open label page"' in body
+        assert 'href="/projects/CS101" class="icon-btn" title="Open label page"' in body
+        assert 'href="/settings/labels/Groceries" class="icon-btn" title="Open label page"' in body
+
