@@ -2823,6 +2823,13 @@ img.avatar-circle{object-fit:cover;}
 
 .field{display:flex; flex-direction:column; gap:var(--space-1); margin-bottom:var(--space-3);}
 .field label{font-size:var(--text-xs); font-weight:600; color:var(--fg-secondary); text-transform:uppercase; letter-spacing:.02em;}
+/* A field's label sharing its row with an inline action, e.g. the "+"
+   button that adds a repeatable contact-field row (Phone/Email/Website/
+   Address/Social network) -- replaces a separate full-width "+ Add X"
+   button sitting below the rows, so the label itself is the anchor for
+   the add action instead of a second, redundant line of text. */
+.field-label-row{display:flex; align-items:center; justify-content:space-between; gap:var(--space-2);}
+.field-label-row label{margin:0;}
 /* Text-like fields (and select/textarea) fill the field's width -- but
    checkbox/radio/file are fixed-size controls, not text fields, and
    should never stretch. Without this exclusion, `width:100%` on a
@@ -6008,10 +6015,15 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    in mockup") -- sits in the same `.widget-row-icon` 26px slot a task's
    checkbox occupies, so an Agenda widget's Overdue/Tasks/Events rows all
    line up in the same column rhythm even though an event has nothing to
-   click there. Sized/colored like the mockup's own `.dot-evt`. */
+   click there. Sized like the mockup's own `.dot-evt`; color comes from
+   the paired `.cal-{color}` class (widget_event_dot() macro, direct
+   request: "the color... of an event/task should be as the label's, not
+   default on blue or any other accent color") -- no `background` of its
+   own here anymore, `.cal-*`'s existing generic background rule paints
+   it, same mechanism `.color-dot.cal-*` already uses on the calendar
+   grids. */
 .widget-event-dot{
   display:inline-block; width:7px; height:7px; border-radius:50%;
-  background:var(--accent);
 }
 .widget-config{margin-top:12px; border-top:1px solid var(--separator); padding-top:8px;}
 .widget-config summary{cursor:pointer; font-size:13px; color:var(--fg-tertiary); display:flex; align-items:center; gap:4px;}

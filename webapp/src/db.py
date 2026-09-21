@@ -3956,6 +3956,34 @@ def effective_label_config_ci(conn: sqlite3.Connection, name: str) -> dict[str, 
     return _effective_label_config(dict(row) if row else None, name)
 
 
+def annotate_item_colors(conn: sqlite3.Connection, items: list[dict[str, Any]], *, key: str = "calendar_color") -> list[dict[str, Any]]:
+    """A task/event row's display color is its first label's color
+    (alphabetical, for a stable pick when it carries more than one),
+    falling back to 'blue' for an unlabeled row -- moved here from
+    routers/calendar.py's `_annotate_calendar_colors` (2026-08-07 fix,
+    kept there as a thin wrapper for its own existing call sites/tests) so
+    routers/dashboard.py and routers/projects.py can reuse it too without
+    importing routers/calendar, which already imports routers/dashboard
+    (a real circular-import risk, not a style preference). Mutates and
+    returns the same list. `key` defaults to `calendar_color` (the name
+    every calendar template already reads via `cal-{{ e.calendar_color
+    }}`) but the Agenda-style widgets reuse this for a plain `.cal-*` dot
+    under the same key, direct request: "the color... of an event/task
+    should be as the label's, not default on blue or any other accent
+    color"."""
+    color_by_label: dict[str, str] = {}
+    for item in items:
+        tags = sorted(item.get("tags") or [], key=str.lower)
+        color = "blue"
+        for name in tags:
+            if name not in color_by_label:
+                color_by_label[name] = effective_label_config(conn, name).get("color") or "blue"
+            color = color_by_label[name]
+            break
+        item[key] = color
+    return items
+
+
 def _effective_label_config(row: dict[str, Any] | None, name: str) -> dict[str, Any]:
     cfg: dict[str, Any] = dict(row) if row else {"name": name}
     for key, default in _LABEL_CONFIG_DEFAULTS.items():

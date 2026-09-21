@@ -6,6 +6,7 @@
      table's own wrapper div does). The empty state below is a sibling of
      .contact-list, not a descendant, so it no longer inherits a card
      background it was never meant to have. -->
+{% from "_label_pill.html" import label_pill with context %}
 <div id="contacts-body" class="main-shell-body">
 {% if contacts %}
 <!-- 2026-09-14 (direct request: "add bulk select for contacts too"): each
@@ -44,7 +45,7 @@
                     {% if not c.title and not c.org and not c.phones and c.emails %}{{ c.emails[0].value }}{% endif %}
                 </span>
             </span>
-            {% if c.tags %}{% for tag in c.tags %}<span class="cell-tag tag-gray">{{ tag }}</span>{% endfor %}{% endif %}
+            {% if c.tags %}{% for tag in c.tags %}{{ label_pill(tag) }}{% endfor %}{% endif %}
         </a>
     </div>
     {% endfor %}

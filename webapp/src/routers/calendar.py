@@ -216,22 +216,16 @@ def _annotate_calendar_colors(conn, events: list[dict]) -> list[dict]:
     when an event carries more than one label), falling back to a fixed
     neutral default for an unlabeled event. Mutates and returns the same
     list (matches _apply_event_label_filter's sibling functions' style
-    of returning a list rather than annotating in place silently)."""
-    color_by_label: dict[str, str] = {}
-    for e in events:
-        tags = sorted(e.get("tags") or [], key=str.lower)
-        color = _DEFAULT_EVENT_COLOR
-        for name in tags:
-            if name not in color_by_label:
-                # effective_label_config, not get_label_config -- fills in
-                # the same 'blue' default a label with no config row would
-                # show on its own manage page, so an event's color matches
-                # what that label looks like everywhere else in the app.
-                cfg = db.effective_label_config(conn, name)
-                color_by_label[name] = cfg.get("color") or _DEFAULT_EVENT_COLOR
-            color = color_by_label[name]
-            break
-        e["calendar_color"] = color
+    of returning a list rather than annotating in place silently).
+
+    2026-09-21: the real logic now lives in `db.annotate_item_colors`
+    (routers/dashboard.py and routers/projects.py need the same
+    resolution for their own Agenda-style widgets and can't import this
+    module -- it already imports `dashboard`, so the reverse import would
+    cycle). This stays a thin wrapper so its own existing call sites
+    (routers/tasks.py) and tests (`_DEFAULT_EVENT_COLOR`) don't need to
+    change."""
+    return db.annotate_item_colors(conn, events, key="calendar_color")
     return events
 
 

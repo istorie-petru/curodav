@@ -781,6 +781,13 @@ def label_detail(name: str, request: Request, conn=Depends(get_db)):
         e for e in db.list_events(conn, start=now_iso)
         if name in (e.get("tags") or []) and e.get("start_at") and e["start_at"][:10] >= today_iso
     ]
+    # Direct request, 2026-09-21: "the color... of an event/task should be
+    # as the label's, not default on blue or any other accent color" --
+    # same db.annotate_item_colors call routers/projects.py::project_detail
+    # makes for its own identically-shaped Agenda card; before the
+    # due-dated-task synthetic dicts get appended below, which render
+    # through a different template branch that never reads this key.
+    db.annotate_item_colors(conn, events)
     for t in tasks:
         if t["status"] == "done" or not t.get("due_at") or t["due_at"][:10] < today_iso:
             continue

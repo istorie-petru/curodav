@@ -270,6 +270,17 @@ class TestRenderedMarkup:
         body = resp.body.decode()
         assert ">Birthday<" not in body
 
+    def test_edit_form_leaves_birthday_input_empty_not_literal_none(self, conn):
+        """A contact with no birthday must render an empty input, not the
+        literal string "None" -- `contact.birthday` is a real Python None
+        for these rows, and Jinja stringifies None as "None" in an
+        attribute value if a template prints it unguarded."""
+        uid = _make_contact(conn)
+        resp = contacts_router.edit_contact_form(uid, _fake_request(f"/contacts/{uid}/edit"), conn=conn)
+        body = resp.body.decode()
+        assert 'name="birthday" value="None"' not in body
+        assert 'name="birthday" value=""' in body
+
 
 class TestBirthdayCalendarEvent:
     """Direct follow-up (2026-08-16): a contact's Birthday is a real,

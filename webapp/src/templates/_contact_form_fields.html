@@ -80,7 +80,10 @@
          posts the SAME field name for every row, same as the old
          select elements did). -->
     <div class="field field-wide" data-repeatable-rows-scope>
-        <label>Phone</label>
+        <div class="field-label-row">
+            <label>Phone</label>
+            <button type="button" class="icon-btn" data-repeatable-add="phone-rows" data-repeatable-template="phone-row-template" title="Add phone" aria-label="Add phone">{{ icon('plus', 'icon-sm') }}</button>
+        </div>
         <div id="phone-rows" class="contact-multi-rows">
             {% for p in (contact.phones if contact else []) %}
             <div class="contact-multi-row">
@@ -97,10 +100,12 @@
                 <button type="button" class="checklist-delete" data-repeatable-remove title="Remove phone" aria-label="Remove phone">{{ icon('x') }}</button>
             </div>
         </template>
-        <button type="button" class="btn btn-sm" data-repeatable-add="phone-rows" data-repeatable-template="phone-row-template">{{ icon('plus', 'icon-sm') }} Add phone</button>
     </div>
     <div class="field field-wide" data-repeatable-rows-scope>
-        <label>Email</label>
+        <div class="field-label-row">
+            <label>Email</label>
+            <button type="button" class="icon-btn" data-repeatable-add="email-rows" data-repeatable-template="email-row-template" title="Add email" aria-label="Add email">{{ icon('plus', 'icon-sm') }}</button>
+        </div>
         <div id="email-rows" class="contact-multi-rows">
             {% for e in (contact.emails if contact else []) %}
             <div class="contact-multi-row">
@@ -117,7 +122,6 @@
                 <button type="button" class="checklist-delete" data-repeatable-remove title="Remove email" aria-label="Remove email">{{ icon('x') }}</button>
             </div>
         </template>
-        <button type="button" class="btn btn-sm" data-repeatable-add="email-rows" data-repeatable-template="email-row-template">{{ icon('plus', 'icon-sm') }} Add email</button>
     </div>
     <!-- Contacts field parity slice 3 of 6 (plans/open.md): Website,
          same multi-value shape as Phone/Email above (db.CONTACT_
@@ -132,7 +136,10 @@
          field is `website_url` (not `website_value`), matching db.py's
          contact_websites.url column naming. -->
     <div class="field field-wide" data-repeatable-rows-scope>
-        <label>Website</label>
+        <div class="field-label-row">
+            <label>Website</label>
+            <button type="button" class="icon-btn" data-repeatable-add="website-rows" data-repeatable-template="website-row-template" title="Add website" aria-label="Add website">{{ icon('plus', 'icon-sm') }}</button>
+        </div>
         <div id="website-rows" class="contact-multi-rows">
             {% for w in (contact.websites if contact else []) %}
             <div class="contact-multi-row">
@@ -149,7 +156,6 @@
                 <button type="button" class="checklist-delete" data-repeatable-remove title="Remove website" aria-label="Remove website">{{ icon('x') }}</button>
             </div>
         </template>
-        <button type="button" class="btn btn-sm" data-repeatable-add="website-rows" data-repeatable-template="website-row-template">{{ icon('plus', 'icon-sm') }} Add website</button>
     </div>
     <!-- Address book selector removed -- contacts now always live in
          Active or Archived, toggled via the Archive/Unarchive button on
@@ -181,7 +187,10 @@
          repeatable field group on this form) since it clones whatever
          `<template>` markup it's given, regardless of field count. -->
     <div class="field field-wide" data-repeatable-rows-scope>
-        <label>Address</label>
+        <div class="field-label-row">
+            <label>Address</label>
+            <button type="button" class="icon-btn" data-repeatable-add="address-rows" data-repeatable-template="address-row-template" title="Add address" aria-label="Add address">{{ icon('plus', 'icon-sm') }}</button>
+        </div>
         <div id="address-rows" class="contact-multi-rows">
             {% for a in (contact.addresses if contact else []) %}
             <div class="contact-multi-row contact-address-row">
@@ -214,7 +223,6 @@
                 <button type="button" class="checklist-delete" data-repeatable-remove title="Remove address" aria-label="Remove address">{{ icon('x') }}</button>
             </div>
         </template>
-        <button type="button" class="btn btn-sm" data-repeatable-add="address-rows" data-repeatable-template="address-row-template">{{ icon('plus', 'icon-sm') }} Add address</button>
     </div>
     <!-- Contacts field parity slice 6 of 6 (plans/open.md): Social
          network, round-tripped through the standard X-SOCIALPROFILE
@@ -222,7 +230,10 @@
          Website above (db.CONTACT_SOCIAL_TYPES -- network names, not
          Home/Work/Other), reusing the same generic repeatable-row JS. -->
     <div class="field field-wide" data-repeatable-rows-scope>
-        <label>Social network</label>
+        <div class="field-label-row">
+            <label>Social network</label>
+            <button type="button" class="icon-btn" data-repeatable-add="social-rows" data-repeatable-template="social-row-template" title="Add social network" aria-label="Add social network">{{ icon('plus', 'icon-sm') }}</button>
+        </div>
         <div id="social-rows" class="contact-multi-rows">
             {% for s in (contact.social_profiles if contact else []) %}
             <div class="contact-multi-row">
@@ -239,7 +250,6 @@
                 <button type="button" class="checklist-delete" data-repeatable-remove title="Remove social profile" aria-label="Remove social profile">{{ icon('x') }}</button>
             </div>
         </template>
-        <button type="button" class="btn btn-sm" data-repeatable-add="social-rows" data-repeatable-template="social-row-template">{{ icon('plus', 'icon-sm') }} Add social network</button>
     </div>
     <!-- Contacts field parity slice 4 of 6 (plans/open.md): Birthday,
          single-value (unlike Phone/Email/Website above -- a contact has
@@ -255,7 +265,7 @@
          stricter client-only guard). -->
     <div class="field">
         <label>Birthday</label>
-        <input type="text" name="birthday" value="{{ contact.birthday if contact else '' }}" placeholder="YYYY-MM-DD or --MM-DD" pattern="\d{4}-\d{2}-\d{2}|--\d{2}-\d{2}">
+        <input type="text" name="birthday" value="{{ contact.birthday or '' }}" placeholder="YYYY-MM-DD or --MM-DD" pattern="\d{4}-\d{2}-\d{2}|--\d{2}-\d{2}">
         <span class="field-hint">Full date, or --MM-DD if you don't know the year.</span>
     </div>
     <!-- Labels -- chip multiselect (2026-08-07, modal-input-design

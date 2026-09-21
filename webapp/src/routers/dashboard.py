@@ -276,13 +276,18 @@ def _filtered_events_expanded(conn, config: dict, window_start: date, window_end
     row in it; this just turns each one into 0+ real occurrence rows dated
     inside the window instead of leaving it as its own unexpanded anchor)."""
     events = _filtered_events(conn, config)
-    return recurrence_expand.expand_events(
+    expanded = recurrence_expand.expand_events(
         events,
         window_start,
         window_end,
         db.list_holidays_by_calendar(conn),
         db.list_event_occurrence_overrides_by_master(conn),
     )
+    # Direct request, 2026-09-21: "the color... of an event/task should be
+    # as the label's, not default on blue or any other accent color" --
+    # the Agenda widget's event dot (widget_event_dot(), _widget_items.
+    # html) reads calendar_color the same way every calendar grid does.
+    return db.annotate_item_colors(conn, expanded)
 
 
 # --------------------------------------------------------------------- #

@@ -291,6 +291,20 @@ class TestAgendaCard:
         resp = projects_router.project_detail("Trip", _request(), conn=conn)
         assert [e["uid"] for e in resp.context["agenda_items"]] == ["e_earlier"]
 
+    def test_event_dot_uses_the_events_own_label_color_not_the_default(self, conn):
+        """Direct request: "the color... of an event/task should be as
+        the label's, not default on blue or any other accent color" --
+        the Agenda card's event dot used to be a flat var(--accent), see
+        _widget_items.html's widget_event_dot()."""
+        _promote(conn, "Trip", end=None)
+        db.upsert_label_config(conn, {"name": "Trip", "is_project": 1, "color": "purple", "created_at": _now()})
+        future = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+        _event(conn, "e_future", ["Trip"], future)
+        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        assert resp.context["agenda_items"][0]["calendar_color"] == "purple"
+        body = resp.body.decode()
+        assert 'widget-event-dot cal-purple' in body
+
     def test_events_are_sorted_soonest_first(self, conn):
         _promote(conn, "Trip", end=None)
         soon = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()

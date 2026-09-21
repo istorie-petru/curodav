@@ -81,9 +81,9 @@
        a fixed 26px width, so there's no unconstrained nowrap column left
        to run away with the table's width. #}
     {% if data.range == 'today' %}
-    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=widget_event_dot(), leading_class='widget-row-icon', right=widget_pill(('All day' if e.all_day or not e.start_at else (e.start_at | fmt_time)), 'blue')) }}
+    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=widget_event_dot(e.calendar_color), leading_class='widget-row-icon', right=widget_pill(('All day' if e.all_day or not e.start_at else (e.start_at | fmt_time)), 'blue')) }}
     {% else %}
-    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=widget_event_dot(), leading_class='widget-row-icon', right=widget_pill(((e.start_at[:10] | relative_date) ~ (' ' ~ (e.start_at | fmt_time) if not e.all_day else '')), 'blue')) }}
+    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=widget_event_dot(e.calendar_color), leading_class='widget-row-icon', right=widget_pill(((e.start_at[:10] | relative_date) ~ (' ' ~ (e.start_at | fmt_time) if not e.all_day else '')), 'blue')) }}
     {% endif %}
     {% endfor %}
 </table>

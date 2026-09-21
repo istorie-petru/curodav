@@ -177,7 +177,12 @@ class TestUpcomingEventsDoubleLineFix:
         assert ".widget-row-time{white-space:nowrap; width:1%;}" in css
         partial = (templates / "_widget_agenda.html").read_text()
         assert "leading_class='widget-row-time'" not in partial
-        assert "widget_event_dot()" in partial
+        # widget_event_dot() used to take no arguments; 2026-09-21 (direct
+        # request: "the color... of an event/task should be as the
+        # label's, not default on blue or any other accent color") it now
+        # takes the event's own resolved calendar_color -- assert the
+        # call, not the now-stale exact no-arg signature.
+        assert "widget_event_dot(e.calendar_color)" in partial
         assert "width:110px" not in partial
         # no widget should hand-roll a fixed-width cell any more (the
         # spaces_projects progress fill's `style="width:{{ ... }}%"` is a

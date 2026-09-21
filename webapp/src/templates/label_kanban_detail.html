@@ -57,7 +57,7 @@
         {% elif item.is_deadline %}
         {{ widget_link_row(none, item.title, leading=icon('flag', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill('Deadline · ' ~ (item.start_at | relative_date), 'red')) }}
         {% else %}
-        {{ widget_link_row('/events/' ~ item.uid, item.title, leading=widget_event_dot(), leading_class='widget-row-icon', right=widget_pill(((item.start_at | relative_date) ~ (' ' ~ (item.start_at | fmt_time) if not item.all_day else '')), 'blue')) }}
+        {{ widget_link_row('/events/' ~ item.uid, item.title, leading=widget_event_dot(item.calendar_color), leading_class='widget-row-icon', right=widget_pill(((item.start_at | relative_date) ~ (' ' ~ (item.start_at | fmt_time) if not item.all_day else '')), 'blue')) }}
         {% endif %}
         {% endfor %}
     </table>
