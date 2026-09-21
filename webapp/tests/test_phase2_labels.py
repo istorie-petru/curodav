@@ -42,8 +42,10 @@ sys.path.insert(0, str(_SCRIPTS_DIR))
 import migrate_labels  # noqa: E402
 import migrate_spaces_direct_tags  # noqa: E402
 
+from src.routers import dashboard as dashboard_router
 from src.routers import habits as habits_router
 from src.routers import labels as labels_router
+from src.routers import projects as projects_router
 from src.routers import spaces as spaces_router
 
 
@@ -117,16 +119,24 @@ class TestIconPersistence:
         labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="", parent_name="", description="", role="none", start_date="", end_date="", conn=conn)
         assert db.get_label_config(conn, "Garden")["icon"] is None
 
-    def test_update_label_still_saves_color_and_parent_alongside_icon(self, conn):
+    def test_update_label_still_saves_parent_alongside_icon(self, conn):
         # Regression guard: adding the new `icon` param shouldn't disturb
         # the fields that already worked. `parent_name` (2026-09-14,
         # replaces the old free-text `label_group`) must name a real Space.
+        #
+        # 2026-09-21 (final labels-page iteration, direct request: "remove
+        # the ability to have colors... for labels or projects grouped
+        # under a space") -- a submitted `color` is no longer saved once
+        # `parent_name` is set; the label's prior stored color ("green")
+        # is preserved untouched instead of being overwritten with
+        # whatever the (now-hidden-in-the-UI) picker happened to submit.
+        # See TestColorInheritance below for the read-side half.
         db.upsert_label_config(conn, {"name": "Home", "generate_space": 1, "created_at": _now()})
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
         labels_router.update_label(name="Garden", new_name="Garden", color="purple", icon="leaf", parent_name="Home", description="", role="none", start_date="", end_date="", conn=conn)
         cfg = db.get_label_config(conn, "Garden")
         assert cfg["icon"] == "leaf"
-        assert cfg["color"] == "purple"
+        assert cfg["color"] == "green"
         assert cfg["parent_name"] == "Home"
 
 
@@ -252,6 +262,110 @@ class TestLabelSelectorScope:
     def test_a_standalone_plain_label_is_unscoped(self, conn):
         db.upsert_label_config(conn, {"name": "Groceries", "created_at": _now()})
         assert db.label_selector_scope(conn, "Groceries") is None
+
+
+class TestColorInheritance:
+    """Final labels-page iteration (direct request, 2026-09-21): "the
+    labels/projects grouped by space should follow the space's color...
+    remove the ability to have colors or banners for labels or projects
+    grouped under a space." """
+
+    def test_grouped_plain_label_inherits_the_spaces_color(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "color": "purple", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "color": "green", "created_at": _now()})
+        assert db.effective_label_config(conn, "Historiography")["color"] == "purple"
+
+    def test_grouped_project_inherits_the_spaces_color(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "color": "orange", "created_at": _now()})
+        db.upsert_label_config(
+            conn, {"name": "CS101", "is_project": 1, "parent_name": "University", "color": "red", "start_date": "2026-01-01", "end_date": "2026-12-31", "created_at": _now()}
+        )
+        assert db.effective_label_config(conn, "CS101")["color"] == "orange"
+
+    def test_ungrouped_label_keeps_its_own_color(self, conn):
+        db.upsert_label_config(conn, {"name": "Groceries", "color": "yellow", "created_at": _now()})
+        assert db.effective_label_config(conn, "Groceries")["color"] == "yellow"
+
+    def test_a_space_never_inherits_even_if_parent_name_is_somehow_set(self, conn):
+        # Defensive -- the app's own UI never lets a Space have a
+        # parent_name (_validate_parent_name/role=space form handling),
+        # but a stored row shouldn't be able to paint a Space with
+        # someone else's color even if one exists on disk regardless.
+        db.upsert_label_config(conn, {"name": "Other", "generate_space": 1, "color": "red", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "color": "purple", "parent_name": "Other", "created_at": _now()})
+        assert db.effective_label_config(conn, "University")["color"] == "purple"
+
+    def test_case_insensitive_lookup_also_inherits(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "color": "teal", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "color": "green", "created_at": _now()})
+        assert db.effective_label_config_ci(conn, "historiography")["color"] == "teal"
+
+    def test_edit_modal_shows_readonly_swatch_for_a_grouped_label(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "color": "purple", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "color": "green", "created_at": _now()})
+        resp = labels_router.edit_label_modal("Historiography", _request("/settings/labels/Historiography/edit"), conn=conn)
+        body = resp.body.decode()
+        assert "Follows University" in body
+        assert 'name="color" value="purple"' not in body  # no interactive swatch radios rendered
+
+    def test_edit_modal_shows_interactive_picker_for_an_ungrouped_label(self, conn):
+        db.upsert_label_config(conn, {"name": "Groceries", "color": "yellow", "created_at": _now()})
+        resp = labels_router.edit_label_modal("Groceries", _request("/settings/labels/Groceries/edit"), conn=conn)
+        body = resp.body.decode()
+        assert "Follows" not in body
+
+    def test_update_label_preserves_stored_color_once_grouped(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Historiography", "color": "green", "created_at": _now()})
+        labels_router.update_label(
+            name="Historiography", new_name="Historiography", color="red", icon="", parent_name="University",
+            description="", role="none", start_date="", end_date="", conn=conn,
+        )
+        # Stored value is untouched ("green"), even though the (hidden)
+        # form submitted "red" -- effective_label_config still resolves
+        # to the Space's own color regardless of what's stored.
+        assert db.get_label_config(conn, "Historiography")["color"] == "green"
+        assert db.effective_label_config(conn, "Historiography")["color"] is not None
+
+
+class TestBannerInheritance:
+    def test_grouped_labels_page_shows_the_spaces_banner_not_its_own(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "created_at": _now()})
+        db.set_page_banner(conn, "University", {"kind": "remote", "image_url": "https://example.com/uni.jpg", "alt": "x"})
+        db.set_page_banner(conn, "Historiography", {"kind": "remote", "image_url": "https://example.com/own.jpg", "alt": "x"})
+        ctx = dashboard_router._page_banner_context(conn, "Historiography")
+        assert ctx["banner"]["image_url"] == "https://example.com/uni.jpg"
+        assert ctx["banner_grouped_under"] == "University"
+        assert ctx["has_own_banner"] is False
+
+    def test_ungrouped_label_still_shows_its_own_banner(self, conn):
+        db.upsert_label_config(conn, {"name": "Groceries", "created_at": _now()})
+        db.set_page_banner(conn, "Groceries", {"kind": "remote", "image_url": "https://example.com/own.jpg", "alt": "x"})
+        ctx = dashboard_router._page_banner_context(conn, "Groceries")
+        assert ctx["banner"]["image_url"] == "https://example.com/own.jpg"
+        assert ctx["banner_grouped_under"] is None
+        assert ctx["has_own_banner"] is True
+
+    def test_edit_label_modal_hides_add_change_banner_control_for_a_grouped_label(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "created_at": _now()})
+        resp = labels_router.edit_label_modal("Historiography", _request("/settings/labels/Historiography/edit"), conn=conn)
+        body = resp.body.decode()
+        assert "Add banner" not in body
+        assert "Change banner" not in body
+        assert "Follows University" in body
+
+    def test_project_page_hides_the_banner_button_when_grouped(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
+        db.upsert_label_config(
+            conn, {"name": "CS101", "is_project": 1, "parent_name": "University", "start_date": "2026-01-01", "end_date": "2026-12-31", "created_at": _now()}
+        )
+        db.set_app_meta(conn, "edit_mode_enabled", "1")
+        resp = projects_router.project_detail("CS101", _request("/projects/CS101"), conn=conn)
+        body = resp.body.decode()
+        assert "Add banner" not in body
+        assert "Change banner" not in body
 
 
 class TestLabelParentNameDropdown:

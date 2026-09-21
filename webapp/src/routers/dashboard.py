@@ -1994,14 +1994,36 @@ def _page_banner_context(conn, scope: str) -> dict:
     is currently showing) so _page_banner.html's `/banners/image` URL
     points at the right stored image rather than looking up this page's
     own (unset) scope with the default banner's version hash."""
-    own_banner = db.get_page_banner(conn, scope)
+    # Final labels-page iteration (direct request, 2026-09-21): "remove
+    # the ability to have... banners for labels or projects grouped
+    # under a space" -- a grouped label/Project (parent_name set, and
+    # not itself a Space) always shows its parent Space's own banner
+    # instead of one of its own, same "follow the space" treatment
+    # db.effective_label_config's own _resolve_inherited_color already
+    # gives `color`. `banner_grouped_under` (the parent's name, or None)
+    # is what each caller's own Add/Change-banner button reads to hide
+    # itself -- Home (scope="") is never grouped, so this is a no-op there.
+    grouped_under = None
+    if scope:
+        label = db.effective_label_config(conn, scope)
+        if label.get("parent_name") and not label.get("generate_space"):
+            grouped_under = label["parent_name"]
+    banner_scope_lookup = grouped_under or scope
+    own_banner = db.get_page_banner(conn, banner_scope_lookup)
     if own_banner:
-        return {"banner": own_banner, "has_own_banner": True, "banner_scope": scope, "banner_image_scope": scope}
+        return {
+            "banner": own_banner,
+            "has_own_banner": not grouped_under,
+            "banner_scope": scope,
+            "banner_image_scope": banner_scope_lookup,
+            "banner_grouped_under": grouped_under,
+        }
     return {
         "banner": db.get_page_banner(conn, PAGE_HEADER_BANNER_SCOPE),
         "has_own_banner": False,
         "banner_scope": scope,
         "banner_image_scope": PAGE_HEADER_BANNER_SCOPE,
+        "banner_grouped_under": grouped_under,
     }
 
 

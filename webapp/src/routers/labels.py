@@ -388,6 +388,15 @@ _ROLE_SORT_RANK = {"space": 0, "project": 1, "none": 2}
 def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
     """The label edit modal -- uses the unified label_form_modal.html."""
     cfg = db.effective_label_config(conn, name)
+    # Final labels-page iteration (direct request, 2026-09-21): "remove
+    # the ability to have... banners for labels or projects grouped
+    # under a space" -- a grouped label (parent_name set, and not itself
+    # a Space) shows its parent Space's own banner read-only instead of
+    # its own Add/Change control, same "follow the space" treatment
+    # db.effective_label_config's own _resolve_inherited_color already
+    # gives `color`.
+    grouped_under = cfg.get("parent_name") if not cfg.get("generate_space") else None
+    banner = db.get_page_banner(conn, grouped_under or name)
     return templates.TemplateResponse(
         "label_form_modal.html",
         {
@@ -406,7 +415,8 @@ def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
             # not only a Space/Project that happens to have a dashboard
             # page. See db.banner_for_task's priority chain (tasks/kanban
             # banner strip) for the other consumer of this same data.
-            "banner": db.get_page_banner(conn, name),
+            "banner": banner,
+            "banner_grouped_under": grouped_under,
         },
     )
 
@@ -482,9 +492,20 @@ def update_label(
         name = new_name
 
     existing = db.get_label_config(conn, name) or {}
+    # Final labels-page iteration (direct request, 2026-09-21): a label
+    # grouped under a Space has no color of its own to save -- the edit
+    # modal doesn't even render the picker for one (_label_form_fields.
+    # html), so `color` here is whatever that form's Form("blue") default
+    # falls back to, not a real user choice. Preserving the label's own
+    # prior stored value (not overwriting it with "blue") means its
+    # original color is still there, unchanged, if it's ever ungrouped
+    # from the Space later -- same "never force-drop/reset old data"
+    # convention this app already applies to every other removed-then-
+    # possibly-relevant-again field.
+    effective_color = (color if color in COLORS else "blue") if not parent_name else (existing.get("color") or "blue")
     row = {
         "name": name,
-        "color": color if color in COLORS else "blue",
+        "color": effective_color,
         "icon": icon,
         "parent_name": parent_name,
         "description": description,

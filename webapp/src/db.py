@@ -3940,7 +3940,7 @@ def effective_label_config(conn: sqlite3.Connection, name: str) -> dict[str, Any
     """A label's config with every default filled in -- a label with zero
     label_config rows (mentioned only via object_labels) still fully
     works, per the table's own "sparse, optional" contract."""
-    return _effective_label_config(get_label_config(conn, name), name)
+    return _resolve_inherited_color(conn, _effective_label_config(get_label_config(conn, name), name))
 
 
 def effective_label_config_ci(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
@@ -3953,7 +3953,27 @@ def effective_label_config_ci(conn: sqlite3.Connection, name: str) -> dict[str, 
     row = conn.execute(
         "SELECT * FROM label_config WHERE name = ? COLLATE NOCASE", (name,)
     ).fetchone()
-    return _effective_label_config(dict(row) if row else None, name)
+    return _resolve_inherited_color(conn, _effective_label_config(dict(row) if row else None, name))
+
+
+def _resolve_inherited_color(conn: sqlite3.Connection, cfg: dict[str, Any]) -> dict[str, Any]:
+    """Final labels-page iteration (direct request, 2026-09-21): "the
+    labels/projects grouped by space should follow the space's color...
+    remove the ability to have colors... for labels or projects grouped
+    under a space." A label/project with `parent_name` set has its own
+    stored `color` column overridden here with its parent Space's own
+    effective color -- every consumer already reads color through
+    `effective_label_config`/`_ci` (label_pill, the calendar/Agenda
+    `calendar_color` resolution, filled_card tiles, the Kanban board...),
+    so this is the one place that needs to change for the inheritance to
+    apply everywhere at once, rather than teaching every call site about
+    `parent_name`. Only one level -- a Space itself never has a
+    `parent_name` (`_validate_parent_name`/role=space form handling both
+    enforce "Spaces don't nest"), so there's nothing further to walk."""
+    parent = cfg.get("parent_name")
+    if parent and not cfg.get("generate_space"):
+        cfg["color"] = effective_label_config(conn, parent).get("color") or cfg["color"]
+    return cfg
 
 
 def annotate_item_colors(conn: sqlite3.Connection, items: list[dict[str, Any]], *, key: str = "calendar_color") -> list[dict[str, Any]]:

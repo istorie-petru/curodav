@@ -31,6 +31,27 @@
         <label>Name</label>
         <input type="text" name="new_name" value="{{ l.name if l else '' }}" required {% if not l %}autofocus{% endif %}>
     </div>
+    {# Final labels-page iteration (direct request, 2026-09-21): "the
+       labels/projects grouped by space should follow the space's
+       color... remove the ability to have colors... for labels or
+       projects grouped under a space." A label with a parent_name
+       (grouped under a Space) gets a read-only swatch instead of the
+       interactive picker -- db.effective_label_config's own
+       _resolve_inherited_color already forces `l.color` to the parent's
+       color whenever this condition holds, so `l.color` here already
+       IS the inherited value, not this label's own stored one.
+       Server-rendered only -- picking a different Space in the dropdown
+       below doesn't live-toggle this field client-side; it takes effect
+       the next time this modal is opened, after saving. #}
+    {% if l and l.parent_name and role != 'space' %}
+    <div class="field">
+        <label>Color</label>
+        <div class="field-readonly-swatch" title="Follows {{ l.parent_name }}'s color">
+            <span class="color-dot cal-{{ l.color }}"></span>
+            <span class="text-muted">Follows {{ l.parent_name }}</span>
+        </div>
+    </div>
+    {% else %}
     <div class="field">
         <label>Color</label>
         {% set cp_current = l.color if l else 'blue' %}
@@ -38,6 +59,7 @@
         {% set cp_form_id = 'label-form' %}
         {% include "_color_swatch_picker.html" %}
     </div>
+    {% endif %}
     <div class="field">
         <label>Icon</label>
         {% set ip_current = l.icon %}
@@ -123,6 +145,7 @@
 </div>
 
 {% if l %}
+{% set _grouped_under = banner_grouped_under if banner_grouped_under is defined else none %}
 {# 2026-08-30 (direct request): a label's banner used to be
    reachable only through a dashboard page's own edit-mode "Add/
    Change banner" button (Home/Space/Project pages, since only
@@ -134,10 +157,28 @@
    page_url pointed back at this same edit modal so its Done
    link returns here instead of a dashboard page. Gated on `l`
    (edit mode only) -- a brand-new label being created has no
-   saved name yet to key a banner off of. #}
+   saved name yet to key a banner off of.
+
+   Final labels-page iteration (direct request, 2026-09-21): "remove
+   the ability to have... banners for labels or projects grouped under
+   a space" -- a grouped label shows its parent Space's own banner
+   read-only (routers/labels.py::edit_label_modal already resolved
+   `banner` from the parent's scope, not this label's own) instead of
+   an Add/Change control. #}
 <div class="field field-wide">
     <label>Banner</label>
-    {% if banner %}
+    {% if _grouped_under %}
+    <div class="label-banner-preview">
+        {% if banner %}
+        {% if banner.version %}
+        <img src="/banners/image?scope={{ _grouped_under|urlencode }}&amp;v={{ banner.version }}" alt="">
+        {% else %}
+        <img src="{{ banner.image_url }}" alt="" referrerpolicy="no-referrer">
+        {% endif %}
+        {% endif %}
+        <span class="text-muted">Follows {{ _grouped_under }}</span>
+    </div>
+    {% elif banner %}
     <div class="label-banner-preview">
         {% if banner.version %}
         <img src="/banners/image?scope={{ l.name|urlencode }}&amp;v={{ banner.version }}" alt="">

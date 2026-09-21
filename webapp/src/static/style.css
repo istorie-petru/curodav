@@ -7104,6 +7104,13 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    to Settings or the banner uploader specifically. */
 .field-hint{display:block; font-size:var(--text-sm); color:var(--fg-tertiary); margin-top:2px;}
 
+/* Read-only color swatch (label_form_modal.html's Color field, final
+   labels-page iteration, direct request 2026-09-21: "remove the ability
+   to have colors... for labels or projects grouped under a space") --
+   same height/alignment as a real input so the field doesn't visibly
+   shrink next to every other field in the grid, just non-interactive. */
+.field-readonly-swatch{display:flex; align-items:center; gap:var(--space-2); height:40px; padding:0 var(--space-1);}
+
 /* Profile picture row (settings_general.html, 2026-08-09) -- the avatar
    upload circle (autosaves via data-autosubmit, see avatar_cropper.js) and,
    when a photo exists, the sibling Remove button. The two forms sit side by
