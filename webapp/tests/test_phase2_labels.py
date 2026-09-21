@@ -42,6 +42,7 @@ sys.path.insert(0, str(_SCRIPTS_DIR))
 import migrate_labels  # noqa: E402
 import migrate_spaces_direct_tags  # noqa: E402
 
+from src.routers import banners as banners_router
 from src.routers import dashboard as dashboard_router
 from src.routers import habits as habits_router
 from src.routers import labels as labels_router
@@ -85,6 +86,80 @@ def _request(path="/labels"):
 # partial-update contract ("only touch what you're told to") meant the
 # icon just... never changed. Fixed by declaring `icon` on both routes.
 # --------------------------------------------------------------------- #
+
+
+class TestModalHeaderAppearanceButtons:
+    """Direct request, 2026-09-21: "the color, icon, banner buttons in the
+    header, as small circular buttons, that look like the close 'X'
+    button, that for pressing each opens each menu." label_form_modal.html
+    moves Color/Icon/Banner out of the body field-grid into
+    .modal-header-actions; quick_add.html's Label panel (shared header
+    across 4 tabs, no natural home for these) keeps them inline, unchanged."""
+
+    def test_edit_modal_header_has_the_three_appearance_buttons(self, conn):
+        db.upsert_label_config(conn, {"name": "Groceries", "color": "yellow", "icon": "shopping-cart", "created_at": _now()})
+        resp = labels_router.edit_label_modal("Groceries", _request("/settings/labels/Groceries/edit"), conn=conn)
+        body = resp.body.decode()
+        assert 'class="modal-header-actions"' in body
+        assert 'class="color-swatch-current cal-yellow"' in body
+        assert 'class="icon-picker-current"' in body
+        assert '/banners/editor?scope=Groceries' in body
+        assert 'from_modal=1' in body
+
+    def test_edit_modal_body_no_longer_has_inline_color_icon_banner_fields(self, conn):
+        db.upsert_label_config(conn, {"name": "Groceries", "color": "yellow", "created_at": _now()})
+        resp = labels_router.edit_label_modal("Groceries", _request("/settings/labels/Groceries/edit"), conn=conn)
+        body = resp.body.decode()
+        assert "<label>Color</label>" not in body
+        assert "<label>Icon</label>" not in body
+        assert "<label>Banner</label>" not in body
+
+    def test_new_label_modal_also_gets_header_buttons_but_no_banner(self, conn):
+        resp = labels_router.new_label_modal(_request("/settings/labels/new"), conn=conn)
+        body = resp.body.decode()
+        assert 'class="modal-header-actions"' in body
+        assert 'class="color-swatch-current cal-blue"' in body  # default, unsaved yet
+        assert "/banners/editor" not in body  # no name yet to key a banner off of
+
+    def test_grouped_label_shows_readonly_swatch_and_no_banner_button_in_header(self, conn):
+        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "color": "purple", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "color": "green", "created_at": _now()})
+        resp = labels_router.edit_label_modal("Historiography", _request("/settings/labels/Historiography/edit"), conn=conn)
+        body = resp.body.decode()
+        assert 'class="modal-header-swatch cal-purple"' in body
+        assert "color-swatch-current" not in body  # no interactive trigger
+        assert "/banners/editor" not in body  # follows the Space's banner, no button
+
+    def test_quick_add_label_tab_keeps_inline_appearance_fields(self, conn):
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), default_tab="label", conn=conn)
+        body = resp.body.decode()
+        assert "<label>Color</label>" in body
+        assert "<label>Icon</label>" in body
+        assert 'class="modal-header-actions"' not in body
+
+
+class TestBannerEditorFromModal:
+    """Direct request: "if a button allows the user to navigate from one
+    modal to the other, instead of the 'Done' there should always be a
+    'Go back' button... 'Page banner' modal window that opens from the
+    label edit modal window has 'Done' instead of 'Cancel'." """
+
+    def test_from_modal_renders_cancel_and_swaps_back(self, conn):
+        resp = banners_router.banner_editor(
+            _request("/banners/editor"), scope="Groceries", page_url="/settings/labels/Groceries/edit", from_modal=True, conn=conn,
+        )
+        body = resp.body.decode()
+        assert ">Cancel</a>" in body or "Cancel" in body
+        assert 'href="/settings/labels/Groceries/edit" class="btn ghost" data-modal' in body
+
+    def test_not_from_modal_still_renders_done_and_closes(self, conn):
+        # Home/Space/Project's own edit-mode banner button -- opened from
+        # a real page, not another modal, so closing (not swapping back
+        # into a modal fragment) is still correct.
+        resp = banners_router.banner_editor(_request("/banners/editor"), scope="", page_url="/", conn=conn)
+        body = resp.body.decode()
+        assert 'href="/" class="btn ghost" data-modal-cancel' in body
+        assert "Done" in body
 
 
 class TestIconPersistence:

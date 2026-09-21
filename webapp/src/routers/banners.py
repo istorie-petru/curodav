@@ -67,13 +67,30 @@ def banner_editor(
     request: Request,
     scope: str = "",
     page_url: str = "",
+    from_modal: bool = False,
     conn=Depends(get_db),
 ):
     """The banner editor modal fragment -- upload and remove in one dialog,
     plus the current banner (if any). `scope` is the page key ("" = Home,
     else the label name), `page_url` where a mutation should return to.
     2026-08-11: the SearXNG "search the web" tab was removed; upload is the
-    only way to set a banner now."""
+    only way to set a banner now.
+
+    `from_modal` (2026-09-21 direct request: "if a button allows the user
+    to navigate from one modal to the other, instead of the 'Done' there
+    should always be a 'Cancel'/back button") -- true only when this modal
+    was opened from INSIDE another already-open modal (today, just
+    label_form_modal.html's own inline Banner field -- see
+    _label_form_fields.html's own comment), as opposed to every other
+    caller's edit-mode "Add/Change banner" button on a real page
+    (Home/Space/Project/label). This app's modal system has no stack (one
+    #modal-target, swapped in place) -- `data-modal-cancel` just closes to
+    the real underlying page, which would drop the user back on the plain
+    labels list instead of the edit modal they came from. `page_url`
+    already points at the right destination either way (the caller sets
+    it); this flag only decides HOW to get there: fetch-and-swap back into
+    that modal (`from_modal=True`) vs. just close (every other caller,
+    unchanged)."""
     return templates.TemplateResponse(
         "banner_editor.html",
         {
@@ -81,6 +98,7 @@ def banner_editor(
             "active_tab": "dashboard",
             "scope": scope,
             "page_url": page_url,
+            "from_modal": from_modal,
             "banner": db.get_page_banner(conn, scope),
         },
     )

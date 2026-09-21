@@ -43,6 +43,16 @@
        Server-rendered only -- picking a different Space in the dropdown
        below doesn't live-toggle this field client-side; it takes effect
        the next time this modal is opened, after saving. #}
+    {# `appearance_in_header` (2026-09-21 direct request: "the color,
+       icon, banner buttons in the header... small circular buttons...
+       that look like the close X button") -- label_form_modal.html sets
+       this and renders Color/Icon/Banner as header buttons instead of
+       these inline fields (see that template's own header comment).
+       quick_add.html's Label panel doesn't set it: its header is shared
+       across all four tabs (Task/Event/Contact/Label), with no natural
+       per-tab home for these, so it keeps the original inline fields
+       unchanged. #}
+    {% if not appearance_in_header %}
     {% if l and l.parent_name and role != 'space' %}
     <div class="field">
         <label>Color</label>
@@ -68,6 +78,7 @@
         {% set ip_default_icon = 'tag' %}
         {% include "_icon_swatch_picker.html" %}
     </div>
+    {% endif %}
     {# 2026-09-14 (Spaces -- labels-as-membership rework slice 1): the old
        free-text Group input (`label_group`) is replaced by a real
        Space-link dropdown (`parent_name`, a real FK column read by
@@ -144,7 +155,7 @@
     </div>
 </div>
 
-{% if l %}
+{% if l and not appearance_in_header %}
 {% set _grouped_under = banner_grouped_under if banner_grouped_under is defined else none %}
 {# 2026-08-30 (direct request): a label's banner used to be
    reachable only through a dashboard page's own edit-mode "Add/
@@ -185,10 +196,10 @@
         {% else %}
         <img src="{{ banner.image_url }}" alt="" referrerpolicy="no-referrer">
         {% endif %}
-        <a href="/banners/editor?scope={{ l.name|urlencode }}&amp;page_url={{ ('/settings/labels/' ~ l.name ~ '/edit')|urlencode }}" data-modal class="btn outlined btn-sm">{{ icon('image', 'icon-sm') }} Change banner</a>
+        <a href="/banners/editor?scope={{ l.name|urlencode }}&amp;page_url={{ ('/settings/labels/' ~ l.name ~ '/edit')|urlencode }}&amp;from_modal=1" data-modal class="btn outlined btn-sm">{{ icon('image', 'icon-sm') }} Change banner</a>
     </div>
     {% else %}
-    <a href="/banners/editor?scope={{ l.name|urlencode }}&amp;page_url={{ ('/settings/labels/' ~ l.name ~ '/edit')|urlencode }}" data-modal class="btn outlined btn-sm">{{ icon('image', 'icon-sm') }} Add banner</a>
+    <a href="/banners/editor?scope={{ l.name|urlencode }}&amp;page_url={{ ('/settings/labels/' ~ l.name ~ '/edit')|urlencode }}&amp;from_modal=1" data-modal class="btn outlined btn-sm">{{ icon('image', 'icon-sm') }} Add banner</a>
     {% endif %}
 </div>
 {% endif %}

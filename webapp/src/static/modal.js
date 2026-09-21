@@ -388,6 +388,17 @@
     // still needs typing.
     wireColorPickers(body);
     wireIconPickers(body);
+    // Also on `header` (2026-09-21, same reasoning as the 2026-09-12
+    // CCAvatarCropper footer fix right above): label_form_modal.html
+    // moved its Color/Icon triggers into #modal-header (small circular
+    // buttons next to the close X, direct request) -- without this, a
+    // click there would silently do nothing, same "wired at boot on
+    // document, but never re-wired on the fragment that actually
+    // contains it" gap the footer fix already found and fixed once.
+    if (header) {
+      wireColorPickers(header);
+      wireIconPickers(header);
+    }
 
     // Widget Builder (dashboard_customize.html): add-widget form + live
     // preview live inside the modal, injected via innerHTML like Schedule's

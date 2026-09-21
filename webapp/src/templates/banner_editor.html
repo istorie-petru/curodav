@@ -104,7 +104,19 @@
        a real navigable page (this template also renders standalone for a
        no-JS visit), so footer_back_url is the real URL, not "#". #}
     {% set footer_back_url = page_url %}
+    {# 2026-09-21 direct request: a back button that navigates from one
+       modal to another should read "Cancel"/go back, never "Done" --
+       "Done" stays for every caller that isn't nested inside another
+       modal (Home/Space/Project/label's own edit-mode banner button on a
+       real page), where closing genuinely is the end of the action, not
+       a step back into something else. See routers/banners.py::
+       banner_editor's own comment on from_modal/footer_back_mode. #}
+    {% if from_modal %}
+    {% set footer_back_mode = 'modal' %}
+    {% set footer_back_label = 'Cancel' %}
+    {% else %}
     {% set footer_back_label = 'Done' %}
+    {% endif %}
     {% set footer_extra_html %}
     {% if banner %}
     <form method="post" action="/banners/remove" class="form-inline" data-cc-change="banner" data-cc-action="remove">

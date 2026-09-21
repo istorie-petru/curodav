@@ -4787,10 +4787,79 @@ main.main-shell > .toolbar.top-app-bar{
 .detail-heading-row h1{margin:0; font-size:var(--text-2xl); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .modal-close{
    position:absolute; top:12px; right:12px; width:28px; height:28px; display:flex; align-items:center;
-   justify-content:center; border-radius:var(--radius-control); background:transparent; border:none;
+   justify-content:center; border-radius:var(--radius-control); background:transparent; border:1px solid transparent;
    cursor:pointer; color:var(--fg-secondary); font-size:16px; z-index:2;
 }
  .modal-close:hover{background:var(--bg-secondary); color:var(--fg-primary);}
+ /* Direct request, 2026-09-21: "the close 'X' in the header to have a
+    background/border like .page-header-narrow-actions" -- that class's
+    own frosted-chip treatment (style.css's `.page-header-narrow.has-
+    banner .page-header-narrow-actions .icon-btn` rule) only applies when
+    there's a photo behind the control to read against; same condition
+    here. #modal-close is a fixed sibling of #modal-header (base.html),
+    not a descendant of whatever fragment gets fetched into it, so
+    :has() on the shared #modal-dialog ancestor is what detects "this
+    modal's header currently shows a cover image" -- same :has()
+    progressive-disclosure technique #event-form's own all-day rule
+    already uses. */
+ #modal-dialog:has(#modal-header .detail-cover-wrap) .modal-close{
+   background:rgba(0,0,0,.4); color:#fff; border-color:rgba(255,255,255,.35);
+   backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+ }
+ #modal-dialog:has(#modal-header .detail-cover-wrap) .modal-close:hover{background:rgba(0,0,0,.55); color:#fff;}
+ /* Header appearance buttons (label_form_modal.html, direct request
+    2026-09-21: "the color, icon, banner buttons in the header, as small
+    circular buttons, that look like the close 'X' button") -- absolute,
+    same technique .modal-close itself uses, so positioning is identical
+    regardless of which header branch renders (plain title vs. the
+    cover-image .detail-header-inner variant) rather than fighting two
+    different flex layouts. Sits immediately left of the close X (which
+    is 28px wide at right:12px -- 48px clears it plus a gap). */
+ .modal-header-actions{position:absolute; top:12px; right:48px; display:flex; align-items:center; gap:6px; z-index:3;}
+ /* Reserve room so the title (ellipsized either way) doesn't visually run
+    under these buttons before it truncates -- :has() targets both header
+    branches uniformly since .modal-header-actions is a direct child of
+    .modal-header either way (a sibling of the bare <h1>, or of
+    .detail-header-inner). The cover-image branch also needs its own
+    bleed (.detail-header-inner's negative right margin, which normally
+    cancels exactly .modal-header's own padding to let the photo reach
+    the dialog's true edge behind the close X) pulled in to match, and
+    .detail-heading-row's own inset widened by the same amount, or the
+    cover would bleed under these new buttons and the title would sit
+    flush against them. */
+ .modal-header:has(> .modal-header-actions){padding-right:156px;}
+ .detail-header-inner:has(~ .modal-header-actions){margin-right:-156px;}
+ .detail-header-inner:has(~ .modal-header-actions) .detail-heading-row{padding-right:156px;}
+ /* Color/Icon triggers, plain-title case: normal-sized .color-swatch-
+    current/.icon-picker-current (labels_manage.html's table rows,
+    _label_form_fields.html's own body fields elsewhere) are smaller and
+    differently shaped than .modal-close -- this scope-only override
+    matches its exact 28px circle instead of changing either trigger's
+    shape everywhere else they're used. */
+ .modal-header-actions .color-swatch-current{width:28px; height:28px;}
+ .modal-header-actions .icon-picker-current,
+ .modal-header-actions .icon-btn{
+   width:28px; height:28px; border-radius:50%; border:1px solid transparent; background:transparent;
+ }
+ .modal-header-actions .icon-picker-current:hover,
+ .modal-header-actions .icon-btn:hover{background:var(--bg-secondary);}
+ .modal-header-swatch{
+   display:block; width:28px; height:28px; border-radius:50%; box-shadow:0 0 0 1px var(--border) inset; flex:none;
+ }
+ /* Cover-image case: same frosted-chip treatment .modal-close gets over a
+    photo, applied to these three triggers too so they read the same way
+    against arbitrary banner imagery. */
+ #modal-dialog:has(#modal-header .detail-cover-wrap) .modal-header-actions .icon-picker-current,
+ #modal-dialog:has(#modal-header .detail-cover-wrap) .modal-header-actions .icon-btn{
+   background:rgba(0,0,0,.4); color:#fff; border-color:rgba(255,255,255,.35);
+   backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+ }
+ #modal-dialog:has(#modal-header .detail-cover-wrap) .modal-header-actions .icon-picker-current:hover,
+ #modal-dialog:has(#modal-header .detail-cover-wrap) .modal-header-actions .icon-btn:hover{background:rgba(0,0,0,.55); color:#fff;}
+ #modal-dialog:has(#modal-header .detail-cover-wrap) .modal-header-swatch,
+ #modal-dialog:has(#modal-header .detail-cover-wrap) .modal-header-actions .color-swatch-current{
+   box-shadow:0 0 0 1px rgba(255,255,255,.35) inset, 0 0 0 3px rgba(0,0,0,.4);
+ }
  .modal-handle{display:none;}
  /* Modal body -- scrollable content area inside the dialog. */
  .modal-body{padding:var(--space-4) var(--space-5); overflow-y:auto; flex:1;}
