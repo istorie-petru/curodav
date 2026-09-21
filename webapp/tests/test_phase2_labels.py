@@ -1383,3 +1383,20 @@ class TestSettingsLabelsGroupedTables:
         assert 'href="/projects/CS101" class="icon-btn" title="Open label page"' in body
         assert 'href="/settings/labels/Groceries" class="icon-btn" title="Open label page"' in body
 
+    def test_grouped_rows_get_a_colored_left_bar_ungrouped_rows_dont(self, conn):
+        # Follow-up direct request: rows grouped under a Space get a thin
+        # colored left bar (their own -- inherited -- color), lighter than
+        # the Space's own full-background-tint row. An ungrouped label has
+        # no group color to link to, so it gets neither the class nor a bar.
+        self._space(conn, "University", color="green")
+        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "color": "red", "created_at": _now()})
+        self._label(conn, "Groceries")
+        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
+        body = resp.body.decode()
+        # "red" (Historiography's own stored color) never appears -- a
+        # grouped row's l.color is already resolved to the Space's own
+        # color (db.effective_label_config's _resolve_inherited_color).
+        assert 'class="labels-child-row" data-style="--row-accent: var(--cal-accent-green)"' in body
+        groceries_row = body.split('data-label-name="Groceries"')[0].rsplit("<tr", 1)[1]
+        assert "labels-child-row" not in groceries_row
+

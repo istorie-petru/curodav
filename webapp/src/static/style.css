@@ -1538,6 +1538,18 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .labels-space-row .text-muted{color:var(--row-tint-fg);}
 .labels-space-row .label-name{font-weight:600;}
 
+/* A label/project row grouped under a Space (`.labels-child-row`, direct
+   request 2026-09-21 follow-up) -- a thin colored left bar in the
+   group's own color (`--row-accent`, set via data-style same as
+   `--row-tint` above), lighter-weight than `.labels-space-row`'s own
+   full background tint: a visual link to the parent, not a repeat of
+   its "card" treatment. `inset` box-shadow (not `border-left`) so it
+   sits flush inside the cell's own padding/rounded-corner box rather
+   than adding to the row's total width or fighting the hover state's
+   own border-radius clipping. First `<td>` only -- the bar reads as one
+   edge of the row, not four separate cell borders. */
+.labels-child-row td:first-child{box-shadow:inset 3px 0 0 0 var(--row-accent);}
+
 #labels-table-wrapper tbody tr:not(.labels-space-row):hover{background:none;}
 #labels-table-wrapper tbody tr:not(.labels-space-row):hover td{background:var(--row-alt);}
 #labels-table-wrapper tbody tr:not(.labels-space-row):hover td:first-child{border-radius:var(--radius-sm) 0 0 var(--radius-sm);}
