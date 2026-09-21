@@ -1528,32 +1528,34 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 
    Rounded-corner hover follows the same per-`<td>`-background technique,
    scoped to this table only (not the global `tbody tr:hover` rule
-   above, which every other settings table still uses unmodified). */
-.labels-space-row td{background:var(--row-tint);}
-.labels-space-row td:first-child{border-radius:var(--radius-sm) 0 0 var(--radius-sm);}
-.labels-space-row td:last-child{border-radius:0 var(--radius-sm) var(--radius-sm) 0;}
-.labels-space-row .label-cell-icon,
-.labels-space-row .label-name,
-.labels-space-row .usage-badge,
-.labels-space-row .text-muted{color:var(--row-tint-fg);}
+   above, which every other settings table still uses unmodified).
+
+   2026-09-21 follow-up (direct request -- first tried a colored left
+   bar on a grouped label's own row, direct feedback "I don't like this,
+   I like the background color more"): `.labels-child-row` (a grouped
+   label/project's row) now shares this exact same tint/rounded-corner
+   treatment via the same `--row-tint`/`--row-tint-fg` custom properties
+   (_labels_table_body.html sets them identically for both row kinds,
+   just off the row's own -- already Space-inherited -- color), not a
+   separate lighter-weight rule. Only the bold name stays exclusive to
+   `.labels-space-row`, so the two still read as parent/child at a
+   glance despite sharing a color family. */
+.labels-space-row td,
+.labels-child-row td{background:var(--row-tint);}
+.labels-space-row td:first-child,
+.labels-child-row td:first-child{border-radius:var(--radius-sm) 0 0 var(--radius-sm);}
+.labels-space-row td:last-child,
+.labels-child-row td:last-child{border-radius:0 var(--radius-sm) var(--radius-sm) 0;}
+.labels-space-row .label-cell-icon, .labels-child-row .label-cell-icon,
+.labels-space-row .label-name, .labels-child-row .label-name,
+.labels-space-row .usage-badge, .labels-child-row .usage-badge,
+.labels-space-row .text-muted, .labels-child-row .text-muted{color:var(--row-tint-fg);}
 .labels-space-row .label-name{font-weight:600;}
 
-/* A label/project row grouped under a Space (`.labels-child-row`, direct
-   request 2026-09-21 follow-up) -- a thin colored left bar in the
-   group's own color (`--row-accent`, set via data-style same as
-   `--row-tint` above), lighter-weight than `.labels-space-row`'s own
-   full background tint: a visual link to the parent, not a repeat of
-   its "card" treatment. `inset` box-shadow (not `border-left`) so it
-   sits flush inside the cell's own padding/rounded-corner box rather
-   than adding to the row's total width or fighting the hover state's
-   own border-radius clipping. First `<td>` only -- the bar reads as one
-   edge of the row, not four separate cell borders. */
-.labels-child-row td:first-child{box-shadow:inset 3px 0 0 0 var(--row-accent);}
-
-#labels-table-wrapper tbody tr:not(.labels-space-row):hover{background:none;}
-#labels-table-wrapper tbody tr:not(.labels-space-row):hover td{background:var(--row-alt);}
-#labels-table-wrapper tbody tr:not(.labels-space-row):hover td:first-child{border-radius:var(--radius-sm) 0 0 var(--radius-sm);}
-#labels-table-wrapper tbody tr:not(.labels-space-row):hover td:last-child{border-radius:0 var(--radius-sm) var(--radius-sm) 0;}
+#labels-table-wrapper tbody tr:not(.labels-space-row):not(.labels-child-row):hover{background:none;}
+#labels-table-wrapper tbody tr:not(.labels-space-row):not(.labels-child-row):hover td{background:var(--row-alt);}
+#labels-table-wrapper tbody tr:not(.labels-space-row):not(.labels-child-row):hover td:first-child{border-radius:var(--radius-sm) 0 0 var(--radius-sm);}
+#labels-table-wrapper tbody tr:not(.labels-space-row):not(.labels-child-row):hover td:last-child{border-radius:0 var(--radius-sm) var(--radius-sm) 0;}
 
 /* 2026-09-16 (direct request, "the table rows are not narrow enough for
    desktop") -- narrower than the global `tbody td`/`thead th` padding

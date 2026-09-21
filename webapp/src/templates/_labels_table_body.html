@@ -89,18 +89,21 @@
 </tr>
 {% endmacro %}
 {% macro _label_row(l) %}
-{# Direct request, 2026-09-21 follow-up: a row grouped under a Space gets
-   a thin colored left bar in the group's own color (l.color already
-   IS the inherited Space color for a grouped label -- db.
-   effective_label_config's _resolve_inherited_color, final labels-page
-   iteration) -- a lighter visual link than the Space's own row's full
-   `.labels-space-row` background tint, not a repeat of it. Only
-   grouped rows (`l.parent_name` set) get the bar -- an ungrouped plain
-   label has no group color to link to. `.labels-child-row` + the
-   `--row-accent` custom property (set via `data-style`, this file's own
-   CSP-safe convention -- see its header comment) are what style.css's
-   `box-shadow: inset` rule reads. #}
-<tr {% if l.parent_name %}class="labels-child-row" data-style="--row-accent: var(--cal-accent-{{ l.color or 'blue' }})"{% endif %} data-label-name="{{ l.name }}" data-label-group="{{ l.parent_name or '' }}">
+{# Direct request, 2026-09-21 follow-up (first tried a colored left bar,
+   direct feedback "I don't like this, I like the background color
+   more"): a row grouped under a Space gets the same tinted-background
+   "card" treatment the Space's own row (`.labels-space-row`) already
+   has, in the group's own color (l.color already IS the inherited Space
+   color for a grouped label -- db.effective_label_config's
+   _resolve_inherited_color, final labels-page iteration). Only grouped
+   rows (`l.parent_name` set) get it -- an ungrouped plain label has no
+   group color to link to. Reuses `.labels-space-row`'s own `--row-tint`/
+   `--row-tint-fg` custom properties (set via `data-style`, this file's
+   own CSP-safe convention -- see its header comment) so both row kinds
+   share one CSS rule for the tint itself; `.labels-child-row` only adds
+   back the plain (non-bold) font-weight so the two still read as
+   parent/child, not identical rows. #}
+<tr {% if l.parent_name %}class="labels-child-row" data-style="--row-tint: var(--tag-{{ l.color or 'blue' }}-bg); --row-tint-fg: var(--tag-{{ l.color or 'blue' }}-fg)"{% endif %} data-label-name="{{ l.name }}" data-label-group="{{ l.parent_name or '' }}">
     {# 2026-09-14: mirrors the row markup this table has used since the
        solid-color-dot -> icon swap (icon + name both painted with
        var(--cal-accent-{color})) -- unchanged by slice 2, just no
