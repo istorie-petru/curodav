@@ -553,7 +553,10 @@
 // Agenda-widget / day-view habit rules.
 // v116 (2026-09-24, same session): habits H8 -- style.css gained the
 // insights bar rules.
-const CACHE_NAME = "cc-shell-v116";
+// v117 (2026-09-24, same session): Web Push P1 -- this file gained the
+// push / notificationclick handlers (a new sw.js is picked up by the
+// browser's own byte-compare anyway; bumped for the shell convention).
+const CACHE_NAME = "cc-shell-v117";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",
@@ -698,4 +701,49 @@ self.addEventListener("fetch", (event) => {
   }
   // Everything else (JSON APIs, non-precached GETs) is left alone --
   // default browser network handling, no caching.
+});
+
+// Web Push (2026-09-24, plans/ui-cleanup-2026-09.md item 7, slice P1) --
+// src/push.py sends a small JSON payload {title, body, url, tag}; show it
+// as a notification, and on click focus an open app tab (navigating it to
+// `url`) or open a new one. Same-origin paths only: a payload can never
+// send the user off-site.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { body: event.data ? event.data.text() : "" };
+  }
+  const title = data.title || "Curodav";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.body || "",
+      icon: "/static/icons/icon-192.png",
+      badge: "/static/icons/icon-192.png",
+      tag: data.tag || undefined,
+      data: { url: data.url || "/" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  let target = "/";
+  try {
+    const u = new URL((event.notification.data && event.notification.data.url) || "/", self.location.origin);
+    if (u.origin === self.location.origin) target = u.pathname + u.search + u.hash;
+  } catch (e) {
+    target = "/";
+  }
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
+      for (const w of wins) {
+        if (new URL(w.url).origin === self.location.origin && "focus" in w) {
+          return w.focus().then(() => (w.navigate ? w.navigate(target) : null));
+        }
+      }
+      return self.clients.openWindow(target);
+    })
+  );
 });

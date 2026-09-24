@@ -755,8 +755,21 @@ session start.
   keep half/half). Verified live at 1440/1024/390px. Full suite **2,398
   passed**.
 
-  **Next slice**: Web Push (item 7, multi-session; habit reminders ride on
-  it -- `habit_schedule.is_due_on` is ready for "is it due today"). Then
+  **Web Push P1 shipped (item 7) -- plumbing.** Audit confirmed nothing
+  existed. New dependency `pywebpush`; `src/push.py` (VAPID keys in
+  app_meta, send_to_all + 404/410 pruning), `push_subscriptions` table,
+  `/push/*` endpoints (https-only endpoints), `sw.js` push +
+  notificationclick (same-origin only), Settings > General
+  "Notifications on this device" card. New `test_push.py` (12). **Can't
+  be verified end to end in this sandbox** (headless Chromium has no push
+  service; FCM unreachable) -- Peter's first real test: Settings >
+  General > Turn on > Send test. Found + fixed during the live check:
+  `.btn`'s display overrode `[hidden]`; the card waited forever when
+  pwa.js's on-load registration hadn't run yet. Full suite **2,410
+  passed**. `sw.js` v116 -> v117.
+
+  **Next slice**: Web Push P2 (scheduler + reminder primitive), then P3
+  (notification types/copy/settings) -- see item 7's section. Then
   labels-as-modules (item 4 -- re-confirm scope with Peter first, do not
   start without it) and narrow banners (item 2, after 4). Others unchanged: Web Push
   (item 7), labels-as-modules (item 4 -- re-confirm scope with Peter

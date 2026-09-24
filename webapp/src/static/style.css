@@ -7802,3 +7802,7 @@ button.allday-habit{width:100%; text-align:left; border:none; cursor:pointer; fo
 .habit-bars.is-avoid .habit-bar-fill{background:var(--danger);}
 .habit-bar-count{font-size:10px; color:var(--fg-tertiary); line-height:1.2; height:12px;}
 .habit-bar-label{font-size:10px; color:var(--fg-tertiary); line-height:1.4; height:14px;}
+/* Web Push P1: Settings > General's Notifications card -- `button.btn`
+   sets display, which would otherwise override the [hidden] attribute
+   push_settings.js toggles. */
+#push-settings button[hidden]{display:none;}

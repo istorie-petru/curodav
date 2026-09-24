@@ -388,7 +388,7 @@ its own). Checked `SHELL_ASSETS` membership before concluding this,
 per this session's own established habit. `test_pwa_shell.py`'s
 version-string assertion updated to match.
 
-## 7. Web Push notifications
+## 7. Web Push notifications — IN PROGRESS (P1 shipped 2026-09-24)
 
 Leisure/sleep-time start, event start, tasks due today (generic phrasing
 when more than one — "you have multiple tasks due today," not a list),
@@ -409,6 +409,48 @@ server-side scheduler capable of firing at specific wall-clock moments (no
 existing background scheduler in this app as of 2026-09 — confirm, don't
 assume), and copy for each notification type. Large, mostly new
 infrastructure — budget multiple sessions.
+
+**Audit (2026-09-24):** no subscription flow, no VAPID keys, no push
+handler in `sw.js`, no scheduler -- confirmed. The one background thread
+is the Radicale sync loop (`sync.start_background_sync`, started in
+main.py's lifespan). The one existing reminder concept is events'
+`reminders_json` (imported VALARMs); tasks and habits have none.
+`plans/ofline-first-pwa.md` is unrelated (offline data, not
+notifications).
+
+**P1 -- shipped 2026-09-24 (plumbing).** New dependency `pywebpush`
+(brings `cryptography`; VAPID JWT + RFC 8291 encryption). `src/push.py`:
+one P-256 VAPID key pair per install, generated on first use into
+app_meta (`push_vapid_private_pem`; no UI to paste keys -- regenerating
+would orphan every subscription), `send_to_all(title, body, url, tag)`
+with pruning on 404/410 and never raising on network errors; contact
+claim `CC_PUSH_CONTACT` env or the repo URL. `push_subscriptions` table
+(endpoint PK, keys, UA, created/last_ok). `routers/push.py`: GET
+`/push/public-key`, POST `/push/subscribe` (https endpoints only, key
+sizes bounded -- no fetching arbitrary URLs), `/push/unsubscribe`,
+`/push/test`. `sw.js`: `push` -> showNotification, `notificationclick` ->
+focus/navigate an app tab, same-origin URLs only. Settings > General:
+"Notifications on this device" card (`static/push_settings.js`: Turn on /
+Send test / Turn off, per device; explains iPhone needs Add to Home
+Screen). **Not verifiable here**: headless Chromium has no push service
+("Registration failed - permission denied"), and this sandbox can't reach
+FCM/Mozilla/Apple -- the send path is covered with an injected fake
+sender. First real check has to be Peter's phone/browser: Settings >
+General > Turn on > Send test.
+
+**Remaining slices:**
+- **P2 -- scheduler + the one reminder primitive.** A small background
+  thread (same start/stop pattern as the sync loop) that wakes each
+  minute, computes due notifications, and records what it sent
+  (`push_sent(key)`, so a restart never double-sends). The primitive per
+  the spec: events remind at start (reuse `reminders_json` offsets when
+  present, else at start); tasks and habits remind on their due date.
+- **P3 -- notification types + copy + settings.** Event start; one
+  morning "due today" digest for tasks ("You have 3 tasks due today" --
+  generic when more than one) and habits; sleep/leisure-time start (the
+  one extra mechanism allowed). Settings: per-type on/off and the digest
+  time (default 08:00). Motivational tone, never a nag (no repeats, no
+  overdue shaming).
 
 ## 8. ~~`main-shell-body`'s `margin-bottom: 6dvh`~~ — SHIPPED 2026-09-24
 

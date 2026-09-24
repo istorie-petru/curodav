@@ -321,5 +321,6 @@ class TestShellCacheVersion:
         # v114 (2026-09-24, same session): habits H6 pause styles.
         # v115 (2026-09-24, same session): habits H7 agenda/day-view styles.
         # v116 (2026-09-24, same session): habits H8 insights styles.
+        # v117 (2026-09-24, same session): Web Push P1 handlers in sw.js.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v116"' in script
+        assert 'CACHE_NAME = "cc-shell-v117"' in script

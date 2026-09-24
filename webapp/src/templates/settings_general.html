@@ -167,4 +167,21 @@
          2026-08-28 is gone; both views are unconditionally available now,
          same as before that setting existed. -->
 </div>
+
+{# Web Push (2026-09-24, plans/ui-cleanup-2026-09.md item 7, slice P1) --
+   per-device: each browser/phone subscribes on its own. Everything here
+   is driven by static/push_settings.js; without JS (or without push
+   support) the status line says so and the buttons stay hidden. #}
+<div class="card push-settings" id="push-settings">
+    <div class="settings-field-row">
+        <span class="settings-field-label">Notifications on this device
+            <span class="settings-field-hint" id="push-status">Checking&hellip;</span>
+        </span>
+        <span class="spacer"></span>
+        <button type="button" class="btn primary btn-sm" id="push-enable" hidden>{{ icon('bell', 'icon-sm') }} Turn on</button>
+        <button type="button" class="btn ghost btn-sm" id="push-test" hidden>Send test</button>
+        <button type="button" class="btn ghost btn-sm" id="push-disable" hidden>Turn off</button>
+    </div>
+</div>
 {% endblock %}
+{% block extra_scripts %}<script defer src="{{ static_url('push_settings.js') }}"></script>{% endblock %}

@@ -622,6 +622,21 @@ CREATE TABLE IF NOT EXISTS task_completions (
     PRIMARY KEY (task_uid, due_date)
 );
 
+-- 2026-09-24 (plans/ui-cleanup-2026-09.md item 7, Web Push slice P1): one
+-- row per browser/device that turned notifications on. `endpoint` is the
+-- push service URL (unique per subscription); p256dh/auth are the
+-- subscription's public key + secret the payload is encrypted to (not
+-- credentials for this app). Pruned automatically when the push service
+-- answers 404/410 (the browser dropped it).
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    endpoint TEXT PRIMARY KEY,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    user_agent TEXT,
+    created_at TEXT,
+    last_ok_at TEXT
+);
+
 -- 2026-09-24 (habits H6): vacation / pause ranges. `task_uid` NULL pauses
 -- every habit; otherwise one habit. Paused days are neutral for streaks
 -- (habit_schedule.habit_stats' `paused_dates`). Local-only like
@@ -1911,7 +1926,7 @@ def purge_all_data(conn: sqlite3.Connection) -> None:
         # Schedule module itself (removed 2026-08-15, see plans/STATE.md);
         # schedule_settings is gone along with that module.
         "schedule_holidays", "habits",
-        "habit_entries", "task_completions", "habit_pauses", "dashboard_widgets",
+        "habit_entries", "task_completions", "habit_pauses", "push_subscriptions", "dashboard_widgets",
         "time_blocks",
         "published_lists", "app_meta",
     ]
@@ -4393,6 +4408,32 @@ def upsert_task_completion(
         "note=COALESCE(excluded.note, task_completions.note)",
         (task_uid, due_date, completed_at, value, note),
     )
+    conn.commit()
+
+
+def upsert_push_subscription(
+    conn: sqlite3.Connection, endpoint: str, p256dh: str, auth: str, user_agent: str | None, now: str
+) -> None:
+    """Web Push P1: store (or refresh the keys of) one device's subscription."""
+    conn.execute(
+        "INSERT INTO push_subscriptions (endpoint, p256dh, auth, user_agent, created_at) VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth, user_agent=excluded.user_agent",
+        (endpoint, p256dh, auth, user_agent, now),
+    )
+    conn.commit()
+
+
+def list_push_subscriptions(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    return [dict(r) for r in conn.execute("SELECT * FROM push_subscriptions ORDER BY created_at").fetchall()]
+
+
+def delete_push_subscription(conn: sqlite3.Connection, endpoint: str) -> None:
+    conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,))
+    conn.commit()
+
+
+def mark_push_subscription_ok(conn: sqlite3.Connection, endpoint: str, now: str) -> None:
+    conn.execute("UPDATE push_subscriptions SET last_ok_at = ? WHERE endpoint = ?", (now, endpoint))
     conn.commit()
 
 
