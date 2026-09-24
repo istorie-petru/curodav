@@ -110,10 +110,11 @@ that fits its remaining budget.
     card-grid fallback, main list pages only. See the "Responsive tables"
     section below (it never had a numbered section of its own; the "(item
     11)" this line used to carry was a numbering slip -- 11 is Search).
-15. **Habits/routines as a distinct frontend data model** (item 14) — audit
-    what `test_habit_ui_rework.py`/`test_habits_router.py`/
-    `test_tasks_habits_view.py`/`habit_checkin.js` already cover before
-    assuming greenfield.
+15. **Habits/routines as a distinct frontend data model** (item 14) —
+    **slice 1 of 4 shipped 2026-09-24** (Habit entity removed, shared
+    `habit_view.py`, Dashboard widget now lists habit tasks); slices 2-4
+    (Habits page, bigger widget, agenda/calendar + detail) in item 14's
+    section below.
 16. **Default dashboard layout (25/50/25)** (item 17) — depends on 15 (a
     real Habit Check-in widget, not just today's `habit_checkin.js`).
 17. **Web Push notifications** (item 7) — mostly independent infra, large;
@@ -828,7 +829,7 @@ match.
 top rather than being rewritten past-tense, matching how it already
 documents the gap between the v1 spec and what shipped.
 
-## 14. Habits/routines as a distinct frontend data model
+## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 of 4 shipped 2026-09-24)
 
 "I also think that we strongly need to make habits/routines a different
 data model, at least in the frontend. They can still be tasks in the
@@ -838,6 +839,59 @@ UI." Audit `test_habit_ui_rework.py`, `test_habits_router.py`,
 `static/habit_checkin.js` first — there's already some habit-specific UI
 surface; this item is about how much further it needs to diverge from a
 plain task's presentation, not a from-scratch build.
+
+**Audit (2026-09-24).** Two habit backends were running side by side:
+(A) standalone Habit entities (`habits`/`habit_entries` -- color, icon,
+per-entry note, `/habits/{uid}` detail page) with **no creation path left
+in the UI** (`/habits` redirected to `/tasks`, `/habits/new` unlinked); and
+(B) habit-labeled tasks (`tasks` + `task_completions.value`, with
+`target_per_day`, recurrence, weekend/holiday exclusions, work sessions) --
+the only kind Tasks' "+ Add habit" creates. The Tasks table merged both
+into one Habits group, but the **Dashboard Habit Check-in widget read only
+(A)** (`db.list_habits`), so every habit created through the UI never
+appeared in it; its empty state pointed at "Settings", which has no habit
+creation either.
+
+**Peter's answers (asked first, three questions):**
+1. Collapse: "I have no real entities" -- delete the entity path outright,
+   no migration.
+2. Placement: a **dedicated Habits page** (habits leave the Tasks table).
+3. Surfaces: a **bigger check-in widget**, **habits in agenda/calendar**,
+   a **habit-specific detail** view -- with a reference app for good
+   habit/routine tracking UX: https://inlitx.github.io/streak/ (blocked by
+   this environment's network egress policy on 2026-09-24 -- not yet
+   looked at; ask Peter for screenshots or to allow the host before
+   designing slices 3-4).
+
+**Target model.** Backend: a habit-labeled task is the only habit.
+Frontend: one habit view-model (`src/habit_view.py::habit_items` -- title,
+cadence label, target, today's value, next value, streak, check-in URLs)
+that every habit surface renders from; no habit surface ever shows task
+fields (status, due date, Kanban).
+
+**Slices:**
+1. ~~Entity removal + shared view-model + widget fix~~ — **shipped
+   2026-09-24.** `habit_view.py` added (`habit_items`/`habit_item`, plus
+   `excluded_dates_for_row` moved from routers/tasks.py); Tasks' Habits
+   group and the Dashboard widget both render from it, so the widget now
+   lists habit-labeled tasks and checks in via
+   `/tasks/{uid}/completion/{date}/toggle` / `/tasks/{uid}/completions`.
+   Removed: `routers/habits.py`'s CRUD/entries/update-field/detail
+   endpoints (every `/habits...` GET now 302s to `/tasks`),
+   `habit_form.html`, `habit_detail.html`, `_habit_detail_body.html`,
+   `static/habits.js`, db.py's entity accessors (`upsert_habit`,
+   `list_habits`, `upsert_habit_entry`, `toggle_habit_entry`, ... plus the
+   now-callerless `_apply_tags_and_project`), `_habit_row.html`'s
+   `kind=entity` branches, `/tasks/bulk`'s `habit_uids`, tasks_table.js's
+   `updateHabitField`/`selectedByKind`. The `habits`/`habit_entries`
+   tables stay in SCHEMA_SQL (never force-dropped).
+2. **Dedicated Habits page** at `/habits` (replacing the redirect) + nav
+   entry; Habits group leaves the Tasks table. Design against the Streak
+   reference once it's viewable.
+3. **Bigger check-in widget** (week strip / streak / progress per habit)
+   -- unblocks item 15's 25/50/25 layout.
+4. **Habits in Agenda/calendar day view** + a habit-only detail modal
+   (drop any remaining task-ish field).
 
 ## 15. Default dashboard layout
 
@@ -966,6 +1020,12 @@ conflicts table.
   mechanism; if one is found during audit, this doc's "only leisure/sleep is
   a new mechanism" constraint may already be satisfied for events/tasks/
   habits and the item shrinks considerably.
+- Found 2026-09-24 (not fixed, out of item 14's scope): opening **any**
+  task detail modal (a plain task too, not just a habit) logs one CSP
+  violation in the console -- "Refused to apply inline style ... style-src
+  'self' 'nonce-...'". Some inline `style=` in the task-detail modal path
+  survived audit-fixes-2.0 item 11's inline-style sweep. Cosmetic effect
+  unknown; worth a one-slice hunt.
 
 ## How open work gets tracked
 

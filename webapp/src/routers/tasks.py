@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from .. import db, derived_state, habit_heatmap
+from .. import db, derived_state, habit_heatmap, habit_view
 from ..deps import get_db, respond, templates
 from . import dashboard as dashboard_router
 from . import calendar as calendar_router  # _annotate_calendar_colors, for related events' identity dots
@@ -26,29 +26,13 @@ TASK_AUTO_ARCHIVE_DAYS_KEY = "task_auto_archive_days"
 
 # 2026-08-28 follow-up ("direct number input" for the Habits group's
 # check-in cell) -- server-side mirror of the input's `max="999999"`, see
-# set_task_completion below. Shared with routers/habits.py's own copy
-# (kept as a plain duplicated constant rather than a cross-router import,
-# same "small enough to just repeat" call this app makes elsewhere for a
-# one-line bound rather than adding an import edge between two routers).
+# set_task_completion below.
 _MAX_HABIT_VALUE = 999999
 
 
-def _excluded_dates_for_row(conn, row: dict, entries_by_date: dict, today: date) -> set[str]:
-    """2026-08-29 (STATE.md backlog item 3): the same holiday_calendar/
-    exclude_saturday/exclude_sunday policy resolution as routers/habits.py's
-    _excluded_dates_for_habit (kept as its own small copy here rather than
-    a cross-router import -- same "small enough to just repeat" call this
-    file already makes for _MAX_HABIT_VALUE above) -- `row` may be a
-    recurring task or a standalone habit entity, both now carry the same
-    three columns. Cheap no-op (no DB read) when the row has no policy set
-    at all."""
-    if not (row.get("holiday_calendar") or row.get("exclude_saturday") or row.get("exclude_sunday")):
-        return set()
-    logged = [date.fromisoformat(d) for d in entries_by_date if d]
-    start = min(logged) if logged else today
-    start = max(start, today - timedelta(days=730))
-    holiday_calendars = db.list_holidays_by_calendar(conn)
-    return habit_heatmap.excluded_dates_in_range(row, holiday_calendars, start, today)
+# Moved to habit_view.py (2026-09-24) -- shared with the Dashboard's
+# Habit Check-in widget; kept under its old name for this file's callers.
+_excluded_dates_for_row = habit_view.excluded_dates_for_row
 
 
 def _auto_archive_if_configured(conn) -> None:
@@ -201,99 +185,11 @@ def _due_at_key(t: dict) -> str:
 
 
 def _habit_group_items(conn) -> list[dict]:
-    """2026-08-28 "major rework" session (item 2, "merge Habits into the
-    Tasks table"): the Habits group's rows are a merge of the two habit
-    concepts this app has grown -- habit-*labeled tasks* (task_habit_
-    settings, "Tasks > Habits" as it existed before this session, real
-    `tasks` rows tracked via target_per_day/task_completions) and the
-    separate, standalone Habit *entities* (routers/habits.py's `habits`/
-    `habit_entries` tables, whose own dedicated list page is retired by
-    this same session -- see routers/habits.py's module docstring). Both
-    are normalized into one shared shape here so _habit_row.html only has
-    to render one thing, not two -- `kind` ('task' | 'entity') is the only
-    field that varies where the two check-in mechanics differ (the toggle/
-    plus/delete URLs). Going forward, the group's own "+" add-row only
-    creates NEW habit-tracked work via the task-habit flow (`/tasks/new?
-    habit=1`, unchanged) -- routers/habits.py's create endpoints stay alive
-    (a pre-existing standalone habit needs somewhere to keep living, and
-    its edit/archive/delete/entries endpoints are still exactly how this
-    group's "entity" rows are mutated), but there's deliberately only one
-    *creation* entry point post-merge rather than two competing ones."""
-    today = date.today()
-    today_iso = today.isoformat()
-    items: list[dict] = []
-    for t in db.list_habit_tasks(conn):
-        if t["status"] in DONE_STATUSES:
-            continue
-        entries_by_date = {c["due_date"]: c["value"] for c in db.list_task_completions(conn, t["uid"])}
-        target = t.get("target_per_day") or 1
-        excluded = _excluded_dates_for_row(conn, t, entries_by_date, today)
-        current_streak, _ = habit_heatmap.streaks(entries_by_date, excluded_dates=excluded)
-        today_value = entries_by_date.get(today_iso, 0)
-        items.append(
-            {
-                "kind": "task",
-                "uid": t["uid"],
-                "title": t["title"],
-                "tags": t.get("tags") or [],
-                "is_quantity": target > 1,
-                "target": target,
-                "today_value": today_value,
-                "next_value": today_value + 1,
-                "done_today": today_value > 0,
-                "current_streak": current_streak,
-                # 2026-08-29 direct feedback: the Due column shows this
-                # habit's cadence ("Daily"/"Weekly"/...), not its streak --
-                # habit_heatmap.recurrence_label never renders the raw
-                # "FREQ=DAILY" the task's own `recurrence` column stores.
-                "recurrence_label": habit_heatmap.recurrence_label(t.get("recurrence")),
-                "detail_url": f"/tasks/{t['uid']}",
-                "toggle_url": f"/tasks/{t['uid']}/completion/{today_iso}/toggle",
-                "plus_url": f"/tasks/{t['uid']}/completions",
-                "delete_url": f"/tasks/{t['uid']}/delete",
-            }
-        )
-    for h in db.list_habits(conn):
-        entries_by_date = db.habit_entries_by_date(conn, h["uid"])
-        target = h.get("target_per_day") or 1
-        excluded = _excluded_dates_for_row(conn, h, entries_by_date, today)
-        current_streak, _ = habit_heatmap.streaks(entries_by_date, excluded_dates=excluded)
-        today_value = entries_by_date.get(today_iso, 0)
-        items.append(
-            {
-                "kind": "entity",
-                "uid": h["uid"],
-                "title": h["name"],
-                # 2026-09-03 bug fix (found while verifying the label-icon
-                # fix above): this was hardcoded to `[]` -- a standalone
-                # Habit entity's own labels (`db.list_habits`'s
-                # `_habit_row_to_dict` already attaches them as `h["tags"]`,
-                # same `object_labels` mechanism every other entity type
-                # uses) were computed and then silently discarded, so no
-                # label a Habit entity carried ever rendered on this page's
-                # Habits group, icon or no icon. A habit-labeled *task*
-                # right above (`kind: "task"`, `t.get("tags")`) never had
-                # this bug -- only the standalone-entity branch did.
-                "tags": h.get("tags") or [],
-                "is_quantity": target > 1,
-                "target": target,
-                "today_value": today_value,
-                "next_value": today_value + 1,
-                "done_today": today_value > 0,
-                "current_streak": current_streak,
-                # A standalone Habit entity has no recurrence field at all
-                # (habit_entries is inherently a per-day log) -- it's
-                # implicitly daily, same as habit_task_form.html's "New
-                # habit" flow defaults its own Recurrence field to.
-                "recurrence_label": "Daily",
-                "detail_url": f"/habits/{h['uid']}",
-                "toggle_url": f"/habits/{h['uid']}/entries/{today_iso}/toggle",
-                "plus_url": f"/habits/{h['uid']}/entries",
-                "delete_url": f"/habits/{h['uid']}/delete",
-            }
-        )
-    items.sort(key=lambda it: (it["title"] or "").lower())
-    return items
+    """The Habits group's rows -- every active habit-labeled task, in the
+    shared frontend habit shape (habit_view.habit_items). Until 2026-09-24
+    this also merged in standalone Habit entities (`habits`/`habit_entries`),
+    removed outright that day -- a habit-labeled task is the only habit."""
+    return habit_view.habit_items(conn)
 
 
 def _build_task_groups(conn, open_tasks: list[dict], completed_tasks: list[dict]) -> list[dict]:
@@ -673,18 +569,7 @@ async def bulk_action(request: Request, conn=Depends(get_db)):
     payload = await request.json()
     action = payload.get("action")
     uids = payload.get("uids") or []
-    # 2026-08-29 (STATE.md backlog item 1, "bulk actions... then Habits"):
-    # a selection on the Tasks page may include Habits-group rows for the
-    # standalone Habit entity kind (_habit_row.html's checkbox, kind=
-    # "entity") alongside plain task uids -- only "delete" needs to know
-    # the difference (see static/tasks_table.js's selectedByKind), since
-    # a habit entity lives in `habits`, not `tasks`. Only meaningful for
-    # `action == "delete"`; every other branch below is unchanged and
-    # still only ever looks at `uids`.
-    habit_uids = payload.get("habit_uids") or []
-    if action != "delete" and not uids:
-        return JSONResponse({"error": "no tasks selected"}, status_code=400)
-    if action == "delete" and not uids and not habit_uids:
+    if not uids:
         return JSONResponse({"error": "no tasks selected"}, status_code=400)
 
     if action == "delete":
@@ -694,9 +579,7 @@ async def bulk_action(request: Request, conn=Depends(get_db)):
         for uid in uids:
             db.delete_task(conn, uid)
             db.delete_checklist_items_for_task(conn, uid)
-        for uid in habit_uids:
-            db.delete_habit(conn, uid)
-        return JSONResponse({"ok": True, "count": len(uids) + len(habit_uids)})
+        return JSONResponse({"ok": True, "count": len(uids)})
 
     if action == "status":
         status = payload.get("status")
@@ -1190,8 +1073,7 @@ def set_task_completion(
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
-    """Explicit-value counterpart to toggle_task_completion above -- same
-    role habits.py's add_entry plays for habit_entries (a >target_per_day
+    """Explicit-value counterpart to toggle_task_completion above (a >target_per_day
     "+1" quick check-in button on Tasks > Habits posts today's date and
     the pre-computed next value here; referer-aware redirect is what lets
     that work from the check-in row without bouncing to the task's own

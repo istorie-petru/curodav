@@ -24,7 +24,6 @@ import pytest
 from starlette.requests import Request
 
 from src import db
-from src.routers import habits as habits_router
 from src.routers import labels as labels_router
 
 
@@ -52,53 +51,6 @@ def _request(path="/", query_string=b""):
         }
     )
 
-
-def _seed_habit(conn, uid, **overrides):
-    row = {"uid": uid, "name": uid, "color": "blue", "target_per_day": 1, "created_at": _now(), "updated_at": _now()}
-    row.update(overrides)
-    db.upsert_habit(conn, row)
-    return db.get_habit(conn, uid)
-
-
-class TestHabitFormRendersSwatchGridNotSelectOrTextInput:
-    def test_new_habit_form_has_color_and_icon_pickers(self, conn):
-        resp = habits_router.new_habit_form(_request("/habits/new"), conn=conn)
-        body = resp.body.decode()
-        assert '<select name="color">' not in body
-        assert 'class="project-icon-input"' not in body
-        assert 'class="color-picker"' in body
-        assert 'class="icon-picker"' in body
-        # Every color/icon radio still submits with the real "habit-form".
-        assert 'form="habit-form"' in body
-
-    def test_edit_habit_form_preselects_current_color_and_icon(self, conn):
-        _seed_habit(conn, "h1", color="purple", icon="star")
-        resp = habits_router.edit_habit_form("h1", _request("/habits/h1/edit"), conn=conn)
-        body = resp.body.decode()
-        assert 'color-swatch-current cal-purple' in body
-        assert 'value="purple" class="color-swatch cal-purple"' in body
-        assert 'value="star" class="icon-swatch" checked' in body
-
-
-class TestHabitCreateEditStoresColorAndIcon:
-    def test_create_habit_with_color_and_icon(self, conn):
-        habits_router.create_habit(
-            name="Read", description="", color="green", icon="book-open",
-            target_per_day="1", tags="", project_uid="", conn=conn,
-        )
-        habit = next(h for h in db.list_habits(conn) if h["name"] == "Read")
-        assert habit["color"] == "green"
-        assert habit["icon"] == "book-open"
-
-    def test_edit_habit_updates_color_and_icon(self, conn):
-        uid = _seed_habit(conn, "h1", color="blue", icon=None)["uid"]
-        habits_router.edit_habit(
-            uid, name="h1", description="", color="orange", icon="target",
-            target_per_day="1", tags="", project_uid="", conn=conn,
-        )
-        habit = db.get_habit(conn, uid)
-        assert habit["color"] == "orange"
-        assert habit["icon"] == "target"
 
 
 class TestLabelsManageRowRendersSwatchGridNotSelect:
@@ -210,18 +162,3 @@ class TestExpandedPaletteAndGroupedIcons:
             escaped = group_name.replace("&", "&amp;")
             assert f'<div class="icon-group-label">{escaped}</div>' in body
 
-    def test_habit_form_shows_all_sixteen_colors_from_the_shared_partial(self, conn):
-        # label_detail.html's own copy of this picker is gone (its inline
-        # "Edit label" form was removed; the manage page /labels is the one
-        # place to edit a label now) -- habit_form.html is the remaining
-        # non-manage-page consumer of the shared 16-color partial.
-        habit_resp = habits_router.new_habit_form(_request("/habits/new"), conn=conn)
-        habit_body = habit_resp.body.decode()
-        assert habit_body.count('class="color-swatch-label"') == 16
-        for group_name in habits_router.ICON_GROUPS:
-            escaped = group_name.replace("&", "&amp;")
-            assert f'<div class="icon-group-label">{escaped}</div>' in habit_body
-
-    def test_habits_colors_and_icon_groups_are_imported_not_duplicated(self):
-        assert habits_router.COLORS is labels_router.COLORS
-        assert habits_router.ICON_GROUPS is labels_router.ICON_GROUPS

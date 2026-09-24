@@ -118,12 +118,6 @@ class TestHabitRowColumns:
         assert "FREQ=WEEKLY" not in body
         assert "Weekly" in body
 
-    def test_entity_habit_recurrence_label_is_daily(self, conn):
-        db.upsert_habit(conn, {"uid": "e1", "name": "Read", "color": "blue", "target_per_day": 1, "created_at": _now()})
-        resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
-        item = next(g for g in resp.context["groups"] if g["kind"] == "habits")["habit_items"][0]
-        assert item["recurrence_label"] == "Daily"
-
     def test_streak_still_present_in_scheduled_column(self, conn):
         _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
         today = date.today().isoformat()
@@ -188,45 +182,6 @@ class TestHabitTaskViewModal:
         resp = tasks_router.task_detail("p1", _request("/tasks/p1"), conn=conn)
         body = resp.body.decode()
         assert "detail-meta-label\">Status" in body
-
-
-class TestEntityHabitFormAndDetail:
-    def test_edit_form_has_no_labels_multiselect(self, conn):
-        db.upsert_habit(conn, {"uid": "e1", "name": "Read", "color": "blue", "target_per_day": 1, "tags": ["Books"], "created_at": _now()})
-        from src.routers import habits as habits_router
-
-        resp = habits_router.edit_habit_form("e1", _request("/habits/e1/edit"), conn=conn)
-        body = resp.body.decode()
-        assert 'data-ms-label="labels"' not in body
-        # existing tags are preserved via hidden inputs, not shown as a picker
-        assert '<input type="hidden" name="tags_labels" value="Books">' in body
-
-    def test_edit_preserves_tags_without_the_field_being_editable(self, conn):
-        from src.routers import habits as habits_router
-
-        db.upsert_habit(conn, {"uid": "e1", "name": "Read", "color": "blue", "target_per_day": 1, "tags": ["Books"], "created_at": _now()})
-        habits_router.edit_habit(
-            "e1",
-            name="Read",
-            description="",
-            color="blue",
-            icon="",
-            target_per_day="1",
-            tags="",
-            tags_labels=["Books"],
-            project_uid="",
-            conn=conn,
-        )
-        assert db.get_habit(conn, "e1")["tags"] == ["Books"]
-
-    def test_detail_heatmap_is_not_interactive(self, conn):
-        db.upsert_habit(conn, {"uid": "e1", "name": "Read", "color": "blue", "target_per_day": 1, "created_at": _now()})
-        from src.routers import habits as habits_router
-
-        resp = habits_router.habit_detail("e1", _request("/habits/e1"), conn=conn)
-        body = resp.body.decode()
-        assert "heatmap-cell-form" not in body
-        assert "heatmap-grid" in body
 
 
 class TestHabitWorkSessionsStatus:

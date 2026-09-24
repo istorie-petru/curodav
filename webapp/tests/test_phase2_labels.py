@@ -44,7 +44,6 @@ import migrate_spaces_direct_tags  # noqa: E402
 
 from src.routers import banners as banners_router
 from src.routers import dashboard as dashboard_router
-from src.routers import habits as habits_router
 from src.routers import labels as labels_router
 from src.routers import projects as projects_router
 from src.routers import spaces as spaces_router
@@ -800,20 +799,6 @@ class TestDashboardWidgetsLabelName:
 # --------------------------------------------------------------------- #
 
 
-class TestHabitsFilterByLabel:
-    def test_habit_project_link_is_a_label(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "color": "blue", "created_at": _now()})
-        habits_router.create_habit(
-            name="Study", description="", color="blue", icon="", target_per_day="1",
-            tags="", project_uid="Uni", conn=conn,
-        )
-        habits_router.create_habit(
-            name="Read", description="", color="blue", icon="", target_per_day="1",
-            tags="", project_uid="", conn=conn,
-        )
-        scoped = db.list_habits(conn, project_uid="Uni")
-        assert [h["name"] for h in scoped] == ["Study"]
-
 
 # --------------------------------------------------------------------- #
 # migrate_labels.py -- generate_space + habit/schedule_class
@@ -852,7 +837,7 @@ class TestMigrationExtensions:
         # must show up in the habit's own `tags` list, not just the
         # derived `project_uid` view, or a Space page's aggregation would
         # never find this habit.
-        assert "CS101" in db.get_habit(conn, "h1")["tags"]
+        assert "CS101" in db.list_labels_for_object(conn, "habit", "h1")
 
     def test_schedule_classes_project_uid_backfilled_as_a_real_tag(self, conn):
         # 1.6 dropped `schedule_classes` from SCHEMA_SQL entirely (see
@@ -905,11 +890,11 @@ class TestMigrateSpacesDirectTags:
         db.upsert_event(conn, {"uid": "e1", "title": "E", "description": "", "status": "active",
                                 "all_day": 0, "tags": ["Uni"], "created_at": _now()})
         db.upsert_contact(conn, {"uid": "c1", "full_name": "C", "tags": ["Uni"], "created_at": _now()})
-        # A habit's project_uid is folded into object_labels as a real tag
-        # (db.py's _apply_tags_and_project) -- a direct Space-name project
-        # link is exactly the same kind of legacy row this migration
-        # targets, not a separate case to special-case.
-        db.upsert_habit(conn, {"uid": "h1", "name": "H", "project_uid": "Uni", "created_at": _now(), "updated_at": _now()})
+        # A legacy habit-entity label row (the entity itself was removed
+        # 2026-09-24, but an old database can still carry its
+        # object_labels rows) is exactly the same kind of direct Space tag
+        # this migration targets, not a separate case to special-case.
+        db.set_object_labels(conn, "habit", "h1", ["Uni"])
         result = migrate_spaces_direct_tags.run_migration(conn)
         assert result == {"per_space_removed": {"Uni": 4}, "total_removed": 4}
         assert db.list_labels_for_object(conn, "task", "t1") == []

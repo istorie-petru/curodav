@@ -80,8 +80,8 @@
         // form's own `value` input for the *next* click would otherwise
         // leak into this request if read back via `new FormData(form)`
         // after the mutation instead of captured up front).
-        const entryDate = form.querySelector('input[name="entry_date"]').value;
-        const body = `entry_date=${encodeURIComponent(entryDate)}&value=${encodeURIComponent(nextValue)}`;
+        const completionDate = form.querySelector('input[name="completion_date"]').value;
+        const body = `completion_date=${encodeURIComponent(completionDate)}&value=${encodeURIComponent(nextValue)}`;
 
         countEl.textContent = `${nextValue}/${target}`;
         if (resetForm) resetForm.style.display = "";

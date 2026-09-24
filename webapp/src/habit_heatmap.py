@@ -10,7 +10,11 @@ routers/tasks.py needs this logic too now -- if it lived in
 routers/habits.py (which itself imports from routers/labels.py for
 LABEL_ICONS), that would close a labels -> tasks -> habits -> labels
 cycle. This module imports nothing from any router, so both can depend on
-it safely."""
+it safely.
+
+2026-09-24: the standalone Habits feature (habit_entries, routers/
+habits.py's endpoints) is removed -- habit-labeled tasks are the only
+caller now, via habit_view.py and routers/tasks.py."""
 
 from __future__ import annotations
 
@@ -20,8 +24,9 @@ from typing import Any
 from . import recurrence_expand
 
 # How many weeks a "full history" heatmap shows. Shared by both heatmap
-# call sites that want this view (routers/habits.py's standalone habit
-# detail modal, and routers/tasks.py's habit-tracked-task detail modal)
+# call sites that wanted this view (routers/habits.py's standalone habit
+# detail modal, removed 2026-09-24, and routers/tasks.py's habit-tracked-task
+# detail modal)
 # rather than each picking its own week count -- 2026-08-29 direct feedback
 # ("the heatmap graph should not have empty space... prefer to show more
 # months, empty cells, but not empty space"): the task modal used to

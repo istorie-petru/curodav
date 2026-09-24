@@ -555,6 +555,11 @@ CREATE TABLE IF NOT EXISTS schedule_holidays (
 -- just `object_labels` rows (object_type='habit'); the one that also has
 -- a `label_config` row with generate_space=0 is treated as "the project"
 -- for display (db.py's `project_label_for`).
+-- 2026-09-24 (plans/ui-cleanup-2026-09.md item 14): the standalone Habit
+-- entity is removed -- no code reads or writes `habits`/`habit_entries`
+-- anymore (a habit is a habit-labeled task, see habit_view.py). Both
+-- tables stay here, never force-dropped, so an existing cache.sqlite is
+-- untouched and purge_all_data still clears them.
 CREATE TABLE IF NOT EXISTS habits (
     uid TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -4327,203 +4332,14 @@ def set_object_project_label_uniform(conn: sqlite3.Connection, object_type: str,
         add_object_label(conn, object_type, object_id, label_name)
 
 
-def _apply_tags_and_project(
-    conn: sqlite3.Connection,
-    object_type: str,
-    object_id: str,
-    tags: list[str] | None,
-    project_uid: str | None,
-    has_project_key: bool,
-) -> None:
-    """Shared write path for upsert_habit/upsert_database: `tags` and
-    `project_uid` are two form fields for the same underlying thing (a
-    project is just a label -- §0.1), so when both arrive in the same call
-    the project is folded into the tag set and the whole thing is applied
-    as one full replace via set_object_labels -- no separate "guess which
-    tag used to be the project and remove it" step needed, which is both
-    simpler and avoids a real bug an earlier version of this function had
-    (2026-08-06: fixed after it corrupted unrelated tags any time a form
-    submitted `tags` and a blank `project_uid` together, which routers/
-    habits.py's create/edit forms always do). Only a genuine partial
-    update -- `project_uid` changing with `tags` not sent at all -- falls
-    back to set_object_project_label_uniform's targeted swap."""
-    if tags is not None:
-        final_tags = list(dict.fromkeys(tags))
-        if has_project_key and project_uid and project_uid not in final_tags:
-            final_tags.append(project_uid)
-        set_object_labels(conn, object_type, object_id, final_tags)
-    elif has_project_key:
-        set_object_project_label_uniform(conn, object_type, object_id, project_uid)
-
-
 # --------------------------------------------------------------------- #
-# Habits + habit entries -- local-only, see the `habits`/`habit_entries`
-# CREATE TABLE comments above for the full rationale.
+# Task completions -- a recurring task's (and so a habit's) per-day log.
+# The standalone Habit entity accessors (upsert_habit/list_habits/
+# upsert_habit_entry/...) that lived here were removed 2026-09-24
+# (plans/ui-cleanup-2026-09.md item 14): a habit is a habit-labeled task.
+# The `habits`/`habit_entries` tables themselves stay in SCHEMA_SQL so an
+# existing cache.sqlite is never touched automatically.
 # --------------------------------------------------------------------- #
-
-_HABIT_COLS = (
-    "uid", "name", "description", "color", "icon", "target_per_day",
-    "archived_at",
-    # 2026-08-29 (STATE.md backlog item 3) -- same non-working-day policy
-    # as tasks/events, see the `habits` CREATE TABLE comment.
-    "holiday_calendar", "exclude_saturday", "exclude_sunday",
-    "created_at", "updated_at",
-)
-
-
-def upsert_habit(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
-    """Full-row upsert. Phase 2 (label-space rework) dropped this table's
-    own `tags_json`/`project_uid` columns -- a habit's tags are now
-    `object_labels` rows (object_type='habit'), written the same way
-    upsert_task/upsert_event handle `tags` (see set_object_labels). Its
-    "project" is just whichever of those same labels isn't a Space (see
-    project_label_for/set_object_project_label_uniform) -- there is no
-    separate tracking for it, corrected 2026-08-06 (see project_label_for's
-    docstring for why an earlier version's pseudo-object_type approach was
-    wrong). `tags` is applied first so a caller passing both `tags` and
-    `project_uid` in the same call gets the project label folded into the
-    final tag set either way."""
-    data = dict(row)
-    data.setdefault("description", "")
-    data.setdefault("color", "blue")
-    data.setdefault("target_per_day", 1)
-    # NOT NULL DEFAULT 0 columns -- same coercion upsert_event/upsert_task
-    # already do for their own holiday-policy columns.
-    data["exclude_saturday"] = 1 if data.get("exclude_saturday") else 0
-    data["exclude_sunday"] = 1 if data.get("exclude_sunday") else 0
-    tags = data.pop("tags", None)
-    project_uid = data.pop("project_uid", None)
-    has_project_key = "project_uid" in row
-    cols = _HABIT_COLS
-    conn.execute(
-        f"INSERT INTO habits ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)}) "
-        f"ON CONFLICT(uid) DO UPDATE SET " + ", ".join(f"{c}=excluded.{c}" for c in cols if c != "uid"),
-        [data.get(c) for c in cols],
-    )
-    _apply_tags_and_project(conn, "habit", data["uid"], tags, project_uid, has_project_key)
-    conn.commit()
-
-
-def _habit_row_to_dict(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
-    d = dict(row)
-    d["tags"] = list_labels_for_object(conn, "habit", d["uid"])
-    d["project_uid"] = project_label_for(conn, "habit", d["uid"])
-    return d
-
-
-def get_habit(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
-    row = conn.execute("SELECT * FROM habits WHERE uid = ?", (uid,)).fetchone()
-    return _habit_row_to_dict(conn, row) if row else None
-
-
-def list_habits(
-    conn: sqlite3.Connection, include_archived: bool = False, project_uid: str | None = None
-) -> list[dict[str, Any]]:
-    query = "SELECT * FROM habits"
-    clauses = []
-    params: list[Any] = []
-    if not include_archived:
-        clauses.append("archived_at IS NULL")
-    if clauses:
-        query += " WHERE " + " AND ".join(clauses)
-    query += " ORDER BY name COLLATE NOCASE"
-    rows = conn.execute(query, params).fetchall()
-    habits = [_habit_row_to_dict(conn, r) for r in rows]
-    if project_uid:
-        # `project_uid` here is a label name (see
-        # _habit_row_to_dict/get_object_project_label) -- kept as the same
-        # parameter name so every existing caller (routers/habits.py,
-        # routers/dashboard.py) needed no renaming, just a different
-        # meaning for the same string.
-        habits = [h for h in habits if h.get("project_uid") == project_uid]
-    return habits
-
-
-def archive_habit(conn: sqlite3.Connection, uid: str, when: str) -> None:
-    conn.execute("UPDATE habits SET archived_at = ? WHERE uid = ?", (when, uid))
-    conn.commit()
-
-
-def unarchive_habit(conn: sqlite3.Connection, uid: str) -> None:
-    conn.execute("UPDATE habits SET archived_at = NULL WHERE uid = ?", (uid,))
-    conn.commit()
-
-
-def delete_habit(conn: sqlite3.Connection, uid: str) -> None:
-    """Hard delete -- cascades to habit_entries (unlike projects/task
-    lists, a habit's daily log has no independent existence or meaning
-    once the habit itself is gone; nothing else can ever point at a
-    dangling habit_uid, so there's no "keep it around, just unassign"
-    case the way there is for project_uid on a task list)."""
-    conn.execute("DELETE FROM habit_entries WHERE habit_uid = ?", (uid,))
-    conn.execute("DELETE FROM habits WHERE uid = ?", (uid,))
-    conn.execute("DELETE FROM object_labels WHERE object_type = 'habit' AND object_id = ?", (uid,))
-    conn.execute("DELETE FROM object_labels WHERE object_type = 'habit:project' AND object_id = ?", (uid,))
-    conn.commit()
-
-
-def upsert_habit_entry(
-    conn: sqlite3.Connection, habit_uid: str, date: str, value: float, note: str | None, when: str
-) -> None:
-    """Insert-or-update the one entry for (habit_uid, date) -- this is
-    both how a fresh backfill entry is created and how an existing day's
-    value is corrected, since UNIQUE(habit_uid, date) makes them the same
-    operation. `uid` is only regenerated on first insert (ON CONFLICT
-    keeps the existing row's uid), consistent with every other upsert in
-    this file treating uid as immutable once assigned."""
-    import uuid
-
-    conn.execute(
-        "INSERT INTO habit_entries (uid, habit_uid, date, value, note, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?) "
-        "ON CONFLICT(habit_uid, date) DO UPDATE SET value=excluded.value, note=excluded.note, updated_at=excluded.updated_at",
-        (str(uuid.uuid4()), habit_uid, date, value, note, when, when),
-    )
-    conn.commit()
-
-
-def delete_habit_entry(conn: sqlite3.Connection, habit_uid: str, date: str) -> None:
-    conn.execute("DELETE FROM habit_entries WHERE habit_uid = ? AND date = ?", (habit_uid, date))
-    conn.commit()
-
-
-def get_habit_entry(conn: sqlite3.Connection, habit_uid: str, date: str) -> dict[str, Any] | None:
-    row = conn.execute(
-        "SELECT * FROM habit_entries WHERE habit_uid = ? AND date = ?", (habit_uid, date)
-    ).fetchone()
-    return dict(row) if row else None
-
-
-def toggle_habit_entry(conn: sqlite3.Connection, habit_uid: str, date: str, when: str) -> bool:
-    """The heatmap's click-to-toggle: no entry (or a zero-value one) ->
-    create with value=1; any logged entry -> remove it entirely (not just
-    zero it out, so a toggled-off day goes back to true "no data," not a
-    visually-empty-but-still-present row). Returns True if the day is now
-    logged, False if it was just cleared -- lets the router respond
-    without a second read."""
-    existing = get_habit_entry(conn, habit_uid, date)
-    if existing and existing["value"] > 0:
-        delete_habit_entry(conn, habit_uid, date)
-        return False
-    upsert_habit_entry(conn, habit_uid, date, 1, None, when)
-    return True
-
-
-def list_habit_entries(
-    conn: sqlite3.Connection, habit_uid: str, start: str | None = None, end: str | None = None
-) -> list[dict[str, Any]]:
-    query = "SELECT * FROM habit_entries WHERE habit_uid = ?"
-    params: list[Any] = [habit_uid]
-    if start:
-        query += " AND date >= ?"
-        params.append(start)
-    if end:
-        query += " AND date <= ?"
-        params.append(end)
-    query += " ORDER BY date ASC"
-    rows = conn.execute(query, params).fetchall()
-    return [dict(r) for r in rows]
-
 
 def upsert_task_completion(
     conn: sqlite3.Connection, task_uid: str, due_date: str, completed_at: str, value: float = 1
@@ -4570,15 +4386,6 @@ def list_task_completions(conn: sqlite3.Connection, task_uid: str | None = None)
 
 
 
-
-
-def habit_entries_by_date(
-    conn: sqlite3.Connection, habit_uid: str, start: str | None = None, end: str | None = None
-) -> dict[str, float]:
-    """date -> value, for the heatmap builder (habits.py's _heatmap_weeks)
-    and streak computation -- a plain dict lookup is simpler for both
-    callers than re-scanning the row list repeatedly."""
-    return {r["date"]: r["value"] for r in list_habit_entries(conn, habit_uid, start, end)}
 
 
 # 2026-08-07: the Custom databases accessor functions (upsert_database/

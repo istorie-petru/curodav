@@ -526,7 +526,11 @@
 // avatar_cropper.js dropped the Free/4:3/16:9 presets (avatars locked 1:1,
 // banners 5:1, resize can't break either), style.css gained
 // .cropper-ratio-label. Both are SHELL_ASSETS entries.
-const CACHE_NAME = "cc-shell-v106";
+// v107 (2026-09-24, same session): habits slice 1 -- the standalone Habit
+// entity removed, the Dashboard's Habit Check-in widget now lists habit-
+// labeled tasks; style.css gained .habit-checkin-name (static/habits.js
+// deleted, but it was page-specific, never a SHELL_ASSETS entry).
+const CACHE_NAME = "cc-shell-v107";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

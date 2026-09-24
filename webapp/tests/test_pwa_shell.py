@@ -310,5 +310,7 @@ class TestShellCacheVersion:
         # see sw.js's own comment.
         # v106 (2026-09-24, same session): image editor aspect-ratio lock
         # -- avatar_cropper.js/style.css -- see sw.js's own comment.
+        # v107 (2026-09-24, same session): habits slice 1 -- style.css
+        # gained .habit-checkin-name -- see sw.js's own comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v106"' in script
+        assert 'CACHE_NAME = "cc-shell-v107"' in script

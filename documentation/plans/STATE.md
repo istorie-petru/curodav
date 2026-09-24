@@ -570,13 +570,54 @@ session start.
   passed, 0 failed**. Bundled: `sw.js` `CACHE_NAME` v105 -> v106,
   `test_pwa_shell.py` updated.
 
-  **Next slice**: `plans/ui-cleanup-2026-09.md`'s remaining build order --
-  habits/routines as a distinct data model (item 14), then the
-  default dashboard layout (item 15, depends on 14), Web Push
-  notifications (item 7, multi-session), narrow banners everywhere (item
-  2, sequence after item 4), or the large labels-as-modules rework (item
-  4 -- re-confirm the reversal's scope with Peter first, then its own
-  multi-slice breakdown).
+  Same day, new session (branch `claude/kind-ride-5aknv0`, the harness's
+  assignment -- fast-forwarded from `claude/magical-dirac-ff461o-ij5r8u`
+  first, which was 2 commits ahead), fourteenth slice --
+  `plans/ui-cleanup-2026-09.md` item 14, **habits as a distinct frontend
+  model, slice 1 of 4**. Audited first: two habit backends coexisted --
+  standalone Habit entities (`habits`/`habit_entries`, no UI creation
+  path left) and habit-labeled tasks (the only kind "+ Add habit" makes).
+  **Real bug found**: the Dashboard Habit Check-in widget read only the
+  entity table, so no habit created through the UI ever appeared in it.
+  Asked three questions; Peter answered: no real entities (delete the
+  path outright), a dedicated Habits page, and bigger widget + agenda/
+  calendar + habit-specific detail, pointing at
+  https://inlitx.github.io/streak/ as the reference -- **blocked by this
+  environment's egress policy, not yet seen**; get screenshots or have
+  the host allowed before designing slices 2-4.
+
+  Shipped: new `src/habit_view.py` (one habit view-model, `habit_items`)
+  that both Tasks' Habits group and the Dashboard widget render from; the
+  widget now checks in through the task completion endpoints. Entity path
+  removed end to end (router CRUD -> `/habits...` 302 to `/tasks`, three
+  templates, `habits.js`, db.py accessors, `kind=entity` row branches,
+  `/tasks/bulk`'s `habit_uids`). Tables kept in SCHEMA_SQL. Full list in
+  the plan doc's item 14 section; `features/habits.md` rewritten (it
+  still described the long-retired `/habits` list page).
+
+  **Tests**: deleted `test_habits_router.py`/`test_habits_db.py` (entity-
+  only); pruned entity cases from 11 other files, ported 4 (dashboard
+  scope filter, Habits-table seeding, purge-all, a legacy migration
+  test) onto habit tasks; new `test_habit_view.py` (8 -- shape/URLs/
+  streak, widget lists habit tasks and renders `/tasks/...` endpoints,
+  old URLs redirect). Full suite: **2,326 passed, 0 failed** (2,386
+  prior - 68 entity-only tests removed + 8 new).
+
+  **Visually verified** (Playwright, seeded preview DB): widget lists all
+  three habit tasks; checkbox toggle and two "+1" clicks persist across a
+  reload (3/8 -> 5/8, streak 4 -> 5); name link opens the habit detail
+  modal; Tasks' Habits table unchanged; `/habits/h1/edit` lands on
+  `/tasks`. **Found, not fixed**: any task detail modal (plain tasks too)
+  logs one CSP inline-style violation -- pre-existing, logged in the plan
+  doc's "Known open risks".
+
+  Bundled: `sw.js` `CACHE_NAME` v106 -> v107, `test_pwa_shell.py`.
+
+  **Next slice**: item 14 slice 2 -- dedicated Habits page at `/habits`
+  (needs the Streak reference first), then slices 3-4 (bigger widget,
+  agenda/calendar + habit detail), then item 15 (default dashboard
+  layout). Others unchanged: Web Push (item 7), labels-as-modules (item 4
+  -- re-confirm scope with Peter first), narrow banners (item 2, after 4).
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-

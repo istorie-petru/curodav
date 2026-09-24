@@ -1,8 +1,9 @@
 """2026-08-29 (STATE.md backlog item 9, direct follow-up): Habits moved out
 of the shared `#task-table` into its own `#habits-table` with its own
 header row, and gained the same double-click-to-edit title inline_edit.js
-already gave plain tasks -- a standalone Habit *entity* needed its own
-`update-field` endpoint for that (its uid lives in `habits`, not `tasks`)."""
+already gave plain tasks. Since 2026-09-24 every habit row is a
+habit-labeled task (the standalone Habit entity, and its own update-field
+endpoint, were removed)."""
 
 from __future__ import annotations
 
@@ -14,7 +15,6 @@ import pytest
 from starlette.requests import Request
 
 from src import db
-from src.routers import habits as habits_router
 from src.routers import tasks as tasks_router
 
 
@@ -33,6 +33,17 @@ def _seed_task(conn, uid, tags=None):
     db.upsert_task(
         conn,
         {"uid": uid, "title": uid, "description": "", "status": "active", "tags": tags or [], "created_at": _now()},
+    )
+
+
+def _seed_habit(conn, uid, title):
+    """A habit is a habit-labeled task (the standalone Habit entity these
+    tests used to seed was removed 2026-09-24)."""
+    db.save_task_habit_settings(conn, "Habit")
+    db.upsert_task(
+        conn,
+        {"uid": uid, "title": title, "description": "", "status": "active", "tags": ["Habit"],
+         "recurrence": "FREQ=DAILY", "created_at": _now()},
     )
 
 
@@ -63,7 +74,7 @@ def _request():
 
 class TestHabitsOwnTable:
     def test_habits_render_in_a_separate_table_with_their_own_header(self, conn):
-        db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
+        _seed_habit(conn, "h1", "Meditate")
         _seed_task(conn, "t1")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
         assert 'id="task-table"' in body
@@ -94,7 +105,7 @@ class TestHabitsOwnTable:
         assert 'id="habits-table"' not in body
 
     def test_habits_table_reappears_once_a_habit_exists(self, conn):
-        db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
+        _seed_habit(conn, "h1", "Meditate")
         _seed_task(conn, "t1")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
         assert 'id="habits-table"' in body
@@ -107,13 +118,13 @@ class TestHabitsOwnTable:
         # one, because the old has_any flag didn't distinguish "habits
         # exist" from "regular tasks exist" -- routers/tasks.py's new
         # has_main_tasks flag is what actually gates this table now.
-        db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
+        _seed_habit(conn, "h1", "Meditate")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
         assert 'id="task-table"' not in body
         assert 'id="habits-table"' in body
 
     def test_habit_entity_row_is_in_the_habits_table_not_the_task_table(self, conn):
-        db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
+        _seed_habit(conn, "h1", "Meditate")
         _seed_task(conn, "t1")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
         task_table = body.split('id="task-table"', 1)[1].split('id="habits-table"')[0]
@@ -152,7 +163,7 @@ class TestGroupNameAndAddButtonInTableHeader:
     row, not "grouping tasks by label")."""
 
     def test_no_task_add_row_left_in_either_table(self, conn):
-        db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
+        _seed_habit(conn, "h1", "Meditate")
         _seed_task(conn, "t1")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
         assert "task-add-row" not in body
@@ -206,7 +217,7 @@ class TestGroupNameAndAddButtonInTableHeader:
         # habits (see TestHabitsOwnTable's own reversal above), so this
         # needs a real habit seeded to exercise the header at all --
         # count reads "Habits (1)", not the old always-rendered "(0)".
-        db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
+        _seed_habit(conn, "h1", "Meditate")
         _seed_task(conn, "t1")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
         habits_table = body.split('id="habits-table"', 1)[1]
@@ -231,45 +242,8 @@ class TestGroupNameAndAddButtonInTableHeader:
 
 
 class TestHabitRowTitleInlineEdit:
-    def test_habit_entity_title_is_double_click_editable(self, conn):
-        db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
+    def test_habit_title_is_double_click_editable(self, conn):
+        _seed_habit(conn, "h1", "Meditate")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        assert 'data-uid="h1" data-field="title" data-kind="entity"' in body
-
-    def test_habit_labeled_task_title_carries_kind_task(self, conn):
-        db.save_task_habit_settings(conn, "Habit")
-        db.upsert_task(
-            conn,
-            {"uid": "ht1", "title": "Stretch", "description": "", "status": "active", "tags": ["Habit"],
-             "recurrence": "FREQ=DAILY", "created_at": _now()},
-        )
-        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        assert 'data-uid="ht1" data-field="title" data-kind="task"' in body
-
-
-class TestHabitEntityUpdateField:
-    def test_renames_a_standalone_habit(self, conn):
-        db.upsert_habit(conn, {"uid": "h1", "name": "Old name", "created_at": _now()})
-        resp = asyncio.run(habits_router.update_field("h1", _json_request({"field": "title", "value": "New name"}), conn=conn))
-        assert resp.status_code == 200
-        assert db.get_habit(conn, "h1")["name"] == "New name"
-
-    def test_trims_the_new_name(self, conn):
-        db.upsert_habit(conn, {"uid": "h1", "name": "Old", "created_at": _now()})
-        asyncio.run(habits_router.update_field("h1", _json_request({"field": "title", "value": "  Padded  "}), conn=conn))
-        assert db.get_habit(conn, "h1")["name"] == "Padded"
-
-    def test_rejects_a_blank_name(self, conn):
-        db.upsert_habit(conn, {"uid": "h1", "name": "Old", "created_at": _now()})
-        resp = asyncio.run(habits_router.update_field("h1", _json_request({"field": "title", "value": "   "}), conn=conn))
-        assert resp.status_code == 400
-        assert db.get_habit(conn, "h1")["name"] == "Old"
-
-    def test_rejects_an_unknown_field(self, conn):
-        db.upsert_habit(conn, {"uid": "h1", "name": "Old", "created_at": _now()})
-        resp = asyncio.run(habits_router.update_field("h1", _json_request({"field": "color", "value": "red"}), conn=conn))
-        assert resp.status_code == 400
-
-    def test_404s_for_a_missing_habit(self, conn):
-        resp = asyncio.run(habits_router.update_field("nope", _json_request({"field": "title", "value": "x"}), conn=conn))
-        assert resp.status_code == 404
+        assert 'data-uid="h1" data-field="title"' in body
+        assert "data-kind" not in body

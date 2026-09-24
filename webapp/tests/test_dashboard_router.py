@@ -1326,10 +1326,12 @@ class TestSpaceScopedRenderers:
     def test_habit_checkin_label_filter(self, conn):
         db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
         db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
-        db.upsert_habit(conn, {"uid": "h1", "name": "Study", "project_uid": "CS101", "created_at": _now(), "updated_at": _now()})
-        db.upsert_habit(conn, {"uid": "h2", "name": "Read", "created_at": _now(), "updated_at": _now()})
+        db.save_task_habit_settings(conn, "Habit")
+        for uid, tags in (("h1", ["Habit", "CS101"]), ("h2", ["Habit"])):
+            db.upsert_task(conn, {"uid": uid, "title": uid, "description": "", "status": "active",
+                                  "tags": tags, "recurrence": "FREQ=DAILY", "created_at": _now()})
         data = dashboard_router._render_habit_checkin(conn, {"label_name": "Uni"})
-        assert [r["habit"]["uid"] for r in data["rows"]] == ["h1"]
+        assert [r["uid"] for r in data["rows"]] == ["h1"]
 
 
 class TestSpacesProjectsScope:

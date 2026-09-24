@@ -1,11 +1,8 @@
 {# Shared Habits-group row (new 2026-08-28, "major rework" session, item 2:
    "Merge Habits into the Tasks table"). Renders ONE normalized item built
-   by routers/tasks.py's _habit_group_items -- either a habit-labeled task
-   (kind='task', the pre-existing "Tasks > Habits" tracking mechanism) or a
-   standalone Habit entity (kind='entity', routers/habits.py's `habits`
-   table, whose own dedicated list page is retired by this session). Both
-   normalize to the exact same shape so this one row template covers both,
-   the same "figure out how a habit's row should look/behave inside a table
+   by habit_view.habit_items -- a habit-labeled task (the standalone Habit
+   entity kind this row also used to cover was removed 2026-09-24). The
+   same "figure out how a habit's row should look/behave inside a table
    built for tasks" judgment call the session brief asked for: Due/
    Scheduled/Labels don't apply the same way to a habit as to a plain task
    (a habit has no deadline, "scheduled hours" isn't a thing it tracks), so
@@ -26,12 +23,11 @@
    lives in a hidden `name="value"` input the whole time; inline_edit.js
    writes into it and calls `form.requestSubmit()` on commit, which is
    exactly the same `plus_url` explicit-value POST (routers/tasks.py's
-   set_task_completion / routers/habits.py's add_entry, both already
-   accepted an arbitrary `value`) via the same data-cc-change/
+   set_task_completion, which already accepted an arbitrary `value`) via the same data-cc-change/
    async_crud.js path as before -- no new endpoint. `data-max="999999"`
    bounds what a typo can submit -- "any whole number under a reasonable
    integer limit," not truly unbounded -- and is mirrored server-side
-   (routers/tasks.py's/habits.py's own clamp) since it's advisory only.
+   (routers/tasks.py's own clamp) since it's advisory only.
 
    Same-day follow-up, direct feedback ("the due date for habits should
    display a text with the streak... that can be playful depending on the
@@ -55,46 +51,21 @@
    purely for layout, not their normal task meaning). #}
 {% from "_label_pill.html" import label_pill with context %}
 {% macro habit_row(item) %}
-<tr data-uid="{{ item.uid }}" data-kind="{{ item.kind }}">
+<tr data-uid="{{ item.uid }}">
     <td>
-        <!-- 2026-08-29 (STATE.md backlog item 1, direct request: "bulk
-             actions on tables... then Habits..."). Habit rows join the
-             Tasks page's own selection Set/bulk-actions-bar (they already
-             share `#task-table`) via `.row-select`, same as a plain task
-             row -- static/tasks_table.js's bulk-delete handler reads
-             `data-kind` off this same checkbox to route a habit-entity uid
-             through `db.delete_habit` instead of `db.delete_task`. Bulk
-             status-set/label-add stay task-only, unchanged -- routers/
-             tasks.py's bulk_action already no-ops harmlessly on a uid
-             `db.get_task` can't find, so a habit row selected for one of
-             those simply does nothing rather than erroring. -->
-        <input type="checkbox" class="row-select" data-uid="{{ item.uid }}" data-kind="{{ item.kind }}" aria-label="Select {{ item.title }}" autocomplete="off">
+        <!-- Habit rows join the Tasks page's selection/bulk-actions-bar like a
+             plain task row (2026-08-29, STATE.md backlog item 1). -->
+        <input type="checkbox" class="row-select" data-uid="{{ item.uid }}" aria-label="Select {{ item.title }}" autocomplete="off">
     </td>
     <td class="task-title-cell">
-        {# 2026-08-29 (STATE.md backlog item 9 follow-up: "support inline
-           editing for habits title too") -- same double-click-to-edit
-           contract the Tasks table's own Title cell uses (_task_row.html,
-           static/inline_edit.js); `data-kind` (already carried by this
-           row's own `.row-select` above) tells tasks_table.js's shared
-           `cc-inline-edit-commit` listener which endpoint owns this uid --
-           a habit-labeled task (kind="task") saves through routers/
-           tasks.py's update_field like any other task title, a standalone
-           Habit entity (kind="entity") through routers/habits.py's own
-           update_field instead (that uid isn't a row in `tasks` at all). #}
         <a href="{{ item.detail_url }}" data-modal data-inline-edit-linked
-           data-inline-edit data-type="text" data-uid="{{ item.uid }}" data-field="title" data-kind="{{ item.kind }}"
+           data-inline-edit data-type="text" data-uid="{{ item.uid }}" data-field="title"
            title="Double-click to rename">{{ item.title }}</a>
     </td>
     <td>
         <div class="habit-checkin-row habit-checkin-row-inline" data-uid="{{ item.uid }}" data-target="{{ item.target|int }}">
-            {# `data-cc-change` is `item.kind`-typed (habits.js still owns
-               the entity kind's own /habits/{uid} detail page;
-               tasks_table.js claims both "task" and "habit" on this page,
-               see plans/STATE.md) -- same reasoning as every other form in
-               this row. #}
-            {% set cc_change = 'habit' if item.kind == 'entity' else 'task' %}
-            <form method="post" action="{{ item.plus_url }}" class="form-inline habit-checkin-value" data-cc-change="{{ cc_change }}" data-cc-action="checkin">
-                {% if item.kind == 'entity' %}<input type="hidden" name="entry_date" value="{{ today_iso }}">{% else %}<input type="hidden" name="completion_date" value="{{ today_iso }}">{% endif %}
+            <form method="post" action="{{ item.plus_url }}" class="form-inline habit-checkin-value" data-cc-change="task" data-cc-action="checkin">
+                <input type="hidden" name="completion_date" value="{{ item.today }}">
                 <input type="hidden" name="value" value="{{ item.today_value|int }}">
                 <span class="inline-edit-cell habit-checkin-display" data-inline-edit data-field="value" data-min="0" data-max="999999" tabindex="0"
                       title="Double-click to edit today's count{% if item.is_quantity %} (target {{ item.target|int }}){% endif %}"

@@ -68,7 +68,7 @@ def _json_request(payload: dict) -> Request:
     )
 
 
-class TestTasksBulkDeleteWithHabits:
+class TestTasksBulkDelete:
     def test_deletes_plain_tasks_as_before(self, conn):
         db.upsert_task(conn, {"uid": "t1", "title": "x", "description": "", "status": "active", "tags": [], "created_at": _now()})
         db.upsert_task(conn, {"uid": "t2", "title": "y", "description": "", "status": "active", "tags": [], "created_at": _now()})
@@ -80,54 +80,13 @@ class TestTasksBulkDeleteWithHabits:
         assert db.get_task(conn, "t1") is None
         assert db.get_task(conn, "t2") is None
 
-    def test_deletes_standalone_habit_entities_via_habit_uids(self, conn):
-        import asyncio
-
-        db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
-        db.upsert_habit(conn, {"uid": "h2", "name": "Read", "created_at": _now()})
-        resp = asyncio.run(
-            tasks_router.bulk_action(_json_request({"action": "delete", "uids": [], "habit_uids": ["h1", "h2"]}), conn=conn)
-        )
-        assert resp.status_code == 200
-        assert json.loads(resp.body)["count"] == 2
-        assert db.get_habit(conn, "h1") is None
-        assert db.get_habit(conn, "h2") is None
-
-    def test_deletes_a_mixed_selection_of_tasks_and_habit_entities(self, conn):
-        import asyncio
-
-        db.upsert_task(conn, {"uid": "t1", "title": "x", "description": "", "status": "active", "tags": [], "created_at": _now()})
-        db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
-        resp = asyncio.run(
-            tasks_router.bulk_action(_json_request({"action": "delete", "uids": ["t1"], "habit_uids": ["h1"]}), conn=conn)
-        )
-        assert resp.status_code == 200
-        assert json.loads(resp.body)["count"] == 2
-        assert db.get_task(conn, "t1") is None
-        assert db.get_habit(conn, "h1") is None
-
-    def test_habit_uids_only_does_not_trip_the_no_tasks_selected_guard(self, conn):
-        # Regression: the pre-existing `if not uids: return 400` guard used
-        # to run before habit_uids was a concept at all -- a selection made
-        # entirely of Habits-group rows (uids=[], habit_uids=[...]) must
-        # not 400 just because the plain `uids` list happens to be empty.
-        import asyncio
-
-        db.upsert_habit(conn, {"uid": "h1", "name": "Meditate", "created_at": _now()})
-        resp = asyncio.run(
-            tasks_router.bulk_action(_json_request({"action": "delete", "uids": [], "habit_uids": ["h1"]}), conn=conn)
-        )
-        assert resp.status_code == 200
-
     def test_both_empty_still_400s(self, conn):
         import asyncio
 
-        resp = asyncio.run(tasks_router.bulk_action(_json_request({"action": "delete", "uids": [], "habit_uids": []}), conn=conn))
+        resp = asyncio.run(tasks_router.bulk_action(_json_request({"action": "delete", "uids": []}), conn=conn))
         assert resp.status_code == 400
 
-    def test_status_action_unaffected_by_habit_uids_plumbing(self, conn):
-        # Every non-"delete" branch never reads habit_uids at all -- still
-        # 400s on an empty `uids`, same as before this slice.
+    def test_status_action_400s_on_empty_uids(self, conn):
         import asyncio
 
         resp = asyncio.run(tasks_router.bulk_action(_json_request({"action": "status", "uids": [], "status": "done"}), conn=conn))
@@ -135,7 +94,7 @@ class TestTasksBulkDeleteWithHabits:
 
 
 class TestHabitRowCheckbox:
-    def test_habit_group_task_row_carries_row_select_and_kind(self, conn):
+    def test_habit_group_task_row_carries_row_select(self, conn):
         habit_label = db.get_task_habit_settings(conn)["habit_label"]
         db.upsert_task(
             conn,
@@ -145,13 +104,7 @@ class TestHabitRowCheckbox:
             },
         )
         body = tasks_router.list_tasks(Request({"type": "http", "method": "GET", "path": "/tasks", "query_string": b"", "scheme": "http", "server": ("t", 80), "root_path": "", "headers": []}), conn=conn).body.decode()
-        assert 'class="row-select" data-uid="t1" data-kind="task"' in body
-
-    def test_standalone_habit_entity_row_carries_row_select_and_entity_kind(self, conn):
-        db.upsert_habit(conn, {"uid": "h1", "name": "Read", "created_at": _now()})
-        body = tasks_router.list_tasks(Request({"type": "http", "method": "GET", "path": "/tasks", "query_string": b"", "scheme": "http", "server": ("t", 80), "root_path": "", "headers": []}), conn=conn).body.decode()
-        assert 'class="row-select" data-uid="h1" data-kind="entity"' in body
-
+        assert 'class="row-select" data-uid="t1" aria-label' in body
 
 class TestLabelsBulkDelete:
     def test_clears_every_selected_label(self, conn):

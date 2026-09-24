@@ -6178,6 +6178,10 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 /* Habit Check-in widget (_widget_habit_checkin.html) */
 .habit-checkin-list{display:flex; flex-direction:column; gap:var(--space-1);}
 .habit-checkin-row{display:flex; align-items:center; gap:var(--space-2); padding:var(--space-1) 0;}
+/* 2026-09-24: the row's name is the habit task's title, a link to its
+   detail modal (was a colored widget_pill for a standalone Habit entity). */
+.habit-checkin-name{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--fg-primary); text-decoration:none;}
+.habit-checkin-name:hover{text-decoration:underline;}
 /* Widget header/title + section-label typography (2026-08-30 design pass,
    same slice as the card-chrome comment above) -- .widget-header h2
    previously fell through to the app's generic `h2` rule (17px,
