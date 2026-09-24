@@ -522,7 +522,11 @@
 // the `.table-responsive` query container and its `.col-opt-1`/`.col-opt-2`
 // column-hiding tiers (plus narrow-width overrides for the Tasks title cell
 // and Published Lists' Link cell). style.css is in SHELL_ASSETS below.
-const CACHE_NAME = "cc-shell-v105";
+// v106 (2026-09-24, same session): image editor aspect-ratio lock --
+// avatar_cropper.js dropped the Free/4:3/16:9 presets (avatars locked 1:1,
+// banners 5:1, resize can't break either), style.css gained
+// .cropper-ratio-label. Both are SHELL_ASSETS entries.
+const CACHE_NAME = "cc-shell-v106";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

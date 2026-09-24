@@ -5235,6 +5235,10 @@ body.command-palette-open{overflow:hidden;}
   display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);
   padding:var(--space-4) var(--space-5) 0; flex-wrap:wrap;
 }
+/* 2026-09-24 (ui-cleanup item 16): replaces the old ratio preset
+   `.segmented` group -- each upload kind now has one locked ratio, so this
+   just names it (read-only) rather than offering a choice. */
+.cropper-ratio-label{font-size:var(--text-sm); color:var(--fg-secondary);}
 .cropper-rotate-group{display:flex; gap:var(--space-1);}
 .cropper-rotate-group .icon-btn{font-size:18px; width:32px; height:32px;}
 .cropper-footer{

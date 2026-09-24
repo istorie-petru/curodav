@@ -543,9 +543,35 @@ session start.
   missing again in this fresh container -- `uv sync --all-packages` at
   the repo root, same as the earlier environment note says.
 
+  Same session, thirteenth slice -- `plans/ui-cleanup-2026-09.md` item 16,
+  **image editor aspect-ratio lock**. Asked three questions first; Peter
+  corrected the premise on one: "square" meant the **crop selector**, not
+  the displayed avatars (`.avatar-circle` untouched everywhere). Also
+  chose: banner cropper locked 5:1 while phones keep displaying 3:1, and
+  no server-side crop of images that bypass the cropper (they already
+  display at shape via `object-fit:cover`).
+
+  `avatar_cropper.js`: Free/Square/4:3/16:9/Banner presets removed; each
+  kind has one `KIND_CONFIG.ratio` (avatar 1, banner 5), named read-only
+  in the toolbar. **Real bug fixed along the way**: the old `clampBox()`
+  clamped width and height independently, so dragging a "locked" box past
+  the canvas edge silently broke its ratio -- resize now caps size by the
+  room on the dragged side and clamps both axes together. Output height
+  derived from width so the file is exactly the ratio.
+
+  **Visually verified** (Playwright, same preview-server pathway):
+  non-matching 900×400 / 400×700 sources, every handle dragged including
+  far off-canvas plus an off-canvas move -- ratio held at 1.000/5.000,
+  box stayed inside the canvas, output 240×240 and 400×80, banner still
+  auto-submits, avatar preview keeps its circle class. Screenshot shows
+  the square selector + "Square (1:1)" label.
+
+  **Tests**: new `test_image_cropper_ratio.py` (4). Full suite: **2,386
+  passed, 0 failed**. Bundled: `sw.js` `CACHE_NAME` v105 -> v106,
+  `test_pwa_shell.py` updated.
+
   **Next slice**: `plans/ui-cleanup-2026-09.md`'s remaining build order --
-  image editor aspect-ratio lock + square avatars (item 16, the smallest
-  left), habits/routines as a distinct data model (item 14), then the
+  habits/routines as a distinct data model (item 14), then the
   default dashboard layout (item 15, depends on 14), Web Push
   notifications (item 7, multi-session), narrow banners everywhere (item
   2, sequence after item 4), or the large labels-as-modules rework (item

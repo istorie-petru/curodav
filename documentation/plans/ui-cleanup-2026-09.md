@@ -101,7 +101,10 @@ that fits its remaining budget.
     in STATE.md, not done here"). Its exact scope (does "any dashboard"
     include Space/Project pages, which may not exist anymore after item 15)
     depends on how item 15 lands — sequence after it.
-13. **Image editor aspect-ratio lock + square avatars** (item 16).
+13. ~~**Image editor aspect-ratio lock + square avatars**~~ (item 16) —
+    **shipped 2026-09-24**: ratio presets removed, avatars locked 1:1 and
+    banners 5:1 in the cropper; displayed avatars stay circles (Peter's
+    correction: "square" meant the crop selector, not the avatars).
 14. ~~**Responsive tables**~~ — **shipped 2026-09-24**: Peter chose
     priority-based column hiding (CSS container queries, no JS) over a
     card-grid fallback, main list pages only. See the "Responsive tables"
@@ -850,7 +853,40 @@ Interacts with the same masonry/widget-grid code item 3's bug lives in —
 sequence after item 3's fix so the new default layout isn't tested against
 a known-broken resize path.
 
-## 16. Image editor: aspect-ratio lock + square avatars
+## 16. ~~Image editor: aspect-ratio lock + square avatars~~ — SHIPPED 2026-09-24
+
+**What shipped** (asked three questions first -- answers below override
+the original request text further down where they differ):
+- `avatar_cropper.js`: the Free/Square/4:3/16:9/Banner preset buttons are
+  gone. Each kind has one locked ratio in `KIND_CONFIG` (avatar `1`,
+  banner `5`), named read-only in the toolbar (`.cropper-ratio-label`).
+  The resize math was rewritten so no drag can break it: a pure n/s handle
+  drives height, every other handle drives width, the size is capped by
+  the room on the side being dragged toward (measured from the edges that
+  stay put), and `clampBox()` shrinks both sides together -- the old one
+  clamped each axis alone, which was how a drag past the canvas edge used
+  to squash a "locked" ratio. Output height is derived from output width,
+  so the saved file is exactly 1:1 / 5:1 (verified: 240×240, 400×80).
+- **Square = the crop selector, not the avatars** (Peter's own answer:
+  "The crop border selector should be square. Not the avatars that are
+  displayed in the app"). `.avatar-circle` is untouched everywhere; the
+  crop box itself was already a rectangle (no circular framing to remove),
+  so locking it 1:1 was the whole change.
+- **Banners**: cropper locked to 5:1 (matches desktop `.page-banner`);
+  phones keep displaying at 3:1 with `object-fit:cover` trimming the sides
+  -- Peter chose this over making phones 5:1 too.
+- **No server-side crop** (Peter's choice): images that never pass the
+  cropper (CardDAV-synced contact photos, banners/profile photos uploaded
+  before this) keep their stored bytes; they already *display* at the
+  right shape via `object-fit:cover`.
+
+**Verified live** (Playwright): fed a 900×400 image to a contact's avatar
+input and a 400×700 image to the banner editor, then dragged every handle
+type including far past the canvas edges and moved the box off-canvas --
+ratio stayed 1.000 / 5.000 and the box stayed inside the canvas throughout.
+`test_image_cropper_ratio.py` pins the source contract.
+
+Original request text:
 
 - Remove "free aspect ratio" as an option in the image editor entirely —
   every editable image type gets a fixed, enforced ratio (`avatar_cropper.js`

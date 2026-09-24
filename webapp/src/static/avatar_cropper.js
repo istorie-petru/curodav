@@ -12,8 +12,8 @@
 // wired the input, not a second copy of this file.
 //
 // Intercepts the file input's own change event, shows a full-screen editor
-// (free-form draggable/resizable crop box, Free/Square/4:3/16:9/Banner
-// (5:1) aspect presets, 90-degree rotation), and on Apply replaces the
+// (draggable/resizable crop box locked to the upload kind's own ratio --
+// see KIND_CONFIG -- plus 90-degree rotation), and on Apply replaces the
 // input's file with the cropped/rotated/resized JPEG via DataTransfer --
 // the form still posts a plain file input exactly as before (`name="photo"`
 // for avatars, `name="banner_file"` for banners), no backend change needed
@@ -41,9 +41,15 @@
 // swapping which CSS class its file input carries). Cancelling or closing
 // the editor clears the file input back to empty (no half-applied state).
 (function () {
-  const RATIOS = { free: null, square: 1, "4:3": 4 / 3, "16:9": 16 / 9, banner: 5 };
-  const RATIO_LABELS = { free: "Free", square: "Square", "4:3": "4:3", "16:9": "16:9", banner: "Banner (5:1)" };
+  // 2026-09-24 (plans/ui-cleanup-2026-09.md item 16, direct request:
+  // "persistent aspect ratio despite any attempts to resize"): the Free/
+  // Square/4:3/16:9/Banner preset buttons are gone -- every upload kind has
+  // exactly one enforced ratio (KIND_CONFIG's `ratio`), and no resize drag
+  // can break it (see pointerMove/fitToRatio). A photo that doesn't match
+  // is still accepted; it just gets cropped to the ratio here rather than
+  // rejected.
   const STAGE_MAX = 480; // px, the editor's on-screen canvas box
+  const MIN_SIDE = 24; // px, smallest the crop box's shorter side may get
 
   // Per-`kind` defaults -- everything that varies between "cropping an
   // avatar" and "cropping a banner." `kind` is derived from which
@@ -63,13 +69,23 @@
       // of each now-separately-cached image (see contact_photo_image/
       // profile_photo_image in routers/contacts.py/settings.py).
       maxOutput: 240,
-      defaultRatio: "free", // unchanged from this file's original, avatar-only behavior
+      // Square crop selector (direct answer, 2026-09-24: "the crop border
+      // selector should be square. Not the avatars that are displayed in
+      // the app" -- `.avatar-circle` stays a circle everywhere it renders;
+      // only what's being cropped is locked to 1:1).
+      ratio: 1,
+      ratioLabel: "Square (1:1)",
       outputName: "avatar",
       alwaysSubmit: false, // gated behind the form's own data-autosubmit, as before
     },
     banner: {
       maxOutput: 2400, // px, matches the old CCBannerUpload's own "long edge" cap -- a banner's own on-screen size (up to the full page width) has no fixed cap the way an avatar circle does, so this stays generous
-      defaultRatio: "banner", // 5:1, matching banner_editor.html's own guidance text
+      // 5:1, matching banner_editor.html's own guidance text and
+      // `.page-banner`'s desktop aspect-ratio. Phones still display the
+      // banner at 3:1 (object-fit:cover trims the sides there) -- kept as-
+      // is by direct choice, 2026-09-24, over making phones 5:1 too.
+      ratio: 5,
+      ratioLabel: "Banner (5:1)",
       outputName: "banner",
       alwaysSubmit: true, // banner_editor.html's upload form always auto-submitted on file selection, even before this editor existed
     },
@@ -113,22 +129,12 @@
     const config = KIND_CONFIG[kind] || KIND_CONFIG.avatar;
     const state = {
       rotation: 0, // 0 | 90 | 180 | 270
-      ratio: RATIOS[config.defaultRatio], // null = free, else a number (w/h)
+      ratio: config.ratio, // w/h, fixed for this kind -- never changes mid-edit
       // Box is in *display* (on-screen canvas) pixel space, top-left origin.
       box: { x: 0, y: 0, w: 0, h: 0 },
       naturalCanvas: document.createElement("canvas"), // full-res, current rotation
       scale: 1, // display px per natural px
     };
-
-    // Ratio presets rendered in a fixed order regardless of kind (Free/
-    // Square/4:3/16:9/Banner) -- same reasoning as offering Square/4:3/
-    // 16:9 on an avatar crop already did before banners existed: extra
-    // presets are harmless, and a single shared list is simpler than
-    // branching the toolbar's own markup per kind. Only which one starts
-    // `.active` (config.defaultRatio) actually varies.
-    const ratioButtons = Object.keys(RATIOS)
-      .map((key) => `<button type="button" class="seg-btn${key === config.defaultRatio ? " active" : ""}" data-ratio="${key}">${RATIO_LABELS[key]}</button>`)
-      .join("");
 
     const overlay = document.createElement("div");
     overlay.className = "cropper-overlay";
@@ -152,7 +158,7 @@
           </div>
         </div>
         <div class="cropper-toolbar">
-          <div class="segmented cropper-ratio-group">${ratioButtons}</div>
+          <span class="cropper-ratio-label">${config.ratioLabel}</span>
           <div class="cropper-rotate-group">
             <button type="button" class="icon-btn" data-rotate="-90" title="Rotate left" aria-label="Rotate left">&#8634;</button>
             <button type="button" class="icon-btn" data-rotate="90" title="Rotate right" aria-label="Rotate right">&#8635;</button>
@@ -206,18 +212,18 @@
       const h = canvas.height;
       let bw = w * 0.8;
       let bh = h * 0.8;
-      if (state.ratio) {
-        if (bw / bh > state.ratio) bw = bh * state.ratio;
-        else bh = bw / state.ratio;
-      }
+      if (bw / bh > state.ratio) bw = bh * state.ratio;
+      else bh = bw / state.ratio;
       state.box = { x: (w - bw) / 2, y: (h - bh) / 2, w: bw, h: bh };
       paintBox();
     }
 
     function clampBox() {
       const b = state.box;
-      b.w = Math.min(b.w, canvas.width);
-      b.h = Math.min(b.h, canvas.height);
+      // Shrink both sides together (never one axis alone, which is what
+      // used to let a drag past the canvas edge squash the ratio).
+      b.w = Math.min(b.w, canvas.width, canvas.height * state.ratio);
+      b.h = b.w / state.ratio;
       b.x = Math.max(0, Math.min(b.x, canvas.width - b.w));
       b.y = Math.max(0, Math.min(b.y, canvas.height - b.h));
     }
@@ -238,27 +244,6 @@
       defaultBox(); // resetting the box on rotate is simpler and more
                      // predictable than trying to remap an arbitrary
                      // rectangle through a 90-degree axis swap
-    }
-
-    function setRatio(key) {
-      overlay.querySelectorAll("[data-ratio]").forEach((b) => b.classList.toggle("active", b.dataset.ratio === key));
-      state.ratio = RATIOS[key];
-      if (state.ratio) {
-        // Re-fit the current box to the new ratio around its own center
-        // rather than resetting position -- keeps whatever the user was
-        // already framing roughly in place.
-        const b = state.box;
-        const cx = b.x + b.w / 2;
-        const cy = b.y + b.h / 2;
-        let bw = b.w;
-        let bh = bw / state.ratio;
-        if (bh > canvas.height) {
-          bh = canvas.height;
-          bw = bh * state.ratio;
-        }
-        state.box = { x: cx - bw / 2, y: cy - bh / 2, w: bw, h: bh };
-        paintBox();
-      }
     }
 
     // --- Drag to move, drag handles to resize -----------------------------
@@ -289,33 +274,28 @@
         b.x = sb.x + dx;
         b.y = sb.y + dy;
       } else {
-        // Resize from whichever edge(s) the handle represents. Each edge
-        // moves independently; a locked ratio recomputes height from the
-        // new width after every edge adjustment (width is treated as the
-        // driving dimension for simplicity/consistency across handles).
-        if (drag.mode.includes("e")) b.w = sb.w + dx;
-        if (drag.mode.includes("s")) b.h = sb.h + dy;
-        if (drag.mode.includes("w")) {
-          b.x = sb.x + dx;
-          b.w = sb.w - dx;
+        // Resize from whichever edge(s) the handle represents; the ratio
+        // lock then recomputes the other dimension (a pure n/s handle
+        // drives height, every other handle drives width).
+        const m = drag.mode;
+        if (m === "n" || m === "s") {
+          b.h = m === "s" ? sb.h + dy : sb.h - dy;
+          b.w = b.h * state.ratio;
+        } else {
+          b.w = m.includes("e") ? sb.w + dx : sb.w - dx;
         }
-        if (drag.mode.includes("n")) {
-          b.y = sb.y + dy;
-          b.h = sb.h - dy;
-        }
-        if (b.w < 24) b.w = 24;
-        if (b.h < 24) b.h = 24;
-        if (state.ratio) {
-          if (drag.mode === "n" || drag.mode === "s") {
-            b.w = b.h * state.ratio;
-          } else {
-            b.h = b.w / state.ratio;
-          }
-          // Re-anchor the edge(s) that shouldn't have moved when the
-          // opposite dimension got recomputed for the ratio lock.
-          if (drag.mode.includes("w")) b.x = sb.x + sb.w - b.w;
-          if (drag.mode.includes("n")) b.y = sb.y + sb.h - b.h;
-        }
+        // Cap the size by the room actually available on the side(s)
+        // being dragged toward, measured from the edge(s) that stay put,
+        // so hitting the canvas edge stops the box instead of letting
+        // clampBox() shove it sideways.
+        const roomW = m.includes("w") ? sb.x + sb.w : canvas.width - sb.x;
+        const roomH = m.includes("n") ? sb.y + sb.h : canvas.height - sb.y;
+        const minW = Math.max(MIN_SIDE, MIN_SIDE * state.ratio);
+        b.w = Math.max(minW, Math.min(b.w, roomW, roomH * state.ratio));
+        b.h = b.w / state.ratio;
+        // Re-anchor the edge(s) that shouldn't have moved.
+        if (m.includes("w")) b.x = sb.x + sb.w - b.w;
+        if (m.includes("n")) b.y = sb.y + sb.h - b.h;
       }
       state.box = b;
       paintBox();
@@ -336,9 +316,6 @@
     });
 
     // --- Toolbar -------------------------------------------------------
-    overlay.querySelectorAll("[data-ratio]").forEach((b) => {
-      b.addEventListener("click", () => setRatio(b.dataset.ratio));
-    });
     overlay.querySelectorAll("[data-rotate]").forEach((b) => {
       b.addEventListener("click", () => rotate(parseInt(b.dataset.rotate, 10)));
     });
@@ -377,7 +354,9 @@
       const outScale = Math.min(1, config.maxOutput / sw, config.maxOutput / sh);
       const out = document.createElement("canvas");
       out.width = Math.max(1, Math.round(sw * outScale));
-      out.height = Math.max(1, Math.round(sh * outScale));
+      // Derived from width, not rounded independently, so the saved file
+      // is exactly the locked ratio rather than off by a rounding pixel.
+      out.height = Math.max(1, Math.round(out.width / state.ratio));
       const octx = out.getContext("2d");
       // White underneath transparent pixels (a cropped PNG/WEBP source
       // with alpha) so a JPEG-fallback encode doesn't turn transparency
