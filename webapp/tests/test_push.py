@@ -117,6 +117,43 @@ class TestSend:
         assert push_router.send_test(conn=conn).status_code == 400
 
 
+class TestRealSigning:
+    """Runs pywebpush's real VAPID signing + payload encryption (curl=True
+    builds the full request without sending it) -- the fake-sender tests
+    above can't catch a claim the library rejects."""
+
+    def test_default_contact_signs(self, conn, monkeypatch):
+        from pywebpush import webpush
+
+        monkeypatch.delenv("CC_PUSH_CONTACT", raising=False)
+        # A real subscription's p256dh/auth: an actual P-256 point + 16 bytes.
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives import serialization
+
+        point = ec.generate_private_key(ec.SECP256R1()).public_key().public_bytes(
+            serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+        p256dh = base64.urlsafe_b64encode(point).rstrip(b"=").decode()
+        auth = base64.urlsafe_b64encode(b"0123456789abcdef").rstrip(b"=").decode()
+        db.upsert_push_subscription(conn, "https://fcm.googleapis.com/fcm/send/abc", p256dh, auth, None, "now")
+        built = []
+
+        def curl_sender(**kw):
+            built.append(webpush(curl=True, **kw))
+
+        assert push.send_to_all(conn, "Hi", "Body", sender=curl_sender) == {"sent": 1, "failed": 0, "pruned": 0}
+        assert "authorization: vapid t=" in built[0].lower()
+        assert "fcm.googleapis.com" in built[0]
+
+    @pytest.mark.parametrize("value,expected", [
+        ("mailto:me@example.org", "mailto:me@example.org"),
+        ("https://example.org/path", push.DEFAULT_CONTACT),  # a path is rejected by py_vapid
+        ("nonsense", push.DEFAULT_CONTACT),
+    ])
+    def test_contact_override_validated(self, monkeypatch, value, expected):
+        monkeypatch.setenv("CC_PUSH_CONTACT", value)
+        assert push._contact() == expected
+
+
 class TestWiring:
     def test_service_worker_handles_push_and_click(self):
         sw = (_STATIC / "sw.js").read_text()

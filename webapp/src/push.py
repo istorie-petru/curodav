@@ -26,7 +26,7 @@ import os
 from datetime import datetime, timezone
 
 from cryptography.hazmat.primitives import serialization
-from py_vapid import Vapid02
+from py_vapid import Vapid02, _check_sub
 from pywebpush import WebPushException, webpush
 
 from . import db
@@ -34,9 +34,12 @@ from . import db
 log = logging.getLogger(__name__)
 
 _PRIVATE_KEY_META = "push_vapid_private_pem"
-# The VAPID "sub" claim: push services want a contact URL or mailto they
-# can reach about abusive traffic. Overridable per deploy.
-DEFAULT_CONTACT = "https://github.com/istorie-petru/curodav"
+# The VAPID "sub" claim: push services want a contact they can reach
+# about abusive traffic -- a `mailto:` address or a bare `https://` ORIGIN
+# (py_vapid rejects anything with a path, which a first version of this
+# default had: caught by the live scheduler check, 2026-09-24). Set
+# CC_PUSH_CONTACT=mailto:you@yourdomain to use your own.
+DEFAULT_CONTACT = "https://github.com"
 # How long a push service may hold an undelivered notification (seconds).
 _TTL = 6 * 60 * 60
 
@@ -61,7 +64,11 @@ def public_key(conn) -> str:
 
 
 def _contact() -> str:
-    return os.environ.get("CC_PUSH_CONTACT") or DEFAULT_CONTACT
+    value = (os.environ.get("CC_PUSH_CONTACT") or "").strip()
+    if value and not _check_sub(value):
+        log.warning("CC_PUSH_CONTACT %r isn't a mailto: address or https:// origin; using the default", value)
+        value = ""
+    return value or DEFAULT_CONTACT
 
 
 def send_to_all(conn, title: str, body: str, url: str = "/", tag: str | None = None, sender=webpush) -> dict:

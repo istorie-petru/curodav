@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import Scope
 
-from . import db, sync
+from . import db, reminders, sync
 from .auth import AuthMiddleware, CSRFMiddleware
 from .caldav_bridge import CalDavBridge
 from .config import apply_persisted_radicale_overrides, load_settings, uses_default_radicale_credentials
@@ -206,6 +206,10 @@ async def lifespan(app: FastAPI):
     thread, stop_event = sync.start_background_sync(
         bridge, settings.db_path, settings.sync_interval_seconds
     )
+    # Web Push P2 (2026-09-24): reminder scheduler -- wakes each minute,
+    # sends due event/task/habit/sleep-leisure reminders to subscribed
+    # devices (src/reminders.py). Idle when no device is subscribed.
+    _reminder_thread, reminder_stop = reminders.start_scheduler(settings.db_path)
     logger.info(
         "Started background Radicale sync every %ss", settings.sync_interval_seconds
     )
@@ -213,6 +217,7 @@ async def lifespan(app: FastAPI):
     yield
 
     stop_event.set()
+    reminder_stop.set()
 
 
 def create_app() -> FastAPI:

@@ -768,8 +768,16 @@ session start.
   pwa.js's on-load registration hadn't run yet. Full suite **2,410
   passed**. `sw.js` v116 -> v117.
 
-  **Next slice**: Web Push P2 (scheduler + reminder primitive), then P3
-  (notification types/copy/settings) -- see item 7's section. Then
+  **Web Push P2 shipped -- scheduler + reminders.** `src/reminders.py`
+  (events at start / own offsets, morning task + habit digests,
+  sleep/leisure starts; 15-min grace; `push_sent` dedupe) + a per-minute
+  daemon thread in main.py's lifespan. Live check caught the VAPID `sub`
+  default being rejected (path in an https contact) -- fixed, with a
+  real-signing test that fails on the old value. New `test_reminders.py`
+  (9) + 4 push tests. Full suite **2,423 passed**.
+
+  **Next slice**: Web Push P3 (per-type toggles + digest time in
+  Settings) -- see item 7's section. Then
   labels-as-modules (item 4 -- re-confirm scope with Peter first, do not
   start without it) and narrow banners (item 2, after 4). Others unchanged: Web Push
   (item 7), labels-as-modules (item 4 -- re-confirm scope with Peter

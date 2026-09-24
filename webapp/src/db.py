@@ -637,6 +637,15 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     last_ok_at TEXT
 );
 
+-- Web Push P2 (2026-09-24): which reminders already went out -- one row
+-- per reminder key (e.g. "event:<uid>:<start>:<minutes>",
+-- "tasks:<date>"), so the scheduler never sends one twice, even across a
+-- restart. Pruned after a few days.
+CREATE TABLE IF NOT EXISTS push_sent (
+    key TEXT PRIMARY KEY,
+    sent_at TEXT NOT NULL
+);
+
 -- 2026-09-24 (habits H6): vacation / pause ranges. `task_uid` NULL pauses
 -- every habit; otherwise one habit. Paused days are neutral for streaks
 -- (habit_schedule.habit_stats' `paused_dates`). Local-only like
@@ -1926,7 +1935,7 @@ def purge_all_data(conn: sqlite3.Connection) -> None:
         # Schedule module itself (removed 2026-08-15, see plans/STATE.md);
         # schedule_settings is gone along with that module.
         "schedule_holidays", "habits",
-        "habit_entries", "task_completions", "habit_pauses", "push_subscriptions", "dashboard_widgets",
+        "habit_entries", "task_completions", "habit_pauses", "push_subscriptions", "push_sent", "dashboard_widgets",
         "time_blocks",
         "published_lists", "app_meta",
     ]
@@ -4434,6 +4443,20 @@ def delete_push_subscription(conn: sqlite3.Connection, endpoint: str) -> None:
 
 def mark_push_subscription_ok(conn: sqlite3.Connection, endpoint: str, now: str) -> None:
     conn.execute("UPDATE push_subscriptions SET last_ok_at = ? WHERE endpoint = ?", (now, endpoint))
+    conn.commit()
+
+
+def push_was_sent(conn: sqlite3.Connection, key: str) -> bool:
+    return conn.execute("SELECT 1 FROM push_sent WHERE key = ?", (key,)).fetchone() is not None
+
+
+def record_push_sent(conn: sqlite3.Connection, key: str, when: str) -> None:
+    conn.execute("INSERT OR IGNORE INTO push_sent (key, sent_at) VALUES (?, ?)", (key, when))
+    conn.commit()
+
+
+def prune_push_sent(conn: sqlite3.Connection, before: str) -> None:
+    conn.execute("DELETE FROM push_sent WHERE sent_at < ?", (before,))
     conn.commit()
 
 

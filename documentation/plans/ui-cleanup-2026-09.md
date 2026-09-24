@@ -388,7 +388,7 @@ its own). Checked `SHELL_ASSETS` membership before concluding this,
 per this session's own established habit. `test_pwa_shell.py`'s
 version-string assertion updated to match.
 
-## 7. Web Push notifications — IN PROGRESS (P1 shipped 2026-09-24)
+## 7. Web Push notifications — IN PROGRESS (P1 + P2 shipped 2026-09-24; P3 next)
 
 Leisure/sleep-time start, event start, tasks due today (generic phrasing
 when more than one — "you have multiple tasks due today," not a list),
@@ -438,19 +438,36 @@ FCM/Mozilla/Apple -- the send path is covered with an injected fake
 sender. First real check has to be Peter's phone/browser: Settings >
 General > Turn on > Send test.
 
-**Remaining slices:**
-- **P2 -- scheduler + the one reminder primitive.** A small background
-  thread (same start/stop pattern as the sync loop) that wakes each
-  minute, computes due notifications, and records what it sent
-  (`push_sent(key)`, so a restart never double-sends). The primitive per
-  the spec: events remind at start (reuse `reminders_json` offsets when
-  present, else at start); tasks and habits remind on their due date.
-- **P3 -- notification types + copy + settings.** Event start; one
-  morning "due today" digest for tasks ("You have 3 tasks due today" --
-  generic when more than one) and habits; sleep/leisure-time start (the
-  one extra mechanism allowed). Settings: per-type on/off and the digest
-  time (default 08:00). Motivational tone, never a nag (no repeats, no
-  overdue shaming).
+**P2 -- shipped 2026-09-24 (scheduler + reminders).** `src/reminders.py`:
+`due_notifications(conn, now)` computes everything due at a local wall-
+clock minute -- **events** at start or at each of their own `reminders`
+offsets (imported VALARMs; timed only, cancelled = status "archived"
+skipped, looks at tomorrow too so an offset can cross midnight);
+**tasks** and **habits** as one morning digest each ("“X” is due today" /
+"You have 3 tasks due today. One at a time." / "3 habits lined up for
+today. You've got this."), from the digest time (app_meta
+`push_digest_time`, default 08:00) until 21:00; **sleep/leisure** block
+starts ("Wind-down time" / the block's label), skipping 00:00 blocks
+(last night's continuation). A moment fires within a 15-minute grace
+window, then is skipped rather than arriving late. `run_once` sends via
+`push.send_to_all`, records keys in the new `push_sent` table (never
+twice, survives restarts; pruned after 3 days), leaves a key unrecorded
+when every device failed so the next tick retries, and does nothing
+while no device is subscribed. `start_scheduler` = a daemon thread
+started/stopped in main.py's lifespan (same pattern as the sync loop).
+**Live-check bug, fixed**: the VAPID contact default (the repo URL) was
+rejected by py_vapid -- `sub` must be a `mailto:` or a bare https
+*origin*; default is now `https://github.com`, `CC_PUSH_CONTACT` is
+validated. A new test runs pywebpush's real signing + encryption
+(`curl=True`, no network) and was confirmed to fail on the old default.
+Live: the thread fired on the minute, retried after failures within the
+window, and got all the way to the HTTP POST (blocked by this sandbox).
+
+**Remaining:**
+- **P3 -- settings.** Per-type on/off (events / tasks / habits / sleep &
+  leisure) and the digest time in Settings > General's Notifications
+  card. Copy is in place; tone stays motivational, never a nag (no
+  repeats, no overdue shaming).
 
 ## 8. ~~`main-shell-body`'s `margin-bottom: 6dvh`~~ — SHIPPED 2026-09-24
 
