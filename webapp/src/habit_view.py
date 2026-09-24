@@ -56,12 +56,16 @@ def stats_for_task(task: dict, entries_by_date: dict, excluded: set[str], today:
         today=today,
         excluded_dates=excluded,
         created=_created_date(task),
+        kind=task.get("habit_kind"),
     )
 
 
 def cadence_label(task: dict) -> str:
     """"Daily", "Every 2 days", "Mon, Wed, Fri", "Weekly", "3x a week",
-    "Monthly" -- the schedule in words, never the raw RRULE."""
+    "Monthly" -- the schedule in words, never the raw RRULE. An avoid
+    habit (H5) has no schedule: "Avoid"."""
+    if task.get("habit_kind") == "avoid":
+        return "Avoid"
     sched = habit_schedule.parse_schedule(task.get("recurrence"), task.get("habits_per_period"))
     if sched.kind == "weekdays":
         if len(sched.weekdays) == 7:
@@ -172,7 +176,7 @@ def habit_item(conn, task: dict, today: date) -> dict:
         "uid": task["uid"],
         "title": task["title"],
         "tags": task.get("tags") or [],
-        "is_quantity": target > 1,
+        "is_quantity": target > 1 and task.get("habit_kind") != "avoid",
         "target": target,
         "today": today_iso,
         "today_value": today_value,
@@ -188,6 +192,10 @@ def habit_item(conn, task: dict, today: date) -> dict:
         "period_done": stats["period_done"],
         "period_target": stats["period_target"],
         "is_period": stats["kind"] == "period",
+        # Habits H5: an avoid habit logs relapses; its streak is clean days.
+        "is_avoid": stats["kind"] == "avoid",
+        "relapsed_today": stats.get("relapsed_today", False),
+        "unit": (task.get("habit_unit") or "").strip(),
         # The habit's cadence in words, never the raw RRULE.
         "recurrence_label": cadence_label(task),
         # Habits H2: the last seven days, oldest first, for the Habits

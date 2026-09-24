@@ -41,9 +41,13 @@ Check-in endpoints: `POST /tasks/{uid}/completion/{date}/toggle` (flip a
 day) and `POST /tasks/{uid}/completions` (explicit value; <=0 clears).
 Heatmap/streak math lives in `habit_heatmap.py`.
 
-**Habit form** (`habit_task_form.html`): Recurrence preset, "Only on" day
-chips (any checked -> `FREQ=WEEKLY;BYDAY=...`), Times per period, Daily
-target.
+**Habit form** (`habit_task_form.html`): Kind (Build / Avoid), Unit,
+Recurrence preset, "Only on" day chips (any checked -> `FREQ=WEEKLY;
+BYDAY=...`), Times per period, Daily target.
+
+**Avoid habits** (`tasks.habit_kind = 'avoid'`, H5) log relapses instead
+of check-ins; the streak is clean days since the last relapse, shown red
+wherever a relapse is logged.
 
 **Removed 2026-09-24** (plans/ui-cleanup-2026-09.md item 14, slice 1): the
 standalone Habit entity (`habits`/`habit_entries`, its CRUD/entries

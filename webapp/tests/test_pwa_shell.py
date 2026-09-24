@@ -317,5 +317,6 @@ class TestShellCacheVersion:
         # v110 (2026-09-24, same session): habits H2 page styles.
         # v111 (2026-09-24, same session): habits H3 modal.js + styles.
         # v112 (2026-09-24, same session): habits H4 widget styles.
+        # v113 (2026-09-24, same session): habits H5 avoid-habit styles.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v112"' in script
+        assert 'CACHE_NAME = "cc-shell-v113"' in script

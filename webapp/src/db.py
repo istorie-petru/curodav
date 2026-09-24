@@ -1288,6 +1288,10 @@ def init_schema(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "tasks", "habits_per_period", "INTEGER")
     # 2026-09-24 (habits H3): a short "what happened" note on a logged day.
     _ensure_column(conn, "task_completions", "note", "TEXT")
+    # 2026-09-24 (habits H5): an amount habit's unit ("glasses", "min")
+    # and the habit kind -- NULL/'build' = do it, 'avoid' = log relapses.
+    _ensure_column(conn, "tasks", "habit_unit", "TEXT")
+    _ensure_column(conn, "tasks", "habit_kind", "TEXT")
     _ensure_column(conn, "task_completions", "value", "REAL NOT NULL DEFAULT 1")
     # 2026-08-29 (STATE.md backlog item 3, direct request): extends the 1.6
     # non-working-day policy (see the `events` CREATE TABLE comment) to
@@ -1758,7 +1762,7 @@ def upsert_task(
         "uid", "title", "description",
         "start_at", "due_at", "status", "progress",
         "recurrence", "completed_at", "created_at", "updated_at",
-        "target_per_day", "habits_per_period",
+        "target_per_day", "habits_per_period", "habit_unit", "habit_kind",
         # 2026-08-29 (STATE.md backlog item 3) -- only meaningful for a
         # recurring task, same convention as events: missing key -> column
         # default (NULL/0).
@@ -4953,7 +4957,7 @@ ENTITY_SYNC_FIELDS: dict[str, set[str]] = {
     "task": {
         "title", "description", "start_at", "due_at", "status", "progress",
         "recurrence", "exdates_json", "completed_at", "target_per_day",
-        "habits_per_period",
+        "habits_per_period", "habit_unit", "habit_kind",
         "created_at", "updated_at", "deleted_at",
     },
     "event": {

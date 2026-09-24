@@ -445,6 +445,18 @@ def _apply_habit_days(recurrence: str | None, habit_days, present) -> str | None
     return recurrence
 
 
+def _habit_kind_value(raw) -> str | None:
+    """Habits H5: "avoid" or None (a normal, build-it habit)."""
+    return "avoid" if isinstance(raw, str) and raw.strip().lower() == "avoid" else None
+
+
+def _habit_unit_value(raw) -> str | None:
+    """Habits H5: short free-text unit for an amount habit ("glasses")."""
+    if not isinstance(raw, str):
+        return None
+    return raw.strip()[:24] or None
+
+
 def _habits_per_period_value(raw) -> int | None:
     """habit_task_form.html's "Times per period" field (habits H1): blank,
     missing, or anything below 2 means "once per period" (NULL); capped
@@ -472,6 +484,8 @@ def create_task(
     habits_per_period: str | None = Form(None),
     habit_days: list[str] = Form([]),
     habit_days_present: str = Form(""),
+    habit_kind: str | None = Form(None),
+    habit_unit: str | None = Form(None),
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
@@ -531,6 +545,8 @@ def create_task(
         ),
         "target_per_day": target_per_day_value,
         "habits_per_period": _habits_per_period_value(habits_per_period),
+        "habit_kind": _habit_kind_value(habit_kind),
+        "habit_unit": _habit_unit_value(habit_unit),
         # 2026-08-29 (STATE.md backlog item 3) -- see the `tasks` CREATE
         # TABLE comment; only meaningful once `recurrence` above is set.
         "holiday_calendar": holiday_calendar or None,
@@ -820,6 +836,8 @@ def update_task(
     habits_per_period: str | None = Form(None),
     habit_days: list[str] = Form([]),
     habit_days_present: str = Form(""),
+    habit_kind: str | None = Form(None),
+    habit_unit: str | None = Form(None),
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
@@ -878,6 +896,11 @@ def update_task(
     # leaves whatever the row already had.
     if isinstance(habits_per_period, str):
         row["habits_per_period"] = _habits_per_period_value(habits_per_period)
+    # Habits H5 -- same "only the habit form sends these" rule.
+    if isinstance(habit_kind, str):
+        row["habit_kind"] = _habit_kind_value(habit_kind)
+    if isinstance(habit_unit, str):
+        row["habit_unit"] = _habit_unit_value(habit_unit)
     try:
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:

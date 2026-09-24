@@ -55,7 +55,7 @@
         </div>
         <div class="detail-meta-item">
             <span class="detail-meta-label">Streak</span>
-            <span class="detail-meta-value">{{ habit_streak_text(request, current_streak, habit_stats.unit if habit_stats else 'day') }}</span>
+            <span class="detail-meta-value">{% if task.habit_kind == 'avoid' %}{{ current_streak }} day{{ 's' if current_streak != 1 }} clean{% else %}{{ habit_streak_text(request, current_streak, habit_stats.unit if habit_stats else 'day') }}{% endif %}</span>
         </div>
         {% if habit_stats %}
         <div class="detail-meta-item">
@@ -64,7 +64,7 @@
         </div>
         {% if habit_stats.rate is not none %}
         <div class="detail-meta-item">
-            <span class="detail-meta-label">Kept</span>
+            <span class="detail-meta-label">{{ 'Clean' if task.habit_kind == 'avoid' else 'Kept' }}</span>
             <span class="detail-meta-value">{{ (habit_stats.rate * 100)|round|int }}%</span>
         </div>
         {% endif %}
@@ -99,10 +99,10 @@
     {# View-only on purpose (2026-08-29, Peter: the view modal's heatmap
        should be "visible... not interactable") -- days are edited from
        the month calendar below instead. #}
-    {{ heatmap(task.uid, completion_weeks, action_prefix='/tasks/' ~ task.uid ~ '/completion', extra_class='heatmap-wide', interactive=false) }}
+    {{ heatmap(task.uid, completion_weeks, action_prefix='/tasks/' ~ task.uid ~ '/completion', extra_class='heatmap-wide' ~ (' heatmap-avoid' if task.habit_kind == 'avoid' else ''), interactive=false) }}
 </div>
 
-<section class="habit-month detail-plain-section" aria-label="Month calendar">
+<section class="habit-month detail-plain-section{% if task.habit_kind == 'avoid' %} is-avoid{% endif %}" aria-label="Month calendar">
     <div class="habit-month-head">
         <a href="{{ habit_month.prev_url }}" data-modal class="icon-btn" title="Previous month" aria-label="Previous month">{{ icon('chevron-left', 'icon-sm') }}</a>
         <h2 class="habit-month-title">{{ habit_month.label }} <span class="text-muted">&middot; {{ habit_month.done_count }} day{{ 's' if habit_month.done_count != 1 }}</span></h2>
@@ -125,12 +125,12 @@
 </section>
 
 <section class="detail-plain-section habit-log" aria-labelledby="habit-log-h">
-    <h2 class="habit-section-h" id="habit-log-h">Log a day</h2>
+    <h2 class="habit-section-h" id="habit-log-h">{{ 'Log a relapse' if task.habit_kind == 'avoid' else 'Log a day' }}</h2>
     <form method="post" action="/tasks/{{ task.uid }}/completions" class="habit-log-form" {{ _keep|safe }}>
         <label class="habit-log-field"><span>Date</span>
             <input type="date" name="completion_date" value="{{ today_iso }}" max="{{ today_iso }}" required data-no-autofocus></label>
-        {% if task.target_per_day and task.target_per_day > 1 %}
-        <label class="habit-log-field habit-log-value"><span>Amount</span>
+        {% if task.target_per_day and task.target_per_day > 1 and task.habit_kind != 'avoid' %}
+        <label class="habit-log-field habit-log-value"><span>Amount{% if task.habit_unit %} ({{ task.habit_unit }}){% endif %}</span>
             <input type="number" name="value" min="0" max="999999" step="1" value="{{ task.target_per_day|int }}" data-no-autofocus></label>
         {% else %}
         <input type="hidden" name="value" value="1">

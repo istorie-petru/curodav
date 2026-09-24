@@ -144,6 +144,7 @@ def habit_stats(
     today: date | None = None,
     excluded_dates: set[str] | None = None,
     created: date | None = None,
+    kind: str | None = None,
 ) -> dict:
     """Streaks and progress for one habit.
 
@@ -153,6 +154,8 @@ def habit_stats(
     window's `period_done`/`period_target` (e.g. 2 of 3 this week).
     """
     today = today or date.today()
+    if kind == "avoid":
+        return _avoid_stats(entries_by_date, today, created)
     excluded = excluded_dates or set()
     schedule = parse_schedule(rrule, per_period, created)
     done = {d for d, v in entries_by_date.items() if v and v > 0 and d <= today.isoformat()}
@@ -219,4 +222,40 @@ def habit_stats(
         "period_done": period_done,
         "period_target": schedule.per_period if schedule.kind == "period" else 1,
         "kind": schedule.kind,
+    }
+
+
+def _avoid_stats(entries_by_date: dict[str, float], today: date, created: date | None) -> dict:
+    """Habits H5: an *avoid* habit (e.g. "no smoking") logs relapses, not
+    successes -- every day without a logged relapse, from creation (or the
+    first relapse, if earlier) through today, is a clean day. Current
+    streak = clean days ending today (today counts while it's still
+    clean), longest = the longest clean run, rate = clean / all days.
+    Never "to do": there's nothing to check off, only something to avoid.
+    The recurrence/exclusion settings don't apply."""
+    relapses = {d for d, v in entries_by_date.items() if v and v > 0 and d <= today.isoformat()}
+    starts = [date.fromisoformat(d) for d in relapses]
+    if created and created <= today:
+        starts.append(created)
+    start = max(min(starts) if starts else today, today - timedelta(days=_MAX_HISTORY_DAYS))
+    clean = [(start + timedelta(days=i)).isoformat() not in relapses for i in range((today - start).days + 1)]
+    longest = run = 0
+    for c in clean:
+        run = run + 1 if c else 0
+        longest = max(longest, run)
+    current = 0
+    for c in reversed(clean):
+        if not c:
+            break
+        current += 1
+    return {
+        "current": current,
+        "longest": longest,
+        "unit": "day",
+        "rate": sum(clean) / len(clean) if clean else None,
+        "due_today": False,
+        "period_done": 0,
+        "period_target": 1,
+        "kind": "avoid",
+        "relapsed_today": today.isoformat() in relapses,
     }

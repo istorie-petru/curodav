@@ -829,7 +829,7 @@ match.
 top rather than being rewritten past-tense, matching how it already
 documents the gap between the v1 spec and what shipped.
 
-## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 + H1-H4 shipped 2026-09-24; H5-H8 next)
+## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 + H1-H5 shipped 2026-09-24; H6-H8 next)
 
 "I also think that we strongly need to make habits/routines a different
 data model, at least in the frontend. They can still be tasks in the
@@ -1027,6 +1027,19 @@ fetch, then re-render the containing region (the widget card from
 `uses: {"tasks"}`, so a habit created/edited in a modal refreshes it
 too. Clicks inside the widget builder's live preview are ignored. Also
 fixed a stray 16px `li` margin on habit rows (page and widget).
+
+**H5 -- shipped 2026-09-24.** New nullable `tasks.habit_kind` ('avoid' or
+NULL = build) and `tasks.habit_unit` (both sync fields; habit form "Kind"
+select + "Unit" input, preserved when a plain task form saves). **Avoid
+habits** log relapses through the same completion endpoints:
+`habit_schedule._avoid_stats` counts clean days from creation (or the
+first relapse) -- current = clean run ending today, longest, clean rate,
+`relapsed_today`; never "to do"; cadence reads "Avoid"; schedule/target/
+exclusions don't apply. UI: a shield "log relapse" button (red when
+relapsed today), relapse days red in the strip / month calendar / year
+grid (`heatmap-avoid`), "N days clean" / "Relapsed today", detail "Log a
+relapse". **Units**: "8 glasses a day" in the row meta, "Amount
+(glasses)" in the log form, in the +1 tooltip.
 
 **Order and why:** H1 first -- every later surface shows streaks, and
 they're wrong today for non-daily habits. H2 (the page), then H3

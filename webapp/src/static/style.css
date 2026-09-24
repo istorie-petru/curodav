@@ -7760,3 +7760,14 @@ button.habit-month-day:hover{box-shadow:0 0 0 1px var(--fg-primary) inset;}
 .habit-log-note{flex:1 1 200px;}
 .habit-notes{list-style:none; margin:var(--space-3) 0 0; padding:0; display:flex; flex-direction:column; gap:var(--space-1); font-size:var(--text-sm);}
 .habit-note-date{color:var(--fg-tertiary); min-width:5ch; display:inline-block;}
+/* Avoid habits (habits H5): relapses read as a warning, not progress. */
+.habit-check-avoid{color:var(--fg-secondary);}
+.habit-check-avoid:hover{border-color:var(--danger); color:var(--danger);}
+.habit-check-btn.habit-check-avoid.is-relapse{background:var(--danger); border-color:var(--danger); color:var(--fg-on-accent);}
+.habit-day.is-relapse{background:var(--danger); color:var(--fg-on-accent);}
+.habit-day.is-today.is-relapse{box-shadow:none;}
+.habit-month.is-avoid .habit-month-day.is-done{background:var(--danger);}
+.heatmap-avoid .heatmap-cell.level-1,
+.heatmap-avoid .heatmap-cell.level-2,
+.heatmap-avoid .heatmap-cell.level-3,
+.heatmap-avoid .heatmap-cell.level-4{background:var(--danger);}

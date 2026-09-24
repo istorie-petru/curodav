@@ -57,6 +57,22 @@
             <label>Description</label>
             <textarea name="description" rows="2">{{ task.description if task else '' }}</textarea>
         </div>
+        <div class="field">
+            {# Habits H5 (2026-09-24): "avoid" habits log relapses instead
+               of check-ins; their streak is clean days, and schedule /
+               target don't apply. #}
+            <label for="habit-kind">Kind</label>
+            <select name="habit_kind" id="habit-kind">
+                <option value="build"{% if not task or task.habit_kind != 'avoid' %} selected{% endif %}>Build -- do it</option>
+                <option value="avoid"{% if task and task.habit_kind == 'avoid' %} selected{% endif %}>Avoid -- log relapses</option>
+            </select>
+        </div>
+        <div class="field">
+            <label for="habit-unit">Unit</label>
+            <input type="text" name="habit_unit" id="habit-unit" maxlength="24" placeholder="e.g. glasses, min"
+                   value="{{ task.habit_unit if task and task.habit_unit else '' }}"
+                   title="For an amount habit (Daily target above 1): what you're counting.">
+        </div>
         <div class="field field-wide">
             <!-- static/recurrence_picker.js turns this into the same
                  preset dropdown task_form.html/event_form.html use --

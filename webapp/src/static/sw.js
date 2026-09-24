@@ -545,7 +545,9 @@
 // reuses the Habits page row; style.css swapped the old .habit-checkin-*
 // rules for the widget summary. habit_checkin.js -> habit_actions.js
 // (page-specific, not SHELL_ASSETS).
-const CACHE_NAME = "cc-shell-v112";
+// v113 (2026-09-24, same session): habits H5 -- style.css gained the
+// avoid-habit (relapse) colors.
+const CACHE_NAME = "cc-shell-v113";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

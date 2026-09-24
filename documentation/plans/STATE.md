@@ -708,8 +708,18 @@ session start.
   Full suite **2,359 passed**. `sw.js` v111 -> v112. **Unblocks item 15**
   (default 25/50/25 layout).
 
-  **Next slice**: H5 (units + avoid habits), H6 (pause), H7 (agenda/
-  calendar), H8 (insights), then item 15. Others unchanged: Web Push
+  **H5 shipped -- units + avoid habits.** `tasks.habit_kind` ('avoid') /
+  `tasks.habit_unit`; Kind + Unit on the habit form. Avoid habits log
+  relapses (same endpoints), streak = clean days (`_avoid_stats`), never
+  "to do", relapses red everywhere; units show as "8 glasses a day" /
+  "Amount (glasses)". New `test_habit_kinds.py` (14). Verified live
+  (create avoid habit -> "1 day clean"; relapse 2 days ago -> "2 days
+  clean"; relapse today -> "Relapsed today"; unit edit -> "8 glasses a
+  day"), no console errors. Full suite **2,373 passed**. `sw.js` v112 ->
+  v113.
+
+  **Next slice**: H6 (pause), H7 (agenda/calendar), H8 (insights), then
+  item 15. Others unchanged: Web Push
   (item 7), labels-as-modules (item 4 -- re-confirm scope with Peter
   first), narrow banners (item 2).
 
