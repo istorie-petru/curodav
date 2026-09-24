@@ -452,6 +452,19 @@ def new_task_form(
     )
 
 
+def _habits_per_period_value(raw) -> int | None:
+    """habit_task_form.html's "Times per period" field (habits H1): blank,
+    missing, or anything below 2 means "once per period" (NULL); capped
+    at 31 (every day of a month)."""
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    try:
+        n = int(float(raw))
+    except ValueError:
+        return None
+    return min(n, 31) if n >= 2 else None
+
+
 @router.post("")
 def create_task(
     title: str = Form(...),
@@ -463,6 +476,7 @@ def create_task(
     tags_labels: list[str] = Form([]),
     recurrence: str = Form(""),
     target_per_day: str = Form("1"),
+    habits_per_period: str | None = Form(None),
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
@@ -517,6 +531,7 @@ def create_task(
         "tags": _tags_list(tags),
         "recurrence": recurrence if recurrence and recurrence.strip().lower() not in ("none", "nothing") else None,
         "target_per_day": target_per_day_value,
+        "habits_per_period": _habits_per_period_value(habits_per_period),
         # 2026-08-29 (STATE.md backlog item 3) -- see the `tasks` CREATE
         # TABLE comment; only meaningful once `recurrence` above is set.
         "holiday_calendar": holiday_calendar or None,
@@ -754,13 +769,16 @@ def task_detail(uid: str, request: Request, conn=Depends(get_db)):
     if task and task.get("recurrence"):
         completions = {c["due_date"]: "x" for c in db.list_task_completions(conn, uid)}
         excluded = _excluded_dates_for_row(conn, task, completions, date.today())
-        current_streak, longest_streak = _completion_streaks(completions, excluded_dates=excluded)
+        # Habits H1 (2026-09-24): schedule-aware -- a weekly or Mon/Wed/Fri
+        # task no longer "breaks" on the days it isn't due.
+        stats = habit_view.stats_for_task(task, {d: 1 for d in completions}, excluded)
         ctx.update(
             {
                 "completions": completions,
                 "completion_weeks": _completion_heatmap_weeks(completions),
-                "current_streak": current_streak,
-                "longest_streak": longest_streak,
+                "current_streak": stats["current"],
+                "longest_streak": stats["longest"],
+                "habit_stats": stats,
             }
         )
     else:
@@ -770,6 +788,7 @@ def task_detail(uid: str, request: Request, conn=Depends(get_db)):
                 "completion_weeks": [],
                 "current_streak": 0,
                 "longest_streak": 0,
+                "habit_stats": None,
             }
         )
     if _is_habit_task(conn, task):
@@ -794,6 +813,7 @@ def update_task(
     tags_labels: list[str] = Form([]),
     recurrence: str = Form(""),
     target_per_day: str = Form("1"),
+    habits_per_period: str | None = Form(None),
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
@@ -844,6 +864,10 @@ def update_task(
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     )
+    # Only habit_task_form.html sends this field -- a plain task form
+    # leaves whatever the row already had.
+    if isinstance(habits_per_period, str):
+        row["habits_per_period"] = _habits_per_period_value(habits_per_period)
     try:
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
@@ -921,63 +945,6 @@ def complete_task(uid: str, x_requested_with: str | None = Header(default=None),
             db.upsert_task_completion(conn, uid, date.today().isoformat(), datetime.now(timezone.utc).isoformat())
     return respond(x_requested_with, "/tasks")
 
-
-def _completion_streaks(
-    completions: dict[str, str], today: date | None = None, excluded_dates: set[str] | None = None
-) -> tuple[int, int]:
-    """(current_streak, longest_streak) in days for a recurring task's
-    completion history (dict of {due_date: ...}). Any present date counts
-    as done. The current streak tolerates today not being checked off yet
-    (you haven't lost the streak because it's 9am) but breaks the moment a
-    full calendar day is skipped -- same semantics as habits' _streaks.
-
-    `excluded_dates` (2026-08-29, STATE.md backlog item 3): same meaning
-    as habit_heatmap.streaks' own parameter -- a non-working day per this
-    task's holiday_calendar/exclude_saturday/exclude_sunday policy is
-    invisible to the walk below, neither done nor a break. This is a
-    hand-rolled twin of habit_heatmap.streaks (presence-only `completions`
-    keys instead of a {date: value} log) rather than a shared call --
-    reworking `completions` into the value-shaped dict streaks() expects
-    just to reuse it would be more churn than the ~20 lines duplicated
-    here, same call this function's own pre-existing docstring note
-    ("same semantics as habits' _streaks") already implied before this
-    change."""
-    excluded_dates = excluded_dates or set()
-    today = today or date.today()
-    done_dates = sorted(d for d in completions if d and d not in excluded_dates)
-    if not done_dates:
-        return 0, 0
-    done_set = set(done_dates)
-
-    def _all_excluded_between(a: date, b: date) -> bool:
-        span = (b - a).days
-        return all((a + timedelta(days=i)).isoformat() in excluded_dates for i in range(1, span))
-
-    longest = current_run = 0
-    prev: date | None = None
-    for d_str in done_dates:
-        d = date.fromisoformat(d_str)
-        if prev is not None and ((d - prev).days == 1 or _all_excluded_between(prev, d)):
-            current_run += 1
-        else:
-            current_run = 1
-        longest = max(longest, current_run)
-        prev = d
-
-    cursor = today
-    if cursor.isoformat() not in done_set and cursor.isoformat() not in excluded_dates:
-        cursor -= timedelta(days=1)
-    current = 0
-    while True:
-        iso = cursor.isoformat()
-        if iso in done_set:
-            current += 1
-            cursor -= timedelta(days=1)
-        elif iso in excluded_dates:
-            cursor -= timedelta(days=1)
-        else:
-            break
-    return current, longest
 
 
 def _completion_heatmap_weeks(

@@ -20,6 +20,14 @@ habit never has to look like a task (status/due date/Kanban) anywhere:
 - **Detail/edit modals** (`habit_task_detail.html` with a view-only
   53-week heatmap, `habit_task_form.html`).
 
+**Schedules and streaks** (H1, 2026-09-24) -- `src/habit_schedule.py`. A
+streak counts *due windows*, not calendar days: a weekly/monthly habit
+(optionally "X times per period" via `tasks.habits_per_period`) counts
+weeks/months kept; a fixed-weekday habit (RRULE BYDAY) counts due days,
+each window running to the next due day; FREQ=DAILY;INTERVAL=N counts
+every-N-day windows. Also: completion rate, best streak, and whether the
+open window is still to do (`due_today`).
+
 Check-in endpoints: `POST /tasks/{uid}/completion/{date}/toggle` (flip a
 day) and `POST /tasks/{uid}/completions` (explicit value; <=0 clears).
 Heatmap/streak math lives in `habit_heatmap.py`.

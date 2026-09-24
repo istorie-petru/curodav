@@ -5753,11 +5753,17 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 @media (pointer:coarse){
   .heatmap-cell{width:16px; height:16px;}
 }
-.heatmap-cell.level-0{background:var(--bg-secondary);}
-.heatmap-cell.level-1{background:var(--accent-neutral); opacity:.3;}
-.heatmap-cell.level-2{background:var(--accent-neutral); opacity:.55;}
-.heatmap-cell.level-3{background:var(--accent-neutral); opacity:.78;}
-.heatmap-cell.level-4{background:var(--accent-neutral); opacity:1;}
+/* 2026-09-24 (habits H1 live check): levels were --accent-neutral, which
+   the css rework set to #efefef in light theme -- a logged day was all but
+   indistinguishable from an empty one (level-0 --bg-secondary), and empty
+   cells vanished into the --bg-secondary detail card. Logged days use the
+   user's accent now; empty days a neutral tint that reads on both page
+   and card backgrounds, in both themes. */
+.heatmap-cell.level-0{background:var(--accent-neutral-subtle-strong);}
+.heatmap-cell.level-1{background:var(--accent); opacity:.3;}
+.heatmap-cell.level-2{background:var(--accent); opacity:.55;}
+.heatmap-cell.level-3{background:var(--accent); opacity:.78;}
+.heatmap-cell.level-4{background:var(--accent); opacity:1;}
 .heatmap-cell.level-future{background:transparent; cursor:default; visibility:hidden;}
 .heatmap-cell:hover:not(.level-future){box-shadow:0 0 0 1px var(--fg-primary) inset;}
 

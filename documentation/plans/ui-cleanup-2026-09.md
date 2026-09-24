@@ -829,7 +829,7 @@ match.
 top rather than being rewritten past-tense, matching how it already
 documents the gap between the v1 spec and what shipped.
 
-## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 shipped 2026-09-24; H1-H8 planned)
+## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 + H1 shipped 2026-09-24; H2-H8 next)
 
 "I also think that we strongly need to make habits/routines a different
 data model, at least in the frontend. They can still be tasks in the
@@ -951,6 +951,30 @@ it just needs surfacing on the H2 page (an "Archived" fold).
   whole-app designs, gamification island, shareable image cards* --
   either phone-app concerns or out of proportion for a single-user app.
   CSV import could come later if Peter actually has history elsewhere.
+
+**Peter's answers (2026-09-24):** (1) yes, "X times per week" matters;
+(2) yes, avoid habits wanted; (3) yes, the Habits page replaces the Tasks-
+table group outright.
+
+**H1 -- shipped 2026-09-24.** New `src/habit_schedule.py`
+(`parse_schedule` + `habit_stats`): streaks walk *due windows* -- period
+(calendar week/month/year, kept at `habits_per_period` logs, default 1),
+weekdays (BYDAY; a window runs to the next due weekday, so a late log still
+keeps it), every-N-days (FREQ=DAILY;INTERVAL=N anchored on creation; N=1 is
+the old behavior). Excluded due days are neutral; the open window never
+breaks a streak. Returns current/longest (in `unit`s), completion `rate`,
+`due_today`, `period_done/target`. New nullable `tasks.habits_per_period`
+(+ sync field), a "Times per period" input on `habit_task_form.html`
+(preserved when a plain task form saves), `habit_view.cadence_label`
+("3x a week", "Mon, Wed, Fri", "Every 2 days"), streak text with a unit
+("3 weeks streak"), habit detail shows Best / Kept % / This week n/N.
+`habit_heatmap.streaks()` and `tasks._completion_streaks()` removed (plain
+recurring tasks use `habit_stats` too, so they get the fix). Also fixed the
+heatmap itself: its fill levels were `--accent-neutral` (#efefef in light
+theme) -- logged days were near-invisible; now `--accent`. **Gap left for
+H2**: the recurrence picker only offers presets, so a fixed-weekday
+(BYDAY) habit can't be created from the UI yet -- the engine supports it;
+add a weekday picker to the habit form.
 
 **Order and why:** H1 first -- every later surface shows streaks, and
 they're wrong today for non-daily habits. H2 (the page), then H3

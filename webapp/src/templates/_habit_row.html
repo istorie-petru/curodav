@@ -78,7 +78,7 @@
         <span class="text-muted">{{ item.recurrence_label }}</span>
     </td>
     <td class="task-scheduled-cell col-opt-2">
-        <span title="{{ item.current_streak }} day{{ 's' if item.current_streak != 1 }}">{{ habit_streak_text(request, item.current_streak) }}</span>
+        <span title="{{ item.current_streak }} {{ item.streak_unit }}{{ 's' if item.current_streak != 1 }}{% if item.completion_rate is not none %}, {{ (item.completion_rate * 100)|round|int }}% kept{% endif %}">{{ habit_streak_text(request, item.current_streak, item.streak_unit) }}</span>
     </td>
     <td class="col-opt-1"><span class="cell-tags">{% for tag in item.tags %}{{ label_pill(tag) }}{% endfor %}</span></td>
     <td class="task-row-actions">

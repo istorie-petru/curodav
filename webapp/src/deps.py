@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 from markupsafe import Markup, escape
 
-from . import db, habit_heatmap
+from . import db, habit_heatmap, habit_view
 from .caldav_bridge import CalDavBridge
 
 # app_meta keys for the two general-purpose display preferences added
@@ -594,7 +594,7 @@ def _habit_streak_terminology(request: Request) -> str:
 templates.env.globals["habit_streak_terminology"] = _habit_streak_terminology
 
 
-def _habit_streak_text(request: Request, days) -> str:
+def _habit_streak_text(request: Request, days, unit: str = "day") -> str:
     """The Habits group's streak readout (_habit_row.html), phrased per
     HABIT_STREAK_TERMINOLOGY_KEY -- "3 day streak" (standard) or "This
     week has been full" (playful) for the same `current_streak` integer
@@ -606,7 +606,7 @@ def _habit_streak_text(request: Request, days) -> str:
     except (TypeError, ValueError):
         days_int = 0
     playful = _habit_streak_terminology(request) == "playful"
-    return habit_heatmap.streak_text(days_int, playful)
+    return habit_heatmap.streak_text(days_int, playful, unit or "day")
 
 
 templates.env.globals["habit_streak_text"] = _habit_streak_text
@@ -622,6 +622,15 @@ def _recurrence_label(rrule) -> str:
 
 
 templates.env.globals["recurrence_label"] = _recurrence_label
+
+
+def _habit_cadence_label(task) -> str:
+    """habit_view.cadence_label for a template ("3x a week", "Mon, Wed,
+    Fri", "Every 2 days") -- habits H1, 2026-09-24."""
+    return habit_view.cadence_label(task or {})
+
+
+templates.env.globals["habit_cadence_label"] = _habit_cadence_label
 
 
 def _label_icon(request: Request, label: str) -> str:

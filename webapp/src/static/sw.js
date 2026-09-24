@@ -533,7 +533,9 @@
 // v108 (2026-09-24, same session): modal.js strips <style> blocks from a
 // fetched page before DOMParser, fixing a CSP style-src-elem violation
 // logged on every modal open. modal.js is a SHELL_ASSETS entry.
-const CACHE_NAME = "cc-shell-v108";
+// v109 (2026-09-24, same session): habits H1 -- style.css's heatmap
+// levels use --accent (were near-invisible #efefef in light theme).
+const CACHE_NAME = "cc-shell-v109";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

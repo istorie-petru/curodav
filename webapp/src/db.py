@@ -1279,6 +1279,10 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # the table already existed on disk" situation as the others in this
     # function.
     _ensure_column(conn, "tasks", "target_per_day", "REAL NOT NULL DEFAULT 1")
+    # 2026-09-24 (habits H1): "X times per week/month" for a habit whose
+    # recurrence is a plain FREQ=WEEKLY/MONTHLY -- see habit_schedule.py.
+    # NULL = once per period (the RRULE alone).
+    _ensure_column(conn, "tasks", "habits_per_period", "INTEGER")
     _ensure_column(conn, "task_completions", "value", "REAL NOT NULL DEFAULT 1")
     # 2026-08-29 (STATE.md backlog item 3, direct request): extends the 1.6
     # non-working-day policy (see the `events` CREATE TABLE comment) to
@@ -1749,7 +1753,7 @@ def upsert_task(
         "uid", "title", "description",
         "start_at", "due_at", "status", "progress",
         "recurrence", "completed_at", "created_at", "updated_at",
-        "target_per_day",
+        "target_per_day", "habits_per_period",
         # 2026-08-29 (STATE.md backlog item 3) -- only meaningful for a
         # recurring task, same convention as events: missing key -> column
         # default (NULL/0).
@@ -4935,6 +4939,7 @@ ENTITY_SYNC_FIELDS: dict[str, set[str]] = {
     "task": {
         "title", "description", "start_at", "due_at", "status", "progress",
         "recurrence", "exdates_json", "completed_at", "target_per_day",
+        "habits_per_period",
         "created_at", "updated_at", "deleted_at",
     },
     "event": {

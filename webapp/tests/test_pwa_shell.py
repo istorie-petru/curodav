@@ -313,5 +313,6 @@ class TestShellCacheVersion:
         # v107 (2026-09-24, same session): habits slice 1 -- style.css
         # gained .habit-checkin-name -- see sw.js's own comment.
         # v108 (2026-09-24, same session): modal.js CSP fix -- see sw.js.
+        # v109 (2026-09-24, same session): habits H1 heatmap colors.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v108"' in script
+        assert 'CACHE_NAME = "cc-shell-v109"' in script

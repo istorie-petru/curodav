@@ -641,11 +641,34 @@ session start.
 
   Full suite: **2,328 passed, 0 failed**.
 
-  **Next slice**: item 14 **H1** (schedule-aware streaks) once Peter
-  answers the plan's three questions, then H2 (Habits page), H3 (detail
-  + day notes), H4 (bigger widget -> unblocks item 15). Others unchanged:
-  Web Push (item 7), labels-as-modules (item 4 -- re-confirm scope with
-  Peter first), narrow banners (item 2, after 4).
+  Peter answered all three plan questions **yes** (X-per-week habits,
+  avoid habits, Habits page replaces the Tasks-table group) and started
+  `/loop` -- autonomous mode, one H-slice per tick, commit + push each.
+
+  **H1 shipped (loop tick 1) -- schedule-aware streaks.** New
+  `src/habit_schedule.py` counts due *windows* (calendar periods with an
+  "X times" target, BYDAY weekdays, every-N-days) instead of calendar
+  days; neutral for excluded due days and the still-open window. New
+  nullable `tasks.habits_per_period` + "Times per period" form input
+  (kept when a plain task form saves); cadence labels ("3x a week", "Mon,
+  Wed, Fri"); streak text with a unit; habit detail gains Best / Kept % /
+  This week n/N. Dead `habit_heatmap.streaks`/`tasks._completion_streaks`
+  removed, their 2 tests ported. **Also fixed**: heatmap fill used
+  `--accent-neutral` (#efefef in light theme) so logged days were
+  near-invisible -- now `--accent` (screenshotted both themes). New
+  `test_habit_schedule.py` (26). **Visually verified** (Playwright): a 3x-a-
+  week habit shows "3 weeks streak / Best 3 weeks / Kept 38% / This week
+  1/3"; editing Times per period 3 -> 2 persists and relabels the row.
+  Full suite: **2,354 passed, 0 failed**. `sw.js` v108 -> v109. **Gap noted for H2**: no weekday picker in the
+  habit form yet (engine supports BYDAY; the recurrence picker only has
+  presets).
+
+  **Next slice**: item 14 **H2** -- Habits page at `/habits` (replaces the
+  redirect and the Tasks-table Habits group), plus a weekday picker in the
+  habit form. Then H3 (detail + day notes), H4 (bigger widget -> unblocks
+  item 15), H5 (units + avoid habits), H6 (pause), H7 (agenda/calendar),
+  H8 (insights). Others unchanged: Web Push (item 7), labels-as-modules
+  (item 4 -- re-confirm scope with Peter first), narrow banners (item 2).
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-

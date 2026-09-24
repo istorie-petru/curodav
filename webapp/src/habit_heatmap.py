@@ -197,76 +197,6 @@ def excluded_dates_in_range(
     return result
 
 
-def streaks(
-    entries_by_date: dict[str, float],
-    today: date | None = None,
-    excluded_dates: set[str] | None = None,
-) -> tuple[int, int]:
-    """(current_streak, longest_streak) in days, counting any day with a
-    logged value > 0 as "done" -- target_per_day only affects heatmap
-    color, not whether a day counts at all (a habit tracker that required
-    hitting the exact target to keep a streak alive would punish e.g.
-    "read 8/10 pages" as a broken streak, which isn't the intent). Current
-    streak tolerates today itself not being logged yet (you haven't lost
-    your streak just because it's 9am and you haven't meditated yet) but
-    breaks the moment a full calendar day is skipped.
-
-    `excluded_dates` (2026-08-29, STATE.md backlog item 3 -- see
-    `excluded_dates_in_range` above): an optional set of ISO date strings
-    the caller has already determined are non-working days for this
-    specific task/habit. Such a day is treated as neither done nor
-    skipped -- it's invisible to the streak walk, so a holiday or an
-    excluded weekend day sitting between two logged days doesn't break the
-    run, and a currently-excluded "today"/yesterday doesn't zero out the
-    current streak either. An excluded day is never itself counted as a
-    "done" day even if it happens to carry a logged value (backfilling a
-    holiday you didn't actually need to keep up the habit is allowed, it
-    just doesn't inflate the streak)."""
-    excluded_dates = excluded_dates or set()
-    today = today or date.today()
-    done_dates = sorted(d for d, v in entries_by_date.items() if v and v > 0 and d not in excluded_dates)
-    if not done_dates:
-        return 0, 0
-    done_set = set(done_dates)
-
-    def _all_excluded_between(a: date, b: date) -> bool:
-        """Every day strictly between `a` and `b` (exclusive both ends) is
-        in `excluded_dates` -- the condition under which a gap doesn't
-        break a streak."""
-        span = (b - a).days
-        return all((a + timedelta(days=i)).isoformat() in excluded_dates for i in range(1, span))
-
-    longest = current_run = 0
-    prev: date | None = None
-    for d_str in done_dates:
-        d = date.fromisoformat(d_str)
-        if prev is not None and ((d - prev).days == 1 or _all_excluded_between(prev, d)):
-            current_run += 1
-        else:
-            current_run = 1
-        longest = max(longest, current_run)
-        prev = d
-
-    cursor = today
-    # The "haven't logged today yet" tolerance only applies to the real
-    # `today` itself, and only when today isn't already an excluded day --
-    # an excluded today is handled by the loop below the same as any other
-    # excluded day (skipped, never treated as "broken"), not by this
-    # one-off step-back.
-    if cursor.isoformat() not in done_set and cursor.isoformat() not in excluded_dates:
-        cursor -= timedelta(days=1)
-    current = 0
-    while True:
-        iso = cursor.isoformat()
-        if iso in done_set:
-            current += 1
-            cursor -= timedelta(days=1)
-        elif iso in excluded_dates:
-            cursor -= timedelta(days=1)
-        else:
-            break
-    return current, longest
-
 
 def recurrence_frequency(rrule: str | None) -> str:
     """Coarse recurrence bucket ("daily"/"weekly"/"monthly"/"yearly"/
@@ -302,7 +232,7 @@ def recurrence_label(rrule: str | None) -> str:
     }.get(recurrence_frequency(rrule), "Custom")
 
 
-def streak_text(days: int, playful: bool = False) -> str:
+def streak_text(days: int, playful: bool = False, unit: str = "day") -> str:
     """Human-readable phrase for a `streaks()`-computed current streak --
     2026-08-28 direct feedback ("the due date for habits should display a
     text with the streak... that can be playful depending on the
@@ -316,6 +246,11 @@ def streak_text(days: int, playful: bool = False) -> str:
     streak", "This Week has been full", "Consistent for 1 Month")."""
     if days <= 0:
         return "Let's get started" if playful else "No streak yet"
+    # Habits H1 (2026-09-24): a weekly/monthly habit's streak counts
+    # periods, not days -- "3 week streak"; the playful escalation below
+    # is day-based, so a non-day unit always gets the plain phrasing.
+    if unit != "day":
+        return f"{days} {unit}{'s' if days != 1 else ''} streak"
     if not playful:
         return f"{days} day{'s' if days != 1 else ''} streak"
     if days == 1:
