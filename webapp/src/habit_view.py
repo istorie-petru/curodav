@@ -251,3 +251,38 @@ def habit_items(conn, today: date | None = None) -> list[dict]:
         for t in db.list_habit_tasks(conn)
         if t["status"] not in _INACTIVE_STATUSES
     ]
+
+
+def habits_for_day(conn, d: date, today: date | None = None) -> list[dict]:
+    """Habits H7: the habits scheduled on day `d` (calendar day view) --
+    build habits only (an avoid habit has nothing to do on a day), minus
+    paused and non-working days. Each carries whether `d` was logged and
+    a toggle URL unless `d` is in the future."""
+    today = today or date.today()
+    iso = d.isoformat()
+    pauses = db.list_habit_pauses(conn)
+    out = []
+    for t in db.list_habit_tasks(conn):
+        if t["status"] in _INACTIVE_STATUSES or t.get("habit_kind") == "avoid":
+            continue
+        sched = habit_schedule.parse_schedule(t.get("recurrence"), t.get("habits_per_period"), _created_date(t))
+        if not habit_schedule.is_due_on(sched, d):
+            continue
+        if iso in pause_info(pauses, t["uid"], max(d, today))["dates"]:
+            continue
+        entries = {c["due_date"]: c["value"] for c in db.list_task_completions(conn, t["uid"])}
+        if iso in excluded_dates_for_row(conn, t, {iso: 1}, max(d, today)):
+            continue
+        value = entries.get(iso, 0) or 0
+        out.append(
+            {
+                "uid": t["uid"],
+                "title": t["title"],
+                "done": value > 0,
+                "value": value,
+                "is_future": d > today,
+                "toggle_url": f"/tasks/{t['uid']}/completion/{iso}/toggle",
+                "detail_url": f"/tasks/{t['uid']}",
+            }
+        )
+    return out

@@ -297,8 +297,10 @@ def _filtered_events_expanded(conn, config: dict, window_start: date, window_end
 
 
 AGENDA_RANGES: tuple[str, ...] = ("today", "next_7_days", "next_30_days", "all_upcoming")
-AGENDA_SHOWS: tuple[str, ...] = ("overdue", "tasks", "events")
-AGENDA_DEFAULT_SHOW: list[str] = ["overdue", "tasks", "events"]
+AGENDA_SHOWS: tuple[str, ...] = ("overdue", "tasks", "events", "habits")
+# Habits H7 (2026-09-24): "habits" -- today's still-to-do habits, one-tap
+# checkable -- is on by default for any agenda without a saved Show list.
+AGENDA_DEFAULT_SHOW: list[str] = ["overdue", "tasks", "events", "habits"]
 
 
 def _agenda_show(config: dict) -> set[str]:
@@ -322,6 +324,18 @@ def _agenda_range(config: dict) -> str:
     if range_days is None and "range_days" in config:
         return "all_upcoming"
     return "today"
+
+
+def _agenda_habits(conn, config: dict, show: set[str]) -> list[dict]:
+    """Habits H7: today's still-to-do build habits for the Agenda widget
+    (habit_view.habit_items rows, page-scoped like every item widget)."""
+    if "habits" not in show:
+        return []
+    scope_names = _scope_child_names(conn, config.get("label_name"))
+    return [
+        h for h in habit_view.habit_items(conn)
+        if h["due_today"] and not h["is_avoid"] and _passes_scope(h["tags"], scope_names)
+    ]
 
 
 def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
@@ -381,7 +395,7 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
         if "events" in show:
             events = [e for e in _filtered_events_expanded(conn, config, today, today) if e.get("start_at") and e["start_at"][:10] == today_iso]
             events.sort(key=lambda e: e.get("start_at") or "")
-        return {"mode": "flat", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "tasks": tasks, "events": events, "today": today_iso}
+        return {"mode": "flat", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "tasks": tasks, "events": events, "today": today_iso, "habits": _agenda_habits(conn, config, show)}
 
     if range_ == "next_7_days":
         end = today + timedelta(days=6)
@@ -403,7 +417,7 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
             )
             day_events = sorted([e for e in events_pool if e.get("start_at") and e["start_at"][:10] == iso], key=lambda e: e.get("start_at") or "")
             by_day.append({"date": iso, "label": d.strftime("%a %b %d"), "is_today": iso == today_iso, "tasks": day_tasks, "events": day_events})
-        return {"mode": "days", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "days": by_day, "today": today_iso}
+        return {"mode": "days", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "days": by_day, "today": today_iso, "habits": _agenda_habits(conn, config, show)}
 
     # next_30_days / all_upcoming -- same flat-list shape; only the window
     # each bounds Tasks/Events to differs (see this function's own

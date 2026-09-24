@@ -271,7 +271,8 @@ class TestDefaultSeedIncludesNewWidgets:
         assert top_level[0]["title"] == "Today"
         assert top_level[0]["config"]["range"] == "today"
         assert "show" not in top_level[0]["config"]  # relies on AGENDA_DEFAULT_SHOW, not a stored override
-        assert dashboard_router.AGENDA_DEFAULT_SHOW == ["overdue", "tasks", "events"]
+        # Habits H7 (2026-09-24) added "habits" to the default Show list.
+        assert dashboard_router.AGENDA_DEFAULT_SHOW == ["overdue", "tasks", "events", "habits"]
 
     def test_fresh_project_label_seed_includes_at_a_glance_and_overdue_tasks(self, conn):
         _make_project(conn, "CS101")

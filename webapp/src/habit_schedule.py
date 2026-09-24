@@ -272,3 +272,16 @@ def _avoid_stats(entries_by_date: dict[str, float], today: date, created: date |
         "kind": "avoid",
         "relapsed_today": today.isoformat() in relapses,
     }
+
+
+def is_due_on(schedule: Schedule, d: date) -> bool:
+    """Habits H7: does this schedule call for the habit on day `d`? A
+    weekdays habit on its weekdays, an every-N-days habit on its N-day
+    beat (from its anchor), a period habit on any day (it's done whenever
+    in the week/month)."""
+    if schedule.kind == "weekdays":
+        return d.weekday() in schedule.weekdays
+    if schedule.kind == "every_n_days":
+        anchor = schedule.anchor or d
+        return (d - anchor).days % schedule.interval == 0
+    return True

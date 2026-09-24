@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Form, Header, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import db, grid_layout, habit_heatmap, recurrence_expand
+from .. import db, grid_layout, habit_heatmap, habit_view, recurrence_expand
 from ..deps import HIDE_SLEEP_HOURS_KEY, _four_week_position, _week_start, get_db, respond, templates, wants_json
 from . import dashboard as dashboard_router
 
@@ -1183,6 +1183,9 @@ def _day_view_context(conn, request, day, label):
         "all_day": all_day,
         "timed": timed,
         "tasks": tasks,
+        # Habits H7 (2026-09-24): the habits scheduled on this day, in the
+        # all-day row -- checkable unless the day is in the future.
+        "habits": habit_view.habits_for_day(conn, d) if not label else [],
         "time_block_overlays": time_block_overlays,
         "hours": list(range(grid_layout.GRID_HOURS)),
         "px_per_hour": grid_layout.PX_PER_HOUR,

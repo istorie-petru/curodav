@@ -24,6 +24,10 @@ habit never has to look like a task (status/due date/Kanban) anywhere:
   "All done for now"; scoped by page label like every other item widget.
   Both surfaces use `static/habit_actions.js` (fetch, then re-render the
   region from the server).
+- **Agenda widget** (H7) -- a "Habits" Show option (on by default) lists
+  today's still-to-do habits as one-tap rows.
+- **Calendar day view** (H7) -- the all-day row lists the habits scheduled
+  that day; past and today are checkable in place.
 - **Detail modal** (`habit_task_detail.html`) -- streak/best/kept stats, a
   view-only 53-week heatmap, a clickable month calendar (`?month=`), a
   "Log a day" form (date, amount, note) and recent day notes

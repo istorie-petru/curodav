@@ -6,6 +6,8 @@
 //   - on /habits: #habits-body from /habits/regions
 //   - in a Dashboard/label-page widget: that .widget-card from
 //     /dashboard/widgets/<uid>
+//   - in the calendar day view (H7): a task change event, which
+//     async_calendar.js answers by re-rendering #day-grid
 // Also re-renders /habits after a habit is created/edited/deleted in a
 // modal (cc-entity-changed, type "task"); widget cards already get that
 // from async_crud.js (the widget declares uses: tasks).
@@ -13,6 +15,10 @@
   function regionFor(form) {
     const page = form.closest("#habits-body");
     if (page) return { url: "/habits/regions", id: "habits-body" };
+    // The calendar day view already re-renders #day-grid on any task
+    // change (async_calendar.js -- keeps scroll, re-binds drag), so just
+    // announce one instead of swapping it here.
+    if (form.closest("#day-grid")) return { dispatch: true };
     const card = form.closest(".widget-card[data-uid]");
     if (card && card.id) return { url: "/dashboard/widgets/" + card.dataset.uid, id: card.id };
     return null;
@@ -39,6 +45,10 @@
         body: new FormData(form),
       });
       if (!resp.ok) throw new Error("habit update failed");
+      if (region.dispatch) {
+        if (!window.ccApi.dispatchChange({ type: "task", action: "checkin" })) window.location.reload();
+        return;
+      }
       await window.ccApi.refreshRegion(region.url, region.id);
     } catch (err) {
       if (btn) btn.disabled = false;

@@ -151,7 +151,7 @@
              replaces the old inline `style="display:none"`, same "hide it
              the same way the same-shaped Task lists/Calendars fields
              elsewhere in this form do" convention. -->
-        {% set _agenda_show_set = (widget.config.show if widget.config.show is defined and widget.config.show is not none else ['overdue', 'tasks', 'events']) %}
+        {% set _agenda_show_set = (widget.config.show if widget.config.show is defined and widget.config.show is not none else ['overdue', 'tasks', 'events', 'habits']) %}
         {% set ms_name = 'show' %}
         {% set ms_mode = 'select' %}
         {% set ms_label = 'Show' %}
@@ -159,6 +159,7 @@
             {'uid': 'overdue', 'name': 'Overdue'},
             {'uid': 'tasks', 'name': 'Tasks'},
             {'uid': 'events', 'name': 'Events'},
+            {'uid': 'habits', 'name': 'Habits'},
         ] %}
         {% set ms_selected = _agenda_show_set %}
         {% set ms_wide = false %}

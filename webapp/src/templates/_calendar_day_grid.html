@@ -36,6 +36,18 @@
             {% for t in tasks %}
             <a class="allday-task" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }} {{ t.title }}</a>
             {% endfor %}
+            {# Habits H7: habits scheduled today, one-tap checkable
+               (static/habit_actions.js re-renders #day-grid). #}
+            {% for h in habits | default([]) %}
+            {% if h.is_future %}
+            <span class="allday-task allday-habit" title="{{ h.title }} (habit)">{{ icon('repeat', 'icon-sm') }} {{ h.title }}</span>
+            {% else %}
+            <form method="post" action="{{ h.toggle_url }}" class="form-inline habit-action allday-habit-form">
+                <button type="submit" class="allday-task allday-habit{% if h.done %} is-done{% endif %}" aria-pressed="{{ 'true' if h.done else 'false' }}"
+                        title="{{ h.title }} -- {% if h.done %}done, click to undo{% else %}click to mark done{% endif %}">{{ icon('check-circle' if h.done else 'square', 'icon-sm') }} {{ h.title }}</button>
+            </form>
+            {% endif %}
+            {% endfor %}
         </div>
     </div>
 </div>

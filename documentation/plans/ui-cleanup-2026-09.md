@@ -829,7 +829,7 @@ match.
 top rather than being rewritten past-tense, matching how it already
 documents the gap between the v1 spec and what shipped.
 
-## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 + H1-H6 shipped 2026-09-24; H7-H8 next)
+## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 + H1-H7 shipped 2026-09-24; H8 next)
 
 "I also think that we strongly need to make habits/routines a different
 data model, at least in the frontend. They can still be tasks in the
@@ -1053,6 +1053,21 @@ habits from/until, list + remove). Detail modal: "Pause this habit" form
 + list. A habit's own pauses are deleted with it; pauses ride along in
 the JSON backup/restore (idempotent). Avoid habits ignore pauses in their
 stats (a pause doesn't make relapses count less).
+
+**H7 -- shipped 2026-09-24.** **Agenda widget**: new "habits" Show option
+(`AGENDA_SHOWS`, on in `AGENDA_DEFAULT_SHOW`, offered in the builder/edit
+Show dropdowns; a saved Show list without it keeps habits out): today's
+still-to-do build habits as one-tap rows (checkbox or n/target +1), in
+both the Today (flat) and Next-7-days (days) layouts, page-scoped.
+**Calendar day view**: the all-day row lists the habits scheduled that
+day (`habit_view.habits_for_day` + `habit_schedule.is_due_on`: weekday
+habits on their days, every-N-days on their beat, period habits any day;
+avoid, paused and non-working days left out); past/today toggle in place,
+future is read-only. `habit_actions.js` handles both (the day view by
+dispatching a task change, which async_calendar.js already answers by
+re-rendering `#day-grid` with scroll kept and drag re-bound). Hidden when
+the day view is label-filtered. Not done: habits in the week/4-week
+grids (dense already; revisit if wanted).
 
 **Order and why:** H1 first -- every later surface shows streaks, and
 they're wrong today for non-daily habits. H2 (the page), then H3

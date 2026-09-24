@@ -728,7 +728,17 @@ session start.
   all 7, Remove restores; no console errors. Full suite **2,383 passed**.
   `sw.js` v113 -> v114.
 
-  **Next slice**: H7 (agenda/calendar), H8 (insights), then item 15. Others unchanged: Web Push
+  **H7 shipped -- habits in Agenda + calendar day view.** Agenda gets a
+  "habits" Show option (default on): today's to-do habits as one-tap rows.
+  Day view's all-day row lists habits scheduled that day (`is_due_on`),
+  checkable for past/today, read-only for future. New
+  `test_habits_agenda_calendar.py` (8); `AGENDA_DEFAULT_SHOW` test updated
+  on purpose. Verified live: agenda check removes the row, day view shows
+  only that day's habits (Mon/Wed/Fri habit absent on a Thursday) and
+  toggles in place; zero reloads/errors. Full suite **2,391 passed**.
+  `sw.js` v114 -> v115.
+
+  **Next slice**: H8 (insights), then item 15. Others unchanged: Web Push
   (item 7), labels-as-modules (item 4 -- re-confirm scope with Peter
   first), narrow banners (item 2).
 

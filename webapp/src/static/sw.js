@@ -549,7 +549,9 @@
 // avoid-habit (relapse) colors.
 // v114 (2026-09-24, same session): habits H6 -- style.css gained the
 // vacation / pause rules.
-const CACHE_NAME = "cc-shell-v114";
+// v115 (2026-09-24, same session): habits H7 -- style.css gained the
+// Agenda-widget / day-view habit rules.
+const CACHE_NAME = "cc-shell-v115";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",
