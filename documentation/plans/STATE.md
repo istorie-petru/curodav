@@ -738,7 +738,20 @@ session start.
   toggles in place; zero reloads/errors. Full suite **2,391 passed**.
   `sw.js` v114 -> v115.
 
-  **Next slice**: H8 (insights), then item 15. Others unchanged: Web Push
+  **H8 shipped -- insights. Item 14 is DONE.** Loop-style strength score
+  (EMA over due windows; one miss dents it) in the detail modal and row
+  tooltip; Insights section: days (relapses) per month x12 and an hour-of-
+  day check-in histogram (same-day check-ins only, server local time,
+  >= 5 needed). Live check caught equal-height month bars (labels
+  squashing the track) -- fixed with a fixed-height track, re-verified
+  proportional. New `test_habit_insights.py` (6). Full suite **2,397
+  passed**. `sw.js` v115 -> v116.
+
+  **Next slice**: item 15 -- default Dashboard layout (25% Today Agenda /
+  50% At a glance + Upcoming / 25% Habit Check-in), now unblocked. Then
+  Web Push (item 7, multi-session; habit reminders ride on it), labels-
+  as-modules (item 4 -- re-confirm scope with Peter first), narrow banners
+  (item 2, after 4). Others unchanged: Web Push
   (item 7), labels-as-modules (item 4 -- re-confirm scope with Peter
   first), narrow banners (item 2).
 

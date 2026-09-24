@@ -110,13 +110,13 @@ that fits its remaining budget.
     card-grid fallback, main list pages only. See the "Responsive tables"
     section below (it never had a numbered section of its own; the "(item
     11)" this line used to carry was a numbering slip -- 11 is Search).
-15. **Habits/routines as a distinct frontend data model** (item 14) —
-    **slice 1 of 4 shipped 2026-09-24** (Habit entity removed, shared
-    `habit_view.py`, Dashboard widget now lists habit tasks); slices 2-4
-    (Habits page, bigger widget, agenda/calendar + detail) in item 14's
-    section below.
-16. **Default dashboard layout (25/50/25)** (item 17) — depends on 15 (a
-    real Habit Check-in widget, not just today's `habit_checkin.js`).
+15. ~~**Habits/routines as a distinct frontend data model**~~ (item 14) —
+    **shipped 2026-09-24**: slice 1 (Habit entity removed, shared
+    `habit_view.py`) + H1-H8 against the Streak reference (schedule-aware
+    streaks, Habits page, detail + notes, widget, avoid/units, pause,
+    agenda/day view, insights). See item 14's section.
+16. **Default dashboard layout (25/50/25)** (item 17) — **unblocked**: the
+    Habit Check-in widget is now the Habits page's row list (H4).
 17. **Web Push notifications** (item 7) — mostly independent infra, large;
     fine to pick up anytime once someone's ready for a multi-session push
     (subscription flow, VAPID keys, a scheduler for wall-clock-timed
