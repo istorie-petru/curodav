@@ -776,8 +776,19 @@ session start.
   real-signing test that fails on the old value. New `test_reminders.py`
   (9) + 4 push tests. Full suite **2,423 passed**.
 
-  **Next slice**: Web Push P3 (per-type toggles + digest time in
-  Settings) -- see item 7's section. Then
+  **Web Push P3 shipped -- item 7 DONE (pending a real-device test).**
+  Per-type reminder toggles + morning digest time in Settings > General
+  (`/settings/notifications`, app-wide). 7 new tests. Verified live (save
+  round-trips, 375px no overflow). Full suite **2,430 passed**. `sw.js`
+  v117 -> v118. **Peter's first real test**: Settings > General > Turn on
+  > Send test (iPhone: Add to Home Screen first).
+
+  **Next slice**: labels-as-modules (item 4) -- **re-confirm the
+  reversal's exact scope with Peter first, do not start without it**
+  (reverses the 2026-09-16 Spaces/Projects Kanban+Agenda pages; break into
+  schema/module migration -> URL/routing collapse -> sidebar chevron +
+  group pages -> label-pill linking). Then narrow banners (item 2, after
+  4). Everything else in the 2026-09-24 batch is shipped. Then
   labels-as-modules (item 4 -- re-confirm scope with Peter first, do not
   start without it) and narrow banners (item 2, after 4). Others unchanged: Web Push
   (item 7), labels-as-modules (item 4 -- re-confirm scope with Peter

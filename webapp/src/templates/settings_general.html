@@ -182,6 +182,19 @@
         <button type="button" class="btn ghost btn-sm" id="push-test" hidden>Send test</button>
         <button type="button" class="btn ghost btn-sm" id="push-disable" hidden>Turn off</button>
     </div>
+    {# Web Push P3: which reminders go out (app-wide) and when the morning
+       digest does. Plain form, saves with its own button. #}
+    <form class="push-types-form" method="post" action="/settings/notifications">
+        <fieldset class="push-types">
+            <legend class="settings-field-label">Remind me about</legend>
+            {% for key, label in push_types %}
+            <label class="push-type"><input type="checkbox" name="types" value="{{ key }}"{% if key in push_types_on %} checked{% endif %}> {{ label }}</label>
+            {% endfor %}
+        </fieldset>
+        <label class="push-digest"><span class="settings-field-label">Morning reminder at</span>
+            <input type="time" name="digest_time" value="{{ push_digest_time }}" step="300" required></label>
+        <button type="submit" class="btn tonal btn-sm">Save</button>
+    </form>
 </div>
 {% endblock %}
 {% block extra_scripts %}<script defer src="{{ static_url('push_settings.js') }}"></script>{% endblock %}

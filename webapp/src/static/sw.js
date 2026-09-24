@@ -556,7 +556,9 @@
 // v117 (2026-09-24, same session): Web Push P1 -- this file gained the
 // push / notificationclick handlers (a new sw.js is picked up by the
 // browser's own byte-compare anyway; bumped for the shell convention).
-const CACHE_NAME = "cc-shell-v117";
+// v118 (2026-09-24, same session): Web Push P3 -- style.css gained the
+// reminder-types / digest-time form rules.
+const CACHE_NAME = "cc-shell-v118";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

@@ -43,6 +43,27 @@ DIGEST_TIME_KEY = "push_digest_time"
 DEFAULT_DIGEST_TIME = "08:00"
 DIGEST_UNTIL = time(21, 0)
 TICK_SECONDS = 60
+# Web Push P3: which reminder types are on (Settings > General). Stored as
+# a comma list; missing = all on.
+TYPES_KEY = "push_types"
+TYPES: tuple[str, ...] = ("events", "tasks", "habits", "blocks")
+TYPE_LABELS = {
+    "events": "Events, when they start",
+    "tasks": "Tasks due today (morning)",
+    "habits": "Habits due today (morning)",
+    "blocks": "Sleep & leisure time starting",
+}
+
+
+def enabled_types(conn) -> set[str]:
+    raw = db.get_app_meta(conn, TYPES_KEY)
+    if raw is None:
+        return set(TYPES)
+    return {t for t in raw.split(",") if t in TYPES}
+
+
+def digest_time_str(conn) -> str:
+    return _digest_time(conn).strftime("%H:%M")
 
 
 @dataclass(frozen=True)
@@ -182,7 +203,14 @@ def due_notifications(conn, now: datetime | None = None) -> list[Notification]:
     """Everything that should fire at `now` (local naive) and hasn't been
     sent yet."""
     now = now or datetime.now()
-    candidates = _event_notifications(conn, now) + _digest_notifications(conn, now) + _time_block_notifications(conn, now)
+    on = enabled_types(conn)
+    candidates: list[Notification] = []
+    if "events" in on:
+        candidates += _event_notifications(conn, now)
+    if on & {"tasks", "habits"}:
+        candidates += [n for n in _digest_notifications(conn, now) if n.key.split(":", 1)[0] in on]
+    if "blocks" in on:
+        candidates += _time_block_notifications(conn, now)
     return [n for n in candidates if not db.push_was_sent(conn, n.key)]
 
 

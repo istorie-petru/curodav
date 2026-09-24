@@ -7806,3 +7806,9 @@ button.allday-habit{width:100%; text-align:left; border:none; cursor:pointer; fo
    sets display, which would otherwise override the [hidden] attribute
    push_settings.js toggles. */
 #push-settings button[hidden]{display:none;}
+/* Web Push P3: reminder types + digest time (Settings > General). */
+.push-types-form{display:flex; flex-wrap:wrap; align-items:flex-end; gap:var(--space-3); padding:var(--space-3) var(--space-2) var(--space-2); border-top:1px solid var(--separator);}
+.push-types{border:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; min-width:0;}
+.push-types legend{padding:0; margin-bottom:4px;}
+.push-type{display:flex; align-items:center; gap:var(--space-2); font-size:var(--text-sm);}
+.push-digest{display:flex; flex-direction:column; gap:4px;}

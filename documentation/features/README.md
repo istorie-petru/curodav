@@ -57,6 +57,9 @@ these pieces fit together.
 - **Schedule** — your class timetable by day of week and week parity; it
   turns into real calendar events automatically, flags conflicts, counts
   credits, and links each class to its professor contact.
+- **Notifications** — Web Push reminders (events at start, a morning
+  digest of tasks/habits due today, sleep/leisure start); Settings >
+  General turns them on per device.
 - **Habits** — simple daily check-ins with heatmaps and streaks, tracked
   locally and also usable as a special task view.
 - **Published lists** — pick a label filter (say, "University, not archived")

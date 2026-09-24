@@ -388,7 +388,7 @@ its own). Checked `SHELL_ASSETS` membership before concluding this,
 per this session's own established habit. `test_pwa_shell.py`'s
 version-string assertion updated to match.
 
-## 7. Web Push notifications — IN PROGRESS (P1 + P2 shipped 2026-09-24; P3 next)
+## 7. ~~Web Push notifications~~ — SHIPPED 2026-09-24 (P1-P3; first real-device test pending)
 
 Leisure/sleep-time start, event start, tasks due today (generic phrasing
 when more than one — "you have multiple tasks due today," not a list),
@@ -463,11 +463,18 @@ validated. A new test runs pywebpush's real signing + encryption
 Live: the thread fired on the minute, retried after failures within the
 window, and got all the way to the HTTP POST (blocked by this sandbox).
 
-**Remaining:**
-- **P3 -- settings.** Per-type on/off (events / tasks / habits / sleep &
-  leisure) and the digest time in Settings > General's Notifications
-  card. Copy is in place; tone stays motivational, never a nag (no
-  repeats, no overdue shaming).
+**P3 -- shipped 2026-09-24 (settings).** Settings > General's
+Notifications card gains "Remind me about" (Events when they start /
+Tasks due today / Habits due today / Sleep & leisure time starting --
+app_meta `push_types`, missing = all on, empty = all off) and "Morning
+reminder at" (`push_digest_time`, validated HH:MM, bad input keeps the
+old value). App-wide, not per device. `reminders.due_notifications`
+filters by the enabled types. POST `/settings/notifications`.
+
+**Still open (needs Peter):** a real-device check -- Settings > General >
+Turn on > Send test on the phone (iPhone: Add to Home Screen first) --
+nothing in this sandbox can reach a push service. Optionally set
+`CC_PUSH_CONTACT=mailto:you@domain` on the server.
 
 ## 8. ~~`main-shell-body`'s `margin-bottom: 6dvh`~~ — SHIPPED 2026-09-24
 

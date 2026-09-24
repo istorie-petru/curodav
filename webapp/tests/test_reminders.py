@@ -130,3 +130,41 @@ class TestRunOnce:
         assert reminders.run_once(conn, at(9, 1), sender=boom) == 0
         assert not db.push_was_sent(conn, f"event:standup:{at(9, 0).isoformat()}:0")
         assert reminders.run_once(conn, at(9, 2), sender=lambda **kw: None) == 1
+
+
+class TestSettings:
+    """Web Push P3: per-type toggles + digest time."""
+
+    def test_defaults_all_on(self, conn):
+        assert reminders.enabled_types(conn) == set(reminders.TYPES)
+        assert reminders.digest_time_str(conn) == "08:00"
+
+    def test_types_filter_and_all_off(self, conn):
+        from src.routers import settings as settings_router
+
+        _event(conn, "standup", at(9, 0))
+        db.upsert_task(conn, {"uid": "t1", "title": "Invoice", "description": "", "status": "active", "tags": [],
+                              "due_at": TODAY.isoformat(), "created_at": _now_utc()})
+        settings_router.set_notifications(types=["tasks"], digest_time="09:00", conn=conn)
+        assert reminders.enabled_types(conn) == {"tasks"}
+        assert _keys(conn, at(9, 1)) == [f"tasks:{TODAY}"]  # event reminder off
+        settings_router.set_notifications(types=[], digest_time="09:00", conn=conn)
+        assert reminders.enabled_types(conn) == set()
+        assert _keys(conn, at(9, 1)) == []
+
+    @pytest.mark.parametrize("raw,expected", [("7:05", "07:05"), ("25:00", "08:00"), ("nope", "08:00"), ("23:59", "23:59")])
+    def test_digest_time_validated(self, conn, raw, expected):
+        from src.routers import settings as settings_router
+
+        settings_router.set_notifications(types=list(reminders.TYPES), digest_time=raw, conn=conn)
+        assert reminders.digest_time_str(conn) == expected
+
+    def test_settings_page_renders_form(self, conn):
+        from starlette.requests import Request
+        from src.routers import settings as settings_router
+
+        req = Request({"type": "http", "method": "GET", "path": "/settings/general", "headers": [], "query_string": b""})
+        body = settings_router.settings_general(req, conn=conn).body.decode()
+        assert 'action="/settings/notifications"' in body
+        assert body.count('name="types"') == 4
+        assert 'name="digest_time" value="08:00"' in body
