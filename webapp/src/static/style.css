@@ -4501,6 +4501,16 @@ main.main-shell > .toolbar.top-app-bar{
 .main-shell-body{
   flex:1 1 auto; min-height:0; overflow-y:auto; margin-bottom:6dvh;
 }
+/* 2026-09-24 direct report: on Dashboard specifically, the shared
+   margin-bottom above "creates a veil that hides content" -- the widget
+   grid's own JS-computed height (app.js's masonry layout) already leaves
+   no natural gap for that reserved space to sit in, so it just eats into
+   the last row of widgets instead of adding breathing room the way it
+   does over a plain scrolling list (Tasks/Contacts/Notes). Scoped to
+   Dashboard alone (dashboard.html's own .main-shell-body--flush) rather
+   than dropped for every .main-shell-body page -- Tasks/Contacts/Notes
+   weren't part of this report and keep the margin. */
+.main-shell-body--flush{margin-bottom:0;}
 @media (min-width:721px){
   /* No bottom bar to reserve on desktop, same as main.main-calendar. */
   main.main-shell{height:100vh; height:100dvh;}

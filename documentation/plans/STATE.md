@@ -125,11 +125,23 @@ session start.
   `dashboard.html`'s widget-grid wrapper -- all sharing one 2026-09-07
   "flex shell" rule (style.css). `labels_manage.html` turned up in the
   grep too but only inside a comment describing it *opting out* of this
-  shell 2026-09-08 -- it doesn't carry the class. **No code change** --
-  the margin is shared, load-bearing spacing across four page types, not
-  a dashboard-only leftover, and inventing a dashboard-scoped modifier
-  class nobody asked for would've been guessing past a conditional that
-  didn't hold. Full detail in the doc's item 8.
+  shell 2026-09-08 -- it doesn't carry the class. **No code change yet**
+  at that point -- the margin is shared, load-bearing spacing across four
+  page types, not a dashboard-only leftover, and inventing a
+  dashboard-scoped modifier class nobody had actually asked for would've
+  been guessing past a conditional that didn't hold.
+
+  Same session, fourth slice, immediate follow-up: Peter confirmed the
+  real ask once the audit came back -- Dashboard specifically does need
+  the margin gone ("that bottom margin creates a veil that hides content
+  ... it doesn't exist for dashboard pages"), Tasks/Contacts/Notes
+  untouched. Landed as `main-shell-body--flush` (style.css), a second
+  class added only to `dashboard.html`'s widget-grid wrapper --
+  `margin-bottom:0` overrides the shared rule there, every other
+  `.main-shell-body` rule stays shared. Verified live (same Playwright
+  pathway as the height-bug slice): Dashboard's wrapper computed
+  `margin-bottom` is `0px`; Tasks' is still `42px` (6dvh at the test
+  viewport), unchanged. Full detail in the doc's item 8.
 
   **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 4
   onward (the App title + PWA icon slice is the next-cheapest, fully

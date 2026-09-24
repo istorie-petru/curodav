@@ -60,8 +60,9 @@ that fits its remaining budget.
    (item 3) — **shipped 2026-09-24**, same session. Root cause wasn't what
    this doc first guessed (see item 3's own entry below).
 3. ~~**`main-shell-body`'s `margin-bottom: 6dvh` audit**~~ (item 6) —
-   **investigated 2026-09-24**: premise was false (not dashboard-only), no
-   change made.
+   **shipped 2026-09-24**: premise was false (not dashboard-only), so
+   scoped to Dashboard alone via a new `--flush` modifier once Peter
+   confirmed that was the actual ask.
 4. **App title + PWA icon** (item 8) — static/manifest change, no backend.
 5. **Notes removal/hiding decision** (item 13) — needs one clarifying
    question (remove entirely vs. feature-flag/hide) before any code.
@@ -293,10 +294,10 @@ existing background scheduler in this app as of 2026-09 — confirm, don't
 assume), and copy for each notification type. Large, mostly new
 infrastructure — budget multiple sessions.
 
-## 8. ~~`main-shell-body`'s `margin-bottom: 6dvh`~~ — INVESTIGATED 2026-09-24, no change
+## 8. ~~`main-shell-body`'s `margin-bottom: 6dvh`~~ — SHIPPED 2026-09-24
 
 "If `main-shell-body` is only used in dashboard pages, remove the
-`margin-bottom: 6dvh`." Conditional on the audit — the premise doesn't
+`margin-bottom: 6dvh`." Conditional on the audit — the premise didn't
 hold: `.main-shell-body` is genuinely applied on four page shapes, not
 just Dashboard — `_tasks_body.html` (`#tasks-body`), `_contacts_body.html`
 (`#contacts-body`), `_notes_body.html` (`#notes-body`), and
@@ -307,12 +308,19 @@ header+scrollable-body shape"). `labels_manage.html` still turned up in a
 grep for the class name, but only inside a comment explaining it
 *opted out* of this shell 2026-09-08 — it doesn't actually carry the class.
 
-Since the condition in the request is false, nothing was removed — the
-margin is shared, load-bearing spacing for Tasks/Contacts/Notes too, not a
-dashboard-only leftover, and the request was explicitly conditional
-("if... only used in dashboard pages"). No code change; flagging back to
-Peter in the session that shipped this rather than guessing at a
-scoped-modifier-class alternative nobody asked for.
+Reported first without changing anything (the condition was false, so a
+blanket removal would've been wrong); Peter then confirmed the real ask —
+Dashboard specifically needs the margin gone regardless ("that bottom
+margin creates a veil that hides content ... it doesn't exist for
+dashboard pages"), Tasks/Contacts/Notes untouched.
+
+Landed as a second class, `main-shell-body--flush` (`style.css`), added
+alongside `main-shell-body` on `dashboard.html`'s widget-grid wrapper only
+— `margin-bottom:0` overrides the shared rule's `6dvh` there, every other
+`.main-shell-body` rule (flex sizing, `overflow-y:auto`) stays shared.
+Verified live: the wrapper's computed `margin-bottom` is `0px` on
+Dashboard, still `42px` (6dvh at a 700px test viewport) on Tasks,
+unchanged.
 
 ## 9. App title + PWA icon
 
