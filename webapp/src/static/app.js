@@ -15,21 +15,50 @@
   const mql = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
   // 2026-08-11: the tabbar's #btnTheme icon button is gone (see
   // base.html's removal note) -- Settings > Appearance's System/Light/Dark
-  // segmented choice is the only theme control left, so this block no
-  // longer has to keep a one-click flip button in sync with it.
+  // choice is the only theme control left, so this block no longer has to
+  // keep a one-click flip button in sync with it.
   //
-  // The control is a three-way System/Light/Dark segmented choice, not an
-  // on/off switch -- a switch can only ever represent two states, so
-  // "follow the OS" (the actual out-of-the-box behavior, computed once by
-  // base.html's inline <head> script from prefers-color-scheme whenever
-  // localStorage has nothing stored yet) became permanently unreachable
-  // the instant anyone touched the old switch even once. "System" isn't a
-  // third stored value -- it's the *absence* of a stored value, same
-  // meaning the inline head script already gives that absence; picking
-  // "System" here just clears the key instead of writing one, and a live
-  // prefers-color-scheme listener keeps the page in sync if the OS theme
-  // changes while "System" is active and the tab stays open.
-  const segmented = document.getElementById("themeSegmented");
+  // The control is a three-way System/Light/Dark choice, not an on/off
+  // switch -- a switch can only ever represent two states, so "follow the
+  // OS" (the actual out-of-the-box behavior, computed once by base.html's
+  // inline <head> script from prefers-color-scheme whenever localStorage
+  // has nothing stored yet) became permanently unreachable the instant
+  // anyone touched the old switch even once. "System" isn't a third stored
+  // value -- it's the *absence* of a stored value, same meaning the inline
+  // head script already gives that absence; picking "System" here just
+  // clears the key instead of writing one, and a live prefers-color-scheme
+  // listener keeps the page in sync if the OS theme changes while "System"
+  // is active and the tab stays open.
+  //
+  // 2026-09-24 direct request ("instead of segmented, drop down menu with
+  // select one") -- the three-way choice is now settings_appearance.html's
+  // `.theme-select` (_widget_list_multiselect.html, `ms_mode="single"`,
+  // no `ms_autosubmit`/`ms_form_id` -- there's still no server round-trip
+  // for this, same as the old buttons: theme stays a pure client-side
+  // localStorage choice). Real radio inputs now, not `data-theme-choice`
+  // buttons, so:
+  //   - Which option is "checked" is native radio-group behavior, no JS
+  //     needed for that part.
+  //   - The trigger's summary text ("System"/"Light"/"Dark") is kept in
+  //     sync automatically by app.js's own generic `.widget-list-
+  //     multiselect` change listener (further down this file) -- every
+  //     multiselect on the page gets that for free, this one included.
+  //   - This block only still owns: reading which radio should start
+  //     checked at page load (the server can't know localStorage's
+  //     content, so it always renders "system" checked and this corrects
+  //     it before the user ever sees a mismatch), applying `data-theme`
+  //     to <html> on every choice (including a live OS-preference change
+  //     while "System" is active), and persisting a pick to localStorage.
+  //   - Uses a plain (non-portal-aware) query rather than
+  //     `window.CCMultiselect.panelFor` -- this file's theme block runs
+  //     before the multiselect IIFE that defines it further down, and in
+  //     every case this code actually needs to read/set the radio (page
+  //     load, or right after a pick the generic listener already closed
+  //     the panel for) the panel is guaranteed to still be in its normal,
+  //     un-portaled spot. The one truly unreachable edge case -- the OS
+  //     theme flips while the user has the panel open and portaled -- just
+  //     self-corrects next render(), not worth the added complexity.
+  const themeControl = document.querySelector(".theme-select");
 
   function osPrefersDark() {
     return !!(mql && mql.matches);
@@ -53,12 +82,15 @@
     } else {
       document.documentElement.removeAttribute("data-theme");
     }
-    if (segmented) {
-      segmented.querySelectorAll("[data-theme-choice]").forEach((btn) => {
-        const isActive = btn.getAttribute("data-theme-choice") === choice;
-        btn.classList.toggle("active", isActive);
-        btn.setAttribute("aria-pressed", isActive ? "true" : "false");
-      });
+    if (themeControl) {
+      const radio = themeControl.querySelector('input[value="' + choice + '"]');
+      if (radio && !radio.checked) {
+        radio.checked = true;
+        const summary = themeControl.querySelector(".ms-summary");
+        const label = radio.closest(".multiselect-option");
+        const text = label ? label.querySelector("span:last-child") : null;
+        if (summary && text) summary.textContent = text.textContent;
+      }
     }
   }
 
@@ -73,12 +105,17 @@
     render();
   }
 
-  if (segmented) {
-    segmented.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-theme-choice]");
-      if (btn) setChoice(btn.getAttribute("data-theme-choice"));
-    });
-  }
+  // A flat attribute selector, not `.theme-select input[...]` -- once the
+  // panel is open it's portaled out to #multiselect-portal (app.js's own
+  // multiselect IIFE further down), no longer a DOM descendant of
+  // `.theme-select` at all, so an ancestry-based selector would silently
+  // stop matching the moment the panel ever opens. `name="theme"` is
+  // unique to this one control app-wide.
+  document.addEventListener("change", (e) => {
+    if (e.target.matches && e.target.matches('input[name="theme"]')) {
+      setChoice(e.target.value);
+    }
+  });
   if (mql && mql.addEventListener) {
     mql.addEventListener("change", () => {
       if (storedChoice() === "system") render();

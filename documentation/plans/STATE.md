@@ -294,8 +294,67 @@ session start.
   Bundled: `sw.js`'s `CACHE_NAME` bump (v100 -> v101) for the `.icon`
   class change; `test_pwa_shell.py`'s version string updated to match.
 
-  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 8 --
-  Settings `.segmented` -> dropdown (self-contained component swap).
+  Same session, ninth slice -- `plans/ui-cleanup-2026-09.md` item 9,
+  Settings `.segmented` -> dropdown. Scoped to the two Settings pages that
+  actually had it (`settings_general.html`, `settings_appearance.html`, 8
+  controls) -- 8 other files using `.segmented` elsewhere in the app
+  (event form, tasks toolbar, widget builder, ...) are outside Settings,
+  untouched, per the request's own wording.
+
+  Reused `_widget_list_multiselect.html`'s existing `ms_mode="single"`
+  convention (built 2026-08-07 for the widget builder's View/Range, for
+  exactly the same reason -- a native `<select>`'s open list is
+  unstyleable browser chrome). Added `ms_bare` (skips the partial's normal
+  `.field`/label wrapper for a caller like `.settings-field-row` that
+  already has its own label) and an `aria-label` on the trigger (a small
+  accessibility fix that applies to every caller, not just the new bare
+  mode). 6 of General's autosubmit radio groups and 2 of Appearance's
+  on/off rows converted directly. The Theme picker (System/Light/Dark)
+  needed real work -- it's the one control with no server round-trip at
+  all (`window.CCTheme`, pure client-side localStorage) -- rewrote
+  `static/app.js`'s theme block to drive the new `.theme-select` radio
+  dropdown: native radio-group behavior handles which one's checked, the
+  generic multiselect change listener keeps the summary text in sync for
+  free, the theme block only still owns `data-theme`/localStorage/the
+  initial page-load sync. Had to match on the flat `input[name="theme"]`
+  rather than an ancestry-based selector, since the open dropdown panel
+  gets portaled out to `#multiselect-portal` (app.js's existing mechanism,
+  shared by every dropdown in the app) and an ancestry selector silently
+  stops matching the moment the panel is ever opened.
+
+  **Found two real bugs along the way, both fixed**: (1) Jinja's
+  `{% set %}` isn't scoped to the `{% include %}` it precedes -- caught
+  live, `ms_root_class` set for the Theme dropdown was leaking into
+  Appearance's next two dropdowns below it until explicitly cleared back
+  out after Theme's own include. Likely pre-existing elsewhere too (not
+  fixed, out of scope): `_widget_builder_fields.html`'s Width dropdown
+  probably inherits Range's `ms_root_class` the same way -- flagged, not
+  investigated. (2) The shared partial's single-mode fallback breaks for a
+  genuinely-selected-but-falsy value (an empty-string "Off") -- every
+  *existing* caller with an empty-string value happened to already list it
+  first in `ms_items`, accidentally, which is why this never surfaced
+  before; followed the same workaround (Off listed first) for the three
+  On/Off rows converted here rather than touching the partial's shared
+  fallback logic (View/Range deliberately rely on the same fallback for a
+  different, genuine case).
+
+  **Visually verified**: opened each dropdown live (screenshotted real
+  radio panels); picked Sunday on Week-starts-on, confirmed autosubmit;
+  picked Dark on Theme, confirmed the whole page switched immediately,
+  localStorage/`data-theme` set correctly, and -- after a full reload --
+  the dropdown still showed "Dark" checked (proving the page-load sync
+  path works, not just the live-pick path); confirmed Show-icons/Edit-mode
+  render independently correct state once the `ms_root_class` leak was
+  fixed (they'd both been silently mirroring Theme's state before that).
+
+  Bundled: `sw.js`'s `CACHE_NAME` bump (v101 -> v102) for `app.js`'s theme
+  rewrite; `test_pwa_shell.py` updated to match. Two existing tests
+  updated for the new markup shape. Full suite: **2,381 passed, 0 failed**
+  (unchanged count -- both are assertion rewrites, not new tests).
+
+  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 9 --
+  design token tightening (audit the current token count before scoping
+  the cut).
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-

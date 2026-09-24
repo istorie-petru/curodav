@@ -248,14 +248,19 @@ def test_set_display_name_strips_and_allows_clearing(conn):
 
 
 class TestSettingsAppearance:
-    def test_renders_system_light_dark_segmented_control(self, conn):
+    def test_renders_system_light_dark_dropdown(self, conn):
+        # 2026-09-24: the segmented System/Light/Dark buttons were swapped
+        # for the same single-select dropdown (_widget_list_multiselect
+        # .html) every other Settings on/off row now uses -- `.theme-select`
+        # is the new hook (static/app.js's theme block), real radio values
+        # replace the old `data-theme-choice` button attribute.
         resp = settings_router.settings_appearance(_request("/settings/appearance"), conn=conn)
         assert resp.context["active_tab"] == "settings_appearance"
         body = resp.body.decode()
-        assert 'id="themeSegmented"' in body
-        assert 'data-theme-choice="system"' in body
-        assert 'data-theme-choice="light"' in body
-        assert 'data-theme-choice="dark"' in body
+        assert "theme-select" in body
+        assert 'name="theme" value="system"' in body
+        assert 'name="theme" value="light"' in body
+        assert 'name="theme" value="dark"' in body
 
 
 class TestDataAndBackupCategoryRemoved:

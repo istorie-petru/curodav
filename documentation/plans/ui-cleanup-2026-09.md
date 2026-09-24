@@ -77,8 +77,10 @@ that fits its remaining budget.
    2026-09-24**: 190 icons (not ~51), all real MDI path data fetched and
    verified, not guessed. Found and fixed a pre-existing bug along the
    way (two icons referenced but never defined in the old sprite).
-8. **Settings `.segmented` → dropdown** (item 9) — self-contained component
-   swap, check for an existing select-based single-choice convention first.
+8. ~~**Settings `.segmented` → dropdown**~~ (item 9) — **shipped
+   2026-09-24**: reused the existing single-select dropdown convention as
+   expected; the Theme picker needed real JS work (no server round-trip),
+   and the pass caught two real pre-existing bugs in the shared partial.
 9. **Design token tightening** (item 12) — audit current token count before
    scoping; likely its own investigation-then-cut slice.
 10. **Search window simplification + event "overdue" rewording** (item 10).
@@ -468,15 +470,108 @@ text rather than a rendered response, so it can't actually distinguish
 "commented out" from "live," which is why it never caught the manifest
 link being disabled in the first place).
 
-## 10. Settings `.segmented` → dropdown
+## 10. ~~Settings `.segmented` → dropdown~~ — SHIPPED 2026-09-24
 
 "Instead of having `class="segmented"` in the settings, I would much rather
-prefer drop down menu with select one (radiobox drop down menu)." Find
-every `.segmented` usage (grep templates + style.css) and replace with a
-native `<select>`-based single-choice control. Check
-`UI_CONSISTENCY_GUIDE.md`/`features/design-system.md` first for whether a
-select-based convention already exists elsewhere to reuse rather than
-inventing a new pattern.
+prefer drop down menu with select one (radiobox drop down menu)." Scoped
+to the two Settings pages that actually had `.segmented` (`settings_general
+.html`, `settings_appearance.html`, 8 controls total) — the other 8 files
+using `.segmented` app-wide (event form, tasks toolbar, widget builder,
+calendar month, contacts list, quick add, time block modal) are outside
+Settings and untouched, per the request's own "in the settings" wording.
+
+An existing select-based convention already existed exactly as the doc's
+own note anticipated checking for: `_widget_list_multiselect.html`'s
+`ms_mode="single"` (built 2026-08-07 for the widget builder's View/Range
+fields specifically *because* a native `<select>`'s open dropdown list is
+unstyleable browser chrome — see that partial's own header comment). Added
+one new capability to reuse it here: `ms_bare` (skips the partial's normal
+`.field`/`<label>` wrapper, since a `.settings-field-row` already has its
+own label to the left) and `aria-label="{{ ms_label }}"` on the trigger
+button (the wrapper's label previously had no programmatic association
+with it at all, in *any* caller — a small accessibility improvement that
+falls out of this pass, not scoped to just the new bare mode).
+
+Landed: all 6 of `settings_general.html`'s autosubmit radio groups (Week
+starts on, 4-Week view position, Recurrence/Habit-streak terminology, Time
+format, Hide sleep hours) and `settings_appearance.html`'s 2 autosubmit
+on/off rows (Show icons next to labels, Edit mode) now use `ms_mode
+="single"` + `ms_autosubmit` + `ms_bare` — same `data-change-submit`
+delegated listener as before, same instant-autosave behavior, just a
+dropdown trigger instead of a row of pill buttons.
+
+The Theme picker (System/Light/Dark) needed real work, not just a markup
+swap: it's the one settings control with no server round-trip at all
+(`window.CCTheme`, a pure client-side localStorage choice, so
+`ms_autosubmit`/`ms_form_id` don't apply). Rewrote `static/app.js`'s theme
+block to drive the new `.theme-select` radio dropdown instead of the old
+`data-theme-choice` buttons: which radio is checked is now native
+radio-group behavior (no JS needed), the trigger's summary text is kept in
+sync for free by app.js's own generic `.widget-list-multiselect` change
+listener (any multiselect on the page gets this, this one included), and
+the theme block only still owns applying `data-theme` to `<html>` +
+persisting to localStorage + correcting the initially-checked radio at
+page load (the server can't know localStorage's content, so it always
+renders "System" checked and JS corrects it before the user sees a
+mismatch). The one thing this needed to get right *on its own*: the
+generic multiselect panel gets portaled out to `#multiselect-portal` while
+open (`static/app.js`'s existing portal mechanism, shared with every
+other dropdown), so an ancestry-based selector like `.theme-select
+input[...]` silently stops matching the moment the panel is ever opened —
+the new document-level change listener matches on the flat, portal-proof
+`input[name="theme"]` instead (a name unique to this one control
+app-wide), the same reasoning `data-change-submit`'s own listener already
+uses.
+
+**Found two real bugs along the way, both fixed as part of this pass:**
+1. Jinja's `{% set %}` isn't scoped to the `{% include %}` it precedes — a
+   value set before one `_widget_list_multiselect.html` include stays set
+   for every *later* include of the same partial lower in the same
+   template, unless explicitly cleared. Caught live: `ms_root_class =
+   'theme-select'` (set for the Theme dropdown) silently leaked into
+   `settings_appearance.html`'s next two dropdowns below it (Show icons
+   next to labels, Edit mode), until an explicit `{% set ms_root_class =
+   '' %}` right after Theme's own include cleared it back out. **Likely
+   pre-existing elsewhere too**, not fixed here (out of scope): `_widget_
+   builder_fields.html`'s Width dropdown doesn't set its own
+   `ms_root_class` and sits right after Range's (`'widget-range-select'`),
+   so it's probably inheriting a class that names the wrong field —
+   flagged, not investigated further, since fixing it needs confirming
+   what (if anything) actually depends on Width's `ms_root_class` being
+   absent.
+2. `_widget_list_multiselect.html`'s single-mode `_sel_item` lookup falls
+   back to `ms_items | first` whenever `ms_selected` is falsy — which an
+   empty-string "Off"/"none" value always is. Every *existing* caller with
+   an empty-string value happened to already list that item first in
+   `ms_items` (accidentally, not by documented convention), which is
+   exactly why this never surfaced before. Followed the same workaround
+   for all three On/Off rows converted here (Off listed first) rather than
+   changing the partial's shared fallback logic, which other callers
+   (View/Range) deliberately rely on for a different, genuine "no
+   selection yet, default to first" case — documented in each affected
+   row's own comment, not just here.
+
+Verified live (same Playwright pathway as earlier slices): opened each
+dropdown and confirmed real radio inputs render in a panel (screenshotted);
+picked Sunday on Week-starts-on and confirmed it autosubmitted and the
+trigger updated; picked Dark on the Theme dropdown and confirmed the whole
+page switched to dark mode immediately, `localStorage`/`data-theme` were
+set correctly, and — after a full page reload — the dropdown still showed
+"Dark" checked correctly (proving the page-load sync logic works, not just
+the live-pick path). Confirmed "Show icons next to labels"/"Edit mode"
+render their own correct state independently once the `ms_root_class` leak
+was fixed (they'd both been silently showing Theme's dropdown state
+before that fix).
+
+Bundled: `sw.js`'s `CACHE_NAME` bump (v101 -> v102) for `app.js`'s theme
+block rewrite; `test_pwa_shell.py`'s version string updated. Two existing
+tests updated for the new markup (`test_calendar_fourweek.py`'s exact-
+adjacent-string assertion loosened to a small-gap regex since `checked` no
+longer sits right after `value=`; `test_phase8_settings_hub.py`'s theme
+test renamed and rewritten for `.theme-select`/real radio values instead
+of `id="themeSegmented"`/`data-theme-choice`). Full suite: 2,381 passed
+(unchanged count, both updates replace prior assertions rather than adding
+new ones).
 
 ## 11. Search window simplification
 

@@ -499,7 +499,11 @@
 // itself a Jinja template inlined per-page, not a separate SHELL_ASSETS
 // entry that needs its own cache-bust). style.css is in SHELL_ASSETS
 // below, so this one's caught on the same slice it shipped in too.
-const CACHE_NAME = "cc-shell-v101";
+// v102 (2026-09-24, same session): Settings' segmented controls -> dropdown
+// swap (direct request) -- app.js's theme block was rewritten to drive
+// settings_appearance.html's new `.theme-select` radio dropdown instead of
+// the old `data-theme-choice` buttons. app.js is in SHELL_ASSETS below.
+const CACHE_NAME = "cc-shell-v102";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

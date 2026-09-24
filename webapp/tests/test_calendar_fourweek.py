@@ -17,6 +17,7 @@ test_calendar_month_bars.py and test_display_prefs_settings.py."""
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -416,11 +417,16 @@ class TestFourWeekPositionSetting:
         assert resp.context["current_four_week_position"] == 1
 
     def test_general_page_checks_stored_position(self, conn):
+        # 2026-09-24: the segmented control was swapped for the same
+        # single-select dropdown View/Range use (_widget_list_
+        # multiselect.html) -- checked no longer sits right after value=
+        # (a form=/data-* attribute lands between them), so match with a
+        # small gap rather than an exact adjacent string.
         db.set_app_meta(conn, deps.FOUR_WEEK_POSITION_KEY, "3")
         resp = settings_router.settings_general(_bare_request("/settings/general"), conn=conn)
         assert resp.context["current_four_week_position"] == 3
         body = resp.body.decode()
-        assert 'value="3" class="seg-radio" checked' in body
+        assert re.search(r'value="3"[^<]*checked', body)
 
     def test_set_route_stores_position(self, conn):
         resp = settings_router.set_four_week_position(position="4", conn=conn)
