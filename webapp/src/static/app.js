@@ -711,6 +711,16 @@ document.addEventListener("submit", (event) => {
       const entries = row.map(({ card, span }) => {
         const width = span * colWidth + (span - 1) * GAP;
         card.style.width = `${width}px`;
+        // Clear any row height a PREVIOUS layout() pass stamped onto this
+        // card before measuring below -- 2026-09-24 bug fix (direct
+        // report: "the height of dashboard widgets doesn't update after
+        // enlarging the sidebar"). Without this, offsetHeight just echoes
+        // back that stale explicit height instead of the card's real
+        // natural height at its new width/content, so a card can never
+        // grow OR shrink again after its first layout() pass -- not
+        // specific to the sidebar, any later relayout (new content, a
+        // resize) was equally stuck once a height had been set once.
+        card.style.height = "";
         return { card, span, width };
       });
       entries.forEach((entry) => {

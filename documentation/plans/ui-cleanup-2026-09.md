@@ -56,8 +56,9 @@ that fits its remaining budget.
 
 1. ~~**Relative-date shorthand**~~ (item 1) — **shipped 2026-09-24**, this
    session. Smallest possible slice, good session opener; see below.
-2. **Dashboard widget height not updating after sidebar resize** (item 3) —
-   isolated JS bug in the masonry packer, no design decision needed.
+2. ~~**Dashboard widget height not updating after sidebar resize**~~
+   (item 3) — **shipped 2026-09-24**, same session. Root cause wasn't what
+   this doc first guessed (see item 3's own entry below).
 3. **`main-shell-body`'s `margin-bottom: 6dvh` audit** (item 6) — a one-page
    CSS/template check.
 4. **App title + PWA icon** (item 8) — static/manifest change, no backend.
@@ -153,14 +154,51 @@ Depends on item 15 (labels-as-modules) for exact scope — if Space/Project
 dashboards stop existing as a page type, "any dashboard" narrows to just
 Home (+ whatever the group pages from item 15 turn out to be).
 
-## 3. Dashboard widget height doesn't update after sidebar resize
+## 3. ~~Dashboard widget height doesn't update after sidebar resize~~ — SHIPPED 2026-09-24
 
-Bug report, no spec needed. `app.js`'s masonry packer (`packRows`, per
-STATE.md's 2026-09-21 entry #6) sizes off the grid's rendered column width;
-resizing the sidebar changes that width without re-triggering a repack.
-Likely fix: a `ResizeObserver` on the sidebar element (or the grid container
-itself) instead of (or in addition to) any existing `window.resize`
-listener.
+This doc's own first-pass guess (missing `ResizeObserver`/resize listener)
+was **wrong** — `sidebar_tree.js` already dispatches a synthetic `window`
+`resize` event on toggle (twice: immediately + after the 160ms width
+transition), and `app.js`'s `layout()` is already wired to real `resize`
+events, so re-layout genuinely does run on every sidebar toggle. Confirmed
+this by instrumenting the running app with Playwright before touching
+anything (`measure.js`/`measure2.js`/`measure3.js`/`measure4.js` in this
+session's scratchpad) rather than guessing from the code alone — the first
+few repro attempts with ordinary widget content showed no discrepancy at
+all, which is what led to actually proving the mechanism rather than
+settling for "should be fine."
+
+Real bug, found once a widget's content was made tall enough to need MORE
+height than a prior layout pass had already stamped onto it (`app.js`
+`layout()`, the `rows.forEach` loop): each pass measured a card's natural
+height via `entry.card.offsetHeight` **without first clearing the previous
+pass's own `card.style.height`** — so `offsetHeight` just echoed back that
+stale explicit height instead of the card's true natural height at its new
+width/content. Confirmed via a direct-injection test: appending a long
+paragraph to a widget card left its measured height frozen at the OLD
+value even on a **fresh page reload** with the paragraph already present
+(same bug, no sidebar involved) — proof this wasn't sidebar-specific, any
+relayout after the first was equally stuck.
+
+Not width-specific either: row *composition* (which cards share a row)
+only depends on `window.innerWidth` (the medium-breakpoint quarter->half
+promotion, the mobile single-column collapse) and each card's own
+`data-span` — a sidebar toggle changes `grid.clientWidth`, not
+`window.innerWidth`, so it never changes which cards share a row, only
+their pixel width and (for width-sensitive content) their natural height.
+
+Fix: `card.style.height = ""` added right alongside the existing
+`card.style.width = ...` write, before the `offsetHeight` measurement pass
+— one line, `app.js`'s `layout()`. Verified with the same injection test:
+a card needing 603px (verified against a fresh-reload ground truth) now
+reaches 603px after a sidebar toggle instead of staying stuck at whatever
+height an earlier pass had set, and every prior non-reflowing test case
+(plain empty widgets, the Contacts widget's container-query reflow) still
+matches its ground truth exactly. Screenshotted live
+(`15-biginject-expanded.png` in scratchpad) — the tall card and its
+row-mate visibly share the new, correct height. No automated test added
+(`audit-fixes-2.0.md` item 4's own note still holds: "No test harness for
+JS behavior in this suite").
 
 ## 4. ~~Labels-as-modules + sidebar/dashboard rework~~ (final, merged form)
 

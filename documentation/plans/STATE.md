@@ -60,21 +60,65 @@ session start.
   full ISO timestamp / unparseable value / `None`). Full suite:
   **2,374 passed, 0 failed** (2,368 prior + 6 new).
 
-  **Environment note**: this session's container had no `.venv` (fresh
-  checkout) despite `STATE.md`'s own "Test env" note below assuming one
-  exists -- had to run `uv sync --all-packages` at the repo root first to
-  create it and pull in the `dev` dependency group (pytest). Not a code
-  change, just a one-time setup step future sessions in a fresh container
-  will hit too.
+  **Not visually verified** (this item only -- see item 3's entry just
+  below for the one that was): a pure-text change (a Jinja filter's output
+  string), low risk, but Peter should confirm a `"Tmw"`/`"Yest"` pill reads
+  clearly at the widget's actual font size rather than looking like a typo.
 
-  **Not visually verified**: sandbox can't reach a real browser -- this
-  is a pure-text change (a Jinja filter's output string), low risk, but
-  Peter should confirm a `"Tmw"`/`"Yest"` pill reads clearly at the
-  widget's actual font size rather than looking like a typo.
+  Same session, second slice -- `plans/ui-cleanup-2026-09.md` item 3,
+  **dashboard widget height not updating after sidebar resize**. That
+  doc's own first-pass guess (missing `ResizeObserver`) was wrong --
+  `sidebar_tree.js` already dispatches a synthetic `resize` event on
+  toggle and `app.js`'s `layout()` already listens for it, confirmed by
+  instrumenting the actually-running app with Playwright rather than
+  trusting the code read. Real bug, found once a widget had content tall
+  enough to need MORE height than an earlier layout pass had already
+  fixed it at: `layout()`'s `rows.forEach` loop measured
+  `entry.card.offsetHeight` to find each card's natural height without
+  first clearing the PREVIOUS pass's own `card.style.height` -- so the
+  measurement just echoed the stale explicit height back, not the card's
+  true content-driven height. Proved this with a direct-injection repro
+  (append a long paragraph to a card, watch its height stay frozen even
+  across a plain page reload with the paragraph already present -- not
+  sidebar-specific, any post-first-paint relayout was equally stuck) before
+  writing the fix, then re-ran the same repro against the fix to confirm
+  the card actually grows/shrinks to the right height now, and re-ran two
+  earlier non-reflowing repro attempts to confirm they still match their
+  ground truth. One-line fix: `card.style.height = ""` added next to the
+  existing `card.style.width = ...` write in `app.js`'s `layout()`, before
+  the `offsetHeight` measurement. Full detail, including why row
+  *composition* (which cards share a row) turned out to be unrelated to
+  sidebar width at all, in `plans/ui-cleanup-2026-09.md`'s item 3.
 
-  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 2
-  onward (dashboard widget height not updating after sidebar resize is
-  the next-cheapest, fully isolated pick).
+  **Visually verified** (unusual for this file, see the environment note
+  below for why it was possible this session): screenshotted the fix live
+  via a real headless Chromium against a fresh preview DB -- a widget
+  forced to need 603px only reached 286px (a stale value borrowed from its
+  row-mate) before the fix, and correctly reaches 603px after it, matching
+  a fresh-reload ground truth exactly.
+
+  **Environment note, worth carrying forward**: this session's container
+  had no `.venv` (fresh checkout) despite this file's own "Test env" note
+  below assuming one exists -- `uv sync --all-packages` at the repo root
+  creates it and pulls in the `dev` group (pytest). Separately, and unlike
+  what most earlier entries in this file say ("sandbox can't reach a real
+  browser"), a real headless Chromium **is** reachable here: Playwright's
+  npm package is preinstalled globally
+  (`NODE_PATH=/opt/node22/lib/node_modules node ...`), and the browser
+  binary lives at
+  `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` (pass as
+  `executablePath` -- the plain `chromium.launch()` default path doesn't
+  resolve here). `chromium-cli` itself isn't installed, so drive Playwright
+  directly (`chromium.launch({executablePath, args:['--no-sandbox']})`) --
+  see this session's scratchpad scripts for the working pattern (server on
+  `CC_DB_PATH=/tmp/curodav-preview/cache.sqlite`, `PYTHONPATH=src
+  ../.venv/bin/python -m src.main`, no login wall hit in this fresh DB).
+  Future sessions doing frontend/JS work should use this instead of
+  defaulting to "not visually verified."
+
+  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 3
+  onward (the `main-shell-body` `margin-bottom: 6dvh` audit is the
+  next-cheapest, fully isolated pick).
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-
