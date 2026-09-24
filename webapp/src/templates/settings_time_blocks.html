@@ -34,13 +34,13 @@
 <!-- 2026-08-29 (STATE.md backlog item 7, direct request): wrapper markup
      matches _tasks_body.html's exact "card table-scroll" single-div
      convention now, same as the Labels/Holidays tables. -->
-<div class="card table-scroll" id="time-block-table-wrapper">
+<div class="card table-scroll table-responsive" id="time-block-table-wrapper">
         <table id="time-block-table">
             <thead>
                 <tr>
                     <th class="col-checkbox"></th>
                     <th>Block</th>
-                    <th>Type</th>
+                    <th class="col-opt-2">Type</th>
                     <th>Hours</th>
                     <th>Days</th>
                     <th class="col-actions-narrow">Actions</th>
@@ -58,7 +58,7 @@
                                 <span class="label-name">{{ b.label or '(untitled)' }}</span>
                             </div>
                         </td>
-                        <td>
+                        <td class="col-opt-2">
                             {% if b.kind == 'sleep' %}
                             <span class="pill-static pill-red">{{ icon('moon', 'icon-sm') }} Sleep</span>
                             {% else %}

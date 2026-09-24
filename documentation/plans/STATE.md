@@ -498,11 +498,59 @@ session start.
   menu changes, overdue/past split, plus a stale Notes cross-reference
   from an earlier slice fixed in passing).
 
+  Same day, new session, twelfth slice -- `plans/ui-cleanup-2026-09.md`'s
+  **responsive tables** (build-order 14; it never had a numbered section,
+  one's been added). Asked first, since the request only named two
+  approaches: Peter chose **priority-based column hiding** (over a card
+  grid or JS measure-and-cut), **main list pages only**, and **no
+  re-exposure** of hidden data (the row's own link already shows it).
+
+  Implemented as CSS container queries, no JS: `.table-responsive` on a
+  `.card.table-scroll` wrapper makes it a named `rtable` inline-size
+  container; `.col-opt-1` hides at ≤720px of *container* width,
+  `.col-opt-2` at ≤520px, ≤340px trims cell padding. Tagged on both `<th>`
+  and every `<td>` of: Tasks (Labels / Status), Habits (Cadence+Labels /
+  Streak), Labels (Usage), Holidays (Calendar), Time blocks (Type),
+  Published lists (Filter / Type). Thresholds come from a Playwright
+  measurement sweep (1280 → 300px), not guesses -- and that sweep found
+  two things column hiding alone couldn't fix: Tasks' `.task-title-cell`
+  320px nowrap ceiling was itself wider than a phone (now wraps under the
+  720 tier -- first attempt lost a specificity fight with `.task-table
+  td{white-space:nowrap}` and silently didn't apply), and Published lists'
+  nowrap URL held its Link column at 420px (now capped at 18ch, then
+  hidden to leave just the Copy button). Full table of what drops where,
+  plus both root causes, in the plan doc's new section.
+
+  **Visually verified** (Playwright, fresh preview DB seeded via a
+  scratch script calling `db.upsert_*` directly): before, Tasks/Habits/
+  Published lists overflowed from ~800px viewport down and Holidays/Time
+  blocks from ~414px; after, nothing overflows at ≥375px. Screenshotted
+  Tasks at 375/800 and Published lists at 375 to confirm it reads right,
+  not just measures right. **Residual, accepted**: at a 320px viewport
+  Holidays still overflows ~10px and Published lists ~2px (only name/
+  date/Actions left, and Actions is those rows' only edit path) -- the
+  kept `.table-scroll` safety net covers it.
+
+  **Tests**: new `test_responsive_tables.py` (13 -- CSS tiers present,
+  each wrapper opts in, and `<th>`/`<td>` `col-opt-*` tags align column
+  by column for all six tables, since a drift there shifts cells under the
+  wrong header and nothing else would catch it without a browser). Full
+  suite: **2,382 passed, 0 failed** (2,369 prior + 13 new).
+
+  Bundled: `sw.js`'s `CACHE_NAME` bump (v104 -> v105); `test_pwa_shell.py`
+  updated to match. `UI_CONSISTENCY_GUIDE.md`'s `<table>` entry documents
+  the new opt-in convention for future tables. Environment: `.venv` was
+  missing again in this fresh container -- `uv sync --all-packages` at
+  the repo root, same as the earlier environment note says.
+
   **Next slice**: `plans/ui-cleanup-2026-09.md`'s remaining build order --
-  responsive tables (needs a decision between the two approaches), habits/
-  routines as a distinct data model, default dashboard layout, Web Push
-  notifications, or the large labels-as-modules rework (needs its own
-  multi-slice breakdown, not a single-session item).
+  image editor aspect-ratio lock + square avatars (item 16, the smallest
+  left), habits/routines as a distinct data model (item 14), then the
+  default dashboard layout (item 15, depends on 14), Web Push
+  notifications (item 7, multi-session), narrow banners everywhere (item
+  2, sequence after item 4), or the large labels-as-modules rework (item
+  4 -- re-confirm the reversal's scope with Peter first, then its own
+  multi-slice breakdown).
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-

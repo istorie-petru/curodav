@@ -1484,6 +1484,25 @@ label.seg-btn[hidden]{display:none;}
   background-size:20px 100%, 20px 100%, 20px 100%, 20px 100%;
   background-attachment:local, local, scroll, scroll;
 }
+/* Responsive tables, 2026-09-24 (plans/ui-cleanup-2026-09.md's
+   "Responsive tables" item -- direct choice between two proposed
+   approaches: priority-based column hiding, not a card-grid fallback).
+   `.table-responsive` opts a `.card.table-scroll` wrapper in as a named
+   query container; cells tagged `.col-opt-1` drop first, `.col-opt-2`
+   next, as the wrapper itself (not the viewport) gets narrower -- so the
+   same table reacts the same way whether the squeeze comes from a phone
+   or from the expanded sidebar rail on a mid-size window. Opt-in rather
+   than put on `.table-scroll` itself: inline-size containment stops a
+   box from sizing to its content, which would collapse any
+   `.table-scroll` sitting in a shrink-to-fit context (widgets). A hidden
+   column's data stays one click away via the row's own detail link, so
+   nothing is re-exposed elsewhere; `.table-scroll`'s horizontal scroll
+   is left in place as a last-resort safety net only. Thresholds were
+   picked from measured overflow points (Tasks: ~690px of content with
+   every column shown), not guessed. */
+.table-responsive{container:rtable / inline-size;}
+@container rtable (max-width:720px){ .col-opt-1{display:none;} }
+@container rtable (max-width:520px){ .col-opt-2{display:none;} }
 table{width:100%; border-collapse:collapse; font-size:var(--text-base);}
 /* 2026-08-30: the Tasks table's per-group `.task-table`s (_tasks_body.
    html) went through several same-day rounds of `<colgroup>` +
@@ -1508,6 +1527,10 @@ tbody tr{border-bottom:1px solid var(--separator);}
 tbody tr:last-child{border-bottom:none;}
 tbody tr:hover{background:var(--row-alt);}
 tbody td{padding:10px 8px; vertical-align:middle;}
+/* Responsive tables (see `.table-responsive` above) -- smallest phones
+   (~320-375px viewport): the last few px of overflow left after both
+   tiers is just the default 8px side padding on every cell. */
+@container rtable (max-width:340px){ thead th, tbody td{padding-left:4px; padding-right:4px;} }
 
 /* Labels manage table -- icon + name, Usage, icon actions.
    2026-08-28: this used to give #labels-table its own compact 6px row
@@ -2182,6 +2205,14 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    the layout. */
 .task-title-cell{min-width:140px; max-width:320px; overflow-x:auto; overflow-y:hidden;}
 .task-title-cell:has([data-editing]){min-width:280px; max-width:360px;}
+/* Responsive tables (2026-09-24, see `.table-responsive` above): once a
+   column has started dropping out, the 320px nowrap ceiling is what's
+   left holding the table wider than its container -- let the title wrap
+   onto a second line instead, so it takes whatever width remains. */
+@container rtable (max-width:720px){
+  .task-table td.task-title-cell,
+  .task-table td.task-title-cell:has([data-editing]){min-width:0; max-width:none; white-space:normal; overflow-wrap:anywhere;}
+}
 /* Generic caret-flip for every checkbox-dropdown trigger in the app, not
    just `.filter-dropdown-trigger` (toolbar filters) -- Status/Labels above
    are two more `.multiselect-trigger`s that need the same "chevron points
@@ -7537,6 +7568,17 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    page used to have. */
 .link-col {
     min-width: 280px;
+}
+/* Responsive tables (2026-09-24, see `.table-responsive` in section 6):
+   the nowrap URL is this table's widest content by far, so it shrinks in
+   two steps instead of the whole column dropping -- the Copy button is
+   the part that's actually used. */
+@container rtable (max-width:720px){
+    .link-col { min-width: 0; }
+    .link-col .truncated-url { max-width: 18ch; }
+}
+@container rtable (max-width:520px){
+    .link-col .truncated-url { display: none; }
 }
 
 .link-wrapper {

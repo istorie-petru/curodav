@@ -29,13 +29,13 @@
      matches _tasks_body.html's exact "card table-scroll" single-div
      convention now, same as the Labels table -- see that template's own
      comment. -->
-<div class="card table-scroll" id="holidays-table-wrapper">
+<div class="card table-scroll table-responsive" id="holidays-table-wrapper">
         <table id="holidays-table">
             <thead>
                 <tr>
                     <th class="col-checkbox"></th>
                     <th>Holiday</th>
-                    <th>Calendar</th>
+                    <th class="col-opt-2">Calendar</th>
                     <th>Date Range</th>
                     <th class="col-actions-narrow">Actions</th>
                 </tr>
@@ -52,7 +52,7 @@
                                 <span class="label-name">{{ h.label or '(untitled)' }}</span>
                             </div>
                         </td>
-                        <td>
+                        <td class="col-opt-2">
                             <span class="group-badge">{{ h.calendar_name }}</span>
                         </td>
                         <td>

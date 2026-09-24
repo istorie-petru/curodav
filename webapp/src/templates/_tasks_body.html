@@ -94,15 +94,15 @@
      one, since the old `has_any` check didn't distinguish "habits exist"
      from "regular tasks exist." -->
 {% if has_main_tasks %}
-<div id="task-table" class="card table-scroll task-group-card">
+<div id="task-table" class="card table-scroll table-responsive task-group-card">
 <table class="task-table">
     <thead>
         <tr>
             <th></th>
             <th>Title</th>
-            <th>Status</th>
+            <th class="col-opt-2">Status</th>
             <th>Date</th>
-            <th>Labels</th>
+            <th class="col-opt-1">Labels</th>
             <th></th>
         </tr>
     </thead>
@@ -115,7 +115,7 @@
 {% endif %}
 
 {% if has_habits %}
-<div class="card table-scroll task-table-habits">
+<div class="card table-scroll table-responsive task-table-habits">
 <table class="task-table" id="habits-table">
     <thead>
         <tr>
@@ -131,9 +131,9 @@
             <th></th>
             <th>{{ _habits_group.name }} ({{ _habits_group.habit_items|length }})</th>
             <th>Check-in</th>
-            <th>Cadence</th>
-            <th>Streak</th>
-            <th>Labels</th>
+            <th class="col-opt-1">Cadence</th>
+            <th class="col-opt-2">Streak</th>
+            <th class="col-opt-1">Labels</th>
             <th class="task-table-add-th">
                 <a href="/tasks/new?habit=1" data-modal class="icon-btn" title="Add habit">{{ icon('plus', 'icon-sm') }}</a>
             </th>

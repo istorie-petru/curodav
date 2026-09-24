@@ -305,5 +305,8 @@ class TestShellCacheVersion:
         # v104 (2026-09-24, same session): search window simplification --
         # command_palette.js dropped label mode and gained the overdue/past
         # split, style.css lost the footer rules -- see sw.js's own comment.
+        # v105 (2026-09-24, same session): responsive tables -- style.css
+        # gained the `.table-responsive` container-query column tiers --
+        # see sw.js's own comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v104"' in script
+        assert 'CACHE_NAME = "cc-shell-v105"' in script

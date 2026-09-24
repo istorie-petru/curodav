@@ -109,7 +109,13 @@ intentional — the split is by *what kind of list it is*, not preference:
 - **`<table>`** (real HTML table, `.table-scroll` wrapper) — for
   data-dense, multi-column, sortable/filterable views: Tasks table,
   Settings > Holidays, Data health's backup list. Use when there are 3+
-  meaningful columns per row.
+  meaningful columns per row. A full-page table should also add
+  `.table-responsive` to its wrapper and tag low-priority columns
+  `.col-opt-1` (hidden when the wrapper is ≤720px) or `.col-opt-2`
+  (≤520px) — on the `<th>` **and** every `<td>` of that column, or cells
+  shift under the wrong header (`test_responsive_tables.py` pins this for
+  the existing tables). Only hide columns whose data is reachable from the
+  row's own detail/edit link. Dashboard widget tables don't opt in.
 - **`.checklist` / `.checklist-row`** — for a simple, single-column list
   of items with an inline action (check off, delete): habit heatmap day
   toggles, the offline shell's task list, search results. Use when a row

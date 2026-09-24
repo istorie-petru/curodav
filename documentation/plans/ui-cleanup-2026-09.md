@@ -102,9 +102,11 @@ that fits its remaining budget.
     include Space/Project pages, which may not exist anymore after item 15)
     depends on how item 15 lands — sequence after it.
 13. **Image editor aspect-ratio lock + square avatars** (item 16).
-14. **Responsive tables** (item 11) — needs a decision between the two
-    proposed approaches (JS column-cutting vs. card-grid fallback) before
-    starting.
+14. ~~**Responsive tables**~~ — **shipped 2026-09-24**: Peter chose
+    priority-based column hiding (CSS container queries, no JS) over a
+    card-grid fallback, main list pages only. See the "Responsive tables"
+    section below (it never had a numbered section of its own; the "(item
+    11)" this line used to carry was a numbering slip -- 11 is Search).
 15. **Habits/routines as a distinct frontend data model** (item 14) — audit
     what `test_habit_ui_rework.py`/`test_habits_router.py`/
     `test_tasks_habits_view.py`/`habit_checkin.js` already cover before
@@ -864,6 +866,59 @@ a known-broken resize path.
   rendered avatar (retire `.avatar-circle` for the 1:1 case) and the
   cropper's own UI (the crop overlay shouldn't imply circular framing while
   editing a square-locked image).
+
+## ~~Responsive tables~~ — SHIPPED 2026-09-24
+
+Decided by direct question (`AskUserQuestion`) before starting, since the
+original request only named two approaches: **hide low-priority columns**
+(not a card-grid fallback, not JS measure-and-cut); **main list pages
+only** (widget tables stay as they are); a hidden column's data is **not
+re-exposed** anywhere -- the row's own detail/edit link already shows it.
+
+**Mechanism** (`style.css`, next to `.table-scroll`): `.table-responsive`
+makes a wrapper a named `rtable` inline-size query container, so tiers key
+off the *table's own width* (sidebar rail expanded on a mid-size window
+squeezes it the same as a phone does). `.col-opt-1` hides at ≤720px of
+container, `.col-opt-2` at ≤520px, and ≤340px trims cell side padding
+from 8px to 4px. Opt-in rather than on `.table-scroll` itself: inline-size
+containment stops a box sizing to its content, which would collapse a
+`.table-scroll` in a shrink-to-fit context. `.table-scroll`'s horizontal
+scroll is kept as a last-resort safety net only.
+
+**Thresholds were measured, not guessed** (Playwright, seeded long titles
+/ several labels / a public published list, viewports 1280 → 300):
+
+| Table | Drops at ≤720 (`opt-1`) | Drops at ≤520 (`opt-2`) |
+|---|---|---|
+| Tasks | Labels | Status |
+| Habits | Cadence, Labels | Streak |
+| Labels | — | Usage |
+| Holidays | — | Calendar |
+| Time blocks | — | Type |
+| Published lists | Filter | Type |
+
+Two tables needed more than column hiding, found by measuring:
+- **Tasks/Habits title** -- `.task-title-cell`'s 320px nowrap ceiling was
+  itself the table's min width (even with every optional column gone, 32 +
+  320 + 97 + 44 > a 351px phone container). Under the 720px tier the title
+  now wraps instead (`.task-table td.task-title-cell` -- needs the `td`
+  to out-rank `.task-table td{white-space:nowrap}`, first attempt without
+  it silently didn't apply), including while being inline-edited (the
+  `:has([data-editing])` 280px floor would otherwise come back mid-edit).
+- **Published lists' Link** -- a nowrap `<code>` URL held the column at
+  420px on every viewport under 1024. ≤720: URL capped at 18ch (ellipsis);
+  ≤520: URL hidden, just the Copy button (the part that's actually used).
+
+**Result**: no table overflows at ≥375px viewport (before: Tasks/Habits/
+Published lists overflowed from ~800px down, Holidays/Time blocks from
+~414px). **Residual at 320px**: Holidays overflows by ~10px and Published
+lists by ~2px -- the only remaining columns are the ones that can't go
+(name, date, Actions -- which is the only edit path on those rows), so
+the scroll safety net covers it rather than hiding Actions.
+
+**Not covered** (by choice): Contacts (turned out to be a card list, not a
+`<table>`), dashboard widget tables, detail-page subtables, Data health's
+conflicts table.
 
 ## Known open risks
 

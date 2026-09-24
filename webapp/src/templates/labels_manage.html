@@ -53,7 +53,7 @@
    wrapping div throughout both changes, unchanged for static/
    bulk_select.js's `tableId: "labels-table"` config below -- it already
    treats it as "any container," not literally a table element. #}
-<div class="card table-scroll" id="labels-table-wrapper">
+<div class="card table-scroll table-responsive" id="labels-table-wrapper">
     <div id="labels-table">
         {% include "_labels_table_body.html" %}
     </div>

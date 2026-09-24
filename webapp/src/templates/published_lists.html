@@ -28,13 +28,13 @@
          explicit: no inline editing. It's now a plain read-only pill
          (below), and both Visibility and every other editable field live
          behind the new Edit button instead. -->
-    <div class="card table-scroll">
+    <div class="card table-scroll table-responsive">
         <table>
             <thead>
                 <tr>
                     <th>Name</th>
-                    <th>Type</th>
-                    <th>Filter</th>
+                    <th class="col-opt-2">Type</th>
+                    <th class="col-opt-1">Filter</th>
                     <th>Sharing</th>
                     <th class="link-col">Link</th>
                     <th class="col-actions-narrow">Actions</th>
@@ -46,10 +46,10 @@
                     <td>
                         <strong>{{ l.name }}</strong>
                     </td>
-                    <td>
+                    <td class="col-opt-2">
                         <span class="cell-tag tag-{{ l.entity_type }}">{{ entity_labels[l.entity_type] }}</span>
                     </td>
-                    <td>
+                    <td class="col-opt-1">
                         {% if l.filter_labels or l.exclude_filter_labels %}
                             <span class="filter-labels">
                                 {% for label in l.filter_labels %}
