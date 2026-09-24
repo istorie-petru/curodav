@@ -84,7 +84,12 @@ that fits its remaining budget.
 9. ~~**Design token tightening**~~ (item 12) — **shipped 2026-09-24**: scoped
    to typography (font-size/font-weight) after auditing; color tokens
    excluded (see item 12's own entry below for why).
-10. **Search window simplification + event "overdue" rewording** (item 10).
+10. ~~**Search window simplification + event "overdue" rewording**~~
+    (item 11) — **shipped 2026-09-24**: footer removed and filters moved
+    into its place, an explicit menu (Edit mode/Import/Export/Backup)
+    added, Add label/Delete removed along with their now-dead backend
+    endpoints, and the date-grouped "Overdue" bucket split from a new
+    "Past" bucket so an event no longer borrows a task's wording.
 11. **Labels-as-modules + sidebar/dashboard rework** (item 4 in Peter's
     numbering, renumbered 15 here) — the biggest item; almost certainly
     needs its own multi-slice breakdown (schema/module migration, then
@@ -574,14 +579,101 @@ of `id="themeSegmented"`/`data-theme-choice`). Full suite: 2,381 passed
 (unchanged count, both updates replace prior assertions rather than adding
 new ones).
 
-## 11. Search window simplification
+## 11. ~~Search window simplification~~ — SHIPPED 2026-09-24
 
-Remove the search modal's footer; move filters into that space instead.
-Add explicit menu actions beyond search itself — Edit mode toggle, Import/
-Export/Backup — reachable from the same surface. Remove the "Add label" and
-"Delete" buttons from the search window. Separately: redo "overdue" wording
-— events can't be overdue, they just pass, so an event's status label needs
-its own wording distinct from a task's "Overdue."
+Request: remove the search modal's footer; move filters into that space
+instead. Add explicit menu actions beyond search itself — Edit mode
+toggle, Import/Export/Backup — reachable from the same surface. Remove the
+"Add label" and "Delete" buttons from the search window. Separately: redo
+"overdue" wording — events can't be overdue, they just pass, so an event's
+status label needs its own wording distinct from a task's "Overdue."
+
+**Footer removed, filters relocated**: `.command-palette-footer` (↑↓/↵
+keyboard hints + standalone New task/New event buttons) deleted outright
+from `base.html`/`style.css`/`command_palette.js`; the type filter pills
+moved from above the results list to that now-vacated space below it
+(border flipped bottom→top to match). New task/New event stay reachable
+everywhere else they already were — the "Create task/event: '<query>'"
+rows once a title's typed, the mobile bottom-sheet's own buttons — so
+losing the footer-only, nothing-typed-yet shortcut is the actual
+simplification, not a capability loss.
+
+**Explicit menu actions added**: a kebab (`.action-menu`) in the input
+row, reusing the exact dropdown convention `settings_data_maintenance.html`'s
+Backup/Sync/Database menus already use rather than inventing a second
+pattern — `app.js`'s existing `initActionMenus()` binds it for free. Items:
+Edit mode toggle (same `POST /settings/edit-mode` the pre-existing typed
+"edit mode" row already used, now also reachable without typing),
+Export data…/Import data… (`/export/modal`, `/export/import-modal`, both
+`data-modal`), Download full backup (`/export/data.json`).
+
+**Bug found and fixed before it shipped**: reusing `.action-menu` inside
+the command palette broke silently at first — `.action-menu-panel`'s own
+`--z-overlay-panel` token (150) sits *below* `.command-palette-overlay`'s
+`--z-modal-stacked` (200), so the opened menu painted invisibly behind the
+palette's own scrim. Caught live (Playwright screenshot showed nothing,
+even though `getComputedStyle` reported the panel as open/visible/
+correctly positioned — a pure stacking-order problem, not a logic one).
+Fixed with a new `.command-palette-menu-panel` modifier class (kept
+through `app.js`'s `document.body` reparent-on-open, since that only
+moves the node, not its `className`) whose own rule bumps just this one
+panel to `--z-top`, rather than raising `--z-overlay-panel` itself and
+pushing every other portaled dropdown (`.multiselect-panel`,
+`.color-popover`, `.dtp-panel`) above the command palette too.
+
+**Add label / Delete removed**: the overlay's third mode (label mode,
+entered from a result row's own "Add label" button) is gone along with
+its one entry point (`enterLabelMode`/`assignLabel`/the whole
+`mode === "label"` branch in every function that checked it) — genuinely
+dead code once the button was gone, nothing else could reach it. The two
+backend endpoints that existed only to serve it,
+`GET /api/labels`/`POST /api/entities/{type}/{uid}/labels`
+(`routers/search.py`), are removed too — confirmed via grep that
+`command_palette.js` was their only caller before deleting. Delete's own
+client code (`deleteEntity`/`deleteUrl`) went with it; the per-type
+`/delete` routes themselves are untouched (still used by each entity's own
+detail page). `buildActions()` now returns `null` (no actions row at all)
+when there's nothing left to show — an already-done task, or any event/
+contact row, since Mark done is the only action left and it's task-only.
+
+**"Overdue" now task-only**: `command_palette.js`'s date-grouped results
+used one shared "Overdue" bucket/header for both a late task and a past
+event — wrong, an event just passes, it doesn't carry a task's "unmet
+obligation" framing. `dateBucket()` now takes the row's `type` and splits
+what was one bucket into "overdue" (tasks) and "past" (events), each
+getting its own header when both are present. Scoped to exactly this one
+surface after auditing every other "Overdue" site in the app
+(`_widget_agenda.html`'s `overdue_table`, `_widget_at_a_glance.html`'s
+stat) — both were already task-only, no bug there; `_widget_items.html`'s
+`relative_due` macro is unrelated dead code (unchanged, still unused).
+
+**Verified live** (Playwright, same pathway as every other slice this
+session): kebab menu opens with all four items and no longer renders
+behind the scrim; a seeded overdue task and a seeded past event land under
+separate "Overdue"/"Past" headers in the same query's results; a task
+result shows exactly one action button ("Mark done"), an event/contact
+result shows none; footer is gone from the DOM, filters render `display:
+flex` below the results list.
+
+**Tests**: `test_command_palette_actions.py` lost its `TestApiLabels`
+(4 tests) and `TestAddEntityLabel` (8 tests) classes with the removed
+endpoints — the file is now just the still-valid title-prefill coverage.
+Two count-based assertions elsewhere broke because the command palette's
+new Export/Import menu items are base.html-wide, so they now appear on
+*every* rendered page, not just the Sync card's own settings page —
+`test_phase8_settings_hub.py` and `test_data_health.py` (the one test
+class in that file that renders through Jinja, not the sibling class that
+reads raw template source and was rightly left at `== 1`) updated from
+`== 1` to `== 2` with a comment explaining the second occurrence is a
+legitimate second entry point, not a same-page duplicate. Full suite:
+**2,369 passed, 0 failed** (2,381 prior − 12 removed + 0 net new).
+
+Bundled: `sw.js`'s `CACHE_NAME` bump (v103 → v104); `test_pwa_shell.py`
+updated to match. `documentation/features/tasks.md`'s "Search & the
+command surface" section rewritten to match current behavior (Add label/
+Delete removed, footer/filters/menu changes, overdue/past split, and a
+stale Notes/Add-label cross-reference from an earlier slice fixed in
+passing).
 
 ## 12. ~~Design token tightening~~ — SHIPPED 2026-09-24
 

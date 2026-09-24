@@ -510,7 +510,15 @@
 // tokenized for the first time (--font-weight-regular:400,
 // --font-weight-bold:600, replacing ~114 raw 400/500/600/700 literals).
 // style.css is in SHELL_ASSETS below.
-const CACHE_NAME = "cc-shell-v103";
+// v104 (2026-09-24, same session): search window simplification (direct
+// request) -- command_palette.js dropped label mode (Add label/Delete
+// removed) and gained the overdue/past date-bucket split; style.css lost
+// the footer rules and repositioned .command-palette-filters; base.html's
+// overlay markup changed (footer removed, filters moved, new .action-menu
+// for Edit mode/Import/Export/Backup) but base.html itself isn't a
+// SHELL_ASSETS entry -- command_palette.js and style.css both are, so the
+// bump is required either way, same v58/v476 lesson as always.
+const CACHE_NAME = "cc-shell-v104";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

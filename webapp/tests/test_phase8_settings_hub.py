@@ -312,7 +312,13 @@ class TestDataAndBackupCategoryRemoved:
         resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         body = resp.body.decode()
         assert 'href="/export/modal" data-modal' in body
-        assert body.count('href="/export/import-modal" data-modal') == 1  # Sync menu only
+        # 2 now, not 1: the Sync menu's own entry (this page's content) plus
+        # one more from base.html's command-palette overlay, present on
+        # every page -- its own Export…/Import… menu items (2026-09-24,
+        # "search window simplification" direct request) are a second,
+        # legitimate entry point, not a duplicate within this page's own
+        # content, which is what this assertion originally guarded against.
+        assert body.count('href="/export/import-modal" data-modal') == 2
         # Neither form lives on the page anymore.
         assert "/export/download" not in body
         assert "/export/import/auto" not in body

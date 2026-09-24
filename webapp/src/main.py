@@ -342,9 +342,8 @@ def create_app() -> FastAPI:
     app.include_router(notes.router)
     # Quick Capture (plans/quick-capture.md) -- POST /api/quick-capture +
     # GET /api/quick-capture/preview, its own tiny router since /api/search
-    # and /api/labels (routers/search.py) already own the /api/ namespace's
-    # other two endpoints and this is a distinct concern (parsing + create,
-    # not query).
+    # (routers/search.py) already owns the /api/ namespace's other endpoint
+    # and this is a distinct concern (parsing + create, not query).
     app.include_router(quick_capture.router)
     app.include_router(labels.router)
     app.include_router(spaces.router)

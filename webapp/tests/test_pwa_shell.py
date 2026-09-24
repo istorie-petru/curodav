@@ -302,5 +302,8 @@ class TestShellCacheVersion:
         # v103 (2026-09-24, same session): design-token tightening --
         # style.css's type scale went from 8 sizes to 4 and font-weight was
         # tokenized for the first time -- see sw.js's own comment.
+        # v104 (2026-09-24, same session): search window simplification --
+        # command_palette.js dropped label mode and gained the overdue/past
+        # split, style.css lost the footer rules -- see sw.js's own comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v103"' in script
+        assert 'CACHE_NAME = "cc-shell-v104"' in script

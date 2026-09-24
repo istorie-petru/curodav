@@ -5023,12 +5023,30 @@ body.command-palette-open{overflow:hidden;}
    reads as a stray boxed border around otherwise-borderless text. */
 .command-palette-input:focus{outline:none; box-shadow:none;}
 
+/* The kebab menu's own .action-menu-panel needs a higher z-index than
+   .action-menu-panel's own default (--z-overlay-panel, 150) -- it opens
+   above .command-palette-overlay itself (--z-modal-stacked, 200), unlike
+   every other .action-menu on a plain page, which only ever needs to
+   clear ordinary page content. Targeted by this extra class rather than
+   raising --z-overlay-panel itself (that would push every other portaled
+   dropdown -- .multiselect-panel, .color-popover, .dtp-panel -- above
+   .command-palette-overlay too, not just this one). The class survives
+   app.js's document.body reparent on open (that only moves the node,
+   className is untouched), so this still matches after detach. */
+.command-palette-menu-panel{z-index:var(--z-top);}
+
 /* Type filter pills (direct feedback, 2026-09-12 mockup) -- wraps instead
    of scrolling (no horizontal scrollbar, even with four pills on a narrow
-   phone width) since the row only ever holds four short labels. */
+   phone width) since the row only ever holds four short labels. Moved
+   below .command-palette-results (2026-09-24, "search window
+   simplification" direct request: "remove the search modal's footer,
+   move filters into that space instead") -- border flipped from
+   border-bottom to border-top to match sitting under the results list
+   now instead of above it; the old footer's own border-top (removed
+   below) is the one this replaces. */
 .command-palette-filters{
   display:flex; flex-wrap:wrap; gap:var(--space-2);
-  padding:var(--space-2) var(--space-4) var(--space-3); border-bottom:1px solid var(--separator);
+  padding:var(--space-3) var(--space-4) var(--space-2); border-top:1px solid var(--separator);
   flex:none;
 }
 .command-palette-pill{
@@ -5042,41 +5060,18 @@ body.command-palette-open{overflow:hidden;}
 
 .command-palette-results{overflow-y:auto; flex:1; padding:var(--space-2);}
 
-/* Date-grouped results (direct feedback, 2026-09-12) -- Overdue/This
+/* Date-grouped results (direct feedback, 2026-09-12) -- Overdue/Past/This
    week/Later/No date section dividers ahead of their first row,
-   command_palette.js's groupRowsByDate. Not a .command-palette-row, so
-   it's automatically excluded from keyboard navigation (currentRowEls
-   only collects .command-palette-row elements). */
+   command_palette.js's groupRowsByDate ("Overdue" split from "Past"
+   2026-09-24, a past-due task vs. a past event -- see dateBucket's own
+   comment). Not a .command-palette-row, so it's automatically excluded
+   from keyboard navigation (currentRowEls only collects
+   .command-palette-row elements). */
 .command-palette-group-header{
   margin-top:var(--space-3); padding:var(--space-1) var(--space-3);
   font-size:var(--text-sm); color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.02em;
 }
 .command-palette-group-header:first-child{margin-top:0;}
-
-/* Footer (direct feedback, 2026-09-12) -- real ↑↓/↵ keyboard hints
-   (spelled out, not literal "t"/"e" shortcuts -- those would collide
-   with typing into the always-focused input above) plus two buttons
-   that create directly, mirroring the mobile bottom-sheet's own New
-   task/New event buttons. Hidden outside global mode/Quick Capture,
-   see command_palette.js's updatePanelsVisibility. */
-.command-palette-footer{
-  display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);
-  padding:var(--space-2) var(--space-4); border-top:1px solid var(--separator); flex:none;
-}
-.command-palette-footer-hints{display:flex; align-items:center; gap:var(--space-4);}
-.command-palette-footer-hints span{display:flex; align-items:center; gap:6px; font-size:var(--text-sm); color:var(--fg-tertiary);}
-.command-palette-footer-hints kbd{
-  border:1px solid var(--border); border-radius:4px; padding:1px 5px;
-  font:inherit; font-size:var(--text-sm); color:var(--fg-tertiary); background:var(--bg-secondary);
-}
-.command-palette-footer-actions{display:flex; gap:var(--space-2);}
-.command-palette-footer-btn{
-  display:flex; align-items:center; gap:6px;
-  padding:4px var(--space-3); border-radius:var(--radius-control); border:1px solid var(--border);
-  background:transparent; color:var(--fg-primary); font-size:var(--text-sm); cursor:pointer;
-}
-.command-palette-footer-btn:hover{background:var(--bg-secondary);}
-.command-palette-footer-btn .icon{color:var(--fg-tertiary);}
 
 .command-palette-row{
   display:flex; align-items:center; gap:var(--space-3); width:100%;
@@ -5118,10 +5113,10 @@ body.command-palette-open{overflow:hidden;}
    feedback, 2026-09-12) -- anchored to the bottom edge, full width,
    top-only radius, and every result row grows to a real 44px touch
    target instead of the desktop-sized row used above 720px. Placed
-   after the base .command-palette-row and .command-palette-footer
-   rules above (not before them, source-order-wise) on purpose --
-   same specificity means the later rule wins per shared property, so
-   with this after, a future edit to the base rules can't silently
+   after the base .command-palette-row/.command-palette-filters rules
+   above (not before them, source-order-wise) on purpose -- same
+   specificity means the later rule wins per shared property, so with
+   this after, a future edit to the base rules can't silently
    reintroduce a desktop value that wins over this mobile override at
    narrow widths the way it would if this block sat earlier. */
 @media (max-width:720px){
@@ -5133,10 +5128,7 @@ body.command-palette-open{overflow:hidden;}
   }
   .command-palette-overlay.is-open .command-palette{transform:translateY(0);}
   .command-palette-row{min-height:44px; box-sizing:border-box;}
-  .command-palette-footer{padding-bottom:calc(var(--space-2) + env(safe-area-inset-bottom, 0px));}
-  .command-palette-footer-hints{display:none;}
-  .command-palette-footer-actions{flex:1;}
-  .command-palette-footer-btn{flex:1; justify-content:center; padding:var(--space-2);}
+  .command-palette-filters{padding-bottom:calc(var(--space-2) + env(safe-area-inset-bottom, 0px));}
 }
 
 /* Quick Capture (plans/quick-capture.md) -- the single preview row shown

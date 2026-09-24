@@ -539,35 +539,65 @@
             {{ icon('command') }}
             <input type="text" id="command-palette-input" class="command-palette-input"
                    placeholder="Search tasks, events, contacts…" autocomplete="off">
+            <!-- Search window simplification (2026-09-24 direct request):
+                 explicit menu actions beyond search itself -- Edit mode
+                 toggle, Import/Export/Backup -- reachable from the palette
+                 without needing to know they're typeable commands. Reuses
+                 the app's existing .action-menu/.action-menu-panel
+                 convention (settings_data_maintenance.html's own Backup/
+                 Sync/Database menus) rather than inventing a second
+                 dropdown pattern -- app.js's initActionMenus() binds this
+                 like any other .action-menu on the page, portal-detaching
+                 the panel to document.body on open so it isn't trapped by
+                 .command-palette's own `transform` (see app.js's own
+                 comment on that -- the same reason .multiselect-panel gets
+                 portaled to #multiselect-portal above). The extra
+                 .command-palette-menu-panel class (kept through the
+                 reparent, since detaching only moves the node, it doesn't
+                 touch className) gets a style.css z-index override --
+                 .action-menu-panel's own --z-overlay-panel (150) sits
+                 BELOW .command-palette-overlay's --z-modal-stacked (200),
+                 so without it the opened panel painted invisibly behind
+                 the palette's own scrim (caught live, not just read from
+                 the token comments -- a real "the menu opens but nothing
+                 shows" bug). command_palette.js still owns updating
+                 #command-palette-edit-mode-item's label to the live on/off
+                 state (unknowable at render time) and wiring its click to
+                 the existing toggleEditMode(). -->
+            <div class="action-menu" aria-label="More actions">
+                <button type="button" class="action-menu-trigger" aria-label="More actions" aria-haspopup="true" aria-expanded="false">{{ icon('more', 'icon-sm') }}</button>
+                <div class="action-menu-panel command-palette-menu-panel" role="menu">
+                    <div class="action-menu-section">
+                        <button type="button" class="action-menu-item" role="menuitem" id="command-palette-edit-mode-item">{{ icon('edit', 'icon-sm') }} Turn on Edit mode</button>
+                    </div>
+                    <div class="action-menu-section">
+                        <a class="action-menu-item" role="menuitem" href="/export/modal" data-modal>{{ icon('share-2', 'icon-sm') }} Export data&hellip;</a>
+                        <a class="action-menu-item" role="menuitem" href="/export/import-modal" data-modal>{{ icon('upload', 'icon-sm') }} Import data&hellip;</a>
+                        <a class="action-menu-item" role="menuitem" href="/export/data.json">{{ icon('download', 'icon-sm') }} Download full backup</a>
+                    </div>
+                </div>
+            </div>
             <button type="button" class="icon-btn" id="command-palette-close" aria-label="Close">{{ icon('x') }}</button>
         </div>
+        <div class="command-palette-results" id="command-palette-results"></div>
         <!-- Type filter pills (global mode only -- command_palette.js hides
              this row in relation/label mode and during Quick Capture, and
              toggles .is-active + re-runs the query with `types` set to
-             the picked pill via /api/search's existing `types` param). -->
+             the picked pill via /api/search's existing `types` param).
+             Moved here, below the results list (2026-09-24, "search window
+             simplification" direct request: "remove the search modal's
+             footer; move filters into that space instead") -- the footer
+             itself (keyboard hints + New task/New event buttons) is gone.
+             New task/New event stay reachable everywhere else they already
+             were (the "Create task/event: '<query>'" rows once a title's
+             typed, the mobile bottom-sheet's own buttons) -- dropping them
+             as a footer-only, nothing-typed-yet shortcut is a real
+             simplification, not a lost capability. -->
         <div class="command-palette-filters" id="command-palette-filters">
             <button type="button" class="command-palette-pill is-active" data-type-filter="">All</button>
             <button type="button" class="command-palette-pill" data-type-filter="task">{{ icon('check-square', 'icon-sm') }}Tasks</button>
             <button type="button" class="command-palette-pill" data-type-filter="event">{{ icon('calendar', 'icon-sm') }}Events</button>
             <button type="button" class="command-palette-pill" data-type-filter="contact">{{ icon('user', 'icon-sm') }}Contacts</button>
-        </div>
-        <div class="command-palette-results" id="command-palette-results"></div>
-        <!-- Footer (global mode only, same visibility rule as the filter
-             pills above) -- real keyboard hints for the nav/select keys
-             command_palette.js already implements, plus two buttons that
-             create a task/event directly (using whatever's currently
-             typed as the title, same as the "Create task/event: ..." rows
-             above but reachable with nothing typed yet -- mirrors the
-             mobile bottom-sheet's own New task/New event buttons). -->
-        <div class="command-palette-footer" id="command-palette-footer">
-            <div class="command-palette-footer-hints">
-                <span><kbd>↑↓</kbd>navigate</span>
-                <span><kbd>↵</kbd>open</span>
-            </div>
-            <div class="command-palette-footer-actions">
-                <button type="button" class="command-palette-footer-btn" id="command-palette-new-task">{{ icon('plus', 'icon-sm') }}New task</button>
-                <button type="button" class="command-palette-footer-btn" id="command-palette-new-event">{{ icon('plus', 'icon-sm') }}New event</button>
-            </div>
         </div>
     </div>
 </div>

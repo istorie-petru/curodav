@@ -1,5 +1,5 @@
 // Universal command surface (1.2 side work, plans/open.md § Universal
-// command surface) -- one shared picker overlay backing three independent
+// command surface) -- one shared picker overlay backing two independent
 // invocation modes:
 //
 //   - Global mode: Ctrl-K / Cmd-K from anywhere, the tabbar's Search
@@ -7,7 +7,11 @@
 //     events/contacts by title/description/label (routers/search.py's
 //     GET /api/search) and navigates to whichever result you pick
 //     (CCModal.open -- the same mechanism every `data-modal` link in the
-//     app already uses).
+//     app already uses). Global mode's own result rows also carry a
+//     Mark-done action (tasks only, not already done -- see buildActions
+//     below), and the input itself doubles as "Create task/event:
+//     '<query>'" once you've typed a title (open.md § Command palette
+//     actions).
 //   - Relation-picker mode: any `[data-relations-picker]` trigger (the
 //     Relations card's "Add a related event/task..." button,
 //     _task_relations.html/_event_relations.html) -- the overlay opens
@@ -20,20 +24,15 @@
 //     (routers/tasks.py's add_task_relation, routers/calendar.py's
 //     add_event_relation) are unchanged from the old <select>-based flow
 //     this replaces.
-//   - Label mode: entered from a global-mode result row's own "Add
-//     label" action button (see buildActions below), never opened
-//     directly -- searches routers/search.py's GET /api/labels (every
-//     label already in use, filtered live) and assigns the picked (or
-//     freshly typed) label to that one result via
-//     POST /api/entities/<type>/<uid>/labels. This is the "Command
-//     palette actions" follow-up (plans/open.md): the overlay was
-//     search-and-navigate only before; result rows now also carry
-//     Complete/Add label/Delete actions (global mode only -- relation
-//     mode's rows exist to be picked as a link target, not acted on), and
-//     global mode itself gained "Create task/event: '<query>'" rows,
-//     mirroring the "Create new" row relation mode already had. Additive
-//     throughout: the query layer, /api/search, and the relations-picker
-//     wiring below are all unchanged.
+//
+// A third mode, Label mode (entered from a result row's own "Add label"
+// action, searching routers/search.py's now-removed GET /api/labels),
+// existed from the original "Command palette actions" follow-up
+// (plans/open.md) through 2026-09-24 -- removed that day (direct
+// request, "search window simplification": "remove the Add label and
+// Delete buttons from the search window") along with its one entry point
+// and the two backend endpoints that existed only to serve it. See
+// buildActions below for what result-row actions remain.
 //
 // Two further additions, direct feedback (2026-08-15), both layered on top
 // of global mode rather than new modes of their own:
@@ -77,14 +76,11 @@
   const resultsEl = document.getElementById("command-palette-results");
   const closeBtn = document.getElementById("command-palette-close");
   const filtersEl = document.getElementById("command-palette-filters");
-  const footerEl = document.getElementById("command-palette-footer");
-  const newTaskBtn = document.getElementById("command-palette-new-task");
-  const newEventBtn = document.getElementById("command-palette-new-event");
+  const editModeMenuItem = document.getElementById("command-palette-edit-mode-item");
   if (!overlay || !input || !resultsEl) return;
 
-  let mode = "global"; // "global" | "relation" | "label"
+  let mode = "global"; // "global" | "relation"
   let relationCtx = null; // {forTask, forEvent, label, hiddenForm} when mode === "relation"
-  let labelCtx = null; // {type, uid, title} when mode === "label"
   let typeFilter = ""; // "" | "task" | "event" | "contact" -- global mode only, see filter pills below
   let activeIndex = -1;
   let fetchToken = 0;
@@ -102,12 +98,21 @@
   // null for contacts/notes/pages). Bucketed client-side rather than by
   // the server so the grouping stays purely a display concern -- the
   // underlying /api/search ordering and relevance ranking are untouched.
-  const BUCKET_ORDER = ["overdue", "week", "later", "nodate"];
-  const BUCKET_LABEL = { overdue: "Overdue", week: "This week", later: "Later", nodate: "No date" };
+  //
+  // "overdue" vs "past" (2026-09-24 direct request, "search window
+  // simplification": "events can't be overdue, they just pass, so an
+  // event's status label needs its own wording distinct from a task's
+  // 'Overdue'") -- a past-due task keeps "Overdue" (a real unmet
+  // obligation), a past event gets its own neutral "Past" bucket/header
+  // instead of being lumped under the same word. Split by type rather
+  // than reworded in place, since the two can both appear in the same
+  // grouped list and need genuinely separate headers, not one shared one.
+  const BUCKET_ORDER = ["overdue", "past", "week", "later", "nodate"];
+  const BUCKET_LABEL = { overdue: "Overdue", past: "Past", week: "This week", later: "Later", nodate: "No date" };
 
   const BARE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-  function dateBucket(dateStr) {
+  function dateBucket(dateStr, type) {
     if (!dateStr) return "nodate";
     // A bare "YYYY-MM-DD" (a task's due_at, always date-only -- see
     // routers/tasks.py's `due_at: str = Form("")`, straight from a plain
@@ -126,18 +131,17 @@
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const diffDays = Math.floor((d.getTime() - startOfToday.getTime()) / 86400000);
-    if (diffDays < 0) return "overdue";
+    if (diffDays < 0) return type === "event" ? "past" : "overdue";
     if (diffDays <= 6) return "week";
     return "later";
   }
 
-  // Filter pills + footer only make sense in global mode's plain search
-  // results -- relation/label mode have their own narrower purpose, and
-  // Quick Capture's single preview row isn't a list to filter or navigate.
+  // Filter pills only make sense in global mode's plain search results --
+  // relation mode has its own narrower purpose, and Quick Capture's single
+  // preview row isn't a list to filter or navigate.
   function updatePanelsVisibility() {
     const show = mode === "global" && !captureState.active;
     if (filtersEl) filtersEl.style.display = show ? "" : "none";
-    if (footerEl) footerEl.style.display = show ? "" : "none";
   }
   // Quick Capture sub-state (global mode only) -- {active, text}. `text`
   // is the exact raw input the last preview was fetched for, re-sent
@@ -196,6 +200,21 @@
       });
   }
 
+  // Explicit menu action (2026-09-24, "search window simplification"
+  // direct request: "Add explicit menu actions beyond search itself --
+  // Edit mode toggle...") -- the .action-menu item in the input row
+  // (base.html) alongside the typed "edit mode" row above; its label is
+  // the one piece render() can't own (it's static markup, not a result
+  // row rebuilt on every keystroke), so it's refreshed once per open()
+  // instead, same "read body[data-edit-mode] fresh" approach editModeOn()
+  // already uses everywhere else.
+  function updateEditModeMenuItem() {
+    if (!editModeMenuItem) return;
+    editModeMenuItem.innerHTML = iconMarkup("edit") + " Turn " + (editModeOn() ? "off" : "on") + " Edit mode";
+  }
+
+  if (editModeMenuItem) editModeMenuItem.addEventListener("click", toggleEditMode);
+
   function iconMarkup(name) {
     return '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-' + name + '"></use></svg>';
   }
@@ -214,7 +233,6 @@
     opts = opts || {};
     mode = opts.forTask || opts.forEvent ? "relation" : "global";
     relationCtx = mode === "relation" ? opts : null;
-    labelCtx = null;
     captureState.active = false;
     typeFilter = "";
     setActivePill("");
@@ -226,6 +244,7 @@
     overlay.classList.add("is-open");
     document.body.classList.add("command-palette-open");
     updatePanelsVisibility();
+    updateEditModeMenuItem();
     // Skip the auto-focus below the mobile breakpoint (same 720px cutoff
     // style.css's own mobile blocks use) -- focusing a text input pops
     // the on-screen keyboard immediately on phones, covering half the
@@ -245,7 +264,6 @@
     document.body.classList.remove("command-palette-open");
     mode = "global";
     relationCtx = null;
-    labelCtx = null;
     captureState.active = false;
   }
 
@@ -256,42 +274,8 @@
     });
   }
 
-  // Label mode is entered from within an already-open overlay (a result
-  // row's "Add label" action), not through the same open() entry points
-  // above -- it keeps the overlay open and just retargets the query.
-  function enterLabelMode(r) {
-    mode = "label";
-    labelCtx = { type: r.type, uid: r.uid, title: r.title };
-    input.value = "";
-    input.placeholder = 'Add a label to "' + r.title + '"…';
-    activeIndex = -1;
-    updatePanelsVisibility();
-    window.setTimeout(function () {
-      input.focus();
-    }, 0);
-    runQuery("");
-  }
-
   function runQuery(q) {
     const token = ++fetchToken;
-    if (mode === "label") {
-      const params = new URLSearchParams();
-      if (q) params.set("q", q);
-      params.set("limit", "20");
-      fetch("/api/labels?" + params.toString())
-        .then(function (r) {
-          return r.json();
-        })
-        .then(function (data) {
-          if (token !== fetchToken) return;
-          render(q, data.labels || [], data);
-        })
-        .catch(function () {
-          if (token !== fetchToken) return;
-          render(q, [], {});
-        });
-      return;
-    }
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     params.set("limit", "20");
@@ -315,16 +299,6 @@
   }
 
   function buildRows(q, items) {
-    if (mode === "label") {
-      const rows = items.map(function (name, i) {
-        return { kind: "label-option", name: name, index: i };
-      });
-      const exact = q && items.some(function (n) {
-        return n.toLowerCase() === q.toLowerCase();
-      });
-      if (q && !exact) rows.push({ kind: "label-create", name: q, index: rows.length });
-      return rows;
-    }
     const rows = items.map(function (item, i) {
       return { kind: "result", item: item, index: i };
     });
@@ -342,9 +316,6 @@
   }
 
   function emptyMessage(q, data) {
-    if (mode === "label") {
-      return q ? "" : "Type to search existing labels, or enter a new one.";
-    }
     if (mode === "relation" && data && data.no_labels) {
       return "Add a label to relate " + (relationCtx.label || "items") + ".";
     }
@@ -454,7 +425,7 @@
     const buckets = {};
     BUCKET_ORDER.forEach(function (b) { buckets[b] = []; });
     resultRows.forEach(function (r) {
-      buckets[dateBucket(r.item.date)].push(r);
+      buckets[dateBucket(r.item.date, r.item.type)].push(r);
     });
     const grouped = [];
     BUCKET_ORDER.forEach(function (b) {
@@ -518,16 +489,6 @@
         el.addEventListener("click", function () {
           createEntity(typeLabel, row.title);
         });
-      } else if (row.kind === "label-option" || row.kind === "label-create") {
-        const isCreate = row.kind === "label-create";
-        el.innerHTML =
-          iconMarkup("tag") +
-          '<span class="command-palette-row-text"><span class="command-palette-row-title">' +
-          (isCreate ? 'Add new label: "' + escapeHtml(row.name) + '"' : escapeHtml(row.name)) +
-          "</span></span>";
-        el.addEventListener("click", function () {
-          assignLabel(row.name);
-        });
       } else {
         const r = row.item;
         const main = document.createElement("button");
@@ -542,7 +503,10 @@
           selectResult(r);
         });
         el.appendChild(main);
-        if (mode === "global" && r.type !== "page") el.appendChild(buildActions(r));
+        if (mode === "global" && r.type !== "page") {
+          const actions = buildActions(r);
+          if (actions) el.appendChild(actions);
+        }
       }
       resultsEl.appendChild(el);
     });
@@ -553,24 +517,23 @@
     highlightActive();
   }
 
-  // Global-mode-only per-row actions (open.md § Command palette actions):
-  // Mark done (tasks, not already done), Add label (any type -- switches
-  // the overlay into label mode above), Delete (any type, destructive --
-  // confirmed via the same window.ccConfirmSheet every other destructive
-  // action in the app uses, static/modal.js's own convention). Relation
-  // mode's rows stay action-free -- they exist to be picked as a link
-  // target, and a stray Delete button in that context would be a real
-  // footgun (Relations picker rows render exactly one click away from a
-  // destructive action with no relation-specific context in the row).
+  // Global-mode-only per-row action (open.md § Command palette actions):
+  // Mark done, tasks only, not already done. Add label/Delete (any type)
+  // removed 2026-09-24 (direct request, "search window simplification":
+  // "remove the Add label and Delete buttons from the search window") --
+  // see this file's own top-of-file comment for what came out with them.
+  // Relation mode's rows stay action-free -- they exist to be picked as a
+  // link target, not acted on. Returns null (no actions row at all) when
+  // there's nothing to show, e.g. an already-done task or any event/
+  // contact row -- Mark done is the only action left, and it's task-only.
   function buildActions(r) {
-    const wrap = document.createElement("div");
-    wrap.className = "command-palette-row-actions";
     const defs = [];
     if (r.type === "task" && r.status !== "done") {
       defs.push({ icon: "check-square", label: "Mark done", danger: false, run: function () { completeTask(r); } });
     }
-    defs.push({ icon: "tag", label: "Add label", danger: false, run: function () { enterLabelMode(r); } });
-    defs.push({ icon: "trash", label: "Delete", danger: true, run: function (btn) { deleteEntity(r, btn); } });
+    if (!defs.length) return null;
+    const wrap = document.createElement("div");
+    wrap.className = "command-palette-row-actions";
     defs.forEach(function (d) {
       const btn = document.createElement("button");
       btn.type = "button";
@@ -596,11 +559,6 @@
     return "/contacts/" + r.uid;
   }
 
-  function deleteUrl(r) {
-    if (r.type === "note") return "/notes/" + r.uid + "/delete";
-    return entityUrl(r) + "/delete";
-  }
-
   function completeTask(r) {
     fetch("/tasks/" + r.uid + "/complete", { method: "POST", headers: { "X-Requested-With": "fetch" } })
       .then(function (resp) {
@@ -615,57 +573,6 @@
       })
       .catch(function () {
         toast({ message: "Could not mark that task done.", variant: "error" });
-      });
-  }
-
-  function deleteEntity(r, anchorBtn) {
-    if (!window.ccConfirmSheet) return;
-    window.ccConfirmSheet({
-      anchor: anchorBtn,
-      message: 'Delete "' + r.title + '"? This cannot be undone.',
-      onConfirm: function () {
-        fetch(deleteUrl(r), { method: "POST", headers: { "X-Requested-With": "fetch" } })
-          .then(function (resp) {
-            if (!resp.ok) throw new Error("failed");
-            toast({ title: "Deleted", message: '"' + r.title + '"' });
-            close();
-            // async-CRUD (features/async-crud.md) -- refresh the page
-            // underneath rather than leaving it stale. Only task deletes
-            // opt into the region-refresh bus; notes/events still just
-            // reload the palette (their own pages are unchanged today).
-            if (r.type === "task") {
-              document.dispatchEvent(
-                new CustomEvent("cc-entity-changed", { detail: { type: "task", action: "delete", uid: r.uid } })
-              );
-            }
-          })
-          .catch(function () {
-            toast({ message: "Could not delete that item.", variant: "error" });
-          });
-      },
-    });
-  }
-
-  function assignLabel(name) {
-    if (!labelCtx) return;
-    const ctx = labelCtx;
-    fetch("/api/entities/" + ctx.type + "/" + ctx.uid + "/labels", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ label: name }),
-    })
-      .then(async function (resp) {
-        if (!resp.ok) {
-          const data = await resp.json().catch(function () {
-            return {};
-          });
-          throw new Error(data.error || "failed");
-        }
-        toast({ title: "Label added", message: '"' + name + '" to "' + ctx.title + '"' });
-        close();
-      })
-      .catch(function (err) {
-        toast({ message: err.message || "Could not add that label.", variant: "error" });
       });
   }
 
@@ -772,20 +679,7 @@
       }
     } else if (e.key === "Escape") {
       e.preventDefault();
-      // Label mode backs out to the global results it was entered from
-      // rather than closing the whole overlay -- it's one step down from
-      // global mode (entered via a row's own action button, not a fresh
-      // Ctrl-K), so Escape should feel like "back", not "quit".
-      if (mode === "label") {
-        mode = "global";
-        labelCtx = null;
-        input.value = "";
-        input.placeholder = "Search tasks, events, contacts…";
-        updatePanelsVisibility();
-        runQuery("");
-      } else {
-        close();
-      }
+      close();
     }
   });
 
@@ -804,14 +698,6 @@
       runQuery(input.value.trim());
     });
   }
-
-  // Footer New task/New event buttons -- create directly from whatever's
-  // currently typed (createEntity handles an empty title fine, same as
-  // opening /tasks/new or /events/new with no query string), reachable
-  // without needing a nonempty query the way the "Create task/event: ..."
-  // rows above the fold require.
-  if (newTaskBtn) newTaskBtn.addEventListener("click", function () { createEntity("task", input.value.trim()); });
-  if (newEventBtn) newEventBtn.addEventListener("click", function () { createEntity("event", input.value.trim()); });
 
   if (closeBtn) closeBtn.addEventListener("click", close);
   // Backdrop click closes, same convention as static/modal.js's own

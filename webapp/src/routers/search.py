@@ -197,65 +197,6 @@ def api_search(
     return JSONResponse({"results": picked, "context": context_title})
 
 
-@router.get("/api/labels")
-def api_labels(q: str = "", limit: int = 20, conn=Depends(get_db)):
-    # Command palette actions (open.md § Command palette actions) --
-    # backs the palette's label-assign sub-mode: type-to-filter over every
-    # label already in use, the same vocabulary list_tag_names_in_use
-    # already serves to every entity form's chip picker, just exposed as
-    # JSON so a fetch()-driven overlay can filter it live instead of
-    # relying on a server-rendered <datalist>.
-    names = db.list_tag_names_in_use(conn)
-    if q:
-        q_lower = q.lower()
-        names = [n for n in names if q_lower in n.lower()]
-    return JSONResponse({"labels": names[:limit]})
-
-
-@router.post("/api/entities/{entity_type}/{uid}/labels")
-async def add_entity_label(entity_type: str, uid: str, request: Request, conn=Depends(get_db)):
-    # Command palette actions -- the "assign a label" action, additive to
-    # the existing per-entity label pickers (task/event/contact forms'
-    # own multiselect fields), not a replacement for them. One label per
-    # call, added (not replaced) -- the palette's own compact UI only ever
-    # offers "add this one label", never a full picker.
-    payload = await request.json()
-    label = (payload.get("label") or "").strip()
-    if not label:
-        return JSONResponse({"error": "label is required"}, status_code=400)
-
-    if entity_type == "task":
-        task = db.get_task(conn, uid)
-        if task is None:
-            return JSONResponse({"error": "task not found"}, status_code=404)
-        tags = sorted(set(task.get("tags") or []) | {label})
-        row = dict(task)
-        row["tags"] = tags
-        try:
-            db.upsert_task(conn, row)
-        except db.MultipleProjectLabelsError as exc:
-            return JSONResponse({"error": str(exc)}, status_code=400)
-    elif entity_type == "event":
-        event = db.get_event(conn, uid)
-        if event is None:
-            return JSONResponse({"error": "event not found"}, status_code=404)
-        db.add_object_label(conn, "event", uid, label)
-    elif entity_type == "contact":
-        contact = db.get_contact(conn, uid)
-        if contact is None:
-            return JSONResponse({"error": "contact not found"}, status_code=404)
-        db.add_object_label(conn, "contact", uid, label)
-    elif entity_type == "note":
-        note = db.get_note(conn, uid)
-        if note is None:
-            return JSONResponse({"error": "note not found"}, status_code=404)
-        db.add_object_label(conn, "note", uid, label)
-    else:
-        return JSONResponse({"error": f"unknown entity type '{entity_type}'"}, status_code=400)
-
-    return JSONResponse({"ok": True})
-
-
 @router.get("/search")
 def search_page(request: Request, q: str = "", conn=Depends(get_db)):
     # Server-rendered first page (works with no JS, bookmarkable); once

@@ -425,8 +425,84 @@ session start.
   Bundled: `sw.js`'s `CACHE_NAME` bump (v102 -> v103); `test_pwa_shell.py`
   updated to match.
 
-  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 10 --
-  search window simplification + event "overdue" rewording.
+  Same session, eleventh slice -- `plans/ui-cleanup-2026-09.md` item 11,
+  search window simplification. Four sub-changes to the command palette
+  (`static/command_palette.js`/`base.html`/`style.css`), plus one query-
+  layer fix, all direct request:
+
+  1. **Footer removed, filters relocated** -- `.command-palette-footer`
+     (keyboard hints + standalone New task/New event buttons) deleted;
+     the type filter pills moved from above the results list into that
+     now-empty space below it. New task/New event stay reachable
+     elsewhere (typed "Create task/event: '<query>'" rows, the mobile
+     bottom-sheet) -- losing the footer-only shortcut is the actual
+     simplification, not a capability loss.
+  2. **Explicit menu actions added** -- a kebab (`.action-menu`) in the
+     input row, reusing `settings_data_maintenance.html`'s own Backup/
+     Sync/Database dropdown convention rather than inventing a second
+     pattern (`app.js`'s `initActionMenus()` binds it for free): Edit
+     mode toggle (same endpoint the pre-existing typed "edit mode" row
+     used), Export data.../Import data... (`/export/modal`,
+     `/export/import-modal`), Download full backup (`/export/data.json`).
+  3. **Add label / Delete removed** -- the overlay's third mode (label
+     mode, entered only from a result row's own "Add label" button) is
+     now fully dead code once that button's gone -- removed along with
+     `GET /api/labels`/`POST /api/entities/{type}/{uid}/labels`
+     (`routers/search.py`), confirmed via grep to have no other caller.
+     `buildActions()` now returns `null` (no actions row) when nothing's
+     left to show -- an already-done task, or any event/contact row,
+     since Mark done is the only action left and it's task-only.
+  4. **"Overdue" split from "Past"** -- the date-grouped results' shared
+     "Overdue" header used to lump a past event in with a late task;
+     `dateBucket()` now takes the row's type and buckets a past event
+     under its own "Past" header instead. Audited every other "Overdue"
+     site in the app first (`_widget_agenda.html`, `_widget_at_a_glance.
+     html`) -- both already task-only, no bug there; this was the one
+     real mixed-type site.
+
+  **Bug found and fixed before it shipped**: reusing `.action-menu`
+  inside the command palette broke silently at first -- `.action-menu-
+  panel`'s `--z-overlay-panel` token (150) sits *below* `.command-
+  palette-overlay`'s `--z-modal-stacked` (200), so the opened menu
+  painted invisibly behind the palette's own scrim (a live Playwright
+  screenshot showed nothing, even though `getComputedStyle` reported the
+  panel open/visible/correctly positioned -- pure stacking order, not
+  logic). Fixed with a `.command-palette-menu-panel` modifier class
+  (survives `app.js`'s `document.body` reparent-on-open, since that only
+  moves the node) whose own rule bumps just this one panel to `--z-top`,
+  rather than raising `--z-overlay-panel` itself and pushing every other
+  portaled dropdown above the command palette too.
+
+  **Visually verified** (Playwright): kebab menu opens with all four
+  items, no longer behind the scrim; a seeded overdue task and a seeded
+  past event land under separate "Overdue"/"Past" headers in the same
+  query; a task result shows exactly one action ("Mark done"), an event/
+  contact result shows none; footer gone from the DOM, filters render
+  below results.
+
+  **Tests**: `test_command_palette_actions.py` lost its `TestApiLabels`
+  (4) and `TestAddEntityLabel` (8) classes with the removed endpoints --
+  down to just its still-valid title-prefill coverage. Two count-based
+  assertions broke because the palette's new Export/Import menu items
+  are base.html-wide, appearing on *every* rendered page now, not just
+  the Sync card's own settings page -- `test_phase8_settings_hub.py` and
+  one class in `test_data_health.py` (the *rendered-response* class;
+  its sibling class reading raw template source was rightly left alone
+  at `== 1`) updated from `== 1` to `== 2` with a comment explaining the
+  second occurrence is a legitimate second entry point. Full suite:
+  **2,369 passed, 0 failed** (2,381 prior - 12 removed).
+
+  Bundled: `sw.js`'s `CACHE_NAME` bump (v103 -> v104); `test_pwa_shell.py`
+  updated to match. `features/tasks.md`'s "Search & the command surface"
+  section rewritten to match (Add label/Delete removed, footer/filters/
+  menu changes, overdue/past split, plus a stale Notes cross-reference
+  from an earlier slice fixed in passing).
+
+  **Next slice**: `plans/ui-cleanup-2026-09.md`'s remaining build order --
+  responsive tables (needs a decision between the two approaches), habits/
+  routines as a distinct data model, default dashboard layout, Web Push
+  notifications, or the large labels-as-modules rework (needs its own
+  multi-slice breakdown, not a single-session item).
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-

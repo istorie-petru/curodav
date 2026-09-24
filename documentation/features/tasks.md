@@ -366,27 +366,14 @@ invocation modes, not two independent search UIs.
 **What's shipped:** the query layer, `/api/search`, `/search`, Ctrl-K,
 navigate-to-result, the Relations picker wiring (`plans/open.md`'s Universal
 command surface steps 1–4 and 6), and — **Command palette actions**, complete
-2026-08-15 — step 5's context-dependent commands, additive to all of the
-above:
+2026-08-15 (Add label/Delete since removed, see the 2026-09-24 update below)
+— step 5's context-dependent commands, additive to all of the above:
 
 - **Mark done** — a task result (not already `done`) gets a "Mark done"
   action button; posts to the existing `POST /tasks/{uid}/complete`
-  unchanged.
-- **Add label** — every result type gets an "Add label" button that
-  retargets the same overlay into a third mode (label mode, alongside
-  global/relation): type-to-filter over `GET /api/labels` (every label
-  already in use — new, thin wrapper around `db.list_tag_names_in_use`),
-  or type a brand-new name. Picking one posts `POST
-  /api/entities/{task,event,contact}/{uid}/labels` (new; `{"label": ...}`).
-  A task's add still goes through `db.upsert_task`'s full tags list (not
-  `db.add_object_label` directly), so 1.5's single-project-per-task guard
-  (`db.MultipleProjectLabelsError`) still applies — the palette is a fourth
-  write path onto `tasks.tags`, not a bypass of the rule; events/contacts
-  have no such constraint and use `db.add_object_label` directly.
-- **Delete** — every result type gets a "Delete" action, confirmed via
-  `window.ccConfirmSheet` (the same destructive-action convention as the
-  rest of the app) before posting to the existing per-type delete route
-  (`/tasks/{uid}/delete`, `/events/{uid}/delete`, `/contacts/{uid}/delete`).
+  unchanged. The only per-row action left after 2026-09-24 (below) — event/
+  contact rows carry no action buttons at all now, since Mark done is the
+  only one and it's task-only.
 - **Create** — global mode (not relation mode) now appends "Create task:
   '\<query>'" / "Create event: '\<query>'" rows whenever there's a query,
   mirroring relation mode's pre-existing "Create new" row. Picking one opens
@@ -398,11 +385,46 @@ above:
 
 Action buttons only render in global mode — relation-picker rows exist to be
 picked as a link target, not acted on. See `static/command_palette.js`'s own
-header comment for the full three-mode shape. 28 new/updated tests
-(`test_command_palette_actions.py`, plus one `test_search_api.py` assertion
-updated for `_picker_result`'s new `status` field — a task's status, `None`
-for the other two types, needed so the palette can hide "Mark done" on an
-already-done task).
+header comment for the current two-mode shape (down from three, see below).
+
+**2026-09-24, "search window simplification" direct request** — several
+changes to the overlay itself, not the query layer:
+
+- **Add label / Delete removed.** The overlay's third mode (label mode,
+  entered from a result row's own "Add label" button) is gone along with
+  its one entry point; `GET /api/labels` and
+  `POST /api/entities/{type}/{uid}/labels` (routers/search.py) are removed
+  too — command_palette.js was their only caller, so nothing else broke.
+  Delete's own client code (`deleteEntity`/`deleteUrl`, confirmed via
+  `window.ccConfirmSheet`) went with it; the per-type `/delete` routes
+  themselves are untouched (still used by each entity's own detail page).
+- **Footer removed, filters relocated.** The old footer (↑↓/↵ keyboard
+  hints + standalone New task/New event buttons, reachable with nothing
+  typed yet) is gone; the type filter pills moved from above the results
+  list to that now-empty space below it. New task/New event stay reachable
+  everywhere else they already were (the "Create task/event: '\<query>'"
+  rows once a title's typed, the mobile bottom-sheet's own buttons) — losing
+  the footer-only, nothing-typed-yet shortcut is the actual simplification.
+- **Explicit menu actions added.** A kebab (`.action-menu`, the same
+  reusable dropdown `settings_data_maintenance.html`'s Backup/Sync/Database
+  menus use) sits in the input row: Edit mode toggle (same
+  `POST /settings/edit-mode` the typed "edit mode" row already used, now
+  also reachable without typing), Export data…/Import data… (`/export/modal`,
+  `/export/import-modal`, both `data-modal`), Download full backup
+  (`/export/data.json`).
+- **"Overdue" now task-only.** The date-grouped results' shared "Overdue"
+  bucket used to lump a past event in with a late task under one header —
+  wrong, since an event just passes, it doesn't carry the "unmet
+  obligation" an overdue task does. `dateBucket()` now takes the row's type
+  and splits what used to be one bucket into "overdue" (tasks) and "past"
+  (events), each with its own group header.
+
+12 tests removed with the label-mode endpoints (`TestApiLabels`,
+`TestAddEntityLabel` in what's now a much smaller
+`test_command_palette_actions.py` — the title-prefill coverage is what's
+left); no new tests (nothing here is server-testable — CSS/DOM/JS
+behavior, verified live instead, same as every other style/markup-only
+slice in `plans/STATE.md`).
 
 **Page navigation and Quick Capture**, complete 2026-08-15, both direct
 follow-up feedback and both layered on top of global mode rather than new
@@ -438,10 +460,9 @@ modes of their own:
   label itself (that would write a new alias on every debounced keystroke
   of a still-uncommitted label) — only an actual create does. `!n` is also
   what makes Notes findable afterward: `db.search_entities` gained a fourth
-  `_search_notes` branch alongside tasks/events/contacts, so a captured note
-  shows up in Ctrl-K/`/search` immediately, and the palette's Add label/
-  Delete actions apply to it exactly like any other type (it just never
-  gets a "Mark done" button — that's task-only). See
+  `_search_notes` branch alongside tasks/events/contacts (global search's
+  own default stopped surfacing notes 2026-09-24, see [`notes.md`](notes.md)
+  — an explicit `types=["note"]` request still reaches this branch). See
   `plans/quick-capture.md` for the full grammar and every simplification
   this v1 makes explicit (short-date year inference, the fuzzy-match cutoff,
   no interactive "suggested for correction" review step).
