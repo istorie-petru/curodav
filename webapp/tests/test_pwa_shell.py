@@ -290,5 +290,8 @@ class TestShellCacheVersion:
         # change ("Command Center" -> "Curodav"), both missed earlier the
         # same session, plus this slice's own command_palette.js change
         # (CAPTURE_MARKER_RE dropping `!n`) -- see sw.js's own comment.
+        # v100 (2026-09-24, same session): the card-model removal --
+        # style.css's `.card`/`.widget-card`/body-background rules -- see
+        # sw.js's own comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v99"' in script
+        assert 'CACHE_NAME = "cc-shell-v100"' in script

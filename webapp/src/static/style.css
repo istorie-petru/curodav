@@ -290,9 +290,16 @@
   *{transition-duration:0.001ms !important; animation-duration:0.001ms !important; scroll-behavior:auto !important;}
 }
 html, body{height:100%;}
-html{background:var(--bg-base);}
+/* 2026-09-24 direct request ("I want the background white/dark depending
+   on the theme, not that gray") -- the page canvas now uses the same
+   token `.card` used to (--bg-elevated, this file's § 6 comment), not
+   --bg-base's gray. --bg-base/--surface-0 are still defined (dark/light
+   :root blocks above) but now unused anywhere in this file -- left as-is,
+   tightening/removing tokens is a separate pass (plans/ui-cleanup-2026-09
+   .md item 12), not part of this change. */
+html{background:var(--bg-elevated);}
 body{
-  margin:0; font-family:var(--font-system); color:var(--fg-primary); background:var(--bg-base);
+  margin:0; font-family:var(--font-system); color:var(--fg-primary); background:var(--bg-elevated);
   font-size:var(--text-base); -webkit-font-smoothing:antialiased;
 }
 a{color:var(--fg-primary); text-decoration:none;}
@@ -1136,14 +1143,20 @@ label.seg-btn[hidden]{display:none;}
 .field-required::after{content:" *"; color:var(--danger);}
 
 /* --------------------------------------------------------------------- */
-/* 6. Cards & tables -- MD3 surface hierarchy: cards use the
-    elevated surface token, with elevation that lifts on hover. */
+/* 6. Cards & tables -- 2026-09-24 direct request ("move away from the
+    card model ... rounded cards that contain all the data ... widgets
+    drawn directly onto that body"), scope confirmed app-wide, hover
+    dropped everywhere with no exceptions. `.card` no longer carries any
+    box chrome (background/border/radius/shadow/hover-lift) -- it's now
+    purely a structural padding+spacing wrapper, page background and card
+    "background" are the same token (see body{} below), so there's
+    nothing left to visually separate. `.card-danger` (below) is the one
+    deliberate exception: it's a semantic alert color, not the generic
+    data-card surface this request was about, so it keeps its own
+    background/border. */
 .card{
-   background:var(--surface-container-high); border:none; border-radius:var(--radius-card);
-   box-shadow:var(--elevation-1); padding:var(--space-4); margin-bottom:var(--space-4);
-   transition:box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard);
+   padding:var(--space-4); margin-bottom:var(--space-4);
 }
-.card:hover{box-shadow:var(--elevation-2); transform:translateY(-1px);}
 /* Danger/warning-tinted card variant -- was a one-off `style="background:
    var(--tag-red-bg);border:1px solid var(--tag-red-fg)"` on the Data
    Maintenance page's "Needs attention" card (2026-09-07, audit-fixes-2.0.md
@@ -4907,11 +4920,11 @@ main.main-shell > .toolbar.top-app-bar{
  /* Modal body -- scrollable content area inside the dialog. */
  .modal-body{padding:var(--space-4) var(--space-5); overflow-y:auto; flex:1;}
  .modal-body h1{margin-top:0;}
- /* Inside the modal, the fetched fragment's own card/button chrome would be
-     redundant with the dialog's -- these neutralize it without touching the
-     full-page version's markup. */
- .modal-body .card{border:none; box-shadow:none; padding:0; margin-bottom:0;}
- .modal-body .card:hover{box-shadow:none;}
+ /* Inside the modal, `.card`'s own padding/margin (still real, unlike its
+    now-removed border/shadow -- see this file's § 6 comment) would double
+    up with the dialog's own -- this neutralizes just that, without
+    touching the full-page version's markup. */
+ .modal-body .card{padding:0; margin-bottom:0;}
  /* 2026-09-03: task_detail.html's resolved-banner strip (2026-08-30,
     db.banner_for_task) that used to render here, as the first element in
     .modal-body, is gone -- its image now renders in the header's own
@@ -5810,43 +5823,33 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .dashboard-grid{position:relative; min-height:200px;}
 .widget-card{margin-bottom:0; position:absolute; box-sizing:border-box;
   transition:left var(--dur-normal) var(--ease-standard), top var(--dur-normal) var(--ease-standard), width var(--dur-normal) var(--ease-standard);}
-/* Widget card surface (2026-08-30 design pass, item 1 of the widget check-up
-   queue, plans/STATE.md) -- .widget-card previously inherited .card's full
-   MD3 treatment verbatim: elevation-1 shadow that lifts to elevation-2 +
-   translateY(-1px) on hover. That reads fine for one focused card (a modal
-   panel) but a dashboard shows 6+ of these in a grid at once -- constant
-   hover-lift across that many cards reads busy/skeuomorphic, and a
-   shadow-only edge (no border) looks soft next to the app's other flatter,
-   hairline-bordered surfaces (sidebar rail, table rows). Direct feedback:
-   "archaic... not minimalist," macOS/Material-3-hybrid direction requested.
-   Flattened to a quiet hairline border + the smaller --elevation-1 (already
-   used for the app's other quiet surfaces, e.g. .table-scroll's bg), static
-   on hover -- still reads as a distinct surface via the border alone,
-   without the constant-motion feel at grid scale. Declared after .card's
-   own rules (this file's general-to-specific ordering) so it wins on equal
-   specificity without needing !important. */
-.widget-card{border:1px solid var(--separator); box-shadow:var(--elevation-1);}
-.widget-card:hover{box-shadow:var(--elevation-1); transform:none;}
+/* Widget card surface -- 2026-08-30 design pass first flattened this from
+   .card's full MD3 treatment (elevation-1 shadow lifting to elevation-2 +
+   translateY(-1px) on hover, busy at grid scale) down to a quiet hairline
+   border + static --elevation-1. 2026-09-24 (direct request, "move away
+   from the card model ... widgets drawn directly onto that body," hover
+   dropped everywhere) went the rest of the way -- no border, no shadow at
+   all now, same as every other `.card` (this file's § 6 comment). Widgets
+   are separated from each other by the masonry grid's own gap (app.js's
+   `GAP`) rather than a visible box each. No rule of its own needed here
+   anymore; `.widget-card` inherits the now-chromeless `.card` base
+   untouched. */
 /* "Bare" tile-grid widgets (2026-08-30, direct feedback -- see routers/
    dashboard.py::_is_bare_tile_widget's own comment for which widgets this
    applies to: Spaces & Projects when its own `style` config is "cards" --
    originally also the standalone Quick Links widget, retired the same
    day and merged into this same style). Renders `.filled-cards-grid`/
    `.filled-card` tiles -- saturated fills with their own elevation-1
-   shadow -- so the .card wrapper's border/shadow/background/padding was a
-   second, redundant frame around an already-framed grid. `.widget-card--
-   bare` strips exactly that (background/border/shadow/padding), same
-   technique `.widget-preview-content .widget-preview-card` already uses
-   to shed the same chrome in a different context (border:none etc.) --
-   the class stays on the element (masonry layout/async-refresh both key
-   off `.widget-card` + its id, untouched), only the visual box is gone.
-   `.widget-header` loses its own hairline divider too (nothing to divide
-   from once there's no card padding framing it) and `.filled-cards-grid`'s
-   horizontal margin is zeroed so the tiles line up flush with the title
-   above them instead of sitting inset from a padding that no longer
-   exists. */
-.widget-card--bare{background:transparent; border:none; box-shadow:none; padding:0;}
-.widget-card--bare:hover{box-shadow:none;}
+   shadow -- so the .card wrapper's padding was a second, redundant frame
+   around an already-framed grid (background/border/shadow no longer need
+   stripping here, `.card` carries none of that anymore either). `.widget-
+   card--bare` still zeroes padding specifically -- the one thing plain
+   `.widget-card` doesn't -- same technique `.widget-preview-content
+   .widget-preview-card` already uses to shed the same chrome in a
+   different context. The class stays on the element (masonry layout/
+   async-refresh both key off `.widget-card` + its id, untouched), only
+   the padding is gone. */
+.widget-card--bare{padding:0;}
 .widget-card--bare .widget-header{border-bottom:none; padding-bottom:0;}
 .widget-card--bare .filled-cards-grid{margin-left:0; margin-right:0;}
 /* Standalone widget-styled card, outside the masonry grid (2026-08-30,
@@ -5855,12 +5858,10 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    `.dashboard-grid`/app.js JS-positioned masonry layout, which sets its
    top/left/width), so on a plain page with no such JS ever assigning
    geometry it collapsed to (0,0) and overlapped the content below it
-   (visual bug, live report). This repeats only the flattened visual
-   treatment from the 2026-08-30 design pass above (hairline border +
-   `--elevation-1`, static on hover) on top of plain `.card`'s own normal-
-   flow box, not `.widget-card`'s positioning. */
-.widget-card-static{border:1px solid var(--separator); box-shadow:var(--elevation-1);}
-.widget-card-static:hover{box-shadow:var(--elevation-1); transform:none;}
+   (visual bug, live report). No box chrome to repeat here since
+   2026-09-24 (see this section's own comment above) -- this class is now
+   just a marker for "outside the masonry grid," `.card`'s own normal-flow
+   box handles the rest. */
 /* Widget drag-to-reorder (static/app.js), edit-mode only */
 .widget-drag-handle{cursor:grab; touch-action:none; margin-right:var(--space-1);}
 .widget-drag-handle:active{cursor:grabbing;}

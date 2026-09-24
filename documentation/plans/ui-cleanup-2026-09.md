@@ -70,8 +70,9 @@ that fits its remaining budget.
    Peter chose hide over remove; every HTML-visible surface (quick-capture
    marker, palette preview, global search, page navigation) turned off,
    data/routes untouched.
-6. **Card model removal** (item 4) — mechanical CSS pass, well-scoped once
-   swept.
+6. ~~**Card model removal**~~ (item 4) — **shipped 2026-09-24**: turned out
+   bigger than "mechanical" once scoped (35 templates) — asked scope +
+   hover questions first, Peter chose app-wide both times.
 7. **Icon set swap to MaterialDesign-SVG** (item 5) — large diff, low
    logical risk; fine to do in one dedicated session since it's mechanical.
 8. **Settings `.segmented` → dropdown** (item 9) — self-contained component
@@ -256,16 +257,58 @@ existing deadline data), (b) URL/routing collapse, (c) sidebar chevron fix +
 new group pages, (d) label-pill linking. Each of those is independently
 testable and shippable.
 
-## 5. Move away from the card model
+## 5. ~~Move away from the card model~~ — SHIPPED 2026-09-24
 
 Page background matches the theme (white/dark), not a gray card fill;
 widgets render directly on the body instead of inside a bordered/shadowed
-card. Keep the hover animation only where it's still doing something (flex
-layouts, still-card-shaped widgets) — drop it from plain page backgrounds if
-cards are kept in some places rather than removed outright everywhere.
-Direct request explicitly separates "remove cards" from "remove hover
-animation for cards if we don't remove them" — read as two independent
-toggles, not one change gated on the other.
+card. `.card` turned out to be used in 35 templates (settings pages, every
+entity form, Calendar grids, modal bodies, published lists — not just the
+dashboard widget grid), and the request's hover-animation wording was
+genuinely ambiguous (keep it somewhere, or drop it everywhere) — asked
+both questions before touching CSS rather than guessing at that big a
+blast radius. Peter chose the broader answer both times: every `.card`
+app-wide, hover dropped everywhere with no exceptions.
+
+Landed (`static/style.css`):
+- `body`/`html`'s background changed from `--bg-base` (the old gray,
+  `#f2f4f7` light / `#363636` dark) to `--bg-elevated` (`#ffffff` /
+  `#3e3e3e`) — the same token `.card` used to use, so the two are now
+  visually identical. `--bg-base`/`--surface-0` are still defined but
+  unused anywhere in the file now — left alone, token cleanup is item 12's
+  job, not this one.
+- `.card`'s base rule stripped to just `padding`/`margin-bottom` — no more
+  `background`/`border`/`border-radius`/`box-shadow`, and its `:hover`
+  rule (shadow-deepen + lift) removed outright. `.card-danger` (the
+  semantic alert-color variant) is the one deliberate exception, kept
+  untouched — it's a warning color, not the generic data-card surface this
+  request was about.
+- `.widget-card`/`.widget-card-static` lost the extra hairline-border +
+  `--elevation-1` + static-hover treatment a 2026-08-30 pass had already
+  given them (that pass's own "not minimalist" fix, now superseded by
+  going the rest of the way to fully flat) — both classes now just
+  inherit the chromeless `.card` base, no rule of their own left.
+  `.widget-card--bare` (already fully flat before this change) keeps its
+  one still-meaningful override, `padding:0`.
+- `.modal-body .card`'s override simplified from `{border:none;
+  box-shadow:none; padding:0; margin-bottom:0;}` + a now-redundant
+  `:hover` rule down to just `{padding:0; margin-bottom:0;}` — the
+  border/shadow neutralization is a no-op now that the base `.card` never
+  sets either.
+
+Verified live (screenshots + computed-style checks via the same
+Playwright pathway as earlier slices): light mode's `.card` background is
+`transparent`/`none` with `body` at `rgb(255,255,255)`; dark mode's
+`body` is `rgb(62,62,62)` (`--bg-elevated`'s dark value); checked the
+Dashboard, a Settings page (General), and a form modal (New Task) in both
+themes — widgets and form sections now sit flush on the page, the modal
+dialog itself keeps its own distinct elevated surface (untouched,
+`.modal`/`.modal-dialog` never used `.card`).
+
+Bundled: `sw.js`'s `CACHE_NAME` bump (v99 -> v100) for style.css's change,
+caught in the same slice this time rather than as a later catch-up.
+`test_pwa_shell.py`'s version-string assertion updated to match. No
+Python test asserts CSS rule content, so the full suite (2,381 passed)
+is unchanged in count — this was purely a visual verification.
 
 ## 6. Icon set swap to MaterialDesign-SVG
 

@@ -486,7 +486,13 @@
 // (Notes quick-capture hidden, direct request) -- all three files are in
 // SHELL_ASSETS below. Same reminder as v97's own comment: check a changed
 // static asset's SHELL_ASSETS membership every time, don't assume.
-const CACHE_NAME = "cc-shell-v99";
+// v100 (2026-09-24, same session): the card-model removal (direct
+// request, "move away from the card model ... widgets drawn directly
+// onto that body," hover dropped everywhere) -- style.css's `.card`/
+// `.widget-card`/`.widget-card-static`/body background rules all
+// changed. style.css is in SHELL_ASSETS below, so this one's caught on
+// the same slice it shipped in, not a later catch-up.
+const CACHE_NAME = "cc-shell-v100";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

@@ -218,8 +218,44 @@ session start.
   gained a `_seed_note` helper and five new tests. Full suite:
   **2,381 passed, 0 failed** (2,374 prior + 7 net new).
 
-  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 6 --
-  the card-model removal (mechanical CSS pass).
+  Same session, seventh slice -- `plans/ui-cleanup-2026-09.md` item 4,
+  card-model removal. Turned out much bigger than "mechanical" once
+  actually scoped: `.card` is used in 35 templates (settings pages, every
+  entity form, Calendar grids, modal bodies, published lists -- not just
+  the dashboard widget grid), and the request's hover-animation wording
+  was genuinely ambiguous (keep it somewhere vs. drop it everywhere).
+  Asked both questions before touching CSS; Peter chose the broader
+  answer both times -- every `.card` app-wide, hover dropped everywhere.
+
+  Landed (`static/style.css`): `body`/`html`'s background changed from
+  `--bg-base` (the old gray) to `--bg-elevated` (the same token `.card`
+  used to use, so the two are now visually identical -- `--bg-base`/
+  `--surface-0` left defined but unused, token cleanup is item 12's job);
+  `.card`'s base rule stripped to just `padding`/`margin-bottom`, its
+  `:hover` shadow-lift removed outright (`.card-danger`, the semantic
+  alert-color variant, is the one deliberate exception, untouched);
+  `.widget-card`/`.widget-card-static` lost the extra hairline-border +
+  static-hover treatment a 2026-08-30 pass had given them (now fully
+  superseded, both just inherit the chromeless `.card` base);
+  `.modal-body .card`'s override simplified since its border/shadow
+  neutralization is a no-op now.
+
+  **Visually verified**: screenshots + computed-style checks (light
+  mode's `.card` background is `transparent` with `body` at
+  `rgb(255,255,255)`; dark mode's `body` is `rgb(62,62,62)`) across
+  Dashboard, a Settings page, and a form modal, both themes -- widgets and
+  form sections sit flush on the page now; the modal dialog itself keeps
+  its own distinct elevated surface (never used `.card`, untouched).
+
+  Bundled: `sw.js`'s `CACHE_NAME` bump (v99 -> v100) for style.css's
+  change, caught in the same slice this time rather than a later
+  catch-up. No Python test asserts CSS rule content, so the full suite
+  (**2,381 passed, 0 failed**) is unchanged in count -- purely a visual
+  verification.
+
+  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 7 --
+  the icon set swap to MaterialDesign-SVG (large mechanical diff, low
+  logical risk).
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-
