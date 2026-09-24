@@ -8,7 +8,7 @@ Layout, per the Streak-informed plan: a "To do" section (habits whose open
 window isn't kept yet) above an "On track" one, each row with a one-tap
 check-in, the schedule and streak, and a tap-a-day strip of the last seven
 days. Every mutation posts to the existing task completion endpoints;
-static/habits_page.js fetches them and re-renders `#habits-body` from
+static/habit_actions.js fetches them and re-renders `#habits-body` from
 `/habits/regions`.
 
 The standalone Habit entity this router used to own (`habits`/

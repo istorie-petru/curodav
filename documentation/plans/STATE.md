@@ -697,10 +697,21 @@ session start.
   page reloads, no console errors. Full suite **2,357 passed**. `sw.js`
   v110 -> v111.
 
-  **Next slice**: H4 (bigger widget -> unblocks item 15), H5 (units +
-  avoid habits), H6 (pause), H7 (agenda/calendar), H8 (insights). Others
-  unchanged: Web Push (item 7), labels-as-modules (item 4 -- re-confirm
-  scope with Peter first), narrow banners (item 2).
+  **H4 shipped -- bigger check-in widget.** Reuses the Habits page row
+  (one-tap check / +1, streak, 7-day strip), still-to-do first, "n of N
+  done" / "All done for now" (reduced-motion safe). `habit_checkin.js` ->
+  shared `habit_actions.js` (fetch + server re-render of the widget card
+  or `#habits-body`); widget `uses: tasks` so modal edits refresh it;
+  preview clicks ignored; stray 16px `li` margin fixed. Verified live:
+  "3 of 6 done" -> checks reorder rows -> "All done for now", zero
+  reloads/errors; narrow (700px) layout drops the strip under the title.
+  Full suite **2,359 passed**. `sw.js` v111 -> v112. **Unblocks item 15**
+  (default 25/50/25 layout).
+
+  **Next slice**: H5 (units + avoid habits), H6 (pause), H7 (agenda/
+  calendar), H8 (insights), then item 15. Others unchanged: Web Push
+  (item 7), labels-as-modules (item 4 -- re-confirm scope with Peter
+  first), narrow banners (item 2).
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-

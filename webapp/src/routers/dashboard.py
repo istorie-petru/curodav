@@ -925,7 +925,18 @@ def _render_habit_checkin(conn, config: dict, nav: dict | None = None) -> dict:
     scope is the same `_passes_scope` tag check every other item widget
     uses now that a habit carries ordinary task labels."""
     scope_names = _scope_child_names(conn, config.get("label_name"))
-    return {"rows": [h for h in habit_view.habit_items(conn) if _passes_scope(h["tags"], scope_names)]}
+    rows = [h for h in habit_view.habit_items(conn) if _passes_scope(h["tags"], scope_names)]
+    # Habits H4 (2026-09-24): the widget renders the Habits page's own row
+    # (_habit_page_row.html) -- still to do first, then the rest -- with a
+    # "n of N done" summary and an all-done state.
+    todo = [h for h in rows if h["due_today"]]
+    rest = [h for h in rows if not h["due_today"]]
+    return {
+        "rows": todo + rest,
+        "todo_count": len(todo),
+        "total": len(rows),
+        "all_done": bool(rows) and not todo,
+    }
 
 
 def _render_scheduled_work_today(conn, config: dict, nav: dict | None = None) -> dict:
@@ -1111,7 +1122,9 @@ WIDGET_TYPES: dict[str, dict] = {
         "label": "Habit Check-in",
         "template": "_widget_habit_checkin.html",
         "render": _render_habit_checkin,
-        "uses": set(),
+        # Habits H4: a habit is a task, so a habit created/edited/deleted
+        # in a modal re-renders this card like any task widget.
+        "uses": {"tasks"},
         "default_width": "half",
     },
     "contact_list": {

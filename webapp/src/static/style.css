@@ -6171,13 +6171,22 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .widget-card[data-span="4"] .at-a-glance-stat .widget-section-label,
 .widget-card[data-span="6"] .at-a-glance-stat .widget-section-label{font-size:9px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 
-/* Habit Check-in widget (_widget_habit_checkin.html) */
-.habit-checkin-list{display:flex; flex-direction:column; gap:var(--space-1);}
-.habit-checkin-row{display:flex; align-items:center; gap:var(--space-2); padding:var(--space-1) 0;}
-/* 2026-09-24: the row's name is the habit task's title, a link to its
-   detail modal (was a colored widget_pill for a standalone Habit entity). */
-.habit-checkin-name{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--fg-primary); text-decoration:none;}
-.habit-checkin-name:hover{text-decoration:underline;}
+/* Habit Check-in widget (_widget_habit_checkin.html) -- habits H4
+   (2026-09-24): its rows are the Habits page's own .habit-card (see the
+   Habits page rules), so only the summary line and a tighter row rhythm
+   live here. The old .habit-checkin-list/-row/-name rules went with
+   habit_checkin.js. */
+.habit-widget-summary{display:flex; align-items:center; gap:var(--space-2); margin:0 0 var(--space-1); font-size:var(--text-sm); color:var(--fg-secondary);}
+.habit-widget-summary strong{color:var(--fg-primary);}
+.habit-widget-link{margin-left:auto; color:var(--fg-secondary);}
+.habit-widget-summary.is-all-done{color:var(--fg-primary); font-weight:var(--font-weight-bold);}
+.habit-widget-summary.is-all-done .icon{color:var(--accent); animation:habit-pop .5s ease-out;}
+@keyframes habit-pop{0%{transform:scale(.4) rotate(-20deg); opacity:0;} 70%{transform:scale(1.25) rotate(8deg); opacity:1;} 100%{transform:scale(1) rotate(0);}}
+@media (prefers-reduced-motion: reduce){ .habit-widget-summary.is-all-done .icon{animation:none;} }
+.habit-list--widget .habit-card{padding:var(--space-2) 0;}
+.habit-list--widget .habit-card:last-child{border-bottom:none;}
+.habit-list--widget .habit-check-btn{min-width:34px; height:34px;}
+.habit-list--widget .habit-day{width:24px; height:24px;}
 /* Widget header/title + section-label typography (2026-08-30 design pass,
    same slice as the card-chrome comment above) -- .widget-header h2
    previously fell through to the app's generic `h2` rule (17px,
@@ -7693,7 +7702,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .habits-section-title{font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary); text-transform:uppercase; letter-spacing:.04em; margin:0 0 var(--space-2); display:flex; align-items:center; gap:var(--space-2);}
 .habits-section-count{font-weight:var(--font-weight-regular); color:var(--fg-tertiary);}
 .habit-list{list-style:none; margin:0; padding:0; container-type:inline-size; container-name:habitlist;}
-.habit-card{display:grid; grid-template-columns:auto minmax(0,1fr) auto; grid-template-areas:"check main week"; align-items:center; gap:var(--space-3); padding:var(--space-3) 0; border-bottom:1px solid var(--separator);}
+.habit-card{margin:0; display:grid; grid-template-columns:auto minmax(0,1fr) auto; grid-template-areas:"check main week"; align-items:center; gap:var(--space-3); padding:var(--space-3) 0; border-bottom:1px solid var(--separator);}
 .habit-card-check{grid-area:check;}
 .habit-card-main{grid-area:main; min-width:0;}
 .habit-week{grid-area:week;}

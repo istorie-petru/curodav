@@ -541,7 +541,11 @@
 // v111 (2026-09-24, same session): habits H3 -- modal.js keep-open forms
 // can dispatch data-cc-change on close instead of reloading; style.css
 // gained the habit detail month calendar / log form / notes rules.
-const CACHE_NAME = "cc-shell-v111";
+// v112 (2026-09-24, same session): habits H4 -- the Habit Check-in widget
+// reuses the Habits page row; style.css swapped the old .habit-checkin-*
+// rules for the widget summary. habit_checkin.js -> habit_actions.js
+// (page-specific, not SHELL_ASSETS).
+const CACHE_NAME = "cc-shell-v112";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

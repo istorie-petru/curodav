@@ -19,9 +19,11 @@ habit never has to look like a task (status/due date/Kanban) anywhere:
   tap-a-day strip of the last seven days. Every control is a plain POST
   form; the JS submits with fetch and re-renders `#habits-body`. The
   Tasks table no longer shows habits.
-- **Dashboard Habit Check-in widget** (`_widget_habit_checkin.html`,
-  `static/habit_checkin.js`, fetch-based with no-JS form fallback) --
-  scoped by page label like every other item widget.
+- **Dashboard Habit Check-in widget** (`_widget_habit_checkin.html`, H4)
+  -- the same row as the Habits page, still-to-do first, "n of N done" /
+  "All done for now"; scoped by page label like every other item widget.
+  Both surfaces use `static/habit_actions.js` (fetch, then re-render the
+  region from the server).
 - **Detail modal** (`habit_task_detail.html`) -- streak/best/kept stats, a
   view-only 53-week heatmap, a clickable month calendar (`?month=`), a
   "Log a day" form (date, amount, note) and recent day notes

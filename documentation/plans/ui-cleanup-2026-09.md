@@ -829,7 +829,7 @@ match.
 top rather than being rewritten past-tense, matching how it already
 documents the gap between the v1 spec and what shipped.
 
-## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 + H1-H3 shipped 2026-09-24; H4-H8 next)
+## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 + H1-H4 shipped 2026-09-24; H5-H8 next)
 
 "I also think that we strongly need to make habits/routines a different
 data model, at least in the frontend. They can still be tasks in the
@@ -1014,6 +1014,20 @@ keeps the pending change, and `data-no-autofocus` opts inputs out of
 open-focus. **Also fixed**: backup restore dropped each completion's
 `value` (amount habits came back as 1) -- it now keeps `value` and `note`.
 
+**H4 -- shipped 2026-09-24.** The Dashboard Habit Check-in widget renders
+the Habits page's own row (`_habit_page_row.html`: one-tap check / +1,
+schedule + streak, 7-day tap-a-day strip), still-to-do first, with an
+"n of N done" summary and an "All done for now" state (a small icon pop,
+off under `prefers-reduced-motion`). The row's container query drops the
+strip under the title in a narrow (25%) column, so it's ready for item
+15's layout. `static/habit_checkin.js` (optimistic client-side updates)
+is replaced by `static/habit_actions.js`, shared with /habits: submit with
+fetch, then re-render the containing region (the widget card from
+`/dashboard/widgets/<uid>`, or `#habits-body`). The widget now declares
+`uses: {"tasks"}`, so a habit created/edited in a modal refreshes it
+too. Clicks inside the widget builder's live preview are ignored. Also
+fixed a stray 16px `li` margin on habit rows (page and widget).
+
 **Order and why:** H1 first -- every later surface shows streaks, and
 they're wrong today for non-daily habits. H2 (the page), then H3
 (detail + notes, the only real schema growth besides H5/H6), then H4
@@ -1030,7 +1044,8 @@ New default widget layout for Home:
 - 50% Stack "At a glance" + Upcoming (tasks + events)
 - 25% Habit Check-in
 
-Depends on item 14 landing enough that "Habit Check-in" is a real,
+**Unblocked 2026-09-24** by item 14's H4 (the widget is now the Habits
+page's row list, narrow-column ready). Depends on item 14 landing enough that "Habit Check-in" is a real,
 sizeable widget rather than today's `habit_checkin.js` behavior (audit what
 that script currently does before assuming it needs to be built new).
 Interacts with the same masonry/widget-grid code item 3's bug lives in —
