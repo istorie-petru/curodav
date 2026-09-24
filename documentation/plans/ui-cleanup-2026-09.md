@@ -59,8 +59,9 @@ that fits its remaining budget.
 2. ~~**Dashboard widget height not updating after sidebar resize**~~
    (item 3) — **shipped 2026-09-24**, same session. Root cause wasn't what
    this doc first guessed (see item 3's own entry below).
-3. **`main-shell-body`'s `margin-bottom: 6dvh` audit** (item 6) — a one-page
-   CSS/template check.
+3. ~~**`main-shell-body`'s `margin-bottom: 6dvh` audit**~~ (item 6) —
+   **investigated 2026-09-24**: premise was false (not dashboard-only), no
+   change made.
 4. **App title + PWA icon** (item 8) — static/manifest change, no backend.
 5. **Notes removal/hiding decision** (item 13) — needs one clarifying
    question (remove entirely vs. feature-flag/hide) before any code.
@@ -292,13 +293,26 @@ existing background scheduler in this app as of 2026-09 — confirm, don't
 assume), and copy for each notification type. Large, mostly new
 infrastructure — budget multiple sessions.
 
-## 8. `main-shell-body`'s `margin-bottom: 6dvh`
+## 8. ~~`main-shell-body`'s `margin-bottom: 6dvh`~~ — INVESTIGATED 2026-09-24, no change
 
 "If `main-shell-body` is only used in dashboard pages, remove the
-`margin-bottom: 6dvh`." Conditional on the audit — grep every template for
-`.main-shell-body` first; if it's genuinely dashboard-only, drop the rule
-outright, otherwise split it into a dashboard-scoped modifier class instead
-of a blanket removal.
+`margin-bottom: 6dvh`." Conditional on the audit — the premise doesn't
+hold: `.main-shell-body` is genuinely applied on four page shapes, not
+just Dashboard — `_tasks_body.html` (`#tasks-body`), `_contacts_body.html`
+(`#contacts-body`), `_notes_body.html` (`#notes-body`), and
+`dashboard.html`'s widget-grid wrapper — all sharing the one "flex shell"
+rule style.css documents at `.main-shell-body{...}` (2026-09-07, "extend
+Calendar/Planner's viewport-fit model to every page with a clear
+header+scrollable-body shape"). `labels_manage.html` still turned up in a
+grep for the class name, but only inside a comment explaining it
+*opted out* of this shell 2026-09-08 — it doesn't actually carry the class.
+
+Since the condition in the request is false, nothing was removed — the
+margin is shared, load-bearing spacing for Tasks/Contacts/Notes too, not a
+dashboard-only leftover, and the request was explicitly conditional
+("if... only used in dashboard pages"). No code change; flagging back to
+Peter in the session that shipped this rather than guessing at a
+scoped-modifier-class alternative nobody asked for.
 
 ## 9. App title + PWA icon
 

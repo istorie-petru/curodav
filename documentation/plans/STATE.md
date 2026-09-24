@@ -116,9 +116,24 @@ session start.
   Future sessions doing frontend/JS work should use this instead of
   defaulting to "not visually verified."
 
-  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 3
-  onward (the `main-shell-body` `margin-bottom: 6dvh` audit is the
-  next-cheapest, fully isolated pick).
+  Same session, third slice -- `plans/ui-cleanup-2026-09.md` item 8, the
+  `main-shell-body` `margin-bottom: 6dvh` audit. The request was
+  conditional ("if `main-shell-body` is only used in dashboard pages,
+  remove..."), and the condition is false: grepped every template,
+  confirmed the class is genuinely applied on four page shapes --
+  `_tasks_body.html`, `_contacts_body.html`, `_notes_body.html`, and
+  `dashboard.html`'s widget-grid wrapper -- all sharing one 2026-09-07
+  "flex shell" rule (style.css). `labels_manage.html` turned up in the
+  grep too but only inside a comment describing it *opting out* of this
+  shell 2026-09-08 -- it doesn't carry the class. **No code change** --
+  the margin is shared, load-bearing spacing across four page types, not
+  a dashboard-only leftover, and inventing a dashboard-scoped modifier
+  class nobody asked for would've been guessing past a conditional that
+  didn't hold. Full detail in the doc's item 8.
+
+  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 4
+  onward (the App title + PWA icon slice is the next-cheapest, fully
+  isolated pick).
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-
