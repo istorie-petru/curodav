@@ -17,6 +17,65 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-24 -- Peter sent one message bundling ~17 distinct
+  UI/UX change requests (labels-as-modules rework, narrow banners
+  everywhere, card-model removal, icon set swap, Web Push notifications,
+  design token tightening, responsive tables, image editor aspect-ratio
+  lock, and more), several of which directly reverse work shipped
+  2026-09-16 (Spaces/Projects' dedicated Kanban+Agenda pages). Given the
+  scale and the reversal, asked before touching anything: how to structure
+  the session, and (since Peter's own message left it open) whether label
+  pills should link as a modal or a full page. Peter chose "log it all,
+  then pick one slice" (not a repeat of 2026-09-21's "plow through all of
+  it") and "context-dependent" for the link target.
+
+  Logged the full batch to a new doc, `plans/ui-cleanup-2026-09.md` --
+  same convention `audit-fixes-2.0.md` used for its own findings list:
+  numbered items, dependency/risk-ordered build order (not the order
+  Peter listed them in), each item's open questions and the shipped-2026-
+  09-16 conflict spelled out so a future session doesn't have to
+  re-derive them. Three of Peter's own numbered points (his 2, 14, 16)
+  were really one evolving spec refined across the same message -- merged
+  into that doc's single item 4 in the final, most-refined form rather
+  than kept as three separate entries.
+
+  Implemented the doc's item 1 (smallest, most isolated) this session:
+  relative-date shorthand. `deps.py::_relative_date`'s two named cases
+  shortened to fit a 5-character budget -- `"Tomorrow"` -> `"Tmw"`,
+  `"Yesterday"` -> `"Yest"` (`"Today"` already fit, unchanged). The
+  day-month fallback (`"5 Sep"`, up to `"25 Sep 2027"`) was read as out of
+  scope -- "relative time" in the request means the three humanized words,
+  not the absolute short-date fallback, which is already as compact as a
+  real calendar date gets. `_holiday_date` (Holidays table) inherits the
+  fix for free since it delegates to `_relative_date`. Also found (not
+  touched): `_widget_items.html`'s `relative_due` macro
+  ("Overdue"/"Tomorrow"/"In N days") is dead code, imported and called
+  nowhere -- left alone since porting a fix into unused code isn't
+  worthwhile; flagged in the new doc for a straight deletion whenever
+  someone's next to that file.
+
+  **Tests**: new `test_relative_date.py` (6 tests -- all three named
+  cases, the 5-char budget as an explicit assertion, the day-month
+  fallback, and the existing degrade-to-original-value behavior for a
+  full ISO timestamp / unparseable value / `None`). Full suite:
+  **2,374 passed, 0 failed** (2,368 prior + 6 new).
+
+  **Environment note**: this session's container had no `.venv` (fresh
+  checkout) despite `STATE.md`'s own "Test env" note below assuming one
+  exists -- had to run `uv sync --all-packages` at the repo root first to
+  create it and pull in the `dev` dependency group (pytest). Not a code
+  change, just a one-time setup step future sessions in a fresh container
+  will hit too.
+
+  **Not visually verified**: sandbox can't reach a real browser -- this
+  is a pure-text change (a Jinja filter's output string), low risk, but
+  Peter should confirm a `"Tmw"`/`"Yest"` pill reads clearly at the
+  widget's actual font size rather than looking like a typo.
+
+  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 2
+  onward (dashboard widget height not updating after sidebar resize is
+  the next-cheapest, fully isolated pick).
+
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-
   session split, explicitly agreed given how many of these were small/

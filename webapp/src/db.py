@@ -3585,7 +3585,7 @@ def holiday_date_picker_value(value: str | None) -> str:
 def format_holiday_date(value: str | None) -> str:
     """Human display for a year-agnostic holiday date -- "25 Dec" (no year
     to show). Full "YYYY-MM-DD" holiday dates keep using the Holidays
-    table's own `relative_date` filter (Today/Tomorrow/"5 Sep" shorthand);
+    table's own `relative_date` filter (Today/Tmw/"5 Sep" shorthand);
     this is only the fallback for the one shape that filter can't parse."""
     v = (value or "").strip()
     if is_year_agnostic_holiday_date(v):

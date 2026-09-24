@@ -773,15 +773,19 @@ def _relative_date(value: str | None) -> str:
     """Jinja filter for a short/relative date -- `{{ t.due_at[:10] |
     relative_date }}` instead of a raw "2026-09-05" (2026-08-31 direct
     feedback on the Dashboard's Agenda widget: "make the dates ...
-    shorthand or relative"). Today/Tomorrow/Yesterday for the immediate
-    cases (the ones worth naming instead of counting), otherwise "5 Sep"
-    -- same day-drop-year-unless-different convention static/
-    datetime_picker.js's own `.dtp--compact` fmtDate already established
-    for the Tasks table's Date column (2026-08-30, praised then as "reads
-    at a glance"); this is that same convention's server-rendered
-    equivalent for read-only widget text rather than an editable picker's
-    trigger label. No @pass_context needed (unlike fmt_time/fmt_hour) --
-    pure function of the stored value and today's date, no per-request
+    shorthand or relative"). Today/Tmw/Yest for the immediate cases (the
+    ones worth naming instead of counting), otherwise "5 Sep" -- same
+    day-drop-year-unless-different convention static/datetime_picker.js's
+    own `.dtp--compact` fmtDate already established for the Tasks table's
+    Date column (2026-08-30, praised then as "reads at a glance"); this
+    is that same convention's server-rendered equivalent for read-only
+    widget text rather than an editable picker's trigger label.
+
+    2026-09-24 direct request: the three named cases shortened to fit a
+    5-character budget ("Tomorrow" -> "Tmw", "Yesterday" -> "Yest") so a
+    widget pill never wraps or gets clipped -- "Today" already fit and is
+    unchanged. No @pass_context needed (unlike fmt_time/fmt_hour) -- pure
+    function of the stored value and today's date, no per-request
     Settings preference involved. Expects a plain "YYYY-MM-DD" (or a
     longer ISO timestamp -- only the first 10 chars are read); anything
     that doesn't parse is returned unchanged, same "display filter
@@ -797,9 +801,9 @@ def _relative_date(value: str | None) -> str:
     if delta == 0:
         return "Today"
     if delta == 1:
-        return "Tomorrow"
+        return "Tmw"
     if delta == -1:
-        return "Yesterday"
+        return "Yest"
     day_month = f"{d.day} {d.strftime('%b')}"
     return day_month if d.year == today.year else f"{day_month} {d.year}"
 
@@ -810,7 +814,7 @@ templates.env.filters["relative_date"] = _relative_date
 def _holiday_date(value: str | None) -> str:
     """Jinja filter for the Holidays table's Date Range column
     (audit-fixes-2.1.md, "only day hollydays, withot the year") -- same
-    Today/Tomorrow/"5 Sep" shorthand as `relative_date` for an ordinary
+    Today/Tmw/"5 Sep" shorthand as `relative_date` for an ordinary
     full-date holiday, or db.format_holiday_date's "25 Dec" for a
     year-agnostic "--MM-DD" one (there's no real year to be relative to,
     so relative_date's own ValueError fallback would otherwise just print
