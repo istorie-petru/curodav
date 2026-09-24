@@ -43,7 +43,7 @@
             <span>{{ h.recurrence_label }}</span>
             {% if h.is_quantity and h.unit %}<span>{{ h.target|int }} {{ h.unit }} a day</span>{% endif %}
             {% if h.is_period and h.period_target > 1 %}<span>{{ h.period_done }}/{{ h.period_target }} this {{ h.streak_unit }}</span>{% endif %}
-            <span class="habit-card-streak" title="Best: {{ h.longest_streak }} {{ h.streak_unit }}{{ 's' if h.longest_streak != 1 }}{% if h.completion_rate is not none %}, {{ (h.completion_rate * 100)|round|int }}% {{ 'clean' if h.is_avoid else 'kept' }}{% endif %}">{% if h.is_avoid %}{% if h.relapsed_today %}Relapsed today{% else %}{{ h.current_streak }} day{{ 's' if h.current_streak != 1 }} clean{% endif %}{% else %}{{ habit_streak_text(request, h.current_streak, h.streak_unit) }}{% endif %}</span>
+            <span class="habit-card-streak" title="Best: {{ h.longest_streak }} {{ h.streak_unit }}{{ 's' if h.longest_streak != 1 }}{% if h.completion_rate is not none %}, {{ (h.completion_rate * 100)|round|int }}% {{ 'clean' if h.is_avoid else 'kept' }}{% endif %}{% if h.strength is not none %}, strength {{ h.strength }}%{% endif %}">{% if h.is_avoid %}{% if h.relapsed_today %}Relapsed today{% else %}{{ h.current_streak }} day{{ 's' if h.current_streak != 1 }} clean{% endif %}{% else %}{{ habit_streak_text(request, h.current_streak, h.streak_unit) }}{% endif %}</span>
         </div>
     </div>
     <ol class="habit-week" aria-label="Last seven days">

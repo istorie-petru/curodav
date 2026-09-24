@@ -7788,3 +7788,17 @@ button.habit-month-day:hover{box-shadow:0 0 0 1px var(--fg-primary) inset;}
 .allday-habit-form{display:block;}
 button.allday-habit{width:100%; text-align:left; border:none; cursor:pointer; font:inherit;}
 .allday-habit.is-done{opacity:.6; text-decoration:line-through;}
+/* Habits H8: insights bars in the habit detail modal (heights via
+   data-style / dynamic_styles.js). */
+.habit-bars-label{font-size:var(--text-sm); color:var(--fg-secondary); margin:var(--space-2) 0 var(--space-1);}
+.habit-bars{display:grid; gap:3px; align-items:end; height:96px;}
+.habit-bars-months{grid-template-columns:repeat(12, minmax(0,1fr));}
+.habit-bars-hours{grid-template-columns:repeat(24, minmax(0,1fr)); height:64px;}
+/* Each bar: count / fixed track / label -- the fill's % height resolves
+   against the track alone, so labels can't squash tall bars together. */
+.habit-bar{display:flex; flex-direction:column; align-items:center; height:100%; min-width:0;}
+.habit-bar-track{position:relative; flex:1 1 auto; width:100%; min-height:0;}
+.habit-bar-fill{position:absolute; left:0; right:0; bottom:0; min-height:2px; border-radius:3px 3px 0 0; background:var(--accent);}
+.habit-bars.is-avoid .habit-bar-fill{background:var(--danger);}
+.habit-bar-count{font-size:10px; color:var(--fg-tertiary); line-height:1.2; height:12px;}
+.habit-bar-label{font-size:10px; color:var(--fg-tertiary); line-height:1.4; height:14px;}

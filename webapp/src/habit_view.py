@@ -15,7 +15,7 @@ Tasks table's own Habits group was retired in H2.)
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from . import db, habit_heatmap, habit_schedule
 
@@ -218,6 +218,7 @@ def habit_item(conn, task: dict, today: date, pauses: list[dict] | None = None) 
         "longest_streak": stats["longest"],
         "streak_unit": stats["unit"],
         "completion_rate": stats["rate"],
+        "strength": stats.get("strength"),
         "due_today": stats["due_today"],
         "period_done": stats["period_done"],
         "period_target": stats["period_target"],
@@ -286,3 +287,47 @@ def habits_for_day(conn, d: date, today: date | None = None) -> list[dict]:
             }
         )
     return out
+
+
+def insights(completions: list[dict], today: date | None = None, months: int = 12) -> dict:
+    """Habits H8: logged days per month for the last `months` months
+    (oldest first, with a 0-1 bar height), and the hour of day check-ins
+    usually happen. The hour histogram only counts check-ins made on the
+    day they were for (a backfilled day's timestamp says nothing about
+    when the habit was done) and reads `completed_at` in the server's
+    local time zone -- there's no per-user zone setting. Hidden (None)
+    until at least 5 such check-ins exist."""
+    today = today or date.today()
+    first = _shift_month(today.replace(day=1), -(months - 1))
+    counts: dict[str, int] = {}
+    hours = [0] * 24
+    same_day = 0
+    for c in completions:
+        if not (c.get("value") or 0) > 0:
+            continue
+        key = (c.get("due_date") or "")[:7]
+        counts[key] = counts.get(key, 0) + 1
+        try:
+            stamp = datetime.fromisoformat(c.get("completed_at") or "")
+        except ValueError:
+            continue
+        local = stamp.astimezone() if stamp.tzinfo else stamp
+        if local.date().isoformat() == c.get("due_date"):
+            hours[local.hour] += 1
+            same_day += 1
+    month_rows = []
+    peak = 0
+    for i in range(months):
+        m = _shift_month(first, i)
+        n = counts.get(m.strftime("%Y-%m"), 0)
+        peak = max(peak, n)
+        month_rows.append({"label": m.strftime("%b"), "key": m.strftime("%Y-%m"), "count": n})
+    for row in month_rows:
+        row["height"] = (row["count"] / peak) if peak else 0
+    hour_rows = None
+    top_hour = None
+    if same_day >= 5:
+        hmax = max(hours)
+        hour_rows = [{"hour": h, "count": n, "height": n / hmax if hmax else 0} for h, n in enumerate(hours)]
+        top_hour = max(range(24), key=lambda h: hours[h])
+    return {"months": month_rows, "hours": hour_rows, "top_hour": top_hour, "same_day": same_day}

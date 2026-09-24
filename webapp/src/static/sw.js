@@ -551,7 +551,9 @@
 // vacation / pause rules.
 // v115 (2026-09-24, same session): habits H7 -- style.css gained the
 // Agenda-widget / day-view habit rules.
-const CACHE_NAME = "cc-shell-v115";
+// v116 (2026-09-24, same session): habits H8 -- style.css gained the
+// insights bar rules.
+const CACHE_NAME = "cc-shell-v116";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

@@ -817,6 +817,8 @@ def task_detail(uid: str, request: Request, month: str | None = None, conn=Depen
         rows = db.list_task_completions(conn, uid)
         ctx["habit_month"] = habit_view.month_calendar(uid, rows, month if isinstance(month, str) else None)
         ctx["habit_notes"] = habit_view.recent_notes(rows)
+        # Habits H8: strength (on habit_stats), per-month counts, usual hour.
+        ctx["habit_insights"] = habit_view.insights(rows)
         # Habits H6: this habit's current/upcoming pauses (own + all-habit).
         ctx["habit_pauses"] = habit_view.pause_info(db.list_habit_pauses(conn), uid, date.today())["upcoming"]
         ctx["today_iso"] = date.today().isoformat()

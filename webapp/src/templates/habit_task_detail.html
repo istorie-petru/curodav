@@ -68,6 +68,12 @@
             <span class="detail-meta-value">{{ (habit_stats.rate * 100)|round|int }}%</span>
         </div>
         {% endif %}
+        {% if habit_stats.strength is not none %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label" title="Loop-style score: every kept day/week raises it, a miss dents it rather than resetting it">Strength</span>
+            <span class="detail-meta-value">{{ habit_stats.strength }}%</span>
+        </div>
+        {% endif %}
         {% if habit_stats.period_target > 1 %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">This {{ habit_stats.unit }}</span>
@@ -123,6 +129,37 @@
         {% endfor %}{% endfor %}
     </div>
 </section>
+
+{# Habits H8 (2026-09-24): insights -- logged days per month, and the
+   hour check-ins usually happen (routers/tasks.py habit_insights). Bar
+   heights go through data-style (CSP: no inline style). #}
+{% if habit_insights %}
+<section class="detail-plain-section habit-insights" aria-labelledby="habit-insights-h">
+    <h2 class="habit-section-h" id="habit-insights-h">Insights</h2>
+    <div class="habit-bars-label">{{ 'Relapses' if task.habit_kind == 'avoid' else 'Days logged' }} per month</div>
+    <div class="habit-bars habit-bars-months{% if task.habit_kind == 'avoid' %} is-avoid{% endif %}" role="img"
+         aria-label="{% for m in habit_insights.months %}{{ m.label }} {{ m.count }}{{ ', ' if not loop.last }}{% endfor %}">
+        {% for m in habit_insights.months %}
+        <div class="habit-bar" title="{{ m.key }}: {{ m.count }}">
+            <span class="habit-bar-count">{{ m.count if m.count else '' }}</span>
+            <span class="habit-bar-track"><span class="habit-bar-fill" data-style="height:{{ (m.height * 100)|round(1) }}%"></span></span>
+            <span class="habit-bar-label">{{ m.label[:1] }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% if habit_insights.hours %}
+    <div class="habit-bars-label">When you check in <span class="text-muted">&middot; usually around {{ '%02d:00'|format(habit_insights.top_hour) }}</span></div>
+    <div class="habit-bars habit-bars-hours" role="img" aria-label="Check-ins by hour; most often around {{ habit_insights.top_hour }}:00">
+        {% for hr in habit_insights.hours %}
+        <div class="habit-bar" title="{{ '%02d:00'|format(hr.hour) }}: {{ hr.count }}">
+            <span class="habit-bar-track"><span class="habit-bar-fill" data-style="height:{{ (hr.height * 100)|round(1) }}%"></span></span>
+            <span class="habit-bar-label">{{ hr.hour if hr.hour % 6 == 0 else '' }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</section>
+{% endif %}
 
 <section class="detail-plain-section habit-pause" aria-labelledby="habit-pause-h">
     {# Habits H6: pause just this habit (a vacation from it). #}

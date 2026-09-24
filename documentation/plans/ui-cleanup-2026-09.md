@@ -829,7 +829,7 @@ match.
 top rather than being rewritten past-tense, matching how it already
 documents the gap between the v1 spec and what shipped.
 
-## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 + H1-H7 shipped 2026-09-24; H8 next)
+## 14. ~~Habits/routines as a distinct frontend data model~~ — SHIPPED 2026-09-24 (slice 1 + H1-H8)
 
 "I also think that we strongly need to make habits/routines a different
 data model, at least in the frontend. They can still be tasks in the
@@ -1068,6 +1068,27 @@ dispatching a task change, which async_calendar.js already answers by
 re-rendering `#day-grid` with scroll kept and drag re-bound). Hidden when
 the day view is label-filtered. Not done: habits in the week/4-week
 grids (dense already; revisit if wanted).
+
+**H8 -- shipped 2026-09-24.** **Strength** (`habit_schedule._strength`,
+on every `habit_stats`): Loop Habit Tracker-style EMA over due windows,
+decay 0.5 ** (length * sqrt(target/length) / 13) per window (~13-day
+half-life daily, ~5 weeks weekly) -- one miss dents it, the streak is
+what zeroes; avoid habits score clean days. Shown in the detail modal
+and the Habits-row streak tooltip. **Insights** (`habit_view.insights`,
+detail modal): logged days (relapses for avoid) per month for 12 months,
+and a 24-hour "when you check in" histogram + "usually around HH:00" --
+counting only check-ins made on the day they're for (a backfill's
+timestamp says nothing about when it was done), in the server's local
+time zone (no per-user zone setting exists; flagged), hidden under 5 such
+check-ins. Bars are CSS (heights via `data-style`, CSP-safe), each in its
+own fixed track -- a first version let the labels squash every tall bar
+to the same height; caught in the live check and fixed.
+
+**Not adopted, as planned:** focus/Pomodoro timer, checklists inside a
+habit (tasks are flat on purpose), third-party import, app lock,
+launcher icons, gamification, share cards. Reminders ride on item 7 (Web
+Push); `habit_schedule.is_due_on` is ready for its "is this habit due
+today" check.
 
 **Order and why:** H1 first -- every later surface shows streaks, and
 they're wrong today for non-daily habits. H2 (the page), then H3
