@@ -293,5 +293,8 @@ class TestShellCacheVersion:
         # v100 (2026-09-24, same session): the card-model removal --
         # style.css's `.card`/`.widget-card`/body-background rules -- see
         # sw.js's own comment.
+        # v101 (2026-09-24, same session): the icon set swap to Material
+        # Design Icons -- style.css's `.icon` class flipped fill/stroke to
+        # match the new filled-icon sprite -- see sw.js's own comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v100"' in script
+        assert 'CACHE_NAME = "cc-shell-v101"' in script

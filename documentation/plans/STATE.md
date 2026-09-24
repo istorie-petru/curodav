@@ -253,9 +253,49 @@ session start.
   (**2,381 passed, 0 failed**) is unchanged in count -- purely a visual
   verification.
 
-  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 7 --
-  the icon set swap to MaterialDesign-SVG (large mechanical diff, low
-  logical risk).
+  Same session, eighth slice -- `plans/ui-cleanup-2026-09.md` item 5, the
+  icon set swap to MaterialDesign-SVG. Turned out much bigger than
+  "mechanical" once scoped: the sprite held 190 hand-drawn Feather-style
+  stroke icons (not just the ~51 hardcoded in templates -- the full
+  `routers/labels.py::ICON_GROUPS` picker palette too), and a partial swap
+  would leave two icon styles mixed together, worse than not swapping.
+  Asked whether to do the full 190-icon swap now or defer; Peter chose
+  now.
+
+  Attached `Templarian/MaterialDesign-SVG` (shallow, blobless, sparse to
+  `svg/`, ~36MB) rather than hand-guessing path data -- a guessed path
+  renders a broken or subtly-wrong icon, not a shortcut. Built a full
+  Feather-name -> real-MDI-name mapping using `meta.json`'s name/alias/tag
+  index, validated every candidate exists as a real file before using it,
+  resolved 6 name collisions (e.g. `edit`/`edit-3`/`pencil` all first
+  landed on the same MDI icon) by finding genuinely distinct real icons.
+  Extracted real path data for all 190 and rebuilt `templates/_icons_
+  sprite.html` from scratch. `style.css`'s `.icon` class flipped
+  `fill:none; stroke:currentColor;` -> `fill:currentColor; stroke:none;`
+  to match -- Feather is outline/stroke, MDI is solid filled shapes, a
+  real style change not just a file swap.
+
+  **Found and fixed a pre-existing bug**: an audit of every literal
+  `icon(...)` call site (not just ICON_GROUPS) turned up `rotate-ccw`/
+  `x-circle` (event_detail.html's occurrence-override buttons) referenced
+  but never defined in the *old* Feather sprite either -- confirmed
+  against the pre-change committed file. Both buttons silently rendered
+  no icon at all. Added real MDI equivalents as part of the same rebuild.
+
+  **Visually verified**: sidebar rail, the full icon picker (all category
+  groups), Contacts' empty state, dark mode -- all clean, distinct, no
+  missing/broken icons, no console errors. One test regression caught and
+  fixed: the new sprite's header comment quoted event_detail.html's exact
+  button label text, which -- since the sprite ships on every page --
+  collided with an unrelated test's "this text should be absent" check;
+  reworded the comment. Full suite: 2,381 passed (unchanged count, no
+  Python logic touched).
+
+  Bundled: `sw.js`'s `CACHE_NAME` bump (v100 -> v101) for the `.icon`
+  class change; `test_pwa_shell.py`'s version string updated to match.
+
+  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 8 --
+  Settings `.segmented` -> dropdown (self-contained component swap).
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-

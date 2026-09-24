@@ -73,8 +73,10 @@ that fits its remaining budget.
 6. ~~**Card model removal**~~ (item 4) — **shipped 2026-09-24**: turned out
    bigger than "mechanical" once scoped (35 templates) — asked scope +
    hover questions first, Peter chose app-wide both times.
-7. **Icon set swap to MaterialDesign-SVG** (item 5) — large diff, low
-   logical risk; fine to do in one dedicated session since it's mechanical.
+7. ~~**Icon set swap to MaterialDesign-SVG**~~ (item 5) — **shipped
+   2026-09-24**: 190 icons (not ~51), all real MDI path data fetched and
+   verified, not guessed. Found and fixed a pre-existing bug along the
+   way (two icons referenced but never defined in the old sprite).
 8. **Settings `.segmented` → dropdown** (item 9) — self-contained component
    swap, check for an existing select-based single-choice convention first.
 9. **Design token tightening** (item 12) — audit current token count before
@@ -310,14 +312,66 @@ caught in the same slice this time rather than as a later catch-up.
 Python test asserts CSS rule content, so the full suite (2,381 passed)
 is unchanged in count — this was purely a visual verification.
 
-## 6. Icon set swap to MaterialDesign-SVG
+## 6. ~~Icon set swap to MaterialDesign-SVG~~ — SHIPPED 2026-09-24
 
-Replace the current icon source (`deps.py`'s `icon()` helper + wherever its
-SVGs/sprite live today — audit before starting) with
-[Templarian/MaterialDesign-SVG](https://github.com/Templarian/MaterialDesign-SVG).
-Every icon name used across templates needs a mapped equivalent in the new
-set — large mechanical diff, low logical risk, but budget a full session for
-the audit + swap + visual check alone.
+Turned out bigger than "mechanical" once actually scoped: the sprite held
+190 hand-drawn Feather-style stroke icons (not just the ~51 hardcoded in
+templates — the full `routers/labels.py::ICON_GROUPS` picker palette too),
+and a partial swap would have left the app with two icon styles mixed
+together (outline + filled), worse than not swapping at all. Asked before
+starting whether to do the full 190-icon swap now or defer; Peter chose
+now.
+
+Process: attached
+[Templarian/MaterialDesign-SVG](https://github.com/Templarian/MaterialDesign-SVG)
+(shallow, blobless, sparse-checked-out to just `svg/`, ~36MB) rather than
+hand-guessing path data — a guessed path would render a broken or
+subtly-wrong icon, not a cheap shortcut. Built a full Feather-name ->
+real-MDI-name mapping (`meta.json`'s name/alias/tag index made this
+tractable), validated every candidate actually exists as a file before
+using it, resolved 6 initial collisions (two names guessing the same MDI
+icon, e.g. `edit`/`edit-3`/`pencil` all first landed on `pencil-outline`)
+by searching for genuinely distinct real icons instead. Extracted real
+`<path d="...">` data for all 190 icons and rebuilt
+`templates/_icons_sprite.html` from scratch.
+
+Real style change, not just file swap: Feather icons are stroke/outline
+shapes, MDI icons are solid filled shapes. `style.css`'s `.icon` class
+flipped from `fill:none; stroke:currentColor;` to `fill:currentColor;
+stroke:none;` to match — one central rule governs every icon's color,
+individual symbols carry no fill/stroke of their own.
+
+Found and fixed a **pre-existing bug** along the way: a from-scratch
+audit of every literal `icon(...)` call site (not just ICON_GROUPS) turned
+up two icon names — `rotate-ccw`/`x-circle`, both used by
+`event_detail.html`'s occurrence-override buttons — that were never
+defined in the *old* Feather sprite either (confirmed against the
+pre-change committed file). Both buttons silently rendered no icon at all
+(`<use>` against a missing id fails silent in every browser, no console
+error). Added real MDI equivalents (`restore`, alias
+`rotate-counter-clockwise`; `close-circle-outline`) as part of the same
+rebuild.
+
+Verified live (screenshots + a console-error check via the same
+Playwright pathway as earlier slices): sidebar rail, the full icon picker
+(all category groups), Contacts' empty state, dark mode — all render
+clean, distinct, no missing/broken icons, no console errors on a fresh
+page load. One test regression caught and fixed: the new sprite's header
+comment quoted event_detail.html's exact button label text ("Restore to
+series"), which — since the sprite is included on every page via
+base.html — collided with a `test_manual_recurrence_exceptions.py`
+assertion checking that text was ABSENT from a different page's body;
+reworded the comment to describe the buttons without quoting their exact
+label strings. Full suite: 2,381 passed (unchanged count — this is a
+template/CSS-only change, no Python logic touched).
+
+Bundled: `sw.js`'s `CACHE_NAME` bump (v100 -> v101) for `style.css`'s
+`.icon` class change (`style.css` is in `SHELL_ASSETS`; `_icons_sprite
+.html` itself isn't a separately-fetched `static/` asset — it's a Jinja
+template inlined into every page's own HTML, so it needs no cache-bust of
+its own). Checked `SHELL_ASSETS` membership before concluding this,
+per this session's own established habit. `test_pwa_shell.py`'s
+version-string assertion updated to match.
 
 ## 7. Web Push notifications
 

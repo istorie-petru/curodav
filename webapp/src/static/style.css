@@ -673,10 +673,20 @@ button.btn:disabled::after, a.btn[aria-disabled="true"]::after{display:none;}
    theme toggle, mail/phone, trash, chevrons, etc.) is now one of these:
    an inline <svg><use> against the local sprite, sized/colored here so it
    always matches the surrounding text (`currentColor`) rather than
-   carrying its own fixed color the way an emoji glyph would. */
+   carrying its own fixed color the way an emoji glyph would.
+
+   `fill:currentColor; stroke:none;` (2026-09-24, was `fill:none;
+   stroke:currentColor;`) -- the sprite itself switched from hand-drawn
+   Feather-style stroke/outline icons to real Material Design Icons
+   (_icons_sprite.html's own header comment has the full story), which are
+   solid filled shapes, not outlines. This one rule governs every icon's
+   color uniformly; individual symbols carry no fill/stroke of their own,
+   same "class sets color, symbol only varies geometry" split the old
+   stroke-based icons already used (stroke-width/linecap were per-symbol,
+   color never was). */
 .icon{
   width:15px; height:15px; flex:none; vertical-align:-2px;
-  fill:none; stroke:currentColor; display:inline-block;
+  fill:currentColor; stroke:none; display:inline-block;
 }
 .icon-sm{width:12px; height:12px; vertical-align:-1px;}
 .icon-lg{width:20px; height:20px; vertical-align:-4px;}

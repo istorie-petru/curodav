@@ -492,7 +492,14 @@
 // `.widget-card`/`.widget-card-static`/body background rules all
 // changed. style.css is in SHELL_ASSETS below, so this one's caught on
 // the same slice it shipped in, not a later catch-up.
-const CACHE_NAME = "cc-shell-v100";
+// v101 (2026-09-24, same session): the icon set swap to Material Design
+// Icons (direct request) -- style.css's `.icon` class flipped from
+// `fill:none; stroke:currentColor;` to `fill:currentColor; stroke:none;`
+// to match the new filled-icon sprite (templates/_icons_sprite.html,
+// itself a Jinja template inlined per-page, not a separate SHELL_ASSETS
+// entry that needs its own cache-bust). style.css is in SHELL_ASSETS
+// below, so this one's caught on the same slice it shipped in too.
+const CACHE_NAME = "cc-shell-v101";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",
