@@ -3,14 +3,33 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}Command Center{% endblock %}</title>
+    {# 2026-09-24 direct request: "constant label for the app... to be
+       Curodav" -- the app's real product name, distinct from the
+       `command-center-web` package name the codebase still uses
+       internally. `self.title()` calls the `title` block below without
+       re-declaring it, so every page's own override (Tasks, "Appearance -
+       Settings", ...) keeps appearing first, same " - " convention those
+       overrides already use for their own sub-context, with "Curodav"
+       always appended last; a page with no override (self.title() empty)
+       just shows "Curodav" alone, not "Curodav - Curodav". #}
+    <title>{% block title %}{% endblock %}{% if self.title() %} - {% endif %}Curodav</title>
     <link rel="icon" type="image/png" sizes="32x32" href="{{ static_url('favicon-32.png') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ static_url('favicon-16.png') }}">
     <link rel="apple-touch-icon" href="{{ static_url('apple-touch-icon.png') }}">
-    {# PWA shell (1.8 slice 3) -- DISABLED
+    {# PWA shell (1.8 slice 3) -- manifest link re-enabled 2026-09-24
+       (direct request, "add PWA icon"). The icon/manifest assets
+       (icon-192.png/icon-512.png, manifest.webmanifest) were already
+       fully built and just never linked; re-enabling ONLY this tag turns
+       on Android/Chrome's install-as-app icon+name. `pwa.js`'s
+       `<script>` below (service-worker registration) stays disabled by
+       direct confirmation -- offline caching/sync is separate, unfinished
+       work (plans/ofline-first-pwa.md), not part of this change, and
+       distinct from the client-side "Offline Mode" feature that was
+       purged outright 2026-09-09 for repeated UI complaints (routers/
+       pwa.py's own header comment) -- this manifest link never had
+       anything to do with that removed feature. #}
     <link rel="manifest" href="{{ static_url('manifest.webmanifest') }}">
     <meta name="theme-color" content="#007aff">
-    #}
     <link rel="stylesheet" href="{{ static_url('style.css') }}">
     <!-- Accent color (2026-09-17, design-system unification pass) -- style.
          css's own --accent is just the "Blue" preset's default; this

@@ -143,9 +143,42 @@ session start.
   `margin-bottom` is `0px`; Tasks' is still `42px` (6dvh at the test
   viewport), unchanged. Full detail in the doc's item 8.
 
-  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 4
-  onward (the App title + PWA icon slice is the next-cheapest, fully
-  isolated pick).
+  Same session, fifth slice -- `plans/ui-cleanup-2026-09.md` item 9, app
+  title + PWA icon. Two open questions resolved before touching code: (1)
+  literal-"constant" title vs. "Curodav" appended to each page's own title
+  -- Peter picked appended, matching the existing "Appearance - Settings"
+  sub-page convention; (2) the PWA icon turned out to already be fully
+  built (real custom artwork, `icon-192.png`/`icon-512.png`,
+  `manifest.webmanifest` with both sizes) but never linked --
+  `base.html` had the manifest `<link>` and theme-color `<meta>` sitting
+  inside a `{# PWA shell (1.8 slice 3) -- DISABLED #}` Jinja comment
+  (favicon/apple-touch-icon were separate tags, already live either way).
+  Confirmed via `routers/pwa.py`'s own header comment this is unrelated to
+  the client-side "Offline Mode" feature purged 2026-09-09 for UI
+  complaints (a different surface entirely) before asking whether to
+  re-enable just the manifest link (icon/name metadata, no service
+  worker) -- Peter confirmed yes.
+
+  Landed: `base.html`'s `<title>` now reads `{% block title %}{% endblock
+  %}{% if self.title() %} - {% endif %}Curodav` (no other template
+  touched -- `self.title()` reuses each page's existing `{% block title
+  %}` override), the manifest `<link>`/theme-color `<meta>` un-commented
+  (`pwa.js`'s service-worker `<script>` deliberately left disabled, out of
+  scope), and `manifest.webmanifest`'s `name`/`short_name` changed from
+  `"Command Center"` to `"Curodav"`. Verified live: `Dashboard - Curodav`,
+  `Tasks - Curodav`, `Appearance - Settings - Curodav`; manifest fetches
+  at 200 with the new name. Full suite still 2,374 passed, including all
+  15 `test_pwa_shell.py` cases -- one of those
+  (`test_base_html_links_the_manifest_and_theme_color`) turned out to read
+  `base.html`'s raw source text rather than a rendered response, so it
+  couldn't actually tell "commented out" from "live" and passed either
+  way both before and after this change; noted in the doc's item 9, not
+  fixed here (out of scope for this slice).
+
+  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 5 --
+  the Notes removal/hiding decision needs one clarifying question (remove
+  entirely vs. feature-flag/hide, per the doc's own item 13) before any
+  code.
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-

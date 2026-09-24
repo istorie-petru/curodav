@@ -63,7 +63,9 @@ that fits its remaining budget.
    **shipped 2026-09-24**: premise was false (not dashboard-only), so
    scoped to Dashboard alone via a new `--flush` modifier once Peter
    confirmed that was the actual ask.
-4. **App title + PWA icon** (item 8) — static/manifest change, no backend.
+4. ~~**App title + PWA icon**~~ (item 8) — **shipped 2026-09-24**: title
+   suffix convention resolved, PWA icon turned out to already exist —
+   just needed its manifest link re-enabled.
 5. **Notes removal/hiding decision** (item 13) — needs one clarifying
    question (remove entirely vs. feature-flag/hide) before any code.
 6. **Card model removal** (item 4) — mechanical CSS pass, well-scoped once
@@ -322,16 +324,50 @@ Verified live: the wrapper's computed `margin-bottom` is `0px` on
 Dashboard, still `42px` (6dvh at a 700px test viewport) on Tasks,
 unchanged.
 
-## 9. App title + PWA icon
+## 9. ~~App title + PWA icon~~ — SHIPPED 2026-09-24
 
-Browser-tab title becomes a constant "Curodav" (app name) instead of the
-current per-page `{% block title %}Dashboard{% endblock %}` pattern —
-decide whether the app name replaces the per-page title entirely or is
-appended/prefixed to it (e.g. "Curodav" vs. "Tasks — Curodav"; the request
-only said "constant... to be [app-name]", read literally that's a full
-replacement, confirm before assuming). Add a PWA icon (manifest.json's
-`icons` array — check what it currently points to, likely a placeholder or
-missing).
+Two open questions asked and resolved before touching anything:
+
+1. **Title scope** — literal "constant" reading (always just "Curodav",
+   no per-page text) vs. "Curodav" appended to each page's own title.
+   Peter picked appended, matching the existing "Appearance - Settings"
+   sub-page convention.
+2. **PWA icon** — turned out to already be fully built (`icon-192.png`/
+   `icon-512.png`, real custom artwork, `manifest.webmanifest` with both
+   sizes) but never linked: `base.html` had `<link rel="manifest">` and
+   `<meta name="theme-color">` sitting inside a `{# PWA shell (1.8 slice
+   3) -- DISABLED #}` Jinja comment. Favicon/apple-touch-icon were already
+   live and unaffected either way (separate `<link>` tags, outside that
+   comment). Confirmed via `routers/pwa.py`'s own header comment that this
+   manifest link is unrelated to the client-side "Offline Mode" feature
+   purged 2026-09-09 for UI complaints (a different surface: the `/offline`
+   page, IndexedDB write queue, offline-navigation fallback) — asked
+   whether to re-enable just the manifest link (icon/name metadata only,
+   no service worker) or leave it off; Peter chose re-enable.
+
+Landed:
+- `base.html`'s `<title>` — `{% block title %}{% endblock %}{% if
+  self.title() %} - {% endif %}Curodav`. Every page's existing
+  `{% block title %}` override still works unchanged (no template beyond
+  `base.html` needed touching — `self.title()` just calls the same block),
+  now with " - Curodav" appended; a page with no override falls back to
+  plain "Curodav" (no "Curodav - Curodav" duplication).
+- `base.html`'s `<link rel="manifest">` + `<meta name="theme-color">`
+  un-commented. `pwa.js`'s `<script>` tag (service-worker registration)
+  deliberately left commented — out of scope, per the resolved question.
+- `manifest.webmanifest`'s `name`/`short_name`: `"Command Center"` ->
+  `"Curodav"`.
+
+Verified live: `Dashboard - Curodav`, `Tasks - Curodav`,
+`Appearance - Settings - Curodav` (three different pages, all correctly
+suffixed); the manifest fetches at 200 with `"name": "Curodav"`; full
+suite still 2,374 passed including all 15 `test_pwa_shell.py` cases
+(`test_base_html_links_the_manifest_and_theme_color` passed both before
+and after this change either way — noted for the record, not fixed here,
+since it's out of this slice's scope: it reads `base.html`'s raw source
+text rather than a rendered response, so it can't actually distinguish
+"commented out" from "live," which is why it never caught the manifest
+link being disabled in the first place).
 
 ## 10. Settings `.segmented` → dropdown
 
