@@ -530,7 +530,10 @@
 // entity removed, the Dashboard's Habit Check-in widget now lists habit-
 // labeled tasks; style.css gained .habit-checkin-name (static/habits.js
 // deleted, but it was page-specific, never a SHELL_ASSETS entry).
-const CACHE_NAME = "cc-shell-v107";
+// v108 (2026-09-24, same session): modal.js strips <style> blocks from a
+// fetched page before DOMParser, fixing a CSP style-src-elem violation
+// logged on every modal open. modal.js is a SHELL_ASSETS entry.
+const CACHE_NAME = "cc-shell-v108";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

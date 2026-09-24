@@ -613,11 +613,39 @@ session start.
 
   Bundled: `sw.js` `CACHE_NAME` v106 -> v107, `test_pwa_shell.py`.
 
-  **Next slice**: item 14 slice 2 -- dedicated Habits page at `/habits`
-  (needs the Streak reference first), then slices 3-4 (bigger widget,
-  agenda/calendar + habit detail), then item 15 (default dashboard
-  layout). Others unchanged: Web Push (item 7), labels-as-modules (item 4
-  -- re-confirm scope with Peter first), narrow banners (item 2, after 4).
+  Same session, follow-up (direct request: fix the CSP problem, plan
+  habits against Streak, commit everything so merging to main stays
+  easy):
+
+  1. **CSP fix.** Pinned via Playwright's `securitypolicyviolation`
+     event to `modal.js:276`, not an inline `style=`: DOMParser-parsing
+     the fetched full page pulled in base.html's `<style nonce>` carrying
+     *that response's* nonce, and the parsed document inherits this
+     page's CSP -> one `style-src-elem` violation per modal open, plain
+     tasks included. modal.js now strips `<style>` blocks before parsing
+     (they could never apply). Policy untouched. Live re-check: plain-
+     task, habit (from Tasks and from the Dashboard widget) and new-task
+     modals open with zero console errors. New `test_modal_csp.py` (2).
+     `sw.js` v107 -> v108 (modal.js is SHELL_ASSETS).
+  2. **Streak-informed habit plan** -- Peter pasted InlitX/streak's
+     README (the site stays blocked here). Written into
+     `plans/ui-cleanup-2026-09.md` item 14 as slices **H1-H8** with
+     adopt / adapt / skip reasoning. Headline: **H1 = schedule-aware
+     streaks, a real bug** -- `habit_heatmap.streaks()` only counts
+     consecutive calendar days, so a weekly habit kept 4 weeks running
+     reads `(current 0, best 1)` and a fully-kept Mon/Wed/Fri habit
+     `(1, 1)` (verified against the function). Three open questions for
+     Peter are listed at the end of that section.
+  3. Branch state: `claude/kind-ride-5aknv0` is 0 behind / 3+ ahead of
+     `origin/main` -- a plain fast-forward merge, no conflicts.
+
+  Full suite: **2,328 passed, 0 failed**.
+
+  **Next slice**: item 14 **H1** (schedule-aware streaks) once Peter
+  answers the plan's three questions, then H2 (Habits page), H3 (detail
+  + day notes), H4 (bigger widget -> unblocks item 15). Others unchanged:
+  Web Push (item 7), labels-as-modules (item 4 -- re-confirm scope with
+  Peter first), narrow banners (item 2, after 4).
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-

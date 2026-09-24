@@ -829,7 +829,7 @@ match.
 top rather than being rewritten past-tense, matching how it already
 documents the gap between the v1 spec and what shipped.
 
-## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 of 4 shipped 2026-09-24)
+## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 shipped 2026-09-24; H1-H8 planned)
 
 "I also think that we strongly need to make habits/routines a different
 data model, at least in the frontend. They can still be tasks in the
@@ -885,13 +885,81 @@ fields (status, due date, Kanban).
    `kind=entity` branches, `/tasks/bulk`'s `habit_uids`, tasks_table.js's
    `updateHabitField`/`selectedByKind`. The `habits`/`habit_entries`
    tables stay in SCHEMA_SQL (never force-dropped).
-2. **Dedicated Habits page** at `/habits` (replacing the redirect) + nav
-   entry; Habits group leaves the Tasks table. Design against the Streak
-   reference once it's viewable.
-3. **Bigger check-in widget** (week strip / streak / progress per habit)
-   -- unblocks item 15's 25/50/25 layout.
-4. **Habits in Agenda/calendar day view** + a habit-only detail modal
-   (drop any remaining task-ish field).
+2-4. Superseded by the Streak-informed plan just below (same goals --
+   Habits page, bigger widget, agenda/calendar + habit detail -- re-cut
+   into H1-H8).
+
+### Streak-informed habit plan (2026-09-24)
+
+Reference: Peter pasted the README of InlitX/streak (Flutter, offline,
+GPLv3) -- the site itself is blocked from this environment. That's a
+feature list, not the design; the screenshots it names (Today, Stats,
+Insights, Amounts, Notes) weren't visible, so the *look* below is
+inferred from the feature descriptions and this app's own conventions,
+not copied.
+
+**What Streak gets right, as principles** (these drive every slice):
+- *One tap from wherever you are* -- logging never needs a page load or
+  a modal (home screen, widget, notification).
+- *The schedule defines the streak* -- "3x a week" or "Mon/Wed/Fri" is a
+  first-class schedule, and a streak only counts days the habit was due.
+- *Honest history* -- any past day can be filled/cleared, days can carry
+  a note, and a pause (vacation) doesn't break anything.
+- *Progress is the reward* -- activity grid, month calendar, streak/best/
+  completion rate/strength score, a small celebration when a day is fully
+  done.
+
+**Where curodav stands** (after slice 1): one-tap check-in exists (widget
++ Tasks Habits group, fetch-based); amount habits exist (`target_per_day`
+> 1, no unit); past-day fill exists (53-week heatmap toggle -- but the
+detail modal's heatmap is view-only since 2026-08-29); weekend/holiday
+exclusions exist; current/longest streak exist; recurrence is a full
+RRULE (daily / weekly / BYDAY / INTERVAL). **Real bug**: `habit_heatmap.
+streaks()` walks calendar days only -- a weekly or Mon/Wed/Fri habit
+"breaks" its streak on every non-scheduled day, so the numbers are wrong
+for any non-daily habit today. Verified 2026-09-24 against the real function:
+a weekly habit logged on 4 consecutive Mondays -> `(current 0, longest
+1)`; a Mon/Wed/Fri habit with every due day kept for two weeks -> `(1, 1)`.
+
+**Adopt** (fits a single-user, server-backed web app):
+
+| # | Slice | What | Backend change |
+|---|---|---|---|
+| H1 | Schedule-aware streaks | Streak counts *due occurrences*, not calendar days: RRULE BYDAY/INTERVAL days via `recurrence_expand`; "X times per period" counts a week/month as kept when X logs land in it (streak unit = periods). Completion rate = done / due. Fixes the bug above | new `habits_per_period` column (nullable int) on `tasks` + period on the existing RRULE FREQ; pure-function rewrite of `streaks()` with the old daily behavior as the FREQ=DAILY case |
+| H2 | Habits page `/habits` | Replaces the redirect; nav rail entry; Habits group leaves the Tasks table. Layout: "Today" list on top (due today first, then not-due-today muted, done last), each row = name, 7-day strip (tap a past day to fill/clear), streak, one-tap check / +1 | none (reads `habit_view`) |
+| H3 | Habit detail modal | Habit-only: header stats (current / best streak, completion rate, total), **interactive** year grid (re-enable day toggle), month calendar view, per-day note | `task_completions.note TEXT` (nullable, additive) |
+| H4 | Bigger Check-in widget | Same row shape as H2 (7-day strip + streak), sized for the 25% column; "all done today" state with a small celebration (CSS-only, `prefers-reduced-motion` respected) | none -- unblocks item 15 |
+| H5 | Habit kinds | *amount* gets a unit ("glasses", "min"); *avoid* habits (log a relapse; streak = days since last relapse, done-by-default) | `tasks.habit_unit TEXT`, `tasks.habit_kind TEXT` ('normal'/'avoid') |
+| H6 | Pause (vacation) | Date-range pause per habit (or all habits): paused days behave exactly like today's excluded weekend days | `habit_pauses(task_uid, start, end)` feeding `excluded_dates_in_range` |
+| H7 | Agenda/calendar | Due-today habits appear as checkable items in the Agenda widget and the calendar day view (not as timed events) | none |
+| H8 | Insights | Strength score (Loop-style exponential moving average of done/due, so one miss dents rather than zeroes), completions per month, "when do you show up" by hour from `task_completions.completed_at` (already stored) | none |
+
+**Adapt, depends on other items:** reminders with Done / Snooze / +1
+actions ride on item 7 (Web Push) -- design H1's schedule so the reminder
+scheduler can reuse "is this habit due today". Archive-without-losing-
+history already works (task status `archived` keeps `task_completions`),
+it just needs surfacing on the H2 page (an "Archived" fold).
+
+**Skip, with reasons:**
+- *Focus/Pomodoro timer, soundscapes, clock styles* -- a separate
+  product; curodav's work sessions (time allocations on the calendar)
+  already cover "time spent on a habit". Revisit only if asked.
+- *Checklists inside a habit* -- tasks went flat on purpose (1.2 task-
+  model decision; checklist items were removed). Re-adding them for
+  habits only would reverse that; ask Peter before considering it.
+- *Import from Loop/HabitKit/Habitica, app lock, launcher icons, three
+  whole-app designs, gamification island, shareable image cards* --
+  either phone-app concerns or out of proportion for a single-user app.
+  CSV import could come later if Peter actually has history elsewhere.
+
+**Order and why:** H1 first -- every later surface shows streaks, and
+they're wrong today for non-daily habits. H2 (the page), then H3
+(detail + notes, the only real schema growth besides H5/H6), then H4
+(widget, unblocks item 15's layout), then H5-H8 in any order. Each is one
+session. **Open questions for Peter before H1/H2**: (1) do "X times per
+week" habits matter to you, or are RRULE weekdays enough? (2) avoid
+habits -- wanted? (3) should the Habits page replace the Tasks-table
+group outright (plan assumes yes, per your earlier answer)?
 
 ## 15. Default dashboard layout
 
@@ -1020,12 +1088,14 @@ conflicts table.
   mechanism; if one is found during audit, this doc's "only leisure/sleep is
   a new mechanism" constraint may already be satisfied for events/tasks/
   habits and the item shrinks considerably.
-- Found 2026-09-24 (not fixed, out of item 14's scope): opening **any**
-  task detail modal (a plain task too, not just a habit) logs one CSP
-  violation in the console -- "Refused to apply inline style ... style-src
-  'self' 'nonce-...'". Some inline `style=` in the task-detail modal path
-  survived audit-fixes-2.0 item 11's inline-style sweep. Cosmetic effect
-  unknown; worth a one-slice hunt.
+- ~~CSP violation on every modal open~~ -- **fixed 2026-09-24**: not an
+  inline `style=` at all. modal.js DOMParser-parses the fetched full page,
+  whose base.html head carries `<style nonce>` with *that response's*
+  nonce; the parsed document inherits this page's CSP, so it logged a
+  `style-src-elem` violation (pinned via Playwright's
+  `securitypolicyviolation` event -> modal.js:276). modal.js now strips
+  `<style>` blocks before parsing (they could never apply: wrong nonce,
+  and the accent rule is already live). Policy unchanged.
 
 ## How open work gets tracked
 
