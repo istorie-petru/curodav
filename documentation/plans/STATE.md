@@ -175,10 +175,51 @@ session start.
   way both before and after this change; noted in the doc's item 9, not
   fixed here (out of scope for this slice).
 
-  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 5 --
-  the Notes removal/hiding decision needs one clarifying question (remove
-  entirely vs. feature-flag/hide, per the doc's own item 13) before any
-  code.
+  Same session, sixth slice -- `plans/ui-cleanup-2026-09.md` item 13,
+  Notes removal/hiding decision. Asked first (genuinely ambiguous which,
+  and the blast radius differs enormously): Peter chose hide, not remove
+  -- data/routes stay intact. Audited every HTML-visible surface Notes
+  actually had (no sidebar nav entry to begin with): Quick Capture's `!n`
+  marker, the command palette's live capture-preview gate, global search
+  (both `/api/search` and `/search`), and the palette's page-navigation
+  feature's synthetic "Notes" destination.
+
+  Landed: `quick_capture.py`'s `MARKER_TYPES`/`_MARKER_RE` drop `"n"`
+  (`parse_note` itself untouched, still directly testable -- only the
+  marker-driven entry point can't reach it); `command_palette.js`'s
+  `CAPTURE_MARKER_RE` drops `"n"` too, so `!n ...` now falls through to a
+  plain search/create-suggestion state instead of a capture preview that
+  would 400 on submit; `routers/search.py` gained
+  `_GLOBAL_SEARCH_TYPES = ["task", "event", "contact"]` as the default for
+  both search entry points when no explicit `types` is given --
+  `db.search_entities` itself untouched, so an explicit `types=["note"]`
+  request still works; `_STATIC_PAGES` lost its "Notes" jump-to-page
+  entry. `quick-capture.md` (the reference spec) got a status update at
+  its top, not a past-tense rewrite, matching its existing convention.
+
+  Bundled in: `sw.js`'s `CACHE_NAME` bump (v98 -> v99) -- caught two
+  missed bumps from earlier this same session (app.js's masonry fix,
+  manifest.webmanifest's name change) alongside this slice's own
+  `command_palette.js` change, per that file's own repeatedly-reinforced
+  "bump on every static-asset change expected to be visible immediately"
+  convention. `test_pwa_shell.py`'s hardcoded version string updated to
+  match.
+
+  **Visually verified**: created a note via the still-live `/notes/new`
+  form, confirmed it renders on `/notes`, then confirmed
+  `GET /api/search?q=<its content>` returns `[]`; typing `!n Some new
+  note text` into Ctrl-K shows ordinary "Create task/event: ..."
+  suggestions, not a broken dead end.
+
+  **Tests**: `test_quick_capture_parser.py`'s `TestNotes` rewritten for
+  the new "marker not recognized" behavior + new `TestParseNoteDirectly`
+  (proves `parse_note` still works standalone); `test_quick_capture.py`'s
+  `TestCreateEndpointNote` rewritten the same way; `test_search_api.py`
+  gained a `_seed_note` helper and five new tests. Full suite:
+  **2,381 passed, 0 failed** (2,374 prior + 7 net new).
+
+  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 6 --
+  the card-model removal (mechanical CSS pass).
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-

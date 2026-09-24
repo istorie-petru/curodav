@@ -285,5 +285,10 @@ class TestShellCacheVersion:
         # swap's width-rule retargeting, and this session's Kanban
         # responsive-column rework (`.kanban-board-wrap`/`@container`) --
         # see sw.js's own comment.
+        # v99 (2026-09-24): three catch-up bumps bundled -- app.js's
+        # masonry layout() fix and manifest.webmanifest's name/short_name
+        # change ("Command Center" -> "Curodav"), both missed earlier the
+        # same session, plus this slice's own command_palette.js change
+        # (CAPTURE_MARKER_RE dropping `!n`) -- see sw.js's own comment.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v98"' in script
+        assert 'CACHE_NAME = "cc-shell-v99"' in script

@@ -66,8 +66,10 @@ that fits its remaining budget.
 4. ~~**App title + PWA icon**~~ (item 8) — **shipped 2026-09-24**: title
    suffix convention resolved, PWA icon turned out to already exist —
    just needed its manifest link re-enabled.
-5. **Notes removal/hiding decision** (item 13) — needs one clarifying
-   question (remove entirely vs. feature-flag/hide) before any code.
+5. ~~**Notes removal/hiding decision**~~ (item 13) — **shipped 2026-09-24**:
+   Peter chose hide over remove; every HTML-visible surface (quick-capture
+   marker, palette preview, global search, page navigation) turned off,
+   data/routes untouched.
 6. **Card model removal** (item 4) — mechanical CSS pass, well-scoped once
    swept.
 7. **Icon set swap to MaterialDesign-SVG** (item 5) — large diff, low
@@ -397,14 +399,73 @@ guaranteed-legible active/foreground text color, one consistent background
 audit of `style.css`'s current `:root` custom properties (how many font
 sizes/weights/colors actually exist today) before scoping the cut.
 
-## 13. Notes: remove or hide from the app's HTML
+## 13. ~~Notes: remove or hide from the app's HTML~~ — SHIPPED 2026-09-24
 
 "REMOVE THE NOTES (OR HIDE THEM) FROM THE APP'S HTML" — genuinely
-ambiguous which. Full removal drops the Quick Capture `!n` marker
-(`quick_capture.py`) and `features/notes.md`'s whole scope; hiding could be
-a nav/feature-flag change only, with data and routes intact underneath.
-**Ask before implementing** — don't guess between these, the blast radius
-differs enormously (data-destructive vs. cosmetic).
+ambiguous which, so asked before implementing rather than guessing between
+a data-destructive removal and a cosmetic hide. Peter chose hide: existing
+notes, `/notes` routes, and `db.py`'s note functions all stay intact and
+fully reachable directly; only the creation-by-marker and
+search-visibility surfaces turn off.
+
+Audited every HTML-visible surface first (Notes had no sidebar nav entry
+to begin with):
+
+1. Quick Capture's `!n` marker (`src/quick_capture.py`) — creates a note
+   from the command palette's single-field input.
+2. The palette's own live capture-preview gate
+   (`static/command_palette.js`'s `CAPTURE_MARKER_RE`) — shows a "Note:
+   ..." preview row as you type `!n`, before you even submit.
+3. Global search (`routers/search.py`'s `db.search_entities` call, both
+   `/api/search` and `/search`) — notes were a fourth searchable type
+   alongside tasks/events/contacts.
+4. `_STATIC_PAGES`' synthetic "Notes" destination — the command palette's
+   page-navigation feature (2026-08-15) listed `/notes` as a jump target
+   even with no query.
+
+Landed:
+- `quick_capture.py`: `"n"` dropped from `MARKER_TYPES`/`_MARKER_RE`.
+  `parse_note` (the pure per-type parser) is untouched and still directly
+  callable/testable — only the marker-driven entry point (`_find_marker`)
+  can no longer reach it. Typing `!n ...` now gets the same "no entity
+  marker found" error any unrecognized marker gets.
+- `command_palette.js`: `"n"` dropped from `CAPTURE_MARKER_RE` — the same
+  input now falls through to a plain search/create-suggestion state
+  instead of a capture preview that would 400 on submit. Verified live:
+  typing `!n Some new note text` in Ctrl-K shows ordinary "Create task:
+  ..." / "Create event: ..." suggestions, no broken dead end.
+- `routers/search.py`: new `_GLOBAL_SEARCH_TYPES = ["task", "event",
+  "contact"]`, used as the default for both `/api/search` (when the
+  caller passes no explicit `types`) and `/search` — `db.search_entities`
+  itself is untouched, so an explicit `types=["note"]` request still
+  finds notes (verified with a direct test). `_STATIC_PAGES` lost its
+  "Notes" entry.
+
+Verified live (same Playwright pathway as earlier slices): created a note
+via the still-live `/notes/new` form, confirmed it renders on `/notes`,
+then confirmed `GET /api/search?q=<its content>` returns `[]`. New tests:
+`test_quick_capture_parser.py`'s `TestNotes` rewritten for the new
+"marker not recognized" behavior plus a new `TestParseNoteDirectly`
+(bypasses the marker gate, proves `parse_note` itself still works —
+re-enabling later is a two-constant revert, not a rebuild);
+`test_quick_capture.py`'s `TestCreateEndpointNote` rewritten the same way;
+`test_search_api.py` gained a `_seed_note` helper and five new tests
+(excluded by default, still reachable explicitly, `/search` page too,
+`_STATIC_PAGES` no longer lists "Notes"). Full suite: 2,381 passed
+(2,374 prior + 7 net new).
+
+Also bundled into this slice: `sw.js`'s `CACHE_NAME` bump (v98 -> v99) —
+caught two earlier missed bumps from this same session (app.js's masonry
+fix, manifest.webmanifest's name change) alongside this slice's own
+`command_palette.js` change, per this file's own repeatedly-reinforced
+"bump on every static-asset change expected to be visible immediately"
+convention (see `sw.js`'s v97/v98 comments — the same lesson keeps
+recurring). `test_pwa_shell.py`'s version-string assertion updated to
+match.
+
+`quick-capture.md` (the reference spec doc) got a status update at its
+top rather than being rewritten past-tense, matching how it already
+documents the gap between the v1 spec and what shipped.
 
 ## 14. Habits/routines as a distinct frontend data model
 

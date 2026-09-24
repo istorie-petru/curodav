@@ -2,7 +2,11 @@
 (test_quick_capture_parser.py) don't cover: the HTTP layer
 (routers/quick_capture.py's preview + create), label fuzzy-matching/alias
 persistence (db.resolve_capture_label), and the Notes entity CRUD
-(routers/notes.py) Quick Capture's `!n` creates."""
+(routers/notes.py). `!n` no longer creates notes as of 2026-09-24 (direct
+request, "remove or hide Notes from the app's HTML" -- hide, not delete;
+see TestCreateEndpointNote) -- the CRUD/search surface stays intact and
+covered here regardless, reachable directly (db.upsert_note et al.) or by
+a future re-enable of the marker."""
 
 from __future__ import annotations
 
@@ -198,18 +202,26 @@ class TestCreateEndpointContact:
 
 
 class TestCreateEndpointNote:
-    def test_creates_a_note(self, conn):
+    """2026-09-24 direct request ("remove or hide Notes from the app's
+    HTML", hide not delete): `!n` no longer creates anything through this
+    endpoint -- quick_capture.py's MARKER_TYPES/_MARKER_RE no longer
+    recognize it, so this is just the ordinary "no entity marker found"
+    400 every other unrecognized marker already gets (test_no_marker_is_a_
+    400 above). The underlying note CRUD/search machinery is untouched --
+    see TestNotesCrud/TestNotesRouter below and
+    test_a_note_created_directly_is_still_findable_via_search here, which
+    create the note through db.upsert_note directly instead of `!n`."""
+
+    def test_n_marker_no_longer_creates_anything(self, conn):
         resp = asyncio.run(
             qcr.create(_post_json_request("/api/quick-capture", {"text": "!n Important points #university"}), conn=conn)
         )
-        data = _json.loads(resp.body.decode())
-        assert data["type"] == "note"
-        note = db.get_note(conn, data["uid"])
-        assert note["content"] == "Important points"
-        assert note["tags"] == ["university"]
+        assert resp.status_code == 400
+        assert db.list_notes(conn) == []
 
-    def test_note_is_then_findable_via_search(self, conn):
-        asyncio.run(qcr.create(_post_json_request("/api/quick-capture", {"text": "!n Findable note content"}), conn=conn))
+    def test_a_note_created_directly_is_still_findable_via_search(self, conn):
+        now = datetime.now(timezone.utc).isoformat()
+        db.upsert_note(conn, {"uid": "n1", "content": "Findable note content", "tags": [], "created_at": now, "updated_at": now})
         results = db.search_entities(conn, q="Findable")
         assert len(results) == 1
         assert results[0]["type"] == "note"

@@ -1,5 +1,5 @@
 """Quick Capture parser (plans/quick-capture.md) -- a single-field input
-method for creating a task/event/contact/note without opening a dedicated
+method for creating a task/event/contact without opening a dedicated
 form. Pure functions only: nothing here touches the database (that's
 routers/quick_capture.py's job, which also runs label resolution via
 db.resolve_capture_label -- deliberately not called from here, so this
@@ -7,10 +7,10 @@ module stays trivially unit-testable with no `conn` fixture at all).
 
 Grammar, per the design doc:
 
-  - An entity marker -- `!t` (task), `!e` (event), `!c` (contact), `!n`
-    (note) -- selects the entity type. May appear anywhere in the input;
-    the first one found wins if more than one marker-looking token is
-    present (an edge case the spec doesn't cover).
+  - An entity marker -- `!t` (task), `!e` (event), `!c` (contact) --
+    selects the entity type. May appear anywhere in the input; the first
+    one found wins if more than one marker-looking token is present (an
+    edge case the spec doesn't cover).
   - `#label` tokens (anywhere) are labels, extracted independently of
     type.
   - Dates are `D/M/YYYY` (unambiguous) or `D/M` (year inferred: the next
@@ -22,6 +22,16 @@ Grammar, per the design doc:
     in the design doc) -- this parser does not attempt to recognize a
     marker/date/label glued to adjacent text with no space.
 
+`!n` (note) is a valid marker in the design doc and `parse_note` below
+still implements it, but it's deliberately NOT wired into `MARKER_TYPES`/
+`_MARKER_RE` as of 2026-09-24 (direct request, "remove or hide Notes from
+the app's HTML" -- Peter chose hide, not delete: existing notes/routes/db
+functions stay intact, only the creation surfaces are turned off). Typing
+`!n ...` now just falls through to "no entity marker found" like any other
+unrecognized token, same as static/command_palette.js's matching
+`CAPTURE_MARKER_RE` change. Re-enabling later is a one-line revert of
+those two constants below, not a rebuild.
+
 See parse_task/parse_event/parse_contact/parse_note below for the
 per-type rules; `parse()` is the single dispatch entry point
 routers/quick_capture.py calls."""
@@ -32,9 +42,9 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
-MARKER_TYPES = {"t": "task", "e": "event", "c": "contact", "n": "note"}
+MARKER_TYPES = {"t": "task", "e": "event", "c": "contact"}
 
-_MARKER_RE = re.compile(r"^!([tecn])$")
+_MARKER_RE = re.compile(r"^!([tec])$")
 _LABEL_RE = re.compile(r"^#([^\s#]+)$")
 _DATE_FULL_RE = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{4})$")
 _DATE_SHORT_RE = re.compile(r"^(\d{1,2})/(\d{1,2})$")
@@ -79,7 +89,7 @@ def _find_marker(tokens: list[str]) -> tuple[int, str]:
         m = _MARKER_RE.match(tok)
         if m:
             return i, MARKER_TYPES[m.group(1)]
-    raise QuickCaptureError("No entity marker (!t task / !e event / !c contact / !n note) found.")
+    raise QuickCaptureError("No entity marker (!t task / !e event / !c contact) found.")
 
 
 def _resolve_date(day: int, month: int, year: int | None, today: date) -> date:

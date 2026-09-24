@@ -148,21 +148,50 @@ class TestContacts:
 
 
 class TestNotes:
+    """2026-09-24 direct request ("remove or hide Notes from the app's
+    HTML", hide chosen over delete): `!n` is no longer a recognized
+    marker in MARKER_TYPES/_MARKER_RE, so `qc.parse("!n ...")` now fails
+    the same way any unrecognized marker does -- these three assertions
+    replace the old spec-compliance tests that expected `!n` to produce a
+    note. `parse_note` itself is untouched (still a correct, directly
+    testable pure function below) so re-enabling the marker later is a
+    one-line revert, not a rebuild."""
+
+    def test_n_marker_is_no_longer_recognized(self):
+        with pytest.raises(qc.QuickCaptureError):
+            qc.parse("!n Important points from the medieval history lecture #university", TODAY)
+
+    def test_n_marker_not_recognized_even_with_other_content(self):
+        with pytest.raises(qc.QuickCaptureError):
+            qc.parse("!n Reading list for 15/09/2026 #history", TODAY)
+
+    def test_note_not_in_marker_types(self):
+        assert "n" not in qc.MARKER_TYPES
+        assert "note" not in qc.MARKER_TYPES.values()
+
+
+class TestParseNoteDirectly:
+    """parse_note is still a correct pure function -- these bypass the
+    marker gate (qc.parse) the same way routers/quick_capture.py never
+    could anyway now, calling it directly the way a future re-enable
+    would restore access to it."""
+
     def test_spec_example(self):
-        r = qc.parse("!n Important points from the medieval history lecture #university", TODAY)
+        r = qc.parse_note("Important points from the medieval history lecture #university".split(), TODAY)
         assert r.type == "note"
         assert r.content == "Important points from the medieval history lecture"
         assert r.labels == ["university"]
 
     def test_dates_are_left_in_the_content_not_extracted(self):
-        r = qc.parse("!n Reading list for 15/09/2026 #history", TODAY)
+        r = qc.parse_note("Reading list for 15/09/2026 #history".split(), TODAY)
         assert r.type == "note"
         assert "15/09/2026" in r.content
         assert r.labels == ["history"]
 
-    def test_empty_content_raises(self):
-        with pytest.raises(qc.QuickCaptureError):
-            qc.parse("!n #onlyalabel", TODAY)
+    def test_empty_content(self):
+        r = qc.parse_note("#onlyalabel".split(), TODAY)
+        assert r.content == ""
+        assert r.labels == ["onlyalabel"]
 
 
 class TestApproximateDateHandling:

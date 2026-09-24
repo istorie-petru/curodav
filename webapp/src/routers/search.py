@@ -49,9 +49,18 @@ _STATIC_PAGES = [
     {"title": "Calendar", "url": "/calendar", "subtitle": ""},
     {"title": "Tasks", "url": "/tasks", "subtitle": ""},
     {"title": "Contacts", "url": "/contacts", "subtitle": ""},
-    {"title": "Notes", "url": "/notes", "subtitle": ""},
     {"title": "Settings", "url": "/settings", "subtitle": ""},
 ]
+
+# 2026-09-24 direct request ("remove or hide Notes from the app's HTML",
+# hide not delete): global search (both /api/search's default and /search)
+# stops surfacing note results and the "Notes" static-page destination
+# above -- but a caller that explicitly asks for types=["note"] (there is
+# none today; the command palette's own filter pills never offered one,
+# see static/command_palette.js's typeFilter comment) still gets them,
+# and db.search_entities itself is untouched, so the data/route stays
+# fully reachable, just not offered by default.
+_GLOBAL_SEARCH_TYPES = ["task", "event", "contact"]
 
 
 def _matching_pages(conn, q: str, limit: int = 5) -> list[dict]:
@@ -131,7 +140,11 @@ def api_search(
 ):
     context_title: str | None = None
     exclude_uids: dict[str, set[str]] | None = None
-    effective_types = types or None
+    # Global mode's default (the caller passed no explicit `types`) excludes
+    # notes -- `_GLOBAL_SEARCH_TYPES`'s own comment above. An explicit
+    # `?types=note` still reaches db.search_entities unfiltered; only the
+    # no-filter default changed.
+    effective_types = types or _GLOBAL_SEARCH_TYPES
     effective_labels = labels or None
 
     if for_task and for_event:
@@ -248,8 +261,10 @@ def search_page(request: Request, q: str = "", conn=Depends(get_db)):
     # Server-rendered first page (works with no JS, bookmarkable); once
     # loaded, command_palette.js takes over live filtering against
     # /api/search the same way Ctrl-K does, so this page and the overlay
-    # share one client-side implementation instead of two.
-    results = db.search_entities(conn, q=q or None, limit=40) if q else []
+    # share one client-side implementation instead of two. `types=` matches
+    # /api/search's own global-mode default (_GLOBAL_SEARCH_TYPES) -- notes
+    # excluded, 2026-09-24.
+    results = db.search_entities(conn, q=q or None, types=_GLOBAL_SEARCH_TYPES, limit=40) if q else []
     return templates.TemplateResponse(
         "search.html",
         {

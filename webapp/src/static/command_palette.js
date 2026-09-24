@@ -45,9 +45,9 @@
 //     (`window.location.href`), not `CCModal.open`, and it carries no
 //     action buttons (buildActions skips `type === "page"` entirely).
 //   - Quick Capture (plans/quick-capture.md): typing a standalone `!t`/
-//     `!e`/`!c`/`!n` token anywhere in the global-mode input (see
-//     CAPTURE_MARKER_RE below) switches the results panel from search
-//     results to a single live-parsed preview row, fed by
+//     `!e`/`!c` token (`!n` note removed 2026-09-24, see CAPTURE_MARKER_RE's
+//     own comment) anywhere in the global-mode input switches the results
+//     panel from search results to a single live-parsed preview row, fed by
 //     `GET /api/quick-capture/preview` instead of `/api/search` for as
 //     long as a marker is present. Enter posts the raw text to
 //     `POST /api/quick-capture`, which does the actual parse + create.
@@ -144,7 +144,12 @@
   // verbatim to POST /api/quick-capture on Enter so the server parses the
   // same string the preview was computed from.
   const captureState = { active: false, text: "" };
-  const CAPTURE_MARKER_RE = /(^|\s)!(t|e|c|n)(\s|$)/;
+  // "n" (note) dropped 2026-09-24 (direct request, "remove or hide Notes
+  // from the app's HTML" -- hide, not delete; src/quick_capture.py's
+  // MARKER_TYPES/_MARKER_RE made the matching server-side change). Typing
+  // "!n ..." now just falls through to a plain search query instead of
+  // triggering a capture preview that would 400 on submit.
+  const CAPTURE_MARKER_RE = /(^|\s)!(t|e|c)(\s|$)/;
   const CAPTURE_TYPE_LABEL = { task: "Task", event: "Event", contact: "Contact", note: "Note" };
   const CAPTURE_ICON = { task: "check-square", event: "calendar", contact: "user", note: "file-text" };
 
@@ -738,7 +743,7 @@
     const raw = input.value;
     const q = raw.trim();
     debounceTimer = window.setTimeout(function () {
-      // Quick Capture (plans/quick-capture.md) -- a standalone !t/!e/!c/!n
+      // Quick Capture (plans/quick-capture.md) -- a standalone !t/!e/!c
       // token anywhere in global mode's input switches from search to a
       // live capture preview instead. Checked fresh on every keystroke, so
       // editing the marker away falls straight back to runQuery's normal

@@ -476,7 +476,17 @@
 // change) is in SHELL_ASSETS below, but style.css is, so both needed the
 // bump regardless -- same v88/v97 reasoning, apparently still not
 // sticking as a habit yet.
-const CACHE_NAME = "cc-shell-v98";
+// v99 (2026-09-24, same lesson yet again): three catch-up bundled changes,
+// same session -- (1) a missed bump from earlier that session: app.js's
+// masonry `layout()` fix (clearing a card's stale forced height before
+// remeasuring, so it can grow/shrink again after the first pass); (2)
+// another missed bump, same session: manifest.webmanifest's name/
+// short_name changed "Command Center" -> "Curodav"; (3) this slice's own
+// change, static/command_palette.js's `CAPTURE_MARKER_RE` dropping `!n`
+// (Notes quick-capture hidden, direct request) -- all three files are in
+// SHELL_ASSETS below. Same reminder as v97's own comment: check a changed
+// static asset's SHELL_ASSETS membership every time, don't assume.
+const CACHE_NAME = "cc-shell-v99";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

@@ -10,6 +10,18 @@ narrows the spec: label resolution's "suggested for correction" tier
 separate interactive review step yet — an automatic resolution doubles as
 the accepted correction (`db.resolve_capture_label`'s own docstring).
 
+**2026-09-24 update:** the `!n` (note) marker below is **hidden, not
+removed** — direct request ("remove or hide Notes from the app's HTML"),
+Peter chose hide. `src/quick_capture.py`'s `MARKER_TYPES`/`_MARKER_RE` and
+`static/command_palette.js`'s `CAPTURE_MARKER_RE` no longer recognize
+`!n`; `parse_note` (the pure per-type parser below) and the Notes entity's
+CRUD/routes/data are all untouched and still fully reachable directly —
+only the creation-by-marker and global-search-visibility surfaces are off.
+The § Notes section below still describes the grammar as active spec text
+(not rewritten past-tense) since re-enabling it is a two-line revert, not
+a rebuild — see `plans/ui-cleanup-2026-09.md` item 13 for the decision
+record.
+
 ### Introduction
 
 Quick Capture is a single-field input method for creating entities without opening a dedicated creation form. Users enter a line of text containing the entity's content and any structured information they want to provide. The input is parsed by recognizing explicit entity markers, dates, times, labels, telephone numbers, and email addresses. The syntax is language-agnostic and relies on explicit structural notation rather than words whose meaning changes between languages.
