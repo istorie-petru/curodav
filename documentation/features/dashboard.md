@@ -221,3 +221,8 @@ hand-roll an empty-state, section label, status pill, or fixed-width cell.
 `/dashboard/customize`, `/dashboard/reset`, `/dashboard/widgets` (add),
 `/dashboard/widgets/preview`, and per-widget `/{uid}/edit`, `/{uid}/delete`,
 `/{uid}/move`, `/{uid}/reorder`, `/{uid}/stack-onto`, `/{uid}/unstack`.
+
+**Default Home layout (2026-09-24, plans/ui-cleanup-2026-09.md item 15):**
+Today agenda (quarter, overdue/tasks/events) | At a glance + Upcoming stack
+(half) | Habit Check-in (quarter). Seeded once per install; "Reset layout"
+re-applies it. Space/Project pages keep the half/half Today + stack pair.

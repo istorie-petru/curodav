@@ -270,7 +270,9 @@ class TestDefaultSeedIncludesNewWidgets:
         assert top_level[0]["type"] == "agenda"
         assert top_level[0]["title"] == "Today"
         assert top_level[0]["config"]["range"] == "today"
-        assert "show" not in top_level[0]["config"]  # relies on AGENDA_DEFAULT_SHOW, not a stored override
+        # Item 15 (2026-09-24): Home's Today leaves habits out -- the Habit
+        # Check-in widget sits right beside it.
+        assert top_level[0]["config"]["show"] == ["overdue", "tasks", "events"]
         # Habits H7 (2026-09-24) added "habits" to the default Show list.
         assert dashboard_router.AGENDA_DEFAULT_SHOW == ["overdue", "tasks", "events", "habits"]
 
@@ -340,13 +342,15 @@ def _canonical_default_titles(widgets):
 
 # 2026-09-13: stack trimmed from 3 members to 2 (dropped a duplicate
 # today-range Agenda) -- see dashboard_router._DEFAULT_STACK_MEMBER_TYPES.
-_DEFAULT_LAYOUT_TYPE_ORDER = ["agenda", "stack", "at_a_glance", "agenda"]
+# 2026-09-24 (plans/ui-cleanup-2026-09.md item 15): Home's default grew a
+# trailing quarter-width Habit Check-in (25/50/25 row).
+_DEFAULT_LAYOUT_TYPE_ORDER = ["agenda", "stack", "at_a_glance", "agenda", "habit_checkin"]
 # Same change also gave the seeded widgets explicit titles instead of
 # leaving them on the generic spec-label fallback -- position-ordered
 # same as _DEFAULT_LAYOUT_TYPE_ORDER above (agenda/stack/at_a_glance/
 # agenda), with the "stack" container itself keeping title=None (it has
 # no spec label of its own to fall back to and none was requested).
-_DEFAULT_LAYOUT_TITLES = ["Today", None, "At a glance", "Upcoming"]
+_DEFAULT_LAYOUT_TITLES = ["Today", None, "At a glance", "Upcoming", "Habits"]
 
 
 class TestResetToDefault:

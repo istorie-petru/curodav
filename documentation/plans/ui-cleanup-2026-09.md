@@ -115,8 +115,9 @@ that fits its remaining budget.
     `habit_view.py`) + H1-H8 against the Streak reference (schedule-aware
     streaks, Habits page, detail + notes, widget, avoid/units, pause,
     agenda/day view, insights). See item 14's section.
-16. **Default dashboard layout (25/50/25)** (item 17) — **unblocked**: the
-    Habit Check-in widget is now the Habits page's row list (H4).
+16. ~~**Default dashboard layout (25/50/25)**~~ (item 17) — **shipped
+    2026-09-24** (Home seed; "Reset layout" applies it to an existing
+    dashboard).
 17. **Web Push notifications** (item 7) — mostly independent infra, large;
     fine to pick up anytime once someone's ready for a multi-session push
     (subscription flow, VAPID keys, a scheduler for wall-clock-timed
@@ -1099,7 +1100,19 @@ week" habits matter to you, or are RRULE weekdays enough? (2) avoid
 habits -- wanted? (3) should the Habits page replace the Tasks-table
 group outright (plan assumes yes, per your earlier answer)?
 
-## 15. Default dashboard layout
+## 15. ~~Default dashboard layout~~ — SHIPPED 2026-09-24
+
+**Shipped.** Home's default seed (`_seed_agenda_stack_layout`, Home only)
+is now one 12-column row: **Today** agenda at quarter width (Show =
+overdue/tasks/events -- habits left out since the Habit Check-in widget
+sits beside it), the **At a glance + Upcoming** stack at half, and a
+quarter-width **Habit Check-in** ("Habits"). Label (Space/Project) pages
+keep their half/half pair. The seed is one-time per install, so an
+existing dashboard doesn't change by itself -- **"Reset layout"** (edit
+mode, or Settings > Data & Maintenance) re-seeds to it. Verified live at
+1440/1024/390px: three columns side by side at 25/50/25 on desktop,
+stacked on a phone, no overflow.
+
 
 New default widget layout for Home:
 - 25% Today Agenda (tasks + events)

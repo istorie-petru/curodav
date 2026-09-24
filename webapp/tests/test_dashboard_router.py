@@ -69,8 +69,10 @@ class TestDefaultWidgetSeeding:
         dashboard_router._ensure_default_widgets(conn)
         widgets = db.list_dashboard_widgets(conn)
         top_level = sorted((w for w in widgets if not w.get("group_uid")), key=lambda w: w["position"])
-        assert [w["type"] for w in top_level] == ["agenda", "stack"]
+        # Item 15 (2026-09-24): + a trailing Habit Check-in (25/50/25).
+        assert [w["type"] for w in top_level] == ["agenda", "stack", "habit_checkin"]
         assert top_level[0]["title"] == "Today"
+        assert top_level[2]["title"] == "Habits"
 
         stack = top_level[1]
         members = sorted((w for w in widgets if w.get("group_uid") == stack["uid"]), key=lambda w: w["position"])
@@ -96,14 +98,24 @@ class TestDefaultWidgetSeeding:
         assert {e["uid"] for e in data["events"]} == {"e1"}
 
     def test_default_seed_sets_width_on_paired_widgets(self, conn):
-        # The main Agenda widget and the stack share the width split
-        # (half/half) so the side-by-side layout is correct out of the box.
+        # Item 15 (2026-09-24): Home is a 25/50/25 row -- Today, the stack,
+        # Habit Check-in -- filling the 12-column grid exactly.
         dashboard_router._ensure_default_widgets(conn)
         widgets = db.list_dashboard_widgets(conn)
         main_agenda = next(w for w in widgets if w["type"] == "agenda" and not w.get("group_uid"))
         stack = next(w for w in widgets if w["type"] == "stack")
+        habits = next(w for w in widgets if w["type"] == "habit_checkin")
+        assert (main_agenda["config"]["width"], stack["config"]["width"], habits["config"]["width"]) == ("quarter", "half", "quarter")
+        spans = [dashboard_router.WIDGET_WIDTHS[w["config"]["width"]]["span"] for w in (main_agenda, stack, habits)]
+        assert sum(spans) == 12
+
+    def test_label_page_seed_keeps_half_half_pair(self, conn):
+        db.upsert_label_config(conn, {"name": "CS101", "created_at": "2026-09-24"})
+        dashboard_router._ensure_default_label_widgets(conn, "CS101")
+        widgets = db.list_dashboard_widgets(conn, label_name="CS101")
+        assert "habit_checkin" not in {w["type"] for w in widgets}
+        main_agenda = next(w for w in widgets if w["type"] == "agenda" and not w.get("group_uid"))
         assert main_agenda["config"]["width"] == "half"
-        assert stack["config"]["width"] == "half"
 
     def test_default_seed_no_longer_includes_removed_types(self, conn):
         # calendar_agenda/weekly_overview/mini_month_calendar are no
@@ -115,7 +127,7 @@ class TestDefaultWidgetSeeding:
     def test_seeds_default_widgets_on_first_visit_only(self, conn):
         # First call seeds the defaults and sets the app_meta flag.
         dashboard_router._ensure_default_widgets(conn)
-        assert len(db.list_dashboard_widgets(conn)) == 4  # today_agenda + stack + 2 members
+        assert len(db.list_dashboard_widgets(conn)) == 5  # today_agenda + stack + 2 members + habit_checkin
         assert db.get_app_meta(conn, dashboard_router._HOME_SEEDED_KEY) == "1"
 
     def test_does_not_reseed_after_all_widgets_deleted(self, conn):
@@ -135,7 +147,7 @@ class TestDefaultWidgetSeeding:
         first_count = len(db.list_dashboard_widgets(conn))
         dashboard_router._ensure_default_widgets(conn)
         second_count = len(db.list_dashboard_widgets(conn))
-        assert first_count == 4
+        assert first_count == 5
         assert second_count == first_count  # no duplicate seeding
 
 
@@ -1036,10 +1048,9 @@ class TestDashboardRoute:
         req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
         resp = dashboard_router.dashboard_view(req, conn=conn)
         assert resp.status_code == 200
-        # Top-level layout is now Today's Agenda + one stack card (the
-        # stack's 3 members render nested inside it, not as their own
-        # top-level entries).
-        assert len(resp.context["widget_contexts"]) == 2
+        # Top-level layout is Today's Agenda + one stack card (its members
+        # render nested inside it) + Habit Check-in (item 15, 2026-09-24).
+        assert len(resp.context["widget_contexts"]) == 3
 
     def test_renders_in_edit_mode_with_the_add_widget_form(self, conn):
         # Smoke test for the Add-widget form/Filters panel/masonry grid
@@ -1070,9 +1081,8 @@ class TestDashboardRoute:
         assert "data-height-key" not in body
         # Every widget's .widget-content opens with the exact same bare
         # markup -- no per-widget/per-type variation left at all (today_agenda
-        # + the stack's 2 members == 3 occurrences; was 4 before 2026-09-13's
-        # stack trim from 3 members to 2).
-        assert body.count('<div class="widget-content">') == 3
+        # + the stack's 2 members + Habit Check-in (item 15) == 4).
+        assert body.count('<div class="widget-content">') == 4
 
 
 class TestSpaceWidgets:

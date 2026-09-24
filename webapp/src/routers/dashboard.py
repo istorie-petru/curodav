@@ -1498,6 +1498,13 @@ _DEFAULT_STACK_MEMBER_TYPES: list[tuple[str, dict, str]] = [
     ("agenda", {"range": "all_upcoming", "show": ["events", "tasks"]}, "Upcoming"),
 ]
 
+# plans/ui-cleanup-2026-09.md item 15 (2026-09-24): Home's default is a
+# 25/50/25 row -- Today (tasks + events, no habits: the Habit Check-in
+# widget sits right beside it), the At a glance + Upcoming stack, and
+# Habit Check-in. Label (Space/Project) pages keep the half/half pair.
+_HOME_TODAY_AGENDA_CONFIG: dict = {"width": "quarter", "range": "today", "show": ["overdue", "tasks", "events"]}
+_HOME_HABIT_CHECKIN_CONFIG: dict = {"width": "quarter"}
+
 _MINI_CALENDAR_BACKFILL_KEY = "dashboard_mini_calendar_backfilled_v1"
 _HOME_SEEDED_KEY = "dashboard_home_seeded_v1"
 
@@ -1518,8 +1525,13 @@ def _seed_agenda_stack_layout(conn, label_name: str | None, now: str) -> None:
     column (None means Home -- see db.upsert_dashboard_widget), and each
     *widget's own config* additionally gets `label_name` set (label pages
     only) so its data query is filtered to this label, same as every
-    other label-page widget (see _effective_tags_filter)."""
-    agenda_config = dict(_DEFAULT_TODAY_AGENDA_CONFIG)
+    other label-page widget (see _effective_tags_filter).
+
+    Home only (2026-09-24, plans/ui-cleanup-2026-09.md item 15): a 25/50/25
+    row -- Today at quarter width without the habits section, the stack at
+    half, and a quarter-width Habit Check-in after it."""
+    home = label_name is None
+    agenda_config = dict(_HOME_TODAY_AGENDA_CONFIG if home else _DEFAULT_TODAY_AGENDA_CONFIG)
     if label_name:
         agenda_config["label_name"] = label_name
     db.upsert_dashboard_widget(
@@ -1546,6 +1558,14 @@ def _seed_agenda_stack_layout(conn, label_name: str | None, now: str) -> None:
             {
                 "uid": str(uuid.uuid4()), "type": wtype, "title": title, "config": member_config,
                 "position": float(i), "created_at": now, "group_uid": stack_uid, "label_name": label_name,
+            },
+        )
+    if home:
+        db.upsert_dashboard_widget(
+            conn,
+            {
+                "uid": str(uuid.uuid4()), "type": "habit_checkin", "title": "Habits",
+                "config": dict(_HOME_HABIT_CHECKIN_CONFIG), "position": 2.0, "created_at": now, "label_name": None,
             },
         )
 

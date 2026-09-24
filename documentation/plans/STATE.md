@@ -747,11 +747,18 @@ session start.
   proportional. New `test_habit_insights.py` (6). Full suite **2,397
   passed**. `sw.js` v115 -> v116.
 
-  **Next slice**: item 15 -- default Dashboard layout (25% Today Agenda /
-  50% At a glance + Upcoming / 25% Habit Check-in), now unblocked. Then
-  Web Push (item 7, multi-session; habit reminders ride on it), labels-
-  as-modules (item 4 -- re-confirm scope with Peter first), narrow banners
-  (item 2, after 4). Others unchanged: Web Push
+  **Item 15 shipped -- default Home layout 25/50/25.** Today (quarter, no
+  habits section) | At a glance + Upcoming stack (half) | Habit Check-in
+  (quarter); label pages unchanged. One-time seed, so **Peter's existing
+  dashboard only changes via "Reset layout"** (deletes customizations --
+  his call). 9 seed-shape tests updated on purpose + 1 new (label pages
+  keep half/half). Verified live at 1440/1024/390px. Full suite **2,398
+  passed**.
+
+  **Next slice**: Web Push (item 7, multi-session; habit reminders ride on
+  it -- `habit_schedule.is_due_on` is ready for "is it due today"). Then
+  labels-as-modules (item 4 -- re-confirm scope with Peter first, do not
+  start without it) and narrow banners (item 2, after 4). Others unchanged: Web Push
   (item 7), labels-as-modules (item 4 -- re-confirm scope with Peter
   first), narrow banners (item 2).
 
