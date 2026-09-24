@@ -159,8 +159,28 @@
   --cal-accent-pink:var(--cal-bg-pink);--cal-accent-brown:var(--cal-bg-brown);--cal-accent-gray:var(--cal-bg-gray);--cal-accent-slate:var(--cal-bg-slate);
 
   --font-system:"Noto Sans","Segoe UI",Cantarell,Ubuntu,Roboto,"Helvetica Neue",Arial,sans-serif;
-  --text-xs:13px;--text-sm:14px;--text-base:15px;--text-md:15.5px;
-  --text-lg:17px;--text-xl:18px;--text-2xl:21px;--text-3xl:26px;
+  /* Type-scale consolidation (2026-09-24): was 8 sizes (xs 13/sm 14/base
+     15/md 15.5/lg 17/xl 18/2xl 21/3xl 26, 3xl unused) -- too many
+     near-duplicate steps for a system this small. Folded to 4: xs merged
+     into sm (both were "small label" text, 13px kept since it's the more
+     common of the two call sites), md merged into base (15.5 was barely
+     distinguishable from 15), and 2xl merged DOWN into xl at 18px rather
+     than xl merged up to 21 -- xl is used for `.page-header-narrow-title`,
+     a fixed `height:48px; overflow:hidden` bar on nearly every page, and
+     21px risked clipping there. 2xl's own sites (modal/detail headings,
+     the page-banner title, the auth brand) all sit in auto-growing
+     containers, so absorbing them into 18px cost no clipping safety. */
+  --text-sm:13px;--text-base:15px;--text-lg:17px;--text-xl:18px;
+
+  /* Font-weight tokenization (2026-09-24, same pass as the type-scale
+     consolidation above): four raw weights were in use (400/500/600/700)
+     across ~114 call sites, with 500/600/700 all doing the same job --
+     "heavier than body text" -- at slightly different values depending on
+     which pass wrote that rule, not any deliberate 3-step hierarchy. Kept
+     400 as the true second option (body/placeholder text that must read
+     as unemphasized) and folded 500/600/700 into one bold step at 600,
+     the most common of the three. */
+  --font-weight-regular:400;--font-weight-bold:600;
 
   --radius-control:12px;--radius-sm:8px;--radius-md:12px;--radius-lg:16px;--radius-pill:999px;
 
@@ -304,7 +324,7 @@ body{
 }
 a{color:var(--fg-primary); text-decoration:none;}
 a:hover{text-decoration:underline;}
-h1{font-size:var(--text-2xl); margin:0 0 14px;}
+h1{font-size:var(--text-xl); margin:0 0 14px;}
 h2{font-size:var(--text-lg); margin:20px 0 8px;}
 
 /* Keyboard-focus ring, global. Nothing in this file styled :focus-visible
@@ -344,7 +364,7 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible{
 .skip-link{
   position:absolute; top:-40px; left:var(--space-3); z-index:var(--z-top);
   background:var(--accent); color:var(--fg-on-accent); padding:8px 16px;
-  border-radius:var(--radius-sm); text-decoration:none; font-weight:600;
+  border-radius:var(--radius-sm); text-decoration:none; font-weight:var(--font-weight-bold);
   transition:top .15s ease;
 }
 .skip-link:focus{top:var(--space-3);}
@@ -439,7 +459,7 @@ button.btn:focus-visible, a.btn:focus-visible, .cell-tag:focus-visible{
 button, input, select, textarea{font-family:inherit;}
 
 input, select, textarea{
-  font-size:var(--text-md); color:var(--fg-primary); background:var(--control-bg);
+  font-size:var(--text-base); color:var(--fg-primary); background:var(--control-bg);
   border:1.5px solid var(--control-border); border-radius:var(--radius-control); padding:10px 14px;
 }
 input::placeholder, textarea::placeholder{color:var(--fg-tertiary); opacity:1;}
@@ -501,7 +521,7 @@ input[type="file"]{
 }
 label.file-btn{
   background:var(--control-bg); border:1px solid var(--control-border); border-radius:var(--radius-control);
-  padding:var(--space-2) var(--space-4); cursor:pointer; font-size:var(--text-sm); font-weight:500; color:var(--fg-primary);
+  padding:var(--space-2) var(--space-4); cursor:pointer; font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-primary);
   display:inline-flex; align-items:center; gap:var(--space-1);
   transition:background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
 }
@@ -524,7 +544,7 @@ label.file-btn:focus-within{
 
 button.btn, a.btn{
    background:var(--control-bg); border:1px solid var(--control-border); border-radius:var(--radius-control);
-   padding:var(--space-2) var(--space-4); cursor:pointer; font-size:var(--text-sm); font-weight:500; color:var(--fg-primary);
+   padding:var(--space-2) var(--space-4); cursor:pointer; font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-primary);
    display:inline-flex; align-items:center; gap:var(--space-1);
    text-decoration:none; position:relative; overflow:hidden;
    transition:background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard),
@@ -558,7 +578,7 @@ button.btn:active::after, a.btn:active::after{opacity:.08;}
     one button that matters on a form reads as such at a glance instead of
     needing color alone to carry the distinction. */
 button.btn.primary, a.btn.primary{
-   background:var(--accent); color:var(--fg-on-accent); border-color:var(--accent); font-weight:600;
+   background:var(--accent); color:var(--fg-on-accent); border-color:var(--accent); font-weight:var(--font-weight-bold);
    box-shadow:var(--elevation-1), 0 2px 8px var(--accent-subtle);
  }
 button.btn.primary:hover, a.btn.primary:hover{background:var(--accent-hover); box-shadow:var(--elevation-2);}
@@ -572,7 +592,7 @@ button.btn.ghost:hover, a.btn.ghost:hover{background:var(--bg-secondary); box-sh
     irreversible action on its form). Filled to match .primary's weight so
     it's unmistakable as "the serious button here," not a lesser sibling. */
 button.btn.danger, a.btn.danger{
-   background:var(--danger); color:#fff; border-color:var(--danger); font-weight:600;
+   background:var(--danger); color:#fff; border-color:var(--danger); font-weight:var(--font-weight-bold);
    box-shadow:0 1px 2px rgba(0,0,0,.06), 0 2px 8px var(--tag-red-bg);
 }
 button.btn.danger:hover, a.btn.danger:hover{background:#d92c22;}
@@ -585,7 +605,7 @@ button.btn.danger::after, a.btn.danger::after{background:#fff;}
     existing .btn.danger call sites (all real delete-this-record buttons)
     keep the filled treatment without every template needing an update. */
 button.btn.danger.subtle, a.btn.danger.subtle{
-   background:transparent; color:var(--danger); border-color:var(--tag-red-bg); box-shadow:none; font-weight:500;
+   background:transparent; color:var(--danger); border-color:var(--tag-red-bg); box-shadow:none; font-weight:var(--font-weight-bold);
 }
 button.btn.danger.subtle:hover, a.btn.danger.subtle:hover{background:var(--tag-red-bg);}
 /* MD3 tonal button -- accent-tinted fill without the full-weight primary look. */
@@ -750,7 +770,7 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
      same 8px into the base rule gives both states the identical 16px
      inset instead of only matching within each state. */
   padding:6px 4px 4px 8px;
-  font-size:12px; font-weight:500; line-height:1.1;
+  font-size:12px; font-weight:var(--font-weight-bold); line-height:1.1;
   color:var(--fg-secondary); text-decoration:none; white-space:nowrap;
   border-radius:0; position:relative;
   transition:color var(--dur-fast) var(--ease-standard);
@@ -760,7 +780,7 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
 .tab-btn:hover{color:var(--fg-primary); text-decoration:none;}
 .tab-btn:active{opacity:.7;}
 /* MD3 active indicator pill: a rounded rectangle behind the icon */
-.tab-btn.active{color:var(--fg-primary); font-weight:600;}
+.tab-btn.active{color:var(--fg-primary); font-weight:var(--font-weight-bold);}
 .tab-btn.active::before{
   content:''; position:absolute;
   top:4px; left:50%; transform:translateX(-50%);
@@ -890,7 +910,7 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
 }
 #sidebar-expand-toggle:hover{background:var(--bg-hover, var(--separator));}
 .sidebar-app-name{
-  display:none; font-size:13px; font-weight:600; color:var(--fg-primary);
+  display:none; font-size:13px; font-weight:var(--font-weight-bold); color:var(--fg-primary);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 
@@ -930,7 +950,7 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
    this label's padding moves with it to stay matched. */
 .sidebar-section-label{
   display:none; width:100%; padding:10px 8px 4px;
-  font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase;
+  font-size:10px; font-weight:var(--font-weight-bold); letter-spacing:.06em; text-transform:uppercase;
   color:var(--fg-tertiary); text-align:left;
 }
 
@@ -1095,9 +1115,9 @@ main.main-full-width{max-width:none;}
    height on Calendar/Tasks, since every row-1 toolbar has one of these. */
 .seg-btn{
   position:relative; z-index:1; border:none; background:transparent; padding:6px 12px; font-size:var(--text-sm);
-  font-weight:500; border-radius:18px; cursor:pointer; color:var(--fg-secondary); text-decoration:none; display:inline-block;
+  font-weight:var(--font-weight-bold); border-radius:18px; cursor:pointer; color:var(--fg-secondary); text-decoration:none; display:inline-block;
 }
-.seg-btn.active{color:var(--fg-primary); font-weight:600; background:var(--bg-elevated); box-shadow:var(--elevation-1);}
+.seg-btn.active{color:var(--fg-primary); font-weight:var(--font-weight-bold); background:var(--bg-elevated); box-shadow:var(--elevation-1);}
 .seg-btn:hover{text-decoration:none;}
 .seg-btn:active{opacity:.7;}
 /* Radio-backed .seg-btn (2026-08-07, modal-input-design Phase A -- widget
@@ -1112,7 +1132,7 @@ main.main-full-width{max-width:none;}
    elsewhere in this file. */
 .seg-radio{position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;}
 label.seg-btn{display:inline-flex; align-items:center; gap:0;}
-label.seg-btn:has(.seg-radio:checked){color:var(--fg-primary); font-weight:600; background:var(--bg-elevated); box-shadow:var(--elevation-1);}
+label.seg-btn:has(.seg-radio:checked){color:var(--fg-primary); font-weight:var(--font-weight-bold); background:var(--bg-elevated); box-shadow:var(--elevation-1);}
 label.seg-btn[hidden]{display:none;}
 .segmented{flex-wrap:wrap;}
 /* Vertical variant (2026-08-07 follow-up) -- .segmented's compact pill
@@ -1185,7 +1205,7 @@ label.seg-btn[hidden]{display:none;}
    color is needed instead of restating the variable every time. */
 .text-muted{color:var(--fg-tertiary);}
 .text-muted-secondary{color:var(--fg-secondary);}
-.text-caption{font-size:var(--text-xs);}
+.text-caption{font-size:var(--text-sm);}
 /* _empty_state_row.html's text-muted empty-state cells (Labels/Holidays/
    Sleep&Leisure's own "No X yet" row) -- every real call site passes the
    macro's own default `style='font-size: var(--text-sm);'`
@@ -1269,12 +1289,12 @@ label.seg-btn[hidden]{display:none;}
    normal small pill everywhere else in the app uses this exact class. */
 .detail-meta-item{display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-width:0;}
 .detail-meta-item.detail-meta-wide{grid-column:1 / -1;}
-.detail-meta-label{font-size:var(--text-xs); color:var(--fg-tertiary);}
+.detail-meta-label{font-size:var(--text-sm); color:var(--fg-tertiary);}
 .detail-meta-description{margin-top:var(--space-3); padding-top:var(--space-3); border-top:1px solid var(--separator);}
 /* Description/Notes value -- crisp like the rest of the .detail-meta-value
    typography (primary color, callout size) while keeping its pre-wrap
    prose layout. */
-.detail-meta-description p{margin:4px 0 0; white-space:pre-wrap; color:var(--fg-primary); font-size:var(--text-md);}
+.detail-meta-description p{margin:4px 0 0; white-space:pre-wrap; color:var(--fg-primary); font-size:var(--text-base);}
 /* 2026-08-08 fix -- task_detail.html's meta card and its Subtasks card
    right below it visually ran together with zero gap when opened as a
    modal: .modal-body .card{margin-bottom:0} (deliberate, elsewhere --
@@ -1304,8 +1324,8 @@ label.seg-btn[hidden]{display:none;}
    h1 already provides the base size/ellipsis; this layers on the heavier
    weight and tighter tracking that makes the entity's name the dominant
    thing in the dialog. */
-.detail-heading-row .detail-title{font-weight:700; letter-spacing:-0.3px;}
-.detail-heading-sub{margin-top:2px; font-size:var(--text-xs); color:var(--fg-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.detail-heading-row .detail-title{font-weight:var(--font-weight-bold); letter-spacing:-0.3px;}
+.detail-heading-sub{margin-top:2px; font-size:var(--text-sm); color:var(--fg-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 
 /* The elevated "panel" every detail modal's body is wrapped in -- a
    tonal surface (--surface-container, deliberately one step below the
@@ -1378,9 +1398,9 @@ label.seg-btn[hidden]{display:none;}
 .detail-meta-value{
   display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;
   min-width:0; line-height:1.35;
-  font-size:var(--text-md); font-weight:600; color:var(--fg-primary);
+  font-size:var(--text-base); font-weight:var(--font-weight-bold); color:var(--fg-primary);
 }
-.detail-meta-value a{font-weight:600;}
+.detail-meta-value a{font-weight:var(--font-weight-bold);}
 /* Contacts field parity slice 5 of 6 -- Address's fmt_address filter
    returns a real multi-line string (PO Box/Extended/Street each own line,
    then "City, Region PostalCode", then Country); .detail-meta-value's
@@ -1397,7 +1417,7 @@ label.seg-btn[hidden]{display:none;}
 .detail-delete-link{
   display:inline-flex; align-items:center; gap:5px;
   background:none; border:none; padding:var(--space-2); cursor:pointer;
-  font-family:inherit; font-size:var(--text-sm); font-weight:500;
+  font-family:inherit; font-size:var(--text-sm); font-weight:var(--font-weight-bold);
   color:var(--fg-tertiary);
   border-radius:var(--radius-control);
   transition:color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard);
@@ -1429,13 +1449,13 @@ label.seg-btn[hidden]{display:none;}
   display:flex; flex-direction:column; gap:var(--space-2);
 }
 .filled-card-title{
-  font-size:var(--text-xl); font-weight:600; line-height:1.2;
+  font-size:var(--text-xl); font-weight:var(--font-weight-bold); line-height:1.2;
 }
 .filled-card-description{
   font-size:var(--text-sm); opacity:.85; line-height:1.3; margin-top:auto;
 }
 .filled-card-meta{
-  font-size:var(--text-xs); opacity:.7; margin-top:auto;
+  font-size:var(--text-sm); opacity:.7; margin-top:auto;
 }
 
 /* Color variants for filled cards */
@@ -1464,7 +1484,7 @@ label.seg-btn[hidden]{display:none;}
   background-size:20px 100%, 20px 100%, 20px 100%, 20px 100%;
   background-attachment:local, local, scroll, scroll;
 }
-table{width:100%; border-collapse:collapse; font-size:var(--text-md);}
+table{width:100%; border-collapse:collapse; font-size:var(--text-base);}
 /* 2026-08-30: the Tasks table's per-group `.task-table`s (_tasks_body.
    html) went through several same-day rounds of `<colgroup>` +
    `table-layout:fixed` to force pixel-identical Status/Date/Labels
@@ -1480,7 +1500,7 @@ table{width:100%; border-collapse:collapse; font-size:var(--text-md);}
    Status/Date/Labels a few px differently from its neighbor -- accepted
    trade-off, not an oversight. */
 thead th{
-  text-align:left; font-weight:600; color:var(--fg-secondary); font-size:13px;
+  text-align:left; font-weight:var(--font-weight-bold); color:var(--fg-secondary); font-size:13px;
   text-transform:uppercase; letter-spacing:.04em; padding:12px 8px; border-bottom:2px solid var(--separator);
   white-space:nowrap;
 }
@@ -1520,7 +1540,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    rule (a label's color is per-row data, not something a shared class
    can know). */
 .label-cell-icon { display: inline-flex; flex-shrink: 0; }
-.label-name { font-weight: 500; color: var(--fg-primary); }
+.label-name { font-weight: var(--font-weight-bold); color: var(--fg-primary); }
 /* Settings > Labels only (direct request, 2026-09-21: "remove the bold
    from labels that are not spaces") -- this table's own rows drop back
    to the plain body weight, not the base `.label-name` rule's 500
@@ -1528,7 +1548,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    row size/on a tinted background. `.labels-space-row` (below) still
    overrides back to 600 for a Space's own row -- same specificity, but
    declared later in the cascade, so it wins for that one row kind. */
-.labels-table .label-name{font-weight:400;}
+.labels-table .label-name{font-weight:var(--font-weight-regular);}
 
 /* Settings > Labels: a single table (2026-09-16, direct request --
    "don't want the header repeated for every group" / "don't want
@@ -1592,7 +1612,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .labels-child-row td:first-child{border-radius:var(--radius-sm) 0 0 var(--radius-sm);}
 .labels-space-row td:last-child,
 .labels-child-row td:last-child{border-radius:0 var(--radius-sm) var(--radius-sm) 0;}
-.labels-space-row .label-name{font-weight:600;}
+.labels-space-row .label-name{font-weight:var(--font-weight-bold);}
 
 #labels-table-wrapper tbody tr:not(.labels-space-row):not(.labels-child-row):hover{background:none;}
 #labels-table-wrapper tbody tr:not(.labels-space-row):not(.labels-child-row):hover td{background:var(--row-alt);}
@@ -1609,13 +1629,13 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 
 .group-badge {
     display: inline-block; padding: 2px 8px; border-radius: var(--radius-pill);
-    font-size: var(--text-xs); font-weight: 500;
+    font-size: var(--text-sm); font-weight: var(--font-weight-bold);
     background: var(--accent-neutral-subtle); color: var(--fg-secondary);
     border: 1px solid var(--separator);
 }
 
 /* 2026-08-29 fix (STATE.md backlog item 6): this used to set
-   font-size: var(--text-xs), a size smaller than the table's own
+   font-size: var(--text-sm), a size smaller than the table's own
    base text -- visibly mismatched against both the "Not used" fallback
    (.text-muted, no size override, inherits the table's size) in the same
    column and every other cell in #labels-table. Just inherit now, same
@@ -1646,7 +1666,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 
 .cell-tag{
   display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border-radius:var(--radius-sm);
-  font-size:var(--text-xs); font-weight:600; white-space:nowrap;
+  font-size:var(--text-sm); font-weight:var(--font-weight-bold); white-space:nowrap;
 }
 /* Wherever multiple tags sit back-to-back in the same cell (Tasks table's
    Tags column, task/contact detail's Tags row) -- a CSS rule instead of
@@ -1710,7 +1730,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .warnings-strip{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0;}
 .credit-pill{
   display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:var(--radius-pill);
-  font-size:var(--text-xs); font-weight:600;
+  font-size:var(--text-sm); font-weight:var(--font-weight-bold);
 }
 .credit-pill.ok{background:var(--tag-green-bg); color:var(--tag-green-fg);}
 .credit-pill.warn{background:var(--tag-orange-bg); color:var(--tag-orange-fg);}
@@ -1760,7 +1780,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    else, e.g. forms/modals) -- a toolbar is scanned, not read, so it gets
    the tightest, most icon-forward treatment in the app. Prev/Next go
    icon-only (see calendar_*.html) using the existing .icon-btn size. */
-.toolbar-row .btn{height:40px; padding:0 12px; font-size:var(--text-xs);}
+.toolbar-row .btn{height:40px; padding:0 12px; font-size:var(--text-sm);}
 .toolbar-row .filter-bar input[type="search"]{width:160px; height:40px; padding:0 9px;}
 /* 2026-08-07, revised same day (2026-08-07 evening) after the first
    version visibly broke: putting the whole <details> (summary + body)
@@ -1798,7 +1818,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .toolbar-filters-badge{
   position:absolute; top:-2px; right:-2px;
   background:var(--accent-neutral); color:var(--fg-on-accent-neutral); border-radius:var(--radius-pill);
-  min-width:14px; height:14px; padding:0 3px; font-size:9px; font-weight:700; line-height:14px; text-align:center;
+  min-width:14px; height:14px; padding:0 3px; font-size:9px; font-weight:var(--font-weight-bold); line-height:14px; text-align:center;
 }
 .toolbar-filters-body{
   display:none; width:100%; flex-direction:column; gap:6px; margin-top:6px; padding-top:6px;
@@ -1817,7 +1837,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .multiselect-trigger{display:inline-flex; align-items:center; gap:6px;}
 .multiselect-count{
   background:var(--bg-secondary); color:var(--fg-secondary); border-radius:var(--radius-pill);
-  padding:1px 7px; font-size:var(--text-xs); font-weight:600;
+  padding:1px 7px; font-size:var(--text-sm); font-weight:var(--font-weight-bold);
 }
 /* 2026-08-08: position:fixed, not :absolute -- static/app.js now always
    moves this into #multiselect-portal (base.html) on open and positions it
@@ -1869,7 +1889,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
      48 - 16(padding) - 2(border) = 30px, so this is 30px now, not 32. */
   height:30px; padding:0 14px; border:1px solid transparent; border-radius:var(--radius-control);
   background:var(--bg-secondary); color:var(--fg-secondary);
-  font-family:inherit; font-size:var(--text-sm); font-weight:600;
+  font-family:inherit; font-size:var(--text-sm); font-weight:var(--font-weight-bold);
   cursor:pointer; white-space:nowrap;
   transition:background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
 }
@@ -1881,7 +1901,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .multiselect-option-form{display:block;}
 .multiselect-option{
   display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:var(--radius-sm);
-  font-size:var(--text-md); cursor:pointer; white-space:nowrap;
+  font-size:var(--text-base); cursor:pointer; white-space:nowrap;
 }
 .multiselect-option:hover{background:var(--bg-secondary);}
 /* Direct feedback, 2026-08-15: "depending on the data source, some Views
@@ -1914,7 +1934,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .multiselect-new-option:hover{background:none;}
 .multiselect-new-input{
   flex:1; border:1px solid var(--border); border-radius:var(--radius-sm);
-  padding:4px 8px; font-size:var(--text-md); background:var(--bg-elevated); color:var(--fg-primary);
+  padding:4px 8px; font-size:var(--text-base); background:var(--bg-elevated); color:var(--fg-primary);
   min-width:0;
 }
 .multiselect-divider{height:1px; background:var(--separator); margin:6px 2px;}
@@ -1957,7 +1977,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
   display:flex; align-items:center; gap:var(--space-2); width:100%;
   padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm);
   background:none; border:none; font-family:inherit; font-size:var(--text-sm);
-  font-weight:400; /* pinned: never inherit a heavier weight from a host surface */
+  font-weight:var(--font-weight-regular); /* pinned: never inherit a heavier weight from a host surface */
   color:var(--fg-primary); cursor:pointer; text-align:left; white-space:nowrap;
   transition:background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
 }
@@ -2006,12 +2026,12 @@ tbody td{padding:10px 8px; vertical-align:middle;}
   display:flex; align-items:flex-start; justify-content:space-between; gap:var(--space-2);
 }
 .status-card-title{
-  font-size:var(--text-lg); font-weight:600; color:var(--fg-primary);
+  font-size:var(--text-lg); font-weight:var(--font-weight-bold); color:var(--fg-primary);
   line-height:1.2; flex:1; min-width:0;
 }
 .status-card-status{
   display:flex; align-items:center; gap:var(--space-1);
-  font-size:var(--text-base); font-weight:500; color:var(--fg-primary);
+  font-size:var(--text-base); font-weight:var(--font-weight-bold); color:var(--fg-primary);
   margin-top:var(--space-1);
 }
 .status-card-status .icon{width:10px; height:10px; flex-shrink:0;}
@@ -2022,7 +2042,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 
 .status-card-meta{
   display:flex; flex-direction:column; gap:2px;
-  font-size:var(--text-xs); color:var(--fg-secondary); line-height:1.35;
+  font-size:var(--text-sm); color:var(--fg-secondary); line-height:1.35;
 }
 .status-card-meta .text-muted{color:var(--fg-tertiary);}
 
@@ -2054,7 +2074,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    bordered field box instead of a borderless pill/tag-pills-as-button. */
 .task-status-select .multiselect-trigger.pill-select-trigger{
   width:auto; background:none; border:none; border-radius:var(--radius-sm);
-  padding:3px 8px; font-size:var(--text-xs); font-weight:600; font-family:inherit; cursor:pointer;
+  padding:3px 8px; font-size:var(--text-sm); font-weight:var(--font-weight-bold); font-family:inherit; cursor:pointer;
 }
 /* Direct follow-up ("status pills but they don't display as pills in the
    inline table"): the `background:none` above -- needed to beat `.widget-
@@ -2196,7 +2216,7 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
      a row gets selected. */
   display:none; align-items:center; gap:var(--space-2); flex-wrap:wrap;
 }
-.bulk-count{font-weight:600; font-size:var(--text-sm); white-space:nowrap;}
+.bulk-count{font-weight:var(--font-weight-bold); font-size:var(--text-sm); white-space:nowrap;}
 /* 2026-09-12 (direct feedback: "the bulk count should be allowed to sit
    on the first row" -- the mobile two-row wrap above forces the whole
    actions cluster, Clear/Delete/any filter dropdown, onto row two, but
@@ -2278,7 +2298,7 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
    its own ordinary card spacing from `.card`'s own `margin-bottom`. */
 /* 3. Title dominant -- the one piece of every row that should actually
    read as the primary content, not tied visually with Status/Date/Labels. */
-.task-title-cell a{font-weight:600; font-size:var(--text-base); color:var(--fg-primary);}
+.task-title-cell a{font-weight:var(--font-weight-bold); font-size:var(--text-base); color:var(--fg-primary);}
 /* Title column's floor width used to be 140px unconditionally (see that
    rule's own long history above) -- enough that a one-character title like
    "h" left a wide dead gap before the Status pill started, exactly the
@@ -2339,7 +2359,7 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
    read-only tag display uses). What's new this round: the Labels pill and
    the Status chip right next to it now share the exact same shape.
    `.cell-tag`'s app-wide default (`var(--radius-sm)`, 8px corners /
-   `var(--text-xs)`, 13px) never matched the Status trigger's own
+   `var(--text-sm)`, 13px) never matched the Status trigger's own
    compact-chip override just above (`var(--radius-pill)` fully rounded) --
    that mismatch is what read as "not all pills have the same rounded
    corners." Scoped to `.cell-tags` -- the wrapping span every row's
@@ -2410,7 +2430,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    follow-up, moved to an icon button on the divider row instead, see
    above) -- Labels/Holidays/Time blocks still do. */
 .task-add-row td{padding:8px 10px; border-bottom:1px solid var(--separator);}
-.task-add-row a{display:flex; align-items:center; gap:6px; color:var(--fg-secondary); text-decoration:none; font-size:var(--text-xs);}
+.task-add-row a{display:flex; align-items:center; gap:6px; color:var(--fg-secondary); text-decoration:none; font-size:var(--text-sm);}
 .task-add-row:hover td{background:var(--bg-hover, var(--bg-secondary));}
 /* Habits-group check-in control (_habit_row.html) reuses the Dashboard
    widget's own .habit-checkin-row layout (_widget_habit_checkin.html) but
@@ -2424,7 +2444,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    .inline-edit-cell -- see the .inline-edit-* rules below for the actual
    click-to-edit look. This just lays out the form/target-suffix. */
 .habit-checkin-value{display:flex; align-items:center; gap:4px;}
-.habit-checkin-target{font-size:var(--text-xs); white-space:nowrap;}
+.habit-checkin-target{font-size:var(--text-sm); white-space:nowrap;}
 /* Notion-style click-to-edit cell (static/inline_edit.js, 2026-08-28,
    direct feedback: "just text and colored pills... click two times on an
    element and it becomes editable in a non-discrete way"). Deliberately
@@ -2505,8 +2525,8 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    field instead of centering a few characters. */
 .inline-edit-input.inline-edit-input--text{width:100% !important; text-align:left;}
 .pill-select{
-  border:none; border-radius:var(--radius-sm); padding:3px 22px 3px 8px; font-size:var(--text-xs);
-  font-weight:600; background-position:right 6px center; background-size:9px;
+  border:none; border-radius:var(--radius-sm); padding:3px 22px 3px 8px; font-size:var(--text-sm);
+  font-weight:var(--font-weight-bold); background-position:right 6px center; background-size:9px;
 }
 /* Read-only sibling of .pill-select (side work, post-1.1) -- for values
    that are displayed but no longer manually editable, e.g. the computed
@@ -2514,8 +2534,8 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    .pill-select minus the dropdown-chrome padding/background-position, so
    the column doesn't visibly shift width next to other pill-selects. */
 .pill-static{
-  display:inline-flex; align-items:center; gap:5px; border-radius:var(--radius-sm); padding:3px 8px; font-size:var(--text-xs);
-  font-weight:600;
+  display:inline-flex; align-items:center; gap:5px; border-radius:var(--radius-sm); padding:3px 8px; font-size:var(--text-sm);
+  font-weight:var(--font-weight-bold);
 }
 .pill-gray{background-color:var(--tag-gray-bg); color:var(--tag-gray-fg);}
 .pill-orange{background-color:var(--tag-orange-bg); color:var(--tag-orange-fg);}
@@ -2537,11 +2557,11 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 .pill-indigo{background-color:var(--tag-indigo-bg); color:var(--tag-indigo-fg);}
 .pill-magenta{background-color:var(--tag-magenta-bg); color:var(--tag-magenta-fg);}
 .pill-slate{background-color:var(--tag-slate-bg); color:var(--tag-slate-fg);}
-.inline-date{border-color:transparent; padding:3px 6px; font-size:var(--text-xs); width:128px;}
+.inline-date{border-color:transparent; padding:3px 6px; font-size:var(--text-sm); width:128px;}
 .inline-date:hover{border-color:var(--control-border);}
 /* Holidays table (settings_holidays.html) -- title cell, same idea as
    .inline-date above but a plain text input instead of a date picker. */
-.inline-text{border-color:transparent; padding:3px 6px; font-size:var(--text-xs); width:100%; min-width:120px;}
+.inline-text{border-color:transparent; padding:3px 6px; font-size:var(--text-sm); width:100%; min-width:120px;}
 .inline-text:hover{border-color:var(--control-border);}
 .holiday-calendar-select{margin:0;}
 .th-sort{color:inherit; text-decoration:none;}
@@ -2591,7 +2611,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
   transition:background var(--dur-fast) var(--ease-standard);
 }
 .kanban-column-head{display:flex; align-items:center; justify-content:space-between; padding:2px 2px var(--space-1);}
-.kanban-count{font-size:var(--text-xs); color:var(--fg-tertiary); font-weight:600;}
+.kanban-count{font-size:var(--text-sm); color:var(--fg-tertiary); font-weight:var(--font-weight-bold);}
 /* flex:1 (added alongside the equal-height column change above) lets the
    card list itself fill a column stretched taller than its own content --
    without it the drop-hover highlight below would leave a plain unhovered
@@ -2623,10 +2643,10 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
   height:56px; object-fit:cover; display:block;
   border-radius:var(--radius-control) var(--radius-control) 0 0;
 }
-.kanban-card-title{color:var(--fg-primary); font-size:var(--text-md); font-weight:600; text-decoration:none;}
+.kanban-card-title{color:var(--fg-primary); font-size:var(--text-base); font-weight:var(--font-weight-bold); text-decoration:none;}
 .kanban-card-title:hover{text-decoration:underline;}
 .kanban-card-meta{display:flex; flex-wrap:wrap; gap:4px;}
-.kanban-empty{color:var(--fg-tertiary); font-size:var(--text-xs); text-align:center; padding:14px 0;}
+.kanban-empty{color:var(--fg-tertiary); font-size:var(--text-sm); text-align:center; padding:14px 0;}
 /* 2026-09-02: the per-card status `<select>` (.kanban-status-select) is
    gone -- "no inline editing", direct request -- status now only changes
    by opening the card's own task (its title link already does that). No
@@ -2675,7 +2695,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 }
 
 /* Checklist (task_detail.html) */
-.checklist-progress{font-size:var(--text-xs); font-weight:600; color:var(--fg-tertiary); margin-left:6px;}
+.checklist-progress{font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-tertiary); margin-left:6px;}
 .checklist{display:flex; flex-direction:column; margin-bottom:8px;}
 .checklist-row{display:flex; align-items:center; gap:var(--space-2); padding:var(--space-1) 0; border-bottom:1px solid var(--separator);}
 .checklist-row:last-child{border-bottom:none;}
@@ -2709,7 +2729,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    before the remove button). */
 .work-sessions-head{display:flex; align-items:center; gap:6px;}
 .work-sessions-head .work-session-add{margin-left:auto;}
-.session-when{color:var(--fg-secondary); font-size:var(--text-xs); white-space:nowrap;}
+.session-when{color:var(--fg-secondary); font-size:var(--text-sm); white-space:nowrap;}
 /* 2026-09-03 direct follow-up ("could we also rework the work sessions")
    -- a .work-session-row modifier (not a change to the shared
    .checklist-row itself, which contact_form.html/search.html/etc. also
@@ -2721,7 +2741,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    Extra gap before the delete X keeps it from reading glued to the
    time-picker trigger. */
 .work-session-row{padding:9px 0; gap:var(--space-3);}
-.work-session-row .checklist-text{display:flex; align-items:center; gap:6px; color:var(--fg-secondary); font-weight:500;}
+.work-session-row .checklist-text{display:flex; align-items:center; gap:6px; color:var(--fg-secondary); font-weight:var(--font-weight-bold);}
 .work-session-row .checklist-text .icon{color:var(--fg-tertiary); flex:none;}
 .work-session-row .checklist-delete{margin-left:2px;}
 
@@ -2808,11 +2828,11 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 }
 .contact-row:hover{text-decoration:none;}
 .contact-row-main{display:flex; flex-direction:column; flex:1; min-width:0;}
-.contact-row-name{font-weight:600; color:var(--fg-primary);}
-.contact-row-sub{font-size:var(--text-xs); color:var(--fg-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.contact-row-name{font-weight:var(--font-weight-bold); color:var(--fg-primary);}
+.contact-row-sub{font-size:var(--text-sm); color:var(--fg-tertiary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .avatar-circle{
   flex:none; width:34px; height:34px; border-radius:50%; background:var(--accent-neutral-subtle); color:var(--fg-primary);
-  display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px;
+  display:flex; align-items:center; justify-content:center; font-weight:var(--font-weight-bold); font-size:14px;
 }
 .avatar-large{width:52px; height:52px; font-size:20px;}
 img.avatar-circle{object-fit:cover;}
@@ -2884,7 +2904,7 @@ img.avatar-circle{object-fit:cover;}
 /* --------------------------------------------------------------------- */
 
 .field{display:flex; flex-direction:column; gap:var(--space-1); margin-bottom:var(--space-3);}
-.field label{font-size:var(--text-xs); font-weight:600; color:var(--fg-secondary); text-transform:uppercase; letter-spacing:.02em;}
+.field label{font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary); text-transform:uppercase; letter-spacing:.02em;}
 /* A field's label sharing its row with an inline action, e.g. the "+"
    button that adds a repeatable contact-field row (Phone/Email/Website/
    Address/Social network) -- replaces a separate full-width "+ Add X"
@@ -2909,9 +2929,9 @@ img.avatar-circle{object-fit:cover;}
 .field.has-error input:not([type="checkbox"], [type="radio"], [type="file"]),
 .field.has-error select,
 .field.has-error textarea{border-color:var(--danger);}
-.field-error{display:block; font-size:var(--text-xs); color:var(--danger); margin-top:2px;}
+.field-error{display:block; font-size:var(--text-sm); color:var(--danger); margin-top:2px;}
 .field-toggle{flex-direction:row; align-items:center; gap:8px;}
-.field-toggle label{text-transform:none; font-weight:500; font-size:var(--text-base);}
+.field-toggle label{text-transform:none; font-weight:var(--font-weight-bold); font-size:var(--text-base);}
 /* An arbitrary-length set of checkboxes (e.g. published_lists.html's
    label-filter editor): a wrapping row of .field-toggle pairs instead of
    one long vertical stack, same idea as .field-grid but for checkboxes
@@ -3057,7 +3077,7 @@ img.avatar-circle{object-fit:cover;}
    border/background/label-text change on .tile-option itself just above
    -- the icon simply no longer has its own separate recolor rule. */
 .tile-icon{color:var(--fg-secondary);}
-.tile-option-label{font-size:11px; font-weight:600; line-height:1.2; word-break:break-word;}
+.tile-option-label{font-size:11px; font-weight:var(--font-weight-bold); line-height:1.2; word-break:break-word;}
 
 /* Stepper (2026-08-07, modal-input-design pattern 5) -- a bounded numeric
    field flanked by -/+ buttons (static/stepper.js), the real
@@ -3073,7 +3093,7 @@ img.avatar-circle{object-fit:cover;}
 .stepper-input::-webkit-outer-spin-button, .stepper-input::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
 .stepper-btn{
   flex:none; border:none; background:var(--bg-secondary); color:var(--fg-secondary); width:30px;
-  font-size:15px; font-weight:600; cursor:pointer; line-height:1;
+  font-size:15px; font-weight:var(--font-weight-bold); cursor:pointer; line-height:1;
 }
 .stepper-btn:hover{background:var(--control-bg-hover); color:var(--fg-primary);}
 .stepper-btn:active{opacity:.7;}
@@ -3140,14 +3160,14 @@ img.avatar-circle{object-fit:cover;}
   color:var(--fg-tertiary); margin-bottom:var(--space-3);
 }
 .empty-state-icon .icon{width:22px; height:22px;}
-.empty-state-title{font-size:var(--text-lg); font-weight:600; color:var(--fg-primary); margin-bottom:4px;}
-.empty-state-text{font-size:var(--text-md); color:var(--fg-tertiary); max-width:380px; margin:0 auto; line-height:1.5;}
+.empty-state-title{font-size:var(--text-lg); font-weight:var(--font-weight-bold); color:var(--fg-primary); margin-bottom:4px;}
+.empty-state-text{font-size:var(--text-base); color:var(--fg-tertiary); max-width:380px; margin:0 auto; line-height:1.5;}
 .empty-state-rich .btn{margin-top:16px;}
 
 /* Weekly schedule grid */
 .week-grid{padding:8px 4px 10px;}
 .week-head{display:grid; grid-template-columns:52px repeat(7,1fr); padding-left:2px;}
-.week-head .wd{text-align:center; font-size:var(--text-xs); font-weight:600; color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.03em; padding:6px 2px;}
+.week-head .wd{text-align:center; font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.03em; padding:6px 2px;}
 .week-body{display:grid; grid-template-columns:52px repeat(7,1fr); position:relative;}
 .week-gutter{position:relative;}
 .week-gutter .hr-label{position:absolute; right:8px; transform:translateY(-50%); font-size:11px; color:var(--fg-tertiary);}
@@ -3159,7 +3179,7 @@ img.avatar-circle{object-fit:cover;}
   position:absolute; left:2px; right:2px; border-radius:6px; padding:4px 6px; overflow:hidden;
   font-size:12px; line-height:1.3; box-shadow:0 1px 2px rgba(0,0,0,.08); text-decoration:none; display:block; color:inherit;
 }
-.week-event .we-name{font-weight:700; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.week-event .we-name{font-weight:var(--font-weight-bold); display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .week-event .we-room{opacity:.8; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .week-event.conflict{box-shadow:0 0 0 1px var(--warning) inset, 0 1px 2px rgba(0,0,0,.08);}
 
@@ -3287,8 +3307,8 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .time-grid-head{display:grid; padding-left:52px;}
 .time-grid-head.week{grid-template-columns:repeat(7,1fr);}
 .time-grid-head.day{grid-template-columns:1fr;}
-.time-grid-head .thd{text-align:center; padding:8px 4px; font-size:var(--text-sm); font-weight:600; border-bottom:1px solid var(--separator);}
-.time-grid-head .thd.is-today{color:var(--fg-primary); font-weight:700;}
+.time-grid-head .thd{text-align:center; padding:8px 4px; font-size:var(--text-sm); font-weight:var(--font-weight-bold); border-bottom:1px solid var(--separator);}
+.time-grid-head .thd.is-today{color:var(--fg-primary); font-weight:var(--font-weight-bold);}
 /* 2026-08-31 -- same past-day dimming as Month's .month-day-cell.is-past,
    applied per-column here since Week/Day split a day across three
    separate elements (header cell, all-day strip cell, hour-grid column)
@@ -3389,7 +3409,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
   opacity:.95; box-shadow:0 0 0 2px var(--bg-elevated), 0 0 0 3.5px var(--accent-neutral), 0 6px 14px rgba(0,0,0,.22);
   z-index:30; cursor:grabbing;
 }
-.time-event .te-name{font-weight:700; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.time-event .te-name{font-weight:var(--font-weight-bold); display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .time-event .te-time{opacity:.85; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:10.5px;}
 .time-event .te-resize-handle{position:absolute; left:0; right:0; bottom:0; height:6px; cursor:ns-resize;}
 
@@ -3590,12 +3610,12 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .unscheduled-project-pill{
   flex:none; display:inline-flex; align-items:center; gap:3px; max-width:80px;
   padding:1px 7px; border-radius:999px; background:var(--accent-neutral-subtle);
-  color:var(--fg-primary); font-size:10px; font-weight:600; white-space:nowrap;
+  color:var(--fg-primary); font-size:10px; font-weight:var(--font-weight-bold); white-space:nowrap;
   overflow:hidden; text-overflow:ellipsis;
 }
 .unscheduled-project-pill .icon{flex:none;}
 .unscheduled-task-title{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.unscheduled-count{flex:none; margin-left:auto; padding-left:4px; min-width:14px; text-align:center; font-size:10px; font-weight:600; color:var(--fg-secondary);}
+.unscheduled-count{flex:none; margin-left:auto; padding-left:4px; min-width:14px; text-align:center; font-size:10px; font-weight:var(--font-weight-bold); color:var(--fg-secondary);}
 /* Drag-onto-the-grid ghost (project_calendar.js interaction 1): a fixed,
    pointer-following copy of the source item while dragging -- hidden until
    the gesture passes the drag threshold, so a plain click isn't mistaken
@@ -3750,7 +3770,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    survives. */
 :root{--month-daynum-h:22px;}
 .month-weekday-row{display:grid; grid-template-columns:repeat(7,1fr); padding:0 0 4px;}
-.month-weekday-row span{text-align:left; font-size:var(--text-xs); font-weight:600; color:var(--fg-tertiary); padding-left:4px;}
+.month-weekday-row span{text-align:left; font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-tertiary); padding-left:4px;}
 .month-week-grid{
   position:relative; display:grid; grid-template-columns:repeat(7,1fr);
   /* Day number row + one auto row for the flat item list that follows. */
@@ -3823,13 +3843,13 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    days strictly before today, but keeping the rule order today-safe
    costs nothing). */
 .month-day-cell.is-past{opacity:.55;}
-.month-day-num{font-weight:600; font-size:var(--text-xs); color:var(--fg-tertiary); text-decoration:none; height:var(--month-daynum-h); display:flex; align-items:center; margin-bottom:2px;}
+.month-day-num{font-weight:var(--font-weight-bold); font-size:var(--text-sm); color:var(--fg-tertiary); text-decoration:none; height:var(--month-daynum-h); display:flex; align-items:center; margin-bottom:2px;}
 .month-day-num span{display:flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; line-height:1;}
 /* Today's day number, circled in the accent color -- same convention
    `.mini-cal-day.is-today .mini-cal-day-num` already established for the
    dashboard mini calendar, reused verbatim rather than inventing a new
    "today" treatment. */
-.month-day-cell.is-today .month-day-num span{background:var(--accent-neutral); color:var(--fg-on-accent-neutral); font-weight:700; width:24px; height:24px;}
+.month-day-cell.is-today .month-day-num span{background:var(--accent-neutral); color:var(--fg-on-accent-neutral); font-weight:var(--font-weight-bold); width:24px; height:24px;}
 [data-theme="dark"] .month-day-cell.is-today .month-day-num span{background:#494949;}
 .month-day-bottom{display:flex; flex-direction:column; gap:1px; overflow:hidden;}
 /* 2026-08-08 follow-up: a task and a single-day timed event (both
@@ -3846,7 +3866,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 }
 .month-task-item > *{overflow:hidden; text-overflow:ellipsis;}
 .month-task-item .color-dot{margin:0;}
-.month-item-time{flex:none; color:var(--fg-tertiary); font-variant-numeric:tabular-nums; font-weight:500;}
+.month-item-time{flex:none; color:var(--fg-tertiary); font-variant-numeric:tabular-nums; font-weight:var(--font-weight-bold);}
 /* 2026-08-29 (direct request, "the calendar page still has problems"
    follow-up) -- the event/task title in a month-view row used to be a bare
    text node after the dot/time spans (_calendar_month_grid.html), not
@@ -3875,7 +3895,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    reachable on hover once it's visually truncated. */
 .month-item-title{flex:1 1 auto; min-width:0;}
 .month-task-item:hover{text-decoration:underline;}
-.month-more-link{font-size:11px; font-weight:600; color:var(--fg-secondary); text-decoration:none; padding-top:1px;}
+.month-more-link{font-size:11px; font-weight:var(--font-weight-bold); color:var(--fg-secondary); text-decoration:none; padding-top:1px;}
 .month-more-link:hover{text-decoration:underline;}
 /* All-day rows are the only colored thing left in a day cell (single-day
    timed events are quiet text above) -- a full-width row in the same
@@ -3887,7 +3907,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    2026-08-09). A later `color:#fff` would override that and be
    illegible against the light tint. */
 .month-all-day{
-  display:block; border-radius:6px; font-size:12px; font-weight:500;
+  display:block; border-radius:6px; font-size:12px; font-weight:var(--font-weight-bold);
   line-height:15px; padding:2px 5px 3px 5px; overflow:hidden; white-space:nowrap;
   text-overflow:ellipsis; text-decoration:none;
 }
@@ -3928,7 +3948,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 }
 .month-bar{
   position:absolute; top:0; height:var(--month-bar-h); pointer-events:auto;
-  display:block; border-radius:6px; font-size:11px; font-weight:500;
+  display:block; border-radius:6px; font-size:11px; font-weight:var(--font-weight-bold);
   line-height:var(--month-bar-h); padding:0 5px; overflow:hidden;
   white-space:nowrap; text-overflow:ellipsis; text-decoration:none;
 }
@@ -4122,10 +4142,12 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    token anywhere in this file) that made Timeline look like a different
    tool from the rest of the app -- Calendar's own grid (.month-week-grid
    etc.) uses the normal system font like everything else. Font-size
-   switched to the real type-scale token (--text-xs, 11px --
-   numerically identical to the old hardcoded value, just no longer a
-   magic number disconnected from the rest of the scale). */
-.timeline-canvas{position:relative; font-family:var(--font-system); font-size:var(--text-xs);}
+   switched to the real type-scale token, `--text-xs` at the time (this
+   comment's own value had already drifted stale from that token's real
+   13px before 2026-09-24's type-scale consolidation folded `--text-xs`
+   into `--text-sm`, still 13px -- see this file's own § 1 comment on that
+   pass). */
+.timeline-canvas{position:relative; font-family:var(--font-system); font-size:var(--text-sm);}
 
 .timeline-gutter-sep{
   position:absolute; top:0; width:2px; background:var(--separator); cursor:col-resize; z-index:4;
@@ -4138,12 +4160,12 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
   color:var(--fg-tertiary); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; cursor:default;
   background:var(--bg-elevated); z-index:2;
 }
-.timeline-gutter-row.is-header{font-weight:700; color:var(--fg-primary);}
+.timeline-gutter-row.is-header{font-weight:var(--font-weight-bold); color:var(--fg-primary);}
 .timeline-gutter-icon{flex:none; margin-right:6px; display:inline-flex; color:var(--fg-tertiary);}
 
 .timeline-week-label{
   position:absolute; top:0; height:18px; display:flex; align-items:center; padding-left:3px;
-  color:var(--fg-tertiary); font-weight:600; overflow:hidden; white-space:nowrap; box-sizing:border-box;
+  color:var(--fg-tertiary); font-weight:var(--font-weight-bold); overflow:hidden; white-space:nowrap; box-sizing:border-box;
 }
 .timeline-day-label{
   position:absolute; top:20px; height:18px; padding-left:2px; color:var(--fg-tertiary); box-sizing:border-box;
@@ -4347,7 +4369,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
      layout mirrors `html[data-sidebar-expanded]`'s own rules further up
      this file almost exactly, since that's the look being mirrored. */
   .tab-separator{width:100%; height:1px; background:var(--separator); margin:var(--space-2) 0;}
-  .sidebar-section-label{display:block; width:100%; padding:10px 8px 4px; font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--fg-tertiary); text-align:left;}
+  .sidebar-section-label{display:block; width:100%; padding:10px 8px 4px; font-size:10px; font-weight:var(--font-weight-bold); letter-spacing:.06em; text-transform:uppercase; color:var(--fg-tertiary); text-align:left;}
   .sidebar-tree-item{display:flex; width:100%; flex-direction:column; align-items:stretch;}
   .sidebar-tree-row{display:flex; align-items:center; width:100%; justify-content:flex-start; gap:4px;}
   .sidebar-tree-toggle{display:flex;}
@@ -4404,13 +4426,13 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
     flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:2px; background:none; border:none; cursor:pointer;
     color:var(--fg-secondary); text-decoration:none;
-    font-size:12px; font-weight:500; line-height:1.1;
+    font-size:12px; font-weight:var(--font-weight-bold); line-height:1.1;
     padding:8px 4px 6px;
   }
   .mobile-tabbar-btn .icon{width:20px; height:20px;}
   .mobile-tabbar-btn:hover{color:var(--fg-primary); text-decoration:none;}
   .mobile-tabbar-btn:active{opacity:.7;}
-  .mobile-tabbar-btn.active, .mobile-tabbar-btn[aria-expanded="true"]{color:var(--fg-primary); font-weight:600;}
+  .mobile-tabbar-btn.active, .mobile-tabbar-btn[aria-expanded="true"]{color:var(--fg-primary); font-weight:var(--font-weight-bold);}
   /* Scrim behind the open drawer, stopping short of .mobile-tabbar itself
      (bottom:64px, not 0) so Home/Search/the toggle stay reachable while
      the drawer is open rather than being covered by their own scrim.
@@ -4579,10 +4601,10 @@ main.main-shell > .toolbar.top-app-bar{
 .toast-error .toast-icon{background:var(--tag-red-bg); color:var(--tag-red-fg);}
 .toast-warning .toast-icon{background:var(--tag-orange-bg); color:var(--tag-orange-fg);}
 .toast-content{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; padding-top:5px;}
-.toast-title{font-size:var(--text-sm); font-weight:600; color:var(--fg-primary);}
-.toast-body{font-size:var(--text-xs); color:var(--fg-secondary); line-height:1.35;}
+.toast-title{font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-primary);}
+.toast-body{font-size:var(--text-sm); color:var(--fg-secondary); line-height:1.35;}
 .toast-action{
-  flex:none; align-self:center; background:none; border:none; color:var(--accent); font-weight:600;
+  flex:none; align-self:center; background:none; border:none; color:var(--accent); font-weight:var(--font-weight-bold);
   font-size:var(--text-sm); cursor:pointer; padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm);
 }
 .toast-action:hover{background:var(--accent-subtle);}
@@ -4626,7 +4648,7 @@ main.main-shell > .toolbar.top-app-bar{
 .toast-typed-confirm{display:block; margin-top:var(--space-2);}
 .toast-typed-input{
   width:100%; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing:.08em; font-size:var(--text-xs);
+  letter-spacing:.08em; font-size:var(--text-sm);
 }
 /* This variant's two buttons stretch to fill the row edge-to-edge (equal
    width each) instead of the plain confirm toast's flex-end pair -- lines
@@ -4646,7 +4668,7 @@ main.main-shell > .toolbar.top-app-bar{
 .toast-overflow{max-width:320px;}
 .toast-overflow .toast-actions{flex-direction:column; align-items:stretch; gap:2px; max-height:220px; overflow-y:auto;}
 .toast-overflow .toast-action.toast-overflow-item{
-  align-self:stretch; text-align:left; font-weight:400; color:var(--fg-primary);
+  align-self:stretch; text-align:left; font-weight:var(--font-weight-regular); color:var(--fg-primary);
   padding:var(--space-2); border-radius:var(--radius-sm);
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
@@ -4764,7 +4786,7 @@ main.main-shell > .toolbar.top-app-bar{
    border-bottom:1px solid var(--separator);
    flex:none;
 }
-.modal-header h1{margin:0; font-size:var(--text-2xl); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.modal-header h1{margin:0; font-size:var(--text-xl); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 /* Wrapper for the 4 detail-view templates' cover+title combo, the single
     child that replaces a bare <h1> inside .modal-header for those pages
     only. Negative margins exactly matching .modal-header's own padding
@@ -4850,7 +4872,7 @@ main.main-shell > .toolbar.top-app-bar{
    padding:24px var(--space-5) var(--space-3);
    padding-right:44px;
 }
-.detail-heading-row h1{margin:0; font-size:var(--text-2xl); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.detail-heading-row h1{margin:0; font-size:var(--text-xl); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .modal-close{
    position:absolute; top:12px; right:12px; width:28px; height:28px; display:flex; align-items:center;
    justify-content:center; border-radius:var(--radius-control); background:transparent; border:1px solid transparent;
@@ -5027,7 +5049,7 @@ body.command-palette-open{overflow:hidden;}
    only collects .command-palette-row elements). */
 .command-palette-group-header{
   margin-top:var(--space-3); padding:var(--space-1) var(--space-3);
-  font-size:var(--text-xs); color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.02em;
+  font-size:var(--text-sm); color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.02em;
 }
 .command-palette-group-header:first-child{margin-top:0;}
 
@@ -5042,10 +5064,10 @@ body.command-palette-open{overflow:hidden;}
   padding:var(--space-2) var(--space-4); border-top:1px solid var(--separator); flex:none;
 }
 .command-palette-footer-hints{display:flex; align-items:center; gap:var(--space-4);}
-.command-palette-footer-hints span{display:flex; align-items:center; gap:6px; font-size:var(--text-xs); color:var(--fg-tertiary);}
+.command-palette-footer-hints span{display:flex; align-items:center; gap:6px; font-size:var(--text-sm); color:var(--fg-tertiary);}
 .command-palette-footer-hints kbd{
   border:1px solid var(--border); border-radius:4px; padding:1px 5px;
-  font:inherit; font-size:var(--text-xs); color:var(--fg-tertiary); background:var(--bg-secondary);
+  font:inherit; font-size:var(--text-sm); color:var(--fg-tertiary); background:var(--bg-secondary);
 }
 .command-palette-footer-actions{display:flex; gap:var(--space-2);}
 .command-palette-footer-btn{
@@ -5065,7 +5087,7 @@ body.command-palette-open{overflow:hidden;}
 .command-palette-row:hover, .command-palette-row.is-active{background:var(--bg-secondary);}
 .command-palette-row-text{display:flex; flex-direction:column; min-width:0;}
 .command-palette-row-title{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.command-palette-row-subtitle{font-size:var(--text-xs); color:var(--fg-tertiary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.command-palette-row-subtitle{font-size:var(--text-sm); color:var(--fg-tertiary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .command-palette-empty{padding:var(--space-4); color:var(--fg-tertiary); font-size:var(--text-sm); text-align:center;}
 
 /* Command palette actions (open.md § Command palette actions) -- a result
@@ -5138,7 +5160,7 @@ body.command-palette-open{overflow:hidden;}
   width:100%; padding:var(--space-3) var(--space-4); border-radius:var(--radius-control);
   border:1px solid var(--border); background:var(--bg-secondary); color:var(--fg-primary); font-size:var(--text-base);
 }
-.search-result-subtitle{display:block; font-size:var(--text-xs); color:var(--fg-tertiary);}
+.search-result-subtitle{display:block; font-size:var(--text-sm); color:var(--fg-tertiary);}
 
 /* --------------------------------------------------------------------- */
 /* Photo crop/resize/rotate editor (static/avatar_cropper.js,            */
@@ -5382,7 +5404,7 @@ body.command-palette-open{overflow:hidden;}
   cursor:pointer; border:2px solid transparent; box-shadow:0 0 0 1px var(--border) inset;
 }
 .color-swatch:checked{border-color:var(--fg-primary);}
-.color-swatch-label:has(.color-swatch:checked) .color-swatch-name{color:var(--fg-primary); font-weight:600;}
+.color-swatch-label:has(.color-swatch:checked) .color-swatch-name{color:var(--fg-primary); font-weight:var(--font-weight-bold);}
 
 /* Accent color picker (Settings > Appearance) -- an inline swatch grid,
    not a popover (the settings page already has room), reusing
@@ -5433,7 +5455,7 @@ body.command-palette-open{overflow:hidden;}
 .icon-group{display:flex; flex-direction:column; gap:4px; padding:4px 0;}
 .icon-group:first-child{padding-top:0;}
 .icon-group-label{
-  font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.04em;
+  font-size:10px; font-weight:var(--font-weight-bold); text-transform:uppercase; letter-spacing:.04em;
   color:var(--fg-tertiary); padding:2px 2px 0;
 }
 .icon-group-swatches{display:flex; gap:4px; flex-wrap:wrap;}
@@ -5478,7 +5500,7 @@ body.command-palette-open{overflow:hidden;}
   margin:0 0 6px;
 }
 .group-sublabel{
-  font-size:12px; font-weight:600; color:var(--fg-tertiary); margin:10px 0 4px; padding-left:2px;
+  font-size:12px; font-weight:var(--font-weight-bold); color:var(--fg-tertiary); margin:10px 0 4px; padding-left:2px;
 }
 .tag-manage-row .calendar-row-edit-form select{padding:5px 7px; min-width:0;}
 .tag-manage-row .calendar-row-edit-form input[type="text"]{max-width:140px;}
@@ -5554,7 +5576,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    border rather than two separate flat sections a reader has to
    cross-reference by matching a "group" label. */
 .space-group-block{margin-bottom:18px;}
-.space-group-header{font-weight:600;}
+.space-group-header{font-weight:var(--font-weight-bold);}
 .space-group-header .calendar-row-edit-form{flex:1;}
 .space-group-projects{
   margin:2px 0 0 13px; padding-left:14px; border-left:2px solid var(--separator);
@@ -5571,7 +5593,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    "click a candidate directly" pattern project_merge.html already uses
    for picking a merge destination. */
 .project-sublists{display:flex; flex-direction:column; gap:18px;}
-.project-sublist-label{font-weight:600; font-size:14px; margin-bottom:6px;}
+.project-sublist-label{font-weight:var(--font-weight-bold); font-size:14px; margin-bottom:6px;}
 .project-sublist-pills{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;}
 /* Both pill kinds are real <button>s (their own one-item <form>, since
    each posts a different uid) so clicking one acts immediately -- no
@@ -5655,11 +5677,11 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .project-card-square.is-archived{opacity:.5;}
 .project-card-square.is-archived:hover{opacity:.85;}
 .project-card-square-status{
-  display:inline-block; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.04em;
+  display:inline-block; font-size:10px; font-weight:var(--font-weight-bold); text-transform:uppercase; letter-spacing:.04em;
   padding:2px 7px; border-radius:var(--radius-pill); background:rgba(0,0,0,.22); margin-bottom:8px;
 }
 .project-card-square-title{
-  display:flex; align-items:center; gap:6px; font-weight:600; font-size:15px; line-height:1.3;
+  display:flex; align-items:center; gap:6px; font-weight:var(--font-weight-bold); font-size:15px; line-height:1.3;
   overflow-wrap:anywhere;
 }
 .project-card-square-footer{font-size:12px; opacity:.92; margin:0;}
@@ -5926,7 +5948,11 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    (7px, down from the generic table's 10px) -- quieter and denser, closer
    to how the app's other markup-light lists already read (.contact-list-
    row, .project-preview-row: no separators, a plain hover tint). font-size
-   drops one notch to --text-sm (14px, was --text-md's 15.5px)
+   drops one notch to --text-sm (14px at the time, was --text-md's 15.5px;
+   2026-09-24's type-scale consolidation later folded --text-md into
+   --text-base and dropped --text-sm itself to 13px, so this row now reads
+   at the merged --text-sm value -- still the "one notch down" compact
+   step, just a renumbered one)
    to match the compact scale the rest of a widget's body already uses
    (.widget-section-label, stat captions).
 
@@ -5956,7 +5982,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .widget-card.is-stack-target::before{
   content:"Drop to stack"; position:absolute; inset:0; z-index:5; pointer-events:none;
   display:flex; align-items:center; justify-content:center;
-  font-size:.9em; font-weight:600; color:var(--fg-primary);
+  font-size:.9em; font-weight:var(--font-weight-bold); color:var(--fg-primary);
   background:var(--accent-neutral-subtle); border-radius:var(--radius-md);
 }
 .widget-stack{display:flex; flex-direction:column;}
@@ -5977,16 +6003,16 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    column's actual width) centered inside its cell instead -- the cell
    itself stays a plain rectangle, only the badge is round. */
 .mini-cal-label-row{display:flex; align-items:center; justify-content:space-between; margin-bottom:var(--space-2);}
-.mini-cal-label{font-size:var(--text-sm); font-weight:600; color:var(--fg-secondary);}
+.mini-cal-label{font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary);}
 .mini-cal-nav{width:24px; height:24px;}
 .mini-cal-weekdays, .mini-cal-grid{display:grid; grid-template-columns:repeat(7,1fr);}
 .mini-cal-weekdays span{
-  text-align:center; font-size:11px; font-weight:600; color:var(--fg-tertiary);
+  text-align:center; font-size:11px; font-weight:var(--font-weight-bold); color:var(--fg-tertiary);
   text-transform:uppercase; padding-bottom:3px;
 }
 .mini-cal-day{
   position:relative; display:flex; align-items:center; justify-content:center; padding:3px 0;
-  font-size:var(--text-xs); color:var(--fg-primary); text-decoration:none;
+  font-size:var(--text-sm); color:var(--fg-primary); text-decoration:none;
 }
 .mini-cal-day-num{
   position:relative; display:flex; align-items:center; justify-content:center;
@@ -5995,7 +6021,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .mini-cal-day:hover .mini-cal-day-num{background:var(--row-alt);}
 .mini-cal-day:hover{text-decoration:none;}
 .mini-cal-day.is-out{color:var(--fg-tertiary); opacity:.5;}
-.mini-cal-day.is-today .mini-cal-day-num{background:var(--accent-neutral); color:var(--fg-on-accent-neutral); font-weight:700; width:32px; height:32px;}
+.mini-cal-day.is-today .mini-cal-day-num{background:var(--accent-neutral); color:var(--fg-on-accent-neutral); font-weight:var(--font-weight-bold); width:32px; height:32px;}
 [data-theme="dark"] .mini-cal-day.is-today .mini-cal-day-num{background:#494949;}
 .mini-cal-day.has-activity .mini-cal-day-num::after{
   content:""; position:absolute; bottom:-1px; left:50%; transform:translateX(-50%);
@@ -6013,10 +6039,10 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .cal-agenda-divider{height:1px; background:var(--separator); margin:var(--space-3) 0;}
 .cal-agenda-days{display:flex; flex-direction:column; gap:var(--space-1);}
 .cal-agenda-day{display:flex; flex-direction:column; gap:2px;}
-.cal-agenda-day.is-today .cal-agenda-day-label{color:var(--fg-primary); font-weight:700;}
-.cal-agenda-day-label{font-size:var(--text-xs); font-weight:600; color:var(--fg-tertiary); margin-bottom:1px;}
+.cal-agenda-day.is-today .cal-agenda-day-label{color:var(--fg-primary); font-weight:var(--font-weight-bold);}
+.cal-agenda-day-label{font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-tertiary); margin-bottom:1px;}
 .cal-agenda-item{
-  display:flex; align-items:center; gap:4px; font-size:var(--text-xs);
+  display:flex; align-items:center; gap:4px; font-size:var(--text-sm);
   color:var(--fg-primary); text-decoration:none; padding:1px 0;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
@@ -6047,7 +6073,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 }
 .contact-list-row:hover{background:var(--row-alt); text-decoration:none;}
 .contact-list-main{display:flex; flex-direction:column; gap:1px; min-width:0; flex:1;}
-.contact-list-name{font-size:var(--text-base); font-weight:500; color:var(--fg-primary);}
+.contact-list-name{font-size:var(--text-base); font-weight:var(--font-weight-bold); color:var(--fg-primary);}
 .contact-list-org{font-size:var(--text-sm); color:var(--fg-secondary);}
 .contact-list-detail{font-size:var(--text-sm); color:var(--fg-tertiary);}
 /* Horizontal reflow once there's genuinely room for it -- name keeps its
@@ -6099,7 +6125,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   min-width:0; background:var(--bg-secondary);
 }
 .at-a-glance-stat:hover{background:var(--bg-tertiary); text-decoration:none;}
-.at-a-glance-number{font-size:28px; font-weight:600; line-height:1.1;}
+.at-a-glance-number{font-size:28px; font-weight:var(--font-weight-bold); line-height:1.1;}
 .at-a-glance-number.is-overdue{color:var(--danger);}
 /* 2026-08-07: at third/half width there isn't room for all three stats at
    full size -- the number and its caption were clipping/wrapping badly,
@@ -6143,9 +6169,9 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   display:flex; align-items:center; gap:6px; margin-bottom:var(--space-3);
   padding-bottom:var(--space-2); border-bottom:1px solid var(--separator);
 }
-.widget-header h2{margin:0; font-size:var(--text-base); font-weight:600; letter-spacing:-.1px; color:var(--fg-primary);}
+.widget-header h2{margin:0; font-size:var(--text-base); font-weight:var(--font-weight-bold); letter-spacing:-.1px; color:var(--fg-primary);}
 .widget-section-label{
-  font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
+  font-size:12px; font-weight:var(--font-weight-bold); text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
   margin:10px 0 4px;
 }
 .widget-section-label:first-child{margin-top:0;}
@@ -6225,7 +6251,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 
 /* "Add widget" details on the workspace (edit mode) -- header-like trigger */
 .widget-add-config summary.widget-add-summary{
-   cursor:pointer; font-size:16px; font-weight:600; color:var(--fg-primary);
+   cursor:pointer; font-size:16px; font-weight:var(--font-weight-bold); color:var(--fg-primary);
    display:flex; align-items:center; gap:6px; user-select:none;
    list-style:none; padding:8px 0;
 }
@@ -6233,7 +6259,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 
 /* "Add a widget" header in the Customize modal's builder pane */
 .widget-add-header{
-   display:flex; align-items:center; gap:6px; font-size:16px; font-weight:600;
+   display:flex; align-items:center; gap:6px; font-size:16px; font-weight:var(--font-weight-bold);
    margin:0 0 8px; color:var(--fg-primary);
 }
 
@@ -6253,7 +6279,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .widget-list-multiselect .multiselect-trigger{
    width:100%; justify-content:flex-start; background:var(--control-bg);
    border:1.5px solid var(--control-border); border-radius:var(--radius-control);
-    padding:10px 14px; font-size:var(--text-base); font-weight:400; color:var(--fg-primary);
+    padding:10px 14px; font-size:var(--text-base); font-weight:var(--font-weight-regular); color:var(--fg-primary);
    font-family:inherit; cursor:pointer;
 }
 .widget-list-multiselect .multiselect-trigger:hover{
@@ -6299,7 +6325,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
     surface with its own elevation. */
 .widget-customize-existing{margin:4px 0 14px; border:1px solid var(--separator); border-radius:var(--radius-md); background:var(--surface-container);}
 .widget-customize-existing > summary{
-   cursor:pointer; font-size:13px; font-weight:600; color:var(--fg-secondary);
+   cursor:pointer; font-size:13px; font-weight:var(--font-weight-bold); color:var(--fg-secondary);
    padding:8px 10px; display:flex; align-items:center; gap:6px; user-select:none;
 }
 .widget-customize-existing > summary:hover{color:var(--fg-primary);}
@@ -6307,7 +6333,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .widget-customize-existing .calendar-list{padding:0 10px;}
 .widget-customize-row{flex-wrap:wrap; gap:4px 6px; padding:var(--space-1) 0;}
 .widget-customize-stack{background:var(--surface-container); border-radius:var(--radius-sm); padding:var(--space-1) var(--space-2); margin:2px 0;}
-.widget-customize-name{font-weight:500; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.widget-customize-name{font-weight:var(--font-weight-bold); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .widget-customize-child{padding-left:20px;}
 .widget-customize-edit{flex:1; min-width:0;}
 .widget-customize-footer{margin-top:var(--space-4); text-align:right;}
@@ -6376,7 +6402,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    display:flex; align-items:center; gap:var(--space-3);
    padding:var(--space-2) 0;
 }
-.widget-customize-card-header .widget-customize-name{flex:1; font-size:var(--text-base); font-weight:500;}
+.widget-customize-card-header .widget-customize-name{flex:1; font-size:var(--text-base); font-weight:var(--font-weight-bold);}
 .widget-customize-card-actions{display:flex; gap:2px; flex:none;}
 
 /* Section divider inside the customize modal -- a subtle
@@ -6389,7 +6415,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    content:""; flex:1; height:1px; background:var(--separator);
 }
 .widget-customize-divider-label{
-   font-size:var(--text-xs); font-weight:600; color:var(--fg-tertiary);
+   font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-tertiary);
    text-transform:uppercase; letter-spacing:.04em; white-space:nowrap;
 }
 
@@ -6429,8 +6455,8 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   border:1px solid var(--separator); border-radius:var(--radius-md); padding:6px; min-height:70px;
 }
 .week-overview-day.is-today{border-color:var(--accent-neutral);}
-.week-overview-day-label{font-size:12px; font-weight:600; color:var(--fg-tertiary); margin-bottom:4px;}
-.week-overview-day.is-today .week-overview-day-label{color:var(--fg-primary); font-weight:700;}
+.week-overview-day-label{font-size:12px; font-weight:var(--font-weight-bold); color:var(--fg-tertiary); margin-bottom:4px;}
+.week-overview-day.is-today .week-overview-day-label{color:var(--fg-primary); font-weight:var(--font-weight-bold);}
 .week-overview-item{
   display:flex; align-items:center; gap:4px; font-size:13px; padding:2px 0;
   text-decoration:none; color:var(--fg-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
@@ -6466,7 +6492,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .weekly-schedule-grid[data-cols="7"]{grid-template-columns:repeat(7,1fr);}
 .weekly-schedule-col{display:flex; flex-direction:column; min-width:0;}
 .weekly-schedule-day-label{
-  font-size:13px; font-weight:600; color:var(--fg-tertiary); margin-bottom:8px; text-align:center;
+  font-size:13px; font-weight:var(--font-weight-bold); color:var(--fg-tertiary); margin-bottom:8px; text-align:center;
 }
 .weekly-schedule-col-body{
   display:flex; flex-direction:column; gap:8px;
@@ -6477,8 +6503,8 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   background:var(--accent-neutral-subtle); border-left:3px solid var(--accent-neutral);
   border-radius:var(--radius-sm); padding:10px 12px; text-decoration:none; color:var(--fg-primary);
 }
-.weekly-schedule-block-time{font-size:11px; font-weight:500; color:var(--fg-tertiary);}
-.weekly-schedule-block-title{font-size:13px; font-weight:600; line-height:1.3; word-break:break-word;}
+.weekly-schedule-block-time{font-size:11px; font-weight:var(--font-weight-bold); color:var(--fg-tertiary);}
+.weekly-schedule-block-title{font-size:13px; font-weight:var(--font-weight-bold); line-height:1.3; word-break:break-word;}
 .weekly-schedule-agenda{width:100%;}
 
 /* Schedule > Export modal (routers/schedule.py, schedule_export.html):
@@ -6487,7 +6513,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    lets each radio live normally inside its own <label> (so clicking the
    text also toggles it) instead of needing the input to be a flat
    sibling of .mode-fields for a `~` selector to reach it. */
-.export-mode-option{display:flex; align-items:center; gap:8px; font-size:var(--text-md); cursor:pointer; padding:4px 0;}
+.export-mode-option{display:flex; align-items:center; gap:8px; font-size:var(--text-base); cursor:pointer; padding:4px 0;}
 .export-form .mode-fields{display:none; margin:2px 0 16px 24px;}
 .export-form:has(#mode-existing:checked) .mode-existing-fields{display:block;}
 .export-form:has(#mode-new:checked) .mode-new-fields{display:flex; align-items:flex-start; gap:10px;}
@@ -6531,7 +6557,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .settings-row{text-decoration:none; color:var(--fg); gap:var(--space-3);}
 .settings-row:hover{color:var(--fg-primary);}
 .settings-row-icon{color:var(--fg-tertiary); display:inline-flex;}
-.settings-row-name{font-weight:500; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.settings-row-name{font-weight:var(--font-weight-bold); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .settings-row .tag-usage-count{flex:none;}
 
 /* Hub rows (settings_index.html) are a step chunkier than an ordinary
@@ -6542,7 +6568,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .settings-hub-row{padding:var(--space-3) var(--space-2);}
 .settings-hub-row .settings-row-icon{width:32px; height:32px; border-radius:var(--radius-md); background:var(--bg-secondary); align-items:center; justify-content:center; flex:none;}
 .settings-hub-row .settings-row-text{display:flex; flex-direction:column; gap:2px; min-width:0;}
-.settings-hub-row .settings-row-name{font-size:var(--text-lg); font-weight:600; color:var(--fg-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.settings-hub-row .settings-row-name{font-size:var(--text-lg); font-weight:var(--font-weight-bold); color:var(--fg-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .settings-hub-row .settings-row-desc{color:var(--fg-tertiary); font-size:var(--text-sm);}
 .settings-hub-row .settings-row-chevron{color:var(--fg-tertiary); flex:none;}
 .settings-hub-row:hover .settings-row-chevron{color:var(--fg-primary);}
@@ -6567,8 +6593,8 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    without a cap it's a plain flex item free to claim however much of the
    row it wants, leaving the control (segmented/select) whatever sliver is
    left over at any width where the row is tight, not just narrow ones. */
-.settings-field-row .settings-field-label{font-weight:500; max-width:55%;}
-.settings-field-row .settings-field-hint{display:block; font-weight:400; color:var(--fg-tertiary); font-size:var(--text-sm); margin-top:2px;}
+.settings-field-row .settings-field-label{font-weight:var(--font-weight-bold); max-width:55%;}
+.settings-field-row .settings-field-hint{display:block; font-weight:var(--font-weight-regular); color:var(--fg-tertiary); font-size:var(--text-sm); margin-top:2px;}
 .settings-field-row .spacer{flex:1;}
 .settings-field-row input[type="text"]{max-width:220px;}
 
@@ -6604,7 +6630,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    icon + name + usage count now; role/color still live in the Edit
    modal. */
 .label-list-group-header{
-  padding:10px 8px 4px; font-size:var(--text-xs); font-weight:600;
+  padding:10px 8px 4px; font-size:var(--text-sm); font-weight:var(--font-weight-bold);
   color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.03em;
 }
 [data-label-group] + [data-label-group] .label-list-group-header{margin-top:6px;}
@@ -6619,7 +6645,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    a `.color-dot`, the icon is the only visual color/identity cue left. */
 .label-list-icon{display:inline-flex; color:var(--fg-tertiary);}
 .label-list-icon .icon{width:19px; height:19px;}
-.label-list-name{font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.label-list-name{font-weight:var(--font-weight-bold); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 /* Every row -- the Space itself included -- indents at the same level
    under its group's plain-text heading. */
 .label-list-row.is-child{padding-left:28px;}
@@ -6932,7 +6958,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   color:#fff;
 }
 .page-banner-title{
-  margin:0; min-width:0; color:var(--fg-primary); font-weight:700;
+  margin:0; min-width:0; color:var(--fg-primary); font-weight:var(--font-weight-bold);
   letter-spacing:-0.3px;
   /* Line-height inverted against viewport width: tight (1.5) at a
      roomy/full-width 1200px+ viewport, loosening to 2 as the viewport
@@ -6970,8 +6996,8 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 /* Title on a bannerless page: flexes to fill the bar so the buttons are
    pushed right, mimicking the old toolbar's title + spacer layout. */
 .page-banner-actions .page-banner-title-plain{
-  flex:1; min-width:0; margin:0; font-weight:700; letter-spacing:-0.3px;
-  font-size:var(--text-2xl); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  flex:1; min-width:0; margin:0; font-weight:var(--font-weight-bold); letter-spacing:-0.3px;
+  font-size:var(--text-xl); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 /* Buttons pinned over a photo need to read against whatever image is
    behind them, not a page background -- the ghost buttons become
@@ -7077,7 +7103,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 }
 .page-header-narrow-icon .icon{width:1.15em; height:1.15em;}
 .page-header-narrow-title{
-  margin:0; font-weight:700; letter-spacing:-0.3px;
+  margin:0; font-weight:var(--font-weight-bold); letter-spacing:-0.3px;
   font-size:var(--text-xl); line-height:1.2;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
@@ -7218,7 +7244,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    long range can't push the prev/next arrows or the label filter out of
    the header's fixed 48px-tall strip. */
 .cal-nav-label{
-  font-weight:600; font-size:var(--text-base); color:var(--fg-secondary);
+  font-weight:var(--font-weight-bold); font-size:var(--text-base); color:var(--fg-secondary);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   max-width:180px;
 }
@@ -7302,14 +7328,14 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 }
 .auth-brand{
   display:flex; align-items:center; gap:8px;
-  font-size:var(--text-2xl); margin:0 0 2px;
+  font-size:var(--text-xl); margin:0 0 2px;
 }
 .login-brand{margin-bottom:var(--space-4);}
 .auth-brand .icon{width:22px; height:22px; color:var(--accent);}
 .auth-subtitle{margin:0 0 var(--space-4);}
 .auth-error{
   margin:0 0 var(--space-3); padding:8px 10px; border-radius:var(--radius-sm);
-  background:var(--tag-red-bg); color:var(--danger); font-size:var(--text-xs);
+  background:var(--tag-red-bg); color:var(--danger); font-size:var(--text-sm);
 }
 .auth-submit{width:100%; margin-top:var(--space-2);}
 
@@ -7328,7 +7354,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   display:flex; align-items:center; justify-content:flex-start; gap:8px;
   width:100%; background:var(--control-bg);
   border:1.5px solid var(--control-border); border-radius:var(--radius-control);
-  padding:10px 14px; font-size:var(--text-base); font-weight:400; color:var(--fg-primary);
+  padding:10px 14px; font-size:var(--text-base); font-weight:var(--font-weight-regular); color:var(--fg-primary);
   font-family:inherit; cursor:pointer;
 }
 .dtp-trigger:hover{background:var(--bg-secondary); border-color:var(--border-strong);}
@@ -7354,7 +7380,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    just above went borderless for. */
 .dtp--compact{display:inline-flex;}
 .dtp--compact .dtp-trigger{
-  width:auto; background:none; border:none; padding:3px 8px; font-size:var(--text-xs); border-radius:var(--radius-sm);
+  width:auto; background:none; border:none; padding:3px 8px; font-size:var(--text-sm); border-radius:var(--radius-sm);
 }
 .dtp--compact .dtp-trigger:hover{background:var(--bg-secondary); border-color:transparent;}
 .dtp--compact .dtp-trigger:focus-visible{border-color:transparent; box-shadow:0 0 0 2px var(--accent-neutral-subtle);}
@@ -7377,7 +7403,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .dtp-panel--date.is-open{display:flex; flex-direction:column;}
 .dtp-panel--date .dtp-panel-head{margin-bottom:var(--space-2);}
 .dtp-panel--date .dtp-cal-grid{flex:1; grid-template-rows:repeat(6,1fr);}
-.dtp-panel-title{font-size:var(--text-sm); font-weight:600; color:var(--fg-secondary); flex:1; text-align:center; white-space:nowrap;}
+.dtp-panel-title{font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary); flex:1; text-align:center; white-space:nowrap;}
 .dtp-month-nav{width:24px; height:24px;}
 /* Date and range modes' Clear (2026-08-29, STATE.md backlog item 9:
    "remove the Apply button entirely; Clear button loses its text label,
@@ -7398,13 +7424,13 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .dtp-cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
 .dtp-day{
   display:flex; align-items:center; justify-content:center;
-  width:100%; padding:3px 0; font-size:var(--text-xs); color:var(--fg-primary);
+  width:100%; padding:3px 0; font-size:var(--text-sm); color:var(--fg-primary);
   background:none; border:none; border-radius:var(--radius-pill); font-family:inherit; cursor:pointer;
 }
 .dtp-day:hover{background:var(--row-alt);}
 .dtp-day:focus-visible{outline:none; box-shadow:0 0 0 2px var(--accent-neutral);}
 .dtp-day.is-blank{visibility:hidden;}
-.dtp-day.is-today{font-weight:700; background:var(--accent-neutral); color:var(--fg-on-accent-neutral);}
+.dtp-day.is-today{font-weight:var(--font-weight-bold); background:var(--accent-neutral); color:var(--fg-on-accent-neutral);}
 .dtp-day.is-selected{background:var(--accent); color:var(--fg-on-accent);}
 .dtp-day.is-disabled{color:var(--fg-tertiary); opacity:.5; cursor:not-allowed;}
 .dtp-day.is-disabled:hover{background:none;}
@@ -7423,7 +7449,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   margin-top:var(--space-1); padding-top:var(--space-2); border-top:1px solid var(--separator);
 }
 .dtp-hour-chip{
-  display:inline-flex; align-items:center; padding:6px 10px; font-size:var(--text-xs); font-weight:500;
+  display:inline-flex; align-items:center; padding:6px 10px; font-size:var(--text-sm); font-weight:var(--font-weight-bold);
   color:var(--fg-primary); background:var(--bg-secondary); border-radius:var(--radius-control);
   border:1.5px solid transparent; font-variant-numeric:tabular-nums; font-family:inherit; cursor:text;
 }
@@ -7434,7 +7460,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .dtp-hour-seg.is-active{background:var(--accent); color:var(--fg-on-accent);}
 .dtp-hour-seg-ampm{margin-left:4px; font-size:11px; color:var(--fg-tertiary);}
 .dtp-hour-seg-ampm.is-active{color:var(--fg-on-accent);}
-.dtp-hour-sep{color:var(--fg-tertiary); font-size:var(--text-xs);}
+.dtp-hour-sep{color:var(--fg-tertiary); font-size:var(--text-sm);}
 
 /* --------------------------------------------------------------------- */
 /* Data & Maintenance page (2026-08-26 redesign, third pass same day)     */
@@ -7454,9 +7480,9 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    server renders the default phrase; data_maintenance.js keeps it
    current on every selection change). */
 .dm-export-form{display:flex; flex-direction:column; align-items:stretch; gap:var(--space-4);}
-.dm-field{display:flex; flex-direction:column; gap:4px; font-size:var(--text-xs); color:var(--fg-secondary);}
+.dm-field{display:flex; flex-direction:column; gap:4px; font-size:var(--text-sm); color:var(--fg-secondary);}
 .dm-field select{width:100%;}
-.dm-count-hint{margin:0; font-size:var(--text-xs); font-style:italic; color:var(--fg-tertiary);}
+.dm-count-hint{margin:0; font-size:var(--text-sm); font-style:italic; color:var(--fg-tertiary);}
 
 .dm-dropzone{
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
@@ -7470,12 +7496,12 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .dm-dropzone-icon .icon{width:24px; height:24px; color:var(--fg-tertiary);}
 .dm-dropzone.is-dragover .dm-dropzone-icon .icon,
 .dm-dropzone:hover .dm-dropzone-icon .icon{color:var(--accent);}
-.dm-dropzone-title{font-size:var(--text-sm); font-weight:500; color:var(--fg-primary);}
-.dm-dropzone-formats{font-size:var(--text-xs); color:var(--fg-tertiary);}
+.dm-dropzone-title{font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-primary);}
+.dm-dropzone-formats{font-size:var(--text-sm); color:var(--fg-tertiary);}
 .dm-status{margin:8px 0 0; font-size:var(--text-sm); color:var(--success);}
 .dm-status-error{color:var(--danger);}
 .dm-merge{display:flex; align-items:center; gap:8px; margin-top:var(--space-3); font-size:var(--text-sm); color:var(--fg-primary); cursor:pointer;}
-.dm-merge-hint{margin:4px 0 var(--space-3); font-size:var(--text-xs); color:var(--fg-tertiary);}
+.dm-merge-hint{margin:4px 0 var(--space-3); font-size:var(--text-sm); color:var(--fg-tertiary);}
 
 /* Reset-database confirmation used to be a modal dialog with its own
    .dm-danger-* typed-phrase input here -- 2026-09-09: replaced by a confirm
@@ -7530,7 +7556,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .truncated-url {
     flex: 1;
     min-width: 0;
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     color: var(--fg-secondary);
     background: var(--bg-secondary);
     padding: 4px 8px;
@@ -7565,8 +7591,8 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
     align-items: center;
     padding: 2px 8px;
     border-radius: var(--radius-pill);
-    font-size: var(--text-xs);
-    font-weight: 500;
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-bold);
     background: var(--accent-neutral-subtle);
     color: var(--fg-secondary);
 }

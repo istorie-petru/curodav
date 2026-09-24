@@ -563,7 +563,9 @@ class TestDataMaintenanceScriptGate:
         assert 'panel.addEventListener("click", () => closeMenu())' in app
         css = (Path(__file__).resolve().parent.parent / "src" / "static" / "style.css").read_text()
         block = css.split(".action-menu-item{", 1)[1].split("}", 1)[0]
-        assert "font-weight:400" in block
+        # font-weight tokenized 2026-09-24 (design-token-tightening slice);
+        # --font-weight-regular is still literal 400, just named now.
+        assert "font-weight:var(--font-weight-regular)" in block
 
     def test_templates_carry_the_data_attributes_the_script_reads(self):
         # The page itself hosts no export/import dialog markup -- the Sync

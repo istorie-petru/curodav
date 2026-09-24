@@ -81,8 +81,9 @@ that fits its remaining budget.
    2026-09-24**: reused the existing single-select dropdown convention as
    expected; the Theme picker needed real JS work (no server round-trip),
    and the pass caught two real pre-existing bugs in the shared partial.
-9. **Design token tightening** (item 12) — audit current token count before
-   scoping; likely its own investigation-then-cut slice.
+9. ~~**Design token tightening**~~ (item 12) — **shipped 2026-09-24**: scoped
+   to typography (font-size/font-weight) after auditing; color tokens
+   excluded (see item 12's own entry below for why).
 10. **Search window simplification + event "overdue" rewording** (item 10).
 11. **Labels-as-modules + sidebar/dashboard rework** (item 4 in Peter's
     numbering, renumbered 15 here) — the biggest item; almost certainly
@@ -582,14 +583,85 @@ Export/Backup — reachable from the same surface. Remove the "Add label" and
 — events can't be overdue, they just pass, so an event's status label needs
 its own wording distinct from a task's "Overdue."
 
-## 12. Design token tightening
+## 12. ~~Design token tightening~~ — SHIPPED 2026-09-24
 
-Cap most token categories at ~3 options: ~3 font families, ~3 font sizes,
-~2 font weights, and reduce to two consistent "role" colors — one
+Request: cap most token categories at ~3 options: ~3 font families, ~3 font
+sizes, ~2 font weights, and reduce to two consistent "role" colors — one
 guaranteed-legible active/foreground text color, one consistent background
-(the example given: the sidebar's own text-on-background pairing). Needs an
-audit of `style.css`'s current `:root` custom properties (how many font
-sizes/weights/colors actually exist today) before scoping the cut.
+(the example given: the sidebar's own text-on-background pairing).
+
+**Scoped to typography only** (font-family, font-size, font-weight) —
+color tokens deliberately excluded. Audited `style.css`'s color system
+first: the app-model/tag/calendar-accent palettes (16 `--cal-bg-*`/
+`--cal-accent-*` pairs, each label/tag's own identity color) and the
+semantic status colors (`--danger`, `--accent-neutral`, etc.) aren't
+decorative excess — each one carries real meaning (which label is which,
+what a status means) that a 2-color system would erase, not simplify. A
+16-color palette compressed to "two role colors" would break label/tag
+disambiguation outright. Flagging this as its own decision rather than a
+silent scope cut: if Peter meant the color reduction literally (labels/
+tags/calendar too), that's a much bigger, separately-justified change and
+should come back as its own slice with its own question, not be folded
+into this one via a unilateral read of "somewhat like."
+
+**Font family**: already compliant — one real family (`--font-system`,
+used everywhere) plus one raw `monospace` fallback used in exactly one
+place (a `font-family:var(--font-mono, monospace)`-style rule that was
+actually already dead — see item 3/timeline note below). 2 font "options"
+total, no change needed.
+
+**Font size**: audited to 8 tokens before this slice (`--text-xs` 13px,
+`--text-sm` 14px, `--text-base` 15px, `--text-md` 15.5px, `--text-lg`
+17px, `--text-xl` 18px, `--text-2xl` 21px, `--text-3xl` 26px — the last
+completely unused). Consolidated to 4, not the requested 3 — a real
+constraint blocked the third cut: merging `--text-xl` UP into `--text-
+2xl`'s 21px (the more obvious "9 -> fewer, evenly spaced" move) would
+push `.page-header-narrow h1`'s text past its container — that class is a
+fixed `height:48px; overflow:hidden` bar used as nearly every page's
+title, deliberately height-capped and already tightly tuned. Went the
+other direction instead: `--text-2xl` merged DOWN into `--text-xl` at
+18px. `--text-2xl`'s other call sites (`.modal-header h1`, `.detail-
+heading-row h1`, the page-banner title, the auth brand) all sit in
+auto-growing, padding-based containers with no clipping risk, so
+absorbing them cost nothing. Final 4: `--text-sm` 13px (was xs+sm merged,
+13px kept as the more common of the two), `--text-base` 15px (was
+base+md merged, 15.5 was barely distinguishable from 15), `--text-lg`
+17px (unchanged, kept standalone — genuine step between body and heading
+text), `--text-xl` 18px (was xl+2xl merged). Every `var(--text-xs)` /
+`var(--text-md)` / `var(--text-2xl)` call site across `style.css` updated
+via scripted find-replace (53/9/5 occurrences respectively), verified
+by before/after count.
+
+**Font weight**: not tokenized at all before this slice — 4 raw literal
+values in use (400/500/600/700) across 114 call sites, `font-weight:X`
+and `font-weight: X` (with-space) both present. New tokens `--font-
+weight-regular:400` and `--font-weight-bold:600`. 400 kept standalone
+(the real "unemphasized" weight — body/placeholder text); 500/600/700
+folded into one `--font-weight-bold` step at 600, since all three were
+doing the same "heavier than body text" job at slightly different values
+depending on which pass wrote that rule, not a deliberate 3-step
+hierarchy. All 114 occurrences replaced with the matching token via a
+scripted regex pass; verified zero raw `font-weight:<number>` literals
+remain.
+
+Along the way, fixed several comments that had gone stale from the exact
+token values they described (pre-existing staleness in some cases, newly
+stale from this slice's own change in others) — near `.timeline-canvas`
+(a `--font-mono` fallback claim that was never true, plus this slice's
+own `--text-xs` -> `--text-sm` rename) and near `.widget-content`'s row
+list (a "14px, was 15.5px" comment that's now "13px, merged token"). Left
+one older, unrelated stale comment alone (`.dtp--compact .dtp-trigger`'s
+own comment references a `--text-caption` token that was never real in
+the current system — predates this slice, out of scope for it).
+
+**Verified**: full test suite green (Python has no CSS-value assertions,
+so this is a source-correctness check, not a visual one — see below).
+`grep` confirmed zero remaining `var(--text-xs|--text-md|--text-2xl|
+--text-3xl)` and zero remaining raw `font-weight:<digits>` literals
+outside the two new token definitions themselves.
+
+Bundled: `sw.js`'s `CACHE_NAME` bump (v102 -> v103); `test_pwa_shell.py`'s
+version string updated to match.
 
 ## 13. ~~Notes: remove or hide from the app's HTML~~ — SHIPPED 2026-09-24
 

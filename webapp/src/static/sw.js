@@ -503,7 +503,14 @@
 // swap (direct request) -- app.js's theme block was rewritten to drive
 // settings_appearance.html's new `.theme-select` radio dropdown instead of
 // the old `data-theme-choice` buttons. app.js is in SHELL_ASSETS below.
-const CACHE_NAME = "cc-shell-v102";
+// v103 (2026-09-24, same session): design-token tightening (direct request,
+// "tighten down the token system ... three font sizes, two font weight
+// options") -- style.css's type scale went from 8 sizes to 4
+// (--text-sm/base/lg/xl, xs/md/2xl/3xl folded in) and font-weight was
+// tokenized for the first time (--font-weight-regular:400,
+// --font-weight-bold:600, replacing ~114 raw 400/500/600/700 literals).
+// style.css is in SHELL_ASSETS below.
+const CACHE_NAME = "cc-shell-v103";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

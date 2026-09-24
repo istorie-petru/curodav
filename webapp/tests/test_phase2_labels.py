@@ -1450,9 +1450,11 @@ class TestSettingsLabelsGroupedTables:
         # later in the cascade, same specificity) still wins for a
         # Space's own row specifically.
         css = (Path(__file__).resolve().parent.parent / "src" / "static" / "style.css").read_text()
-        assert ".labels-table .label-name{font-weight:400;}" in css
-        assert ".labels-space-row .label-name{font-weight:600;}" in css
-        table_rule_pos = css.index(".labels-table .label-name{font-weight:400;}")
-        space_rule_pos = css.index(".labels-space-row .label-name{font-weight:600;}")
+        # font-weight tokenized 2026-09-24 (design-token-tightening slice);
+        # --font-weight-regular/--font-weight-bold are still literal 400/600.
+        assert ".labels-table .label-name{font-weight:var(--font-weight-regular);}" in css
+        assert ".labels-space-row .label-name{font-weight:var(--font-weight-bold);}" in css
+        table_rule_pos = css.index(".labels-table .label-name{font-weight:var(--font-weight-regular);}")
+        space_rule_pos = css.index(".labels-space-row .label-name{font-weight:var(--font-weight-bold);}")
         assert table_rule_pos < space_rule_pos  # later wins at equal specificity
 

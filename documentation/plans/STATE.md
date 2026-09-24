@@ -352,9 +352,81 @@ session start.
   updated for the new markup shape. Full suite: **2,381 passed, 0 failed**
   (unchanged count -- both are assertion rewrites, not new tests).
 
-  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 9 --
-  design token tightening (audit the current token count before scoping
-  the cut).
+  Same session, tenth slice -- `plans/ui-cleanup-2026-09.md` item 12,
+  design token tightening. Scoped to typography only (font-family,
+  font-size, font-weight) -- color tokens (the 16 `--cal-bg-*`/
+  `--cal-accent-*` label/tag/calendar identity colors, plus semantic
+  status colors) were deliberately excluded, a unilateral scoping call
+  made via investigation rather than `AskUserQuestion`: those colors carry
+  real meaning (which label is which), so compressing them to "two role
+  colors" would erase disambiguation, not simplify it -- flagged as its
+  own decision in the doc rather than silently narrowed, in case Peter
+  meant the literal reduction and wants that as its own future slice.
+
+  Font family was already compliant (one real family, `--font-system`,
+  plus one already-dead raw `monospace` fallback -- no change). Font size:
+  audited to 8 tokens (`--text-xs` 13/`--text-sm` 14/`--text-base`
+  15/`--text-md` 15.5/`--text-lg` 17/`--text-xl` 18/`--text-2xl`
+  21/`--text-3xl` 26, the last unused) -- consolidated to 4, not the
+  requested 3, because a real constraint blocked the third cut:
+  `--text-xl` merging UP into `--text-2xl` (the more even split) would've
+  pushed `.page-header-narrow-title`'s text past its container --
+  `.page-header-narrow` is a fixed `height:48px; overflow:hidden` bar on
+  nearly every page. Went the other way instead: `--text-2xl` merged DOWN
+  into `--text-xl` at 18px (its own call sites -- modal/detail headings,
+  page-banner title, auth brand -- all sit in auto-growing containers, no
+  clipping risk). Final 4: `--text-sm` 13px, `--text-base` 15px,
+  `--text-lg` 17px (kept standalone), `--text-xl` 18px. Every `var(--text-
+  xs/md/2xl)` call site updated via scripted find-replace (53/9/5
+  occurrences), verified by count.
+
+  Font weight: not tokenized before this slice -- 4 raw values in use
+  (400/500/600/700, 114 call sites). New `--font-weight-regular:400` /
+  `--font-weight-bold:600`; 400 kept standalone (real "unemphasized"
+  weight), 500/600/700 folded into one bold step at 600 (all three were
+  doing the same job at slightly different values depending on which pass
+  wrote the rule, not a deliberate hierarchy). All 114 literals replaced
+  via a scripted regex pass.
+
+  **Bug found and fixed in my own script, before it shipped**: the
+  font-weight regex's replacement string duplicated the colon already
+  captured in its own matched group, producing `font-weight::var(...)`
+  (double colon) at all 114 call sites -- invalid CSS that silently drops
+  the whole declaration, which would have made every styled weight in the
+  app fall back to the browser default. Caught by the full test suite
+  (two tests asserting exact `font-weight:400`/`600` source strings
+  failed, since the string they expected no longer existed at all -- not
+  because of the double colon itself, pytest doesn't parse CSS) before
+  any commit; fixed with a follow-up `sed` pass normalizing `font-weight::`
+  -> `font-weight:` file-wide, then reran the full suite clean. Also fixed
+  two now-stale comments describing the pre-consolidation token values
+  (`.timeline-canvas`, `.widget-content`'s row-list note) and one
+  inaccurate selector in this slice's own new `:root` comment
+  (`.page-header-narrow h1` doesn't exist -- the actual element is
+  `.page-header-narrow-title`, an `h2`).
+
+  **Tests**: two pre-existing tests asserting raw `font-weight:400`/`600`
+  source strings (`test_data_health.py`, `test_phase2_labels.py`) updated
+  to assert the tokenized form instead -- same literal values, just named
+  now. Full suite: **2,381 passed, 0 failed** (unchanged count -- no new
+  tests, source-value assertion rewrites only; Python has no CSS-parsing
+  harness, so this is a source-correctness check, not a rendered-value
+  one).
+
+  **Visually verified** (Playwright, same pathway as earlier slices in
+  this session): confirmed live computed styles match the new tokens
+  exactly (`--text-sm`/`--text-base`/`--text-lg`/`--text-xl` =
+  13/15/17/18px, `--font-weight-regular`/`--font-weight-bold` = 400/600,
+  old token names resolve empty) across Dashboard, Tasks, and Settings >
+  Appearance, both themes; confirmed `.page-header-narrow-title` is not
+  clipped at the new 18px size (22px content height inside the 48px
+  fixed-height, `overflow:hidden` header, both Tasks and Contacts).
+
+  Bundled: `sw.js`'s `CACHE_NAME` bump (v102 -> v103); `test_pwa_shell.py`
+  updated to match.
+
+  **Next slice**: `plans/ui-cleanup-2026-09.md`'s build order, item 10 --
+  search window simplification + event "overdue" rewording.
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-
