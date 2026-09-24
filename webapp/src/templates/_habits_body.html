@@ -1,0 +1,28 @@
+{# Habits page body (habits H2) -- also the async-CRUD region fragment
+   (GET /habits/regions), re-rendered by static/habits_page.js after every
+   check-in or habit edit so streaks and the To do / On track split stay
+   exact. Expects: todo, on_track, has_habits (routers/habits.py). #}
+{% from "_habit_page_row.html" import habit_page_row with context %}
+<div id="habits-body" class="main-shell-body habits-body">
+{% if has_habits %}
+    {% if todo %}
+    <section class="habits-section" aria-labelledby="habits-todo-h">
+        <h2 class="habits-section-title" id="habits-todo-h">To do <span class="habits-section-count">{{ todo|length }}</span></h2>
+        <ul class="habit-list">{% for h in todo %}{{ habit_page_row(h) }}{% endfor %}</ul>
+    </section>
+    {% endif %}
+    {% if on_track %}
+    <section class="habits-section" aria-labelledby="habits-done-h">
+        <h2 class="habits-section-title" id="habits-done-h">{% if todo %}On track{% else %}All done for now{% endif %} <span class="habits-section-count">{{ on_track|length }}</span></h2>
+        <ul class="habit-list">{% for h in on_track %}{{ habit_page_row(h) }}{% endfor %}</ul>
+    </section>
+    {% endif %}
+{% else %}
+<div class="empty-state empty-state-rich">
+    <div class="empty-state-icon">{{ icon('repeat') }}</div>
+    <div class="empty-state-title">No habits yet</div>
+    <div class="empty-state-text">A habit is something you want to do on a schedule -- daily, a few times a week, or on set days.</div>
+    <a class="btn primary" href="/tasks/new?habit=1" data-modal>{{ icon('plus') }} New habit</a>
+</div>
+{% endif %}
+</div>

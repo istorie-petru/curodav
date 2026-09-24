@@ -69,16 +69,17 @@ def _group(groups, kind, name=None):
 
 
 class TestFixedGroupOrder:
-    def test_project_habits_unassigned_completed_in_that_order(self, conn):
+    def test_project_unassigned_completed_in_that_order(self, conn):
+        # Habits H2 (2026-09-24): the Habits group moved to /habits.
         _project(conn, "Alpha")
         _task(conn, "a1", tags=["Alpha"])
         _task(conn, "loose1", tags=[])
 
         resp = tasks_router.list_tasks(_request(), conn=conn)
         kinds = [g["kind"] for g in resp.context["groups"]]
-        assert kinds == ["project", "habits", "unassigned", "completed"]
+        assert kinds == ["project", "unassigned", "completed"]
 
-    def test_multiple_projects_stay_alphabetical_before_habits(self, conn):
+    def test_multiple_projects_stay_alphabetical_before_unassigned(self, conn):
         _project(conn, "banana")
         _project(conn, "Apple")
         _task(conn, "t1", tags=["banana"])
@@ -88,7 +89,7 @@ class TestFixedGroupOrder:
         groups = resp.context["groups"]
         names = [g["name"] for g in groups]
         assert names[:2] == ["Apple", "banana"]
-        assert names[2:] == ["Habits", "Unassigned", "Completed"]
+        assert names[2:] == ["Unassigned", "Completed"]
 
 
 class TestProjectGrouping:

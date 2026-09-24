@@ -11,6 +11,8 @@
    `group_by` toggle, and no more column-header sort links (every group but
    Completed is fixed due-date-ascending; Completed is most-recent-first).
 
+   (Habits H2, 2026-09-24: the Habits table described below is gone --
+   habits have their own page, /habits. Kept for history.)
    2026-08-29 (STATE.md backlog item 9 follow-up, direct request: "habits
    should be a separate table at the end of the normal tasks table, with
    its own first row") -- the Habits group used to be just another
@@ -69,13 +71,11 @@
    table">`+`<thead>` with its own name/count/`+`, per the reasoning
    above: it isn't "grouping tasks by label," it's a different set of
    columns for a different kind of row.
-   Expects: groups, has_any, has_main_tasks, has_habits, today_iso, q,
+   Expects: groups, has_any, has_main_tasks, today_iso, q,
    active_date_filter. #}
 {% from "_task_row.html" import task_row with context %}
-{% from "_habit_row.html" import habit_row with context %}
-{% set _habits_group = (groups | selectattr('kind', 'equalto', 'habits') | first) %}
 {% set _completed_group = (groups | selectattr('kind', 'equalto', 'completed') | first) %}
-{% set _flat_groups = groups | rejectattr('kind', 'equalto', 'habits') | rejectattr('kind', 'equalto', 'completed') | list %}
+{% set _flat_groups = groups | rejectattr('kind', 'equalto', 'completed') | list %}
 <div id="tasks-body" class="main-shell-body">
 {% if has_any %}
 <!-- 2026-09-07 (direct report: "the habits or completed tables should
@@ -114,37 +114,6 @@
 </div>
 {% endif %}
 
-{% if has_habits %}
-<div class="card table-scroll table-responsive task-table-habits">
-<table class="task-table" id="habits-table">
-    <thead>
-        <tr>
-            {# 2026-08-30 ("remove the grouping for habits, it's
-               redundant") -- Title renamed to this group's own name +
-               count, so the generic "Title" this table used to print
-               (redundant with its own Check-in/Cadence/Streak columns
-               already saying "this is Habits") carries real information
-               instead. Kept as-is by the 2026-09-03 flattening above --
-               Habits was never part of the Project/Unassigned/Completed
-               "grouped by label" complaint, it's a structurally different
-               row shape (see this file's own top comment). #}
-            <th></th>
-            <th>{{ _habits_group.name }} ({{ _habits_group.habit_items|length }})</th>
-            <th>Check-in</th>
-            <th class="col-opt-1">Cadence</th>
-            <th class="col-opt-2">Streak</th>
-            <th class="col-opt-1">Labels</th>
-            <th class="task-table-add-th">
-                <a href="/tasks/new?habit=1" data-modal class="icon-btn" title="Add habit">{{ icon('plus', 'icon-sm') }}</a>
-            </th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for item in _habits_group.habit_items %}{{ habit_row(item) }}{% endfor %}
-    </tbody>
-</table>
-</div>
-{% endif %}
 {% else %}
 <div class="empty-state empty-state-rich">
     <div class="empty-state-icon">{{ icon('check-square') }}</div>

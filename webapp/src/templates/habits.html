@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Habits{% endblock %}
+{% block main_class %}main-shell{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{# The Habits page (routers/habits.py, habits H2 2026-09-24). #}
+<h1 class="sr-only">Habits</h1>
+{% call page_header_narrow("Habits", "repeat") %}
+<span class="spacer"></span>
+<a href="/tasks/new?habit=1" data-modal class="btn primary btn-sm">{{ icon('plus', 'icon-sm') }} New habit</a>
+{% endcall %}
+{% include "_habits_body.html" %}
+{% endblock %}
+{% block extra_scripts %}<script defer src="{{ static_url('habits_page.js') }}"></script>{% endblock %}

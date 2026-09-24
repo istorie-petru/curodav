@@ -2463,19 +2463,9 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 .task-add-row td{padding:8px 10px; border-bottom:1px solid var(--separator);}
 .task-add-row a{display:flex; align-items:center; gap:6px; color:var(--fg-secondary); text-decoration:none; font-size:var(--text-sm);}
 .task-add-row:hover td{background:var(--bg-hover, var(--bg-secondary));}
-/* Habits-group check-in control (_habit_row.html) reuses the Dashboard
-   widget's own .habit-checkin-row layout (_widget_habit_checkin.html) but
-   needs to sit inside one narrow table cell instead of a full-width
-   widget row -- this modifier drops the outer row's own padding/min-width
-   so it doesn't fight the table cell's. */
-.habit-checkin-row-inline{padding:0; min-width:0;}
-/* Habits-group check-in control (_habit_row.html, 2026-08-28 follow-ups --
-   first replaced the checkbox/"+1"/reset trio with an always-visible
-   number field, then (same day, "like Notion") that field became a
-   .inline-edit-cell -- see the .inline-edit-* rules below for the actual
-   click-to-edit look. This just lays out the form/target-suffix. */
-.habit-checkin-value{display:flex; align-items:center; gap:4px;}
-.habit-checkin-target{font-size:var(--text-sm); white-space:nowrap;}
+/* (The Tasks table's Habits-group check-in rules that sat here --
+   .habit-checkin-row-inline/-value/-target -- went with that group in
+   habits H2, 2026-09-24; habits have their own page now.) */
 /* Notion-style click-to-edit cell (static/inline_edit.js, 2026-08-28,
    direct feedback: "just text and colored pills... click two times on an
    element and it becomes editable in a non-discrete way"). Deliberately
@@ -7692,3 +7682,48 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    Removed outright rather than re-scoped -- there's no evidence any
    modal actually wanted always-100vh/square-corner behavior on top of
    the bottom-sheet design that already existed one breakpoint up. */
+
+/* Habits page (habits H2, 2026-09-24 -- habits.html/_habits_body.html/
+   _habit_page_row.html). Flat rows with hairline separators, same
+   no-card-chrome direction as the rest of the app since item 5. Row =
+   one-tap check | name + schedule/streak | last-7-days strip; on a narrow
+   container the strip drops to its own line under the name. */
+.habits-body{max-width:860px; width:100%; margin:0 auto;}
+.habits-section{margin-top:var(--space-6);}
+.habits-section-title{font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary); text-transform:uppercase; letter-spacing:.04em; margin:0 0 var(--space-2); display:flex; align-items:center; gap:var(--space-2);}
+.habits-section-count{font-weight:var(--font-weight-regular); color:var(--fg-tertiary);}
+.habit-list{list-style:none; margin:0; padding:0; container-type:inline-size; container-name:habitlist;}
+.habit-card{display:grid; grid-template-columns:auto minmax(0,1fr) auto; grid-template-areas:"check main week"; align-items:center; gap:var(--space-3); padding:var(--space-3) 0; border-bottom:1px solid var(--separator);}
+.habit-card-check{grid-area:check;}
+.habit-card-main{grid-area:main; min-width:0;}
+.habit-week{grid-area:week;}
+.habit-card-title{display:block; color:var(--fg-primary); font-weight:var(--font-weight-bold); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.habit-card-title:hover{text-decoration:underline;}
+.habit-card-meta{display:flex; flex-wrap:wrap; gap:0 var(--space-2); font-size:var(--text-sm); color:var(--fg-secondary);}
+.habit-card-meta > span + span::before{content:"\00b7"; margin-right:var(--space-2); color:var(--fg-tertiary);}
+.habit-check-btn{display:inline-flex; align-items:center; justify-content:center; min-width:40px; height:40px; padding:0 var(--space-2); border-radius:var(--radius-pill); border:2px solid var(--border-strong); background:transparent; color:var(--fg-tertiary); cursor:pointer;}
+.habit-check-btn .icon{width:20px; height:20px;}
+.habit-check-btn:hover{border-color:var(--accent); color:var(--accent);}
+.habit-check-btn.is-done{background:var(--accent); border-color:var(--accent); color:var(--fg-on-accent);}
+.habit-check-qty{font-size:var(--text-sm); font-variant-numeric:tabular-nums; color:var(--fg-primary);}
+.habit-qty-target{color:inherit; opacity:.7;}
+.habit-card.is-done-today .habit-card-title{color:var(--fg-secondary);}
+.habit-week{display:flex; gap:4px; list-style:none; margin:0; padding:0;}
+.habit-day{width:28px; height:28px; border-radius:var(--radius-sm); border:none; padding:0; background:var(--accent-neutral-subtle-strong); color:var(--fg-tertiary); font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center;}
+.habit-day:hover{box-shadow:0 0 0 1px var(--fg-primary) inset;}
+.habit-day.is-done{background:var(--accent); color:var(--fg-on-accent);}
+.habit-day.is-today{box-shadow:0 0 0 2px var(--accent) inset;}
+.habit-day.is-today.is-done{box-shadow:none;}
+.habit-day.is-excluded:not(.is-done){opacity:.45;}
+@container habitlist (max-width: 520px){
+  .habit-card{grid-template-columns:auto minmax(0,1fr); grid-template-areas:"check main" "check week";}
+  .habit-week{justify-content:flex-start;}
+}
+/* Habit form's "Only on" day chips (habit_task_form.html, habits H2). */
+.habit-days-picker{display:flex; flex-wrap:wrap; gap:var(--space-1);}
+.habit-day-chip{position:relative; cursor:pointer;}
+.habit-day-chip input{position:absolute; opacity:0; width:1px; height:1px;}
+.habit-day-chip span{display:inline-block; padding:var(--space-1) var(--space-3); border-radius:var(--radius-pill); border:1px solid var(--border); font-size:var(--text-sm); color:var(--fg-secondary);}
+.habit-day-chip input:checked + span{background:var(--accent); border-color:var(--accent); color:var(--fg-on-accent);}
+.habit-day-chip input:focus-visible + span{outline:2px solid var(--accent); outline-offset:2px;}
+.habit-days-hint{font-size:var(--text-sm); color:var(--fg-tertiary); margin:var(--space-1) 0 0;}

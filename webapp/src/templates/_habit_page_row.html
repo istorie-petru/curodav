@@ -1,0 +1,52 @@
+{# One habit on the Habits page (habits H2) -- one item from
+   habit_view.habit_items. Every control is a plain POST form (no-JS
+   fallback); static/habits_page.js submits them with fetch and refreshes
+   #habits-body. The check-in posts to the same task completion endpoints
+   the Dashboard widget uses. #}
+{% macro habit_page_row(h) %}
+<li class="habit-card{% if h.done_today %} is-done-today{% endif %}" data-uid="{{ h.uid }}">
+    <div class="habit-card-check">
+        {% if h.is_quantity %}
+        <form method="post" action="{{ h.plus_url }}" class="form-inline habit-action habit-plus">
+            <input type="hidden" name="completion_date" value="{{ h.today }}">
+            <input type="hidden" name="value" value="{{ h.next_value|int }}">
+            <button type="submit" class="habit-check-btn habit-check-qty{% if h.today_value >= h.target %} is-done{% endif %}"
+                    title="Log one more ({{ h.today_value|int }} of {{ h.target|int }} today)" aria-label="Log one more {{ h.title }}">
+                <span class="habit-qty-count">{{ h.today_value|int }}</span><span class="habit-qty-target">/{{ h.target|int }}</span>
+            </button>
+        </form>
+        {% else %}
+        <form method="post" action="{{ h.toggle_url }}" class="form-inline habit-action habit-toggle">
+            <button type="submit" class="habit-check-btn{% if h.done_today %} is-done{% endif %}"
+                    aria-pressed="{{ 'true' if h.done_today else 'false' }}"
+                    title="{% if h.done_today %}Done today -- click to undo{% else %}Mark done today{% endif %}"
+                    aria-label="{% if h.done_today %}Undo today for{% else %}Mark done today:{% endif %} {{ h.title }}">
+                {{ icon('check-circle') if h.done_today else icon('square') }}
+            </button>
+        </form>
+        {% endif %}
+    </div>
+    <div class="habit-card-main">
+        <a href="{{ h.detail_url }}" data-modal class="habit-card-title">{{ h.title }}</a>
+        <div class="habit-card-meta">
+            <span>{{ h.recurrence_label }}</span>
+            {% if h.is_period and h.period_target > 1 %}<span>{{ h.period_done }}/{{ h.period_target }} this {{ h.streak_unit }}</span>{% endif %}
+            <span class="habit-card-streak" title="Best: {{ h.longest_streak }} {{ h.streak_unit }}{{ 's' if h.longest_streak != 1 }}{% if h.completion_rate is not none %}, {{ (h.completion_rate * 100)|round|int }}% kept{% endif %}">{{ habit_streak_text(request, h.current_streak, h.streak_unit) }}</span>
+        </div>
+    </div>
+    <ol class="habit-week" aria-label="Last seven days">
+        {% for d in h.week %}
+        <li>
+            <form method="post" action="{{ d.toggle_url }}" class="form-inline habit-action habit-day-form">
+                <button type="submit" class="habit-day{% if d.done %} is-done{% endif %}{% if d.is_today %} is-today{% endif %}{% if d.excluded %} is-excluded{% endif %}"
+                        aria-pressed="{{ 'true' if d.done else 'false' }}"
+                        title="{{ d.day_name }} {{ d.iso }}{% if d.done %} -- done{% if h.is_quantity %} ({{ d.value|int }}){% endif %}, click to clear{% else %} -- click to mark done{% endif %}">
+                    <span class="habit-day-initial" aria-hidden="true">{{ d.initial }}</span>
+                    <span class="sr-only">{{ d.day_name }} {{ d.iso }}{% if d.done %}, done{% endif %}</span>
+                </button>
+            </form>
+        </li>
+        {% endfor %}
+    </ol>
+</li>
+{% endmacro %}

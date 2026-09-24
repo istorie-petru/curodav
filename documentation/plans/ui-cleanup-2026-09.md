@@ -829,7 +829,7 @@ match.
 top rather than being rewritten past-tense, matching how it already
 documents the gap between the v1 spec and what shipped.
 
-## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 + H1 shipped 2026-09-24; H2-H8 next)
+## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 + H1 + H2 shipped 2026-09-24; H3-H8 next)
 
 "I also think that we strongly need to make habits/routines a different
 data model, at least in the frontend. They can still be tasks in the
@@ -975,6 +975,27 @@ theme) -- logged days were near-invisible; now `--accent`. **Gap left for
 H2**: the recurrence picker only offers presets, so a fixed-weekday
 (BYDAY) habit can't be created from the UI yet -- the engine supports it;
 add a weekday picker to the habit form.
+
+**H2 -- shipped 2026-09-24.** `/habits` is a real page again
+(routers/habits.py: `habits_page`, `habits_regions` fragment; any other
+`/habits/...` URL redirects to it; `/tasks/habits` too). Nav rail entry
+(`repeat` icon) after Tasks. Rows (`_habit_page_row.html`) from
+`habit_view.habit_items`: one-tap check (or `n/target` +1 button), title
+-> detail modal, cadence + period progress + streak (tooltip: best + %
+kept), and a 7-day strip where each day is a toggle form (new
+`habit_view.week_strip`). Sections: "To do" (`due_today`) above "On track"
+("All done for now" when nothing's left). `static/habits_page.js` submits
+every form with fetch and re-renders `#habits-body` from the server (no
+client-side streak guessing); it also claims `cc-entity-changed` task
+events so modal create/edit/delete refreshes in place. The Tasks table's
+Habits group is gone (`_build_task_groups`, `_tasks_body.html`,
+`_habit_row.html` deleted). **Weekday picker**: the habit form's "Only on"
+chips post `habit_days`; any checked -> `FREQ=WEEKLY;BYDAY=...`
+(routers/tasks.py `_apply_habit_days`), none checked strips a previous
+BYDAY; forms without the chips are untouched. Container query drops the
+strip under the title below 520px. Leftover dead CSS for the old Tasks
+Habits table removed in the same slice. Not done (by design, later
+slices): archived-habits fold (H3/H6), bigger widget (H4).
 
 **Order and why:** H1 first -- every later surface shows streaks, and
 they're wrong today for non-daily habits. H2 (the page), then H3

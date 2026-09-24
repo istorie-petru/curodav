@@ -76,12 +76,12 @@ class TestCheckinWidget:
         assert "/habits/" not in html
 
 
-class TestHabitUrlsRedirect:
-    @pytest.mark.parametrize("path", ["/habits", "/habits/abc", "/habits/new", "/habits/abc/edit"])
-    def test_old_urls_redirect_to_tasks(self, path, tmp_path, monkeypatch):
+class TestHabitUrls:
+    @pytest.mark.parametrize("path", ["/habits/abc", "/habits/new", "/habits/abc/edit"])
+    def test_old_urls_redirect_to_the_habits_page(self, path, tmp_path, monkeypatch):
         monkeypatch.setenv("CC_DB_PATH", str(tmp_path / "cache.sqlite"))
         from src.main import app
 
         resp = TestClient(app).get(path, follow_redirects=False)
         assert resp.status_code == 302
-        assert resp.headers["location"] == "/tasks"
+        assert resp.headers["location"] == "/habits"

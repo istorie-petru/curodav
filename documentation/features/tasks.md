@@ -36,7 +36,7 @@ below.
   `POST /tasks/{uid}/timeline-reschedule`, vertical lane drag →
   `/tasks/{uid}/timeline-lane` (persisted `timeline_lane`), click-drag-create →
   `POST /tasks/timeline/create`. Double-click opens the card.
-- **Habits** (`/tasks/habits`) — see `habits.md`.
+- **Habits** — own page at `/habits` since 2026-09-24 (`/tasks/habits` redirects there); see `habits.md`.
 
 (This paragraph also describes Table as it stood before the "major rework"
 and before Importance/Urgency was removed: search box + five inline fancy

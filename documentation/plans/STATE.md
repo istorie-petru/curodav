@@ -663,12 +663,29 @@ session start.
   habit form yet (engine supports BYDAY; the recurrence picker only has
   presets).
 
-  **Next slice**: item 14 **H2** -- Habits page at `/habits` (replaces the
-  redirect and the Tasks-table Habits group), plus a weekday picker in the
-  habit form. Then H3 (detail + day notes), H4 (bigger widget -> unblocks
-  item 15), H5 (units + avoid habits), H6 (pause), H7 (agenda/calendar),
-  H8 (insights). Others unchanged: Web Push (item 7), labels-as-modules
-  (item 4 -- re-confirm scope with Peter first), narrow banners (item 2).
+  **H2 shipped (loop tick 2, Peter: "continue") -- the Habits page.**
+  `/habits` (nav rail entry, `repeat` icon): "To do" / "On track"
+  sections, each row a one-tap check (or n/target +1), cadence + period
+  progress + streak, and a tap-a-day 7-day strip; `habits_page.js` posts
+  with fetch and re-renders `#habits-body` from `/habits/regions`, and
+  refreshes on modal create/edit/delete. The Tasks table's Habits group is
+  gone (`_habit_row.html` deleted; `/tasks/habits` -> `/habits`). Habit
+  form gains "Only on" weekday chips (-> `FREQ=WEEKLY;BYDAY=...`,
+  `_apply_habit_days`), closing H1's gap. Tests: new
+  `test_habits_page.py` (15); Tasks-group tests ported/removed (10 files
+  touched). **Visually verified** (Playwright, light + dark + 375px):
+  checking moves a habit To do -> On track, a past-day tap on a Mon/Wed/
+  Fri habit yields a 1-day streak, +1 increments, creating "Yoga" with
+  Tue+Sat chips lands as "Tue, Sat" on the page, no horizontal overflow
+  at 375px, zero console errors; Tasks page has no habits table. Full
+  suite: **2,349 passed, 0 failed**. `sw.js` v109 -> v110.
+
+  **Next slice**: item 14 **H3** -- habit detail: interactive year grid,
+  month calendar, per-day notes (`task_completions.note`). Then H4
+  (bigger widget -> unblocks item 15), H5 (units + avoid habits), H6
+  (pause), H7 (agenda/calendar), H8 (insights). Others unchanged: Web
+  Push (item 7), labels-as-modules (item 4 -- re-confirm scope with Peter
+  first), narrow banners (item 2).
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-

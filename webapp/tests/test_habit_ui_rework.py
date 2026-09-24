@@ -100,31 +100,6 @@ class TestRecurrenceLabel:
         assert habit_heatmap.recurrence_label(None) == "Custom"
 
 
-class TestHabitRowColumns:
-    def _render_tasks_page(self, conn):
-        req = _request("/tasks")
-        resp = tasks_router.list_tasks(req, conn=conn)
-        ctx = {"request": req, **resp.context}
-        return tasks_router.templates.get_template("tasks_list.html").render(ctx)
-
-    def test_no_repeat_icon_next_to_streak(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
-        body = self._render_tasks_page(conn)
-        assert "#icon-repeat" not in body
-
-    def test_due_column_shows_recurrence_label_not_raw_rrule(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=WEEKLY")
-        body = self._render_tasks_page(conn)
-        assert "FREQ=WEEKLY" not in body
-        assert "Weekly" in body
-
-    def test_streak_still_present_in_scheduled_column(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
-        today = date.today().isoformat()
-        db.upsert_task_completion(conn, "h1", today, _now())
-        body = self._render_tasks_page(conn)
-        assert "1 day streak" in body
-
 
 class TestHabitTaskEditModal:
     def test_uses_dedicated_template_no_label_status_due_start(self, conn):

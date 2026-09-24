@@ -184,19 +184,10 @@ def _due_at_key(t: dict) -> str:
     return t.get("due_at") or "9999"
 
 
-def _habit_group_items(conn) -> list[dict]:
-    """The Habits group's rows -- every active habit-labeled task, in the
-    shared frontend habit shape (habit_view.habit_items). Until 2026-09-24
-    this also merged in standalone Habit entities (`habits`/`habit_entries`),
-    removed outright that day -- a habit-labeled task is the only habit."""
-    return habit_view.habit_items(conn)
-
-
 def _build_task_groups(conn, open_tasks: list[dict], completed_tasks: list[dict]) -> list[dict]:
     """2026-08-28 "major rework" session (item 3): grouping is now always
     on, in one fixed order -- Project (one group per project label,
-    alphabetical) -> Habits (its own group, see _habit_group_items) ->
-    Unassigned (open tasks with no project label) -> Completed (every
+    alphabetical) -> Unassigned (open tasks with no project label) -> Completed (every
     completed task regardless of project, most-recent-first, always last).
     `open_tasks` is expected pre-sorted by due date (_due_at_key) -- every
     group but Completed simply preserves that order, so a project/
@@ -204,7 +195,10 @@ def _build_task_groups(conn, open_tasks: list[dict], completed_tasks: list[dict]
     re-sorting per bucket. Completed intentionally does NOT nest under its
     task's project anymore (the pre-rework `group_by=project` grouping did)
     -- "completed always last" only holds if every completed task, from
-    every project, lands in the one trailing group together."""
+    every project, lands in the one trailing group together.
+
+    Habits H2 (2026-09-24): the Habits group that used to sit between
+    Project and Unassigned is gone -- habits live on /habits now."""
     buckets: dict[str | None, list[dict]] = {}
     order: list[str | None] = []
     for t in open_tasks:
@@ -216,12 +210,6 @@ def _build_task_groups(conn, open_tasks: list[dict], completed_tasks: list[dict]
     named = sorted((p for p in order if p is not None), key=str.lower)
 
     groups = [{"kind": "project", "name": p, "tasks": buckets[p]} for p in named]
-    # NOTE: the key is `habit_items`, not `items` -- Jinja's attribute
-    # lookup falls back to `dict.items` (the bound method every plain dict
-    # already carries) if a `grp.items` template expression is used, which
-    # would silently shadow a real "items" dict key with the builtin
-    # instead of erroring.
-    groups.append({"kind": "habits", "name": "Habits", "habit_items": _habit_group_items(conn)})
     groups.append({"kind": "unassigned", "name": "Unassigned", "tasks": buckets.get(None, [])})
     completed_sorted = sorted(completed_tasks, key=lambda t: t.get("updated_at") or "", reverse=True)
     groups.append({"kind": "completed", "name": "Completed", "tasks": completed_sorted})
@@ -273,20 +261,11 @@ def _tasks_list_context(
         t["work_hours"] = _hours[t["uid"]]
 
     groups = _build_task_groups(conn, open_tasks, completed_tasks)
-    has_habits = bool(groups[-3]["habit_items"])  # the Habits group
-    # 2026-09-07 (direct report: "the habits or completed tables should
-    # appear only if there is data") -- _build_task_groups always appends
-    # a Habits group (see its own comment: grouping is unconditional, one
-    # fixed order), so `_habits_group` in the template was always truthy
-    # even with zero habits, rendering an empty "Habits (0)" table with a
-    # header row and no data. has_any (below) stayed a combined "is there
-    # anything to show at all" flag for the page's own top-level empty
-    # state -- has_main_tasks is the new, narrower flag _tasks_body.html
-    # uses to gate the Project/Unassigned/Completed table specifically,
-    # so an account with only habits (no regular tasks) doesn't also get
-    # an empty main table above them.
+    # Habits H2 (2026-09-24): habits have their own page (/habits) now --
+    # the Habits group this table used to carry is gone, so "anything to
+    # show" is just "any regular task".
     has_main_tasks = bool(open_tasks or completed_tasks)
-    has_any = has_main_tasks or has_habits
+    has_any = has_main_tasks
 
     tag_names = db.list_tag_names_in_use(conn)
     ctx = _task_context(request)
@@ -295,7 +274,6 @@ def _tasks_list_context(
             "groups": groups,
             "has_any": has_any,
             "has_main_tasks": has_main_tasks,
-            "has_habits": has_habits,
             "date_filters": DATE_FILTERS,
             "date_filter_labels": DATE_FILTER_LABELS,
             "active_date_filter": date_filter,
@@ -307,10 +285,6 @@ def _tasks_list_context(
             # when the bulk-actions-bar shrank to Delete+Clear) -- is gone.
             # `tag_names` itself stays -- _task_row.html's per-row inline
             # Labels picker still reads it directly.
-            # _habit_row.html's check-in "+1" form needs today's date to
-            # post as entry_date/completion_date -- same value
-            # _habit_group_items already anchored its per-item today_value/
-            # next_value computation to.
             "today_iso": date.today().isoformat(),
         }
     )
@@ -363,12 +337,10 @@ def board_view_redirect():
 
 @router.get("/habits")
 def habits_view_redirect():
-    """The dedicated Tasks > Habits view is retired (2026-08-28 "major
-    rework" session, items 2+3) -- every habit-labeled task, and every
-    standalone Habit entity, now renders as a row in the Table view's own
-    Habits group instead (see _habit_group_items/_build_task_groups).
-    Redirect, same precedent as board_view_redirect above."""
-    return RedirectResponse(url="/tasks", status_code=302)
+    """Old Tasks > Habits URL -- habits have their own page since habits
+    H2 (2026-09-24, routers/habits.py). Redirect, same precedent as
+    board_view_redirect above."""
+    return RedirectResponse(url="/habits", status_code=302)
 
 
 @router.post("/habits/settings")
@@ -379,9 +351,9 @@ def save_habit_settings(habit_label: str = Form("Habit"), conn=Depends(get_db)):
     endpoint, are left in place unchanged -- a future slice can surface it
     somewhere in the merged Table view's Habits group if that turns out to
     be needed; nothing currently reads this route's redirect target as a
-    real page, so it just returns to the Table."""
+    real page. Returns to /habits since habits H2."""
     db.save_task_habit_settings(conn, habit_label)
-    return RedirectResponse(url="/tasks", status_code=303)
+    return RedirectResponse(url="/habits", status_code=303)
 
 
 @router.get("/new")
@@ -452,6 +424,27 @@ def new_task_form(
     )
 
 
+_WEEKDAY_ORDER = ("MO", "TU", "WE", "TH", "FR", "SA", "SU")
+
+
+def _apply_habit_days(recurrence: str | None, habit_days, present) -> str | None:
+    """habit_task_form.html's "Only on" day chips (habits H2): any day
+    checked makes the habit a fixed-days one, `FREQ=WEEKLY;BYDAY=...`,
+    overriding the Recurrence preset (the preset picker can't express
+    weekdays). All unchecked on a form that carries the chips strips a
+    previous BYDAY back to plain weekly. Forms without the chips (the plain
+    task form, direct callers) leave `recurrence` untouched."""
+    if not (isinstance(present, str) and present):
+        return recurrence
+    days = [d for d in _WEEKDAY_ORDER if isinstance(habit_days, list) and d in habit_days]
+    if days:
+        return "FREQ=WEEKLY;BYDAY=" + ",".join(days)
+    if recurrence and "BYDAY=" in recurrence.upper():
+        kept = [p for p in recurrence.split(";") if not p.upper().startswith("BYDAY=")]
+        return ";".join(kept) or "FREQ=WEEKLY"
+    return recurrence
+
+
 def _habits_per_period_value(raw) -> int | None:
     """habit_task_form.html's "Times per period" field (habits H1): blank,
     missing, or anything below 2 means "once per period" (NULL); capped
@@ -477,6 +470,8 @@ def create_task(
     recurrence: str = Form(""),
     target_per_day: str = Form("1"),
     habits_per_period: str | None = Form(None),
+    habit_days: list[str] = Form([]),
+    habit_days_present: str = Form(""),
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
@@ -529,7 +524,11 @@ def create_task(
         "status": status,
         "progress": _progress_for_status(status),
         "tags": _tags_list(tags),
-        "recurrence": recurrence if recurrence and recurrence.strip().lower() not in ("none", "nothing") else None,
+        "recurrence": _apply_habit_days(
+            recurrence if recurrence and recurrence.strip().lower() not in ("none", "nothing") else None,
+            habit_days,
+            habit_days_present,
+        ),
         "target_per_day": target_per_day_value,
         "habits_per_period": _habits_per_period_value(habits_per_period),
         # 2026-08-29 (STATE.md backlog item 3) -- see the `tasks` CREATE
@@ -814,6 +813,8 @@ def update_task(
     recurrence: str = Form(""),
     target_per_day: str = Form("1"),
     habits_per_period: str | None = Form(None),
+    habit_days: list[str] = Form([]),
+    habit_days_present: str = Form(""),
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
@@ -850,7 +851,11 @@ def update_task(
             "status": status,
             "progress": _progress_for_status(status),
             "tags": _tags_list(tags),
-            "recurrence": recurrence if recurrence and recurrence.strip().lower() not in ("none", "nothing") else None,
+            "recurrence": _apply_habit_days(
+                recurrence if recurrence and recurrence.strip().lower() not in ("none", "nothing") else None,
+                habit_days,
+                habit_days_present,
+            ),
             "target_per_day": target_per_day_value,
             # 2026-08-29 (STATE.md backlog item 3) -- always overwritten by
             # whatever this form submits, same convention as recurrence/tags

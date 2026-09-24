@@ -3,7 +3,9 @@ of the shared `#task-table` into its own `#habits-table` with its own
 header row, and gained the same double-click-to-edit title inline_edit.js
 already gave plain tasks. Since 2026-09-24 every habit row is a
 habit-labeled task (the standalone Habit entity, and its own update-field
-endpoint, were removed)."""
+endpoint, were removed); since habits H2 (same day) the Habits table left
+the Tasks page entirely for /habits -- what's left here covers the main
+task table's own shape (test_habits_page.py covers the new page)."""
 
 from __future__ import annotations
 
@@ -73,18 +75,6 @@ def _request():
 
 
 class TestHabitsOwnTable:
-    def test_habits_render_in_a_separate_table_with_their_own_header(self, conn):
-        _seed_habit(conn, "h1", "Meditate")
-        _seed_task(conn, "t1")
-        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        assert 'id="task-table"' in body
-        assert 'id="habits-table"' in body
-        # The habits table's own header names what its columns actually
-        # are, not the task table's Status/Date/Scheduled labels.
-        habits_table = body.split('id="habits-table"', 1)[1]
-        assert ">Check-in<" in habits_table.split("</table>")[0]
-        assert ">Cadence<" in habits_table.split("</table>")[0]
-        assert ">Streak<" in habits_table.split("</table>")[0]
 
     def test_habits_table_is_hidden_when_there_are_no_habits_yet(self, conn):
         # 2026-09-07 (direct report: "the habits or completed tables
@@ -103,35 +93,6 @@ class TestHabitsOwnTable:
         _seed_task(conn, "t1")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
         assert 'id="habits-table"' not in body
-
-    def test_habits_table_reappears_once_a_habit_exists(self, conn):
-        _seed_habit(conn, "h1", "Meditate")
-        _seed_task(conn, "t1")
-        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        assert 'id="habits-table"' in body
-        assert "Add habit" in body
-
-    def test_main_task_table_is_hidden_when_only_habits_exist(self, conn):
-        # The companion half of the same direct report: an account with
-        # only habits (no regular/completed tasks) used to still render
-        # the whole empty Title/Status/Date/Labels table above the Habits
-        # one, because the old has_any flag didn't distinguish "habits
-        # exist" from "regular tasks exist" -- routers/tasks.py's new
-        # has_main_tasks flag is what actually gates this table now.
-        _seed_habit(conn, "h1", "Meditate")
-        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        assert 'id="task-table"' not in body
-        assert 'id="habits-table"' in body
-
-    def test_habit_entity_row_is_in_the_habits_table_not_the_task_table(self, conn):
-        _seed_habit(conn, "h1", "Meditate")
-        _seed_task(conn, "t1")
-        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        task_table = body.split('id="task-table"', 1)[1].split('id="habits-table"')[0]
-        habits_table = body.split('id="habits-table"', 1)[1]
-        assert "Meditate" not in task_table
-        assert "Meditate" in habits_table
-        assert "t1" in task_table
 
 
 class TestGroupNameAndAddButtonInTableHeader:
@@ -212,19 +173,6 @@ class TestGroupNameAndAddButtonInTableHeader:
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
         assert "/tasks/new?project=Garden" not in body
 
-    def test_habits_group_name_and_add_link_are_in_its_header(self, conn):
-        # 2026-09-07 follow-up: the table itself is now hidden at zero
-        # habits (see TestHabitsOwnTable's own reversal above), so this
-        # needs a real habit seeded to exercise the header at all --
-        # count reads "Habits (1)", not the old always-rendered "(0)".
-        _seed_habit(conn, "h1", "Meditate")
-        _seed_task(conn, "t1")
-        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        habits_table = body.split('id="habits-table"', 1)[1]
-        assert ">Habits (1)<" in habits_table.split("</thead>")[0]
-        header = habits_table.split("</thead>")[0]
-        assert 'href="/tasks/new?habit=1"' in header
-        assert 'title="Add habit"' in header
 
     def test_completed_tasks_render_dimmed_in_the_same_table_no_own_header(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "is_project": 1})
@@ -241,9 +189,3 @@ class TestGroupNameAndAddButtonInTableHeader:
         assert "task-row-completed" in done_row_open_tag
 
 
-class TestHabitRowTitleInlineEdit:
-    def test_habit_title_is_double_click_editable(self, conn):
-        _seed_habit(conn, "h1", "Meditate")
-        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        assert 'data-uid="h1" data-field="title"' in body
-        assert "data-kind" not in body

@@ -77,7 +77,7 @@ class TestHabitTaskFormFooter:
     def test_new_habit_task_uses_shared_footer(self, conn):
         body = tasks_router.new_task_form(_request(), habit=True, conn=conn).body.decode()
         assert 'form="habit-task-form"' in body
-        assert '<a href="/tasks/habits" class="btn ghost" data-modal-cancel>' in body
+        assert '<a href="/habits" class="btn ghost" data-modal-cancel>' in body
 
 
 class TestLabelEditModalFooter:

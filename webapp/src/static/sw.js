@@ -535,7 +535,10 @@
 // logged on every modal open. modal.js is a SHELL_ASSETS entry.
 // v109 (2026-09-24, same session): habits H1 -- style.css's heatmap
 // levels use --accent (were near-invisible #efefef in light theme).
-const CACHE_NAME = "cc-shell-v109";
+// v110 (2026-09-24, same session): habits H2 -- style.css gained the
+// Habits page + weekday-chip rules (habits_page.js is page-specific, not
+// SHELL_ASSETS).
+const CACHE_NAME = "cc-shell-v110";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

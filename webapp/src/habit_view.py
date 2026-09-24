@@ -8,9 +8,9 @@ same slice (Peter: no real entities in use; its tables are left physically
 in place, never force-dropped, same convention as every other table
 removal in db.py). Every habit surface renders from `habit_items` below
 instead of reading task rows directly, so a habit never has to look like a
-task (status, due date, Kanban column) anywhere it's shown -- the Tasks
-table's Habits group and the Dashboard's Habit Check-in widget today, the
-dedicated Habits page next.
+task (status, due date, Kanban column) anywhere it's shown -- the Habits
+page (`/habits`, H2) and the Dashboard's Habit Check-in widget. (The
+Tasks table's own Habits group was retired in H2.)
 """
 
 from __future__ import annotations
@@ -79,6 +79,28 @@ def cadence_label(task: dict) -> str:
     return habit_heatmap.recurrence_label(task.get("recurrence")) if sched.interval == 1 else f"Once {base}"
 
 
+def week_strip(uid: str, entries_by_date: dict, today: date, excluded: set[str] | None = None) -> list[dict]:
+    excluded = excluded or set()
+    days = []
+    for back in range(6, -1, -1):
+        d = today - timedelta(days=back)
+        iso = d.isoformat()
+        value = entries_by_date.get(iso, 0) or 0
+        days.append(
+            {
+                "iso": iso,
+                "initial": _DAY_NAMES[d.weekday()][0],
+                "day_name": _DAY_NAMES[d.weekday()],
+                "value": value,
+                "done": value > 0,
+                "is_today": back == 0,
+                "excluded": iso in excluded,
+                "toggle_url": f"/tasks/{uid}/completion/{iso}/toggle",
+            }
+        )
+    return days
+
+
 def habit_item(conn, task: dict, today: date) -> dict:
     today_iso = today.isoformat()
     entries_by_date = {c["due_date"]: c["value"] for c in db.list_task_completions(conn, task["uid"])}
@@ -108,7 +130,11 @@ def habit_item(conn, task: dict, today: date) -> dict:
         "is_period": stats["kind"] == "period",
         # The habit's cadence in words, never the raw RRULE.
         "recurrence_label": cadence_label(task),
+        # Habits H2: the last seven days, oldest first, for the Habits
+        # page's (and later the widget's) tap-a-day strip.
+        "week": week_strip(task["uid"], entries_by_date, today, excluded),
         "detail_url": f"/tasks/{task['uid']}",
+        "edit_url": f"/tasks/{task['uid']}/edit",
         "toggle_url": f"/tasks/{task['uid']}/completion/{today_iso}/toggle",
         "plus_url": f"/tasks/{task['uid']}/completions",
         "delete_url": f"/tasks/{task['uid']}/delete",

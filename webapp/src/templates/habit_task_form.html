@@ -68,6 +68,22 @@
             <label class="field-required">Recurrence</label>
             <input type="text" name="recurrence" class="recurrence-input" value="{{ task.recurrence if task and task.recurrence else 'FREQ=DAILY' }}" required>
         </div>
+        <div class="field field-wide">
+            {# Habits H2 (2026-09-24): fixed-days habits. Any day checked
+               makes it FREQ=WEEKLY;BYDAY=... server-side (routers/tasks.py
+               _apply_habit_days), overriding the Recurrence preset above,
+               which can't express weekdays. #}
+            {% set _rr = (task.recurrence or '')|upper if task else '' %}
+            {% set _byday = _rr.split('BYDAY=')[1].split(';')[0].split(',') if 'BYDAY=' in _rr else [] %}
+            <label id="habit-days-label">Only on</label>
+            <input type="hidden" name="habit_days_present" value="1">
+            <div class="habit-days-picker" role="group" aria-labelledby="habit-days-label">
+                {% for code, name in [('MO','Mon'),('TU','Tue'),('WE','Wed'),('TH','Thu'),('FR','Fri'),('SA','Sat'),('SU','Sun')] %}
+                <label class="habit-day-chip"><input type="checkbox" name="habit_days" value="{{ code }}"{% if code in _byday %} checked{% endif %}><span>{{ name }}</span></label>
+                {% endfor %}
+            </div>
+            <p class="habit-days-hint">Pick days for a fixed-days habit (overrides Recurrence). Leave empty for daily, weekly or "times per period".</p>
+        </div>
         <div class="field">
             <!-- Habits H1 (2026-09-24): "X times per week/month" -- only
                  used when Recurrence is a plain Weekly/Monthly (see
@@ -94,7 +110,7 @@
 </form>
 </div>
 </div>
-{% set footer_back_url = '/tasks/habits' %}
+{% set footer_back_url = '/habits' %}
 {% set footer_back_label = 'Cancel' %}
 {% if task %}
 {% set footer_delete_url = '/tasks/' ~ task.uid ~ '/delete' %}
