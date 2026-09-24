@@ -145,6 +145,7 @@ def habit_stats(
     excluded_dates: set[str] | None = None,
     created: date | None = None,
     kind: str | None = None,
+    paused_dates: set[str] | None = None,
 ) -> dict:
     """Streaks and progress for one habit.
 
@@ -156,7 +157,11 @@ def habit_stats(
     today = today or date.today()
     if kind == "avoid":
         return _avoid_stats(entries_by_date, today, created)
-    excluded = excluded_dates or set()
+    # Habits H6: paused (vacation) days are neutral like a non-working day
+    # for a daily/weekday habit; a period window (week/month) that
+    # includes any paused day is neutral unless it was kept anyway.
+    paused = paused_dates or set()
+    excluded = (excluded_dates or set()) | paused
     schedule = parse_schedule(rrule, per_period, created)
     done = {d for d, v in entries_by_date.items() if v and v > 0 and d <= today.isoformat()}
     dates = [date.fromisoformat(d) for d in done]
@@ -178,6 +183,9 @@ def habit_stats(
             kept = count >= schedule.per_period
             if is_open:
                 period_done = count
+            if not kept and any(d in paused for d in in_window):
+                results.append(None)
+                continue
         else:
             if w_start.isoformat() in excluded:
                 results.append(None)
@@ -212,8 +220,13 @@ def habit_stats(
     # non-working day.
     open_start = windows[-1][0] if windows else today
     kept_now = bool(results) and results[-1] is True
-    due_today = not kept_now and (schedule.kind == "period" or open_start.isoformat() not in excluded)
+    due_today = (
+        not kept_now
+        and today.isoformat() not in paused
+        and (schedule.kind == "period" or open_start.isoformat() not in excluded)
+    )
     return {
+        "paused_today": today.isoformat() in paused,
         "current": current,
         "longest": longest,
         "unit": schedule.unit,

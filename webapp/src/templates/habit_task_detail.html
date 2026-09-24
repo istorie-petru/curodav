@@ -124,6 +124,27 @@
     </div>
 </section>
 
+<section class="detail-plain-section habit-pause" aria-labelledby="habit-pause-h">
+    {# Habits H6: pause just this habit (a vacation from it). #}
+    <h2 class="habit-section-h" id="habit-pause-h">Pause</h2>
+    {% for p in habit_pauses %}
+    <div class="habit-pause-row">
+        <span>{% if p.is_global %}All habits{% else %}Paused{% endif %} {{ p.start_date|relative_date }} &ndash; {{ p.end_date|relative_date }}</span>
+        {% if not p.is_global %}
+        <form method="post" action="/habits/pauses/{{ p.uid }}/delete" class="form-inline" {{ _keep|safe }}>
+            <button type="submit" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Remove</button>
+        </form>
+        {% endif %}
+    </div>
+    {% endfor %}
+    <form method="post" action="/habits/pauses" class="habit-pause-form" {{ _keep|safe }}>
+        <input type="hidden" name="task_uid" value="{{ task.uid }}">
+        <label class="habit-log-field"><span>From</span><input type="date" name="start_date" value="{{ today_iso }}" required data-no-autofocus></label>
+        <label class="habit-log-field"><span>Until</span><input type="date" name="end_date" value="{{ today_iso }}" required data-no-autofocus></label>
+        <button type="submit" class="btn tonal btn-sm">{{ icon('pause', 'icon-sm') }} Pause this habit</button>
+    </form>
+</section>
+
 <section class="detail-plain-section habit-log" aria-labelledby="habit-log-h">
     <h2 class="habit-section-h" id="habit-log-h">{{ 'Log a relapse' if task.habit_kind == 'avoid' else 'Log a day' }}</h2>
     <form method="post" action="/tasks/{{ task.uid }}/completions" class="habit-log-form" {{ _keep|safe }}>

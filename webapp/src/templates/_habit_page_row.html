@@ -39,6 +39,7 @@
     <div class="habit-card-main">
         <a href="{{ h.detail_url }}" data-modal class="habit-card-title">{{ h.title }}</a>
         <div class="habit-card-meta">
+            {% if h.paused_today %}<span class="habit-paused-badge">{{ icon('pause', 'icon-sm') }} Paused until {{ h.paused_until|relative_date }}</span>{% endif %}
             <span>{{ h.recurrence_label }}</span>
             {% if h.is_quantity and h.unit %}<span>{{ h.target|int }} {{ h.unit }} a day</span>{% endif %}
             {% if h.is_period and h.period_target > 1 %}<span>{{ h.period_done }}/{{ h.period_target }} this {{ h.streak_unit }}</span>{% endif %}

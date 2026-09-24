@@ -17,6 +17,32 @@
         <ul class="habit-list">{% for h in on_track %}{{ habit_page_row(h) }}{% endfor %}</ul>
     </section>
     {% endif %}
+    {% if paused %}
+    <section class="habits-section" aria-labelledby="habits-paused-h">
+        <h2 class="habits-section-title" id="habits-paused-h">Paused <span class="habits-section-count">{{ paused|length }}</span></h2>
+        <ul class="habit-list">{% for h in paused %}{{ habit_page_row(h) }}{% endfor %}</ul>
+    </section>
+    {% endif %}
+    {# Habits H6 (2026-09-24): vacation -- pause every habit for a date
+       range. Paused days are neutral for streaks. A single habit is paused
+       from its own detail modal. #}
+    <section class="habits-section habits-vacation" aria-labelledby="habits-vacation-h">
+        <h2 class="habits-section-title" id="habits-vacation-h">Vacation</h2>
+        {% for p in global_pauses %}
+        <div class="habit-pause-row">
+            <span>All habits paused {{ p.start_date|relative_date }} &ndash; {{ p.end_date|relative_date }}</span>
+            <form method="post" action="/habits/pauses/{{ p.uid }}/delete" class="form-inline habit-action">
+                <button type="submit" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Remove</button>
+            </form>
+        </div>
+        {% endfor %}
+        <form method="post" action="/habits/pauses" class="habit-action habit-pause-form">
+            <label class="habit-log-field"><span>From</span><input type="date" name="start_date" value="{{ today_iso }}" required></label>
+            <label class="habit-log-field"><span>Until</span><input type="date" name="end_date" value="{{ today_iso }}" required></label>
+            <button type="submit" class="btn tonal btn-sm">{{ icon('pause', 'icon-sm') }} Pause all habits</button>
+        </form>
+        <p class="habit-days-hint">Paused days don't count for or against a streak.</p>
+    </section>
 {% else %}
 <div class="empty-state empty-state-rich">
     <div class="empty-state-icon">{{ icon('repeat') }}</div>

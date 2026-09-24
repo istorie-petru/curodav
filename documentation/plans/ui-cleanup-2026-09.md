@@ -829,7 +829,7 @@ match.
 top rather than being rewritten past-tense, matching how it already
 documents the gap between the v1 spec and what shipped.
 
-## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 + H1-H5 shipped 2026-09-24; H6-H8 next)
+## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 + H1-H6 shipped 2026-09-24; H7-H8 next)
 
 "I also think that we strongly need to make habits/routines a different
 data model, at least in the frontend. They can still be tasks in the
@@ -1040,6 +1040,19 @@ relapsed today), relapse days red in the strip / month calendar / year
 grid (`heatmap-avoid`), "N days clean" / "Relapsed today", detail "Log a
 relapse". **Units**: "8 glasses a day" in the row meta, "Amount
 (glasses)" in the log form, in the +1 tooltip.
+
+**H6 -- shipped 2026-09-24.** New `habit_pauses` table (uid, task_uid
+NULL = all habits, inclusive start/end). `POST /habits/pauses` (ISO dates,
+end >= start, <= 366 days, known habit; past ranges allowed on purpose --
+"forgot to set it before leaving") and `POST /habits/pauses/{uid}/delete`.
+`habit_schedule.habit_stats(paused_dates=...)`: a paused due day is
+neutral; a week/month window with any paused day is neutral unless kept
+anyway; paused today -> not "to do". Habits page: a "Paused" section,
+"Paused until <date>" on the row, and a "Vacation" block (pause all
+habits from/until, list + remove). Detail modal: "Pause this habit" form
++ list. A habit's own pauses are deleted with it; pauses ride along in
+the JSON backup/restore (idempotent). Avoid habits ignore pauses in their
+stats (a pause doesn't make relapses count less).
 
 **Order and why:** H1 first -- every later surface shows streaks, and
 they're wrong today for non-daily habits. H2 (the page), then H3

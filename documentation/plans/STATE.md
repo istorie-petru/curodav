@@ -718,8 +718,17 @@ session start.
   day"), no console errors. Full suite **2,373 passed**. `sw.js` v112 ->
   v113.
 
-  **Next slice**: H6 (pause), H7 (agenda/calendar), H8 (insights), then
-  item 15. Others unchanged: Web Push
+  **H6 shipped -- vacation / pause.** `habit_pauses` table + `/habits/
+  pauses` add/delete (validated); paused days neutral in the streak
+  engine (period windows too); "Paused" section, "Paused until" badge,
+  Vacation block (pause all) on /habits, "Pause this habit" in the
+  detail modal; pauses deleted with their habit and included in backup/
+  restore. New `test_habit_pauses.py` (10). Verified live: pausing one
+  habit moves it to Paused with "Paused until 29 Sep", pause-all moves
+  all 7, Remove restores; no console errors. Full suite **2,383 passed**.
+  `sw.js` v113 -> v114.
+
+  **Next slice**: H7 (agenda/calendar), H8 (insights), then item 15. Others unchanged: Web Push
   (item 7), labels-as-modules (item 4 -- re-confirm scope with Peter
   first), narrow banners (item 2).
 

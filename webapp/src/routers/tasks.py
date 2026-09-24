@@ -786,7 +786,8 @@ def task_detail(uid: str, request: Request, month: str | None = None, conn=Depen
         excluded = _excluded_dates_for_row(conn, task, completions, date.today())
         # Habits H1 (2026-09-24): schedule-aware -- a weekly or Mon/Wed/Fri
         # task no longer "breaks" on the days it isn't due.
-        stats = habit_view.stats_for_task(task, {d: 1 for d in completions}, excluded)
+        pinfo = habit_view.pause_info(db.list_habit_pauses(conn), uid, date.today())
+        stats = habit_view.stats_for_task(task, {d: 1 for d in completions}, excluded, paused=pinfo["dates"])
         ctx.update(
             {
                 "completions": completions,
@@ -816,6 +817,8 @@ def task_detail(uid: str, request: Request, month: str | None = None, conn=Depen
         rows = db.list_task_completions(conn, uid)
         ctx["habit_month"] = habit_view.month_calendar(uid, rows, month if isinstance(month, str) else None)
         ctx["habit_notes"] = habit_view.recent_notes(rows)
+        # Habits H6: this habit's current/upcoming pauses (own + all-habit).
+        ctx["habit_pauses"] = habit_view.pause_info(db.list_habit_pauses(conn), uid, date.today())["upcoming"]
         ctx["today_iso"] = date.today().isoformat()
         return templates.TemplateResponse("habit_task_detail.html", ctx)
     return templates.TemplateResponse("task_detail.html", ctx)

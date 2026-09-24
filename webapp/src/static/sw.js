@@ -547,7 +547,9 @@
 // (page-specific, not SHELL_ASSETS).
 // v113 (2026-09-24, same session): habits H5 -- style.css gained the
 // avoid-habit (relapse) colors.
-const CACHE_NAME = "cc-shell-v113";
+// v114 (2026-09-24, same session): habits H6 -- style.css gained the
+// vacation / pause rules.
+const CACHE_NAME = "cc-shell-v114";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

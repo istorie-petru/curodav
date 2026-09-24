@@ -19,24 +19,34 @@ tables stay physically in an existing cache.sqlite. Any other old
 
 from __future__ import annotations
 
-from datetime import date
+import uuid
+from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Form, Header, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .. import db, habit_view
-from ..deps import get_db, templates
+from ..deps import get_db, respond, templates
+
+# Habits H6: longest single pause (vacation) range accepted.
+_MAX_PAUSE_DAYS = 366
 
 router = APIRouter(prefix="/habits", tags=["habits"])
 
 
 def _habits_context(conn, request: Request) -> dict:
     items = habit_view.habit_items(conn)
+    today = date.today()
     return {
         "request": request,
         "active_tab": "habits",
         "todo": [h for h in items if h["due_today"]],
-        "on_track": [h for h in items if not h["due_today"]],
+        "on_track": [h for h in items if not h["due_today"] and not h["paused_today"]],
+        # Habits H6: habits on a pause today get their own section.
+        "paused": [h for h in items if h["paused_today"] and not h["due_today"]],
+        "global_pauses": [
+            p for p in db.list_habit_pauses(conn) if p["task_uid"] is None and p["end_date"] >= today.isoformat()
+        ],
         "has_habits": bool(items),
         "habit_label": db.get_task_habit_settings(conn)["habit_label"],
         "today_iso": date.today().isoformat(),
@@ -54,6 +64,44 @@ def habits_regions(request: Request, conn=Depends(get_db)):
     check-in or a habit edit (features/async-crud.md)."""
     html = templates.env.get_template("_habits_body.html").render(_habits_context(conn, request))
     return HTMLResponse(html)
+
+
+@router.post("/pauses")
+def add_pause(
+    request: Request,
+    start_date: str = Form(...),
+    end_date: str = Form(...),
+    task_uid: str = Form(""),
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
+    """Habits H6: pause one habit (`task_uid`) or all habits (blank) for an
+    inclusive date range -- a vacation. Past ranges are allowed on
+    purpose (forgot to set it before leaving); paused days are neutral for
+    streaks, never "missed"."""
+    try:
+        start, end = date.fromisoformat(start_date), date.fromisoformat(end_date)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "Invalid date."}, status_code=400)
+    if end < start:
+        return JSONResponse({"error": "The pause must end on or after its start."}, status_code=400)
+    if (end - start).days + 1 > _MAX_PAUSE_DAYS:
+        return JSONResponse({"error": "A pause can be at most a year long."}, status_code=400)
+    task_uid = (task_uid or "").strip() or None
+    if task_uid is not None and db.get_task(conn, task_uid) is None:
+        return JSONResponse({"error": "Unknown habit."}, status_code=404)
+    db.add_habit_pause(
+        conn, str(uuid.uuid4()), task_uid, start.isoformat(), end.isoformat(), datetime.now(timezone.utc).isoformat()
+    )
+    return respond(x_requested_with, request.headers.get("referer") or "/habits")
+
+
+@router.post("/pauses/{pause_uid}/delete")
+def delete_pause(
+    pause_uid: str, request: Request, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)
+):
+    db.delete_habit_pause(conn, pause_uid)
+    return respond(x_requested_with, request.headers.get("referer") or "/habits")
 
 
 @router.get("/{rest:path}")

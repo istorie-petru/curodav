@@ -45,6 +45,11 @@ Heatmap/streak math lives in `habit_heatmap.py`.
 Recurrence preset, "Only on" day chips (any checked -> `FREQ=WEEKLY;
 BYDAY=...`), Times per period, Daily target.
 
+**Vacation / pause** (H6, `habit_pauses`): pause one habit (its detail
+modal) or all habits (the Habits page's Vacation block) for a date range;
+paused days neither keep nor break a streak, and a paused habit sits in
+its own "Paused" section instead of "To do".
+
 **Avoid habits** (`tasks.habit_kind = 'avoid'`, H5) log relapses instead
 of check-ins; the streak is clean days since the last relapse, shown red
 wherever a relapse is logged.

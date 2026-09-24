@@ -622,6 +622,19 @@ CREATE TABLE IF NOT EXISTS task_completions (
     PRIMARY KEY (task_uid, due_date)
 );
 
+-- 2026-09-24 (habits H6): vacation / pause ranges. `task_uid` NULL pauses
+-- every habit; otherwise one habit. Paused days are neutral for streaks
+-- (habit_schedule.habit_stats' `paused_dates`). Local-only like
+-- task_completions; start/end are inclusive ISO dates.
+CREATE TABLE IF NOT EXISTS habit_pauses (
+    uid TEXT PRIMARY KEY,
+    task_uid TEXT,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    created_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_habit_pauses_task ON habit_pauses(task_uid);
+
 -- 2026-08-08 ("add habits page as a view on tasks") -- app-wide setting
 -- for which label name marks a task as habit-tracked (hidden from every
 -- normal task view/widget, shown instead on Tasks > Habits with a
@@ -1818,6 +1831,8 @@ def delete_task(
     # Mirror of delete_event's relation cleanup -- the linked event survives,
     # only this task's rows go.
     conn.execute("DELETE FROM event_task_relations WHERE task_uid = ?", (uid,))
+    # Habits H6: a habit's own pauses go with it (all-habit pauses stay).
+    conn.execute("DELETE FROM habit_pauses WHERE task_uid = ?", (uid,))
     conn.commit()
 
 
@@ -1896,7 +1911,7 @@ def purge_all_data(conn: sqlite3.Connection) -> None:
         # Schedule module itself (removed 2026-08-15, see plans/STATE.md);
         # schedule_settings is gone along with that module.
         "schedule_holidays", "habits",
-        "habit_entries", "task_completions", "dashboard_widgets",
+        "habit_entries", "task_completions", "habit_pauses", "dashboard_widgets",
         "time_blocks",
         "published_lists", "app_meta",
     ]
@@ -4378,6 +4393,27 @@ def upsert_task_completion(
         "note=COALESCE(excluded.note, task_completions.note)",
         (task_uid, due_date, completed_at, value, note),
     )
+    conn.commit()
+
+
+def add_habit_pause(
+    conn: sqlite3.Connection, uid: str, task_uid: str | None, start_date: str, end_date: str, created_at: str
+) -> None:
+    """Habits H6: pause one habit (`task_uid`) or all (None), inclusive."""
+    conn.execute(
+        "INSERT INTO habit_pauses (uid, task_uid, start_date, end_date, created_at) VALUES (?, ?, ?, ?, ?)",
+        (uid, task_uid, start_date, end_date, created_at),
+    )
+    conn.commit()
+
+
+def list_habit_pauses(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    rows = conn.execute("SELECT * FROM habit_pauses ORDER BY start_date, end_date").fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_habit_pause(conn: sqlite3.Connection, uid: str) -> None:
+    conn.execute("DELETE FROM habit_pauses WHERE uid = ?", (uid,))
     conn.commit()
 
 

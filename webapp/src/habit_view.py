@@ -47,7 +47,35 @@ def _created_date(task: dict) -> date | None:
         return None
 
 
-def stats_for_task(task: dict, entries_by_date: dict, excluded: set[str], today: date | None = None) -> dict:
+def pause_info(pauses: list[dict], uid: str, today: date) -> dict:
+    """Habits H6: which days (up to today) this habit is paused, whether
+    it's paused today and until when, and the pauses that apply to it
+    (its own plus all-habit ones) that haven't ended yet."""
+    dates: set[str] = set()
+    until = None
+    upcoming = []
+    for p in pauses:
+        if p.get("task_uid") not in (None, uid):
+            continue
+        try:
+            start, end = date.fromisoformat(p["start_date"]), date.fromisoformat(p["end_date"])
+        except (TypeError, ValueError):
+            continue
+        d = start
+        while d <= min(end, today):
+            dates.add(d.isoformat())
+            d += timedelta(days=1)
+        if start <= today <= end:
+            until = max(until, end) if until else end
+        if end >= today:
+            upcoming.append({**p, "is_global": p.get("task_uid") is None})
+    return {"dates": dates, "paused_today": until is not None, "paused_until": until.isoformat() if until else None,
+            "upcoming": upcoming}
+
+
+def stats_for_task(
+    task: dict, entries_by_date: dict, excluded: set[str], today: date | None = None, paused: set[str] | None = None
+) -> dict:
     """habit_schedule.habit_stats for one recurring task row (habits H1)."""
     return habit_schedule.habit_stats(
         entries_by_date,
@@ -57,6 +85,7 @@ def stats_for_task(task: dict, entries_by_date: dict, excluded: set[str], today:
         excluded_dates=excluded,
         created=_created_date(task),
         kind=task.get("habit_kind"),
+        paused_dates=paused,
     )
 
 
@@ -165,12 +194,13 @@ def recent_notes(completions: list[dict], limit: int = 10) -> list[dict]:
     return [{"iso": c["due_date"], "note": c["note"].strip(), "value": c.get("value") or 0} for c in rows[:limit]]
 
 
-def habit_item(conn, task: dict, today: date) -> dict:
+def habit_item(conn, task: dict, today: date, pauses: list[dict] | None = None) -> dict:
     today_iso = today.isoformat()
     entries_by_date = {c["due_date"]: c["value"] for c in db.list_task_completions(conn, task["uid"])}
     target = task.get("target_per_day") or 1
     excluded = excluded_dates_for_row(conn, task, entries_by_date, today)
-    stats = stats_for_task(task, entries_by_date, excluded, today)
+    pinfo = pause_info(db.list_habit_pauses(conn) if pauses is None else pauses, task["uid"], today)
+    stats = stats_for_task(task, entries_by_date, excluded, today, pinfo["dates"])
     today_value = entries_by_date.get(today_iso, 0)
     return {
         "uid": task["uid"],
@@ -196,11 +226,14 @@ def habit_item(conn, task: dict, today: date) -> dict:
         "is_avoid": stats["kind"] == "avoid",
         "relapsed_today": stats.get("relapsed_today", False),
         "unit": (task.get("habit_unit") or "").strip(),
+        # Habits H6: vacation / pause.
+        "paused_today": pinfo["paused_today"],
+        "paused_until": pinfo["paused_until"],
         # The habit's cadence in words, never the raw RRULE.
         "recurrence_label": cadence_label(task),
         # Habits H2: the last seven days, oldest first, for the Habits
         # page's (and later the widget's) tap-a-day strip.
-        "week": week_strip(task["uid"], entries_by_date, today, excluded),
+        "week": week_strip(task["uid"], entries_by_date, today, excluded | pinfo["dates"]),
         "detail_url": f"/tasks/{task['uid']}",
         "edit_url": f"/tasks/{task['uid']}/edit",
         "toggle_url": f"/tasks/{task['uid']}/completion/{today_iso}/toggle",
@@ -212,8 +245,9 @@ def habit_item(conn, task: dict, today: date) -> dict:
 def habit_items(conn, today: date | None = None) -> list[dict]:
     """Every active habit, alphabetical (list_habit_tasks' own order)."""
     today = today or date.today()
+    pauses = db.list_habit_pauses(conn)
     return [
-        habit_item(conn, t, today)
+        habit_item(conn, t, today, pauses)
         for t in db.list_habit_tasks(conn)
         if t["status"] not in _INACTIVE_STATUSES
     ]
