@@ -476,7 +476,66 @@
 // change) is in SHELL_ASSETS below, but style.css is, so both needed the
 // bump regardless -- same v88/v97 reasoning, apparently still not
 // sticking as a habit yet.
-const CACHE_NAME = "cc-shell-v98";
+// v99 (2026-09-24, same lesson yet again): three catch-up bundled changes,
+// same session -- (1) a missed bump from earlier that session: app.js's
+// masonry `layout()` fix (clearing a card's stale forced height before
+// remeasuring, so it can grow/shrink again after the first pass); (2)
+// another missed bump, same session: manifest.webmanifest's name/
+// short_name changed "Command Center" -> "Curodav"; (3) this slice's own
+// change, static/command_palette.js's `CAPTURE_MARKER_RE` dropping `!n`
+// (Notes quick-capture hidden, direct request) -- all three files are in
+// SHELL_ASSETS below. Same reminder as v97's own comment: check a changed
+// static asset's SHELL_ASSETS membership every time, don't assume.
+// v100 (2026-09-24, same session): the card-model removal (direct
+// request, "move away from the card model ... widgets drawn directly
+// onto that body," hover dropped everywhere) -- style.css's `.card`/
+// `.widget-card`/`.widget-card-static`/body background rules all
+// changed. style.css is in SHELL_ASSETS below, so this one's caught on
+// the same slice it shipped in, not a later catch-up.
+// v101 (2026-09-24, same session): the icon set swap to Material Design
+// Icons (direct request) -- style.css's `.icon` class flipped from
+// `fill:none; stroke:currentColor;` to `fill:currentColor; stroke:none;`
+// to match the new filled-icon sprite (templates/_icons_sprite.html,
+// itself a Jinja template inlined per-page, not a separate SHELL_ASSETS
+// entry that needs its own cache-bust). style.css is in SHELL_ASSETS
+// below, so this one's caught on the same slice it shipped in too.
+// v102 (2026-09-24, same session): Settings' segmented controls -> dropdown
+// swap (direct request) -- app.js's theme block was rewritten to drive
+// settings_appearance.html's new `.theme-select` radio dropdown instead of
+// the old `data-theme-choice` buttons. app.js is in SHELL_ASSETS below.
+// v103 (2026-09-24, same session): design-token tightening (direct request,
+// "tighten down the token system ... three font sizes, two font weight
+// options") -- style.css's type scale went from 8 sizes to 4
+// (--text-sm/base/lg/xl, xs/md/2xl/3xl folded in) and font-weight was
+// tokenized for the first time (--font-weight-regular:400,
+// --font-weight-bold:600, replacing ~114 raw 400/500/600/700 literals).
+// style.css is in SHELL_ASSETS below.
+// v104 (2026-09-24, same session): search window simplification (direct
+// request) -- command_palette.js dropped label mode (Add label/Delete
+// removed) and gained the overdue/past date-bucket split; style.css lost
+// the footer rules and repositioned .command-palette-filters; base.html's
+// overlay markup changed (footer removed, filters moved, new .action-menu
+// for Edit mode/Import/Export/Backup) but base.html itself isn't a
+// SHELL_ASSETS entry -- command_palette.js and style.css both are, so the
+// bump is required either way, same v58/v476 lesson as always.
+// v105 (2026-09-24, same session): responsive tables -- style.css gained
+// the `.table-responsive` query container and its `.col-opt-1`/`.col-opt-2`
+// column-hiding tiers (plus narrow-width overrides for the Tasks title cell
+// and Published Lists' Link cell). style.css is in SHELL_ASSETS below.
+// v106 (2026-09-24, same session): image editor aspect-ratio lock --
+// avatar_cropper.js dropped the Free/4:3/16:9 presets (avatars locked 1:1,
+// banners 5:1, resize can't break either), style.css gained
+// .cropper-ratio-label. Both are SHELL_ASSETS entries.
+// v107 (2026-09-24, same session): habits slice 1 -- the standalone Habit
+// entity removed, the Dashboard's Habit Check-in widget now lists habit-
+// labeled tasks; style.css gained .habit-checkin-name (static/habits.js
+// deleted, but it was page-specific, never a SHELL_ASSETS entry).
+// v108 (2026-09-24, same session): modal.js strips <style> blocks from a
+// fetched page before DOMParser, fixing a CSP style-src-elem violation
+// logged on every modal open. modal.js is a SHELL_ASSETS entry.
+// v109 (2026-09-24, same session): habits H1 -- style.css's heatmap
+// levels use --accent (were near-invisible #efefef in light theme).
+const CACHE_NAME = "cc-shell-v109";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

@@ -98,6 +98,19 @@ def _seed_contact(conn, uid, tags=None, **overrides):
     return db.get_contact(conn, uid)
 
 
+def _seed_note(conn, uid, tags=None, **overrides):
+    row = {
+        "uid": uid,
+        "content": uid,
+        "tags": tags or [],
+        "created_at": _now(),
+        "updated_at": _now(),
+    }
+    row.update(overrides)
+    db.upsert_note(conn, row)
+    return db.get_note(conn, uid)
+
+
 class TestGlobalMode:
     def test_returns_compact_surface_only(self, conn):
         _seed_task(conn, "t1", tags=["Work"], due_at="2026-09-01")
@@ -155,6 +168,26 @@ class TestGlobalMode:
         by_type = {r["type"]: r for r in data["results"]}
         assert by_type["event"]["date"] == "2026-09-20T10:00:00"
         assert by_type["contact"]["date"] is None
+
+    def test_notes_are_excluded_from_global_search_by_default(self, conn):
+        # 2026-09-24 direct request ("remove or hide Notes from the app's
+        # HTML", hide not delete) -- global mode's default (no explicit
+        # `types`) now excludes notes, unlike the other three entity types.
+        _seed_task(conn, "t1", title="Shared name")
+        _seed_note(conn, "n1", content="Shared name")
+        import json
+
+        data = json.loads(search_router.api_search(q="Shared", conn=conn).body.decode())
+        assert {r["type"] for r in data["results"]} == {"task"}
+
+    def test_notes_still_reachable_with_an_explicit_type_filter(self, conn):
+        # The underlying data/route stays intact -- only the *default*
+        # changed. db.search_entities itself was never touched.
+        _seed_note(conn, "n1", content="Findable note")
+        import json
+
+        data = json.loads(search_router.api_search(q="Findable", types=["note"], conn=conn).body.decode())
+        assert [r["type"] for r in data["results"]] == ["note"]
 
 
 class TestForTaskFilter:
@@ -246,6 +279,15 @@ class TestPageNavigation:
         titles = {r["title"] for r in data["results"] if r["type"] == "page"}
         assert "Dashboard" in titles
 
+    def test_notes_is_not_a_navigable_page(self, conn):
+        # 2026-09-24 direct request -- _STATIC_PAGES dropped its "Notes"
+        # entry alongside the entity-search exclusion above.
+        import json
+
+        data = json.loads(search_router.api_search(conn=conn).body.decode())
+        titles = {r["title"] for r in data["results"] if r["type"] == "page"}
+        assert "Notes" not in titles
+
     def test_a_space_label_is_a_navigable_page(self, conn):
         import json
 
@@ -325,4 +367,11 @@ class TestSearchPage:
 
     def test_query_with_no_matches_shows_empty_state(self, conn):
         body = search_router.search_page(_request("/search"), q="nothingmatchesthis", conn=conn).body.decode()
+        assert "No results" in body
+
+    def test_notes_are_excluded_here_too(self, conn):
+        # Same default as /api/search's global mode -- 2026-09-24, notes
+        # hidden not deleted.
+        _seed_note(conn, "n1", content="Findable note content")
+        body = search_router.search_page(_request("/search"), q="Findable", conn=conn).body.decode()
         assert "No results" in body

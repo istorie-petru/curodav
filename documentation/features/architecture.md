@@ -31,8 +31,12 @@ fields) to serialize to a valid VEVENT/VTODO/VCARD on demand
 (`src/ical_rows.py`, `src/vcard_rows.py`) — for export, and for §1.3's Published
 Lists — but nothing about base storage reads from or writes to Radicale.
 
-- **`habits`/`habit_entries`** stay their own local-only pair (unaffected by the
-  pool/label model beyond gaining `object_labels` rows the same way tasks do).
+- **`habits`/`habit_entries`** are dead tables since 2026-09-24: the standalone
+  Habit entity was removed, and a habit is now a habit-labeled task
+  (`task_habit_settings` label + `tasks.target_per_day`/`recurrence` +
+  `task_completions.value`), rendered through `src/habit_view.py`'s one
+  frontend habit shape. The tables stay in `SCHEMA_SQL` (never force-dropped)
+  so an existing database is untouched.
 - **`schedule_classes`/`schedule_holidays`/`schedule_settings`** are local-only
   modules, not synced objects — see §1.4.
 

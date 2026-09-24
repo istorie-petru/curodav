@@ -285,5 +285,34 @@ class TestShellCacheVersion:
         # swap's width-rule retargeting, and this session's Kanban
         # responsive-column rework (`.kanban-board-wrap`/`@container`) --
         # see sw.js's own comment.
+        # v99 (2026-09-24): three catch-up bumps bundled -- app.js's
+        # masonry layout() fix and manifest.webmanifest's name/short_name
+        # change ("Command Center" -> "Curodav"), both missed earlier the
+        # same session, plus this slice's own command_palette.js change
+        # (CAPTURE_MARKER_RE dropping `!n`) -- see sw.js's own comment.
+        # v100 (2026-09-24, same session): the card-model removal --
+        # style.css's `.card`/`.widget-card`/body-background rules -- see
+        # sw.js's own comment.
+        # v101 (2026-09-24, same session): the icon set swap to Material
+        # Design Icons -- style.css's `.icon` class flipped fill/stroke to
+        # match the new filled-icon sprite -- see sw.js's own comment.
+        # v102 (2026-09-24, same session): Settings' segmented -> dropdown
+        # swap -- app.js's theme block rewritten for the new radio dropdown
+        # -- see sw.js's own comment.
+        # v103 (2026-09-24, same session): design-token tightening --
+        # style.css's type scale went from 8 sizes to 4 and font-weight was
+        # tokenized for the first time -- see sw.js's own comment.
+        # v104 (2026-09-24, same session): search window simplification --
+        # command_palette.js dropped label mode and gained the overdue/past
+        # split, style.css lost the footer rules -- see sw.js's own comment.
+        # v105 (2026-09-24, same session): responsive tables -- style.css
+        # gained the `.table-responsive` container-query column tiers --
+        # see sw.js's own comment.
+        # v106 (2026-09-24, same session): image editor aspect-ratio lock
+        # -- avatar_cropper.js/style.css -- see sw.js's own comment.
+        # v107 (2026-09-24, same session): habits slice 1 -- style.css
+        # gained .habit-checkin-name -- see sw.js's own comment.
+        # v108 (2026-09-24, same session): modal.js CSP fix -- see sw.js.
+        # v109 (2026-09-24, same session): habits H1 heatmap colors.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v98"' in script
+        assert 'CACHE_NAME = "cc-shell-v109"' in script

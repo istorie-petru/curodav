@@ -25,7 +25,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from .. import db, derived_state, recurrence_expand
+from .. import db, derived_state, habit_view, recurrence_expand
 from ..deps import EDIT_MODE_KEY, PAGE_HEADER_BANNER_SCOPE, get_db, templates
 
 router = APIRouter(tags=["dashboard"])
@@ -911,53 +911,21 @@ def _render_contact_list(conn, config: dict, nav: dict | None = None) -> dict:
 
 
 def _render_habit_checkin(conn, config: dict, nav: dict | None = None) -> dict:
-    """Check-off-today for every active habit, right on the Dashboard --
-    the point of pulling Habits off the main topbar (2026-08-01): daily
-    use ("did I do X today / how much of X today") shouldn't require a
-    whole page, only editing/adding a habit's definition should (now in
-    Settings). `target_per_day == 1` habits (the common case -- "did I
-    read today") render as a plain checkbox via the existing toggle
-    endpoint; `target_per_day > 1` ("8 glasses of water") render as a
-    count + a "+1" button instead, since a checkbox can't express a
-    partial amount. `next_value` is pre-computed here (not left to
-    client-side JS) so the "+1" button is a plain no-JS form post to the
-    existing /habits/{uid}/entries endpoint, same no-JS-required
-    philosophy as the heatmap toggle cells it sits next to conceptually.
+    """Check-off-today for every active habit, right on the Dashboard.
+    `target_per_day == 1` habits render as a plain checkbox (the toggle
+    endpoint); `target_per_day > 1` ("8 glasses of water") as a count + a
+    "+1" button posting the pre-computed `next_value`, so it works as a
+    plain no-JS form.
 
-    2026-09-14 (Spaces -- labels-as-membership rework slice 4): scope
-    resolution goes through the shared `_scope_child_names` now (was an
-    inline generate_space branch here, duplicated with the pre-slice-4
-    `_effective_tags_filter` and `_child_label_names`). Habits use
-    `project_uid`, not tags, so this still can't share `_passes_scope`/
-    `_filtered_tasks`/`_filtered_events` directly -- but the *resolution*
-    of what counts as "in scope" is the one shared function every other
-    item type also uses: a Space's habits widget pools every habit under
-    any of the Space's child (project) labels; a plain label's own habits
-    widget shows just its own `project_uid`'s habits (`scope_names ==
-    {label_name}` for a plain label, so `in scope_names` collapses to
-    exactly `== label_name`, same as the old direct `project_uid=label_name`
-    query it replaces)."""
+    2026-09-24 (plans/ui-cleanup-2026-09.md item 14, slice 1): sourced from
+    habit-labeled tasks via the shared habit_view.habit_items -- until
+    today this read only the standalone Habit entities (`habits` table), so
+    every habit made through the only creation path the UI actually offers
+    (Tasks > Habits' "+", a habit-labeled task) never showed up here. Page
+    scope is the same `_passes_scope` tag check every other item widget
+    uses now that a habit carries ordinary task labels."""
     scope_names = _scope_child_names(conn, config.get("label_name"))
-    if scope_names is not None:
-        habits = [h for h in db.list_habits(conn) if h.get("project_uid") in scope_names]
-    else:
-        habits = db.list_habits(conn)
-    today_iso = date.today().isoformat()
-    rows = []
-    for h in habits:
-        entry = db.get_habit_entry(conn, h["uid"], today_iso)
-        current_value = entry["value"] if entry else 0
-        rows.append(
-            {
-                "habit": h,
-                "today": today_iso,
-                "is_quantity": h["target_per_day"] > 1,
-                "current_value": current_value,
-                "done_today": current_value > 0,
-                "next_value": current_value + 1,
-            }
-        )
-    return {"rows": rows}
+    return {"rows": [h for h in habit_view.habit_items(conn) if _passes_scope(h["tags"], scope_names)]}
 
 
 def _render_scheduled_work_today(conn, config: dict, nav: dict | None = None) -> dict:

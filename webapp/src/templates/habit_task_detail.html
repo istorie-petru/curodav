@@ -51,12 +51,30 @@
     <div class="detail-meta-grid">
         <div class="detail-meta-item">
             <span class="detail-meta-label">Recurrence</span>
-            <span class="detail-meta-value">{{ recurrence_label(task.recurrence) }}</span>
+            <span class="detail-meta-value">{{ habit_cadence_label(task) }}</span>
         </div>
         <div class="detail-meta-item">
             <span class="detail-meta-label">Streak</span>
-            <span class="detail-meta-value">{{ habit_streak_text(request, current_streak) }}</span>
+            <span class="detail-meta-value">{{ habit_streak_text(request, current_streak, habit_stats.unit if habit_stats else 'day') }}</span>
         </div>
+        {% if habit_stats %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Best</span>
+            <span class="detail-meta-value">{{ habit_stats.longest }} {{ habit_stats.unit }}{{ 's' if habit_stats.longest != 1 }}</span>
+        </div>
+        {% if habit_stats.rate is not none %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Kept</span>
+            <span class="detail-meta-value">{{ (habit_stats.rate * 100)|round|int }}%</span>
+        </div>
+        {% endif %}
+        {% if habit_stats.period_target > 1 %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">This {{ habit_stats.unit }}</span>
+            <span class="detail-meta-value">{{ habit_stats.period_done }} / {{ habit_stats.period_target }}</span>
+        </div>
+        {% endif %}
+        {% endif %}
         {% set _other_tags = (task.tags or [])|reject('equalto', habit_label)|list %}
         {% if _other_tags %}
         <div class="detail-meta-item detail-meta-wide">

@@ -272,8 +272,17 @@
      }
    }
 
+   // 2026-09-24 (CSP fix): a modal URL returns a full page, and its
+   // base.html head carries `<style nonce="...">` with *that response's*
+   // nonce. DOMParser's document inherits this page's CSP, so parsing it
+   // logged a style-src-elem violation on every modal open. Those <style>
+   // blocks could never apply here anyway (wrong nonce; the accent rule is
+   // already live from this page's own head), so strip them before parsing
+   // rather than loosening the policy.
+   const STYLE_BLOCK_RE = /<style\b[^>]*>[\s\S]*?<\/style\s*>/gi;
+
    function injectModalContent(html) {
-     const doc = new DOMParser().parseFromString(html, "text/html");
+     const doc = new DOMParser().parseFromString(html.replace(STYLE_BLOCK_RE, ""), "text/html");
      const fragment = doc.getElementById("modal-target");
      if (!fragment) return null;
      const inner = fragment.innerHTML;

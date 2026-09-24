@@ -28,7 +28,6 @@ from starlette.requests import Request
 from src import db
 from src.routers import calendar as calendar_router
 from src.routers import contacts as contacts_router
-from src.routers import habits as habits_router
 from src.routers import tasks as tasks_router
 
 
@@ -81,12 +80,6 @@ def _seed_contact(conn, uid, **overrides):
     return db.get_contact(conn, uid)
 
 
-def _seed_habit(conn, uid, **overrides):
-    row = {"uid": uid, "name": uid, "color": "blue", "target_per_day": 1, "created_at": _now(), "updated_at": _now()}
-    row.update(overrides)
-    db.upsert_habit(conn, row)
-    return db.get_habit(conn, uid)
-
 
 class TestFormsRenderChipMultiselectNotTextInput:
     def test_task_form_has_no_tag_input(self, conn):
@@ -112,12 +105,6 @@ class TestFormsRenderChipMultiselectNotTextInput:
         assert 'class="tag-input"' not in body
         assert 'name="tags_labels" value="Professor"' in body
 
-    def test_habit_form_has_no_tag_input(self, conn):
-        _seed_habit(conn, "h1", tags=["Health"])
-        resp = habits_router.edit_habit_form("h1", _request("/habits/h1/edit"), conn=conn)
-        body = resp.body.decode()
-        assert 'class="tag-input"' not in body
-        assert 'name="tags_labels" value="Health"' in body
 
     def test_new_task_form_lists_existing_labels_unchecked(self, conn):
         _seed_task(conn, "t1", tags=["Existing"])
@@ -153,14 +140,6 @@ class TestCreateWithTwoLabelsStoresBoth:
         row = db.list_contacts(conn)[0]
         assert sorted(row["tags"]) == ["CS", "Professor"]
 
-    def test_create_habit_with_two_labels(self, conn):
-        habits_router.create_habit(
-            name="Study", description="", color="purple", icon="",
-            target_per_day="1", tags="", tags_labels=["Uni", "Focus"], project_uid="", conn=conn,
-        )
-        h = next(x for x in db.list_habits(conn) if x["name"] == "Study")
-        assert sorted(h["tags"]) == ["Focus", "Uni"]
-
 
 class TestEditAddOrRemoveLabel:
     def test_update_task_adds_and_removes_labels(self, conn):
@@ -188,14 +167,6 @@ class TestEditAddOrRemoveLabel:
             tags="", tags_labels=["New"], notes="", photo=None, remove_photo="", conn=conn,
         ))
         assert db.get_contact(conn, "c1")["tags"] == ["New"]
-
-    def test_edit_habit_adds_and_removes_labels(self, conn):
-        _seed_habit(conn, "h1", tags=["Old"])
-        habits_router.edit_habit(
-            "h1", name="h1", description="", color="blue", icon="",
-            target_per_day="1", tags="", tags_labels=["New"], project_uid="", conn=conn,
-        )
-        assert db.get_habit(conn, "h1")["tags"] == ["New"]
 
 
 def _json_request(payload: dict):

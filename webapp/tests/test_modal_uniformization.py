@@ -41,7 +41,6 @@ from starlette.requests import Request
 from src import db, deps
 from src.routers import banners as banners_router
 from src.routers import dashboard as dashboard_router
-from src.routers import habits as habits_router
 from src.routers import labels as labels_router
 from src.routers import notes as notes_router
 from src.routers import tasks as tasks_router
@@ -72,22 +71,6 @@ def _request(path="/"):
         }
     )
 
-
-class TestHabitFormFooter:
-    def test_edit_habit_uses_shared_footer_with_confirm_delete(self, conn):
-        db.upsert_habit(conn, {"uid": "h1", "name": "Read"})
-        body = habits_router.edit_habit_form("h1", _request(), conn=conn).body.decode()
-        assert 'class="detail-delete-link"' in body
-        assert 'class="btn danger"' not in body  # old filled-red button is gone
-        assert "data-confirm-sheet=" in body
-        assert "/habits/h1/delete" in body
-        assert 'form="habit-form"' in body
-
-    def test_new_habit_has_no_delete_but_has_shared_footer(self, conn):
-        body = habits_router.new_habit_form(_request(), conn=conn).body.decode()
-        assert "detail-delete-link" not in body
-        assert 'form="habit-form"' in body
-        assert 'class="modal-footer"' in body
 
 
 class TestHabitTaskFormFooter:
@@ -220,7 +203,7 @@ class TestFullAppModalSweep:
         templates_dir = Path(__file__).resolve().parents[1] / "src" / "templates"
         modal_files = [
             "contact_detail.html", "contact_form.html", "event_detail.html", "event_form.html",
-            "habit_form.html", "habit_task_form.html", "label_merge_modal.html",
+            "habit_task_form.html", "label_merge_modal.html",
             "note_form.html", "quick_add.html", "task_detail.html", "task_form.html",
             "banner_editor.html", "_widget_edit_modal.html", "_modal_widget_customize.html",
         ]

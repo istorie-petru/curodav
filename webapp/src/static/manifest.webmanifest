@@ -1,6 +1,6 @@
 {
-  "name": "Command Center",
-  "short_name": "Command Center",
+  "name": "Curodav",
+  "short_name": "Curodav",
   "description": "Tasks, calendar, projects, and contacts in one place.",
   "start_url": "/",
   "scope": "/",

@@ -82,27 +82,6 @@
     }
   }
 
-  // Same contract as updateField above, but for a standalone Habit
-  // *entity* row (kind="entity", _habit_row.html) -- that uid lives in the
-  // `habits` table, not `tasks`, so it needs routers/habits.py's own
-  // update-field endpoint instead. A habit-labeled *task* row (kind="task")
-  // still goes through updateField/`/tasks/...` like any other task.
-  async function updateHabitField(uid, field, value) {
-    try {
-      const resp = await fetch(`/habits/${uid}/update-field`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ field, value }),
-      });
-      if (!resp.ok) throw new Error("update failed");
-      return true;
-    } catch (err) {
-      window.ccToast({ message: "Could not save that change. Reloading...", variant: "error", duration: 1400 });
-      setTimeout(() => window.location.reload(), 1200);
-      return false;
-    }
-  }
-
   // Inline status-pill / labels / due-date / title changes -- delegated so
   // they survive a region swap. These stay optimistic with NO region
   // refresh (the design's explicit choice): a swap after every dropdown
@@ -186,20 +165,14 @@
   // every other inline edit here uses. Works for both tables: a plain task
   // row's title (`#task-table`) and, since STATE.md backlog item 9's
   // follow-up ("support inline editing for habit title too"), a Habits-
-  // group row's title (`#habits-table`) -- `cell.dataset.kind` (carried by
-  // both row kinds' title cell, mirroring the row-select checkbox's own
-  // `data-kind`) is what decides which endpoint owns the uid.
+  // group row's title (`#habits-table`) -- both are task uids.
   document.addEventListener("cc-inline-edit-commit", (e) => {
     const cell = e.target;
     if (!cell || !cell.matches || !cell.matches("#tasks-body [data-inline-edit]")) return;
     const uid = cell.dataset.uid;
     const field = e.detail && e.detail.field;
     if (!uid || !field) return;
-    if (cell.dataset.kind === "entity") {
-      updateHabitField(uid, field, e.detail.value);
-    } else {
-      updateField(uid, field, e.detail.value);
-    }
+    updateField(uid, field, e.detail.value);
   });
 
   // Small HTML-escape for the label pills' optimistic rebuild above --
@@ -419,25 +392,6 @@
     window.ccApi.dispatchChange({ type: "task", action });
   }
 
-  // 2026-08-29 (STATE.md backlog item 1): a selected row may be a plain
-  // task OR a Habits-group row (_habit_row.html's checkbox now carries
-  // `data-kind`, "task" for a habit-labeled task, "entity" for a
-  // standalone Habit -- see routers/tasks.py's _habit_group_items). Only
-  // "delete" needs to know the difference -- status/tag bulk actions stay
-  // task-uid-only (bulkPost's plain `Array.from(selected)`), harmlessly
-  // no-op-ing on any habit-entity uid mixed in (db.get_task returns None
-  // for it, same "skip unknown uid" behavior every bulk_action branch
-  // already has).
-  function selectedByKind() {
-    const taskUids = [];
-    const habitUids = [];
-    allCheckboxes().forEach((cb) => {
-      if (!selected.has(cb.dataset.uid)) return;
-      (cb.dataset.kind === "entity" ? habitUids : taskUids).push(cb.dataset.uid);
-    });
-    return { taskUids, habitUids };
-  }
-
   document.getElementById("bulk-delete")?.addEventListener("click", () => {
     const count = selected.size;
     if (!count) return;
@@ -446,21 +400,20 @@
       message: `Delete ${count} selected item${count === 1 ? "" : "s"}? This cannot be undone.`,
       onConfirm: async () => {
         try {
-          const { taskUids, habitUids } = selectedByKind();
+          const taskUids = Array.from(selected);
           const resp = await fetch("/tasks/bulk", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "delete", uids: taskUids, habit_uids: habitUids }),
+            body: JSON.stringify({ action: "delete", uids: taskUids }),
           });
           if (!resp.ok) throw new Error("bulk delete failed");
-          const allUids = taskUids.concat(habitUids);
-          allUids.forEach((uid) => {
+          taskUids.forEach((uid) => {
             const row = currentBody().querySelector(`tr[data-uid="${uid}"]`);
             if (row) row.remove();
           });
           selected.clear();
           updateBar();
-          window.ccToast({ title: "Deleted", message: `${allUids.length} item${allUids.length === 1 ? "" : "s"}` });
+          window.ccToast({ title: "Deleted", message: `${taskUids.length} item${taskUids.length === 1 ? "" : "s"}` });
           dispatchTaskChange("delete");
         } catch (err) {
           window.ccToast({ message: "Could not delete the selected items.", variant: "error" });
@@ -474,8 +427,8 @@
   // `<select>` this listener drove is gone from tasks_list.html -- see
   // that template's own comment. /tasks/bulk's "status" action itself is
   // untouched (routers/tasks.py's bulk_action, still covered by
-  // test_bulk_actions_tables.py::TestTasksBulkDeleteWithHabits::
-  // test_status_action_unaffected_by_habit_uids_plumbing) -- this was a
+  // test_bulk_actions_tables.py::TestTasksBulkDelete::
+  // test_status_action_400s_on_empty_uids) -- this was a
   // UI simplification, not an API removal.
 
   document.getElementById("bulk-list-select")?.addEventListener("change", async (e) => {
@@ -506,23 +459,10 @@
   // actions, command palette) dispatches cc-entity-changed; this refreshes
   // the #tasks-body region from the server. Falls back to a full reload if
   // the fragment fetch itself fails after the mutation already succeeded.
-  //
-  // Also claims "habit" changes (2026-08-28 fix): the Habits group renders
-  // as part of this same #tasks-body region (`_tasks_body.html`'s
-  // `grp.kind == 'habits'` block, since /habits was retired the same day in
-  // favor of "the Tasks table's Habits group, this form's real home now" --
-  // see plans/STATE.md). habit_form.html's edit/create form still dispatches
-  // `data-cc-change="habit"` (habits.js's own listener, unchanged, still
-  // covers /habits/{uid}'s standalone detail page), but nothing on the Tasks
-  // page ever claimed that type, so modal.js's dispatchChange() always came
-  // back unclaimed here and fell back to a full `window.location.reload()`
-  // -- reported directly ("editing habits force a page refresh"). Reusing
-  // the exact same table-region refresh as an ordinary task edit fixes it
-  // the same way.
   // ------------------------------------------------------------------ //
   document.addEventListener("cc-entity-changed", (e) => {
     const detail = e.detail || {};
-    if (detail.type !== "task" && detail.type !== "habit") return;
+    if (detail.type !== "task") return;
     // Claim the event only when the region is actually on this page --
     // otherwise (task/habit edited from a calendar/timeline modal) leave it
     // unclaimed so modal.js falls back to a reload rather than going stale.

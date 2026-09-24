@@ -1,44 +1,29 @@
-<!-- Habit Check-in widget (routers/dashboard.py's _render_habit_checkin) --
-     the reason Habits no longer needs its own topbar tab: daily use ("did
-     I do X today" / "how much of X today") lives right here. A
-     target_per_day==1 habit is a plain checkbox (posts to the existing
-     .../toggle endpoint); a target_per_day>1 habit gets a count + "+1"
-     button instead (posts to the existing .../entries endpoint with a
-     pre-computed next value -- see routers/habits.py's add_entry).
-     Editing/adding a habit's definition is Settings' job, not this
-     widget's -- see habits_list.html.
-
-     2026-08-01: these forms are now fetch-based (static/habit_checkin.js)
-     instead of full-page-reloading submits -- checking off a habit
-     shouldn't re-render the entire Dashboard (every other widget's data
-     too) just to flip one row's icon. `data-*` attributes carry the
-     numbers the JS needs to update the row in place; the forms
-     themselves are the no-JS fallback (still real POSTs to the same
-     endpoints) if the script fails to load. The name pill renders through
-     the shared widget_pill macro and the empty state through widget_empty
-     (_widget_items.html). -->
-{% from "_widget_items.html" import widget_empty, widget_pill %}
+<!-- Habit Check-in widget (routers/dashboard.py's _render_habit_checkin).
+     Each row is one habit in habit_view.habit_items' shape (a habit-labeled
+     task, 2026-09-24). A target==1 habit is a plain checkbox (the task's
+     completion toggle endpoint); a target>1 habit gets a count + "+1"
+     button instead (the explicit-value completions endpoint, with a
+     pre-computed next value). Fetch-based via static/habit_checkin.js;
+     the forms themselves are the no-JS fallback. -->
+{% from "_widget_items.html" import widget_empty %}
 {% if data.rows %}
 <div class="habit-checkin-list" id="habit-checkin-list">
     {% for row in data.rows %}
-    <div class="habit-checkin-row" data-uid="{{ row.habit.uid }}" data-target="{{ row.habit.target_per_day|int }}" data-today="{{ row.today }}">
-        <!-- habit.icon is a sprite icon name (modal-input-design Phase C),
-             not a free-typed emoji glyph -- same icon() rendering as
-             habits_list.html's own card header. -->
-        {{ widget_pill(row.habit.name, row.habit.color, icon_name=row.habit.icon) }}
+    <div class="habit-checkin-row" data-uid="{{ row.uid }}" data-target="{{ row.target|int }}" data-today="{{ row.today }}">
+        <a href="{{ row.detail_url }}" data-modal class="habit-checkin-name">{{ row.title }}</a>
         <span class="spacer"></span>
         {% if row.is_quantity %}
-        <span class="tag-usage-count habit-checkin-count">{{ row.current_value|int }}/{{ row.habit.target_per_day|int }}</span>
-        <form method="post" action="/habits/{{ row.habit.uid }}/entries" class="form-inline habit-checkin-plus" data-value="{{ row.next_value }}">
-            <input type="hidden" name="entry_date" value="{{ row.today }}">
-            <input type="hidden" name="value" value="{{ row.next_value }}">
+        <span class="tag-usage-count habit-checkin-count">{{ row.today_value|int }}/{{ row.target|int }}</span>
+        <form method="post" action="{{ row.plus_url }}" class="form-inline habit-checkin-plus" data-value="{{ row.next_value|int }}">
+            <input type="hidden" name="completion_date" value="{{ row.today }}">
+            <input type="hidden" name="value" value="{{ row.next_value|int }}">
             <button type="submit" class="icon-btn" title="Log one more">{{ icon('plus', 'icon-sm') }}</button>
         </form>
-        <form method="post" action="/habits/{{ row.habit.uid }}/entries/{{ row.today }}/toggle" class="form-inline habit-checkin-reset" {% if not row.current_value %}data-initially-hidden="1"{% endif %}>
+        <form method="post" action="{{ row.toggle_url }}" class="form-inline habit-checkin-reset" {% if not row.today_value %}data-initially-hidden="1"{% endif %}>
             <button type="submit" class="icon-btn" title="Reset today">{{ icon('x', 'icon-sm') }}</button>
         </form>
         {% else %}
-        <form method="post" action="/habits/{{ row.habit.uid }}/entries/{{ row.today }}/toggle" class="form-inline habit-checkin-toggle">
+        <form method="post" action="{{ row.toggle_url }}" class="form-inline habit-checkin-toggle">
             <button type="submit" class="checklist-check {% if row.done_today %}is-done{% endif %}" title="{% if row.done_today %}Done today -- click to undo{% else %}Mark done today{% endif %}">
                 {{ icon('check-square') if row.done_today else icon('square') }}
             </button>
@@ -48,5 +33,5 @@
     {% endfor %}
 </div>
 {% else %}
-{{ widget_empty('No habits yet -- add one from Settings.') }}
+{{ widget_empty('No habits yet -- add one from Tasks > Habits.') }}
 {% endif %}

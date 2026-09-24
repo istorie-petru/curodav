@@ -32,7 +32,6 @@ from starlette.requests import Request
 from src import db
 from src.routers import calendar as calendar_router
 from src.routers import contacts as contacts_router
-from src.routers import habits as habits_router
 from src.routers import tasks as tasks_router
 
 
@@ -103,19 +102,6 @@ def _seed_contact(conn, uid, **overrides):
     return db.get_contact(conn, uid)
 
 
-def _seed_habit(conn, uid, **overrides):
-    row = {
-        "uid": uid,
-        "name": uid,
-        "color": "blue",
-        "target_per_day": 1,
-        "created_at": _now(),
-        "updated_at": _now(),
-    }
-    row.update(overrides)
-    db.upsert_habit(conn, row)
-    return db.get_habit(conn, uid)
-
 
 def _index(body: str, needle: str) -> int:
     idx = body.find(needle)
@@ -163,14 +149,6 @@ class TestModalHeaderBodyFooterSections:
         resp = contacts_router.edit_contact_form("c1", _request("/contacts/c1/edit"), conn=conn)
         self._assert_sections(resp.body.decode())
 
-    def test_habit_form_new(self, conn):
-        resp = habits_router.new_habit_form(_request("/habits/new"), conn=conn)
-        self._assert_sections(resp.body.decode())
-
-    def test_habit_form_edit(self, conn):
-        _seed_habit(conn, "h1")
-        resp = habits_router.edit_habit_form("h1", _request("/habits/h1/edit"), conn=conn)
-        self._assert_sections(resp.body.decode())
 
 class TestFooterButtonPlacement:
     """Save/Cancel(/Delete) must actually sit inside the footer markup,

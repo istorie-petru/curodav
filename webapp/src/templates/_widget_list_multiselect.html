@@ -180,7 +180,19 @@ ms_hidden    -- when true, the outer `.field` starts with the
                       11) to checkbox/radio inputs so the form submits
                       immediately on selection change (for settings that
                       auto-save).
-      ms_pill      -- (2026-09-02, direct request: "labels also as pills ...
+      ms_bare      -- (2026-09-24, Settings' segmented-control -> dropdown
+                     swap, direct request) when true, skips the outer
+                     `.field`/`<label>` wrapper entirely and renders only
+                     the `.multiselect` trigger+panel -- for a caller that
+                     already has its own label in a different layout (a
+                     `.settings-field-row`'s own `.settings-field-label`,
+                     label-left-control-right, not this partial's normal
+                     label-above-field `.field` shape). `ms_label` is still
+                     required even when bare: it's still used for the
+                     dropdown's `aria-label`/`data-ms-label` (summary text
+                     when nothing else applies) and the placeholder text,
+                     just never rendered as a second, redundant `<label>`.
+     ms_pill      -- (2026-09-02, direct request: "labels also as pills ...
                       that reflect the colors for that label, and also have
                       icons") when true, each option's `<span>{{ it.name }}
                       </span>` is replaced with `_label_pill.html`'s shared
@@ -205,11 +217,14 @@ ms_hidden    -- when true, the outer `.field` starts with the
 {% set _sel_item = (ms_items | selectattr('uid', 'equalto', ms_selected) | list | first) if (_single and ms_selected) else ((ms_items | first) if (_single and ms_items) else none) %}
 {% set _autosubmit = ms_autosubmit | default(false) %}
 {% set _pill = ms_pill | default(false) %}
+{% set _bare = ms_bare | default(false) %}
 {% if _pill %}{% from "_label_pill.html" import label_pill with context %}{% endif %}
+{% if not _bare %}
 <div class="field {{ 'field-wide' if _wide else '' }} {{ ms_extra_class | default('') }}" {% if ms_hidden | default(false) %}hidden{% endif %}>
     <label class="{{ ms_label_class | default('') }}">{{ ms_label }}</label>
+{% endif %}
     <div class="multiselect widget-list-multiselect {{ ms_root_class | default('') }}" data-ms data-ms-mode="{{ _mode }}" data-ms-label="{{ ms_label|lower }}">
-        <button type="button" class="multiselect-trigger ms-trigger" aria-haspopup="true" aria-expanded="false">
+        <button type="button" class="multiselect-trigger ms-trigger" aria-haspopup="true" aria-expanded="false" aria-label="{{ ms_label }}">
             <span class="ms-summary">{% if _single %}{{ _sel_item.name if _sel_item else (ms_placeholder | default('Select')) }}{% elif _mode == 'select' %}{% if _n == 0 %}No {{ ms_label|lower }}{% else %}{{ _n }} selected{% endif %}{% else %}{% if _n == 0 or _n >= _total %}All{% else %}{{ _n }} selected{% endif %}{% endif %}</span>
             <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
         </button>
@@ -248,4 +263,6 @@ ms_hidden    -- when true, the outer `.field` starts with the
             {% endif %}
         </div>
     </div>
+{% if not _bare %}
 </div>
+{% endif %}

@@ -19,22 +19,51 @@
             <span class="settings-field-hint">Follows your system by default</span>
         </span>
         <span class="spacer"></span>
-        <!-- Segmented System/Light/Dark (2026-08-08 redesign) -- replaces
-             the old on/off "Dark theme" switch, which couldn't represent
-             "follow the OS" once you'd touched it even once: the switch
-             only ever stored an explicit light/dark, so the one-time-only
+        <!-- System/Light/Dark (2026-08-08 redesign) -- replaces the old
+             on/off "Dark theme" switch, which couldn't represent "follow
+             the OS" once you'd touched it even once: the switch only ever
+             stored an explicit light/dark, so the one-time-only
              OS-preference fallback base.html's inline <head> script and
              app.js already have (prefers-color-scheme, used only when
              localStorage has never been set) became permanently
              unreachable the instant anyone flipped the switch. This
              control can express all three states explicitly and put the
              user back in "System" at any time -- same underlying
-             mechanism (window.CCTheme, static/app.js), no new storage. -->
-        <div class="segmented" id="themeSegmented" role="radiogroup" aria-label="Theme">
-            <button type="button" class="seg-btn" data-theme-choice="system">{{ icon('monitor', 'icon-sm') }} System</button>
-            <button type="button" class="seg-btn" data-theme-choice="light">{{ icon('sun', 'icon-sm') }} Light</button>
-            <button type="button" class="seg-btn" data-theme-choice="dark">{{ icon('moon', 'icon-sm') }} Dark</button>
-        </div>
+             mechanism (window.CCTheme, static/app.js), no new storage.
+
+             2026-09-24 direct request ("instead of segmented, drop down
+             menu with select one") -- same single-select dropdown
+             (_widget_list_multiselect.html) the rest of this page's
+             on/off rows below now use, but with no `ms_autosubmit`/
+             `ms_form_id`: there's still no form/server round-trip for
+             this, static/app.js's theme block (see its own header
+             comment) owns picking it up via a document-level `change`
+             listener instead. `ms_selected` always renders "system" --
+             the server has no visibility into localStorage, so app.js
+             corrects the checked radio (and the trigger's summary text)
+             to the real stored choice immediately on load, same "avoid a
+             flash of the wrong state" reasoning base.html's inline
+             pre-paint theme script already follows for the page
+             background itself. No per-option icon (monitor/sun/moon) any
+             more -- _widget_list_multiselect.html dropped per-item icons
+             app-wide back in 2026-08-07 ("shouldn't have an icon"), this
+             row is no longer a deliberate exception to that. -->
+        {% set ms_name = 'theme' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Theme' %}
+        {% set ms_items = [{'uid': 'system', 'name': 'System'}, {'uid': 'light', 'name': 'Light'}, {'uid': 'dark', 'name': 'Dark'}] %}
+        {% set ms_selected = 'system' %}
+        {% set ms_bare = true %}
+        {% set ms_root_class = 'theme-select' %}
+        {% include "_widget_list_multiselect.html" %}
+        {# Jinja's {% set %} isn't block-scoped to the include above -- it
+           stays set for every later {% include %} of this same partial
+           lower in this file, so ms_root_class has to be cleared back out
+           explicitly here or "Show icons next to labels"/"Edit mode"
+           below would silently inherit "theme-select" too (caught live:
+           all three `.ms-summary` elements matched `.theme-select
+           .ms-summary` until this reset was added). #}
+        {% set ms_root_class = '' %}
     </div>
     <!-- Accent color (2026-09-17, design-system unification pass) -- 8
          fixed presets, not a free color picker (see deps.py's
@@ -61,19 +90,30 @@
     </form>
     <!-- Show icons next to labels (2026-08-09) -- when on, every label pill
          in the app (task/event label pills, Tasks table/board, calendar
-         chips) renders the label's assigned icon before its name. Same
-         autosubmit segmented on/off pattern as General's Week-starts-on
-         control. Read back everywhere via deps.py's show_label_icons()/
-         label_icon() Jinja globals. -->
-    <form class="settings-field-row" method="post" action="/settings/label-icons">
+         chips) renders the label's assigned icon before its name. Read
+         back everywhere via deps.py's show_label_icons()/label_icon()
+         Jinja globals.
+
+         2026-09-24 direct request ("instead of segmented, drop down menu
+         with select one") -- same dropdown swap as General's
+         Week-starts-on control, Off listed first for the same
+         `_sel_item`-fallback-on-a-falsy-selected-value reason
+         settings_general.html's Hide-sleep-hours row's own comment spells
+         out in full. -->
+    <form class="settings-field-row" method="post" action="/settings/label-icons" id="label-icons-form">
         <span class="settings-field-label">Show icons next to labels
             <span class="settings-field-hint">Each label's icon before its name, wherever labels appear</span>
         </span>
         <span class="spacer"></span>
-        <div class="segmented" role="radiogroup" aria-label="Show icons next to labels">
-            <label class="seg-btn"><input type="radio" name="show" value="1" class="seg-radio" {% if current_show_label_icons %}checked{% endif %} data-change-submit> On</label>
-            <label class="seg-btn"><input type="radio" name="show" value="" class="seg-radio" {% if not current_show_label_icons %}checked{% endif %} data-change-submit> Off</label>
-        </div>
+        {% set ms_name = 'show' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Show icons next to labels' %}
+        {% set ms_items = [{'uid': '', 'name': 'Off'}, {'uid': '1', 'name': 'On'}] %}
+        {% set ms_selected = '1' if current_show_label_icons else '' %}
+        {% set ms_autosubmit = true %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'label-icons-form' %}
+        {% include "_widget_list_multiselect.html" %}
     </form>
     <!-- 2026-08-29 (STATE.md backlog item 4, direct request): the "Show the
          Relations card" toggle is removed along with the feature it
@@ -85,19 +125,27 @@
          widget grid's editing controls (move/resize/reorder/delete,
          New widget, Reset layout, Add/Change banner) on across every
          dashboard/label/Space page, staying on until turned off here --
-         not a per-page, per-visit thing any more. Same autosubmit
-         segmented on/off pattern as "Show icons next to labels" above.
-         Read back via routers/dashboard.py's EDIT_MODE_KEY, straight off
-         widget_page_context (routers/settings.py's set_edit_mode). -->
-    <form class="settings-field-row" method="post" action="/settings/edit-mode">
+         not a per-page, per-visit thing any more. Read back via
+         routers/dashboard.py's EDIT_MODE_KEY, straight off
+         widget_page_context (routers/settings.py's set_edit_mode).
+
+         Same dropdown swap as "Show icons next to labels" above
+         (2026-09-24 direct request), Off listed first for the same
+         reason. -->
+    <form class="settings-field-row" method="post" action="/settings/edit-mode" id="edit-mode-form">
         <span class="settings-field-label">Edit mode
             <span class="settings-field-hint">Show widget editing controls (move, resize, reorder, delete, add) on every dashboard page until turned off</span>
         </span>
         <span class="spacer"></span>
-        <div class="segmented" role="radiogroup" aria-label="Edit mode">
-            <label class="seg-btn"><input type="radio" name="enabled" value="1" class="seg-radio" {% if current_edit_mode %}checked{% endif %} data-change-submit> On</label>
-            <label class="seg-btn"><input type="radio" name="enabled" value="" class="seg-radio" {% if not current_edit_mode %}checked{% endif %} data-change-submit> Off</label>
-        </div>
+        {% set ms_name = 'enabled' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Edit mode' %}
+        {% set ms_items = [{'uid': '', 'name': 'Off'}, {'uid': '1', 'name': 'On'}] %}
+        {% set ms_selected = '1' if current_edit_mode else '' %}
+        {% set ms_autosubmit = true %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'edit-mode-form' %}
+        {% include "_widget_list_multiselect.html" %}
     </form>
     <!-- Page header banner (2026-08-29, sidebar redesign item 13e
          follow-up, direct request) -- one image, reused as the background

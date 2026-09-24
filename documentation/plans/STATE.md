@@ -17,6 +17,659 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-24 -- Peter sent one message bundling ~17 distinct
+  UI/UX change requests (labels-as-modules rework, narrow banners
+  everywhere, card-model removal, icon set swap, Web Push notifications,
+  design token tightening, responsive tables, image editor aspect-ratio
+  lock, and more), several of which directly reverse work shipped
+  2026-09-16 (Spaces/Projects' dedicated Kanban+Agenda pages). Given the
+  scale and the reversal, asked before touching anything: how to structure
+  the session, and (since Peter's own message left it open) whether label
+  pills should link as a modal or a full page. Peter chose "log it all,
+  then pick one slice" (not a repeat of 2026-09-21's "plow through all of
+  it") and "context-dependent" for the link target.
+
+  Logged the full batch to a new doc, `plans/ui-cleanup-2026-09.md` --
+  same convention `audit-fixes-2.0.md` used for its own findings list:
+  numbered items, dependency/risk-ordered build order (not the order
+  Peter listed them in), each item's open questions and the shipped-2026-
+  09-16 conflict spelled out so a future session doesn't have to
+  re-derive them. Three of Peter's own numbered points (his 2, 14, 16)
+  were really one evolving spec refined across the same message -- merged
+  into that doc's single item 4 in the final, most-refined form rather
+  than kept as three separate entries.
+
+  Implemented the doc's item 1 (smallest, most isolated) this session:
+  relative-date shorthand. `deps.py::_relative_date`'s two named cases
+  shortened to fit a 5-character budget -- `"Tomorrow"` -> `"Tmw"`,
+  `"Yesterday"` -> `"Yest"` (`"Today"` already fit, unchanged). The
+  day-month fallback (`"5 Sep"`, up to `"25 Sep 2027"`) was read as out of
+  scope -- "relative time" in the request means the three humanized words,
+  not the absolute short-date fallback, which is already as compact as a
+  real calendar date gets. `_holiday_date` (Holidays table) inherits the
+  fix for free since it delegates to `_relative_date`. Also found (not
+  touched): `_widget_items.html`'s `relative_due` macro
+  ("Overdue"/"Tomorrow"/"In N days") is dead code, imported and called
+  nowhere -- left alone since porting a fix into unused code isn't
+  worthwhile; flagged in the new doc for a straight deletion whenever
+  someone's next to that file.
+
+  **Tests**: new `test_relative_date.py` (6 tests -- all three named
+  cases, the 5-char budget as an explicit assertion, the day-month
+  fallback, and the existing degrade-to-original-value behavior for a
+  full ISO timestamp / unparseable value / `None`). Full suite:
+  **2,374 passed, 0 failed** (2,368 prior + 6 new).
+
+  **Not visually verified** (this item only -- see item 3's entry just
+  below for the one that was): a pure-text change (a Jinja filter's output
+  string), low risk, but Peter should confirm a `"Tmw"`/`"Yest"` pill reads
+  clearly at the widget's actual font size rather than looking like a typo.
+
+  Same session, second slice -- `plans/ui-cleanup-2026-09.md` item 3,
+  **dashboard widget height not updating after sidebar resize**. That
+  doc's own first-pass guess (missing `ResizeObserver`) was wrong --
+  `sidebar_tree.js` already dispatches a synthetic `resize` event on
+  toggle and `app.js`'s `layout()` already listens for it, confirmed by
+  instrumenting the actually-running app with Playwright rather than
+  trusting the code read. Real bug, found once a widget had content tall
+  enough to need MORE height than an earlier layout pass had already
+  fixed it at: `layout()`'s `rows.forEach` loop measured
+  `entry.card.offsetHeight` to find each card's natural height without
+  first clearing the PREVIOUS pass's own `card.style.height` -- so the
+  measurement just echoed the stale explicit height back, not the card's
+  true content-driven height. Proved this with a direct-injection repro
+  (append a long paragraph to a card, watch its height stay frozen even
+  across a plain page reload with the paragraph already present -- not
+  sidebar-specific, any post-first-paint relayout was equally stuck) before
+  writing the fix, then re-ran the same repro against the fix to confirm
+  the card actually grows/shrinks to the right height now, and re-ran two
+  earlier non-reflowing repro attempts to confirm they still match their
+  ground truth. One-line fix: `card.style.height = ""` added next to the
+  existing `card.style.width = ...` write in `app.js`'s `layout()`, before
+  the `offsetHeight` measurement. Full detail, including why row
+  *composition* (which cards share a row) turned out to be unrelated to
+  sidebar width at all, in `plans/ui-cleanup-2026-09.md`'s item 3.
+
+  **Visually verified** (unusual for this file, see the environment note
+  below for why it was possible this session): screenshotted the fix live
+  via a real headless Chromium against a fresh preview DB -- a widget
+  forced to need 603px only reached 286px (a stale value borrowed from its
+  row-mate) before the fix, and correctly reaches 603px after it, matching
+  a fresh-reload ground truth exactly.
+
+  **Environment note, worth carrying forward**: this session's container
+  had no `.venv` (fresh checkout) despite this file's own "Test env" note
+  below assuming one exists -- `uv sync --all-packages` at the repo root
+  creates it and pulls in the `dev` group (pytest). Separately, and unlike
+  what most earlier entries in this file say ("sandbox can't reach a real
+  browser"), a real headless Chromium **is** reachable here: Playwright's
+  npm package is preinstalled globally
+  (`NODE_PATH=/opt/node22/lib/node_modules node ...`), and the browser
+  binary lives at
+  `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` (pass as
+  `executablePath` -- the plain `chromium.launch()` default path doesn't
+  resolve here). `chromium-cli` itself isn't installed, so drive Playwright
+  directly (`chromium.launch({executablePath, args:['--no-sandbox']})`) --
+  see this session's scratchpad scripts for the working pattern (server on
+  `CC_DB_PATH=/tmp/curodav-preview/cache.sqlite`, `PYTHONPATH=src
+  ../.venv/bin/python -m src.main`, no login wall hit in this fresh DB).
+  Future sessions doing frontend/JS work should use this instead of
+  defaulting to "not visually verified."
+
+  Same session, third slice -- `plans/ui-cleanup-2026-09.md` item 8, the
+  `main-shell-body` `margin-bottom: 6dvh` audit. The request was
+  conditional ("if `main-shell-body` is only used in dashboard pages,
+  remove..."), and the condition is false: grepped every template,
+  confirmed the class is genuinely applied on four page shapes --
+  `_tasks_body.html`, `_contacts_body.html`, `_notes_body.html`, and
+  `dashboard.html`'s widget-grid wrapper -- all sharing one 2026-09-07
+  "flex shell" rule (style.css). `labels_manage.html` turned up in the
+  grep too but only inside a comment describing it *opting out* of this
+  shell 2026-09-08 -- it doesn't carry the class. **No code change yet**
+  at that point -- the margin is shared, load-bearing spacing across four
+  page types, not a dashboard-only leftover, and inventing a
+  dashboard-scoped modifier class nobody had actually asked for would've
+  been guessing past a conditional that didn't hold.
+
+  Same session, fourth slice, immediate follow-up: Peter confirmed the
+  real ask once the audit came back -- Dashboard specifically does need
+  the margin gone ("that bottom margin creates a veil that hides content
+  ... it doesn't exist for dashboard pages"), Tasks/Contacts/Notes
+  untouched. Landed as `main-shell-body--flush` (style.css), a second
+  class added only to `dashboard.html`'s widget-grid wrapper --
+  `margin-bottom:0` overrides the shared rule there, every other
+  `.main-shell-body` rule stays shared. Verified live (same Playwright
+  pathway as the height-bug slice): Dashboard's wrapper computed
+  `margin-bottom` is `0px`; Tasks' is still `42px` (6dvh at the test
+  viewport), unchanged. Full detail in the doc's item 8.
+
+  Same session, fifth slice -- `plans/ui-cleanup-2026-09.md` item 9, app
+  title + PWA icon. Two open questions resolved before touching code: (1)
+  literal-"constant" title vs. "Curodav" appended to each page's own title
+  -- Peter picked appended, matching the existing "Appearance - Settings"
+  sub-page convention; (2) the PWA icon turned out to already be fully
+  built (real custom artwork, `icon-192.png`/`icon-512.png`,
+  `manifest.webmanifest` with both sizes) but never linked --
+  `base.html` had the manifest `<link>` and theme-color `<meta>` sitting
+  inside a `{# PWA shell (1.8 slice 3) -- DISABLED #}` Jinja comment
+  (favicon/apple-touch-icon were separate tags, already live either way).
+  Confirmed via `routers/pwa.py`'s own header comment this is unrelated to
+  the client-side "Offline Mode" feature purged 2026-09-09 for UI
+  complaints (a different surface entirely) before asking whether to
+  re-enable just the manifest link (icon/name metadata, no service
+  worker) -- Peter confirmed yes.
+
+  Landed: `base.html`'s `<title>` now reads `{% block title %}{% endblock
+  %}{% if self.title() %} - {% endif %}Curodav` (no other template
+  touched -- `self.title()` reuses each page's existing `{% block title
+  %}` override), the manifest `<link>`/theme-color `<meta>` un-commented
+  (`pwa.js`'s service-worker `<script>` deliberately left disabled, out of
+  scope), and `manifest.webmanifest`'s `name`/`short_name` changed from
+  `"Command Center"` to `"Curodav"`. Verified live: `Dashboard - Curodav`,
+  `Tasks - Curodav`, `Appearance - Settings - Curodav`; manifest fetches
+  at 200 with the new name. Full suite still 2,374 passed, including all
+  15 `test_pwa_shell.py` cases -- one of those
+  (`test_base_html_links_the_manifest_and_theme_color`) turned out to read
+  `base.html`'s raw source text rather than a rendered response, so it
+  couldn't actually tell "commented out" from "live" and passed either
+  way both before and after this change; noted in the doc's item 9, not
+  fixed here (out of scope for this slice).
+
+  Same session, sixth slice -- `plans/ui-cleanup-2026-09.md` item 13,
+  Notes removal/hiding decision. Asked first (genuinely ambiguous which,
+  and the blast radius differs enormously): Peter chose hide, not remove
+  -- data/routes stay intact. Audited every HTML-visible surface Notes
+  actually had (no sidebar nav entry to begin with): Quick Capture's `!n`
+  marker, the command palette's live capture-preview gate, global search
+  (both `/api/search` and `/search`), and the palette's page-navigation
+  feature's synthetic "Notes" destination.
+
+  Landed: `quick_capture.py`'s `MARKER_TYPES`/`_MARKER_RE` drop `"n"`
+  (`parse_note` itself untouched, still directly testable -- only the
+  marker-driven entry point can't reach it); `command_palette.js`'s
+  `CAPTURE_MARKER_RE` drops `"n"` too, so `!n ...` now falls through to a
+  plain search/create-suggestion state instead of a capture preview that
+  would 400 on submit; `routers/search.py` gained
+  `_GLOBAL_SEARCH_TYPES = ["task", "event", "contact"]` as the default for
+  both search entry points when no explicit `types` is given --
+  `db.search_entities` itself untouched, so an explicit `types=["note"]`
+  request still works; `_STATIC_PAGES` lost its "Notes" jump-to-page
+  entry. `quick-capture.md` (the reference spec) got a status update at
+  its top, not a past-tense rewrite, matching its existing convention.
+
+  Bundled in: `sw.js`'s `CACHE_NAME` bump (v98 -> v99) -- caught two
+  missed bumps from earlier this same session (app.js's masonry fix,
+  manifest.webmanifest's name change) alongside this slice's own
+  `command_palette.js` change, per that file's own repeatedly-reinforced
+  "bump on every static-asset change expected to be visible immediately"
+  convention. `test_pwa_shell.py`'s hardcoded version string updated to
+  match.
+
+  **Visually verified**: created a note via the still-live `/notes/new`
+  form, confirmed it renders on `/notes`, then confirmed
+  `GET /api/search?q=<its content>` returns `[]`; typing `!n Some new
+  note text` into Ctrl-K shows ordinary "Create task/event: ..."
+  suggestions, not a broken dead end.
+
+  **Tests**: `test_quick_capture_parser.py`'s `TestNotes` rewritten for
+  the new "marker not recognized" behavior + new `TestParseNoteDirectly`
+  (proves `parse_note` still works standalone); `test_quick_capture.py`'s
+  `TestCreateEndpointNote` rewritten the same way; `test_search_api.py`
+  gained a `_seed_note` helper and five new tests. Full suite:
+  **2,381 passed, 0 failed** (2,374 prior + 7 net new).
+
+  Same session, seventh slice -- `plans/ui-cleanup-2026-09.md` item 4,
+  card-model removal. Turned out much bigger than "mechanical" once
+  actually scoped: `.card` is used in 35 templates (settings pages, every
+  entity form, Calendar grids, modal bodies, published lists -- not just
+  the dashboard widget grid), and the request's hover-animation wording
+  was genuinely ambiguous (keep it somewhere vs. drop it everywhere).
+  Asked both questions before touching CSS; Peter chose the broader
+  answer both times -- every `.card` app-wide, hover dropped everywhere.
+
+  Landed (`static/style.css`): `body`/`html`'s background changed from
+  `--bg-base` (the old gray) to `--bg-elevated` (the same token `.card`
+  used to use, so the two are now visually identical -- `--bg-base`/
+  `--surface-0` left defined but unused, token cleanup is item 12's job);
+  `.card`'s base rule stripped to just `padding`/`margin-bottom`, its
+  `:hover` shadow-lift removed outright (`.card-danger`, the semantic
+  alert-color variant, is the one deliberate exception, untouched);
+  `.widget-card`/`.widget-card-static` lost the extra hairline-border +
+  static-hover treatment a 2026-08-30 pass had given them (now fully
+  superseded, both just inherit the chromeless `.card` base);
+  `.modal-body .card`'s override simplified since its border/shadow
+  neutralization is a no-op now.
+
+  **Visually verified**: screenshots + computed-style checks (light
+  mode's `.card` background is `transparent` with `body` at
+  `rgb(255,255,255)`; dark mode's `body` is `rgb(62,62,62)`) across
+  Dashboard, a Settings page, and a form modal, both themes -- widgets and
+  form sections sit flush on the page now; the modal dialog itself keeps
+  its own distinct elevated surface (never used `.card`, untouched).
+
+  Bundled: `sw.js`'s `CACHE_NAME` bump (v99 -> v100) for style.css's
+  change, caught in the same slice this time rather than a later
+  catch-up. No Python test asserts CSS rule content, so the full suite
+  (**2,381 passed, 0 failed**) is unchanged in count -- purely a visual
+  verification.
+
+  Same session, eighth slice -- `plans/ui-cleanup-2026-09.md` item 5, the
+  icon set swap to MaterialDesign-SVG. Turned out much bigger than
+  "mechanical" once scoped: the sprite held 190 hand-drawn Feather-style
+  stroke icons (not just the ~51 hardcoded in templates -- the full
+  `routers/labels.py::ICON_GROUPS` picker palette too), and a partial swap
+  would leave two icon styles mixed together, worse than not swapping.
+  Asked whether to do the full 190-icon swap now or defer; Peter chose
+  now.
+
+  Attached `Templarian/MaterialDesign-SVG` (shallow, blobless, sparse to
+  `svg/`, ~36MB) rather than hand-guessing path data -- a guessed path
+  renders a broken or subtly-wrong icon, not a shortcut. Built a full
+  Feather-name -> real-MDI-name mapping using `meta.json`'s name/alias/tag
+  index, validated every candidate exists as a real file before using it,
+  resolved 6 name collisions (e.g. `edit`/`edit-3`/`pencil` all first
+  landed on the same MDI icon) by finding genuinely distinct real icons.
+  Extracted real path data for all 190 and rebuilt `templates/_icons_
+  sprite.html` from scratch. `style.css`'s `.icon` class flipped
+  `fill:none; stroke:currentColor;` -> `fill:currentColor; stroke:none;`
+  to match -- Feather is outline/stroke, MDI is solid filled shapes, a
+  real style change not just a file swap.
+
+  **Found and fixed a pre-existing bug**: an audit of every literal
+  `icon(...)` call site (not just ICON_GROUPS) turned up `rotate-ccw`/
+  `x-circle` (event_detail.html's occurrence-override buttons) referenced
+  but never defined in the *old* Feather sprite either -- confirmed
+  against the pre-change committed file. Both buttons silently rendered
+  no icon at all. Added real MDI equivalents as part of the same rebuild.
+
+  **Visually verified**: sidebar rail, the full icon picker (all category
+  groups), Contacts' empty state, dark mode -- all clean, distinct, no
+  missing/broken icons, no console errors. One test regression caught and
+  fixed: the new sprite's header comment quoted event_detail.html's exact
+  button label text, which -- since the sprite ships on every page --
+  collided with an unrelated test's "this text should be absent" check;
+  reworded the comment. Full suite: 2,381 passed (unchanged count, no
+  Python logic touched).
+
+  Bundled: `sw.js`'s `CACHE_NAME` bump (v100 -> v101) for the `.icon`
+  class change; `test_pwa_shell.py`'s version string updated to match.
+
+  Same session, ninth slice -- `plans/ui-cleanup-2026-09.md` item 9,
+  Settings `.segmented` -> dropdown. Scoped to the two Settings pages that
+  actually had it (`settings_general.html`, `settings_appearance.html`, 8
+  controls) -- 8 other files using `.segmented` elsewhere in the app
+  (event form, tasks toolbar, widget builder, ...) are outside Settings,
+  untouched, per the request's own wording.
+
+  Reused `_widget_list_multiselect.html`'s existing `ms_mode="single"`
+  convention (built 2026-08-07 for the widget builder's View/Range, for
+  exactly the same reason -- a native `<select>`'s open list is
+  unstyleable browser chrome). Added `ms_bare` (skips the partial's normal
+  `.field`/label wrapper for a caller like `.settings-field-row` that
+  already has its own label) and an `aria-label` on the trigger (a small
+  accessibility fix that applies to every caller, not just the new bare
+  mode). 6 of General's autosubmit radio groups and 2 of Appearance's
+  on/off rows converted directly. The Theme picker (System/Light/Dark)
+  needed real work -- it's the one control with no server round-trip at
+  all (`window.CCTheme`, pure client-side localStorage) -- rewrote
+  `static/app.js`'s theme block to drive the new `.theme-select` radio
+  dropdown: native radio-group behavior handles which one's checked, the
+  generic multiselect change listener keeps the summary text in sync for
+  free, the theme block only still owns `data-theme`/localStorage/the
+  initial page-load sync. Had to match on the flat `input[name="theme"]`
+  rather than an ancestry-based selector, since the open dropdown panel
+  gets portaled out to `#multiselect-portal` (app.js's existing mechanism,
+  shared by every dropdown in the app) and an ancestry selector silently
+  stops matching the moment the panel is ever opened.
+
+  **Found two real bugs along the way, both fixed**: (1) Jinja's
+  `{% set %}` isn't scoped to the `{% include %}` it precedes -- caught
+  live, `ms_root_class` set for the Theme dropdown was leaking into
+  Appearance's next two dropdowns below it until explicitly cleared back
+  out after Theme's own include. Likely pre-existing elsewhere too (not
+  fixed, out of scope): `_widget_builder_fields.html`'s Width dropdown
+  probably inherits Range's `ms_root_class` the same way -- flagged, not
+  investigated. (2) The shared partial's single-mode fallback breaks for a
+  genuinely-selected-but-falsy value (an empty-string "Off") -- every
+  *existing* caller with an empty-string value happened to already list it
+  first in `ms_items`, accidentally, which is why this never surfaced
+  before; followed the same workaround (Off listed first) for the three
+  On/Off rows converted here rather than touching the partial's shared
+  fallback logic (View/Range deliberately rely on the same fallback for a
+  different, genuine case).
+
+  **Visually verified**: opened each dropdown live (screenshotted real
+  radio panels); picked Sunday on Week-starts-on, confirmed autosubmit;
+  picked Dark on Theme, confirmed the whole page switched immediately,
+  localStorage/`data-theme` set correctly, and -- after a full reload --
+  the dropdown still showed "Dark" checked (proving the page-load sync
+  path works, not just the live-pick path); confirmed Show-icons/Edit-mode
+  render independently correct state once the `ms_root_class` leak was
+  fixed (they'd both been silently mirroring Theme's state before that).
+
+  Bundled: `sw.js`'s `CACHE_NAME` bump (v101 -> v102) for `app.js`'s theme
+  rewrite; `test_pwa_shell.py` updated to match. Two existing tests
+  updated for the new markup shape. Full suite: **2,381 passed, 0 failed**
+  (unchanged count -- both are assertion rewrites, not new tests).
+
+  Same session, tenth slice -- `plans/ui-cleanup-2026-09.md` item 12,
+  design token tightening. Scoped to typography only (font-family,
+  font-size, font-weight) -- color tokens (the 16 `--cal-bg-*`/
+  `--cal-accent-*` label/tag/calendar identity colors, plus semantic
+  status colors) were deliberately excluded, a unilateral scoping call
+  made via investigation rather than `AskUserQuestion`: those colors carry
+  real meaning (which label is which), so compressing them to "two role
+  colors" would erase disambiguation, not simplify it -- flagged as its
+  own decision in the doc rather than silently narrowed, in case Peter
+  meant the literal reduction and wants that as its own future slice.
+
+  Font family was already compliant (one real family, `--font-system`,
+  plus one already-dead raw `monospace` fallback -- no change). Font size:
+  audited to 8 tokens (`--text-xs` 13/`--text-sm` 14/`--text-base`
+  15/`--text-md` 15.5/`--text-lg` 17/`--text-xl` 18/`--text-2xl`
+  21/`--text-3xl` 26, the last unused) -- consolidated to 4, not the
+  requested 3, because a real constraint blocked the third cut:
+  `--text-xl` merging UP into `--text-2xl` (the more even split) would've
+  pushed `.page-header-narrow-title`'s text past its container --
+  `.page-header-narrow` is a fixed `height:48px; overflow:hidden` bar on
+  nearly every page. Went the other way instead: `--text-2xl` merged DOWN
+  into `--text-xl` at 18px (its own call sites -- modal/detail headings,
+  page-banner title, auth brand -- all sit in auto-growing containers, no
+  clipping risk). Final 4: `--text-sm` 13px, `--text-base` 15px,
+  `--text-lg` 17px (kept standalone), `--text-xl` 18px. Every `var(--text-
+  xs/md/2xl)` call site updated via scripted find-replace (53/9/5
+  occurrences), verified by count.
+
+  Font weight: not tokenized before this slice -- 4 raw values in use
+  (400/500/600/700, 114 call sites). New `--font-weight-regular:400` /
+  `--font-weight-bold:600`; 400 kept standalone (real "unemphasized"
+  weight), 500/600/700 folded into one bold step at 600 (all three were
+  doing the same job at slightly different values depending on which pass
+  wrote the rule, not a deliberate hierarchy). All 114 literals replaced
+  via a scripted regex pass.
+
+  **Bug found and fixed in my own script, before it shipped**: the
+  font-weight regex's replacement string duplicated the colon already
+  captured in its own matched group, producing `font-weight::var(...)`
+  (double colon) at all 114 call sites -- invalid CSS that silently drops
+  the whole declaration, which would have made every styled weight in the
+  app fall back to the browser default. Caught by the full test suite
+  (two tests asserting exact `font-weight:400`/`600` source strings
+  failed, since the string they expected no longer existed at all -- not
+  because of the double colon itself, pytest doesn't parse CSS) before
+  any commit; fixed with a follow-up `sed` pass normalizing `font-weight::`
+  -> `font-weight:` file-wide, then reran the full suite clean. Also fixed
+  two now-stale comments describing the pre-consolidation token values
+  (`.timeline-canvas`, `.widget-content`'s row-list note) and one
+  inaccurate selector in this slice's own new `:root` comment
+  (`.page-header-narrow h1` doesn't exist -- the actual element is
+  `.page-header-narrow-title`, an `h2`).
+
+  **Tests**: two pre-existing tests asserting raw `font-weight:400`/`600`
+  source strings (`test_data_health.py`, `test_phase2_labels.py`) updated
+  to assert the tokenized form instead -- same literal values, just named
+  now. Full suite: **2,381 passed, 0 failed** (unchanged count -- no new
+  tests, source-value assertion rewrites only; Python has no CSS-parsing
+  harness, so this is a source-correctness check, not a rendered-value
+  one).
+
+  **Visually verified** (Playwright, same pathway as earlier slices in
+  this session): confirmed live computed styles match the new tokens
+  exactly (`--text-sm`/`--text-base`/`--text-lg`/`--text-xl` =
+  13/15/17/18px, `--font-weight-regular`/`--font-weight-bold` = 400/600,
+  old token names resolve empty) across Dashboard, Tasks, and Settings >
+  Appearance, both themes; confirmed `.page-header-narrow-title` is not
+  clipped at the new 18px size (22px content height inside the 48px
+  fixed-height, `overflow:hidden` header, both Tasks and Contacts).
+
+  Bundled: `sw.js`'s `CACHE_NAME` bump (v102 -> v103); `test_pwa_shell.py`
+  updated to match.
+
+  Same session, eleventh slice -- `plans/ui-cleanup-2026-09.md` item 11,
+  search window simplification. Four sub-changes to the command palette
+  (`static/command_palette.js`/`base.html`/`style.css`), plus one query-
+  layer fix, all direct request:
+
+  1. **Footer removed, filters relocated** -- `.command-palette-footer`
+     (keyboard hints + standalone New task/New event buttons) deleted;
+     the type filter pills moved from above the results list into that
+     now-empty space below it. New task/New event stay reachable
+     elsewhere (typed "Create task/event: '<query>'" rows, the mobile
+     bottom-sheet) -- losing the footer-only shortcut is the actual
+     simplification, not a capability loss.
+  2. **Explicit menu actions added** -- a kebab (`.action-menu`) in the
+     input row, reusing `settings_data_maintenance.html`'s own Backup/
+     Sync/Database dropdown convention rather than inventing a second
+     pattern (`app.js`'s `initActionMenus()` binds it for free): Edit
+     mode toggle (same endpoint the pre-existing typed "edit mode" row
+     used), Export data.../Import data... (`/export/modal`,
+     `/export/import-modal`), Download full backup (`/export/data.json`).
+  3. **Add label / Delete removed** -- the overlay's third mode (label
+     mode, entered only from a result row's own "Add label" button) is
+     now fully dead code once that button's gone -- removed along with
+     `GET /api/labels`/`POST /api/entities/{type}/{uid}/labels`
+     (`routers/search.py`), confirmed via grep to have no other caller.
+     `buildActions()` now returns `null` (no actions row) when nothing's
+     left to show -- an already-done task, or any event/contact row,
+     since Mark done is the only action left and it's task-only.
+  4. **"Overdue" split from "Past"** -- the date-grouped results' shared
+     "Overdue" header used to lump a past event in with a late task;
+     `dateBucket()` now takes the row's type and buckets a past event
+     under its own "Past" header instead. Audited every other "Overdue"
+     site in the app first (`_widget_agenda.html`, `_widget_at_a_glance.
+     html`) -- both already task-only, no bug there; this was the one
+     real mixed-type site.
+
+  **Bug found and fixed before it shipped**: reusing `.action-menu`
+  inside the command palette broke silently at first -- `.action-menu-
+  panel`'s `--z-overlay-panel` token (150) sits *below* `.command-
+  palette-overlay`'s `--z-modal-stacked` (200), so the opened menu
+  painted invisibly behind the palette's own scrim (a live Playwright
+  screenshot showed nothing, even though `getComputedStyle` reported the
+  panel open/visible/correctly positioned -- pure stacking order, not
+  logic). Fixed with a `.command-palette-menu-panel` modifier class
+  (survives `app.js`'s `document.body` reparent-on-open, since that only
+  moves the node) whose own rule bumps just this one panel to `--z-top`,
+  rather than raising `--z-overlay-panel` itself and pushing every other
+  portaled dropdown above the command palette too.
+
+  **Visually verified** (Playwright): kebab menu opens with all four
+  items, no longer behind the scrim; a seeded overdue task and a seeded
+  past event land under separate "Overdue"/"Past" headers in the same
+  query; a task result shows exactly one action ("Mark done"), an event/
+  contact result shows none; footer gone from the DOM, filters render
+  below results.
+
+  **Tests**: `test_command_palette_actions.py` lost its `TestApiLabels`
+  (4) and `TestAddEntityLabel` (8) classes with the removed endpoints --
+  down to just its still-valid title-prefill coverage. Two count-based
+  assertions broke because the palette's new Export/Import menu items
+  are base.html-wide, appearing on *every* rendered page now, not just
+  the Sync card's own settings page -- `test_phase8_settings_hub.py` and
+  one class in `test_data_health.py` (the *rendered-response* class;
+  its sibling class reading raw template source was rightly left alone
+  at `== 1`) updated from `== 1` to `== 2` with a comment explaining the
+  second occurrence is a legitimate second entry point. Full suite:
+  **2,369 passed, 0 failed** (2,381 prior - 12 removed).
+
+  Bundled: `sw.js`'s `CACHE_NAME` bump (v103 -> v104); `test_pwa_shell.py`
+  updated to match. `features/tasks.md`'s "Search & the command surface"
+  section rewritten to match (Add label/Delete removed, footer/filters/
+  menu changes, overdue/past split, plus a stale Notes cross-reference
+  from an earlier slice fixed in passing).
+
+  Same day, new session, twelfth slice -- `plans/ui-cleanup-2026-09.md`'s
+  **responsive tables** (build-order 14; it never had a numbered section,
+  one's been added). Asked first, since the request only named two
+  approaches: Peter chose **priority-based column hiding** (over a card
+  grid or JS measure-and-cut), **main list pages only**, and **no
+  re-exposure** of hidden data (the row's own link already shows it).
+
+  Implemented as CSS container queries, no JS: `.table-responsive` on a
+  `.card.table-scroll` wrapper makes it a named `rtable` inline-size
+  container; `.col-opt-1` hides at ≤720px of *container* width,
+  `.col-opt-2` at ≤520px, ≤340px trims cell padding. Tagged on both `<th>`
+  and every `<td>` of: Tasks (Labels / Status), Habits (Cadence+Labels /
+  Streak), Labels (Usage), Holidays (Calendar), Time blocks (Type),
+  Published lists (Filter / Type). Thresholds come from a Playwright
+  measurement sweep (1280 → 300px), not guesses -- and that sweep found
+  two things column hiding alone couldn't fix: Tasks' `.task-title-cell`
+  320px nowrap ceiling was itself wider than a phone (now wraps under the
+  720 tier -- first attempt lost a specificity fight with `.task-table
+  td{white-space:nowrap}` and silently didn't apply), and Published lists'
+  nowrap URL held its Link column at 420px (now capped at 18ch, then
+  hidden to leave just the Copy button). Full table of what drops where,
+  plus both root causes, in the plan doc's new section.
+
+  **Visually verified** (Playwright, fresh preview DB seeded via a
+  scratch script calling `db.upsert_*` directly): before, Tasks/Habits/
+  Published lists overflowed from ~800px viewport down and Holidays/Time
+  blocks from ~414px; after, nothing overflows at ≥375px. Screenshotted
+  Tasks at 375/800 and Published lists at 375 to confirm it reads right,
+  not just measures right. **Residual, accepted**: at a 320px viewport
+  Holidays still overflows ~10px and Published lists ~2px (only name/
+  date/Actions left, and Actions is those rows' only edit path) -- the
+  kept `.table-scroll` safety net covers it.
+
+  **Tests**: new `test_responsive_tables.py` (13 -- CSS tiers present,
+  each wrapper opts in, and `<th>`/`<td>` `col-opt-*` tags align column
+  by column for all six tables, since a drift there shifts cells under the
+  wrong header and nothing else would catch it without a browser). Full
+  suite: **2,382 passed, 0 failed** (2,369 prior + 13 new).
+
+  Bundled: `sw.js`'s `CACHE_NAME` bump (v104 -> v105); `test_pwa_shell.py`
+  updated to match. `UI_CONSISTENCY_GUIDE.md`'s `<table>` entry documents
+  the new opt-in convention for future tables. Environment: `.venv` was
+  missing again in this fresh container -- `uv sync --all-packages` at
+  the repo root, same as the earlier environment note says.
+
+  Same session, thirteenth slice -- `plans/ui-cleanup-2026-09.md` item 16,
+  **image editor aspect-ratio lock**. Asked three questions first; Peter
+  corrected the premise on one: "square" meant the **crop selector**, not
+  the displayed avatars (`.avatar-circle` untouched everywhere). Also
+  chose: banner cropper locked 5:1 while phones keep displaying 3:1, and
+  no server-side crop of images that bypass the cropper (they already
+  display at shape via `object-fit:cover`).
+
+  `avatar_cropper.js`: Free/Square/4:3/16:9/Banner presets removed; each
+  kind has one `KIND_CONFIG.ratio` (avatar 1, banner 5), named read-only
+  in the toolbar. **Real bug fixed along the way**: the old `clampBox()`
+  clamped width and height independently, so dragging a "locked" box past
+  the canvas edge silently broke its ratio -- resize now caps size by the
+  room on the dragged side and clamps both axes together. Output height
+  derived from width so the file is exactly the ratio.
+
+  **Visually verified** (Playwright, same preview-server pathway):
+  non-matching 900×400 / 400×700 sources, every handle dragged including
+  far off-canvas plus an off-canvas move -- ratio held at 1.000/5.000,
+  box stayed inside the canvas, output 240×240 and 400×80, banner still
+  auto-submits, avatar preview keeps its circle class. Screenshot shows
+  the square selector + "Square (1:1)" label.
+
+  **Tests**: new `test_image_cropper_ratio.py` (4). Full suite: **2,386
+  passed, 0 failed**. Bundled: `sw.js` `CACHE_NAME` v105 -> v106,
+  `test_pwa_shell.py` updated.
+
+  Same day, new session (branch `claude/kind-ride-5aknv0`, the harness's
+  assignment -- fast-forwarded from `claude/magical-dirac-ff461o-ij5r8u`
+  first, which was 2 commits ahead), fourteenth slice --
+  `plans/ui-cleanup-2026-09.md` item 14, **habits as a distinct frontend
+  model, slice 1 of 4**. Audited first: two habit backends coexisted --
+  standalone Habit entities (`habits`/`habit_entries`, no UI creation
+  path left) and habit-labeled tasks (the only kind "+ Add habit" makes).
+  **Real bug found**: the Dashboard Habit Check-in widget read only the
+  entity table, so no habit created through the UI ever appeared in it.
+  Asked three questions; Peter answered: no real entities (delete the
+  path outright), a dedicated Habits page, and bigger widget + agenda/
+  calendar + habit-specific detail, pointing at
+  https://inlitx.github.io/streak/ as the reference -- **blocked by this
+  environment's egress policy, not yet seen**; get screenshots or have
+  the host allowed before designing slices 2-4.
+
+  Shipped: new `src/habit_view.py` (one habit view-model, `habit_items`)
+  that both Tasks' Habits group and the Dashboard widget render from; the
+  widget now checks in through the task completion endpoints. Entity path
+  removed end to end (router CRUD -> `/habits...` 302 to `/tasks`, three
+  templates, `habits.js`, db.py accessors, `kind=entity` row branches,
+  `/tasks/bulk`'s `habit_uids`). Tables kept in SCHEMA_SQL. Full list in
+  the plan doc's item 14 section; `features/habits.md` rewritten (it
+  still described the long-retired `/habits` list page).
+
+  **Tests**: deleted `test_habits_router.py`/`test_habits_db.py` (entity-
+  only); pruned entity cases from 11 other files, ported 4 (dashboard
+  scope filter, Habits-table seeding, purge-all, a legacy migration
+  test) onto habit tasks; new `test_habit_view.py` (8 -- shape/URLs/
+  streak, widget lists habit tasks and renders `/tasks/...` endpoints,
+  old URLs redirect). Full suite: **2,326 passed, 0 failed** (2,386
+  prior - 68 entity-only tests removed + 8 new).
+
+  **Visually verified** (Playwright, seeded preview DB): widget lists all
+  three habit tasks; checkbox toggle and two "+1" clicks persist across a
+  reload (3/8 -> 5/8, streak 4 -> 5); name link opens the habit detail
+  modal; Tasks' Habits table unchanged; `/habits/h1/edit` lands on
+  `/tasks`. **Found, not fixed**: any task detail modal (plain tasks too)
+  logs one CSP inline-style violation -- pre-existing, logged in the plan
+  doc's "Known open risks".
+
+  Bundled: `sw.js` `CACHE_NAME` v106 -> v107, `test_pwa_shell.py`.
+
+  Same session, follow-up (direct request: fix the CSP problem, plan
+  habits against Streak, commit everything so merging to main stays
+  easy):
+
+  1. **CSP fix.** Pinned via Playwright's `securitypolicyviolation`
+     event to `modal.js:276`, not an inline `style=`: DOMParser-parsing
+     the fetched full page pulled in base.html's `<style nonce>` carrying
+     *that response's* nonce, and the parsed document inherits this
+     page's CSP -> one `style-src-elem` violation per modal open, plain
+     tasks included. modal.js now strips `<style>` blocks before parsing
+     (they could never apply). Policy untouched. Live re-check: plain-
+     task, habit (from Tasks and from the Dashboard widget) and new-task
+     modals open with zero console errors. New `test_modal_csp.py` (2).
+     `sw.js` v107 -> v108 (modal.js is SHELL_ASSETS).
+  2. **Streak-informed habit plan** -- Peter pasted InlitX/streak's
+     README (the site stays blocked here). Written into
+     `plans/ui-cleanup-2026-09.md` item 14 as slices **H1-H8** with
+     adopt / adapt / skip reasoning. Headline: **H1 = schedule-aware
+     streaks, a real bug** -- `habit_heatmap.streaks()` only counts
+     consecutive calendar days, so a weekly habit kept 4 weeks running
+     reads `(current 0, best 1)` and a fully-kept Mon/Wed/Fri habit
+     `(1, 1)` (verified against the function). Three open questions for
+     Peter are listed at the end of that section.
+  3. Branch state: `claude/kind-ride-5aknv0` is 0 behind / 3+ ahead of
+     `origin/main` -- a plain fast-forward merge, no conflicts.
+
+  Full suite: **2,328 passed, 0 failed**.
+
+  Peter answered all three plan questions **yes** (X-per-week habits,
+  avoid habits, Habits page replaces the Tasks-table group) and started
+  `/loop` -- autonomous mode, one H-slice per tick, commit + push each.
+
+  **H1 shipped (loop tick 1) -- schedule-aware streaks.** New
+  `src/habit_schedule.py` counts due *windows* (calendar periods with an
+  "X times" target, BYDAY weekdays, every-N-days) instead of calendar
+  days; neutral for excluded due days and the still-open window. New
+  nullable `tasks.habits_per_period` + "Times per period" form input
+  (kept when a plain task form saves); cadence labels ("3x a week", "Mon,
+  Wed, Fri"); streak text with a unit; habit detail gains Best / Kept % /
+  This week n/N. Dead `habit_heatmap.streaks`/`tasks._completion_streaks`
+  removed, their 2 tests ported. **Also fixed**: heatmap fill used
+  `--accent-neutral` (#efefef in light theme) so logged days were
+  near-invisible -- now `--accent` (screenshotted both themes). New
+  `test_habit_schedule.py` (26). **Visually verified** (Playwright): a 3x-a-
+  week habit shows "3 weeks streak / Best 3 weeks / Kept 38% / This week
+  1/3"; editing Times per period 3 -> 2 persists and relabels the row.
+  Full suite: **2,354 passed, 0 failed**. `sw.js` v108 -> v109. **Gap noted for H2**: no weekday picker in the
+  habit form yet (engine supports BYDAY; the recurrence picker only has
+  presets).
+
+  **Next slice**: item 14 **H2** -- Habits page at `/habits` (replaces the
+  redirect and the Tasks-table Habits group), plus a weekday picker in the
+  habit form. Then H3 (detail + day notes), H4 (bigger widget -> unblocks
+  item 15), H5 (units + avoid habits), H6 (pause), H7 (agenda/calendar),
+  H8 (insights). Others unchanged: Web Push (item 7), labels-as-modules
+  (item 4 -- re-confirm scope with Peter first), narrow banners (item 2).
+
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-
   session split, explicitly agreed given how many of these were small/

@@ -23,7 +23,7 @@ from datetime import date, datetime, timezone
 import pytest
 from starlette.requests import Request
 
-from src import db
+from src import db, habit_schedule
 from src.routers import tasks as tasks_router
 
 
@@ -110,18 +110,19 @@ class TestTaskDetailContext:
 
 
 class TestHeatmapHelpers:
+    # Streaks moved to habit_schedule.habit_stats (habits H1, 2026-09-24)
+    # -- tasks._completion_streaks/habit_heatmap.streaks are gone; a daily
+    # schedule keeps their exact calendar-day semantics.
     def test_streaks_count_consecutive_days(self):
-        current, longest = tasks_router._completion_streaks(
-            {"2026-08-01": "x", "2026-08-02": "x", "2026-08-04": "x"}, today=date(2026, 8, 5)
+        stats = habit_schedule.habit_stats(
+            {"2026-08-01": 1, "2026-08-02": 1, "2026-08-04": 1}, "FREQ=DAILY", today=date(2026, 8, 5)
         )
-        assert current == 1  # 08-04 is the latest, and today (08-05) is still allowed to be unlogged
-        assert longest == 2
+        assert stats["current"] == 1  # 08-04 is the latest, and today (08-05) is still allowed to be unlogged
+        assert stats["longest"] == 2
 
     def test_current_streak_tolerates_unlogged_today(self):
-        current, _ = tasks_router._completion_streaks(
-            {"2026-08-04": "x"}, today=date(2026, 8, 5)
-        )
-        assert current == 1
+        stats = habit_schedule.habit_stats({"2026-08-04": 1}, "FREQ=DAILY", today=date(2026, 8, 5))
+        assert stats["current"] == 1
 
     def test_heatmap_weeks_end_this_week_and_flag_future(self):
         weeks = tasks_router._completion_heatmap_weeks({}, weeks=12, today=date(2026, 8, 3))

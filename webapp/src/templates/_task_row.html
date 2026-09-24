@@ -71,7 +71,7 @@
            data-inline-edit data-type="text" data-uid="{{ t.uid }}" data-field="title"
            title="Double-click to rename">{{ t.title }}</a>
     </td>
-    <td>
+    <td class="col-opt-2">
         <div class="multiselect widget-list-multiselect task-status-select" data-ms data-ms-mode="single" data-ms-label="status" data-uid="{{ t.uid }}">
             <button type="button" class="multiselect-trigger pill-select-trigger pill-{{ status_colors[t.status] }}" aria-haspopup="true" aria-expanded="false">
                 <span class="ms-summary">{{ status_labels[t.status] }}</span>
@@ -117,7 +117,7 @@
        header comment. `t.work_hours` is still attached to `t` (routers/
        tasks.py's db.task_work_hours_bulk) and still shown on the task
        detail modal's "Work sessions" card -- only this table cell is gone. #}
-    <td>
+    <td class="col-opt-1">
         <div class="multiselect widget-list-multiselect task-labels-select" data-ms data-ms-mode="select" data-ms-label="labels" data-uid="{{ t.uid }}">
             <button type="button" class="multiselect-trigger cell-tags-trigger" aria-haspopup="true" aria-expanded="false">
                 <span class="cell-tags">

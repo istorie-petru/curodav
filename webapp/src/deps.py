@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 from markupsafe import Markup, escape
 
-from . import db, habit_heatmap
+from . import db, habit_heatmap, habit_view
 from .caldav_bridge import CalDavBridge
 
 # app_meta keys for the two general-purpose display preferences added
@@ -594,7 +594,7 @@ def _habit_streak_terminology(request: Request) -> str:
 templates.env.globals["habit_streak_terminology"] = _habit_streak_terminology
 
 
-def _habit_streak_text(request: Request, days) -> str:
+def _habit_streak_text(request: Request, days, unit: str = "day") -> str:
     """The Habits group's streak readout (_habit_row.html), phrased per
     HABIT_STREAK_TERMINOLOGY_KEY -- "3 day streak" (standard) or "This
     week has been full" (playful) for the same `current_streak` integer
@@ -606,7 +606,7 @@ def _habit_streak_text(request: Request, days) -> str:
     except (TypeError, ValueError):
         days_int = 0
     playful = _habit_streak_terminology(request) == "playful"
-    return habit_heatmap.streak_text(days_int, playful)
+    return habit_heatmap.streak_text(days_int, playful, unit or "day")
 
 
 templates.env.globals["habit_streak_text"] = _habit_streak_text
@@ -622,6 +622,15 @@ def _recurrence_label(rrule) -> str:
 
 
 templates.env.globals["recurrence_label"] = _recurrence_label
+
+
+def _habit_cadence_label(task) -> str:
+    """habit_view.cadence_label for a template ("3x a week", "Mon, Wed,
+    Fri", "Every 2 days") -- habits H1, 2026-09-24."""
+    return habit_view.cadence_label(task or {})
+
+
+templates.env.globals["habit_cadence_label"] = _habit_cadence_label
 
 
 def _label_icon(request: Request, label: str) -> str:
@@ -773,15 +782,19 @@ def _relative_date(value: str | None) -> str:
     """Jinja filter for a short/relative date -- `{{ t.due_at[:10] |
     relative_date }}` instead of a raw "2026-09-05" (2026-08-31 direct
     feedback on the Dashboard's Agenda widget: "make the dates ...
-    shorthand or relative"). Today/Tomorrow/Yesterday for the immediate
-    cases (the ones worth naming instead of counting), otherwise "5 Sep"
-    -- same day-drop-year-unless-different convention static/
-    datetime_picker.js's own `.dtp--compact` fmtDate already established
-    for the Tasks table's Date column (2026-08-30, praised then as "reads
-    at a glance"); this is that same convention's server-rendered
-    equivalent for read-only widget text rather than an editable picker's
-    trigger label. No @pass_context needed (unlike fmt_time/fmt_hour) --
-    pure function of the stored value and today's date, no per-request
+    shorthand or relative"). Today/Tmw/Yest for the immediate cases (the
+    ones worth naming instead of counting), otherwise "5 Sep" -- same
+    day-drop-year-unless-different convention static/datetime_picker.js's
+    own `.dtp--compact` fmtDate already established for the Tasks table's
+    Date column (2026-08-30, praised then as "reads at a glance"); this
+    is that same convention's server-rendered equivalent for read-only
+    widget text rather than an editable picker's trigger label.
+
+    2026-09-24 direct request: the three named cases shortened to fit a
+    5-character budget ("Tomorrow" -> "Tmw", "Yesterday" -> "Yest") so a
+    widget pill never wraps or gets clipped -- "Today" already fit and is
+    unchanged. No @pass_context needed (unlike fmt_time/fmt_hour) -- pure
+    function of the stored value and today's date, no per-request
     Settings preference involved. Expects a plain "YYYY-MM-DD" (or a
     longer ISO timestamp -- only the first 10 chars are read); anything
     that doesn't parse is returned unchanged, same "display filter
@@ -797,9 +810,9 @@ def _relative_date(value: str | None) -> str:
     if delta == 0:
         return "Today"
     if delta == 1:
-        return "Tomorrow"
+        return "Tmw"
     if delta == -1:
-        return "Yesterday"
+        return "Yest"
     day_month = f"{d.day} {d.strftime('%b')}"
     return day_month if d.year == today.year else f"{day_month} {d.year}"
 
@@ -810,7 +823,7 @@ templates.env.filters["relative_date"] = _relative_date
 def _holiday_date(value: str | None) -> str:
     """Jinja filter for the Holidays table's Date Range column
     (audit-fixes-2.1.md, "only day hollydays, withot the year") -- same
-    Today/Tomorrow/"5 Sep" shorthand as `relative_date` for an ordinary
+    Today/Tmw/"5 Sep" shorthand as `relative_date` for an ordinary
     full-date holiday, or db.format_holiday_date's "25 Dec" for a
     year-agnostic "--MM-DD" one (there's no real year to be relative to,
     so relative_date's own ValueError fallback would otherwise just print

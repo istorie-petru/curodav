@@ -82,8 +82,18 @@
      total card content, often taller than the viewport), unchanged; this
      wrapper is the one that actually gets the fixed viewport-derived
      height + overflow-y:auto, so the grid scrolls inside it exactly the
-     same way Calendar's .time-grid-body scrolls inside .time-grid-wrap. -->
-<div class="main-shell-body">
+     same way Calendar's .time-grid-body scrolls inside .time-grid-wrap.
+
+     .main-shell-body--flush (2026-09-24, direct report: the shared
+     `margin-bottom:6dvh` "creates a veil that hides content" here) --
+     Dashboard opts out of that margin while keeping every other
+     .main-shell-body rule (the flex sizing, overflow-y:auto). Scoped to
+     Dashboard alone via this second class, not a blanket removal --
+     Tasks/Contacts/Notes still apply the plain .main-shell-body and were
+     never part of this report; see style.css's own comment on the
+     modifier and plans/ui-cleanup-2026-09.md item 8 for the audit that
+     found .main-shell-body isn't dashboard-only. -->
+<div class="main-shell-body main-shell-body--flush">
 {% include "_widget_workspace.html" %}
 </div>
 

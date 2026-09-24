@@ -19,104 +19,148 @@
          format/display preferences below, none of which are about who the
          user IS. -->
     <!-- Week starts on (2026-08-08) -- affects Calendar's Month/Week
-         views (routers/calendar.py). Radio-backed segmented control
-         (same `.seg-btn`/`.seg-radio`/:has() pattern the widget builder's
-         View/Range fields already use), autosubmits on pick -- a
-         two-choice preference like this is a complete choice the instant
-         it changes, no separate Save step needed. -->
-    <form class="settings-field-row" method="post" action="/settings/week-start">
+         views (routers/calendar.py). 2026-09-24 direct request ("instead
+         of segmented, drop down menu with select one") -- now the same
+         single-select dropdown _widget_builder_fields.html's View/Range
+         fields use (_widget_list_multiselect.html, `ms_mode="single"`),
+         `ms_bare` (this file's own new param) since this row already has
+         its own left-side label. `ms_autosubmit` reuses the exact same
+         `data-change-submit` delegated listener the old segmented radios
+         relied on -- still autosubmits the instant it changes, no
+         separate Save step. -->
+    <form class="settings-field-row" method="post" action="/settings/week-start" id="week-start-form">
         <span class="settings-field-label">Week starts on
             <span class="settings-field-hint">Calendar's Month and Week views</span>
         </span>
         <span class="spacer"></span>
-        <div class="segmented" role="radiogroup" aria-label="Week starts on">
-            <label class="seg-btn"><input type="radio" name="week_start" value="monday" class="seg-radio" {% if current_week_start == 'monday' %}checked{% endif %} data-change-submit> Monday</label>
-            <label class="seg-btn"><input type="radio" name="week_start" value="sunday" class="seg-radio" {% if current_week_start == 'sunday' %}checked{% endif %} data-change-submit> Sunday</label>
-        </div>
+        {% set ms_name = 'week_start' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Week starts on' %}
+        {% set ms_items = [{'uid': 'monday', 'name': 'Monday'}, {'uid': 'sunday', 'name': 'Sunday'}] %}
+        {% set ms_selected = current_week_start %}
+        {% set ms_autosubmit = true %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'week-start-form' %}
+        {% include "_widget_list_multiselect.html" %}
     </form>
     <!-- 4-Week view: current week (2026-08-11) -- which of the four rows
          the Calendar 4-Week view's current week occupies (the window of
          28 continuous days always shows the current week, placed on the
          chosen row; see routers/calendar.py's four_week_view). Same
-         autosubmit segmented pattern as Week starts on above. Four
-         choices, not two, but .segmented wraps (flex-wrap) so it still
-         fits a settings row. -->
-    <form class="settings-field-row" method="post" action="/settings/four-week-position">
+         dropdown swap as Week starts on above (2026-09-24 direct
+         request). -->
+    <form class="settings-field-row" method="post" action="/settings/four-week-position" id="four-week-position-form">
         <span class="settings-field-label">4-Week view: current week
             <span class="settings-field-hint">Calendar's 4-Week view &mdash; which row holds the current week</span>
         </span>
         <span class="spacer"></span>
-        <div class="segmented" role="radiogroup" aria-label="4-Week view current week row">
-            <label class="seg-btn"><input type="radio" name="position" value="1" class="seg-radio" {% if current_four_week_position == 1 %}checked{% endif %} data-change-submit> First</label>
-            <label class="seg-btn"><input type="radio" name="position" value="2" class="seg-radio" {% if current_four_week_position == 2 %}checked{% endif %} data-change-submit> Second</label>
-            <label class="seg-btn"><input type="radio" name="position" value="3" class="seg-radio" {% if current_four_week_position == 3 %}checked{% endif %} data-change-submit> Third</label>
-            <label class="seg-btn"><input type="radio" name="position" value="4" class="seg-radio" {% if current_four_week_position == 4 %}checked{% endif %} data-change-submit> Fourth</label>
-        </div>
+        {% set ms_name = 'position' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = '4-Week view current week row' %}
+        {% set ms_items = [{'uid': '1', 'name': 'First'}, {'uid': '2', 'name': 'Second'}, {'uid': '3', 'name': 'Third'}, {'uid': '4', 'name': 'Fourth'}] %}
+        {% set ms_selected = current_four_week_position | string %}
+        {% set ms_autosubmit = true %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'four-week-position-form' %}
+        {% include "_widget_list_multiselect.html" %}
     </form>
     <!-- Recurrence terminology (1.6, "Configurable terminology") -- which
          label set the recurrence editor's holiday-calendar/weekend
          controls use (_event_form_fields.html, schedule_classes.html).
-         Presentation-layer only, same autosubmit segmented pattern as
-         Week starts on above -- the underlying holiday_calendar/exclude_
-         saturday/exclude_sunday fields never change name or meaning. -->
-    <form class="settings-field-row" method="post" action="/settings/recurrence-terminology">
+         Presentation-layer only -- the underlying holiday_calendar/
+         exclude_saturday/exclude_sunday fields never change name or
+         meaning. Same dropdown swap as Week starts on above (2026-09-24
+         direct request). -->
+    <form class="settings-field-row" method="post" action="/settings/recurrence-terminology" id="recurrence-terminology-form">
         <span class="settings-field-label">Recurrence terminology
             <span class="settings-field-hint">Labels on the event form's holiday/weekend fields</span>
         </span>
         <span class="spacer"></span>
-        <div class="segmented" role="radiogroup" aria-label="Recurrence terminology">
-            <label class="seg-btn"><input type="radio" name="terminology" value="standard" class="seg-radio" {% if current_recurrence_terminology == 'standard' %}checked{% endif %} data-change-submit> Standard</label>
-            <label class="seg-btn"><input type="radio" name="terminology" value="playful" class="seg-radio" {% if current_recurrence_terminology == 'playful' %}checked{% endif %} data-change-submit> Playful</label>
-        </div>
+        {% set ms_name = 'terminology' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Recurrence terminology' %}
+        {% set ms_items = [{'uid': 'standard', 'name': 'Standard'}, {'uid': 'playful', 'name': 'Playful'}] %}
+        {% set ms_selected = current_recurrence_terminology %}
+        {% set ms_autosubmit = true %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'recurrence-terminology-form' %}
+        {% include "_widget_list_multiselect.html" %}
     </form>
     <!-- Habit streak terminology (2026-08-28, direct feedback) -- which
          wording the Habits group's streak readout uses (Tasks table,
-         _habit_row.html via deps.py's habit_streak_text() global). Same
-         presentation-layer-only autosubmit segmented pattern as Recurrence
-         terminology above. -->
-    <form class="settings-field-row" method="post" action="/settings/habit-streak-terminology">
+         _habit_row.html via deps.py's habit_streak_text() global).
+         Presentation-layer-only, same dropdown swap as Recurrence
+         terminology above (2026-09-24 direct request). -->
+    <form class="settings-field-row" method="post" action="/settings/habit-streak-terminology" id="habit-streak-terminology-form">
         <span class="settings-field-label">Habit streak terminology
             <span class="settings-field-hint">Wording for the Habits group's streak readout</span>
         </span>
         <span class="spacer"></span>
-        <div class="segmented" role="radiogroup" aria-label="Habit streak terminology">
-            <label class="seg-btn"><input type="radio" name="terminology" value="standard" class="seg-radio" {% if current_habit_streak_terminology == 'standard' %}checked{% endif %} data-change-submit> Standard</label>
-            <label class="seg-btn"><input type="radio" name="terminology" value="playful" class="seg-radio" {% if current_habit_streak_terminology == 'playful' %}checked{% endif %} data-change-submit> Playful</label>
-        </div>
+        {% set ms_name = 'terminology' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Habit streak terminology' %}
+        {% set ms_items = [{'uid': 'standard', 'name': 'Standard'}, {'uid': 'playful', 'name': 'Playful'}] %}
+        {% set ms_selected = current_habit_streak_terminology %}
+        {% set ms_autosubmit = true %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'habit-streak-terminology-form' %}
+        {% include "_widget_list_multiselect.html" %}
     </form>
     <!-- 24-hour time (2026-08-08) -- affects every server-rendered time
          in the app (deps.py's fmt_time/fmt_hour filters) plus the
-         Calendar/Schedule drag-preview labels. Same autosubmit segmented
-         pattern as Week starts on above. -->
-    <form class="settings-field-row" method="post" action="/settings/time-format">
+         Calendar/Schedule drag-preview labels. Same dropdown swap as Week
+         starts on above (2026-09-24 direct request). -->
+    <form class="settings-field-row" method="post" action="/settings/time-format" id="time-format-form">
         <span class="settings-field-label">Time format
             <span class="settings-field-hint">Used everywhere a time is shown</span>
         </span>
         <span class="spacer"></span>
-        <div class="segmented" role="radiogroup" aria-label="Time format">
-            <label class="seg-btn"><input type="radio" name="time_format" value="24h" class="seg-radio" {% if current_time_format == '24h' %}checked{% endif %} data-change-submit> 24-hour</label>
-            <label class="seg-btn"><input type="radio" name="time_format" value="12h" class="seg-radio" {% if current_time_format == '12h' %}checked{% endif %} data-change-submit> 12-hour</label>
-        </div>
+        {% set ms_name = 'time_format' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Time format' %}
+        {% set ms_items = [{'uid': '24h', 'name': '24-hour'}, {'uid': '12h', 'name': '12-hour'}] %}
+        {% set ms_selected = current_time_format %}
+        {% set ms_autosubmit = true %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'time-format-form' %}
+        {% include "_widget_list_multiselect.html" %}
     </form>
     <!-- Hide sleep hours in Planner (2026-09-09, direct request) -- Week
          view's hour grid collapses whatever Sleep-kind window Settings >
          Sleep & Leisure Time has configured, instead of just hatching it
          (routers/calendar.py's _sleep_collapse_window/_week_view_context).
-         Off by default, same autosubmit On/Off segmented pattern as every
-         other boolean preference on this page. Day view is unaffected
-         regardless of this setting (direct decision, confirmed via
-         AskUserQuestion) -- the hint below says so up front rather than
-         letting someone discover it by checking Day and finding nothing
-         changed. -->
-    <form class="settings-field-row" method="post" action="/settings/hide-sleep-hours">
+         Off by default. Day view is unaffected regardless of this setting
+         (direct decision, confirmed via AskUserQuestion) -- the hint below
+         says so up front rather than letting someone discover it by
+         checking Day and finding nothing changed.
+
+         Same dropdown swap as Week starts on above (2026-09-24 direct
+         request), with one wrinkle: the submitted value for "Off" has to
+         stay the empty string (routers/settings.py's
+         `set_hide_sleep_hours(enabled: str = Form(""))`), and
+         _widget_list_multiselect.html's single-mode `_sel_item` lookup
+         (its own header comment doesn't call this out) falls back to
+         `ms_items | first` whenever `ms_selected` is falsy -- which an
+         empty-string "Off" always is. Every other single-select caller in
+         the app that uses an empty-string value already works around this
+         by listing that item first (_event_form_fields.html's Holiday
+         calendar "(none)"); Off leads here for the same reason, not
+         because it reads better -- the on/off order flips from the old
+         segmented control's "On, Off" to "Off, On" as a result. -->
+    <form class="settings-field-row" method="post" action="/settings/hide-sleep-hours" id="hide-sleep-hours-form">
         <span class="settings-field-label">Hide sleep hours in Planner
             <span class="settings-field-hint">Removes the Sleep time block's hours from the Week grid entirely, instead of just highlighting them. Requires one consistent Sleep window in <a href="/settings/time-blocks">Sleep &amp; Leisure Time</a> -- Day view is unaffected.</span>
         </span>
         <span class="spacer"></span>
-        <div class="segmented" role="radiogroup" aria-label="Hide sleep hours in Planner">
-            <label class="seg-btn"><input type="radio" name="enabled" value="1" class="seg-radio" {% if current_hide_sleep_hours %}checked{% endif %} data-change-submit> On</label>
-            <label class="seg-btn"><input type="radio" name="enabled" value="" class="seg-radio" {% if not current_hide_sleep_hours %}checked{% endif %} data-change-submit> Off</label>
-        </div>
+        {% set ms_name = 'enabled' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Hide sleep hours in Planner' %}
+        {% set ms_items = [{'uid': '', 'name': 'Off'}, {'uid': '1', 'name': 'On'}] %}
+        {% set ms_selected = '1' if current_hide_sleep_hours else '' %}
+        {% set ms_autosubmit = true %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'hide-sleep-hours-form' %}
+        {% include "_widget_list_multiselect.html" %}
     </form>
     <!-- Calendar views setting removed 2026-08-29 (STATE.md backlog item 5,
          direct request) -- the Month/Day switcher's visibility toggle added

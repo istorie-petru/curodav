@@ -88,7 +88,7 @@
             <span class="label-name">{{ group.space.name }}</span>
         </div>
     </td>
-    <td>
+    <td class="col-opt-2">
         {% if total_usage > 0 %}
             <span class="usage-badge">Used in {{ total_usage }} item{{ 's' if total_usage != 1 else '' }}</span>
         {% else %}
@@ -147,7 +147,7 @@
             <span class="label-name"{% if not l.parent_name %} data-style="color: var(--cal-accent-{{ l.color or 'blue' }})"{% endif %}>{{ l.name }}</span>
         </div>
     </td>
-    <td>
+    <td class="col-opt-2">
         {% if l.usage_count and l.usage_count > 0 %}
             <span class="usage-badge">Used in {{ l.usage_count }} item{{ 's' if l.usage_count != 1 else '' }}</span>
         {% else %}
@@ -176,7 +176,7 @@
         <tr>
             <th class="col-checkbox"></th>
             <th>Label</th>
-            <th>Usage</th>
+            <th class="col-opt-2">Usage</th>
             <th class="col-actions-narrow">Actions</th>
         </tr>
     </thead>

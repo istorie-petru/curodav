@@ -105,9 +105,8 @@ class TestListHabitTasks:
 class TestHabitsViewRetired:
     """2026-08-28 "major rework" session (items 2+3): the dedicated Tasks >
     Habits page is gone -- `GET /tasks/habits` now redirects to the plain
-    Table view, where every habit-labeled task (and every standalone Habit
-    entity, see test_habits_router.py) renders as a row in the Habits
-    group instead (routers/tasks.py's _habit_group_items/
+    Table view, where every habit-labeled task renders as a row in the
+    Habits group instead (routers/tasks.py's _habit_group_items/
     _build_task_groups)."""
 
     def test_habits_view_redirects_to_tasks(self, conn):
@@ -126,7 +125,6 @@ class TestHabitsViewRetired:
         assert len(items) == 1
         item = items[0]
         assert item["uid"] == "h1"
-        assert item["kind"] == "task"
         assert item["current_streak"] == 1
         assert item["today_value"] == 1
 
@@ -154,26 +152,11 @@ class TestHabitsViewRetired:
         unassigned = next(g for g in resp.context["groups"] if g["kind"] == "unassigned")
         assert unassigned["tasks"] == []
 
-    def test_standalone_habit_entity_carries_its_own_labels(self, conn):
-        # 2026-09-03 bug fix -- found while verifying an unrelated label-
-        # icon fix: `_habit_group_items`'s standalone-entity branch
-        # hardcoded `"tags": []`, discarding the real labels `db.
-        # list_habits`/`_habit_row_to_dict` already attaches as `h["tags"]`
-        # (the same `object_labels` mechanism every other entity type
-        # uses) -- so a label on a standalone Habit never rendered on this
-        # page, icon or no icon, unlike a habit-labeled *task* right next
-        # to it (which reads `t.get("tags")` correctly, never had this
-        # bug). Regression guard: entity-kind items must round-trip their
-        # own labels same as task-kind ones do.
-        db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
-        db.upsert_habit(conn, {"uid": "hb1", "name": "Meditate", "created_at": _now()})
-        db.set_object_labels(conn, "habit", "hb1", ["Garden"])
-
+    def test_habit_task_carries_its_own_labels(self, conn):
+        _seed_task(conn, "h1", tags=["Habit", "Garden"], title="Meditate")
         resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
         habits_group = next(g for g in resp.context["groups"] if g["kind"] == "habits")
-        item = next(it for it in habits_group["habit_items"] if it["uid"] == "hb1")
-        assert item["kind"] == "entity"
-        assert item["tags"] == ["Garden"]
+        assert "Garden" in habits_group["habit_items"][0]["tags"]
 
 
 class TestSetTaskCompletion:
@@ -290,15 +273,6 @@ class TestHabitRowAsyncSubmit:
         assert 'type="hidden" name="value" value="3"' in body
         assert '>3</span>' in body  # the inline-edit cell's own display text
         assert 'habit-checkin-target">/ 8</span>' in body
-
-    def test_standalone_habit_entity_form_has_data_cc_change_habit(self, conn):
-        db.upsert_habit(
-            conn,
-            {"uid": "e1", "name": "Read", "color": "blue", "target_per_day": 1, "created_at": _now()},
-        )
-        body = self._render_tasks_page(conn)
-        assert 'action="/habits/e1/entries"' in body
-        assert 'class="form-inline habit-checkin-value" data-cc-change="habit" data-cc-action="checkin"' in body
 
     def test_due_column_renders_streak_text_standard_by_default(self, conn):
         _seed_task(conn, "h1", tags=["Habit"], title="Meditate")

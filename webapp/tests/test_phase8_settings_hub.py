@@ -248,14 +248,19 @@ def test_set_display_name_strips_and_allows_clearing(conn):
 
 
 class TestSettingsAppearance:
-    def test_renders_system_light_dark_segmented_control(self, conn):
+    def test_renders_system_light_dark_dropdown(self, conn):
+        # 2026-09-24: the segmented System/Light/Dark buttons were swapped
+        # for the same single-select dropdown (_widget_list_multiselect
+        # .html) every other Settings on/off row now uses -- `.theme-select`
+        # is the new hook (static/app.js's theme block), real radio values
+        # replace the old `data-theme-choice` button attribute.
         resp = settings_router.settings_appearance(_request("/settings/appearance"), conn=conn)
         assert resp.context["active_tab"] == "settings_appearance"
         body = resp.body.decode()
-        assert 'id="themeSegmented"' in body
-        assert 'data-theme-choice="system"' in body
-        assert 'data-theme-choice="light"' in body
-        assert 'data-theme-choice="dark"' in body
+        assert "theme-select" in body
+        assert 'name="theme" value="system"' in body
+        assert 'name="theme" value="light"' in body
+        assert 'name="theme" value="dark"' in body
 
 
 class TestDataAndBackupCategoryRemoved:
@@ -307,7 +312,13 @@ class TestDataAndBackupCategoryRemoved:
         resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         body = resp.body.decode()
         assert 'href="/export/modal" data-modal' in body
-        assert body.count('href="/export/import-modal" data-modal') == 1  # Sync menu only
+        # 2 now, not 1: the Sync menu's own entry (this page's content) plus
+        # one more from base.html's command-palette overlay, present on
+        # every page -- its own Export…/Import… menu items (2026-09-24,
+        # "search window simplification" direct request) are a second,
+        # legitimate entry point, not a duplicate within this page's own
+        # content, which is what this assertion originally guarded against.
+        assert body.count('href="/export/import-modal" data-modal') == 2
         # Neither form lives on the page anymore.
         assert "/export/download" not in body
         assert "/export/import/auto" not in body
@@ -431,7 +442,7 @@ class TestSettingsAdvanced:
         db.upsert_event(conn, {"uid": "e1", "title": "E", "description": "", "status": "active", "all_day": 0, "created_at": _now()})
         db.upsert_contact(conn, {"uid": "c1", "full_name": "Ada", "created_at": _now(), "updated_at": _now()})
         db.upsert_label_config(conn, {"name": "Work", "color": "blue", "created_at": _now()})
-        db.upsert_habit(conn, {"uid": "h1", "name": "Read", "created_at": _now(), "updated_at": _now()})
+        db.upsert_task_completion(conn, "t1", "2026-09-24", _now())
         db.upsert_time_block(conn, {"uid": "tb1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:59", "days": "Monday"})
         db.set_app_meta(conn, "some_flag", "1")
 
@@ -441,7 +452,7 @@ class TestSettingsAdvanced:
         assert db.list_events(conn) == []
         assert db.list_contacts(conn) == []
         assert db.list_labels(conn) == []
-        assert db.list_habits(conn) == []
+        assert db.list_task_completions(conn) == []
         assert db.list_time_blocks(conn) == []
         assert db.get_app_meta(conn, "some_flag") is None
 

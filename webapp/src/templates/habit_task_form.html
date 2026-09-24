@@ -69,6 +69,15 @@
             <input type="text" name="recurrence" class="recurrence-input" value="{{ task.recurrence if task and task.recurrence else 'FREQ=DAILY' }}" required>
         </div>
         <div class="field">
+            <!-- Habits H1 (2026-09-24): "X times per week/month" -- only
+                 used when Recurrence is a plain Weekly/Monthly (see
+                 habit_schedule.py); blank = once per period. -->
+            <label>Times per period</label>
+            <input type="number" name="habits_per_period" min="2" max="31" step="1" placeholder="Once"
+                   value="{{ task.habits_per_period if task and task.habits_per_period else '' }}"
+                   title="For a weekly or monthly habit: how many days per week/month count as done. Leave empty for once.">
+        </div>
+        <div class="field">
             <label>Daily target</label>
             <div class="stepper">
                 <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease daily target">&minus;</button>
