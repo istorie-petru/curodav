@@ -538,7 +538,10 @@
 // v110 (2026-09-24, same session): habits H2 -- style.css gained the
 // Habits page + weekday-chip rules (habits_page.js is page-specific, not
 // SHELL_ASSETS).
-const CACHE_NAME = "cc-shell-v110";
+// v111 (2026-09-24, same session): habits H3 -- modal.js keep-open forms
+// can dispatch data-cc-change on close instead of reloading; style.css
+// gained the habit detail month calendar / log form / notes rules.
+const CACHE_NAME = "cc-shell-v111";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

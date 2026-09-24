@@ -22,8 +22,10 @@ habit never has to look like a task (status/due date/Kanban) anywhere:
 - **Dashboard Habit Check-in widget** (`_widget_habit_checkin.html`,
   `static/habit_checkin.js`, fetch-based with no-JS form fallback) --
   scoped by page label like every other item widget.
-- **Detail/edit modals** (`habit_task_detail.html` with a view-only
-  53-week heatmap, `habit_task_form.html`).
+- **Detail modal** (`habit_task_detail.html`) -- streak/best/kept stats, a
+  view-only 53-week heatmap, a clickable month calendar (`?month=`), a
+  "Log a day" form (date, amount, note) and recent day notes
+  (`task_completions.note`). Edit form: `habit_task_form.html`.
 
 **Schedules and streaks** (H1, 2026-09-24) -- `src/habit_schedule.py`. A
 streak counts *due windows*, not calendar days: a weekly/monthly habit

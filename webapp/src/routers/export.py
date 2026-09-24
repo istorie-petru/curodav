@@ -714,8 +714,14 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
     # the `grades` table (and db.upsert_grade) is gone. A backup file from
     # before this removal that still carries a "grades" key simply has
     # that key ignored on restore now.
+    # 2026-09-24 (habits H3): carry `value` and `note` through too -- the
+    # restore used to drop `value`, so an amount habit's counts (e.g. 5 of
+    # 8 glasses) came back as 1 after a backup round-trip.
     for row in payload.get("task_completions", []):
-        db.upsert_task_completion(conn, row["task_uid"], row["due_date"], row["completed_at"])
+        db.upsert_task_completion(
+            conn, row["task_uid"], row["due_date"], row["completed_at"],
+            row.get("value") or 1, row.get("note"),
+        )
     # Relations reference both an event and a task, so they must restore
     # after both pools are up. add_event_task_relation is idempotent, so a
     # backup with duplicate rows (or a re-restore) is harmless.

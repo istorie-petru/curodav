@@ -829,7 +829,7 @@ match.
 top rather than being rewritten past-tense, matching how it already
 documents the gap between the v1 spec and what shipped.
 
-## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 + H1 + H2 shipped 2026-09-24; H3-H8 next)
+## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 + H1-H3 shipped 2026-09-24; H4-H8 next)
 
 "I also think that we strongly need to make habits/routines a different
 data model, at least in the frontend. They can still be tasks in the
@@ -996,6 +996,23 @@ BYDAY; forms without the chips are untouched. Container query drops the
 strip under the title below 520px. Leftover dead CSS for the old Tasks
 Habits table removed in the same slice. Not done (by design, later
 slices): archived-habits fold (H3/H6), bigger widget (H4).
+
+**H3 -- shipped 2026-09-24.** Habit detail modal: a Mon-first **month
+calendar** (`habit_view.month_calendar`, `?month=YYYY-MM`, prev/next
+arrows, never past this month) whose days toggle in place; **"Log a day"**
+form (date, amount for an amount habit, note) posting to
+`/tasks/{uid}/completions`; **recent notes** list; a dot marks days with a
+note. New `task_completions.note` (upsert keeps an existing note unless a
+new one is sent; `""` clears). Both completion endpoints now reject a
+malformed or future date (400). **Deviation from the plan, on purpose**:
+the year grid stays view-only -- Peter asked for exactly that on
+2026-08-29 and a test guards it; the month calendar is the editing
+surface instead. modal.js: a `data-modal-keep-open` form with
+`data-cc-change` now dispatches that change on close (page refreshes its
+live region) instead of a full reload, navigating inside an open modal
+keeps the pending change, and `data-no-autofocus` opts inputs out of
+open-focus. **Also fixed**: backup restore dropped each completion's
+`value` (amount habits came back as 1) -- it now keeps `value` and `note`.
 
 **Order and why:** H1 first -- every later surface shows streaks, and
 they're wrong today for non-daily habits. H2 (the page), then H3

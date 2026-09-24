@@ -101,6 +101,66 @@ def week_strip(uid: str, entries_by_date: dict, today: date, excluded: set[str] 
     return days
 
 
+def _shift_month(first: date, delta: int) -> date:
+    idx = first.year * 12 + first.month - 1 + delta
+    return date(idx // 12, idx % 12 + 1, 1)
+
+
+def month_calendar(uid: str, completions: list[dict], month: str | None, today: date | None = None) -> dict:
+    """Habits H3: one month (Mon-first weeks) for the habit detail modal --
+    each day carries its logged value and note, and a toggle URL unless
+    it's in the future. `month` is "YYYY-MM" (default: this month; never
+    past this month). Prev/next point at the detail URL with ?month=."""
+    today = today or date.today()
+    this_month = today.replace(day=1)
+    try:
+        first = date.fromisoformat(f"{month}-01") if month else this_month
+    except ValueError:
+        first = this_month
+    first = min(first, this_month)
+    by_date = {c["due_date"]: c for c in completions}
+    start = first - timedelta(days=first.weekday())
+    nxt = _shift_month(first, 1)
+    weeks = []
+    d = start
+    while d < nxt or d.weekday() != 0:
+        if d.weekday() == 0:
+            weeks.append([])
+        iso = d.isoformat()
+        row = by_date.get(iso) or {}
+        value = row.get("value") or 0
+        weeks[-1].append(
+            {
+                "iso": iso,
+                "day": d.day,
+                "in_month": d.month == first.month,
+                "value": value,
+                "done": value > 0,
+                "note": (row.get("note") or "").strip(),
+                "is_today": d == today,
+                "is_future": d > today,
+                "toggle_url": f"/tasks/{uid}/completion/{iso}/toggle",
+            }
+        )
+        d += timedelta(days=1)
+    prev_first = _shift_month(first, -1)
+    return {
+        "label": first.strftime("%B %Y"),
+        "weeks": weeks,
+        "day_names": _DAY_NAMES,
+        "prev_url": f"/tasks/{uid}?month={prev_first.strftime('%Y-%m')}",
+        "next_url": f"/tasks/{uid}?month={nxt.strftime('%Y-%m')}" if nxt <= this_month else None,
+        "done_count": sum(1 for w in weeks for x in w if x["in_month"] and x["done"]),
+    }
+
+
+def recent_notes(completions: list[dict], limit: int = 10) -> list[dict]:
+    """Habits H3: newest-first logged days that carry a note."""
+    rows = [c for c in completions if (c.get("note") or "").strip()]
+    rows.sort(key=lambda c: c["due_date"], reverse=True)
+    return [{"iso": c["due_date"], "note": c["note"].strip(), "value": c.get("value") or 0} for c in rows[:limit]]
+
+
 def habit_item(conn, task: dict, today: date) -> dict:
     today_iso = today.isoformat()
     entries_by_date = {c["due_date"]: c["value"] for c in db.list_task_completions(conn, task["uid"])}

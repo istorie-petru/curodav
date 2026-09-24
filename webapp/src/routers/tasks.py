@@ -745,7 +745,7 @@ def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
 
 
 @router.get("/{uid}")
-def task_detail(uid: str, request: Request, conn=Depends(get_db)):
+def task_detail(uid: str, request: Request, month: str | None = None, conn=Depends(get_db)):
     task = db.get_task(conn, uid)
     ctx = _task_context(request)
     ctx.update(
@@ -796,6 +796,11 @@ def task_detail(uid: str, request: Request, conn=Depends(get_db)):
         # (task, completion_weeks, current_streak, work_allocations,
         # work_hours, habit_label) is already on `ctx`/available here.
         ctx["habit_label"] = db.get_task_habit_settings(conn)["habit_label"]
+        # Habits H3 (2026-09-24): month calendar + day notes + "Log a day".
+        rows = db.list_task_completions(conn, uid)
+        ctx["habit_month"] = habit_view.month_calendar(uid, rows, month if isinstance(month, str) else None)
+        ctx["habit_notes"] = habit_view.recent_notes(rows)
+        ctx["today_iso"] = date.today().isoformat()
         return templates.TemplateResponse("habit_task_detail.html", ctx)
     return templates.TemplateResponse("task_detail.html", ctx)
 
@@ -1026,6 +1031,14 @@ def toggle_task_completion(
     (no `data-cc-change` was even set), causing a full-page reload/re-
     navigate on every check-in. Now dual-mode like every other mutation
     endpoint in this router (deps.respond)."""
+    # Habits H3 (2026-09-24): every day cell (Habits page strip, detail
+    # year grid, month calendar) posts here -- reject a malformed or
+    # future date instead of storing it.
+    try:
+        if date.fromisoformat(completion_date) > date.today():
+            return JSONResponse({"error": "Can't log a day in the future."}, status_code=400)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "Invalid date."}, status_code=400)
     if db.get_task_completion(conn, uid, completion_date) is not None:
         db.delete_task_completion(conn, uid, completion_date)
     else:
@@ -1042,6 +1055,7 @@ def set_task_completion(
     request: Request,
     completion_date: str = Form(...),
     value: str = Form("1"),
+    note: str | None = Form(None),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -1057,6 +1071,18 @@ def set_task_completion(
     2026-08-28 follow-up fix: same always-redirects gap as the toggle route
     above -- now dual-mode (deps.respond) so the Habits group's "+1" button
     can succeed via fetch instead of a full native form submit."""
+    # Habits H3 (2026-09-24): the detail modal's "Log a day" form lets a
+    # user pick the date, so validate it -- a real ISO date, not in the
+    # future (backfilling the past is the point; logging tomorrow isn't).
+    try:
+        if date.fromisoformat(completion_date) > date.today():
+            return JSONResponse({"error": "Can't log a day in the future."}, status_code=400)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "Invalid date."}, status_code=400)
+    if not isinstance(note, str):
+        note = None
+    elif note is not None:
+        note = note.strip()[:500]
     try:
         parsed_value = float(value) if value else 1.0
     except ValueError:
@@ -1070,7 +1096,9 @@ def set_task_completion(
     if parsed_value <= 0:
         db.delete_task_completion(conn, uid, completion_date)
     else:
-        db.upsert_task_completion(conn, uid, completion_date, datetime.now(timezone.utc).isoformat(), parsed_value)
+        db.upsert_task_completion(
+            conn, uid, completion_date, datetime.now(timezone.utc).isoformat(), parsed_value, note
+        )
     referer = request.headers.get("referer")
     return respond(x_requested_with, referer or f"/tasks/{uid}")
 

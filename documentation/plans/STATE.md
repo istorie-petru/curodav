@@ -680,12 +680,27 @@ session start.
   at 375px, zero console errors; Tasks page has no habits table. Full
   suite: **2,349 passed, 0 failed**. `sw.js` v109 -> v110.
 
-  **Next slice**: item 14 **H3** -- habit detail: interactive year grid,
-  month calendar, per-day notes (`task_completions.note`). Then H4
-  (bigger widget -> unblocks item 15), H5 (units + avoid habits), H6
-  (pause), H7 (agenda/calendar), H8 (insights). Others unchanged: Web
-  Push (item 7), labels-as-modules (item 4 -- re-confirm scope with Peter
-  first), narrow banners (item 2).
+  Peter then said the loop wasn't firing and to keep going without him
+  ("get to work") -- the remaining slices run back-to-back in one turn,
+  each committed + pushed on its own.
+
+  **H3 shipped -- habit detail.** Month calendar (toggle days in place,
+  month arrows), "Log a day" (date / amount / note), recent notes, note
+  dots; new `task_completions.note`; completion endpoints reject future/
+  malformed dates. **Kept the year grid view-only** (Peter's 2026-08-29
+  request, test-guarded) instead of the plan's "interactive year grid".
+  modal.js: keep-open forms with `data-cc-change` refresh the page's live
+  region on close instead of reloading; `data-no-autofocus`. **Fixed**:
+  backup restore dropped completion `value`. New `test_habit_detail.py`
+  (8). Verified live: day toggles, a 3-days-ago log with a note shows in
+  the list and as a dot, month nav, closing refreshes /habits with zero
+  page reloads, no console errors. Full suite **2,357 passed**. `sw.js`
+  v110 -> v111.
+
+  **Next slice**: H4 (bigger widget -> unblocks item 15), H5 (units +
+  avoid habits), H6 (pause), H7 (agenda/calendar), H8 (insights). Others
+  unchanged: Web Push (item 7), labels-as-modules (item 4 -- re-confirm
+  scope with Peter first), narrow banners (item 2).
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-

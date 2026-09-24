@@ -315,5 +315,6 @@ class TestShellCacheVersion:
         # v108 (2026-09-24, same session): modal.js CSP fix -- see sw.js.
         # v109 (2026-09-24, same session): habits H1 heatmap colors.
         # v110 (2026-09-24, same session): habits H2 page styles.
+        # v111 (2026-09-24, same session): habits H3 modal.js + styles.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v110"' in script
+        assert 'CACHE_NAME = "cc-shell-v111"' in script

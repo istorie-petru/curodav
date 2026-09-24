@@ -616,6 +616,9 @@ CREATE TABLE IF NOT EXISTS task_completions (
     -- has -- a plain recurring task's own checkbox-only completion still
     -- always writes 1 here, so this is purely additive.
     value REAL NOT NULL DEFAULT 1,
+    -- 2026-09-24 (habits H3): optional day note; also added to existing
+    -- databases via _ensure_column in init_schema.
+    note TEXT,
     PRIMARY KEY (task_uid, due_date)
 );
 
@@ -1283,6 +1286,8 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # recurrence is a plain FREQ=WEEKLY/MONTHLY -- see habit_schedule.py.
     # NULL = once per period (the RRULE alone).
     _ensure_column(conn, "tasks", "habits_per_period", "INTEGER")
+    # 2026-09-24 (habits H3): a short "what happened" note on a logged day.
+    _ensure_column(conn, "task_completions", "note", "TEXT")
     _ensure_column(conn, "task_completions", "value", "REAL NOT NULL DEFAULT 1")
     # 2026-08-29 (STATE.md backlog item 3, direct request): extends the 1.6
     # non-working-day policy (see the `events` CREATE TABLE comment) to
@@ -4346,7 +4351,12 @@ def set_object_project_label_uniform(conn: sqlite3.Connection, object_type: str,
 # --------------------------------------------------------------------- #
 
 def upsert_task_completion(
-    conn: sqlite3.Connection, task_uid: str, due_date: str, completed_at: str, value: float = 1
+    conn: sqlite3.Connection,
+    task_uid: str,
+    due_date: str,
+    completed_at: str,
+    value: float = 1,
+    note: str | None = None,
 ) -> None:
     """Records (or updates) that a recurring task was completed on `due_date`
     -- the row that feeds its heatmap/streak. `completed_at` is when the
@@ -4354,11 +4364,15 @@ def upsert_task_completion(
     day being checked off. `value` (2026-08-08) is only meaningful for a
     habit-labeled task with target_per_day > 1 -- every other caller
     (the plain recurring-task complete_task path) leaves it at the
-    default 1, same as before this column existed."""
+    default 1, same as before this column existed.
+
+    `note` (habits H3, 2026-09-24): None leaves an existing note alone (a
+    check-in or +1 never wipes what you wrote); "" clears it."""
     conn.execute(
-        "INSERT INTO task_completions (task_uid, due_date, completed_at, value) VALUES (?, ?, ?, ?) "
-        "ON CONFLICT(task_uid, due_date) DO UPDATE SET completed_at=excluded.completed_at, value=excluded.value",
-        (task_uid, due_date, completed_at, value),
+        "INSERT INTO task_completions (task_uid, due_date, completed_at, value, note) VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT(task_uid, due_date) DO UPDATE SET completed_at=excluded.completed_at, value=excluded.value, "
+        "note=COALESCE(excluded.note, task_completions.note)",
+        (task_uid, due_date, completed_at, value, note),
     )
     conn.commit()
 

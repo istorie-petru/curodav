@@ -116,6 +116,12 @@
 
   let currentUrl = null;
   let pendingReload = false;
+  // Habits H3 (2026-09-24): when every keep-open form that changed
+  // something carried data-cc-change, closing the modal dispatches that
+  // change (the page refreshes just its own live region) instead of a
+  // full reload. Any keep-open form without it forces the reload.
+  let pendingChange = null;
+  let pendingForceReload = false;
 
   // --- Generic swatch/emoji picker popover -----------------------------
   // .color-picker (calendars_list.html, schedule_export.html, projects_
@@ -268,7 +274,12 @@
      currentUrl = null;
      if (pendingReload) {
        pendingReload = false;
-       window.location.reload();
+       const change = pendingForceReload ? null : pendingChange;
+       pendingChange = null;
+       pendingForceReload = false;
+       if (!(change && window.ccApi && window.ccApi.dispatchChange && window.ccApi.dispatchChange(change))) {
+         window.location.reload();
+       }
      }
    }
 
@@ -483,6 +494,12 @@
           if (resp.ok) {
             if (keepOpen) {
               pendingReload = true;
+              const keepChange = form.getAttribute("data-cc-change");
+              if (keepChange) {
+                pendingChange = { type: keepChange, action: form.getAttribute("data-cc-action") || "edit" };
+              } else {
+                pendingForceReload = true;
+              }
               await refreshModalContent(); // re-render in place, modal stays open
             } else {
               closeModal();
@@ -599,7 +616,13 @@
        return;
      }
      currentUrl = url;
-     pendingReload = false;
+     // Navigating inside an already-open modal (e.g. a habit's month
+     // arrows) keeps any change made earlier in it pending for close.
+     if (!wasOpen) {
+       pendingReload = false;
+       pendingChange = null;
+       pendingForceReload = false;
+     }
      overlay.classList.add("is-open");
      // See closeModal()'s own comment -- style.css hides the mobile
      // bottom bar (.mobile-tabbar) for as long as this class is present,
@@ -629,7 +652,10 @@
      applyHeightTier(fragment);
      applyCoverHandle();
      if (wasOpen) animateContentSwap();
-     const firstInput = body.querySelector("input, select, textarea");
+     // data-no-autofocus (habits H3): a view modal's secondary inputs
+     // (the habit detail's "Log a day" form) shouldn't grab focus -- and
+     // scroll the modal / raise a phone keyboard -- on open.
+     const firstInput = body.querySelector("input:not([data-no-autofocus]), select:not([data-no-autofocus]), textarea:not([data-no-autofocus])");
      if (firstInput) firstInput.focus();
    }
 
