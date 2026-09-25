@@ -91,7 +91,8 @@ that fits its remaining budget.
     endpoints, and the date-grouped "Overdue" bucket split from a new
     "Past" bucket so an event no longer borrows a task's wording.
 11. **Labels-as-modules + sidebar/dashboard rework** (item 4 in Peter's
-    numbering, renumbered 15 here) — the biggest item; almost certainly
+    numbering, renumbered 15 here) — **in progress: scope re-confirmed and
+    slice a (schema + backfill) shipped 2026-09-25**, see item 4. The biggest item; almost certainly
     needs its own multi-slice breakdown (schema/module migration, then
     URL/routing collapse, then sidebar chevron fix + group pages, then
     label-pill linking). Do NOT attempt as one slice.
@@ -224,7 +225,52 @@ row-mate visibly share the new, correct height. No automated test added
 (`audit-fixes-2.0.md` item 4's own note still holds: "No test harness for
 JS behavior in this suite").
 
-## 4. ~~Labels-as-modules + sidebar/dashboard rework~~ (final, merged form)
+## 4. Labels-as-modules + sidebar/dashboard rework (final, merged form) — IN PROGRESS (slice a shipped 2026-09-25)
+
+**Scope re-confirmed with Peter, 2026-09-25**. This overrides the "final
+model" wording below wherever the two disagree:
+- **Groups** are plain text (`label_group`) and each group gets its own
+  customizable widget dashboard (new storage keyed by group name, built in
+  slice c). A group is **not** a label. Spaces become groups, the
+  `parent_name` link goes away, and so does color inheritance from a Space.
+- **Projects** keep **deadline + the archive flow**: `deadline_date`, plus
+  the "confirm finished → archive" step and its computed Pending Archiving
+  status, both now generic to any label. `start_date` and the
+  period-overlap rule go.
+- **`/labels/<name>` with `has_dashboard` = yes** is the Home-style widget
+  dashboard scoped to the label (the existing `dashboard_widgets.label_name`).
+  The fixed Kanban+Agenda pages (label_kanban_detail.html,
+  project_detail.html) and the Space/Project URLs go. `has_dashboard` = no
+  shows only the toggled agenda/tasks/contacts sections.
+
+**Slice a — SHIPPED 2026-09-25 (schema + backfill, no UI change).** New
+`label_config` columns `sidebar_pin`, `widget_pin`, `has_deadline`,
+`deadline_date`, `has_dashboard`, `agenda_widget` (default on),
+`tasks_widget` (default on) and `contacts_widget` (default off).
+`archived_at` stays the archive flag, exposed as `is_archived` in
+`effective_label_config`. There's a one-time `db.backfill_label_modules`
+(app_meta marker `label_modules_backfilled`):
+- group: a Space's name for the Space itself and its children; other
+  labels keep any free-text group;
+- sidebar_pin: Spaces, children of real Spaces, and projects;
+- widget_pin: Spaces and projects;
+- has_dashboard: Spaces, projects, and labels that already have their own
+  widgets;
+- deadline: a project's `end_date`.
+
+`_mirror_legacy_module_fields` in `upsert_label_config` keeps the new
+fields in step while the forms still write the legacy flags, and
+`_rename_space_group` does the same for rename and merge. **Both are
+interim: delete them once slice b stops writing the legacy fields.** Pins
+are one-way: turning off a Space/Project doesn't unpin. Tests:
+`test_label_modules.py` (18).
+
+**Open for slice b/c (decide when building, not now):** after the
+backfill, a Space's own label sits in its own group, and its existing
+widgets stay on the *label's* dashboard. Slice c must decide whether to move
+them to the new *group* dashboard. Also, free-text `label_group` values from
+before 2026-09-14 (if Peter's DB has any) will show up as groups once slice
+c renders groups.
 
 This merges three passes at the same idea across one message, in the most
 refined form (later statements override earlier ones where they conflict):

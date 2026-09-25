@@ -795,16 +795,29 @@ session start.
   sessions collapsed -> stay open while adding one). Full suite **2,436
   passed**. `sw.js` v118 -> v119.
 
-  **Next slice**: labels-as-modules (item 4) -- **re-confirm the
-  reversal's exact scope with Peter first, do not start without it**
-  (reverses the 2026-09-16 Spaces/Projects Kanban+Agenda pages; break into
-  schema/module migration -> URL/routing collapse -> sidebar chevron +
-  group pages -> label-pill linking). Then narrow banners (item 2, after
-  4). Everything else in the 2026-09-24 batch is shipped. Then
-  labels-as-modules (item 4 -- re-confirm scope with Peter first, do not
-  start without it) and narrow banners (item 2, after 4). Others unchanged: Web Push
-  (item 7), labels-as-modules (item 4 -- re-confirm scope with Peter
-  first), narrow banners (item 2).
+  **2026-09-25 -- item 4 scope re-confirmed + slice a shipped.** Peter's
+  answers (read literally; recorded at the top of the plan doc's item 4):
+  groups are **text `label_group` + their own widget dashboard** (not
+  labels); projects keep **deadline + archive flow** (start_date/overlap
+  go); `/labels/<name>` with has_dashboard is the **widget dashboard**
+  (Kanban+Agenda pages go). Slice a = schema only, no UI change: 8 new
+  label_config module columns, a one-time `backfill_label_modules` from
+  the Space/Project flags, and an interim write mirror (plus a group
+  rename on label rename/merge) so the new fields don't drift while the
+  forms still write the legacy flags. New `test_label_modules.py` (18).
+  Full suite **2,454 passed**. No CSS/JS change, so there's no sw.js bump.
+
+  **Next slice**: item 4 slice b, the URL/routing collapse. Move the label
+  forms onto the new fields (sidebar/widget pin, deadline, archive,
+  has_dashboard and its section toggles, text group); `/labels/<name>`
+  becomes the widget dashboard (or the toggled sections when
+  has_dashboard=no); retire `/spaces/*`, `/projects/*`,
+  label_kanban_detail.html and project_detail.html (redirect to
+  `/labels/<name>`); `project_status` reads `deadline_date`; delete the
+  interim `_mirror_legacy_module_fields`/`_rename_space_group`. Then c
+  (sidebar chevron + group pages/dashboards, which decides whether a
+  Space's widgets move to its group), then d (label-pill links), then
+  narrow banners (item 2).
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-

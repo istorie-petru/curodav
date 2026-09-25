@@ -475,7 +475,23 @@ CREATE TABLE IF NOT EXISTS label_config (
     start_date TEXT,
     end_date TEXT,
     archived_at TEXT,
-    created_at TEXT
+    created_at TEXT,
+    -- 2026-09-25 (labels-as-modules, plans/ui-cleanup-2026-09.md item 4,
+    -- slice a): generic per-label module fields that replace the Space/
+    -- Project special cases. Written and backfilled here; the UI still
+    -- reads generate_space/is_project until slices b-d switch it over
+    -- (see _mirror_legacy_module_fields for the interim sync).
+    -- `label_group` (above) is the group, plain text -- Peter's call,
+    -- 2026-09-25: groups are text, not labels. `archived_at` (above) is
+    -- the archive flag; `start_date` is kept on disk but not used any more.
+    sidebar_pin INTEGER NOT NULL DEFAULT 0,
+    widget_pin INTEGER NOT NULL DEFAULT 0,
+    has_deadline INTEGER NOT NULL DEFAULT 0,
+    deadline_date TEXT,
+    has_dashboard INTEGER NOT NULL DEFAULT 0,
+    agenda_widget INTEGER NOT NULL DEFAULT 1,
+    tasks_widget INTEGER NOT NULL DEFAULT 1,
+    contacts_widget INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_start ON events(start_at);
@@ -934,6 +950,21 @@ CREATE TABLE IF NOT EXISTS label_aliases (
 """
 
 
+# labels-as-modules slice a (2026-09-25) -- label_config's module columns,
+# shared by init_schema's _ensure_column pass and upsert_label_config.
+# Keep in sync with the label_config CREATE TABLE above.
+_LABEL_MODULE_COLUMNS = (
+    ("sidebar_pin", "INTEGER NOT NULL DEFAULT 0"),
+    ("widget_pin", "INTEGER NOT NULL DEFAULT 0"),
+    ("has_deadline", "INTEGER NOT NULL DEFAULT 0"),
+    ("deadline_date", "TEXT"),
+    ("has_dashboard", "INTEGER NOT NULL DEFAULT 0"),
+    ("agenda_widget", "INTEGER NOT NULL DEFAULT 1"),
+    ("tasks_widget", "INTEGER NOT NULL DEFAULT 1"),
+    ("contacts_widget", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, coldef: str) -> None:
     """Lightweight migration for columns added to a table that already
     existed on disk. `CREATE TABLE IF NOT EXISTS` (below) only helps for
@@ -1305,6 +1336,9 @@ def init_schema(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "label_config", "start_date", "TEXT")
     _ensure_column(conn, "label_config", "end_date", "TEXT")
     _ensure_column(conn, "label_config", "archived_at", "TEXT")
+    # 2026-09-25 labels-as-modules slice a -- see the CREATE TABLE comment.
+    for col, decl in _LABEL_MODULE_COLUMNS:
+        _ensure_column(conn, "label_config", col, decl)
     # CREATE INDEX statements that were moved out of SCHEMA_SQL
     # because they reference columns that may not exist yet in an
     # existing DB (the table predates the column).  `_ensure_column`
@@ -1419,6 +1453,9 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # be set, but that covers entity columns only -- the flag lives in
     # event_task_relations, which that pass never reads.
     backfill_work_allocation_flags(conn)
+    # 2026-09-25 -- one-time backfill of the labels-as-modules fields from
+    # generate_space/is_project/parent_name/end_date (see the function).
+    backfill_label_modules(conn)
     conn.commit()
 
 
@@ -3985,7 +4022,22 @@ _LABEL_CONFIG_DEFAULTS: dict[str, Any] = {
     "end_date": None,
     "archived_at": None,
     "created_at": None,
+    "sidebar_pin": 0,
+    "widget_pin": 0,
+    "has_deadline": 0,
+    "deadline_date": None,
+    "has_dashboard": 0,
+    "agenda_widget": 1,
+    "tasks_widget": 1,
+    "contacts_widget": 0,
 }
+
+# The labels-as-modules boolean flags -- normalized to 0/1 on write and to
+# bool on read, same as generate_space/is_project.
+_LABEL_MODULE_FLAGS = (
+    "sidebar_pin", "widget_pin", "has_deadline", "has_dashboard",
+    "agenda_widget", "tasks_widget", "contacts_widget",
+)
 
 
 def get_label_config(conn: sqlite3.Connection, name: str) -> dict[str, Any] | None:
@@ -4067,6 +4119,9 @@ def _effective_label_config(row: dict[str, Any] | None, name: str) -> dict[str, 
         cfg.setdefault(key, default)
     cfg["generate_space"] = bool(cfg.get("generate_space"))
     cfg["is_project"] = bool(cfg.get("is_project"))
+    for flag in _LABEL_MODULE_FLAGS:
+        cfg[flag] = bool(cfg.get(flag))
+    cfg["is_archived"] = bool(cfg.get("archived_at"))
     # `uid` mirrors `name` -- a label has no surrogate id (its name IS its
     # identity, see the label_config table comment), but templates that
     # used to render a project/space's `.uid` in a link/form field (e.g.
@@ -4084,22 +4139,119 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
         "name", "color", "icon", "description", "parent_name", "label_group",
         "generate_space", "dashboard_preset_json", "abbreviation",
         "is_project", "start_date", "end_date", "archived_at",
-        "created_at",
+        "created_at", *(c for c, _ in _LABEL_MODULE_COLUMNS),
     )
     existing = get_label_config(conn, row["name"]) or {}
     data = dict(row)
-    if "generate_space" in data:
-        data["generate_space"] = 1 if data["generate_space"] else 0
-    if "is_project" in data:
-        data["is_project"] = 1 if data["is_project"] else 0
+    for flag in ("generate_space", "is_project", *_LABEL_MODULE_FLAGS):
+        if flag in data:
+            data[flag] = 1 if data[flag] else 0
     for key, default in _LABEL_CONFIG_DEFAULTS.items():
         data.setdefault(key, existing.get(key, default))
+    _mirror_legacy_module_fields(row, existing, data)
     conn.execute(
         f"INSERT INTO label_config ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)}) "
         f"ON CONFLICT(name) DO UPDATE SET " + ", ".join(f"{c}=excluded.{c}" for c in cols if c != "name"),
         [data.get(c) for c in cols],
     )
     conn.commit()
+
+
+def _mirror_legacy_module_fields(row: dict[str, Any], existing: dict[str, Any], data: dict[str, Any]) -> None:
+    """Interim sync, labels-as-modules slice a (2026-09-25): until slices
+    b-d move the forms/routes onto the new module fields, every edit still
+    arrives as generate_space/is_project/parent_name/end_date. This carries
+    each such edit over to the new fields using the same rules as
+    backfill_label_modules, so the two don't drift apart between sessions.
+    A new-field key passed explicitly in `row` always wins (e.g. restoring
+    a backup that already has them). Delete this once nothing writes the
+    legacy fields any more.
+
+    Turning a Space/Project flag off doesn't unpin anything: the old sidebar
+    and widget still read the legacy flags, so a stale pin has no visible
+    effect until slice b, and guessing whether a pin was set on purpose
+    would be worse than leaving it."""
+    def put(key: str, value: Any) -> None:
+        if key not in row:
+            data[key] = value
+
+    if row.get("generate_space"):
+        put("sidebar_pin", 1)
+        put("widget_pin", 1)
+        put("has_dashboard", 1)
+        if not data.get("label_group"):
+            put("label_group", data["name"])
+    if row.get("is_project"):
+        put("sidebar_pin", 1)
+        put("widget_pin", 1)
+        put("has_dashboard", 1)
+    if "parent_name" in row:
+        if row["parent_name"]:
+            put("label_group", row["parent_name"])
+            put("sidebar_pin", 1)
+        elif existing.get("parent_name") and existing.get("label_group") == existing.get("parent_name"):
+            # Moved out of its Space -- leave the group it came from too.
+            put("label_group", None)
+    if "is_project" in row and not row["is_project"]:
+        # Demoting a project drops its dates (routers/projects.py::demote),
+        # so its deadline goes with them.
+        put("has_deadline", 0)
+        put("deadline_date", None)
+    elif "end_date" in row and data.get("is_project"):
+        put("deadline_date", row["end_date"] or None)
+        put("has_deadline", 1 if row["end_date"] else 0)
+
+
+_LABEL_MODULES_BACKFILLED_KEY = "label_modules_backfilled"
+
+
+def backfill_label_modules(conn: sqlite3.Connection) -> None:
+    """One-time (labels-as-modules slice a, 2026-09-25): fills the new
+    per-label module fields from the Space/Project model they replace, so
+    that when later slices switch the UI over, what's visible stays the same:
+
+    - label_group: a Space's children take the Space's name, and the Space
+      itself takes its own name. That group was the Space. A label with no
+      Space keeps whatever free-text label_group it already had.
+    - sidebar_pin: everything the sidebar shows today, which is Spaces,
+      the children of real Spaces, and projects.
+    - widget_pin: Spaces and projects (the "Spaces & Projects" widget).
+    - has_dashboard: Spaces, projects, and any label whose page already has
+      its own widgets.
+    - has_deadline/deadline_date: a project's end_date.
+    - agenda/tasks/contacts_widget: left at their defaults (agenda + tasks
+      on, contacts off, matching a plain label's current Kanban + Agenda
+      page).
+
+    Idempotent through its own app_meta marker."""
+    if get_app_meta(conn, _LABEL_MODULES_BACKFILLED_KEY):
+        return
+    rows = [dict(r) for r in conn.execute("SELECT * FROM label_config").fetchall()]
+    spaces = {r["name"] for r in rows if r.get("generate_space")}
+    with_widgets = {
+        r["label_name"]
+        for r in conn.execute("SELECT DISTINCT label_name FROM dashboard_widgets WHERE label_name IS NOT NULL")
+    }
+    for r in rows:
+        is_space = bool(r.get("generate_space"))
+        is_project = bool(r.get("is_project"))
+        parent = r.get("parent_name") if r.get("parent_name") in spaces else None
+        group = r["name"] if is_space else (parent or r.get("label_group"))
+        has_deadline = is_project and bool(r.get("end_date"))
+        conn.execute(
+            "UPDATE label_config SET label_group = ?, sidebar_pin = ?, widget_pin = ?, "
+            "has_dashboard = ?, has_deadline = ?, deadline_date = ? WHERE name = ?",
+            (
+                group,
+                1 if (is_space or is_project or parent) else 0,
+                1 if (is_space or is_project) else 0,
+                1 if (is_space or is_project or r["name"] in with_widgets) else 0,
+                1 if has_deadline else 0,
+                r.get("end_date") if has_deadline else None,
+                r["name"],
+            ),
+        )
+    set_app_meta(conn, _LABEL_MODULES_BACKFILLED_KEY, "1")
 
 
 def list_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -4271,6 +4423,7 @@ def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None
         conn.execute("UPDATE object_labels SET label_name = ? WHERE label_name = ?", (new_name, old_name))
         conn.execute("UPDATE label_config SET name = ? WHERE name = ?", (new_name, old_name))
         conn.execute("UPDATE label_config SET parent_name = ? WHERE parent_name = ?", (new_name, old_name))
+        _rename_space_group(conn, old_name, new_name)
         conn.commit()
         return
     collision = new_name.lower() in {n.lower() for n in list_all_label_names(conn)} or bool(get_label_config(conn, new_name))
@@ -4280,7 +4433,21 @@ def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None
     conn.execute("UPDATE object_labels SET label_name = ? WHERE label_name = ?", (new_name, old_name))
     conn.execute("UPDATE label_config SET name = ? WHERE name = ?", (new_name, old_name))
     conn.execute("UPDATE label_config SET parent_name = ? WHERE parent_name = ?", (new_name, old_name))
+    _rename_space_group(conn, old_name, new_name)
     conn.commit()
+
+
+def _rename_space_group(conn: sqlite3.Connection, old_name: str, new_name: str) -> None:
+    """Interim (labels-as-modules slice a): while groups still mirror
+    Spaces, renaming or merging a Space renames its group as well. Only
+    rows that followed the Space are touched (the Space itself, now
+    `new_name`, and its children, whose parent_name has already been
+    repointed). A free-text group that merely happens to share the old
+    name is left alone."""
+    conn.execute(
+        "UPDATE label_config SET label_group = ? WHERE label_group = ? AND (name = ? OR parent_name = ?)",
+        (new_name, old_name, new_name, new_name),
+    )
 
 
 def merge_labels(conn: sqlite3.Connection, source_name: str, dest_name: str) -> None:
@@ -4303,6 +4470,7 @@ def merge_labels(conn: sqlite3.Connection, source_name: str, dest_name: str) -> 
         )
     conn.execute("DELETE FROM object_labels WHERE label_name = ?", (source_name,))
     conn.execute("UPDATE label_config SET parent_name = ? WHERE parent_name = ?", (dest_name, source_name))
+    _rename_space_group(conn, source_name, dest_name)
     conn.execute("DELETE FROM label_config WHERE name = ?", (source_name,))
     conn.commit()
 
