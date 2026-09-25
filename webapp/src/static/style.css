@@ -7386,6 +7386,10 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .label-deadline-text.is-overdue{color:var(--tag-red-fg); font-weight:var(--font-weight-bold);}
 .label-deadline-text.is-soon{color:var(--tag-orange-fg); font-weight:var(--font-weight-bold);}
 .widget-header.label-section-heading{margin-top:var(--space-4);}
+/* 2026-09-25 (merge follow-up, UI audit F1): the label page's Tasks heading
+   and board sit outside any .card, so they started on the banner's outer
+   edge (72px) while every other section starts on --page-inset (85px). */
+.label-section-heading, .label-section-heading + .kanban-board-wrap{padding-inline:var(--page-inset);}
 .label-empty-state{
   display:flex; flex-direction:column; align-items:center; text-align:center;
   gap:var(--space-2); padding:48px var(--space-4) 56px;

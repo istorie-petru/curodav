@@ -568,7 +568,12 @@
 // v124 (2026-09-25, same session): audit decisions -- dashboard columns
 // stack independently (app.js), pills never wrap, phone month view hides
 // times, Week all-day spanning bars (style.css + calendar_week_allday_drag.js).
-const CACHE_NAME = "cc-shell-v124";
+// v125 (2026-09-25, same session): UI audit fixes merged from four areas --
+// habits (habit_actions.js/habit_day.js, partial/off-day styles), calendar
+// (popover, now-line via page-specific calendar_now.js, colour tokens),
+// labels/sidebar (rail titles, group monograms, banner chip) and the flat
+// sweep (--page-inset, dividers, dead CSS removed). style.css throughout.
+const CACHE_NAME = "cc-shell-v125";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

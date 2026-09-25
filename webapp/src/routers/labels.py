@@ -153,11 +153,13 @@ COLORS = [
 # in sync with style.css's :root --cal-bg-* variables. The foregrounds
 # are text colors and never painted onto a bar here, so only the
 # backgrounds live in this map.
+# 2026-09-25 (UI audit C-12): 8 values darkened in style.css for >=4.5:1
+# white text; synced here to keep the mirror exact.
 CAL_COLOR_HEX = {
-    "red": "#c6594f", "orange": "#bf7a33", "yellow": "#b59b33", "lime": "#96a93e",
-    "green": "#3f8f60", "mint": "#2f9c8a", "teal": "#2f8fa3", "cyan": "#2f86ab",
+    "red": "#c35045", "orange": "#a1672b", "yellow": "#b59b33", "lime": "#96a93e",
+    "green": "#398156", "mint": "#278172", "teal": "#2a7f91", "cyan": "#2c7d9f",
     "blue": "#3778bd", "indigo": "#575dcf", "purple": "#8a56c1", "magenta": "#ac4e93",
-    "pink": "#c1577e", "brown": "#967a44", "gray": "#70767d", "slate": "#5b6b7d",
+    "pink": "#be4e77", "brown": "#8b713f", "gray": "#70767d", "slate": "#5b6b7d",
 }
 
 # The contrast-picked foreground of each medium swatch above -- white on

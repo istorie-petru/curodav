@@ -53,8 +53,22 @@ session start.
   dashboards only have 2-3 widgets, so a many-row dashboard hasn't been
   eyeballed yet.
 
-  **Next slice suggestion**: H-01/H-02/C-5 (amount habits done only at
-  target, partial state shown) -- a real correctness bug, S-M.
+  Same session, fix round: Peter asked to "fix the issues found in the
+  audit". Four agents (habits / calendar / labels / flat), one worktree +
+  dev server + DB copy each, merged sequentially (no conflicts), SW cache
+  v125. Nearly every finding fixed incl. H-01 -- see the "Fix round"
+  section at the end of `plans/ui-audit-2026-09-25.md` for behaviour
+  changes and the short still-open list. Suite on the merged tree: 2,554
+  passed. Lessons: (1) agent worktrees start from `main`, not the session
+  branch -- each agent had to hard-reset onto it; tell them up front next
+  time; (2) never run the suite while merging into the same tree (34 bogus
+  failures); (3) restart the dev server by exact PID -- `grep src.main`
+  also matches `uvicorn src.main:app` agent servers, and Jinja re-reads
+  templates from disk while Python routes stay stale, which looks like a
+  half-applied merge.
+
+  **Next slice suggestion**: C-7 on phones needs Peter's call; otherwise
+  H-18 + the H-08 remainder (small), then group rename/add-members.
 
 - **Shipped:** 2026-09-24 -- Peter sent one message bundling ~17 distinct
   UI/UX change requests (labels-as-modules rework, narrow banners

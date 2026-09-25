@@ -116,3 +116,14 @@ def test_f16_dead_rules_are_gone():
 
 def test_f19_widget_checkbox_does_not_set_row_height():
     assert ".widget-row-icon .icon-btn{margin-block:-4px;}" in _CSS
+
+
+def test_f1_label_page_tasks_board_uses_the_page_inset():
+    # Merge follow-up: the label page's Tasks heading + board live outside
+    # any .card and sat on the banner's outer edge instead of the inset.
+    assert ".label-section-heading, .label-section-heading + .kanban-board-wrap{padding-inline:var(--page-inset);}" in _CSS
+
+
+def test_no_double_hyphen_dash_in_sleep_hours_hint():
+    tpl = (_SRC / "templates" / "settings_general.html").read_text()
+    assert "Leisure Time</a> -- Day view" not in tpl
