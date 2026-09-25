@@ -219,6 +219,12 @@ def materialize_all(conn: sqlite3.Connection, bridge: Any) -> dict[str, dict[str
 
     logger = logging.getLogger(__name__)
     results: dict[str, dict[str, int]] = {}
+    # `bridge` may be None (Radicale unreachable at startup, see main.py's
+    # lifespan) -- nothing to push to, so skip quietly instead of logging
+    # one AttributeError traceback per List on every tick. The Lists catch
+    # up on the first tick after a restart with Radicale reachable.
+    if bridge is None:
+        return results
     for row in db.list_published_lists(conn):
         if row.get("visibility") == "archived":
             continue

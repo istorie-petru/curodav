@@ -276,6 +276,16 @@ class TestMaterialize:
         assert "lst1" in results
         assert "bad" not in results  # raised ValueError, caught and logged, skipped
 
+    def test_materialize_all_is_a_quiet_noop_without_a_bridge(self, conn, caplog):
+        """Radicale unreachable at startup -> main.py passes bridge=None;
+        that must not log an AttributeError traceback per List per tick."""
+        _make_task(conn, "t1", "A", ["University"])
+        db.upsert_published_list(conn, self._list_row())
+        with caplog.at_level("ERROR"):
+            assert materialize_all(conn, None) == {}
+        assert caplog.records == []
+        assert db.get_published_list(conn, "lst1")["last_materialized_at"] is None
+
 
 # --------------------------------------------------------------------- #
 # Settings CRUD round-trip (routers/published_lists.py)
