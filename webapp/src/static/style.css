@@ -2958,6 +2958,11 @@ img.avatar-circle{object-fit:cover;}
 .field.has-error select,
 .field.has-error textarea{border-color:var(--danger);}
 .field-error{display:block; font-size:var(--text-sm); color:var(--danger); margin-top:2px;}
+/* 2026-09-25 bug fix: `.field{display:flex}` beat the UA's [hidden]
+   rule, so a field hidden with the `hidden` attribute (e.g. the label
+   form's Sections toggles while Dashboard is ticked) still showed. Same
+   class of bug as the earlier `.btn` vs [hidden] fix. */
+.field[hidden], .field-grid[hidden]{display:none;}
 .field-toggle{flex-direction:row; align-items:center; gap:8px;}
 .field-toggle label{text-transform:none; font-weight:var(--font-weight-bold); font-size:var(--text-base);}
 /* An arbitrary-length set of checkboxes (e.g. published_lists.html's
@@ -4902,6 +4907,31 @@ main.main-shell > .toolbar.top-app-bar{
    padding-right:44px;
 }
 .detail-heading-row h1{margin:0; font-size:var(--text-xl); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+/* Narrow cover (2026-09-25, ui-cleanup item 2, "all banners should be
+   narrow ... the title displayed inside the banner"; Peter included the
+   detail/edit modals). The cover becomes a 56px strip with the icon badge
+   and the title *inside* it, like .page-header-narrow, instead of a taller
+   cover with a badge straddling its bottom edge and the title below. Every
+   rule is scoped to .detail-header-inner, so only covered detail modals
+   (task/event/contact/habit/label preview, the label edit modal's banner
+   header) change. A scrim keeps the white title readable on a photo or on
+   a light label color. */
+.detail-header-inner{position:relative;}
+.detail-header-inner .detail-cover{height:56px; position:relative;}
+.detail-header-inner .detail-cover::after{content:""; position:absolute; inset:0; background:rgba(0,0,0,.28);}
+.detail-header-inner .detail-cover:has(.detail-cover-img)::after{background:rgba(0,0,0,.45);}
+.detail-header-inner .detail-cover-icon{
+   top:50%; bottom:auto; transform:translateY(-50%); z-index:1;
+   width:32px; height:32px; border-radius:var(--radius-sm);
+}
+.detail-header-inner .detail-cover-icon .icon{width:16px; height:16px;}
+.detail-header-inner:has(.detail-cover) .detail-heading-row{
+   position:absolute; top:0; left:0; right:0; height:56px; z-index:1;
+   align-items:center; padding:0 44px 0 calc(var(--space-5) + 32px + var(--space-3));
+}
+.detail-header-inner:not(:has(.detail-cover-icon)) .detail-heading-row{padding-left:var(--space-5);}
+.detail-header-inner .detail-heading-row h1{font-size:var(--text-lg); color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.5);}
+.detail-header-inner .detail-heading-sub{color:rgba(255,255,255,.85);}
 .modal-close{
    position:absolute; top:12px; right:12px; width:28px; height:28px; display:flex; align-items:center;
    justify-content:center; border-radius:var(--radius-control); background:transparent; border:1px solid transparent;
@@ -5333,6 +5363,10 @@ body.command-palette-open{overflow:hidden;}
     .detail-cover{height:56px; border-radius:0;}
     .detail-cover-icon{left:var(--space-4); bottom:-16px; width:40px; height:40px;}
     .detail-heading-row{padding:22px var(--space-4) var(--space-2); padding-right:44px;}
+    /* Narrow cover on mobile -- see the desktop rules' own comment. */
+    .detail-header-inner .detail-cover-icon{left:var(--space-4); bottom:auto; width:32px; height:32px;}
+    .detail-header-inner .detail-heading-row{padding:0 44px 0 calc(var(--space-4) + 32px + var(--space-3));}
+    .detail-header-inner:not(:has(.detail-cover-icon)) .detail-heading-row{padding-left:var(--space-4);}
    .modal-body{padding:var(--space-3) var(--space-4);}
    .modal-footer{padding:var(--space-2) var(--space-4) var(--space-3); flex-wrap:wrap; row-gap:var(--space-2);}
    /* 2026-09-08 bugfix (direct report: banner editor "full screen,

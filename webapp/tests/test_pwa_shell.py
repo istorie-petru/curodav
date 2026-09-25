@@ -325,5 +325,6 @@ class TestShellCacheVersion:
         # v118 (2026-09-24, same session): Web Push P3 settings styles.
         # v119 (2026-09-25): habit amount popup (habit_day.js) + modal.js.
         # v120 (2026-09-25): sidebar group chevron fix (style.css).
+        # v121 (2026-09-25): narrow banners on dashboards + modal covers.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v120"' in script
+        assert 'CACHE_NAME = "cc-shell-v121"' in script

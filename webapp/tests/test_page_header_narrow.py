@@ -146,19 +146,25 @@ class TestPageHeaderNarrowRollout:
         resp = published_lists_router.list_index(_request_with_app("/published-lists", tmp_path / "cache.sqlite"), conn=conn)
         _assert_narrow_header(resp.body.decode(), "Published Lists", "share-2")
 
-    def test_dashboard_unaffected(self, conn):
-        # Home keeps its own full hero banner/greeting -- no narrow header.
+    def test_dashboard_now_uses_the_narrow_header(self, conn):
+        # 2026-09-25 (ui-cleanup item 2): "all banners should be narrow --
+        # even on dashboard pages". Home's greeting is the title, next to
+        # the house icon.
         from src.routers import dashboard as dashboard_router
 
-        resp = dashboard_router.dashboard_view(_bare_request("/"), conn=conn)
-        assert 'class="page-header-narrow"' not in resp.body.decode()
+        body = dashboard_router.dashboard_view(_bare_request("/"), conn=conn).body.decode()
+        assert 'class="page-header-narrow' in body
+        assert "#icon-home" in body[body.index('class="page-header-narrow'):][:600]
+        assert "page-banner-avatar" not in body
 
-    def test_label_page_unaffected(self, conn):
-        # Space/label pages keep the full banner system -- not converted
-        # to the narrow variant in this slice (see STATE.md's own note).
-        db.upsert_label_config(conn, {"name": "CS101", "created_at": _now()})
-        resp = label_pages.label_page("CS101", _bare_request("/labels/CS101"), conn=conn)
-        assert 'class="page-header-narrow"' not in resp.body.decode()
+    def test_label_page_now_uses_the_narrow_header(self, conn):
+        db.upsert_label_config(conn, {"name": "CS101", "color": "red", "icon": "book", "created_at": _now()})
+        body = label_pages.label_page("CS101", _bare_request("/labels/CS101"), conn=conn).body.decode()
+        header = body[body.index('class="page-header-narrow'):][:800]
+        assert "#icon-book" in header
+        assert 'data-style="color: var(--cal-accent-red, var(--cal-accent-blue))"' in header
+        assert ">CS101</h2>" in header
+        assert "label-icon-tile" not in body
 
 
 class TestNarrowHeaderActionsSlot:

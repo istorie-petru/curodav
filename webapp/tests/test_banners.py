@@ -202,216 +202,6 @@ class TestBannerUploadImageSniffing:
         assert db.get_page_banner(conn, "")["image_type"] == "png"
 
 
-class TestPageBannerAvatar:
-    """2026-08-29 (sidebar redesign follow-up, direct request,
-    plans/sidebar-redesign.md § "The Standard Header") -- "Dashboard
-    Header (Expanded)... large, circular avatar overlapping the bottom
-    left of the banner." _page_banner.html renders it (avatar-hero,
-    inside .page-banner-avatar-wrap) whenever a banner is set, reusing
-    the same profile-photo feature Settings > General's own avatar row
-    already has -- no new storage. Covers Home, a Project page
-    (labels_router.label_detail), and a Space page (spaces_router.
-    space_detail) -- all three are "dashboard type" pages sharing
-    _page_banner.html."""
-
-    def test_no_avatar_wrap_without_a_banner(self, conn):
-        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
-        assert "page-banner-avatar-wrap" not in body
-
-    def test_home_shows_avatar_initial_fallback_with_a_banner(self, conn):
-        _set_remote(conn, cached=True, scope="")
-        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
-        assert 'class="page-banner-avatar-wrap"' in body
-        # No display name/photo set -- falls back to the "U" initial, same
-        # convention as settings_your_profile.html's own avatar row.
-        # 2026-09-13 (direct request: "contact's avatar-circle avatar-large
-        # avatar should be colored... like Projects and Spaces avatars") --
-        # the initials fallback now also carries `avatar-colored` plus an
-        # inline `--tile-swatch` var (deps.py's avatar(), same mechanism
-        # _page_banner.html's own icon tile uses) -- asserted piecewise
-        # rather than as one exact tag string, since the color name itself
-        # is a stable_color() hash not worth hardcoding into this test.
-        assert 'class="avatar-circle avatar-hero avatar-colored"' in body
-        assert '--tile-swatch:var(--cal-bg-' in body
-        assert '>U</span>' in body
-
-    def test_home_avatar_uses_display_name_initial(self, conn):
-        db.set_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY, "Petru")
-        _set_remote(conn, cached=True, scope="")
-        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
-        assert 'class="avatar-circle avatar-hero avatar-colored"' in body
-        assert '>P</span>' in body
-
-    def test_home_avatar_renders_uploaded_photo(self, conn):
-        # 2026-08-29 (direct request: "better cache these images") -- the
-        # avatar now renders via a real, cacheable /settings/profile-photo
-        # /image?v=... URL (routers/settings.py's profile_photo_image),
-        # not an inline data: URI -- see deps.py's avatar() own comment.
-        db.set_profile_photo(conn, base64.b64encode(b"photo-bytes").decode("ascii"), "png")
-        _set_remote(conn, cached=True, scope="")
-        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
-        assert 'class="avatar-circle avatar-hero"' in body
-        assert "data:image/png;base64," not in body
-        assert '/settings/profile-photo/image?v=' in body
-
-    def test_uploaded_avatar_photo_is_not_tagged_as_the_cover_image(self, conn):
-        # Regression test (2026-09-13 bug report: "the avatar is too big").
-        # The cover photo's own sizing rule (style.css's `.page-banner-cover`,
-        # was the bare descendant selector `.page-banner img`) is scoped to
-        # a dedicated class precisely so it can never again match the
-        # avatar's own <img> now that both live inside .page-banner --
-        # confirm at the markup level that the avatar photo never carries
-        # that class, and the real cover image always does.
-        db.set_profile_photo(conn, base64.b64encode(b"photo-bytes").decode("ascii"), "png")
-        _set_remote(conn, cached=True, scope="")
-        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
-        avatar_tag_start = body.index('class="avatar-circle avatar-hero"')
-        avatar_tag_line = body[body.rfind("<img", 0, avatar_tag_start):body.index(">", avatar_tag_start)]
-        assert "page-banner-cover" not in avatar_tag_line
-        assert 'class="page-banner-cover"' in body
-
-    def test_project_page_shows_avatar_with_a_banner(self, conn):
-        _make_label(conn, "CS101")
-        _set_remote(conn, cached=True, scope="CS101")
-        body = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn).body.decode()
-        assert 'class="page-banner-avatar-wrap"' in body
-
-    def test_project_page_has_no_avatar_wrap_without_a_banner(self, conn):
-        _make_label(conn, "CS101")
-        body = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn).body.decode()
-        assert "page-banner-avatar-wrap" not in body
-
-    def test_space_page_shows_avatar_with_a_banner(self, conn):
-        db.upsert_label_config(conn, {"name": "Work", "generate_space": 1, "created_at": _now()})
-        _set_remote(conn, cached=True, scope="Work")
-        body = label_pages.label_page("Work", _request("/labels/Work"), conn=conn).body.decode()
-        assert 'class="page-banner-avatar-wrap"' in body
-
-
-class TestPageBannerNotionStyleHeaderRow:
-    """2026-09-07 rework (direct report: "the avatar and text for the big
-    banner is a bit off... remake it Notion-like") -- the title used to be
-    white overlay text pinned right next to the avatar on the cover photo
-    itself; it now renders below the cover in a normal-colored
-    `.page-banner-header-row`, and the edit-mode action buttons became a
-    real child of `.page-banner` (floating over the photo) instead of a
-    sibling anchored to the whole `.page-banner-wrap`.
-
-    2026-09-13: briefly reverted this (title moved back onto the photo,
-    same-day dashboard size-up review) then reverted BACK to exactly this
-    below-cover design a few hours later, direct request ("I would like to
-    have the Title below design back with the big avatars") after seeing
-    the on-photo version live. See _page_banner.html's `page_banner()`
-    macro and style.css's own `.page-banner-header-row` comment for the
-    full round-trip history."""
-
-    def test_title_renders_inside_the_header_row_below_the_cover_not_on_it(self, conn):
-        _set_remote(conn, cached=True, scope="")
-        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
-        assert '<div class="page-banner-header-row">' in body
-        assert "page-banner-overlay" not in body
-        # The header row (avatar + title) comes after .page-banner's own
-        # closing tag, not nested inside it -- title is below the cover,
-        # not overlaid on it.
-        cover_end = body.index("</div>", body.index('class="page-banner"'))
-        row_start = body.index('class="page-banner-header-row"')
-        title_start = body.index('class="page-banner-title"')
-        assert cover_end < row_start < title_start
-
-    def test_avatar_still_comes_before_the_title_in_the_header_row(self, conn):
-        _set_remote(conn, cached=True, scope="")
-        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
-        avatar_start = body.index('class="page-banner-avatar-wrap"')
-        title_start = body.index('class="page-banner-title"')
-        assert avatar_start < title_start
-
-    def test_edit_mode_actions_are_nested_inside_the_cover_not_the_header_row(self, conn):
-        _set_remote(conn, cached=True, scope="")
-        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
-        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
-        cover_start = body.index('class="page-banner"')
-        cover_end = body.index("</div>", body.index('class="page-banner-actions"'))
-        actions_start = body.index('class="page-banner-actions"')
-        header_row_start = body.index('class="page-banner-header-row"')
-        # Actions sit between the cover's own opening tag and the header
-        # row that follows -- i.e. still inside .page-banner, not moved
-        # down alongside the avatar/title.
-        assert cover_start < actions_start < header_row_start
-
-    def test_project_page_gets_the_same_header_row(self, conn):
-        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "start_date": "2026-01-01", "end_date": "2026-12-31", "created_at": _now()})
-        _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE)
-        body = label_pages.label_page("Garden", _request("/labels/Garden"), conn=conn).body.decode()
-        assert '<div class="page-banner-header-row">' in body
-
-
-class TestLabelIconTile:
-    """2026-09-13 (direct request: "why have we abandoned the rounded
-    square with gradient background and icon for spaces? I want it...
-    merging [the icon and the profile picture] into something custom for
-    spaces and projects alike") -- a Space/Project page's banner avatar
-    slot renders `.label-icon-tile` (a colored squircle, style.css) using
-    the label's own existing `color`, instead of the account's profile
-    photo/initial. Home is unaffected -- it never had a label to draw a
-    color/icon from, and still shows the account's own avatar."""
-
-    def test_space_page_gets_an_icon_tile_not_the_profile_avatar(self, conn):
-        db.upsert_label_config(conn, {"name": "Work", "generate_space": 1, "color": "teal", "icon": "briefcase", "created_at": _now()})
-        _set_remote(conn, cached=True, scope="Work")
-        body = label_pages.label_page("Work", _request("/labels/Work"), conn=conn).body.decode()
-        assert 'class="label-icon-tile avatar-hero avatar-circle"' in body
-        assert "--tile-swatch:var(--cal-bg-teal, var(--cal-bg-blue))" in body
-        assert '<span class="avatar-circle avatar-hero">' not in body  # no profile-photo fallback rendered instead
-
-    def test_project_page_gets_an_icon_tile_with_its_own_color(self, conn):
-        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "color": "green", "icon": "leaf", "start_date": "2026-01-01", "end_date": "2026-12-31", "created_at": _now()})
-        _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE)
-        body = label_pages.label_page("Garden", _request("/labels/Garden"), conn=conn).body.decode()
-        assert "--tile-swatch:var(--cal-bg-green, var(--cal-bg-blue))" in body
-
-    def test_unrecognized_legacy_color_falls_back_to_blue_not_transparent(self, conn):
-        # Regression test (direct report: "the --tile-swatch doesn't have
-        # full opacity"). routers/labels.py's COLORS guard covers every
-        # UI write path, but scripts/migrate_labels.py's one-time
-        # carry-forward of legacy calendar/task-list/project colors has no
-        # such guard -- an older label can hold a color name outside the
-        # current 16 (`db.upsert_label_config` itself has no CHECK
-        # constraint). `var(--cal-bg-<unknown-name>)` with no fallback is
-        # "guaranteed-invalid" at computed-value time, which doesn't just
-        # skip that property -- it invalidates the WHOLE background
-        # declaration on .label-icon-tile, rendering transparent instead
-        # of any color at all. The explicit `, var(--cal-bg-blue)` fallback
-        # (_page_banner.html) guarantees --tile-swatch always resolves to
-        # a real, fully-opaque color even for a color name that predates
-        # the current palette.
-        db.upsert_label_config(conn, {"name": "Legacy", "generate_space": 1, "color": "turquoise", "icon": "folder", "created_at": _now()})
-        _set_remote(conn, cached=True, scope="Legacy")
-        body = label_pages.label_page("Legacy", _request("/labels/Legacy"), conn=conn).body.decode()
-        assert "--tile-swatch:var(--cal-bg-turquoise, var(--cal-bg-blue))" in body
-
-    def test_title_no_longer_has_the_icon_prepended(self, conn):
-        # The icon used to render inline in the <h1> (e.g. "📁 CS101") --
-        # it lives only in the tile now, so the title text is the plain
-        # name.
-        db.upsert_label_config(conn, {"name": "CS101", "color": "blue", "icon": "book", "created_at": _now()})
-        _set_remote(conn, cached=True, scope="CS101")
-        body = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn).body.decode()
-        title_start = body.index('class="page-banner-title"')
-        title_end = body.index("</h1>", title_start)
-        title_html = body[title_start:title_end]
-        assert "CS101" in title_html
-        assert "<svg" not in title_html  # icon() renders an <svg> -- none should land in the title itself
-
-    def test_home_still_shows_the_profile_avatar(self, conn):
-        # Home has no label to draw a color/icon from -- unaffected by
-        # the icon-tile change.
-        _set_remote(conn, cached=True, scope="")
-        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
-        assert "label-icon-tile" not in body
-        assert 'class="avatar-circle avatar-hero avatar-colored"' in body
-        assert '>U</span>' in body
-
-
 class TestPageBannerDefaultFallback:
     """2026-08-29 (direct request): Home/Project/Space pages with no
     banner of their own now fall back to the single default set in
@@ -763,3 +553,38 @@ class TestBannerRendersOnTaskDetailAndKanban:
         db.upsert_task(conn, {"uid": "t1", "title": "Water the plants", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
         resp = label_pages.label_page("Garden", _request("/labels/Garden"), conn=conn)
         assert "kanban-card-banner" not in resp.body.decode()
+
+
+class TestNarrowDashboardHeaders:
+    """2026-09-25 (ui-cleanup item 2): Home, label and group pages render
+    the narrow header (_page_header_narrow.html) instead of the full hero
+    banner; each keeps its own uploaded banner as the strip's background
+    (Peter: "keep per-page images"), falling back to the Settings default.
+    No avatar anywhere."""
+
+    def test_label_page_uses_its_own_banner_in_the_strip(self, conn):
+        _make_label(conn, "CS101")
+        _set_remote(conn, cached=True, scope="CS101")
+        body = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn).body.decode()
+        assert 'class="page-header-narrow has-banner"' in body
+        assert 'class="page-header-narrow-bg" src="/banners/image?scope=CS101&amp;v=' in body
+
+    def test_label_page_falls_back_to_the_default_banner(self, conn):
+        _make_label(conn, "CS101")
+        _set_remote(conn, cached=True, scope=db.PAGE_HEADER_BANNER_SCOPE)
+        body = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn).body.decode()
+        assert "/banners/image?scope=__page_header__&amp;v=" in body
+
+    def test_group_page_uses_the_group_key(self, conn):
+        db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni"})
+        _set_remote(conn, cached=True, scope="group:Uni")
+        body = label_pages.group_page("Uni", _request("/groups/Uni"), conn=conn).body.decode()
+        assert "/banners/image?scope=group%3AUni&amp;v=" in body
+        assert "#icon-layers" in body[body.index('class="page-header-narrow'):][:600]
+
+    def test_home_has_no_avatar_even_with_a_photo(self, conn):
+        db.set_profile_photo(conn, base64.b64encode(b"img").decode("ascii"), "jpeg")
+        _set_remote(conn, cached=True, scope="")
+        body = dashboard_router.dashboard_view(_request("/"), conn=conn).body.decode()
+        assert 'class="page-header-narrow has-banner"' in body
+        assert "page-banner-avatar" not in body and "avatar-hero" not in body

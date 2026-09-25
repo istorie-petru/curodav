@@ -504,7 +504,7 @@ class TestQuickAddButtons:
         assert "data-fab" not in body
         assert 'href="/tasks/new"' not in body
         assert 'href="/events/new"' not in body
-        assert 'class="page-banner-actions"' in body
+        assert 'class="page-header-narrow-actions"' in body
         assert 'class="toolbar"' not in body
 
     def test_label_page_has_no_page_level_quick_add_button(self, conn):
@@ -514,7 +514,7 @@ class TestQuickAddButtons:
         assert "data-fab" not in body
         assert 'href="/tasks/new"' not in body
         assert 'href="/events/new"' not in body
-        assert 'class="page-banner-actions"' in body
+        assert 'class="page-header-narrow-actions"' in body
         assert 'class="toolbar"' not in body
 
     def test_dashboard_html_edit_mode_actions_present(self, conn):
@@ -532,7 +532,7 @@ class TestQuickAddButtons:
         assert "data-fab" not in body
         assert 'New widget' in body
         assert 'Add banner' in body
-        assert 'class="page-banner-actions"' in body
+        assert 'class="page-header-narrow-actions"' in body
 
     def test_label_page_edit_mode_actions_present(self, conn):
         # 2026-09-16 (direct request: "plain labels should generate pages
@@ -549,7 +549,7 @@ class TestQuickAddButtons:
         assert 'New widget' not in body
         assert 'Reset layout' not in body
         assert 'Add banner' in body
-        assert 'class="page-banner-actions"' in body
+        assert 'class="page-header-narrow-actions"' in body
 
     def test_dashboard_html_no_longer_has_a_separate_quick_add_row(self, conn):
         resp = dashboard_router.dashboard_view(_request(), conn=conn)

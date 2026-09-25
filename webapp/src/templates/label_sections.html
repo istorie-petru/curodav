@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill, widget_complete_button, widget_event_dot %}
 {% from "_label_pill.html" import label_pill with context %}
-{% from "_page_banner.html" import page_banner with context %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% block title %}{{ label.name }}{% endblock %}
 {% block main_class %}main-full-width{% endblock %}
 <!-- A label's page when it has no dashboard (labels-as-modules slice b,
@@ -11,13 +11,12 @@
      which were near-identical copies of each other. -->
 
 {% block content %}
-<div class="page-banner-wrap">
-{% call page_banner(label.name, icon_tile={'icon': label.icon or 'tag', 'color': label.color}) %}
+{# Narrow header (2026-09-25, ui-cleanup item 2), same as label_detail.html. #}
+{% call page_header_narrow(label.name, label.icon or 'tag', banner=banner, banner_image_scope=banner_image_scope, icon_color=label.color) %}
     {% if edit_mode %}
     <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
     {% endif %}
 {% endcall %}
-</div>
 {% include "_label_status.html" %}
 
 <!-- Agenda: future events tagged with this label, its own deadline, and

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_page_banner.html" import page_banner with context %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% block title %}Dashboard{% endblock %}
 <!-- 2026-08-07: opt out of the default 1120px-max-width centered column
      (base.html's main_class block), same mechanism Calendar already uses
@@ -12,16 +12,10 @@
      change to the masonry math itself. -->
 {% block main_class %}main-full-width main-shell{% endblock %}
 {% block content %}
-<!-- Header banner + one page-action bar (2026-08-10, reworked 2026-09-07
-     into the shared page_banner() macro -- see _page_banner.html's own
-     comment for why) -- the banner cover (when set, routers/banners.py)
-     and ALL of this page's actions live together: with a banner the
-     buttons float bottom-right over the photo (see style.css's
-     .page-banner-actions rules) and the greeting sits below the photo,
-     Notion-style, next to the avatar; without one it's a plain top bar
-     with the greeting h1 left of the buttons. -->
-<div class="page-banner-wrap">
-{% call page_banner(greeting) %}
+{# Narrow header (2026-09-25, ui-cleanup item 2): Home's greeting as the
+   title next to the house icon, its own banner (or the default) behind
+   it; the avatar is gone. Edit-mode actions sit in the actions slot. #}
+{% call page_header_narrow(greeting, 'home', banner=banner, banner_image_scope=banner_image_scope) %}
     <!-- Dynamic greeting (dashboard usability rework, 2026-08-07) --
          "Good morning/afternoon/evening[, name]" computed server-side in
          routers/dashboard.py's dashboard_view (_greeting_for_hour), local
@@ -71,7 +65,6 @@
          the sidebar rail has its own global "+ New" (13c, base.html),
          reachable from every page including this one. -->
 {% endcall %}
-</div>
 
 <!-- Widget grid -- Add-widget/live-preview/grid/Filters, shared verbatim
      with every Space page (routers/projects.py's space_detail) via

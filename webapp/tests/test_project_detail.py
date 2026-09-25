@@ -487,19 +487,20 @@ class TestHeaderBannerAndAvatar:
         _promote(conn, "Trip")
         resp = label_pages.label_page("Trip", _request(), conn=conn)
         body = resp.body.decode()
-        assert "page-banner-wrap" in body
-        assert "page-banner-title-plain" in body
+        # Narrow header since 2026-09-25 (ui-cleanup item 2).
+        assert 'class="page-header-narrow"' in body
+        assert ">Trip</h2>" in body
         assert resp.context["has_own_banner"] is False
 
-    def test_own_banner_renders_cover_and_avatar_overlap(self, conn):
+    def test_own_banner_renders_in_the_narrow_strip(self, conn):
         _promote(conn, "Trip")
         db.set_page_banner(conn, "Trip", {"kind": "remote", "image_url": "https://example.com/a.jpg", "alt": "x"})
         resp = label_pages.label_page("Trip", _request(), conn=conn)
         body = resp.body.decode()
-        assert "page-banner-avatar-wrap" in body
+        assert 'class="page-header-narrow has-banner"' in body
         assert "https://example.com/a.jpg" in body
         assert resp.context["has_own_banner"] is True
-        assert 'class="page-banner-title"' in body
+        assert "page-banner-avatar" not in body
 
     def test_add_banner_button_only_shows_in_edit_mode(self, conn):
         _promote(conn, "Trip")

@@ -561,7 +561,7 @@
 // v119 (2026-09-25): clickable habit heatmap -- new base.html-loaded
 // habit_day.js (amount popup; added to SHELL_ASSETS), modal.js gained
 // CCModal.markChangedWith, style.css the popup/work-sessions rules.
-const CACHE_NAME = "cc-shell-v120";
+const CACHE_NAME = "cc-shell-v121";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

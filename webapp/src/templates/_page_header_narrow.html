@@ -88,12 +88,21 @@
    _bulk_actions_bar.html's new `bulk_count()` macro and each call site's
    own comment. Empty string by default (`title_extra=''`), so pages with
    nothing to add here render exactly as before. #}
-{% macro page_header_narrow(title, icon_name, title_extra='') %}
-{% set _banner = page_header_banner(request) %}
+{% macro page_header_narrow(title, icon_name, title_extra='', banner=none, banner_image_scope=none, icon_color=none) %}
+{# 2026-09-25 (ui-cleanup item 2, "all banners should be narrow, even on
+   dashboard pages"): Home, label and group pages use this header too now,
+   so it can take the page's own banner instead of the global one. `banner`
+   + `banner_image_scope` are routers/dashboard.py::_page_banner_context's
+   values (the page's own uploaded image, or the Settings > Appearance
+   default when it has none). `icon_color` paints the icon in a label's
+   color. Every other page leaves all three unset and gets the global
+   image exactly as before. #}
+{% set _banner = banner if banner is not none else page_header_banner(request) %}
+{% set _scope = banner_image_scope if banner is not none else '__page_header__' %}
 <div class="page-header-narrow{% if _banner %} has-banner{% endif %}">
     {% if _banner %}
     {% if _banner.version %}
-    <img class="page-header-narrow-bg" src="/banners/image?scope=__page_header__&amp;v={{ _banner.version }}" alt="">
+    <img class="page-header-narrow-bg" src="/banners/image?scope={{ _scope|urlencode }}&amp;v={{ _banner.version }}" alt="">
     {% else %}
     <img class="page-header-narrow-bg" src="{{ _banner.image_url }}" alt="" referrerpolicy="no-referrer">
     {% endif %}
@@ -101,7 +110,7 @@
     {% if crumbs is defined and crumbs %}
     <a class="icon-btn page-header-narrow-back" href="{{ crumbs[-1].url }}" aria-label="Back to {{ crumbs[-1].name }}" title="Back to {{ crumbs[-1].name }}">{{ icon('chevron-left', 'icon-sm') }}</a>
     {% endif %}
-    <span class="page-header-narrow-icon">{{ icon(icon_name|default('layout')) }}</span>
+    <span class="page-header-narrow-icon"{% if icon_color %} data-style="color: var(--cal-accent-{{ icon_color }}, var(--cal-accent-blue))"{% endif %}>{{ icon(icon_name|default('layout')) }}</span>
     <h2 class="page-header-narrow-title">{{ title }}</h2>
     {% if title_extra %}{{ title_extra }}{% endif %}
     <div class="spacer"></div>

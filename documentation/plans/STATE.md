@@ -867,12 +867,26 @@ session start.
   no console errors). Full suite **2,445 passed**. No CSS/SHELL_ASSETS
   change, so there's no sw.js bump.
 
-  **Next slice**: narrow banners everywhere, including dashboards (item 2 in
-  `plans/ui-cleanup-2026-09.md`). Label and group pages now both render
-  through `label_detail.html`/`label_sections.html`, so this includes the
-  icon_tile banner treatment Peter listed in the 2026-09-16 reversal. Check
-  item 2's own open questions first. Known gaps from item 4: no "rename
-  group" action; Tasks-table and Contacts-row pills aren't clickable.
+  **2026-09-25 (same session) -- item 2 shipped: narrow banners.** After
+  asking: per-page banner images stay (shown in the strip), plain icons
+  (house / label icon in its color / layers), and modal covers included.
+  Home, label and group pages use `page_header_narrow()` (new `banner`/
+  `banner_image_scope`/`icon_color` params; `_page_banner.html` deleted,
+  no avatar). Detail/edit modal covers are a 56px strip with the title
+  inside (CSS only). **Bug fixed along the way**: `.field{display:flex}`
+  beat `[hidden]`, so hidden fields always showed (label Sections toggles,
+  the non-recurring Holiday calendar field, the widget editor's
+  Limit/Style fields). Verified live: headers 48px, modal covers 56px
+  with the title inside, 390px no overflow, no console errors. Full suite
+  **2,432 passed** (hero-banner tests replaced). `sw.js` v120 -> v121.
+
+  **Next slice**: the whole 2026-09-24 batch is shipped. Web Push still
+  needs Peter's real-device test (Settings > General > Turn on > Send
+  test). Loose ends, only if asked: no "rename group" action; Tasks-table
+  and Contacts-row label pills aren't clickable; a work session added
+  inside a habit/task modal reloads the page on close; habits aren't in the
+  week/4-week grids; the habit check-in histogram uses the server's time
+  zone; the optional `CC_PUSH_CONTACT` env var.
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-

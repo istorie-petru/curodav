@@ -145,7 +145,32 @@ worth touching unused code in an unrelated pass); worth a straight deletion
 whenever someone's next to that file, not a "port the character-budget fix
 into it" task since nothing calls it.
 
-## 2. Narrow banners everywhere, including dashboards
+## 2. ~~Narrow banners everywhere, including dashboards~~ — SHIPPED 2026-09-25
+
+**Peter's answers (2026-09-25):** keep per-page banner images (the narrow
+strip shows the page's own image, falling back to the Settings default);
+plain icons (Home = house, label = its own icon in its color, group =
+layers); the detail/edit modal covers are in scope too.
+
+**Shipped:**
+- **Page headers:** Home (`dashboard.html`), label pages
+  (`label_detail.html`/`label_sections.html`) and group pages render
+  `page_header_narrow()`. The macro gained `banner`/`banner_image_scope`
+  (a page's own image) and `icon_color`, and edit-mode actions moved into
+  its actions slot. The avatar and the icon-tile straddle are gone, and
+  `_page_banner.html` is deleted (its CSS stays, unused).
+- **Modal covers:** a CSS-only change scoped to `.detail-header-inner`.
+  The cover is a 56px strip with a 32px icon badge and the white title
+  inside it, over a scrim (darker on photos). It covers the task, event,
+  contact, habit and label-preview modals, the label edit modal's banner
+  header and the banner editor.
+- **Found and fixed:** `.field{display:flex}` overrode `[hidden]`, so
+  fields hidden with the attribute always showed: the label form's Sections
+  toggles, the recurring-only Holiday calendar field, and the widget
+  editor's Limit/Style fields. They now hide as designed.
+
+sw.js v120 -> v121.
+
 
 "All banners should be narrow - even on dashboard pages. Remove the avatar
 from any dashboard - keep only the icon as of any narrow banner. The title
