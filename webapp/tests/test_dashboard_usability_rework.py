@@ -128,13 +128,12 @@ class TestScopingBugFix:
         uids = {e["uid"] for e in data["events"]}
         assert uids == {"in_scope"}
 
-    def test_space_page_scoping_pools_child_labels(self, conn):
-        _make_space(conn, "Uni")
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+    def test_group_page_scoping_pools_member_labels(self, conn):
+        db.upsert_label_config(conn, {"name": "CS101", "label_group": "Uni", "created_at": _now()})
         today = date.today().isoformat()
         _seed_task(conn, "in_scope", due_at=today, tags=["CS101"])
         _seed_task(conn, "out_of_scope", due_at=today)
-        data = dashboard_router._render_agenda(conn, {"label_name": "Uni", "range": "today", "show": ["tasks"]})
+        data = dashboard_router._render_agenda(conn, {"label_name": "group:Uni", "range": "today", "show": ["tasks"]})
         uids = {t["uid"] for t in data["tasks"]}
         assert uids == {"in_scope"}
 
@@ -166,11 +165,10 @@ class TestScopingBugFix:
         # still behave exactly as before (its own pre-existing tests in
         # test_dashboard_router.py already cover this in depth; this is a
         # quick sanity check the refactor didn't regress it).
-        _make_space(conn, "Uni")
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "label_group": "Uni", "created_at": _now()})
         db.upsert_contact(conn, {"uid": "c1", "full_name": "Alice", "tags": ["CS101"], "created_at": _now()})
         db.upsert_contact(conn, {"uid": "c2", "full_name": "Bob", "tags": ["Personal"], "created_at": _now()})
-        data = dashboard_router._render_contact_list(conn, {"label_name": "Uni"})
+        data = dashboard_router._render_contact_list(conn, {"label_name": "group:Uni"})
         assert {c["uid"] for c in data["contacts"]} == {"c1"}
 
 
@@ -634,10 +632,9 @@ class TestQuickAddLabelScope:
         assert resp.context["tag_names"] == ["Anything"]
 
     def test_space_scope_restricts_to_its_children(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Historiography", "label_group": "University", "created_at": _now()})
         db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Unrelated"], "created_at": _now()})
-        resp = dashboard_router.quick_add_form(_request("/quick/add"), scope="University", conn=conn)
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), scope="group:University", conn=conn)
         assert resp.context["tag_names"] == ["Historiography"]
         assert [i["name"] for i in resp.context["tag_name_items"]] == ["Historiography"]
 
@@ -646,9 +643,8 @@ class TestQuickAddLabelScope:
         # still be offered -- the scoped list is the group's full child
         # set, not an intersection with "already in use" (list_tag_names_
         # in_use's own usual precondition).
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "2nd Semester", "parent_name": "University", "created_at": _now()})
-        resp = dashboard_router.quick_add_form(_request("/quick/add"), scope="University", conn=conn)
+        db.upsert_label_config(conn, {"name": "2nd Semester", "label_group": "University", "created_at": _now()})
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), scope="group:University", conn=conn)
         assert resp.context["tag_names"] == ["2nd Semester"]
 
     def test_scope_naming_an_unscoped_label_is_a_no_op(self, conn):
@@ -678,7 +674,7 @@ class TestQuickAddContactAndLabelTabs:
         assert 'enctype="multipart/form-data"' in body
         # ...and label-specific fields present.
         assert 'name="new_name"' in body
-        assert 'name="parent_name"' in body
+        assert 'name="label_group"' in body
 
     def test_contact_and_label_tabs_present(self, conn):
         resp = dashboard_router.quick_add_form(_request("/quick/add"), conn=conn)

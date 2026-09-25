@@ -136,7 +136,7 @@ def _scope_child_names(conn, label_name: str | None) -> set[str] | None:
     """The Dashboard's hard, page-level tag-membership scope for
     `label_name` (a Space/Project page's own identity, `config["label_name"]`
     on every widget seeded there) -- child labels for a Space
-    (`generate_space=1`, `db.list_child_labels`, the same query
+    (historically `generate_space=1` + child labels; a group key since slice c -- the same query
     `routers/spaces.py::_label_scope` uses for that Space's own page,
     Spaces -- labels-as-membership rework slice 3), or the label's own
     name for a plain/project label (direct membership, same rule
@@ -153,9 +153,12 @@ def _scope_child_names(conn, label_name: str | None) -> set[str] | None:
     generate_space branch)."""
     if not label_name:
         return None
-    cfg = db.get_label_config(conn, label_name)
-    if cfg and cfg.get("generate_space"):
-        return {c["name"] for c in db.list_child_labels(conn, label_name)}
+    # labels-as-modules slice c (2026-09-25): a group's page (key
+    # "group:<name>") is scoped to every member label; a label's page to
+    # the label itself. Replaces the Space -> child-labels branch.
+    group = db.group_from_page_key(label_name)
+    if group is not None:
+        return set(db.group_member_names(conn, group))
     return {label_name}
 
 
@@ -653,55 +656,48 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
     Space/Project page) are unaffected -- `db.list_child_labels` already
     pools both projects and sub-Spaces under that label, unlike this
     unscoped branch which otherwise only ever saw `list_space_labels`."""
+    # labels-as-modules slice c (2026-09-25): driven by groups and the
+    # per-label `widget_pin` flag instead of Spaces/projects. On a group's
+    # page it shows that group's pinned labels; on a label's page, nothing
+    # (a label has no sub-labels); on Home, every pinned label (List) or
+    # every group plus every pinned label with no group (Cards).
     style = config.get("style") or "list"
     label_name = config.get("label_name") if config.get("scope") != "everything" else None
+    pinned = [lbl for lbl in db.list_labels(conn) if lbl.get("widget_pin") and not lbl.get("archived_at")]
     if label_name:
-        labels = db.list_child_labels(conn, label_name)
-    elif style == "cards":
-        labels = db.list_space_labels(conn)
+        group = db.group_from_page_key(label_name)
+        labels = [lbl for lbl in pinned if group is not None and lbl.get("label_group") == group]
     else:
-        labels = [lbl for lbl in db.list_labels(conn) if not lbl.get("generate_space")]
+        labels = pinned
 
     if style == "cards":
         cards = []
+        if not label_name:
+            for g in db.list_groups(conn):
+                n = len(g["labels"])
+                cards.append({
+                    "uid": db.group_page_key(g["name"]),
+                    "name": g["name"],
+                    "href": f"/groups/{g['name']}",
+                    "icon": "layers",
+                    "color": "gray",
+                    "description": "",
+                    "meta": f"{n} label{'' if n == 1 else 's'}",
+                })
         for lbl in labels:
-            children = db.list_child_labels(conn, lbl["name"])
-            href = f"/labels/{lbl['name']}"
+            if not label_name and lbl.get("label_group"):
+                continue  # already reachable through its group's card
             cards.append({
                 "uid": lbl["name"],
                 "name": lbl["name"],
-                "href": href,
-                "icon": lbl.get("icon") or "layers",
+                "href": f"/labels/{lbl['name']}",
+                "icon": lbl.get("icon") or ("folder" if lbl.get("is_project") else "tag"),
                 "color": lbl.get("color") or "blue",
                 "description": lbl.get("description") or "",
-                "meta": f"{len(children)} project{'' if len(children) == 1 else 's'}",
+                "meta": "Project" if lbl.get("is_project") else "Label",
             })
-        if not label_name:
-            # Unscoped (Home, or a scoped instance opted out via
-            # scope=="everything") -- fold in every open project too, same
-            # "every Space + every open project" set Quick Links used to
-            # render on its own. Not reachable when label_name is set: that
-            # branch already sourced `labels` from list_child_labels above,
-            # which pools projects in directly -- adding them again here
-            # would duplicate every project card on a Space/Project page.
-            for lbl in db.list_project_labels(conn):
-                if lbl.get("archived_at"):
-                    continue
-                cards.append({
-                    "uid": lbl["name"],
-                    "name": lbl["name"],
-                    "href": f"/labels/{lbl['name']}",
-                    "icon": lbl.get("icon") or "folder",
-                    "color": lbl.get("color") or "blue",
-                    "description": "",
-                    "meta": "Project",
-                })
         return {"style": "cards", "cards": cards}
 
-    # Progress is derived from direct object_labels membership (tasks
-    # tagged with that label) -- direct assignment only, same "not
-    # transitive through parent_name" rule every label-page query in this
-    # app follows.
     previews = []
     for lbl in labels:
         tasks = [t for t in db.list_tasks(conn) if lbl["name"] in (t.get("tags") or [])]
@@ -1128,7 +1124,7 @@ WIDGET_TYPES: dict[str, dict] = {
     # project_preview/filled_cards (2 types -> 1, a List/Cards style
     # toggle instead of 2 separate names).
     "spaces_projects": {
-        "label": "Spaces & Projects",
+        "label": "Groups & Labels",
         "template": "_widget_spaces_projects.html",
         "render": _render_spaces_projects,
         "uses": set(),
@@ -1216,7 +1212,7 @@ WIDGET_SOURCES: dict[str, dict] = {
     # grid merged into this source's own "cards" style (Style radio, see
     # WIDGET_VIEWS' spaces_projects_view/has_style below) rather than
     # staying a second, harder-to-explain source next to this one.
-    "spaces_projects": {"label": "Spaces & Projects", "icon": "layers"},
+    "spaces_projects": {"label": "Groups & Labels", "icon": "layers"},
 }
 
 # Which views exist per source, and which of those views take a Range.
@@ -1247,7 +1243,7 @@ WIDGET_VIEWS: dict[str, dict] = {
     # gating idea as Agenda's has_show. "quick_links_view"/"streak_view"/
     # "next_deadline_view"/"organize_today_view" retired 2026-08-30 along
     # with their widget types -- see WIDGET_TYPES' own comment.
-    "spaces_projects_view": {"label": "Spaces & Projects", "source": "spaces_projects", "has_range": False, "has_style": True},
+    "spaces_projects_view": {"label": "Groups & Labels", "source": "spaces_projects", "has_range": False, "has_style": True},
     "weekly_schedule_view": {"label": "Weekly schedule", "source": "calendar_tasks", "has_range": False},
 }
 
@@ -1383,8 +1379,8 @@ def _page_scope(conn, label_name: str | None) -> str:
     rather than which of two columns was set."""
     if not label_name:
         return ""
-    cfg = db.get_label_config(conn, label_name)
-    return "space" if (cfg and cfg.get("generate_space")) else "project"
+    # A group's page keeps the old Space page's widget-type rules.
+    return "space" if db.group_from_page_key(label_name) is not None else "project"
 
 
 def _excluded_widget_types(scope: str) -> set[str]:
@@ -1433,13 +1429,13 @@ def _scoped_collections(conn, label_name: str | None) -> tuple[list[dict], list[
     unchanged. "projects" here means "labels" -- kept as the historical
     name templates already read (`projects` context key)."""
     if label_name is not None:
-        cfg = db.get_label_config(conn, label_name)
-        if cfg and cfg.get("generate_space"):
-            projects = db.list_child_labels(conn, label_name)
+        group = db.group_from_page_key(label_name)
+        if group is not None:
+            projects = [db.effective_label_config(conn, n) for n in db.group_member_names(conn, group)]
         else:
             projects = [db.effective_label_config(conn, label_name)]
     else:
-        projects = [lbl for lbl in db.list_labels(conn) if not lbl.get("generate_space")]
+        projects = db.list_labels(conn)
     return projects, [], []
 
 
@@ -1931,6 +1927,9 @@ def _return_url(label_name: str | None, _legacy: str | None = None, conn=None) -
     label_name = label_name or _legacy
     if not label_name:
         return "/"
+    group = db.group_from_page_key(label_name)
+    if group is not None:
+        return f"/groups/{group}"
     return f"/labels/{label_name}"
 
 
@@ -2007,36 +2006,22 @@ def _page_banner_context(conn, scope: str) -> dict:
     is currently showing) so _page_banner.html's `/banners/image` URL
     points at the right stored image rather than looking up this page's
     own (unset) scope with the default banner's version hash."""
-    # Final labels-page iteration (direct request, 2026-09-21): "remove
-    # the ability to have... banners for labels or projects grouped
-    # under a space" -- a grouped label/Project (parent_name set, and
-    # not itself a Space) always shows its parent Space's own banner
-    # instead of one of its own, same "follow the space" treatment
-    # db.effective_label_config's own _resolve_inherited_color already
-    # gives `color`. `banner_grouped_under` (the parent's name, or None)
-    # is what each caller's own Add/Change-banner button reads to hide
-    # itself -- Home (scope="") is never grouped, so this is a no-op there.
-    grouped_under = None
-    if scope:
-        label = db.effective_label_config(conn, scope)
-        if label.get("parent_name") and not label.get("generate_space"):
-            grouped_under = label["parent_name"]
-    banner_scope_lookup = grouped_under or scope
-    own_banner = db.get_page_banner(conn, banner_scope_lookup)
+    # Since labels-as-modules slice c (2026-09-25) every label and group
+    # has its own banner; the 2026-09-21 "a label grouped under a Space
+    # shows the Space's banner" rule went with Spaces.
+    own_banner = db.get_page_banner(conn, scope)
     if own_banner:
         return {
             "banner": own_banner,
-            "has_own_banner": not grouped_under,
+            "has_own_banner": True,
             "banner_scope": scope,
-            "banner_image_scope": banner_scope_lookup,
-            "banner_grouped_under": grouped_under,
+            "banner_image_scope": scope,
         }
     return {
         "banner": db.get_page_banner(conn, PAGE_HEADER_BANNER_SCOPE),
         "has_own_banner": False,
         "banner_scope": scope,
         "banner_image_scope": PAGE_HEADER_BANNER_SCOPE,
-        "banner_grouped_under": grouped_under,
     }
 
 
@@ -2178,7 +2163,7 @@ def quick_add_form(request: Request, default_tab: str = "task", scope: str = "",
             "colors": COLORS,
             "icon_groups": ICON_GROUPS,
             "role": "none",
-            "space_options": db.list_space_labels(conn),
+            "group_options": [g["name"] for g in db.list_groups(conn)],
         },
     )
 

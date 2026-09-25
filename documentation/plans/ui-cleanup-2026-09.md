@@ -225,7 +225,7 @@ row-mate visibly share the new, correct height. No automated test added
 (`audit-fixes-2.0.md` item 4's own note still holds: "No test harness for
 JS behavior in this suite").
 
-## 4. Labels-as-modules + sidebar/dashboard rework (final, merged form) — IN PROGRESS (slices a + b shipped 2026-09-25)
+## 4. Labels-as-modules + sidebar/dashboard rework (final, merged form) — IN PROGRESS (slices a, b, c shipped 2026-09-25; d left)
 
 **Scope re-confirmed with Peter, 2026-09-25**. This overrides the "final
 model" wording below wherever the two disagree:
@@ -327,7 +327,47 @@ How it's built:
 
 Tests: `test_project_picker.py` (18).
 
-**Open for slice c (decide when building, not now):** after the
+**Slice c — SHIPPED 2026-09-25 (groups + sidebar).** Peter said "continue"
+without answering the widget question, so I decided it while building: a
+former Space's widgets move to its group page (the Space page was always the
+whole-group view).
+
+- **Groups:** a group is the text `label_group`. Its page is
+  `/groups/<name>` (`label_pages.group_router`): a widget dashboard scoped to
+  every member label, plus a row of member-label links.
+- **Group storage:** it reuses the per-page storage (widgets, seeded marker,
+  banner) under the page key `group:<name>` (`db.group_page_key`), so the
+  widget, reset, banner and return-URL code needed no changes. Label names
+  can't start with `group:`.
+- **Sidebar:** a Groups section (chevron reveals the members with
+  `sidebar_pin`), then Pinned (pinned labels with no group). The chevron bug
+  was the expanded rail's `.tab-btn{width:100%}` pushing it past
+  `.tabbar{overflow:hidden}`; fixed with a `flex:1; min-width:0` link, which
+  also covers mobile. The collapsed rail still has no chevron (no room), so
+  the group page lists every member.
+- **Removed:** the Space role, the parent_name dropdown (now a free-text Group
+  field with suggestions), colour/banner inheritance (every label picks its
+  own), `list_space_labels`/`list_child_labels`/`_rename_space_group`, and
+  `scripts/migrate_spaces_direct_tags.py`.
+- **Label form:** gains "Show in: Sidebar / Groups & Labels widget".
+- **Widget:** the "Spaces & Projects" widget is shown as "Groups & Labels"
+  and driven by `widget_pin` and groups.
+- **Settings > Labels:** one header row per group (links to its page), then
+  its labels.
+- **Migration:** a one-time `db.migrate_spaces_to_groups`. Each Space's
+  widgets and config move to `group:<name>`, its banner is copied there, and
+  the Space label becomes a plain label with no dashboard. `parent_name` is
+  cleared.
+- **Backup restores:** `_mirror_legacy_module_fields` stays, but only for
+  restoring pre-2026-09-25 backups.
+
+**Known gaps:**
+- There is no "rename group" action; you change the Group field on each
+  label.
+- `project_label_for`'s pre-1.3 fallback still skips `generate_space` labels,
+  which is now a no-op.
+
+**Open for slice c (decided above):** after the
 backfill, a Space's own label sits in its own group, and its existing
 widgets stay on the *label's* dashboard. Slice c must decide whether to move
 them to the new *group* dashboard. Also, free-text `label_group` values from

@@ -23,7 +23,7 @@ from .caldav_bridge import CalDavBridge
 # 2026-08-08 (Settings > General) -- both read via the memoized helper
 # below rather than routers/settings.py threading them through every
 # single calendar/schedule route's own context dict, same reasoning as
-# sidebar_spaces() above: these two affect pages all over the app (Month/
+# sidebar_groups() below: these two affect pages all over the app (Month/
 # Week/Day/Agenda, Schedule, every dashboard widget that shows a time),
 # and "add week_start/time_format to this route's context too" is exactly
 # the kind of easy-to-miss-one-of duplication that would drift the moment
@@ -338,89 +338,45 @@ def _avatar(contact: dict | None, cls: str = "", lazy: bool = False) -> Markup:
 templates.env.globals["avatar"] = _avatar
 
 
-def _sidebar_spaces(request: Request) -> list[dict]:
-    """Every Space (generate_space=1 label) for the nav rail's own sidebar
-    list (base.html, 2026-08-08) -- registered as a Jinja global (like
-    icon()/static_url()/avatar() above) rather than threaded through every
-    single router's own context dict, since base.html renders on literally
-    every page in the app and adding this to every one of those routers'
-    return values would be exactly the kind of easy-to-miss-one-of
-    duplication this app avoids elsewhere (see app.js's dashboard masonry
-    comment on the same principle). Opens its own short-lived connection
-    off `request.app.state.settings.db_path` -- the same value get_db's
-    own per-request connection already uses -- rather than depending on
-    whatever `conn` a given route happens to have already opened, since
-    this needs to work identically regardless of which route is
-    rendering.
-
-    2026-08-08 follow-up: this used to be a *pinned* subset (a separate
-    per-label opt-in flag on top of generate_space) -- removed same-day
-    per direct feedback: a label worth turning into a Space is a label
-    worth finding quickly, so a second manual step just to make it show
-    up in the rail was friction with no real benefit. Every Space shows
-    here now, no pin/unpin step at all -- this is just db.list_space_labels.
-
-    Broad try/except is deliberate, not sloppy: `request.app` doesn't
-    exist on the bare `Request({...})` objects this app's own test suite
-    constructs by hand (no ASGI `app` in their scope dict) -- every one of
-    those tests renders templates that extend base.html, so a hard
-    failure here would break the entire test suite, not just tests that
-    care about the sidebar. Any other failure (a mid-migration database, a
-    locked file) degrades the same way: an empty rail section, not a
-    broken page load -- the sidebar is a shortcut, not something any page
-    depends on to render at all.
-
-    2026-08-29 (sidebar redesign slice 13a, plans/STATE.md): each space
-    dict now also carries `children` -- `db.list_child_labels(conn,
-    l["name"])`, the same parent_name relationship label_detail.html's own
-    Space page already uses for its "Projects" section (a label pointing
-    `parent_name` at a Space is, by that existing convention, one of its
-    projects). Fetched inside the same connection/try-except as the
-    spaces themselves rather than a second global, so the nested rail
-    tree degrades exactly the same way (empty, not broken) under the same
-    failure conditions."""
+def _sidebar_groups(request: Request) -> list[dict]:
+    """The nav rail's group section (base.html; labels-as-modules slice c,
+    2026-09-25, replacing the Spaces section). Every group gets an entry
+    that links to its page (/groups/<name>); its `children` are its members
+    with `sidebar_pin` on, revealed by the entry's chevron in the expanded
+    rail. A Jinja global rather than per-route context because base.html
+    renders on every page. Broad try/except with a short-lived connection
+    for the same reasons as before: a bare test Request has no `.app`, and
+    a DB error should degrade to an empty section, not a 500."""
     try:
         with db.connect(request.app.state.settings.db_path) as conn:
-            spaces = db.list_space_labels(conn)
-            for space in spaces:
-                space["children"] = db.list_child_labels(conn, space["name"])
-            return spaces
+            groups = db.list_groups(conn)
+            for g in groups:
+                g["children"] = [l for l in g["labels"] if l.get("sidebar_pin")]
+            return groups
     except Exception:
         return []
 
 
-templates.env.globals["sidebar_spaces"] = _sidebar_spaces
+templates.env.globals["sidebar_groups"] = _sidebar_groups
 
 
-def _sidebar_projects(request: Request) -> list[dict]:
-    """Every *standalone* project (is_project=1 label with no parent_name)
-    for the nav rail's own "Projects" section (base.html, 2026-08-29
-    sidebar redesign follow-up -- plans/sidebar-redesign.md's source doc
-    explicitly asks for Spaces/Projects/Private as separate group headers,
-    which this app had no direct equivalent of: is_project=1 labels only
-    ever showed up in the Tasks table's own Project grouping, never in the
-    rail itself).
-
-    Deliberately excludes any project whose parent_name points at a Space
-    -- those already render nested under that Space via _sidebar_spaces'
-    own `children` (label_edit_modal.html's parent_name dropdown only ever
-    offers Space names as options, so "has a parent_name" and "nested
-    under a Space elsewhere in the rail" are the same condition here).
-    Showing a project in both places would be the exact kind of
-    duplication this app avoids elsewhere -- see _sidebar_spaces' own
-    docstring on the same principle.
-
-    Same broad try/except + short-lived connection pattern as
-    _sidebar_spaces above, for the same reasons (bare test Request objects
-    with no `.app`, graceful empty-section degradation on any DB error)."""
+def _sidebar_pinned(request: Request) -> list[dict]:
+    """Labels with `sidebar_pin` on and no group -- a flat "Pinned" section
+    under the groups (slice c). A grouped label is reached through its
+    group's chevron instead, so it's never listed twice. Same error
+    handling as _sidebar_groups."""
     try:
         with db.connect(request.app.state.settings.db_path) as conn:
-            return [p for p in db.list_project_labels(conn) if not p.get("parent_name")]
+            rows = conn.execute(
+                "SELECT name FROM label_config WHERE sidebar_pin = 1 AND archived_at IS NULL "
+                "AND TRIM(COALESCE(label_group, '')) = '' ORDER BY name COLLATE NOCASE"
+            ).fetchall()
+            return [db.effective_label_config(conn, r["name"]) for r in rows]
     except Exception:
         return []
 
 
-templates.env.globals["sidebar_projects"] = _sidebar_projects
+templates.env.globals["sidebar_pinned"] = _sidebar_pinned
 
 
 def _cached_app_meta(request: Request, key: str, default: str) -> str:
@@ -432,7 +388,7 @@ def _cached_app_meta(request: Request, key: str, default: str) -> str:
     redundant round trips for a value that cannot change mid-request.
     `request.state` is a plain per-request namespace (Starlette), safe to
     stash arbitrary attributes on -- nothing here persists across
-    requests. Same broad try/except + graceful default as sidebar_spaces()
+    requests. Same broad try/except + graceful default as sidebar_groups()
     above, for the same reason (this app's own test suite constructs bare
     `Request({...})` objects with no real ASGI `app` in scope)."""
     cache_attr = "_cc_app_meta_cache"
@@ -646,7 +602,7 @@ def _label_icon(request: Request, label: str) -> str:
     Resolved icons are memoized on `request.state` per request (labels
     repeat heavily on Tasks/Calendar pages; a cached lookup makes the
     second and third mention of the same label free). Same broad
-    try/except + graceful "" as sidebar_spaces() above, for the same
+    try/except + graceful "" as sidebar_groups() above, for the same
     reason (this app's own test suite constructs bare Request({...})
     objects with no real ASGI app in scope)."""
     if not _show_label_icons(request):

@@ -1010,6 +1010,13 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
   html[data-sidebar-expanded] .sidebar-tree-item{align-items:stretch;}
   html[data-sidebar-expanded] .sidebar-tree-row{justify-content:flex-start; gap:4px;}
   html[data-sidebar-expanded] .sidebar-tree-toggle{display:flex;}
+  /* labels-as-modules slice c (2026-09-25, direct bug report: the expand
+     chevron was "invisible regardless of sidebar width"). The expanded
+     rail's generic `.tab-btn{width:100%}` made a group's link take the
+     whole row, which pushed the chevron past the rail's right edge, where
+     `.tabbar{overflow:hidden}` clipped it. Letting the link shrink keeps
+     the chevron inside the row. */
+  html[data-sidebar-expanded] .sidebar-tree-row > .tab-btn{flex:1 1 auto; width:auto; min-width:0;}
   /* Indent children under their Space; only the space whose own chevron is
      open reveals its .sidebar-tree-children (a sibling of .sidebar-tree-row,
      not of the toggle itself -- :has() on the row is how this app's own
@@ -4395,6 +4402,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
   .sidebar-tree-row{display:flex; align-items:center; width:100%; justify-content:flex-start; gap:4px;}
   .sidebar-tree-toggle{display:flex;}
   .sidebar-tree-row:has(.sidebar-tree-toggle[aria-expanded="true"]) + .sidebar-tree-children{display:flex;}
+  .sidebar-tree-row > .tab-btn{flex:1 1 auto; width:auto; min-width:0;}
   .tab-btn-child{padding-left:34px;}
   /* Every rail entry becomes a full-width icon+label row -- a touch list,
      not the desktop rail's icon-only column. min-height 44px (not

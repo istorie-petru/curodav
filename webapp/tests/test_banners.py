@@ -525,10 +525,10 @@ class TestBannerForTask:
         banner = db.banner_for_task(conn, task)
         assert banner["image_url"] == "https://cdn.example.com/project.jpg"
 
-    def test_falls_back_to_the_projects_parent_space_banner(self, conn):
-        db.upsert_label_config(conn, {"name": "Home", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "parent_name": "Home", "created_at": _now()})
-        _set_remote(conn, cached=True, scope="Home", image_url="https://cdn.example.com/space.jpg")
+    def test_falls_back_to_the_projects_group_banner(self, conn):
+        # Slice c (2026-09-25): was the project's parent Space's banner.
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "label_group": "Home", "created_at": _now()})
+        _set_remote(conn, cached=True, scope="group:Home", image_url="https://cdn.example.com/space.jpg")
         db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
         task = db.get_task(conn, "t1")
         banner = db.banner_for_task(conn, task)

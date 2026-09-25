@@ -352,6 +352,7 @@ def create_app() -> FastAPI:
     app.include_router(quick_capture.router)
     app.include_router(labels.router)
     app.include_router(label_pages.router)
+    app.include_router(label_pages.group_router)
     app.include_router(spaces.router)
     app.include_router(projects.router)
     app.include_router(habits.router)

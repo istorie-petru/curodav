@@ -46,15 +46,9 @@ class TestWhichPage:
         resp = _page(conn, "Gym")
         assert resp.template.name == "label_detail.html"
         assert resp.context["active_tab"] == "label"
-        assert resp.context["is_space"] is False
+        assert resp.context["group_labels"] == []
         # Seeded with the Home-style default layout on first visit.
         assert db.list_dashboard_widgets(conn, label_name="Gym")
-
-    def test_space_always_gets_the_widget_grid(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "has_dashboard": 0})
-        resp = _page(conn, "Uni")
-        assert resp.template.name == "label_detail.html"
-        assert resp.context["active_tab"] == "space"
 
     def test_label_without_a_dashboard_gets_the_sections_page(self, conn):
         db.upsert_label_config(conn, {"name": "Gym"})
@@ -115,6 +109,42 @@ class TestSections:
         assert _page(conn, "Essay").context["agenda_items"] == []
 
 
+class TestGroupPage:
+    """Slice c (2026-09-25): /groups/<name> -- a widget dashboard scoped to
+    every label in the group, stored under the "group:<name>" page key."""
+
+    def _group(self, conn):
+        db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni", "color": "red"})
+        db.upsert_label_config(conn, {"name": "Art", "label_group": "Uni"})
+
+    def test_renders_a_dashboard_with_its_members(self, conn):
+        self._group(conn)
+        resp = label_pages.group_page("Uni", _request("/groups/Uni"), conn=conn)
+        assert resp.template.name == "label_detail.html"
+        assert resp.context["label"]["uid"] == "group:Uni"
+        assert [l["name"] for l in resp.context["group_labels"]] == ["Art", "Maths"]
+        assert resp.context["page_label_scope"] == "group:Uni"
+        body = resp.body.decode()
+        assert 'href="/labels/Maths"' in body and 'class="toolbar group-labels"' in body
+        # Seeded with the default layout under the group key.
+        assert db.list_dashboard_widgets(conn, label_name="group:Uni")
+
+    def test_widgets_are_scoped_to_the_members(self, conn):
+        from src.routers import dashboard as dashboard_router
+        self._group(conn)
+        assert dashboard_router._scope_child_names(conn, "group:Uni") == {"Art", "Maths"}
+        assert dashboard_router._return_url("group:Uni") == "/groups/Uni"
+        assert dashboard_router._page_scope(conn, "group:Uni") == "space"
+
+    def test_unknown_group_redirects_to_the_labels_list(self, conn):
+        resp = label_pages.group_page("Nope", _request("/groups/Nope"), conn=conn)
+        assert resp.status_code == 303 and resp.headers["location"] == "/settings/labels"
+
+    def test_group_prefix_is_reserved_for_label_names(self, conn):
+        with pytest.raises(HTTPException):
+            labels_router.create_label(new_name="group:Uni", color="blue", icon="", label_group="", role="none", conn=conn)
+
+
 class TestStatusRow:
     def test_plain_label_has_no_status_row(self, conn):
         db.upsert_label_config(conn, {"name": "Gym"})
@@ -171,7 +201,7 @@ class TestOldUrls:
 
 class TestFormFields:
     def _update(self, conn, **kw):
-        base = dict(name="Gym", new_name="Gym", color="blue", icon="", parent_name="", description="", role="none")
+        base = dict(name="Gym", new_name="Gym", color="blue", icon="", label_group="", description="", role="none")
         base.update(kw)
         return labels_router.update_label(**base, conn=conn)
 
@@ -214,7 +244,7 @@ class TestFormFields:
         assert db.effective_label_config(conn, "Gym")["is_archived"] is True
 
     def test_create_writes_page_fields(self, conn):
-        labels_router.create_label(new_name="Essay", color="blue", icon="", parent_name="", role="none",
+        labels_router.create_label(new_name="Essay", color="blue", icon="", label_group="", role="none",
                                    page_fields="1", deadline_date="2026-11-30", agenda_widget="1", conn=conn)
         cfg = db.effective_label_config(conn, "Essay")
         assert cfg["deadline_date"] == "2026-11-30" and cfg["has_dashboard"] is False
@@ -230,8 +260,53 @@ class TestFormFields:
         assert 'class="field field-wide label-sections-field" hidden' in body
         assert 'name="start_date"' not in body and 'name="end_date"' not in body
 
+    def test_update_writes_group_and_pins(self, conn):
+        db.upsert_label_config(conn, {"name": "Gym"})
+        self._update(conn, label_group="  Health ", page_fields="1", sidebar_pin="1", widget_pin="")
+        cfg = db.effective_label_config(conn, "Gym")
+        assert cfg["label_group"] == "Health"
+        assert cfg["sidebar_pin"] is True and cfg["widget_pin"] is False
+
     def test_new_label_modal_defaults_all_sections_on(self, conn):
         body = labels_router.new_label_modal(_request("/settings/labels/new"), conn=conn).body.decode()
         for name in ("agenda_widget", "tasks_widget", "contacts_widget"):
             assert f'name="{name}" value="1" checked' in body
         assert 'name="has_dashboard" value="1" >' in body
+
+
+class TestSettingsLabelsTable:
+    """Settings > Labels groups its rows by the text label_group since slice
+    c (2026-09-25): one header row per group (links to the group's page, no
+    checkbox or edit/delete, since a group isn't a label), then its labels;
+    ungrouped labels after. Within a group, projects sort before plain
+    labels, then by name."""
+
+    def test_context_groups_and_sorts(self, conn):
+        db.upsert_label_config(conn, {"name": "Zeta", "label_group": "Uni"})
+        db.upsert_label_config(conn, {"name": "Alpha", "label_group": "Uni"})
+        db.upsert_label_config(conn, {"name": "Thesis", "label_group": "Uni", "is_project": 1})
+        db.upsert_label_config(conn, {"name": "Run", "label_group": "Health"})
+        db.upsert_label_config(conn, {"name": "Loose"})
+        ctx = labels_router._labels_context(conn, _request("/settings/labels"))
+        assert [(g["name"], [l["name"] for l in g["labels"]]) for g in ctx["label_groups"]] == [
+            ("Health", ["Run"]), ("Uni", ["Thesis", "Alpha", "Zeta"]),
+        ]
+        assert [l["name"] for l in ctx["ungrouped_labels"]] == ["Loose"]
+
+    def test_rendered_group_row_links_to_the_group_page(self, conn):
+        db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni"})
+        body = labels_router.manage_labels(_request("/settings/labels"), conn=conn).body.decode()
+        assert 'class="labels-space-row" data-label-group="Uni"' in body
+        assert 'href="/groups/Uni" class="icon-btn" title="Open group page"' in body
+        assert 'data-uid="Uni"' not in body  # no bulk-select checkbox for a group
+        assert 'data-label-name="Maths" data-label-group="Uni"' in body
+
+    def test_edit_modal_has_a_free_text_group_field(self, conn):
+        db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni"})
+        db.upsert_label_config(conn, {"name": "Run", "label_group": "Health"})
+        body = labels_router.edit_label_modal("Maths", _request("/settings/labels/Maths/edit"), conn=conn).body.decode()
+        assert 'name="label_group" value="Uni"' in body
+        assert '<option value="Health">' in body and '<option value="Uni">' in body
+        assert 'name="parent_name"' not in body
+        assert 'value="space"' not in body  # no Space role any more
+        assert 'name="sidebar_pin"' in body and 'name="widget_pin"' in body

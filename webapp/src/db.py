@@ -1456,6 +1456,8 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # 2026-09-25 -- one-time backfill of the labels-as-modules fields from
     # generate_space/is_project/parent_name/end_date (see the function).
     backfill_label_modules(conn)
+    # 2026-09-25 -- one-time: Spaces become text groups (see the function).
+    migrate_spaces_to_groups(conn)
     conn.commit()
 
 
@@ -4105,7 +4107,7 @@ def effective_label_config(conn: sqlite3.Connection, name: str) -> dict[str, Any
     """A label's config with every default filled in -- a label with zero
     label_config rows (mentioned only via object_labels) still fully
     works, per the table's own "sparse, optional" contract."""
-    return _resolve_inherited_color(conn, _effective_label_config(get_label_config(conn, name), name))
+    return _effective_label_config(get_label_config(conn, name), name)
 
 
 def effective_label_config_ci(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
@@ -4118,27 +4120,7 @@ def effective_label_config_ci(conn: sqlite3.Connection, name: str) -> dict[str, 
     row = conn.execute(
         "SELECT * FROM label_config WHERE name = ? COLLATE NOCASE", (name,)
     ).fetchone()
-    return _resolve_inherited_color(conn, _effective_label_config(dict(row) if row else None, name))
-
-
-def _resolve_inherited_color(conn: sqlite3.Connection, cfg: dict[str, Any]) -> dict[str, Any]:
-    """Final labels-page iteration (direct request, 2026-09-21): "the
-    labels/projects grouped by space should follow the space's color...
-    remove the ability to have colors... for labels or projects grouped
-    under a space." A label/project with `parent_name` set has its own
-    stored `color` column overridden here with its parent Space's own
-    effective color -- every consumer already reads color through
-    `effective_label_config`/`_ci` (label_pill, the calendar/Agenda
-    `calendar_color` resolution, filled_card tiles, the Kanban board...),
-    so this is the one place that needs to change for the inheritance to
-    apply everywhere at once, rather than teaching every call site about
-    `parent_name`. Only one level -- a Space itself never has a
-    `parent_name` (`_validate_parent_name`/role=space form handling both
-    enforce "Spaces don't nest"), so there's nothing further to walk."""
-    parent = cfg.get("parent_name")
-    if parent and not cfg.get("generate_space"):
-        cfg["color"] = effective_label_config(conn, parent).get("color") or cfg["color"]
-    return cfg
+    return _effective_label_config(dict(row) if row else None, name)
 
 
 def annotate_item_colors(conn: sqlite3.Connection, items: list[dict[str, Any]], *, key: str = "calendar_color") -> list[dict[str, Any]]:
@@ -4205,6 +4187,7 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     for key, default in _LABEL_CONFIG_DEFAULTS.items():
         data.setdefault(key, existing.get(key, default))
     _mirror_legacy_module_fields(row, existing, data)
+    data["label_group"] = (data.get("label_group") or "").strip() or None
     conn.execute(
         f"INSERT INTO label_config ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)}) "
         f"ON CONFLICT(name) DO UPDATE SET " + ", ".join(f"{c}=excluded.{c}" for c in cols if c != "name"),
@@ -4214,19 +4197,15 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
 
 
 def _mirror_legacy_module_fields(row: dict[str, Any], existing: dict[str, Any], data: dict[str, Any]) -> None:
-    """Interim sync, labels-as-modules slice a (2026-09-25): until slices
-    b-d move the forms/routes onto the new module fields, every edit still
-    arrives as generate_space/is_project/parent_name/end_date. This carries
-    each such edit over to the new fields using the same rules as
-    backfill_label_modules, so the two don't drift apart between sessions.
-    A new-field key passed explicitly in `row` always wins (e.g. restoring
-    a backup that already has them). Delete this once nothing writes the
-    legacy fields any more.
-
-    Turning a Space/Project flag off doesn't unpin anything: the old sidebar
-    and widget still read the legacy flags, so a stale pin has no visible
-    effect until slice b, and guessing whether a pin was set on purpose
-    would be worse than leaving it."""
+    """Translates the legacy Space/Project fields (generate_space,
+    parent_name, a project's end_date) into the module fields, using the
+    same rules as backfill_label_modules. Since labels-as-modules slice c
+    (2026-09-25) nothing in the app writes those legacy fields; the one
+    remaining source is restoring a backup taken before 2026-09-25
+    (routers/export.py upserts its label rows as-is). Without this, such a
+    restore would bring labels back ungrouped and unpinned. A new-field key
+    passed explicitly in `row` always wins, so a newer backup's own values
+    are kept. It only ever turns things on; it never guesses an "off"."""
     def put(key: str, value: Any) -> None:
         if key not in row:
             data[key] = value
@@ -4274,6 +4253,65 @@ def _fix_contacts_widget_default(conn: sqlite3.Connection) -> None:
         return
     conn.execute("UPDATE label_config SET contacts_widget = 1")
     set_app_meta(conn, _CONTACTS_WIDGET_DEFAULT_FIXED_KEY, "1")
+
+
+_SPACES_TO_GROUPS_KEY = "label_modules_spaces_to_groups"
+
+
+def migrate_spaces_to_groups(conn: sqlite3.Connection) -> None:
+    """One-time (labels-as-modules slice c, 2026-09-25): Spaces stop being
+    a kind of label. A Space was always "this group of labels" in practice,
+    and the group itself (label_group, set by backfill_label_modules)
+    now gets its own page at /groups/<name>. For every generate_space=1
+    label:
+
+    - its dashboard widgets move to the group's page key, config included
+      (Peter's call, left open and decided when building: the Space page
+      was the whole-group view, so that is where its widgets belong);
+    - its banner is copied to the group page (the label keeps its copy);
+    - the label itself becomes an ordinary label: no dashboard (its own
+      page now shows what is tagged with it directly), generate_space off.
+
+    parent_name is cleared everywhere, because label_group replaced it.
+    Idempotent through its own app_meta marker. Runs after
+    backfill_label_modules, so every Space already has label_group set."""
+    if get_app_meta(conn, _SPACES_TO_GROUPS_KEY):
+        return
+    spaces = conn.execute(
+        "SELECT name, label_group FROM label_config WHERE generate_space = 1"
+    ).fetchall()
+    for sp in spaces:
+        name = sp["name"]
+        group = (sp["label_group"] or "").strip() or name
+        key = group_page_key(group)
+        rows = conn.execute(
+            "SELECT uid, config_json FROM dashboard_widgets WHERE label_name = ?", (name,)
+        ).fetchall()
+        has_group_widgets = conn.execute(
+            "SELECT 1 FROM dashboard_widgets WHERE label_name = ? LIMIT 1", (key,)
+        ).fetchone()
+        if rows and not has_group_widgets:
+            for r in rows:
+                try:
+                    cfg = json.loads(r["config_json"] or "{}")
+                except (json.JSONDecodeError, TypeError):
+                    cfg = {}
+                if cfg.get("label_name") == name:
+                    cfg["label_name"] = key
+                conn.execute(
+                    "UPDATE dashboard_widgets SET label_name = ?, config_json = ? WHERE uid = ?",
+                    (key, json.dumps(cfg), r["uid"]),
+                )
+            set_app_meta(conn, f"dashboard_label_{key}_seeded_v1", "1")
+        banner = get_app_meta(conn, _page_banner_key(name))
+        if banner and not get_app_meta(conn, _page_banner_key(key)):
+            set_app_meta(conn, _page_banner_key(key), banner)
+        conn.execute(
+            "UPDATE label_config SET generate_space = 0, has_dashboard = 0, label_group = ? WHERE name = ?",
+            (group, name),
+        )
+    conn.execute("UPDATE label_config SET parent_name = NULL WHERE parent_name IS NOT NULL")
+    set_app_meta(conn, _SPACES_TO_GROUPS_KEY, "1")
 
 
 def backfill_label_modules(conn: sqlite3.Connection) -> None:
@@ -4346,13 +4384,47 @@ def list_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return result
 
 
-def list_space_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """Every label with generate_space=1 -- the labels that get a
-    generated page (routers/labels.py's label_detail)."""
+GROUP_KEY_PREFIX = "group:"
+
+
+def group_page_key(group: str) -> str:
+    """The page key a group's dashboard is stored under (labels-as-modules
+    slice c, 2026-09-25). Groups are plain text (`label_config.label_group`)
+    with no table of their own, so a group's dashboard widgets, "seeded"
+    marker and banner reuse the same per-page storage a label's page uses
+    (dashboard_widgets.label_name, app_meta), keyed "group:<name>". Label
+    names can't start with this prefix (routers/labels.py's
+    _reject_reserved_label_name), so the two can't collide."""
+    return f"{GROUP_KEY_PREFIX}{group}"
+
+
+def group_from_page_key(key: str | None) -> str | None:
+    if key and key.startswith(GROUP_KEY_PREFIX):
+        return key[len(GROUP_KEY_PREFIX):] or None
+    return None
+
+
+def list_groups(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Every group: the distinct non-empty label_group values, each with its
+    member labels' effective configs, sorted by name. A group exists exactly
+    as long as at least one label names it."""
     rows = conn.execute(
-        "SELECT * FROM label_config WHERE generate_space = 1 ORDER BY name COLLATE NOCASE"
+        "SELECT name, label_group FROM label_config WHERE TRIM(COALESCE(label_group, '')) != '' "
+        "ORDER BY label_group COLLATE NOCASE, name COLLATE NOCASE"
     ).fetchall()
-    return [effective_label_config(conn, r["name"]) for r in rows]
+    groups: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        g = r["label_group"].strip()
+        groups.setdefault(g, {"name": g, "labels": []})["labels"].append(effective_label_config(conn, r["name"]))
+    return list(groups.values())
+
+
+def group_member_names(conn: sqlite3.Connection, group: str) -> list[str]:
+    rows = conn.execute(
+        "SELECT name FROM label_config WHERE TRIM(COALESCE(label_group, '')) = ? ORDER BY name COLLATE NOCASE",
+        ((group or "").strip(),),
+    ).fetchall()
+    return [r["name"] for r in rows]
 
 
 def list_project_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -4425,42 +4497,20 @@ def unarchive_label(conn: sqlite3.Connection, name: str) -> None:
     conn.commit()
 
 
-def list_child_labels(conn: sqlite3.Connection, parent_name: str) -> list[dict[str, Any]]:
-    """Labels whose parent_name points at `parent_name` -- e.g. a Space's
-    nested course/project labels, for a Space page's own nav/listing."""
-    rows = conn.execute(
-        "SELECT * FROM label_config WHERE parent_name = ? ORDER BY name COLLATE NOCASE", (parent_name,)
-    ).fetchall()
-    return [effective_label_config(conn, r["name"]) for r in rows]
-
-
-def label_selector_scope(conn: sqlite3.Connection, name: str) -> list[str] | None:
-    """The set of label names a Labels picker should offer while the user
-    is on `name`'s own generated page (a Space, a Project, or a plain
-    label's Kanban page) -- direct request: "On space's dashboard,
-    project pages or label's page, the label selector should only have
-    labels from that group... this should work for any space > labels
-    grouped under it." Returns None for "no restriction, show every
-    label" (a standalone Project/label with no parent Space -- today's
-    unscoped behavior, unchanged).
-
-    - A Space (`generate_space`): its own children (`list_child_labels`)
-      -- membership through a Space is already transitive-through-children
-      only (see routers/spaces.py::_label_scope's own docstring), so the
-      picker offering anything else would let someone tag an item with a
-      label that page's own aggregation then ignores.
-    - A Project or plain label grouped under a Space (`parent_name` set):
-      that Space's other children -- its own siblings -- same "everything
-      under this Space" grouping, just viewed from a child's own page.
-    - Anything else (no Space involved): None, unscoped."""
-    label = effective_label_config(conn, name)
-    if label.get("generate_space"):
-        parent = name
-    else:
-        parent = label.get("parent_name")
-    if not parent:
+def label_selector_scope(conn: sqlite3.Connection, key: str) -> list[str] | None:
+    """The label names a Labels picker should offer while the user is on
+    one page (direct request: "On space's dashboard, project pages or
+    label's page, the label selector should only have labels from that
+    group"). Since slice c (2026-09-25) that group is the text label_group:
+    a group's page offers its members, and a label's page offers the
+    members of its group. None means unscoped: Home, or a label with no
+    group."""
+    group = group_from_page_key(key)
+    if group is None:
+        group = (effective_label_config(conn, key).get("label_group") or "").strip() or None
+    if not group:
         return None
-    return [c["name"] for c in list_child_labels(conn, parent)]
+    return group_member_names(conn, group)
 
 
 def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None:
@@ -4481,7 +4531,6 @@ def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None
         conn.execute("UPDATE object_labels SET label_name = ? WHERE label_name = ?", (new_name, old_name))
         conn.execute("UPDATE label_config SET name = ? WHERE name = ?", (new_name, old_name))
         conn.execute("UPDATE label_config SET parent_name = ? WHERE parent_name = ?", (new_name, old_name))
-        _rename_space_group(conn, old_name, new_name)
         conn.commit()
         return
     collision = new_name.lower() in {n.lower() for n in list_all_label_names(conn)} or bool(get_label_config(conn, new_name))
@@ -4491,21 +4540,7 @@ def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None
     conn.execute("UPDATE object_labels SET label_name = ? WHERE label_name = ?", (new_name, old_name))
     conn.execute("UPDATE label_config SET name = ? WHERE name = ?", (new_name, old_name))
     conn.execute("UPDATE label_config SET parent_name = ? WHERE parent_name = ?", (new_name, old_name))
-    _rename_space_group(conn, old_name, new_name)
     conn.commit()
-
-
-def _rename_space_group(conn: sqlite3.Connection, old_name: str, new_name: str) -> None:
-    """Interim (labels-as-modules slice a): while groups still mirror
-    Spaces, renaming or merging a Space renames its group as well. Only
-    rows that followed the Space are touched (the Space itself, now
-    `new_name`, and its children, whose parent_name has already been
-    repointed). A free-text group that merely happens to share the old
-    name is left alone."""
-    conn.execute(
-        "UPDATE label_config SET label_group = ? WHERE label_group = ? AND (name = ? OR parent_name = ?)",
-        (new_name, old_name, new_name, new_name),
-    )
 
 
 def merge_labels(conn: sqlite3.Connection, source_name: str, dest_name: str) -> None:
@@ -4528,7 +4563,6 @@ def merge_labels(conn: sqlite3.Connection, source_name: str, dest_name: str) -> 
         )
     conn.execute("DELETE FROM object_labels WHERE label_name = ?", (source_name,))
     conn.execute("UPDATE label_config SET parent_name = ? WHERE parent_name = ?", (dest_name, source_name))
-    _rename_space_group(conn, source_name, dest_name)
     conn.execute("DELETE FROM label_config WHERE name = ?", (source_name,))
     conn.commit()
 
@@ -5161,9 +5195,8 @@ def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str,
     treatment as the baseline "Variant B" detail-modal header for events/
     contacts/habit-tasks too, not just tasks) -- the banner an object
     should show, if any, resolved by priority: its own directly-set plain
-    label(s) first, then its Project label, then that project's parent
-    Space (`label_config.parent_name`, the "Group" field
-    label_edit_modal.html exposes). No new storage: a label's banner
+    label(s) first, then its Project label, then that project's group's
+    page (`label_config.label_group`; was the parent Space until slice c). No new storage: a label's banner
     already exists (get_page_banner/routers/banners.py, keyed by label
     name) as the image a label's own generated dashboard page shows --
     this just resolves which one of an object's several labels wins, the
@@ -5204,11 +5237,12 @@ def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str,
             banner["scope"] = project
             return banner
         cfg = get_label_config(conn, project)
-        space = (cfg or {}).get("parent_name")
-        if space:
-            banner = get_page_banner(conn, space)
+        group = ((cfg or {}).get("label_group") or "").strip()
+        if group:
+            key = group_page_key(group)
+            banner = get_page_banner(conn, key)
             if banner:
-                banner["scope"] = space
+                banner["scope"] = key
                 return banner
     # 2026-09-07 (direct request): a task/event with no matching label/
     # Project/Space banner falls back further instead of stopping at None

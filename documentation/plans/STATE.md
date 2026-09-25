@@ -840,17 +840,27 @@ session start.
   console errors). New `test_project_picker.py` (18). Full suite **2,495
   passed**. No sw.js bump (no style.css/SHELL_ASSETS change).
 
-  **Next slice**: item 4 slice c -- sidebar chevron fix + group pages.
-  (Question 1 below is answered: the Project role stays.)
-  Groups are `label_group` text with their own widget dashboard (new
-  storage keyed by group name). The sidebar lists groups (chevron expands
-  their labels, `sidebar_pin`); the Space role, `parent_name`, color/banner
-  inheritance and the interim `_mirror_legacy_module_fields`/
-  `_rename_space_group` go; `widget_pin` drives the Spaces & Projects
-  widget. **Ask Peter first**: (1) ~~does the Project role go?~~ answered,
-  it stays; (2) should a former Space's widgets move to its new group
-  dashboard? Then d (label-pill links), then narrow banners (item 2,
-  including the icon_tile banner reversal).
+  **2026-09-25 (same session, Peter: "continue") -- item 4 slice c
+  shipped: groups + sidebar.** Groups are the text `label_group`, each with
+  a widget dashboard at `/groups/<name>` (stored under the page key
+  `group:<name>`). The sidebar shows Groups (the chevron reveals
+  sidebar-pinned members) and a Pinned section. **Chevron bug fixed**: the
+  expanded rail's `.tab-btn{width:100%}` pushed it past the clipped rail
+  edge. The Space role, parent_name dropdown and colour/banner inheritance
+  are gone. The label form has a free-text Group field plus "Show in"
+  pins, and the widget is renamed "Groups & Labels" (driven by widget_pin).
+  A one-time `migrate_spaces_to_groups` moves each Space's widgets and
+  banner to its group page (**my call**: Peter said "continue" without
+  answering, and the Space page was the whole-group view). Verified live on
+  a seeded pre-migration DB. Obsolete Space tests removed and new group
+  tests added. Full suite **2,441 passed** (lower than 2,495 because of the
+  deleted Space tests). `sw.js` v119 -> v120.
+
+  **Next slice**: item 4 slice d -- label pills link to `/labels/<name>`
+  everywhere (modal from inside a widget/card, full page from the sidebar
+  or a label list -- "context-dependent", Peter 2026-09-24). Then narrow
+  banners (item 2, including the icon_tile banner reversal). Known gap: no
+  "rename group" action (you change the Group field on each label).
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-

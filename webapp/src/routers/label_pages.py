@@ -9,8 +9,7 @@ page shows depends on the label's module fields, not on what kind of label
 it is:
 
 - `has_dashboard`: the Home-style customizable widget grid, scoped to this
-  label (label_detail.html). A Space always gets this until slice c turns
-  Spaces into text groups with their own dashboards.
+  label (label_detail.html).
 - otherwise: only the sections switched on in the label's settings
   (`agenda_widget`, `contacts_widget`, and `tasks_widget` for the Kanban
   board), in label_sections.html.
@@ -49,40 +48,18 @@ def _status_context(conn, label: dict) -> dict:
     return {"label_status": db.project_status(conn, label)}
 
 
-def _space_scope(conn, name: str) -> dict:
-    """Every task/event/contact tagged with one of this Space's child
-    labels. Moved here unchanged from routers/spaces.py (see the history
-    there, 2026-09-14 slice 3). Goes away in slice c, when a Space becomes
-    a text group with its own dashboard."""
-    child_names = {c["name"] for c in db.list_child_labels(conn, name)}
-    return {
-        "tasks": [t for t in db.list_tasks(conn) if child_names & set(t.get("tags") or [])],
-        "events": [e for e in db.list_events(conn) if child_names & set(e.get("tags") or [])],
-        "contacts": [c for c in db.list_contacts(conn) if child_names & set(c.get("tags") or [])],
-    }
-
-
 def _dashboard_page(conn, request: Request, name: str, label: dict):
-    is_space = bool(label.get("generate_space"))
     dashboard_router._ensure_default_label_widgets(conn, name)
     ctx = dashboard_router.widget_page_context(conn, project_uid=name)
-    if is_space:
-        ctx.update(_space_scope(conn, name))
     ctx.update(
         {
             "request": request,
-            # "space" keeps a Space page's quick-add defaulting to a new
-            # task (base.html's _qa_defaults), as before; any other label
-            # page defaults to "New label", as the old label/project
-            # pages did.
-            "active_tab": "space" if is_space else "label",
+            "active_tab": "label",
             "label": label,
-            "is_space": is_space,
+            "group_labels": [],
             # base.html's quick-add restricts the Labels picker to this
-            # page's group (db.label_selector_scope). A Space is its own
-            # group; a label inside a Space scopes to its siblings.
-            "page_label_scope": name if (is_space or label.get("parent_name")) else None,
-            "children": db.list_child_labels(conn, name) if is_space else [],
+            # label's group (db.label_selector_scope); None when ungrouped.
+            "page_label_scope": name if label.get("label_group") else None,
             "profile_photo": db.get_profile_photo(conn),
             "display_name": db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY),
             "page_url": label_url(name),
@@ -137,7 +114,7 @@ def _sections_page(conn, request: Request, name: str, label: dict):
         "request": request,
         "active_tab": "label",
         "label": label,
-        "page_label_scope": name if label.get("parent_name") else None,
+        "page_label_scope": name if label.get("label_group") else None,
         "agenda_items": agenda_items,
         "contacts": contacts,
         "columns": columns,
@@ -157,7 +134,7 @@ def _sections_page(conn, request: Request, name: str, label: dict):
 @router.get("/{name}")
 def label_page(name: str, request: Request, conn=Depends(get_db)):
     label = db.effective_label_config(conn, name)
-    if label.get("generate_space") or label.get("has_dashboard"):
+    if label.get("has_dashboard"):
         return _dashboard_page(conn, request, name, label)
     return _sections_page(conn, request, name, label)
 
@@ -174,3 +151,49 @@ def archive_label(name: str, conn=Depends(get_db)):
 def unarchive_label(name: str, conn=Depends(get_db)):
     db.unarchive_label(conn, name)
     return RedirectResponse(url=label_url(name), status_code=303)
+
+
+# --------------------------------------------------------------------- #
+# Group pages -- labels-as-modules slice c (2026-09-25). A group is the
+# plain-text label_group shared by some labels (what used to be a Space).
+# Its page is a widget dashboard scoped to every member label, stored under
+# db.group_page_key(name) ("group:<name>") in the same per-page storage a
+# label's dashboard uses. Every member label is also linked from the page,
+# since the collapsed sidebar has no room to expand a group.
+# --------------------------------------------------------------------- #
+
+group_router = APIRouter(prefix="/groups", tags=["group-pages"])
+
+
+def group_url(name: str) -> str:
+    return f"/groups/{name}"
+
+
+@group_router.get("/{name}")
+def group_page(name: str, request: Request, conn=Depends(get_db)):
+    members = db.group_member_names(conn, name)
+    if not members:
+        # A group only exists while a label names it; an old link to an
+        # emptied group lands on the labels list rather than a blank page.
+        return RedirectResponse(url="/settings/labels", status_code=303)
+    key = db.group_page_key(name)
+    dashboard_router._ensure_default_label_widgets(conn, key)
+    ctx = dashboard_router.widget_page_context(conn, project_uid=key)
+    ctx.update(
+        {
+            "request": request,
+            "active_tab": "group",
+            # label_detail.html renders a group through the same `label`
+            # shape: title, icon tile, and `uid` as the page key its
+            # New widget / Reset layout controls post back.
+            "label": {"name": name, "uid": key, "icon": "layers", "color": "gray", "description": None},
+            "group_labels": [db.effective_label_config(conn, n) for n in members],
+            "page_label_scope": key,
+            "label_status": None,
+            "profile_photo": db.get_profile_photo(conn),
+            "display_name": db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY),
+            "page_url": group_url(name),
+        }
+    )
+    ctx.update(dashboard_router._page_banner_context(conn, key))
+    return templates.TemplateResponse("label_detail.html", ctx)

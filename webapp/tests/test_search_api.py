@@ -288,17 +288,17 @@ class TestPageNavigation:
         titles = {r["title"] for r in data["results"] if r["type"] == "page"}
         assert "Notes" not in titles
 
-    def test_a_space_label_is_a_navigable_page(self, conn):
+    def test_a_group_is_a_navigable_page(self, conn):
         import json
 
         db.upsert_label_config(
             conn,
-            {"name": "University", "generate_space": 1, "created_at": _now()},
+            {"name": "CS101", "label_group": "University", "created_at": _now()},
         )
         data = json.loads(search_router.api_search(q="Univers", conn=conn).body.decode())
         pages = [r for r in data["results"] if r["type"] == "page"]
         assert pages == [
-            {"type": "page", "uid": "/labels/University", "url": "/labels/University", "title": "University", "subtitle": "Space", "tags": [], "status": None, "date": None}
+            {"type": "page", "uid": "/groups/University", "url": "/groups/University", "title": "University", "subtitle": "Group", "tags": [], "status": None, "date": None}
         ]
 
     def test_type_filtered_search_excludes_pages(self, conn):

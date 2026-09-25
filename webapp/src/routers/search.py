@@ -38,7 +38,7 @@ router = APIRouter(tags=["search"])
 # allow to navigate to pages") -- global mode's results now include the
 # app's own primary destinations, not just entities. A fixed list (every
 # primary tabbar destination, base.html) plus every Space (generate_space=1
-# label, db.list_space_labels -- a real per-install page, not a built-in
+# label group (db.list_groups) -- a real per-install page, not a built-in
 # one) matched the same substring-on-title way entities are. These are
 # synthetic rows, never touched by db.search_entities/_picker_result -- a
 # page isn't a database row, it has no uid/tags/status, just a title and a
@@ -65,8 +65,10 @@ _GLOBAL_SEARCH_TYPES = ["task", "event", "contact"]
 
 def _matching_pages(conn, q: str, limit: int = 5) -> list[dict]:
     pages = list(_STATIC_PAGES)
-    for space in db.list_space_labels(conn):
-        pages.append({"title": space["name"], "url": f"/labels/{space['name']}", "subtitle": "Space"})
+    # Groups (labels-as-modules slice c, 2026-09-25; were Spaces) are
+    # navigable pages too.
+    for group in db.list_groups(conn):
+        pages.append({"title": group["name"], "url": f"/groups/{group['name']}", "subtitle": "Group"})
     if not q:
         return pages[:limit]
     q_lower = q.lower()

@@ -31,7 +31,7 @@
     {% endfor %}
 </div>
 {% else %}
-{{ widget_empty('No Spaces or projects yet -- add one from Settings.') }}
+{{ widget_empty('No groups or pinned labels yet -- give labels a group, or tick "Groups & Labels widget" on a label.') }}
 {% endif %}
 {% else %}
 {% if data.previews %}
@@ -53,6 +53,6 @@
     {% endfor %}
 </div>
 {% else %}
-{{ widget_empty('No active projects -- add one from Settings.') }}
+{{ widget_empty('No pinned labels yet -- tick "Groups & Labels widget" on a label.') }}
 {% endif %}
 {% endif %}

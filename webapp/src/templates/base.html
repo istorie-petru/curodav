@@ -302,96 +302,55 @@
            reason as the /today//week note above -- no stale path text
            should leak into rendered markup. #}
         <a href="/contacts" data-tab="contacts" class="tab-btn {% if active_tab == 'contacts' %}active{% endif %}">{{ icon('address-book') }}<span>Contacts</span></a>
-        <!-- Spaces (2026-08-08, follow-up same day) -- a second, shorter,
-             user-defined list in the same rail, directly below the five
-             fixed destinations above: every label with "Generate a Space
-             page" on shows here automatically, no separate pin/unpin step
-             -- see deps.py's sidebar_spaces() docstring for why that extra
-             step got removed the same day it was added (a label worth
-             turning into a Space is a label worth finding quickly).
-             `.tab-separator` is a small divider, not another tab --
-             signals "everything below this line is yours, not the app's
-             fixed nav" the same way a native OS sidebar splits pinned
-             items from system locations. Empty (no Spaces yet) renders
-             nothing at all, not an empty section header. -->
-        {% set spaces = sidebar_spaces(request) %}
-        {% if spaces %}
-        <div class="tab-separator" role="separator" aria-label="Spaces"></div>
-        <!-- 2026-08-29 follow-up: a visible group-header label ("tiny,
-             uppercase, gray text" per plans/sidebar-redesign.md's own
-             wording) for expanded mode, replacing the plain divider line
-             there -- collapsed mode (no room for text) keeps just the
-             divider above, unchanged. aria-hidden since `.tab-separator`
-             already carries the equivalent aria-label for assistive tech;
-             this is a purely visual label for sighted expanded-mode
-             users. -->
-        <div class="sidebar-section-label" aria-hidden="true">Spaces</div>
-        {% for l in spaces %}
-        {% set has_children = l.children|length > 0 %}
-        {# A child's own href mirrors label_detail.html's Projects section:
-           a child that's itself a Space goes to its generated page, a
-           promoted-project child goes to its own Kanban page
-           (routers/projects.py::project_detail, real again as of
-           2026-08-30), a plain child label goes to its settings edit
-           page. namespace() is needed (not a plain {% set %}) because
-           child_active is written from inside a nested {% for %} and read
-           after it -- a bare {% set %} inside that loop wouldn't leak
-           back out to this scope. #}
+        {# Groups + pinned labels (labels-as-modules slice c, 2026-09-25;
+           replaces the Spaces and Projects sections). Each group links to
+           its own page; its chevron (expanded rail only -- there's no room
+           in the collapsed one, and the group page lists every member
+           anyway) reveals the members with "Pin to sidebar" on. Pinned
+           labels with no group follow as a flat list. Class names are kept
+           from the Spaces tree (tab-btn-space/-child, sidebar-tree-*,
+           data-space-name) so the existing CSS and sidebar_tree.js, which
+           remembers each entry's open/closed state, apply unchanged.
+           The `_sb_` prefix matters: a top-level {% set %} here would
+           shadow any page's own context variable of the same name
+           (e.g. the Tasks page's `groups`). #}
+        {% set _sb_groups = sidebar_groups(request) %}
+        {% if _sb_groups %}
+        <div class="tab-separator" role="separator" aria-label="Groups"></div>
+        <div class="sidebar-section-label" aria-hidden="true">Groups</div>
+        {% for g in _sb_groups %}
+        {% set has_children = g.children|length > 0 %}
+        {% set group_href = '/groups/' ~ g.name %}
+        {# namespace(): child_active is written inside the loop and read after it. #}
         {% set ns = namespace(child_active=false) %}
-        {% if has_children %}
-          {% for child in l.children %}
-            {% set child_href = '/labels/' ~ child.name %}
-            {% if request.url.path == child_href %}{% set ns.child_active = true %}{% endif %}
-          {% endfor %}
-        {% endif %}
-        <div class="sidebar-tree-item {% if has_children %}has-children{% endif %}" data-space-name="{{ l.name }}">
+        {% for child in g.children %}
+          {% if request.url.path == '/labels/' ~ child.name %}{% set ns.child_active = true %}{% endif %}
+        {% endfor %}
+        <div class="sidebar-tree-item {% if has_children %}has-children{% endif %}" data-space-name="{{ g.name }}">
           <div class="sidebar-tree-row">
-            <a href="/labels/{{ l.name }}" class="tab-btn tab-btn-space {% if request.url.path == '/labels/' ~ l.name %}active{% endif %}" title="{{ l.name }}">{{ icon(l.icon or 'layers') }}<span>{{ l.abbreviation or l.name }}</span></a>
+            <a href="{{ group_href }}" class="tab-btn tab-btn-space {% if request.url.path == group_href %}active{% endif %}" title="{{ g.name }}">{{ icon('layers') }}<span>{{ g.name }}</span></a>
             {% if has_children %}
-            {# aria-expanded defaults to true when one of this space's own
-               children is the active page -- so a direct link/reload lands
-               with its parent already open, before sidebar_tree.js's stored
-               per-space preference (if any) overrides it on load. #}
-            <button type="button" class="sidebar-tree-toggle" aria-expanded="{{ 'true' if ns.child_active else 'false' }}" aria-label="Toggle {{ l.name }} projects">{{ icon('chevron-right', 'sidebar-tree-chevron') }}</button>
+            <button type="button" class="sidebar-tree-toggle" aria-expanded="{{ 'true' if ns.child_active else 'false' }}" aria-label="Toggle {{ g.name }} labels">{{ icon('chevron-right', 'sidebar-tree-chevron') }}</button>
             {% endif %}
           </div>
           {% if has_children %}
           <div class="sidebar-tree-children">
-            {% for child in l.children %}
+            {% for child in g.children %}
             {% set child_href = '/labels/' ~ child.name %}
-            {# 2026-08-29 follow-up: no more `icon-sm` here -- it made a
-               child's icon (12px) visibly smaller than its parent Space's
-               (20px, the plain .tab-btn .icon size) for no reason tied to
-               meaning, just depth. Dropping the size override lets it
-               inherit the same 20px as every other rail icon; the
-               .tab-btn-child padding-left indent (style.css) is what
-               signals depth instead. #}
-            <a href="{{ child_href }}" class="tab-btn tab-btn-child {% if request.url.path == child_href %}active{% endif %}" title="{{ child.name }}">{{ icon(child.icon or 'folder') }}<span>{{ child.name }}</span></a>
+            <a href="{{ child_href }}" class="tab-btn tab-btn-child {% if request.url.path == child_href %}active{% endif %}" title="{{ child.name }}">{{ icon(child.icon or ('folder' if child.is_project else 'tag')) }}<span>{{ child.abbreviation or child.name }}</span></a>
             {% endfor %}
           </div>
           {% endif %}
         </div>
         {% endfor %}
         {% endif %}
-        <!-- 2026-08-29 sidebar redesign follow-up -- plans/sidebar-redesign.md
-             asks for "Spaces", "Projects", and "Private" as separate group
-             headers. "Private" has no equivalent in this app's data model
-             (nothing here is a private/public toggle on a label the way
-             the doc's source app apparently has -- Published Lists' own
-             public/private setting is a different, unrelated concept, see
-             that feature's own visibility work) and isn't stubbed out for
-             that reason. "Projects" is real: every is_project=1 label with
-             no parent_name (i.e. not already nested under a Space above,
-             see deps.py::_sidebar_projects) gets its own flat section
-             here -- flat, not a tree, since a project has no further
-             nested children in this app's data model today. -->
-        {% set projects = sidebar_projects(request) %}
-        {% if projects %}
-        <div class="tab-separator" role="separator" aria-label="Projects"></div>
-        <div class="sidebar-section-label" aria-hidden="true">Projects</div>
-        {% for p in projects %}
-        {% set project_href = '/labels/' ~ p.name %}
-        <a href="{{ project_href }}" class="tab-btn tab-btn-project {% if request.url.path == project_href %}active{% endif %}" title="{{ p.name }}">{{ icon(p.icon or 'folder') }}<span>{{ p.abbreviation or p.name }}</span></a>
+        {% set _sb_pinned = sidebar_pinned(request) %}
+        {% if _sb_pinned %}
+        <div class="tab-separator" role="separator" aria-label="Pinned"></div>
+        <div class="sidebar-section-label" aria-hidden="true">Pinned</div>
+        {% for p in _sb_pinned %}
+        {% set pinned_href = '/labels/' ~ p.name %}
+        <a href="{{ pinned_href }}" class="tab-btn tab-btn-project {% if request.url.path == pinned_href %}active{% endif %}" title="{{ p.name }}">{{ icon(p.icon or ('folder' if p.is_project else 'tag')) }}<span>{{ p.abbreviation or p.name }}</span></a>
         {% endfor %}
         {% endif %}
         <div class="spacer"></div>

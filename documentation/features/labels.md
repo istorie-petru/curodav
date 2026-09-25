@@ -1,5 +1,17 @@
 # Labels & Spaces
 
+> **2026-09-25 — Spaces are gone (labels-as-modules, `plans/ui-cleanup-2026-09.md`
+> item 4).** A group is now the plain-text `label_group` shared by some labels,
+> with its own widget dashboard at `/groups/<name>` (stored under the page key
+> `group:<name>`). Every label's page is `/labels/<name>`: a widget dashboard when
+> `has_dashboard` is on, otherwise its switched-on Agenda / Tasks / Contacts
+> sections. Other per-label fields: `sidebar_pin`, `widget_pin`, deadline
+> (`has_deadline`/`deadline_date`) and the archive flow. `generate_space` and
+> `parent_name` stay on disk but nothing reads them; the one-time
+> `db.migrate_spaces_to_groups` converted existing Spaces, and
+> `scripts/migrate_spaces_direct_tags.py` was deleted. The Space sections below
+> are history.
+
 `routers/labels.py` — the single organizing mechanism (see `architecture.md` §1.2).
 A label is just a name in the `object_labels` join table; any config is a thin
 optional `label_config` dict (color/icon/description/parent_name/`generate_space`/

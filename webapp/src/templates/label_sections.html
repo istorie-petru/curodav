@@ -13,7 +13,7 @@
 {% block content %}
 <div class="page-banner-wrap">
 {% call page_banner(label.name, icon_tile={'icon': label.icon or 'tag', 'color': label.color}) %}
-    {% if edit_mode and not banner_grouped_under %}
+    {% if edit_mode %}
     <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
     {% endif %}
 {% endcall %}

@@ -216,10 +216,9 @@ class TestScopeChildNames:
         assert dashboard_router._scope_child_names(conn, None) is None
 
     def test_space_resolves_to_its_child_label_names(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "MATH201", "parent_name": "Uni", "created_at": _now()})
-        assert dashboard_router._scope_child_names(conn, "Uni") == {"CS101", "MATH201"}
+        db.upsert_label_config(conn, {"name": "CS101", "label_group": "Uni", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "MATH201", "label_group": "Uni", "created_at": _now()})
+        assert dashboard_router._scope_child_names(conn, "group:Uni") == {"CS101", "MATH201"}
 
     def test_plain_label_resolves_to_just_its_own_name(self, conn):
         db.upsert_label_config(conn, {"name": "CS101", "created_at": _now()})
@@ -245,8 +244,7 @@ class TestHardTopLevelScopeFilter:
     type and assert it's closed."""
 
     def test_task_widget_filter_no_longer_escapes_page_scope(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "label_group": "Uni", "created_at": _now()})
         # In scope (CS101) and matches the widget's own "Urgent" filter.
         _seed_task(conn, "in_scope_and_matches", tags=["CS101", "Urgent"])
         # Matches the widget's own filter but is OUTSIDE the Space --
@@ -254,23 +252,21 @@ class TestHardTopLevelScopeFilter:
         _seed_task(conn, "matches_but_out_of_scope", tags=["Urgent"])
         # In scope but doesn't match the widget's own filter.
         _seed_task(conn, "in_scope_no_match", tags=["CS101"])
-        result = dashboard_router._filtered_tasks(conn, {"label_name": "Uni", "tags": ["Urgent"]}, open_only=False)
+        result = dashboard_router._filtered_tasks(conn, {"label_name": "group:Uni", "tags": ["Urgent"]}, open_only=False)
         assert {t["uid"] for t in result} == {"in_scope_and_matches"}
 
     def test_event_widget_filter_no_longer_escapes_page_scope(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "label_group": "Uni", "created_at": _now()})
         _seed_event(conn, "in_scope_and_matches", tags=["CS101", "Urgent"])
         _seed_event(conn, "matches_but_out_of_scope", tags=["Urgent"])
-        result = dashboard_router._filtered_events(conn, {"label_name": "Uni", "tags": ["Urgent"]})
+        result = dashboard_router._filtered_events(conn, {"label_name": "group:Uni", "tags": ["Urgent"]})
         assert {e["uid"] for e in result} == {"in_scope_and_matches"}
 
     def test_contact_widget_filter_no_longer_escapes_page_scope(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "label_group": "Uni", "created_at": _now()})
         db.upsert_contact(conn, {"uid": "c1", "full_name": "In scope", "tags": ["CS101", "Professor"], "created_at": _now()})
         db.upsert_contact(conn, {"uid": "c2", "full_name": "Out of scope", "tags": ["Professor"], "created_at": _now()})
-        data = dashboard_router._render_contact_list(conn, {"label_name": "Uni", "tags": ["Professor"]})
+        data = dashboard_router._render_contact_list(conn, {"label_name": "group:Uni", "tags": ["Professor"]})
         assert {c["uid"] for c in data["contacts"]} == {"c1"}
 
     def test_plain_label_page_widget_filter_no_longer_escapes_its_own_scope(self, conn):
@@ -1148,7 +1144,6 @@ class TestSpaceWidgets:
         """2026-08-28 fix: when the label actually has generate_space=1,
         the redirect should go straight to /spaces/{name} rather than
         bouncing through /settings/labels/{name}'s own 301."""
-        db.upsert_label_config(conn, {"name": "space1", "generate_space": 1, "created_at": "2026-01-01"})
         resp = dashboard_router.add_widget(
             source="calendar_tasks", view="agenda", range="today", title="", project_uid="", tags="",
             task_list_uids=[], calendar_uids=[], limit="", space_uid="space1", conn=conn,
@@ -1208,11 +1203,10 @@ class TestContactListWidget:
         assert {c["uid"] for c in data["contacts"]} == {"c1"}
 
     def test_label_name_scoping_uses_child_label_names_as_tags(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "label_group": "Uni", "created_at": _now()})
         self._seed_contact(conn, "c1", "Alice", tags=["CS101"])
         self._seed_contact(conn, "c2", "Bob", tags=["Personal"])
-        data = dashboard_router._render_contact_list(conn, {"label_name": "Uni"})
+        data = dashboard_router._render_contact_list(conn, {"label_name": "group:Uni"})
         assert {c["uid"] for c in data["contacts"]} == {"c1"}
 
     def test_limit_caps_results(self, conn):
@@ -1327,133 +1321,82 @@ class TestSpaceScopedRenderers:
     project_uid, to auto-scope (2026-08-02)."""
 
     def test_project_preview_label_filter(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Personal", "created_at": _now()})
-        data = dashboard_router._render_spaces_projects(conn, {"label_name": "Uni"})
+        db.upsert_label_config(conn, {"name": "CS101", "label_group": "Uni", "widget_pin": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Personal", "widget_pin": 1, "created_at": _now()})
+        data = dashboard_router._render_spaces_projects(conn, {"label_name": "group:Uni"})
         assert [pv["project"]["uid"] for pv in data["previews"]] == ["CS101"]
 
     def test_habit_checkin_label_filter(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "label_group": "Uni", "created_at": _now()})
         db.save_task_habit_settings(conn, "Habit")
         for uid, tags in (("h1", ["Habit", "CS101"]), ("h2", ["Habit"])):
             db.upsert_task(conn, {"uid": uid, "title": uid, "description": "", "status": "active",
                                   "tags": tags, "recurrence": "FREQ=DAILY", "created_at": _now()})
-        data = dashboard_router._render_habit_checkin(conn, {"label_name": "Uni"})
+        data = dashboard_router._render_habit_checkin(conn, {"label_name": "group:Uni"})
         assert [r["uid"] for r in data["rows"]] == ["h1"]
 
 
-class TestSpacesProjectsScope:
-    """2026-08-15, widget consolidation expanded scope: a Spaces & Projects
-    widget placed on a Space/Project page is auto-scoped to that page via
-    config['label_name'] -- config['scope']=='everything' opts a single
-    widget instance out of that, rendering the same as an unscoped Home
-    instance would."""
+class TestGroupsAndLabelsWidget:
+    """The "spaces_projects" widget type, shown as "Groups & Labels" since
+    labels-as-modules slice c (2026-09-25): driven by groups and each
+    label's widget_pin flag. On a group's page it lists that group's pinned
+    labels; on Home, every pinned label (List) or every group plus every
+    pinned ungrouped label (Cards). scope=="everything" still opts a page's
+    instance out of its page scope."""
 
-    def test_default_scope_is_label_scoped(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Personal", "created_at": _now()})
-        data = dashboard_router._render_spaces_projects(conn, {"label_name": "Uni"})
-        assert [pv["project"]["uid"] for pv in data["previews"]] == ["CS101"]
+    def _seed(self, conn):
+        db.upsert_label_config(conn, {"name": "CS101", "label_group": "Uni", "widget_pin": 1, "is_project": 1})
+        db.upsert_label_config(conn, {"name": "Art", "label_group": "Uni"})  # not pinned
+        db.upsert_label_config(conn, {"name": "Personal", "widget_pin": 1})
+        db.upsert_label_config(conn, {"name": "Old", "widget_pin": 1})
+        db.archive_project(conn, "Old")
 
-    def test_scope_everything_ignores_label_name(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Personal", "created_at": _now()})
-        data = dashboard_router._render_spaces_projects(conn, {"label_name": "Uni", "scope": "everything"})
-        # Same as the unscoped Home case: every plain (non-Space) label,
-        # parented or not (list_labels' own "not generate_space" query
-        # doesn't filter by parent_name).
-        assert {pv["project"]["uid"] for pv in data["previews"]} == {"CS101", "Personal"}
+    def test_group_page_lists_its_pinned_labels(self, conn):
+        self._seed(conn)
+        data = dashboard_router._render_spaces_projects(conn, {"label_name": "group:Uni"})
+        assert [pv["project"]["name"] for pv in data["previews"]] == ["CS101"]
 
-    def test_scope_everything_cards_style_lists_every_space(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Work", "generate_space": 1, "created_at": _now()})
-        data = dashboard_router._render_spaces_projects(conn, {"label_name": "Uni", "scope": "everything", "style": "cards"})
-        assert {c["uid"] for c in data["cards"]} == {"Uni", "Work"}
+    def test_home_list_is_every_pinned_open_label(self, conn):
+        self._seed(conn)
+        data = dashboard_router._render_spaces_projects(conn, {})
+        assert [pv["project"]["name"] for pv in data["previews"]] == ["CS101", "Personal"]
 
-    def test_children_include_sub_spaces_not_just_projects(self, conn):
-        # db.list_child_labels doesn't distinguish project vs. Space
-        # children -- "This Space" scope already includes both, no special
-        # casing needed.
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Grad School", "parent_name": "Uni", "generate_space": 1, "created_at": _now()})
-        data = dashboard_router._render_spaces_projects(conn, {"label_name": "Uni"})
-        assert {pv["project"]["uid"] for pv in data["previews"]} == {"CS101", "Grad School"}
+    def test_scope_everything_ignores_the_page(self, conn):
+        self._seed(conn)
+        data = dashboard_router._render_spaces_projects(conn, {"label_name": "group:Uni", "scope": "everything"})
+        assert {pv["project"]["name"] for pv in data["previews"]} == {"CS101", "Personal"}
+
+    def test_label_page_has_no_sub_labels(self, conn):
+        self._seed(conn)
+        data = dashboard_router._render_spaces_projects(conn, {"label_name": "CS101"})
+        assert data["previews"] == []
+
+    def test_home_cards_are_groups_plus_ungrouped_pinned_labels(self, conn):
+        self._seed(conn)
+        data = dashboard_router._render_spaces_projects(conn, {"style": "cards"})
+        cards = {c["name"]: c for c in data["cards"]}
+        assert set(cards) == {"Uni", "Personal"}  # CS101 is reached through Uni
+        assert cards["Uni"]["href"] == "/groups/Uni" and cards["Uni"]["meta"] == "2 labels"
+        assert cards["Personal"]["href"] == "/labels/Personal" and cards["Personal"]["meta"] == "Label"
+
+    def test_group_page_cards_are_its_pinned_labels(self, conn):
+        self._seed(conn)
+        data = dashboard_router._render_spaces_projects(conn, {"label_name": "group:Uni", "style": "cards"})
+        assert [(c["name"], c["icon"], c["meta"]) for c in data["cards"]] == [("CS101", "folder", "Project")]
 
     def test_add_widget_stores_scope(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
         dashboard_router.add_widget(
             source="spaces_projects", view="spaces_projects_view", range="", title="", project_uid="",
             tags="", task_list_uids=[], calendar_uids=[], limit="", style="cards", scope="everything",
-            show=[], space_uid="Uni", conn=conn,
+            show=[], space_uid="group:Uni", conn=conn,
         )
-        w = db.list_dashboard_widgets(conn, space_uid="Uni")[0]
+        w = db.list_dashboard_widgets(conn, label_name="group:Uni")[0]
         assert w["type"] == "spaces_projects"
         assert w["config"]["scope"] == "everything"
         assert w["config"]["style"] == "cards"
 
-
-class TestSpacesProjectsCardsIncludesProjects:
-    """2026-08-30, direct request ("merge the quick links and spaces &
-    projects into one data source") -- an unscoped "cards" style instance
-    now includes every open project alongside every Space, the same
-    "every Space + every open project" set the retired Quick Links widget
-    used to render on its own (see TestNextDeadlineOrganizeTodayStreakRemoved
-    for the removal side of the same session)."""
-
-    def test_unscoped_cards_includes_spaces_and_open_projects(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "is_project": 1, "created_at": _now()})
-        data = dashboard_router._render_spaces_projects(conn, {"style": "cards"})
-        names = {c["name"]: c["meta"] for c in data["cards"]}
-        assert names["Uni"] == "0 projects"
-        assert names["CS101"] == "Project"
-
-    def test_archived_projects_excluded(self, conn):
-        db.upsert_label_config(conn, {"name": "Old", "is_project": 1, "archived_at": _now(), "created_at": _now()})
-        data = dashboard_router._render_spaces_projects(conn, {"style": "cards"})
-        assert "Old" not in {c["name"] for c in data["cards"]}
-
-    def test_project_card_uses_label_icon_and_folder_fallback(self, conn):
-        db.upsert_label_config(conn, {"name": "NoIcon", "is_project": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Iconed", "is_project": 1, "icon": "rocket", "created_at": _now()})
-        data = dashboard_router._render_spaces_projects(conn, {"style": "cards"})
-        by_name = {c["name"]: c for c in data["cards"]}
-        assert by_name["NoIcon"]["icon"] == "folder"
-        assert by_name["Iconed"]["icon"] == "rocket"
-        assert by_name["NoIcon"]["href"] == "/labels/NoIcon"
-
-    def test_scope_everything_also_includes_projects(self, conn):
-        # scope=="everything" opts a Space/Project page's own widget
-        # instance out of its page auto-scope, rendering the same as an
-        # unscoped Home instance -- that includes this merge too, not just
-        # the Space-only behavior scope=="everything" had before.
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "is_project": 1, "created_at": _now()})
-        data = dashboard_router._render_spaces_projects(conn, {"label_name": "Uni", "scope": "everything", "style": "cards"})
-        assert {c["name"] for c in data["cards"]} == {"Uni", "CS101"}
-
-    def test_scoped_instance_does_not_double_up_projects(self, conn):
-        # label_name set (a Space/Project page) -- `labels` already comes
-        # from list_child_labels, which pools projects in directly. The
-        # unscoped-only merge branch must not also run here, or a Space's
-        # own child project would render twice.
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "is_project": 1, "created_at": _now()})
-        data = dashboard_router._render_spaces_projects(conn, {"label_name": "Uni", "style": "cards"})
-        names = [c["name"] for c in data["cards"]]
-        assert names.count("CS101") == 1
-
-    def test_empty_state_mentions_both_spaces_and_projects(self, conn):
-        import pathlib
-
-        templates = pathlib.Path(__file__).resolve().parents[1] / "src" / "templates"
-        text = (templates / "_widget_spaces_projects.html").read_text()
-        assert "No Spaces or projects yet" in text
+    def test_display_name(self):
+        assert dashboard_router.WIDGET_TYPES["spaces_projects"]["label"] == "Groups & Labels"
 
 
 class TestWidgetRemovalMigration:

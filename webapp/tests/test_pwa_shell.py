@@ -324,5 +324,6 @@ class TestShellCacheVersion:
         # v117 (2026-09-24, same session): Web Push P1 handlers in sw.js.
         # v118 (2026-09-24, same session): Web Push P3 settings styles.
         # v119 (2026-09-25): habit amount popup (habit_day.js) + modal.js.
+        # v120 (2026-09-25): sidebar group chevron fix (style.css).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v119"' in script
+        assert 'CACHE_NAME = "cc-shell-v120"' in script

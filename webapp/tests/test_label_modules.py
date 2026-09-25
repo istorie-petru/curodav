@@ -187,27 +187,103 @@ class TestLegacyWriteMirror:
         assert cfg["widget_pin"] is True
 
 
-class TestRenameCarriesTheGroup:
-    def _space(self, conn):
-        db.upsert_label_config(conn, {"name": "Home", "generate_space": 1})
-        db.upsert_label_config(conn, {"name": "Garden", "parent_name": "Home"})
-        _legacy(conn, "Unrelated", label_group="Home")
+class TestGroupsAreIndependentText:
+    """Slice c (2026-09-25): a group is its own text, not a label's name,
+    so renaming or merging a label never renames a group."""
 
-    def test_rename(self, conn):
-        self._space(conn)
+    def test_rename_leaves_the_group_alone(self, conn):
+        db.upsert_label_config(conn, {"name": "Home", "label_group": "Home"})
+        db.upsert_label_config(conn, {"name": "Garden", "label_group": "Home"})
         db.rename_label(conn, "Home", "House")
-        assert db.effective_label_config(conn, "House")["label_group"] == "House"
-        assert db.effective_label_config(conn, "Garden")["label_group"] == "House"
-        assert db.effective_label_config(conn, "Unrelated")["label_group"] == "Home"
+        assert db.effective_label_config(conn, "House")["label_group"] == "Home"
+        assert db.effective_label_config(conn, "Garden")["label_group"] == "Home"
 
-    def test_case_only_rename(self, conn):
-        self._space(conn)
-        db.rename_label(conn, "Home", "HOME")
-        assert db.effective_label_config(conn, "Garden")["label_group"] == "HOME"
+    def test_group_text_is_trimmed_and_blank_is_none(self, conn):
+        db.upsert_label_config(conn, {"name": "A", "label_group": "  Uni  "})
+        db.upsert_label_config(conn, {"name": "B", "label_group": "   "})
+        assert db.effective_label_config(conn, "A")["label_group"] == "Uni"
+        assert db.effective_label_config(conn, "B")["label_group"] is None
 
-    def test_merge(self, conn):
-        self._space(conn)
-        db.upsert_label_config(conn, {"name": "House", "generate_space": 1})
-        db.merge_labels(conn, "Home", "House")
-        assert db.effective_label_config(conn, "Garden")["label_group"] == "House"
-        assert db.effective_label_config(conn, "Unrelated")["label_group"] == "Home"
+    def test_list_groups_and_members(self, conn):
+        db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni"})
+        db.upsert_label_config(conn, {"name": "Art", "label_group": "Uni"})
+        db.upsert_label_config(conn, {"name": "Run", "label_group": "Health"})
+        db.upsert_label_config(conn, {"name": "Loose"})
+        assert [(g["name"], [l["name"] for l in g["labels"]]) for g in db.list_groups(conn)] == [
+            ("Health", ["Run"]), ("Uni", ["Art", "Maths"]),
+        ]
+        assert db.group_member_names(conn, "Uni") == ["Art", "Maths"]
+
+    def test_page_key_round_trip(self):
+        assert db.group_page_key("Uni") == "group:Uni"
+        assert db.group_from_page_key("group:Uni") == "Uni"
+        assert db.group_from_page_key("Uni") is None
+        assert db.group_from_page_key(None) is None
+
+    def test_label_selector_scope_uses_the_group(self, conn):
+        db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni"})
+        db.upsert_label_config(conn, {"name": "Art", "label_group": "Uni"})
+        db.upsert_label_config(conn, {"name": "Loose"})
+        assert db.label_selector_scope(conn, "group:Uni") == ["Art", "Maths"]
+        assert db.label_selector_scope(conn, "Maths") == ["Art", "Maths"]
+        assert db.label_selector_scope(conn, "Loose") is None
+
+    def test_grouped_label_keeps_its_own_color(self, conn):
+        # The 2026-09-21 "follow the Space's color" rule went with Spaces.
+        db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni", "color": "red"})
+        assert db.effective_label_config(conn, "Maths")["color"] == "red"
+
+
+class TestSpacesToGroupsMigration:
+    def _rerun(self, conn):
+        conn.execute("DELETE FROM app_meta WHERE key = ?", (db._SPACES_TO_GROUPS_KEY,))
+        db.migrate_spaces_to_groups(conn)
+
+    def _space_with_widget(self, conn):
+        _legacy(conn, "Uni", generate_space=1, label_group="Uni", has_dashboard=1)
+        _legacy(conn, "Maths", parent_name="Uni", label_group="Uni")
+        conn.execute(
+            "INSERT INTO dashboard_widgets (uid, type, label_name, config_json) VALUES ('w1', 'today_agenda', 'Uni', ?)",
+            ('{"label_name": "Uni", "limit": 5}',),
+        )
+        db.set_page_banner(conn, "Uni", {"kind": "remote", "image_url": "https://example.com/u.jpg"})
+
+    def test_widgets_banner_and_flags_move_to_the_group(self, conn):
+        self._space_with_widget(conn)
+        self._rerun(conn)
+        w = db.get_dashboard_widget(conn, "w1")
+        assert w["label_name"] == "group:Uni"
+        assert w["config"] == {"label_name": "group:Uni", "limit": 5}
+        assert db.get_page_banner(conn, "group:Uni")["image_url"] == "https://example.com/u.jpg"
+        assert db.get_page_banner(conn, "Uni") is not None  # the label keeps its copy
+        uni = db.effective_label_config(conn, "Uni")
+        assert uni["generate_space"] is False and uni["has_dashboard"] is False
+        assert uni["label_group"] == "Uni"
+        assert db.effective_label_config(conn, "Maths")["parent_name"] is None
+        # The group page won't re-seed default widgets on top of the moved ones.
+        assert db.get_app_meta(conn, "dashboard_label_group:Uni_seeded_v1") == "1"
+
+    def test_existing_group_widgets_are_not_overwritten(self, conn):
+        self._space_with_widget(conn)
+        conn.execute("INSERT INTO dashboard_widgets (uid, type, label_name) VALUES ('g1', 'tasks', 'group:Uni')")
+        self._rerun(conn)
+        assert db.get_dashboard_widget(conn, "w1")["label_name"] == "Uni"
+
+    def test_runs_once(self, conn):
+        self._rerun(conn)
+        _legacy(conn, "Late", generate_space=1)
+        db.migrate_spaces_to_groups(conn)
+        assert db.effective_label_config(conn, "Late")["generate_space"] is True
+
+    def test_fresh_database_runs_it_via_init_schema(self, tmp_path):
+        path = tmp_path / "cache.sqlite"
+        with db.connect(path) as c:
+            for key in (db._LABEL_MODULES_BACKFILLED_KEY, db._SPACES_TO_GROUPS_KEY):
+                c.execute("DELETE FROM app_meta WHERE key = ?", (key,))
+            _legacy(c, "Uni", generate_space=1)
+            _legacy(c, "Maths", parent_name="Uni")
+            c.commit()
+        with db.connect(path) as c:
+            assert [g["name"] for g in db.list_groups(c)] == ["Uni"]
+            assert db.group_member_names(c, "Uni") == ["Maths", "Uni"]
+            assert db.effective_label_config(c, "Uni")["generate_space"] is False

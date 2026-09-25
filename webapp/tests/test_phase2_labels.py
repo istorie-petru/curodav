@@ -40,7 +40,6 @@ from src import db
 _SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(_SCRIPTS_DIR))
 import migrate_labels  # noqa: E402
-import migrate_spaces_direct_tags  # noqa: E402
 
 from src.routers import banners as banners_router
 from src.routers import label_pages
@@ -121,15 +120,6 @@ class TestModalHeaderAppearanceButtons:
         assert 'class="color-swatch-current cal-blue"' in body  # default, unsaved yet
         assert "/banners/editor" not in body  # no name yet to key a banner off of
 
-    def test_grouped_label_shows_readonly_swatch_and_no_banner_button_in_header(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "color": "purple", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "color": "green", "created_at": _now()})
-        resp = labels_router.edit_label_modal("Historiography", _request("/settings/labels/Historiography/edit"), conn=conn)
-        body = resp.body.decode()
-        assert 'class="modal-header-swatch cal-purple"' in body
-        assert "color-swatch-current" not in body  # no interactive trigger
-        assert "/banners/editor" not in body  # follows the Space's banner, no button
-
     def test_quick_add_label_tab_keeps_inline_appearance_fields(self, conn):
         resp = dashboard_router.quick_add_form(_request("/quick/add"), default_tab="label", conn=conn)
         body = resp.body.decode()
@@ -173,47 +163,26 @@ class TestIconPersistence:
     # `set_label`/`create_label` already document for `abbreviation`).
 
     def test_create_label_saves_the_chosen_icon(self, conn):
-        labels_router.create_label(new_name="Garden", color="green", icon="  leaf  ", parent_name="", role="none", conn=conn)
+        labels_router.create_label(new_name="Garden", color="green", icon="  leaf  ", label_group="", role="none", conn=conn)
         cfg = db.get_label_config(conn, "Garden")
         assert cfg["icon"] == "leaf"
 
     def test_update_label_saves_a_newly_chosen_icon(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
-        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="leaf", parent_name="", description="", role="none", conn=conn)
+        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="leaf", label_group="", description="", role="none", conn=conn)
         assert db.get_label_config(conn, "Garden")["icon"] == "leaf"
 
     def test_update_label_changes_an_existing_icon(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "icon": "leaf", "created_at": _now()})
-        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="flag", parent_name="", description="", role="none", conn=conn)
+        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="flag", label_group="", description="", role="none", conn=conn)
         assert db.get_label_config(conn, "Garden")["icon"] == "flag"
 
     def test_update_label_no_icon_radio_clears_it(self, conn):
         # The picker's "No icon" option submits icon="" (_icon_swatch_
         # picker.html) -- an explicit clear, not "leave unchanged".
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "icon": "leaf", "created_at": _now()})
-        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="", parent_name="", description="", role="none", conn=conn)
+        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="", label_group="", description="", role="none", conn=conn)
         assert db.get_label_config(conn, "Garden")["icon"] is None
-
-    def test_update_label_still_saves_parent_alongside_icon(self, conn):
-        # Regression guard: adding the new `icon` param shouldn't disturb
-        # the fields that already worked. `parent_name` (2026-09-14,
-        # replaces the old free-text `label_group`) must name a real Space.
-        #
-        # 2026-09-21 (final labels-page iteration, direct request: "remove
-        # the ability to have colors... for labels or projects grouped
-        # under a space") -- a submitted `color` is no longer saved once
-        # `parent_name` is set; the label's prior stored color ("green")
-        # is preserved untouched instead of being overwritten with
-        # whatever the (now-hidden-in-the-UI) picker happened to submit.
-        # See TestColorInheritance below for the read-side half.
-        db.upsert_label_config(conn, {"name": "Home", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
-        labels_router.update_label(name="Garden", new_name="Garden", color="purple", icon="leaf", parent_name="Home", description="", role="none", conn=conn)
-        cfg = db.get_label_config(conn, "Garden")
-        assert cfg["icon"] == "leaf"
-        assert cfg["color"] == "green"
-        assert cfg["parent_name"] == "Home"
-
 
 # --------------------------------------------------------------------- #
 # Color validation + reserved-name guard (2026-09-07 fixes, both flagged
@@ -227,40 +196,40 @@ class TestIconPersistence:
 
 class TestColorValidation:
     def test_create_label_rejects_an_unknown_color(self, conn):
-        labels_router.create_label(new_name="Garden", color="not-a-real-color", icon="", parent_name="", role="none", conn=conn)
+        labels_router.create_label(new_name="Garden", color="not-a-real-color", icon="", label_group="", role="none", conn=conn)
         assert db.get_label_config(conn, "Garden")["color"] == "blue"
 
     def test_create_label_accepts_a_real_color(self, conn):
-        labels_router.create_label(new_name="Garden", color="teal", icon="", parent_name="", role="none", conn=conn)
+        labels_router.create_label(new_name="Garden", color="teal", icon="", label_group="", role="none", conn=conn)
         assert db.get_label_config(conn, "Garden")["color"] == "teal"
 
     def test_update_label_rejects_an_unknown_color(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
-        labels_router.update_label(name="Garden", new_name="Garden", color="<script>", icon="", parent_name="", description="", role="none", conn=conn)
+        labels_router.update_label(name="Garden", new_name="Garden", color="<script>", icon="", label_group="", description="", role="none", conn=conn)
         assert db.get_label_config(conn, "Garden")["color"] == "blue"
 
     def test_set_label_rejects_an_unknown_color(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
-        labels_router.set_label(name="Garden", color="whatever", icon="", description="", parent_name="", generate_space="", abbreviation="", return_to="", conn=conn)
+        labels_router.set_label(name="Garden", color="whatever", icon="", description="", abbreviation="", return_to="", conn=conn)
         assert db.get_label_config(conn, "Garden")["color"] == "blue"
 
 
 class TestReservedLabelNameGuard:
     def test_create_label_rejects_the_page_header_scope_name(self, conn):
         with pytest.raises(Exception) as excinfo:
-            labels_router.create_label(new_name=db.PAGE_HEADER_BANNER_SCOPE, color="blue", icon="", parent_name="", role="none", conn=conn)
+            labels_router.create_label(new_name=db.PAGE_HEADER_BANNER_SCOPE, color="blue", icon="", label_group="", role="none", conn=conn)
         assert excinfo.value.status_code == 400
         assert db.get_label_config(conn, db.PAGE_HEADER_BANNER_SCOPE) is None
 
     def test_create_label_rejects_a_season_scope_name(self, conn):
         with pytest.raises(Exception) as excinfo:
-            labels_router.create_label(new_name=db.SEASON_BANNER_SCOPES["summer"], color="blue", icon="", parent_name="", role="none", conn=conn)
+            labels_router.create_label(new_name=db.SEASON_BANNER_SCOPES["summer"], color="blue", icon="", label_group="", role="none", conn=conn)
         assert excinfo.value.status_code == 400
 
     def test_update_label_rejects_renaming_into_a_reserved_name(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
         with pytest.raises(Exception) as excinfo:
-            labels_router.update_label(name="Garden", new_name=db.PAGE_HEADER_BANNER_SCOPE, color="green", icon="", parent_name="", description="", role="none", conn=conn)
+            labels_router.update_label(name="Garden", new_name=db.PAGE_HEADER_BANNER_SCOPE, color="green", icon="", label_group="", description="", role="none", conn=conn)
         assert excinfo.value.status_code == 400
         # Rejected before the rename happened -- the label is untouched.
         assert db.get_label_config(conn, "Garden") is not None
@@ -269,7 +238,7 @@ class TestReservedLabelNameGuard:
         # Sanity check the guard only fires on an actual name *change* --
         # every ordinary edit (new_name == name) must keep working.
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
-        labels_router.update_label(name="Garden", new_name="Garden", color="teal", icon="", parent_name="", description="", role="none", conn=conn)
+        labels_router.update_label(name="Garden", new_name="Garden", color="teal", icon="", label_group="", description="", role="none", conn=conn)
         assert db.get_label_config(conn, "Garden")["color"] == "teal"
 
     def test_rename_endpoint_rejects_a_reserved_destination(self, conn):
@@ -288,7 +257,7 @@ class TestReservedLabelNameGuard:
 
     def test_set_label_rejects_a_reserved_name(self, conn):
         with pytest.raises(Exception) as excinfo:
-            labels_router.set_label(name=db.PAGE_HEADER_BANNER_SCOPE, color="blue", icon="", description="", parent_name="", generate_space="", abbreviation="", return_to="", conn=conn)
+            labels_router.set_label(name=db.PAGE_HEADER_BANNER_SCOPE, color="blue", icon="", description="", abbreviation="", return_to="", conn=conn)
         assert excinfo.value.status_code == 400
         assert db.get_label_config(conn, db.PAGE_HEADER_BANNER_SCOPE) is None
 
@@ -300,222 +269,6 @@ class TestReservedLabelNameGuard:
 # db.list_space_labels; create_label/update_label validate it against
 # that same set instead of accepting arbitrary text.
 # --------------------------------------------------------------------- #
-
-
-class TestLabelSelectorScope:
-    """Direct request: "On space's dashboard, project pages or label's
-    page, the label selector should only have labels from that group...
-    this should work for any space > labels grouped under it"."""
-
-    def test_a_space_scopes_to_its_own_children(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Ancient History", "parent_name": "University", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Unrelated", "created_at": _now()})
-        assert db.label_selector_scope(conn, "University") == ["Ancient History", "Historiography"]
-
-    def test_a_project_grouped_under_a_space_scopes_to_its_siblings(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "is_project": 1, "parent_name": "University", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "created_at": _now()})
-        # Includes CS101 itself -- list_child_labels(University) returns
-        # every label grouped under it, siblings and self alike; a picker
-        # that dropped the page's own label while keeping every other
-        # sibling would be an arbitrary, unrequested exclusion.
-        assert db.label_selector_scope(conn, "CS101") == ["CS101", "Historiography"]
-
-    def test_a_plain_label_grouped_under_a_space_scopes_to_its_siblings(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Ancient History", "parent_name": "University", "created_at": _now()})
-        assert db.label_selector_scope(conn, "Historiography") == ["Ancient History", "Historiography"]
-
-    def test_a_standalone_project_with_no_parent_space_is_unscoped(self, conn):
-        db.upsert_label_config(conn, {"name": "Website Relaunch", "is_project": 1, "created_at": _now()})
-        assert db.label_selector_scope(conn, "Website Relaunch") is None
-
-    def test_a_standalone_plain_label_is_unscoped(self, conn):
-        db.upsert_label_config(conn, {"name": "Groceries", "created_at": _now()})
-        assert db.label_selector_scope(conn, "Groceries") is None
-
-
-class TestColorInheritance:
-    """Final labels-page iteration (direct request, 2026-09-21): "the
-    labels/projects grouped by space should follow the space's color...
-    remove the ability to have colors or banners for labels or projects
-    grouped under a space." """
-
-    def test_grouped_plain_label_inherits_the_spaces_color(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "color": "purple", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "color": "green", "created_at": _now()})
-        assert db.effective_label_config(conn, "Historiography")["color"] == "purple"
-
-    def test_grouped_project_inherits_the_spaces_color(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "color": "orange", "created_at": _now()})
-        db.upsert_label_config(
-            conn, {"name": "CS101", "is_project": 1, "parent_name": "University", "color": "red", "start_date": "2026-01-01", "end_date": "2026-12-31", "created_at": _now()}
-        )
-        assert db.effective_label_config(conn, "CS101")["color"] == "orange"
-
-    def test_ungrouped_label_keeps_its_own_color(self, conn):
-        db.upsert_label_config(conn, {"name": "Groceries", "color": "yellow", "created_at": _now()})
-        assert db.effective_label_config(conn, "Groceries")["color"] == "yellow"
-
-    def test_a_space_never_inherits_even_if_parent_name_is_somehow_set(self, conn):
-        # Defensive -- the app's own UI never lets a Space have a
-        # parent_name (_validate_parent_name/role=space form handling),
-        # but a stored row shouldn't be able to paint a Space with
-        # someone else's color even if one exists on disk regardless.
-        db.upsert_label_config(conn, {"name": "Other", "generate_space": 1, "color": "red", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "color": "purple", "parent_name": "Other", "created_at": _now()})
-        assert db.effective_label_config(conn, "University")["color"] == "purple"
-
-    def test_case_insensitive_lookup_also_inherits(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "color": "teal", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "color": "green", "created_at": _now()})
-        assert db.effective_label_config_ci(conn, "historiography")["color"] == "teal"
-
-    def test_edit_modal_shows_readonly_swatch_for_a_grouped_label(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "color": "purple", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "color": "green", "created_at": _now()})
-        resp = labels_router.edit_label_modal("Historiography", _request("/settings/labels/Historiography/edit"), conn=conn)
-        body = resp.body.decode()
-        assert "Follows University" in body
-        assert 'name="color" value="purple"' not in body  # no interactive swatch radios rendered
-
-    def test_edit_modal_shows_interactive_picker_for_an_ungrouped_label(self, conn):
-        db.upsert_label_config(conn, {"name": "Groceries", "color": "yellow", "created_at": _now()})
-        resp = labels_router.edit_label_modal("Groceries", _request("/settings/labels/Groceries/edit"), conn=conn)
-        body = resp.body.decode()
-        assert "Follows" not in body
-
-    def test_update_label_preserves_stored_color_once_grouped(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Historiography", "color": "green", "created_at": _now()})
-        labels_router.update_label(
-            name="Historiography", new_name="Historiography", color="red", icon="", parent_name="University",
-            description="", role="none", conn=conn,
-        )
-        # Stored value is untouched ("green"), even though the (hidden)
-        # form submitted "red" -- effective_label_config still resolves
-        # to the Space's own color regardless of what's stored.
-        assert db.get_label_config(conn, "Historiography")["color"] == "green"
-        assert db.effective_label_config(conn, "Historiography")["color"] is not None
-
-
-class TestBannerInheritance:
-    def test_grouped_labels_page_shows_the_spaces_banner_not_its_own(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "created_at": _now()})
-        db.set_page_banner(conn, "University", {"kind": "remote", "image_url": "https://example.com/uni.jpg", "alt": "x"})
-        db.set_page_banner(conn, "Historiography", {"kind": "remote", "image_url": "https://example.com/own.jpg", "alt": "x"})
-        ctx = dashboard_router._page_banner_context(conn, "Historiography")
-        assert ctx["banner"]["image_url"] == "https://example.com/uni.jpg"
-        assert ctx["banner_grouped_under"] == "University"
-        assert ctx["has_own_banner"] is False
-
-    def test_ungrouped_label_still_shows_its_own_banner(self, conn):
-        db.upsert_label_config(conn, {"name": "Groceries", "created_at": _now()})
-        db.set_page_banner(conn, "Groceries", {"kind": "remote", "image_url": "https://example.com/own.jpg", "alt": "x"})
-        ctx = dashboard_router._page_banner_context(conn, "Groceries")
-        assert ctx["banner"]["image_url"] == "https://example.com/own.jpg"
-        assert ctx["banner_grouped_under"] is None
-        assert ctx["has_own_banner"] is True
-
-    def test_edit_label_modal_hides_add_change_banner_control_for_a_grouped_label(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "created_at": _now()})
-        resp = labels_router.edit_label_modal("Historiography", _request("/settings/labels/Historiography/edit"), conn=conn)
-        body = resp.body.decode()
-        assert "Add banner" not in body
-        assert "Change banner" not in body
-        assert "Follows University" in body
-
-    def test_project_page_hides_the_banner_button_when_grouped(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(
-            conn, {"name": "CS101", "is_project": 1, "parent_name": "University", "start_date": "2026-01-01", "end_date": "2026-12-31", "created_at": _now()}
-        )
-        db.set_app_meta(conn, "edit_mode_enabled", "1")
-        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
-        body = resp.body.decode()
-        assert "Add banner" not in body
-        assert "Change banner" not in body
-
-
-class TestLabelParentNameDropdown:
-    def test_create_label_writes_a_valid_parent_name(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        labels_router.create_label(new_name="Homework", color="blue", icon="", parent_name="University", role="none", conn=conn)
-        assert db.get_label_config(conn, "Homework")["parent_name"] == "University"
-
-    def test_create_label_rejects_a_parent_name_that_is_not_a_space(self, conn):
-        # "Homework" exists but isn't generate_space=1 -- not a valid Space
-        # to link under.
-        db.upsert_label_config(conn, {"name": "Homework", "created_at": _now()})
-        with pytest.raises(Exception) as excinfo:
-            labels_router.create_label(new_name="Essay", color="blue", icon="", parent_name="Homework", role="none", conn=conn)
-        assert excinfo.value.status_code == 400
-        assert db.get_label_config(conn, "Essay") is None
-
-    def test_create_label_rejects_a_parent_name_naming_nothing_at_all(self, conn):
-        with pytest.raises(Exception) as excinfo:
-            labels_router.create_label(new_name="Essay", color="blue", icon="", parent_name="Nonexistent Space", role="none", conn=conn)
-        assert excinfo.value.status_code == 400
-
-    def test_create_label_blank_parent_name_is_ungrouped(self, conn):
-        labels_router.create_label(new_name="Essay", color="blue", icon="", parent_name="", role="none", conn=conn)
-        assert db.get_label_config(conn, "Essay")["parent_name"] is None
-
-    def test_create_label_role_space_ignores_any_submitted_parent_name(self, conn):
-        # Spaces don't nest -- a label becoming a Space can't also carry a
-        # parent, regardless of what a raw POST submits alongside role=space.
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        labels_router.create_label(new_name="Work", color="blue", icon="", parent_name="University", role="space", conn=conn)
-        assert db.get_label_config(conn, "Work")["parent_name"] is None
-
-    def test_update_label_writes_a_valid_parent_name(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Homework", "created_at": _now()})
-        labels_router.update_label(name="Homework", new_name="Homework", color="blue", icon="", parent_name="University", description="", role="none", conn=conn)
-        assert db.get_label_config(conn, "Homework")["parent_name"] == "University"
-
-    def test_update_label_rejects_a_parent_name_that_is_not_a_space(self, conn):
-        db.upsert_label_config(conn, {"name": "Homework", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Essay", "created_at": _now()})
-        with pytest.raises(Exception) as excinfo:
-            labels_router.update_label(name="Essay", new_name="Essay", color="blue", icon="", parent_name="Homework", description="", role="none", conn=conn)
-        assert excinfo.value.status_code == 400
-
-    def test_update_label_role_space_ignores_any_submitted_parent_name(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Work", "created_at": _now()})
-        labels_router.update_label(name="Work", new_name="Work", color="blue", icon="", parent_name="University", description="", role="space", conn=conn)
-        assert db.get_label_config(conn, "Work")["parent_name"] is None
-
-    def test_edit_modal_renders_a_space_dropdown_not_a_text_input(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Homework", "parent_name": "University", "created_at": _now()})
-        resp = labels_router.edit_label_modal("Homework", _request("/settings/labels/Homework/edit"), conn=conn)
-        body = resp.body.decode()
-        assert '<select name="parent_name">' in body
-        assert 'name="label_group"' not in body
-        assert '<option value="University" selected>University</option>' in body
-        assert '<option value="">No space</option>' in body
-
-    def test_edit_modal_hides_the_dropdown_when_editing_a_space_itself(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        resp = labels_router.edit_label_modal("University", _request("/settings/labels/University/edit"), conn=conn)
-        body = resp.body.decode()
-        assert 'class="field label-parent-field" hidden' in body
-
-    def test_new_label_modal_renders_every_space_as_an_option(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Home", "generate_space": 1, "created_at": _now()})
-        resp = labels_router.new_label_modal(_request("/settings/labels/new"), conn=conn)
-        body = resp.body.decode()
-        assert '<option value="University"' in body
-        assert '<option value="Home"' in body
 
 
 # --------------------------------------------------------------------- #
@@ -648,53 +401,6 @@ class TestNoDeleteJustClear:
 
 
 class TestGeneratedSpacePage:
-    def test_space_page_aggregates_by_child_label_membership(self, conn):
-        # 2026-09-14 (Spaces -- labels-as-membership rework slice 3):
-        # reverses the direct-membership-only behavior this test used to
-        # assert (see git history for the pre-slice-3 version) -- a
-        # Space's page now shows items tagged with any of its child
-        # labels, and NO LONGER shows items tagged directly with the
-        # Space's own name (that tag still exists in the UI today, see
-        # spaces.py::_label_scope's own docstring on why, but has no
-        # effect here anymore).
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "MATH201", "parent_name": "Uni", "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t1", "title": "Direct", "description": "", "status": "active",
-                               "tags": ["Uni"], "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t2", "title": "ChildOnly", "description": "", "status": "active",
-                               "tags": ["CS101"], "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t3", "title": "OtherChild", "description": "", "status": "active",
-                               "tags": ["MATH201"], "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t4", "title": "Unrelated", "description": "", "status": "active",
-                               "tags": ["Groceries"], "created_at": _now()})
-        db.upsert_event(conn, {"uid": "e1", "title": "Lecture", "description": "", "status": "active",
-                                "all_day": 0, "tags": ["CS101"], "created_at": _now()})
-        db.upsert_contact(conn, {"uid": "c1", "full_name": "Prof", "tags": ["MATH201"], "created_at": _now()})
-        resp = label_pages.label_page("Uni", _request("/labels/Uni"), conn=conn)
-        assert resp.status_code == 200
-        assert {t["uid"] for t in resp.context["tasks"]} == {"t2", "t3"}
-        assert {e["uid"] for e in resp.context["events"]} == {"e1"}
-        assert {c["uid"] for c in resp.context["contacts"]} == {"c1"}
-        assert resp.context["is_space"] is True
-        assert [c["name"] for c in resp.context["children"]] == ["CS101", "MATH201"]
-
-    def test_space_page_scopes_the_sidebar_quick_add_link_to_itself(self, conn):
-        # Direct request: "the label selector should only have labels
-        # from that group." base.html's quick-add link reads
-        # page_label_scope to append &scope=<name>.
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        resp = label_pages.label_page("Uni", _request("/labels/Uni"), conn=conn)
-        assert resp.context["page_label_scope"] == "Uni"
-        assert "/quick/add?default_tab=task&amp;scope=Uni" in resp.body.decode()
-
-    def test_space_with_no_children_shows_nothing(self, conn):
-        db.upsert_label_config(conn, {"name": "Empty Space", "generate_space": 1, "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t1", "title": "Direct", "description": "", "status": "active",
-                               "tags": ["Empty Space"], "created_at": _now()})
-        resp = label_pages.label_page("Empty Space", _request("/labels/Empty Space"), conn=conn)
-        assert resp.context["tasks"] == []
-
     def test_plain_label_page_shows_its_own_kanban_task_and_agenda_event(self, conn):
         # 2026-09-16 (direct request: "plain labels should generate pages
         # like projects, with agenda and kanban, not dashboards") -- a
@@ -800,7 +506,6 @@ class TestDashboardWidgetsLabelName:
 # --------------------------------------------------------------------- #
 
 
-
 # --------------------------------------------------------------------- #
 # migrate_labels.py -- generate_space + habit/schedule_class
 # backfill (Phase 2 extensions to the Phase 1 script)
@@ -867,112 +572,6 @@ class TestMigrationExtensions:
         assert "CS101" in db.list_labels_for_object(conn, "schedule_class", "c1")
 
 
-# --------------------------------------------------------------------- #
-# scripts/migrate_spaces_direct_tags.py -- Spaces -- labels-as-membership
-# rework slice 6 (2026-09-14, the last of the six slices): strips legacy
-# direct Space-label tags left dead-but-visible by slice 3's aggregation
-# change.
-# --------------------------------------------------------------------- #
-
-
-class TestMigrateSpacesDirectTags:
-    def test_removes_a_direct_space_tag_from_a_task(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t1", "title": "Direct", "description": "", "status": "active",
-                               "tags": ["Uni"], "created_at": _now()})
-        result = migrate_spaces_direct_tags.run_migration(conn)
-        assert result == {"per_space_removed": {"Uni": 1}, "total_removed": 1}
-        assert db.list_labels_for_object(conn, "task", "t1") == []
-
-    def test_removes_direct_space_tags_across_every_object_type(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t1", "title": "T", "description": "", "status": "active",
-                               "tags": ["Uni"], "created_at": _now()})
-        db.upsert_event(conn, {"uid": "e1", "title": "E", "description": "", "status": "active",
-                                "all_day": 0, "tags": ["Uni"], "created_at": _now()})
-        db.upsert_contact(conn, {"uid": "c1", "full_name": "C", "tags": ["Uni"], "created_at": _now()})
-        # A legacy habit-entity label row (the entity itself was removed
-        # 2026-09-24, but an old database can still carry its
-        # object_labels rows) is exactly the same kind of direct Space tag
-        # this migration targets, not a separate case to special-case.
-        db.set_object_labels(conn, "habit", "h1", ["Uni"])
-        result = migrate_spaces_direct_tags.run_migration(conn)
-        assert result == {"per_space_removed": {"Uni": 4}, "total_removed": 4}
-        assert db.list_labels_for_object(conn, "task", "t1") == []
-        assert db.list_labels_for_object(conn, "event", "e1") == []
-        assert db.list_labels_for_object(conn, "contact", "c1") == []
-        assert db.project_label_for(conn, "habit", "h1") is None
-
-    def test_leaves_child_label_tags_untouched(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t1", "title": "Direct", "description": "", "status": "active",
-                               "tags": ["Uni"], "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t2", "title": "Child", "description": "", "status": "active",
-                               "tags": ["CS101"], "created_at": _now()})
-        migrate_spaces_direct_tags.run_migration(conn)
-        assert db.list_labels_for_object(conn, "task", "t1") == []
-        assert db.list_labels_for_object(conn, "task", "t2") == ["CS101"]
-
-    def test_leaves_a_plain_labels_own_direct_tags_untouched(self, conn):
-        # Only generate_space=1 labels are in scope -- a plain/project
-        # label's own direct tagging is real, intended usage (its own
-        # page's whole scope), not legacy dead data.
-        db.upsert_label_config(conn, {"name": "CS101", "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t1", "title": "T", "description": "", "status": "active",
-                               "tags": ["CS101"], "created_at": _now()})
-        result = migrate_spaces_direct_tags.run_migration(conn)
-        assert result == {"per_space_removed": {}, "total_removed": 0}
-        assert db.list_labels_for_object(conn, "task", "t1") == ["CS101"]
-
-    def test_dry_run_counts_without_writing(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t1", "title": "Direct", "description": "", "status": "active",
-                               "tags": ["Uni"], "created_at": _now()})
-        result = migrate_spaces_direct_tags.run_migration(conn, dry_run=True)
-        assert result == {"per_space_removed": {"Uni": 1}, "total_removed": 1}
-        assert db.list_labels_for_object(conn, "task", "t1") == ["Uni"]
-
-    def test_idempotent_second_run_is_a_no_op(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t1", "title": "Direct", "description": "", "status": "active",
-                               "tags": ["Uni"], "created_at": _now()})
-        migrate_spaces_direct_tags.run_migration(conn)
-        result = migrate_spaces_direct_tags.run_migration(conn)
-        assert result == {"per_space_removed": {}, "total_removed": 0}
-
-    def test_multiple_spaces_reported_independently(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Home", "generate_space": 1, "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t1", "title": "T1", "description": "", "status": "active",
-                               "tags": ["Uni"], "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t2", "title": "T2", "description": "", "status": "active",
-                               "tags": ["Uni"], "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t3", "title": "T3", "description": "", "status": "active",
-                               "tags": ["Home"], "created_at": _now()})
-        result = migrate_spaces_direct_tags.run_migration(conn)
-        assert result == {"per_space_removed": {"Uni": 2, "Home": 1}, "total_removed": 3}
-
-    def test_a_space_with_nothing_to_clean_is_omitted_from_the_report(self, conn):
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "created_at": _now()})
-        result = migrate_spaces_direct_tags.run_migration(conn)
-        assert result == {"per_space_removed": {}, "total_removed": 0}
-
-    def test_label_group_column_is_left_alone(self, conn):
-        # Slice 6's own scope note (open.md): label_group's now-unused
-        # legacy text values are deliberately left alone -- nothing in
-        # the UI reads them after slice 2.
-        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1, "label_group": "Legacy", "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t1", "title": "T", "description": "", "status": "active",
-                               "tags": ["Uni"], "created_at": _now()})
-        migrate_spaces_direct_tags.run_migration(conn)
-        assert db.get_label_config(conn, "Uni")["label_group"] == "Legacy"
-
-    def test_cli_reports_no_database(self, conn, tmp_path, capsys):
-        missing = tmp_path / "does-not-exist.sqlite"
-        exit_code = migrate_spaces_direct_tags.main(["--db-path", str(missing)])
-        assert exit_code == 0
-        assert "nothing to migrate" in capsys.readouterr().out
 
 
 # --------------------------------------------------------------------- #
@@ -1003,8 +602,6 @@ class TestLabelAbbreviation:
             color="blue",
             icon="",
             description="",
-            parent_name="",
-            generate_space=generate_space,
             abbreviation=abbreviation,
             conn=self.conn,
         )
@@ -1060,13 +657,6 @@ class TestLabelAbbreviation:
         # Ambiguous -- passed through as-is rather than guessing a label.
         assert db.list_labels_for_object(conn, "task", "t1") == ["Uni"]
 
-    def test_list_space_labels_carries_abbreviation(self, conn):
-        self._conn(conn)
-        self._set("University", abbreviation="Uni", generate_space="1")
-        spaces = db.list_space_labels(conn)
-        assert [(s["name"], s["abbreviation"]) for s in spaces] == [("University", "Uni")]
-
-
 class TestSystemLabelsExcludedFromThePicker:
     """2026-09-13 direct request: "the Birthday label should be hidden, as
     well for the habits one, because they are not intended to be applied
@@ -1107,63 +697,6 @@ class TestSystemLabelsExcludedFromThePicker:
     def test_ordinary_labels_unaffected(self, conn):
         db.set_object_labels(conn, "task", "t1", ["Birthday", "Habit", "Focus"])
         assert db.list_tag_names_in_use(conn) == ["Focus"]
-
-
-class TestSettingsLabelsTableSortOrder:
-    """2026-09-13 direct request, last of a 9-item pre-v2.2.0 batch: "the
-    label table inside settings should be sorted by Groups first, then by
-    type (space first, then projects, then plain), then alphabetically."
-    Was flat-alphabetical-by-name only (routers/labels.py::_labels_context
-    used to override db.list_labels's own name-only sort with an
-    identical one). No prior test asserted row order here.
-
-    2026-09-14 (Spaces -- labels-as-membership rework slice 1): the sort's
-    primary key moved from the old free-text `label_group` to the real
-    `parent_name` FK -- `_label` below writes directly via
-    db.upsert_label_config (bypassing the router's now-added "must name a
-    real Space" validation), so the `group` param here is just an
-    arbitrary string in `parent_name`, same as it always was in
-    `label_group`; the sort itself doesn't validate what it points at."""
-
-    def _label(self, conn, name, group="", role="none"):
-        db.upsert_label_config(conn, {
-            "name": name,
-            "parent_name": group or None,
-            "generate_space": 1 if role == "space" else 0,
-            "is_project": 1 if role == "project" else 0,
-            "created_at": _now(),
-        })
-
-    def _order(self, conn):
-        ctx = labels_router._labels_context(conn, _request("/settings/labels"))
-        return [l["name"] for l in ctx["labels"]]
-
-    def test_type_order_within_the_same_group_is_space_then_project_then_plain(self, conn):
-        self._label(conn, "Zebra Project", group="Work", role="project")
-        self._label(conn, "Alpha Space", group="Work", role="space")
-        self._label(conn, "Middle Plain", group="Work", role="plain")
-        assert self._order(conn) == ["Alpha Space", "Zebra Project", "Middle Plain"]
-
-    def test_alphabetical_within_the_same_group_and_type(self, conn):
-        self._label(conn, "Zebra", group="Work")
-        self._label(conn, "Alpha", group="Work")
-        self._label(conn, "Middle", group="Work")
-        assert self._order(conn) == ["Alpha", "Middle", "Zebra"]
-
-    def test_group_is_the_primary_sort_key_above_type_and_name(self, conn):
-        # A plain label in an earlier (alphabetically) group sorts before
-        # a Space-type label in a later group -- Group beats type/name.
-        self._label(conn, "Owns the Zoo group", group="Zoo", role="plain")
-        self._label(conn, "In Aardvark space", group="Aardvark", role="space")
-        assert self._order(conn) == ["In Aardvark space", "Owns the Zoo group"]
-
-    def test_manage_labels_route_renders_in_the_sorted_order(self, conn):
-        # End-to-end through the actual route, not just the helper --
-        # confirms the sort survives all the way to the template context.
-        self._label(conn, "Zebra Project", group="Work", role="project")
-        self._label(conn, "Alpha Space", group="Work", role="space")
-        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
-        assert [l["name"] for l in resp.context["labels"]] == ["Alpha Space", "Zebra Project"]
 
 
 class TestSettingsLabelsTableIconInsteadOfDot:
@@ -1232,215 +765,4 @@ class TestSettingsLabelsTableIconInsteadOfDot:
 # old single flat table + `label_group` text-badge column.
 # --------------------------------------------------------------------- #
 
-
-class TestSettingsLabelsGroupedTables:
-    def _space(self, conn, name, color="blue", icon_name=None):
-        db.upsert_label_config(conn, {
-            "name": name, "generate_space": 1, "color": color, "icon": icon_name, "created_at": _now(),
-        })
-
-    def _label(self, conn, name, parent_name=None, color="blue"):
-        db.upsert_label_config(conn, {
-            "name": name, "parent_name": parent_name, "color": color, "created_at": _now(),
-        })
-
-    def test_label_groups_has_one_entry_per_space_with_its_own_row_first(self, conn):
-        self._space(conn, "University")
-        self._label(conn, "Homework", parent_name="University")
-        self._label(conn, "Essay", parent_name="University")
-        ctx = labels_router._labels_context(conn, _request("/settings/labels"))
-        assert len(ctx["label_groups"]) == 1
-        group = ctx["label_groups"][0]
-        assert group["space"]["name"] == "University"
-        # Space's own row first (rank 0), then its plain-role children
-        # alphabetically -- same (role_rank, name) order the flat
-        # `labels` sort already establishes; this just filters it.
-        assert [l["name"] for l in group["labels"]] == ["University", "Essay", "Homework"]
-
-    def test_a_space_with_no_children_still_gets_its_own_group(self, conn):
-        self._space(conn, "Empty Space")
-        ctx = labels_router._labels_context(conn, _request("/settings/labels"))
-        assert len(ctx["label_groups"]) == 1
-        assert [l["name"] for l in ctx["label_groups"][0]["labels"]] == ["Empty Space"]
-
-    def test_space_groups_are_sorted_alphabetically_by_space_name(self, conn):
-        self._space(conn, "Zebra Space")
-        self._space(conn, "Aardvark Space")
-        ctx = labels_router._labels_context(conn, _request("/settings/labels"))
-        assert [g["space"]["name"] for g in ctx["label_groups"]] == ["Aardvark Space", "Zebra Space"]
-
-    def test_ungrouped_excludes_spaces_and_labels_with_a_real_parent(self, conn):
-        self._space(conn, "University")
-        self._label(conn, "Homework", parent_name="University")
-        self._label(conn, "Loose Label")
-        ctx = labels_router._labels_context(conn, _request("/settings/labels"))
-        assert [l["name"] for l in ctx["ungrouped_labels"]] == ["Loose Label"]
-
-    def test_stale_parent_name_pointing_at_a_non_space_falls_back_to_ungrouped(self, conn):
-        # A label whose parent_name names something that isn't (or no
-        # longer is) a real Space -- e.g. a Space demoted back to a plain
-        # label without the child being repointed -- shouldn't vanish.
-        self._label(conn, "Not A Space")
-        self._label(conn, "Orphaned Child", parent_name="Not A Space")
-        ctx = labels_router._labels_context(conn, _request("/settings/labels"))
-        assert ctx["label_groups"] == []
-        assert {l["name"] for l in ctx["ungrouped_labels"]} == {"Not A Space", "Orphaned Child"}
-
-    def test_manage_page_renders_a_single_table_with_no_repeated_headers(self, conn):
-        # 2026-09-16 (direct request: "don't want the header repeated for
-        # every group" / "don't want separate behavior for the labels
-        # that are not assigned") -- replaces the old "one <table> per
-        # Space plus a separate Ungrouped table" design with one table,
-        # one <thead>, everything (Space rows, their children, and every
-        # ungrouped label) in one <tbody>.
-        self._space(conn, "University", color="teal")
-        self._label(conn, "Homework", parent_name="University")
-        self._label(conn, "Loose Label")
-        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
-        body = resp.body.decode()
-        assert body.count("<table") == 1
-        assert body.count("<thead>") == 1
-        assert 'data-label-group="University"' in body
-        assert 'data-label-group=""' in body
-        assert "Group" not in body.split("<thead>")[1].split("</thead>")[0]  # no Group column header
-        assert 'name="label_group"' not in body
-
-    def test_space_row_uses_a_plain_icon_not_a_colored_tile(self, conn):
-        # 2026-09-16 (direct request: "the .label-icon-tile for spaces is
-        # unnecessary, show only the icon like for any plain label") --
-        # a Space's own row now renders its icon the same way any plain
-        # label row does (.label-cell-icon, no .label-icon-tile squircle).
-        # The row still reads as a "card" via a colored background/rounded
-        # corners set through one `data-style` on the <tr> itself, per
-        # `dynamic_styles.js`'s CSP-safe convention (2026-09-15 fix --
-        # style-src silently drops a literal `style="..."` attribute in a
-        # real enforcing browser, confirmed via headless-Chrome; this test
-        # only proves the markup is right, not that a browser applies it).
-        self._space(conn, "University", color="teal", icon_name="graduation-cap")
-        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
-        body = resp.body.decode()
-        assert "label-icon-tile" not in body
-        assert 'class="labels-space-row"' in body
-        assert 'data-style="--row-tint: var(--tag-teal-bg)"' in body
-        assert "#icon-graduation-cap" in body
-        # 2026-09-21, final word (direct report, all caps: "MAKE THEM THE
-        # DEFAULT TEXT COLOR NOT STUPID COLORFUL TEXT THAT I CAN'T READ")
-        # -- no per-span color at all on the Space row's own icon/name;
-        # the tinted background alone carries the "this is University"
-        # signal, colored text on top of it read badly.
-        assert 'class="label-cell-icon">' in body
-        assert 'class="label-name">University<' in body
-
-    def test_add_label_row_always_present(self, conn):
-        self._space(conn, "University")
-        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
-        body = resp.body.decode()
-        assert 'href="/settings/labels/new"' in body
-
-    def test_empty_state_shows_when_truly_no_labels_or_spaces_exist(self, conn):
-        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
-        body = resp.body.decode()
-        assert "No labels yet" in body
-
-    def test_async_region_fragment_renders_the_same_single_table(self, conn):
-        self._space(conn, "University")
-        self._label(conn, "Homework", parent_name="University")
-        resp = labels_router.labels_regions("list", _request("/settings/labels/regions"), conn=conn)
-        body = resp.body.decode()
-        assert body.count("<table") == 1
-        assert 'data-label-group="University"' in body
-
-    def test_space_and_its_children_are_editable_and_deletable_rows(self, conn):
-        # The Space's own row (not just its children) keeps the same
-        # Edit/Delete row_action_buttons every other label row has --
-        # it's no longer reachable as a flat-table row, so this is its
-        # only remaining path from this page.
-        self._space(conn, "University")
-        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
-        body = resp.body.decode()
-        assert 'href="/settings/labels/University/edit"' in body
-        assert 'action="/settings/labels/University/delete"' in body
-
-    def test_actions_column_links_to_each_rows_own_generated_page(self, conn):
-        # Direct request: "in the actions column, I would like a button
-        # that allows the user to navigate to that label's page (either
-        # it a space, project or plain label)."
-        self._space(conn, "University")
-        db.upsert_label_config(
-            conn, {"name": "CS101", "is_project": 1, "parent_name": "University", "start_date": "2026-01-01", "end_date": "2026-12-31", "created_at": _now()}
-        )
-        self._label(conn, "Groceries")
-        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
-        body = resp.body.decode()
-        assert 'href="/labels/University" class="icon-btn" title="Open label page"' in body
-        assert 'href="/labels/CS101" class="icon-btn" title="Open label page"' in body
-        assert 'href="/labels/Groceries" class="icon-btn" title="Open label page"' in body
-
-    def test_grouped_rows_get_the_tinted_background_ungrouped_rows_dont(self, conn):
-        # Follow-up direct request -- first tried a colored left bar,
-        # direct feedback "I don't like this, I like the background color
-        # more": a row grouped under a Space now shares the exact same
-        # tinted-background treatment (--row-tint) the Space's own row
-        # gets, in the group's own (already Space-inherited) color. An
-        # ungrouped label has no group color to link to, so it gets
-        # neither the class nor the tint.
-        self._space(conn, "University", color="green")
-        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "color": "red", "created_at": _now()})
-        self._label(conn, "Groceries")
-        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
-        body = resp.body.decode()
-        # "red" (Historiography's own stored color) never appears -- a
-        # grouped row's l.color is already resolved to the Space's own
-        # color (db.effective_label_config's _resolve_inherited_color).
-        assert 'class="labels-child-row" data-style="--row-tint: var(--tag-green-bg)"' in body
-        groceries_row = body.split('data-label-name="Groceries"')[0].rsplit("<tr", 1)[1]
-        assert "labels-child-row" not in groceries_row
-
-    def test_grouped_row_text_stays_the_default_color_not_a_tag_fg_pairing(self, conn):
-        # Direct request, same-day follow-up: "the font color should be
-        # the default one or one that contrasts with the bg color" --
-        # --row-tint-fg (a small-pill-tuned color, read low-contrast at
-        # full-row size) is gone; text/icon simply inherit the app's own
-        # default color, no override at all.
-        self._space(conn, "University", color="green")
-        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "color": "red", "created_at": _now()})
-        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
-        body = resp.body.decode()
-        assert "--row-tint-fg" not in body
-
-    def test_grouped_rows_own_icon_name_have_no_color_override_ungrouped_still_do(self, conn):
-        # Final word (direct report, all caps: "MAKE THEM THE DEFAULT
-        # TEXT COLOR NOT STUPID COLORFUL TEXT THAT I CAN'T READ") -- a
-        # grouped row's own tinted background already carries the color
-        # signal; colored text on top of it read badly, so neither
-        # _group_row's nor a grouped _label_row's icon/name spans get a
-        # per-span data-style color at all. An ungrouped row has no tint
-        # to clash with and keeps its pre-existing colored icon/name
-        # unchanged.
-        self._space(conn, "University", color="green")
-        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "color": "red", "created_at": _now()})
-        self._label(conn, "Groceries", color="orange")
-        resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
-        body = resp.body.decode()
-        historiography_row = body.split('data-label-name="Historiography"')[1].split("</tr>")[0]
-        assert "data-style" not in historiography_row.split("</td>")[1]  # the label-cell <td>
-        groceries_row = body.split('data-label-name="Groceries"')[1].split("</tr>")[0]
-        assert 'data-style="color: var(--cal-accent-orange)"' in groceries_row
-
-    def test_only_the_space_row_is_bold(self):
-        # Direct request: "remove the bold from labels that are not
-        # spaces." .label-name's own base rule is font-weight:500, which
-        # still read bold-ish at this row size/on a tinted background --
-        # .labels-table scopes a plain 400 back in for every row, and
-        # .labels-space-row's own pre-existing 600 override (declared
-        # later in the cascade, same specificity) still wins for a
-        # Space's own row specifically.
-        css = (Path(__file__).resolve().parent.parent / "src" / "static" / "style.css").read_text()
-        # font-weight tokenized 2026-09-24 (design-token-tightening slice);
-        # --font-weight-regular/--font-weight-bold are still literal 400/600.
-        assert ".labels-table .label-name{font-weight:var(--font-weight-regular);}" in css
-        assert ".labels-space-row .label-name{font-weight:var(--font-weight-bold);}" in css
-        table_rule_pos = css.index(".labels-table .label-name{font-weight:var(--font-weight-regular);}")
-        space_rule_pos = css.index(".labels-space-row .label-name{font-weight:var(--font-weight-bold);}")
-        assert table_rule_pos < space_rule_pos  # later wins at equal specificity
 

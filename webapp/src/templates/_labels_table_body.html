@@ -65,27 +65,18 @@
 {% from "_row_action_buttons.html" import row_action_buttons %}
 {% from "_empty_state_row.html" import empty_state_row %}
 {% macro _group_row(group) %}
+{# A group's header row (labels-as-modules slice c, 2026-09-25). A group
+   is plain text shared by its labels, not a label itself, so the row has
+   no checkbox or edit/delete: it names the group, totals its members'
+   usage, and links to the group's page. Rename a group by changing the
+   Group field on its labels. #}
 {% set total_usage = group.labels | sum(attribute='usage_count') %}
-<tr class="labels-space-row" data-label-name="{{ group.space.name }}" data-label-group="{{ group.space.name }}" data-style="--row-tint: var(--tag-{{ group.space.color or 'blue' }}-bg)">
-    <td>
-        <input type="checkbox" class="row-select" data-uid="{{ group.space.name }}" aria-label="Select {{ group.space.name }}" autocomplete="off">
-    </td>
+<tr class="labels-space-row" data-label-group="{{ group.name }}" data-style="--row-tint: var(--tag-gray-bg)">
+    <td></td>
     <td>
         <div class="label-cell">
-            {# 2026-09-21, final word (direct report, all caps: "MAKE THEM
-               THE DEFAULT TEXT COLOR NOT STUPID COLORFUL TEXT THAT I
-               CAN'T READ") -- no color override at all, on either span.
-               A colored-text-on-colored-tint combination is exactly what
-               reads badly; the tint alone (--row-tint on the <tr>)
-               already carries "this belongs to this Space" -- text does
-               not need to repeat that signal in a way that fights
-               readability. Same treatment _label_row's own icon/name get
-               below when grouped (see that macro's own comment) -- only
-               an UNGROUPED plain label's row (default, untinted
-               background) still colors its icon/name, unchanged, since
-               there's no tint there for colored text to clash with. #}
-            <span class="label-cell-icon">{{ icon(group.space.icon or 'layers', 'icon-sm') }}</span>
-            <span class="label-name">{{ group.space.name }}</span>
+            <span class="label-cell-icon">{{ icon('layers', 'icon-sm') }}</span>
+            <span class="label-name">{{ group.name }}</span>
         </div>
     </td>
     <td class="col-opt-2">
@@ -96,34 +87,12 @@
         {% endif %}
     </td>
     <td>
-        {{ row_action_buttons(
-            "/settings/labels/" ~ group.space.name ~ "/edit",
-            "/settings/labels/" ~ group.space.name ~ "/delete",
-            "label",
-            'Remove "' ~ group.space.name ~ '" from every object that carries it? This doesn\'t delete the label config, just clears its usage.',
-            "/labels/" ~ group.space.name
-        ) }}
+        <div class="action-buttons"><a href="/groups/{{ group.name|urlencode }}" class="icon-btn" title="Open group page">{{ icon('external-link', 'icon-sm') }}</a></div>
     </td>
 </tr>
 {% endmacro %}
 {% macro _label_row(l) %}
-{# Direct request, 2026-09-21 follow-up (first tried a colored left bar,
-   direct feedback "I don't like this, I like the background color
-   more"): a row grouped under a Space gets the same tinted-background
-   "card" treatment the Space's own row (`.labels-space-row`) already
-   has, in the group's own color (l.color already IS the inherited Space
-   color for a grouped label -- db.effective_label_config's
-   _resolve_inherited_color, final labels-page iteration). Only grouped
-   rows (`l.parent_name` set) get it -- an ungrouped plain label has no
-   group color to link to. Reuses `.labels-space-row`'s own `--row-tint`
-   custom property (set via `data-style`, this file's own CSP-safe
-   convention -- see its header comment) so both row kinds share one CSS
-   rule for the tint itself; text/icon color is left at the default in
-   both (2026-09-21, same day, direct request: "the font color should be
-   the default one or one that contrasts with the bg color") -- only the
-   bold name stays exclusive to `.labels-space-row`, so the two still
-   read as parent/child despite sharing a color family. #}
-<tr {% if l.parent_name %}class="labels-child-row" data-style="--row-tint: var(--tag-{{ l.color or 'blue' }}-bg)"{% endif %} data-label-name="{{ l.name }}" data-label-group="{{ l.parent_name or '' }}">
+<tr data-label-name="{{ l.name }}" data-label-group="{{ l.label_group or '' }}">
     {# 2026-09-14: mirrors the row markup this table has used since the
        solid-color-dot -> icon swap (icon + name both painted with
        var(--cal-accent-{color})) -- unchanged by slice 2, just no
@@ -143,8 +112,8 @@
     </td>
     <td>
         <div class="label-cell">
-            <span class="label-cell-icon"{% if not l.parent_name %} data-style="color: var(--cal-accent-{{ l.color or 'blue' }})"{% endif %}>{{ icon(l.icon or 'tag', 'icon-sm') }}</span>
-            <span class="label-name"{% if not l.parent_name %} data-style="color: var(--cal-accent-{{ l.color or 'blue' }})"{% endif %}>{{ l.name }}</span>
+            <span class="label-cell-icon" data-style="color: var(--cal-accent-{{ l.color or 'blue' }})">{{ icon(l.icon or 'tag', 'icon-sm') }}</span>
+            <span class="label-name" data-style="color: var(--cal-accent-{{ l.color or 'blue' }})">{{ l.name }}</span>
         </div>
     </td>
     <td class="col-opt-2">
@@ -178,7 +147,7 @@
     <tbody id="labels-body">
         {% for group in label_groups %}
             {{ _group_row(group) }}
-            {% for l in group.labels[1:] %}{{ _label_row(l) }}{% endfor %}
+            {% for l in group.labels %}{{ _label_row(l) }}{% endfor %}
         {% endfor %}
         {% for l in ungrouped_labels %}{{ _label_row(l) }}{% endfor %}
         {% if not labels %}

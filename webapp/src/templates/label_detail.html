@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% from "_page_banner.html" import page_banner with context %}
 {% block title %}{{ label.name if label else "Label" }}{% endblock %}
-<!-- A label's widget-dashboard page (routers/label_pages.py, labels-as-
-     modules slice b, 2026-09-25): rendered for a Space, or for any label
-     with has_dashboard on. A label without a dashboard gets
-     label_sections.html instead. `is_space` is only still read by the icon
-     tile fallback below.
+<!-- A widget-dashboard page (routers/label_pages.py): a label with
+     has_dashboard on (slice b, 2026-09-25), or a group's page (slice c,
+     where `label` is a stand-in {name, uid = "group:<name>", icon, color}
+     and `group_labels` lists the members). A label without a dashboard
+     gets label_sections.html instead.
      Opts out of the default 1120px-max-width centered column, like
      dashboard.html: app.js's masonry sizes its 6 columns off the grid's
      rendered width, so a boxed column leaves an empty strip on the right. -->
@@ -23,7 +23,7 @@
    tile (`icon_tile` below, see _page_banner.html's own comment) instead
    of showing both an inline icon AND the account's profile photo. #}
 <div class="page-banner-wrap">
-{% call page_banner(label.name, icon_tile={'icon': label.icon or ('layers' if is_space else 'folder'), 'color': label.color}) %}
+{% call page_banner(label.name, icon_tile={'icon': label.icon or 'tag', 'color': label.color}) %}
     <!-- 2026-08-29 (sidebar redesign item 13d): edit mode is now a
          persistent, app-wide Settings > Appearance toggle instead of a
          per-page `?edit=1` query param with its own "Edit mode"/"Done"
@@ -39,11 +39,7 @@
          routers/dashboard.py's _page_banner_context). #}
     {# 2026-09-08: data-modal-size="wide" dropped, see dashboard.html's
        own trigger for why. #}
-    {# A label grouped under a Space follows the Space's banner
-       (2026-09-21), so it has no banner control of its own. #}
-    {% if not banner_grouped_under %}
     <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
-    {% endif %}
     <!-- Reset to default layout (item #1, dashboard usability rework,
          2026-08-07) -- Settings has no per-space subpage to host this
          (it's a single hub page, see routers/settings.py's module
@@ -66,20 +62,15 @@
 {% include "_label_status.html" %}
 {% if label.description %}<p>{{ label.description }}</p>{% endif %}
 
-<!-- 2026-09-16 (direct request: "an ancient part of the app appears, in
-     the spaces pages, the project-scope-section. i don't want it. it
-     shouldn't exist. we already have spaces & projects widget.") -- this
-     used to be a hardcoded "Projects" card listing a Space's child
-     labels/sub-Spaces (`is_space`/`children`, still passed by
-     routers/spaces.py::space_detail -- the only route left rendering this
-     template, see this file's own header comment; `children` costs
-     nothing to keep computing even with this block gone). Removed
-     outright, not replaced -- the Spaces & Projects widget
-     (dashboard.py::_render_spaces_projects, _widget_spaces_projects.html)
-     reads the exact same db.list_child_labels(conn, name) data and is the
-     intended way to see this now; Peter confirmed no auto-seeding
-     fallback is wanted, a Space page with nothing manually added simply
-     shows no child-project list until one's added. -->
+{# A group's page lists its labels (slice c): the collapsed sidebar can't
+   expand a group, so this is the always-available way in. #}
+{% if group_labels %}
+<div class="toolbar group-labels">
+    {% for l in group_labels %}
+    <a class="cell-tag cal-{{ l.color }}" href="/labels/{{ l.name|urlencode }}">{{ icon(l.icon or 'tag', 'icon-sm') }} {{ l.name }}</a>
+    {% endfor %}
+</div>
+{% endif %}
 
 <!-- Widget grid -- the exact same customizable system as Home
      (routers/dashboard.py's widget_page_context/WIDGET_TYPES), scoped to

@@ -65,26 +65,25 @@ def _reject_reserved_label_name(name: str) -> None:
     reserved = {db.PAGE_HEADER_BANNER_SCOPE, *db.SEASON_BANNER_SCOPES.values()}
     if name in reserved:
         raise HTTPException(400, f'"{name}" is a reserved name and can\'t be used for a label.')
+    # Slice c (2026-09-25): "group:<name>" is a group page's storage key
+    # (db.group_page_key), so no label may start with it.
+    if name.startswith(db.GROUP_KEY_PREFIX):
+        raise HTTPException(400, f'A label name can\'t start with "{db.GROUP_KEY_PREFIX}".')
 
 
-def _validate_parent_name(conn, parent_name: str) -> str | None:
-    """2026-09-14 (Spaces -- labels-as-membership rework slice 1): the
-    label edit/create forms' old free-text `label_group` input is replaced
-    by a real Space-link dropdown (`parent_name`) -- unlike the free text
-    it replaces, this is a real FK into `label_config` and must actually
-    name a Space (`generate_space=1`), same "reject, don't silently
-    coerce" validation style `create_label`/`update_label` already use for
-    a required new_name/project dates. Blank collapses to None (no
-    space)."""
-    parent_name = (parent_name or "").strip()
-    if not parent_name:
+def _clean_group(label_group) -> str | None:
+    """The label form's Group field (labels-as-modules slice c, 2026-09-25):
+    free text, trimmed, blank = no group. It replaced the Space dropdown
+    (`parent_name`), so no validation against existing groups: typing a new
+    name creates the group. The isinstance guard covers direct calls from
+    tests, where an unset param is FastAPI's Form marker object."""
+    if not isinstance(label_group, str):
         return None
-    space_names = {s["name"] for s in db.list_space_labels(conn)}
-    if parent_name not in space_names:
-        raise HTTPException(400, f'"{parent_name}" is not a Space.')
-    return parent_name
+    return " ".join(label_group.split())[:60] or None
 
-def _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks_widget, contacts_widget) -> dict:
+
+def _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks_widget, contacts_widget,
+                 sidebar_pin="", widget_pin="") -> dict:
     """labels-as-modules slice b (2026-09-25): the label form's Deadline and
     Page fields as label_config columns. Returns {} when the form didn't
     carry them (no `page_fields` marker), so an older caller that posts
@@ -114,6 +113,8 @@ def _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks
         "agenda_widget": on(agenda_widget),
         "tasks_widget": on(tasks_widget),
         "contacts_widget": on(contacts_widget),
+        "sidebar_pin": on(sidebar_pin),
+        "widget_pin": on(widget_pin),
     }
 
 
@@ -309,67 +310,21 @@ def _labels_context(conn, request: Request) -> dict:
         if lbl.get("is_project") or lbl.get("has_deadline"):
             lbl["project_status"] = db.project_status(conn, lbl)
 
-    # 2026-09-13 (direct request, 9 of 9 in a "before v2.2.0 release"
-    # batch: "the label table inside settings should be sorted by Groups
-    # first, then by type (space first, then projects, then plain), then
-    # alphabetically") -- was flat-alphabetical-by-name only. `_label_role`
-    # below already encodes the exact mutually-exclusive type a label can
-    # have; `_ROLE_SORT_RANK` maps it to the requested space/project/plain
-    # ordering (deliberately not the same order `_label_role` computes
-    # its own precedence in -- that function's "is_project wins if both
-    # flags are somehow set" is about resolving ambiguity, unrelated to
-    # what order the three buckets should sort in here). `parent_name` is
-    # the primary key ("Groups first", 2026-09-14: was `label_group`, a
-    # free-text field with no real membership meaning -- the Spaces --
-    # labels-as-membership rework slice 1 makes `parent_name`, the real
-    # Space-link FK, the one grouping mechanism), so every label sharing a
-    # Space sits together, sub-sorted by type then name within it;
-    # unparented rows (`parent_name` empty/None) happen to land before any
-    # named Space purely because `"" < "Anything"` in Python's default
-    # string ordering -- no direction ("ungrouped first" vs "last") was
-    # specified in the request, this is just `sorted()`'s natural
-    # behavior for the tuple key below, not a deliberate call either way.
-    #
-    # This flat, fully-sorted `labels` list is still returned below (and
-    # still what `TestSettingsLabelsTableSortOrder` asserts against) --
-    # 2026-09-14 slice 2 ("Settings > Labels: one table per Space") builds
-    # `label_groups`/`ungrouped_labels` (the per-Space-table template
-    # actually renders) by filtering THIS list rather than re-sorting, so
-    # a Space's own row and its children keep the exact same relative
-    # order within their table that this sort already establishes.
-    labels.sort(key=lambda l: ((l.get("parent_name") or "").lower(), _ROLE_SORT_RANK[_label_role(l)], l["name"].lower()))
-
-    # 2026-09-14 (Spaces -- labels-as-membership rework slice 2): group by
-    # `parent_name` into one bucket per Space (plus "Ungrouped") instead of
-    # labels_manage.html/_labels_table_body.html rendering one flat table
-    # with a `label_group` text-badge column. A Space's own row heads its
-    # own bucket (its `parent_name` is never itself -- Spaces don't nest,
-    # slice 1's dropdown never offers a Space as its own parent -- so it
-    # has to be added explicitly, not just picked up by the parent_name
-    # filter below) so it stays reachable/editable from this page even
-    # though it no longer also appears as a plain row elsewhere; every
-    # other label with no parent_name lands in "Ungrouped", and any label
-    # whose `parent_name` points at something that isn't (or no longer is)
-    # a real Space -- stale data, not reachable through slice 1's
-    # validated dropdown, but `_validate_parent_name` only guards the
-    # write path -- falls back to Ungrouped too rather than silently
-    # vanishing.
-    space_rows = {l["name"]: l for l in labels if l.get("generate_space")}
-    children_by_space: dict[str, list[dict]] = {name: [] for name in space_rows}
+    # Sorted by group, then type (project before plain), then name
+    # (2026-09-13 request, "sorted by Groups first, then by type"). Since
+    # slice c (2026-09-25) the group is the text label_group; there are no
+    # Space rows heading a table any more, each group's table is headed by
+    # the group's own name and links to its page.
+    labels.sort(key=lambda l: ((l.get("label_group") or "").lower(), _ROLE_SORT_RANK[_label_role(l)], l["name"].lower()))
+    by_group: dict[str, list[dict]] = {}
     ungrouped: list[dict] = []
     for lbl in labels:
-        if lbl.get("generate_space"):
-            continue
-        parent = lbl.get("parent_name")
-        if parent in children_by_space:
-            children_by_space[parent].append(lbl)
+        group = lbl.get("label_group")
+        if group:
+            by_group.setdefault(group, []).append(lbl)
         else:
             ungrouped.append(lbl)
-
-    label_groups = [
-        {"space": space_rows[name], "labels": [space_rows[name]] + children_by_space[name]}
-        for name in sorted(space_rows, key=str.lower)
-    ]
+    label_groups = [{"name": g, "labels": by_group[g]} for g in sorted(by_group, key=str.lower)]
 
     return {
         "request": request,
@@ -384,18 +339,10 @@ def _labels_context(conn, request: Request) -> dict:
 
 
 def _label_role(cfg: dict) -> str:
-    """"none" / "space" / "project" -- the mutually-exclusive Role a label
-    can have (side work, 2026-08-15 direct feedback: "becoming a project
-    should be mutually exclusive to a space"). `is_project` wins if a
-    pre-existing label somehow still has both flags set (from before this
-    rework) -- a label edited through this page from now on can never
-    reach that state again, see update_label below, but nothing here
-    forces a one-time migration of old rows that were never re-saved."""
-    if cfg.get("is_project"):
-        return "project"
-    if cfg.get("generate_space"):
-        return "space"
-    return "none"
+    """"none" / "project" -- a label's Role. "space" was the third role
+    until labels-as-modules slice c (2026-09-25) turned Spaces into text
+    groups."""
+    return "project" if cfg.get("is_project") else "none"
 
 
 # 2026-09-13: sort-order weights for _labels_context's Settings > Labels
@@ -404,22 +351,14 @@ def _label_role(cfg: dict) -> str:
 # hardcoding numbers inline at the one call site, so the requested order
 # reads directly off this table instead of needing _label_role's docstring
 # cross-referenced to see what "space"/"project"/"none" even mean here.
-_ROLE_SORT_RANK = {"space": 0, "project": 1, "none": 2}
+_ROLE_SORT_RANK = {"project": 0, "none": 1}
 
 
 @router.get("/{name}/edit")
 def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
     """The label edit modal -- uses the unified label_form_modal.html."""
     cfg = db.effective_label_config(conn, name)
-    # Final labels-page iteration (direct request, 2026-09-21): "remove
-    # the ability to have... banners for labels or projects grouped
-    # under a space" -- a grouped label (parent_name set, and not itself
-    # a Space) shows its parent Space's own banner read-only instead of
-    # its own Add/Change control, same "follow the space" treatment
-    # db.effective_label_config's own _resolve_inherited_color already
-    # gives `color`.
-    grouped_under = cfg.get("parent_name") if not cfg.get("generate_space") else None
-    banner = db.get_page_banner(conn, grouped_under or name)
+    banner = db.get_page_banner(conn, name)
     return templates.TemplateResponse(
         "label_form_modal.html",
         {
@@ -428,7 +367,7 @@ def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
             "colors": COLORS,
             "icon_groups": ICON_GROUPS,
             "role": _label_role(cfg),
-            "space_options": db.list_space_labels(conn),
+            "group_options": [g["name"] for g in db.list_groups(conn)],
             # 2026-08-30 (direct request): a label's banner used to be
             # reachable only through a dashboard page's own edit-mode "Add/
             # Change banner" button (routers/banners.py, generate_space/
@@ -439,7 +378,6 @@ def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
             # page. See db.banner_for_task's priority chain (tasks/kanban
             # banner strip) for the other consumer of this same data.
             "banner": banner,
-            "banner_grouped_under": grouped_under,
         },
     )
 
@@ -463,7 +401,7 @@ def update_label(
     new_name: str = Form(""),
     color: str = Form("blue"),
     icon: str = Form(""),
-    parent_name: str = Form(""),
+    label_group: str = Form(""),
     description: str = Form(""),
     role: str = Form("none"),
     page_fields: str = Form(""),
@@ -472,6 +410,8 @@ def update_label(
     agenda_widget: str = Form(""),
     tasks_widget: str = Form(""),
     contacts_widget: str = Form(""),
+    sidebar_pin: str = Form(""),
+    widget_pin: str = Form(""),
     conn=Depends(get_db),
 ):
     """The label edit modal's single Save button -- handles the unified
@@ -497,17 +437,9 @@ def update_label(
     or None` pattern; mirrored here."""
     new_name = (new_name or "").strip() or name
     icon = (icon or "").strip() or None
-    page = _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks_widget, contacts_widget)
-
-    role = role if role in ("none", "space", "project") else "none"
-    generate_space = 1 if role == "space" else 0
+    page = _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks_widget, contacts_widget,
+                        sidebar_pin, widget_pin)
     is_project = 1 if role == "project" else 0
-
-    # Spaces don't nest (list_child_labels is non-recursive, one level) --
-    # a label becoming a Space has no Space of its own to belong to, so any
-    # parent_name submitted alongside role=space is ignored rather than
-    # validated. Otherwise validate it names a real, existing Space.
-    parent_name = None if generate_space else _validate_parent_name(conn, parent_name)
 
     if new_name != name:
         _reject_reserved_label_name(new_name)
@@ -515,24 +447,12 @@ def update_label(
         name = new_name
 
     existing = db.get_label_config(conn, name) or {}
-    # Final labels-page iteration (direct request, 2026-09-21): a label
-    # grouped under a Space has no color of its own to save -- the edit
-    # modal doesn't even render the picker for one (_label_form_fields.
-    # html), so `color` here is whatever that form's Form("blue") default
-    # falls back to, not a real user choice. Preserving the label's own
-    # prior stored value (not overwriting it with "blue") means its
-    # original color is still there, unchanged, if it's ever ungrouped
-    # from the Space later -- same "never force-drop/reset old data"
-    # convention this app already applies to every other removed-then-
-    # possibly-relevant-again field.
-    effective_color = (color if color in COLORS else "blue") if not parent_name else (existing.get("color") or "blue")
     row = {
         "name": name,
-        "color": effective_color,
+        "color": color if color in COLORS else "blue",
         "icon": icon,
-        "parent_name": parent_name,
+        "label_group": _clean_group(label_group),
         "description": description,
-        "generate_space": generate_space,
         "is_project": is_project,
         "created_at": existing.get("created_at") or _now(),
         **page,
@@ -581,7 +501,7 @@ def new_label_modal(request: Request, conn=Depends(get_db)):
             "colors": COLORS,
             "icon_groups": ICON_GROUPS,
             "role": "none",
-            "space_options": db.list_space_labels(conn),
+            "group_options": [g["name"] for g in db.list_groups(conn)],
         },
     )
 
@@ -591,7 +511,7 @@ def create_label(
     new_name: str = Form(...),
     color: str = Form("blue"),
     icon: str = Form(""),
-    parent_name: str = Form(""),
+    label_group: str = Form(""),
     role: str = Form("none"),
     page_fields: str = Form(""),
     deadline_date: str = Form(""),
@@ -599,6 +519,8 @@ def create_label(
     agenda_widget: str = Form(""),
     tasks_widget: str = Form(""),
     contacts_widget: str = Form(""),
+    sidebar_pin: str = Form(""),
+    widget_pin: str = Form(""),
     conn=Depends(get_db),
 ):
     """Create a new label with zero items attached -- labels are first-class
@@ -616,18 +538,14 @@ def create_label(
     _reject_reserved_label_name(new_name)
 
     icon = (icon or "").strip() or None
-    role = role if role in ("none", "space", "project") else "none"
-    # Spaces don't nest -- see update_label's identical guard right above.
-    parent_name = None if role == "space" else _validate_parent_name(conn, parent_name)
-
-    page = _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks_widget, contacts_widget)
+    page = _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks_widget, contacts_widget,
+                        sidebar_pin, widget_pin)
 
     row = {
         "name": new_name,
         "color": color if color in COLORS else "blue",
         "icon": icon,
-        "parent_name": parent_name,
-        "generate_space": 1 if role == "space" else 0,
+        "label_group": _clean_group(label_group),
         "is_project": 1 if role == "project" else 0,
         "created_at": _now(),
         **page,
@@ -709,8 +627,6 @@ def set_label(
     color: str = Form("blue"),
     icon: str = Form(""),
     description: str = Form(""),
-    parent_name: str = Form(""),
-    generate_space: str = Form(""),
     abbreviation: str = Form(""),
     return_to: str = Form(""),
     conn=Depends(get_db),
@@ -735,8 +651,6 @@ def set_label(
             "color": color if color in COLORS else "blue",
             "icon": icon.strip() or None,
             "description": description,
-            "parent_name": parent_name.strip() or None,
-            "generate_space": 1 if generate_space in ("1", "true", "on") else 0,
             "abbreviation": abbreviation,
             "created_at": _now(),
         },

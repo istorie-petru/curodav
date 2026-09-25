@@ -152,16 +152,16 @@ class TestSpacePageNavHighlighting:
     def _make_space(self, conn, name):
         db.upsert_label_config(conn, {"name": name, "generate_space": 1, "created_at": _now()})
 
-    def test_label_detail_sets_independent_active_tab(self, conn):
-        self._make_space(conn, "Uni")
-        resp = label_pages.label_page("Uni", self._space_page_request("/labels/Uni", conn), conn=conn)
-        assert resp.context["active_tab"] == "space"
+    def test_group_page_sets_independent_active_tab(self, conn):
+        db.upsert_label_config(conn, {"name": "CS101", "label_group": "Uni", "created_at": _now()})
+        resp = label_pages.group_page("Uni", self._space_page_request("/groups/Uni", conn), conn=conn)
+        assert resp.context["active_tab"] == "group"
 
-    def test_space_page_highlights_only_its_own_rail_link(self, conn):
-        self._make_space(conn, "Uni")
-        resp = label_pages.label_page("Uni", self._space_page_request("/labels/Uni", conn), conn=conn)
+    def test_group_page_highlights_only_its_own_rail_link(self, conn):
+        db.upsert_label_config(conn, {"name": "CS101", "label_group": "Uni", "created_at": _now()})
+        resp = label_pages.group_page("Uni", self._space_page_request("/groups/Uni", conn), conn=conn)
         body = resp.body.decode()
-        assert 'href="/labels/Uni" class="tab-btn tab-btn-space active"' in body
+        assert 'href="/groups/Uni" class="tab-btn tab-btn-space active"' in body
         assert 'data-tab="settings" class="tab-btn active"' not in body
 
     def test_plain_label_page_has_no_settings_or_rail_highlight(self, conn):

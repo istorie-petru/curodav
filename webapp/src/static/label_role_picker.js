@@ -10,21 +10,15 @@
 // jobs, so this file's two jobs stay exactly the same as before, just
 // reading the checked radio's value instead of a <select>'s:
 //
-//  1. Show the Project start/end date fields only while "Project" is the
-//     selected option -- `hidden` toggled on `.label-project-fields`, no
-//     server round trip, same "reveal on selection" idiom
-//     task_habit_field_toggle.js already established for this app's forms.
-//     The same toggle hides `.label-parent-field` (the Space-link
-//     dropdown, 2026-09-14 Spaces -- labels-as-membership rework slice 1)
-//     whenever "Space" is selected -- Spaces don't nest, so a label that
-//     is itself becoming a Space has no Space of its own to belong to.
+//  1. Hide the Sections toggles while the Dashboard checkbox is ticked
+//     (they only apply to a label without a dashboard). The Project date
+//     fields and the Space role this job used to toggle are gone
+//     (labels-as-modules slices b and c, 2026-09-25).
 //
 //  2. Warn before actually losing something. `data-warn-role` (set by
 //     routers/labels.py::edit_label_modal) is the ORIGINAL role only if
 //     that role has real data worth confirming before dropping -- an
-//     existing Project always (its dates/lifecycle), a Space only if it
-//     has child labels grouped under it (routers/labels.py's has_children)
-//     -- otherwise it's empty. Whenever the live selection differs from
+//     existing Project always -- otherwise it's empty. Whenever the live selection differs from
 //     data-original-role AND data-original-role matches data-warn-role,
 //     this sets `data-confirm-sheet` on the whole edit form so app.js's/
 //     modal.js's existing confirm-sheet handling (see modal.js's own
@@ -53,19 +47,15 @@
       const warnRole = wrap.dataset.warnRole || "";
       const radios = Array.from(wrap.querySelectorAll('input[name="role"]'));
       const form = wrap.closest("form");
-      const parentField = form ? form.querySelector(".label-parent-field") : null;
-      // labels-as-modules slice b: the Deadline/Page fields (hidden for a
-      // Space, which is always a dashboard), and the Sections toggles
-      // (only meaningful when Dashboard is off).
-      const pageFields = form ? form.querySelector(".label-page-fields") : null;
+      // labels-as-modules slice b: the Sections toggles only matter when
+      // Dashboard is off. (Slice c removed the Space role and its
+      // show/hide of the group and page fields.)
       const dashboardBox = form ? form.querySelector('input[name="has_dashboard"]') : null;
       const sectionsField = form ? form.querySelector(".label-sections-field") : null;
 
       const MESSAGES = {
         project:
           "Switching away from Project stops treating this label as a project. Its deadline and everything tagged with it stay exactly as they are.",
-        space:
-          "This label generates a Space page other labels are grouped under. Switching away removes that page; the child labels and their own data are untouched.",
       };
 
       function selectedRole() {
@@ -75,8 +65,6 @@
 
       function sync() {
         const value = selectedRole();
-        if (parentField) parentField.hidden = value === "space";
-        if (pageFields) pageFields.hidden = value === "space";
         if (sectionsField && dashboardBox) sectionsField.hidden = dashboardBox.checked;
         if (!form) return;
         if (value !== originalRole && warnRole && warnRole === originalRole) {
