@@ -291,8 +291,8 @@ def apply_batch(conn: sqlite3.Connection, ops: list[dict[str, Any]]) -> list[dic
     entity order never matters. Sorting is stable, so ops for different
     entities interleaved in the input keep their relative order too.
 
-    §7c: after every op has applied, re-validate single-project-per-task
-    across the whole batch -- each individual `label_add` is a valid,
+    §7c: after every op has applied, re-validate one-project-per-item
+    (tasks and events, _ONE_PROJECT_TYPES) across the whole batch -- each individual `label_add` is a valid,
     commutative §7a op on its own; only the *combination* (two different
     project labels landing on the same task) can violate the invariant,
     so it can only be caught after the fact, not per-op."""
@@ -323,6 +323,11 @@ def apply_batch(conn: sqlite3.Connection, ops: list[dict[str, Any]]) -> list[dic
     return results
 
 
+# Item types limited to one project each: tasks since 1.5, events since the
+# project-picker slice (2026-09-25, Peter: "one project per data model").
+_ONE_PROJECT_TYPES = ("task", "event")
+
+
 def _snapshot_pre_existing_project_labels(
     conn: sqlite3.Connection, ordered: list[dict[str, Any]], project_names: set[str]
 ) -> dict[str, set[str]]:
@@ -331,17 +336,18 @@ def _snapshot_pre_existing_project_labels(
     taken before any op in the batch applies. A pre-existing project label
     has no in-batch HLC to arbitrate with, so it always outranks anything
     newly added by this batch (see _reconcile_project_labels)."""
-    pre_existing: dict[str, set[str]] = {}
+    pre_existing: dict[tuple[str, str], set[str]] = {}
     for op in ordered:
         if op.get("op_type") != "label_add" or op.get("entity_type") != "object_label":
             continue
         target = op.get("target") or {}
-        if target.get("object_type") != "task" or target.get("label_name") not in project_names:
+        object_type = target.get("object_type")
+        if object_type not in _ONE_PROJECT_TYPES or target.get("label_name") not in project_names:
             continue
-        task_uid = target["object_id"]
-        if task_uid not in pre_existing:
-            task = db.get_task(conn, task_uid)
-            pre_existing[task_uid] = {t for t in ((task or {}).get("tags") or []) if t in project_names}
+        key = (object_type, target["object_id"])
+        if key not in pre_existing:
+            labels = db.list_labels_for_object(conn, object_type, key[1])
+            pre_existing[key] = {t for t in labels if t in project_names}
     return pre_existing
 
 
@@ -353,17 +359,18 @@ def _reconcile_project_labels(
     results: list[dict[str, Any]],
 ) -> None:
     results_by_op_id = {r["op_id"]: r for r in results}
-    adds_by_task: dict[str, dict[str, dict[str, Any]]] = {}
+    adds_by_task: dict[tuple[str, str], dict[str, dict[str, Any]]] = {}
     for op in ordered:
         if op.get("op_type") != "label_add" or op.get("entity_type") != "object_label":
             continue
         target = op.get("target") or {}
         label_name = target.get("label_name")
-        if target.get("object_type") != "task" or label_name not in project_names:
+        object_type = target.get("object_type")
+        if object_type not in _ONE_PROJECT_TYPES or label_name not in project_names:
             continue
-        task_uid = target["object_id"]
+        key = (object_type, target["object_id"])
         hlc = hlc_from_payload(op["hlc"])
-        by_label = adds_by_task.setdefault(task_uid, {})
+        by_label = adds_by_task.setdefault(key, {})
         # Multiple ops re-adding the *same* label are commutative (§7a) --
         # only the highest HLC of each distinct label name is kept as that
         # label's own representative for the cross-label arbitration below.
@@ -371,8 +378,8 @@ def _reconcile_project_labels(
         if existing is None or hlc > existing["hlc"]:
             by_label[label_name] = {"label_name": label_name, "hlc": hlc, "op_id": op["op_id"]}
 
-    for task_uid, by_label in adds_by_task.items():
-        pre = pre_existing.get(task_uid, set())
+    for (object_type, task_uid), by_label in adds_by_task.items():
+        pre = pre_existing.get((object_type, task_uid), set())
         distinct_labels = set(by_label) | pre
         if len(distinct_labels) <= 1:
             continue
@@ -390,11 +397,11 @@ def _reconcile_project_labels(
             losers = [v for v in by_label.values() if v["label_name"] != winner_label]
         for loser in losers:
             conn.execute(
-                "DELETE FROM object_labels WHERE object_type = 'task' AND object_id = ? AND label_name = ?",
-                (task_uid, loser["label_name"]),
+                "DELETE FROM object_labels WHERE object_type = ? AND object_id = ? AND label_name = ?",
+                (object_type, task_uid, loser["label_name"]),
             )
             db.create_sync_conflict(
-                conn, "task", task_uid, "project_label",
+                conn, object_type, task_uid, "project_label",
                 loser["label_name"], loser["hlc"], winning_hlc,
             )
             result = results_by_op_id.get(loser["op_id"])

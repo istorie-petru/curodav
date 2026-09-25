@@ -83,11 +83,15 @@
              unchanged. ms_mode=select (not the widget builder's default
              "filter" mode) since an empty selection here means "no
              labels", not "no filter". -->
+        {% set pf_tags = task.tags if task else (prefill_tags or []) %}
+        {% set pf_form_id = 'task-form' %}
+        {% include "_project_field.html" %}
         <div class="field">
             {% set ms_name = 'tags_labels' %}
             {% set ms_icon = 'tag' %}
             {% set ms_label = 'Labels' %}
-            {% set ms_items = tag_name_items %}
+            {# Projects have their own dropdown above (_project_field.html). #}
+            {% set ms_items = tag_name_items | rejectattr('uid', 'in', project_names | default([])) | list %}
             {% set ms_selected = task.tags if task else (prefill_tags or []) %}
             {% set ms_mode = 'select' %}
             {% set ms_allow_new = true %}

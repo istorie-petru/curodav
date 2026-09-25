@@ -304,6 +304,29 @@ children + a Projects section (slice c); the icon_tile banner (item 2);
 table's project grouping — **needs a decision from Peter before slice c
 removes the Project role**).
 
+**Project-picker slice — SHIPPED 2026-09-25 (inserted before slice c).**
+Peter's decisions:
+- the Project role stays;
+- a project is still stored as a label, but the task and event forms ask
+  for it in its own single-choice **Project** dropdown, because assigning
+  a project means something different from tagging;
+- **one project per task and per event**;
+- lists and cards are unchanged (no separate project display);
+- contacts and habits get no dropdown and keep their plain Labels picker.
+
+How it's built:
+- `_project_field.html` offers "No project", then the open projects, plus
+  the item's current project marked "(archived)" if it has one.
+- The Labels picker no longer lists project labels.
+- The server swaps the item's project label for the chosen one
+  (`db.apply_project_choice` via `dashboard._with_project`), but only when
+  the form sends the `project_field` marker.
+- Events now enforce one project. An event that already has the same two
+  projects can still be re-saved, so a week-grid drag doesn't fail.
+- Offline sync's §7c batch check covers events too.
+
+Tests: `test_project_picker.py` (18).
+
 **Open for slice c (decide when building, not now):** after the
 backfill, a Space's own label sits in its own group, and its existing
 widgets stay on the *label's* dashboard. Slice c must decide whether to move

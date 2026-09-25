@@ -405,6 +405,7 @@ def new_task_form(
             "status_items": STATUS_ITEMS,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            **db.project_picker_context(conn),
             # 2026-08-08: Start date is a real field on the new-task form
             # now (see task_form.html) -- prefilled to today so the field
             # reads as "defaults to today, override if you want" rather
@@ -479,6 +480,8 @@ def create_task(
     status: str = Form("active"),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
+    project: str = Form(""),
+    project_field: str = Form(""),
     recurrence: str = Form(""),
     target_per_day: str = Form("1"),
     habits_per_period: str | None = Form(None),
@@ -493,6 +496,7 @@ def create_task(
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
+    tags = dashboard_router._with_project(conn, tags, project, project_field)
     # Same defensive-coercion pattern as start_at below -- target_per_day
     # is a new Form field too, so any pre-existing direct caller of
     # create_task() that doesn't pass it gets the literal Form(...) marker
@@ -744,6 +748,7 @@ def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
             "status_items": STATUS_ITEMS,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            **db.project_picker_context(conn),
             # Work sessions card (1.4) -- see _work_allocation_context above.
             **_work_allocation_context(conn, task),
             # Fallback only -- every task has a real start_at since
@@ -845,6 +850,8 @@ def update_task(
     status: str = Form("active"),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
+    project: str = Form(""),
+    project_field: str = Form(""),
     recurrence: str = Form(""),
     target_per_day: str = Form("1"),
     habits_per_period: str | None = Form(None),
@@ -859,6 +866,7 @@ def update_task(
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
+    tags = dashboard_router._with_project(conn, tags, project, project_field)
     if not isinstance(target_per_day, str):
         target_per_day = "1"
     try:

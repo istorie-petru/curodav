@@ -826,15 +826,29 @@ session start.
   `test_label_pages.py` (27). Full suite **2,477 passed**. `label_role_picker.js`
   isn't a SHELL_ASSET and style.css is unchanged, so there's no sw.js bump.
 
+  **2026-09-25 (same session) -- SWOT + project-picker slice shipped.**
+  Peter asked for a SWOT on making projects a separate data model; it
+  turned out he meant the frontend. Decisions: keep the Project role; a
+  separate single-choice Project dropdown on the task and event forms
+  (projects removed from the Labels picker, still stored as labels, so
+  CalDAV CATEGORIES and sync are unchanged); one project per task AND per
+  event; no separate display in lists or cards. Events now enforce one
+  project (a pre-existing pair can still be re-saved), and offline sync's
+  §7c covers events. Verified live (dropdown lists No project + open
+  projects, preselects the current one, save swaps it, Labels list has no
+  projects, quick add has it on both the Task and Event tabs, 390px OK, no
+  console errors). New `test_project_picker.py` (18). Full suite **2,495
+  passed**. No sw.js bump (no style.css/SHELL_ASSETS change).
+
   **Next slice**: item 4 slice c -- sidebar chevron fix + group pages.
+  (Question 1 below is answered: the Project role stays.)
   Groups are `label_group` text with their own widget dashboard (new
   storage keyed by group name). The sidebar lists groups (chevron expands
   their labels, `sidebar_pin`); the Space role, `parent_name`, color/banner
   inheritance and the interim `_mirror_legacy_module_fields`/
   `_rename_space_group` go; `widget_pin` drives the Spaces & Projects
-  widget. **Ask Peter first**: (1) does the Project role/`is_project` go
-  too (it still drives one-project-per-task and the Tasks table's project
-  grouping)? (2) should a former Space's widgets move to its new group
+  widget. **Ask Peter first**: (1) ~~does the Project role go?~~ answered,
+  it stays; (2) should a former Space's widgets move to its new group
   dashboard? Then d (label-pill links), then narrow banners (item 2,
   including the icon_tile banner reversal).
 

@@ -85,6 +85,21 @@ def _combine_tags(tags: str, tags_labels: list[str]) -> str:
     return ",".join(parts)
 
 
+def _with_project(conn, tags: str, project, project_field) -> str:
+    """The task/event forms' Project dropdown (project-picker slice,
+    2026-09-25) folded into the same comma-separated `tags` string
+    _combine_tags produces, via db.apply_project_choice. Only applied when
+    the form actually carried the dropdown (`project_field` == "1"), so
+    every other writer (inline edits, bulk actions, quick capture, tests
+    calling the route directly) keeps its tags exactly as posted. The
+    isinstance guards cover direct calls, where an unset param is still
+    FastAPI's Form marker object."""
+    if not (isinstance(project_field, str) and project_field == "1"):
+        return tags
+    project = project if isinstance(project, str) else ""
+    return ",".join(db.apply_project_choice(conn, _tags_list(tags) if tags else [], project))
+
+
 # One-time default for the optional "Your name" Settings field: absent =
 # no name, greeting reads "Good evening" alone rather than "Good evening,
 # None". App-meta-backed (see routers/settings.py's own field for this).
@@ -2135,6 +2150,7 @@ def quick_add_form(request: Request, default_tab: str = "task", scope: str = "",
             "status_items": STATUS_ITEMS,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            **db.project_picker_context(conn),
             "today": date.today().isoformat(),
             "habit_label": db.get_task_habit_settings(conn)["habit_label"],
             # Event-side context -- same union new_event_form passes, all

@@ -1566,6 +1566,8 @@ def upsert_event(
     data["exclude_saturday"] = 1 if data.get("exclude_saturday") else 0
     data["exclude_sunday"] = 1 if data.get("exclude_sunday") else 0
     tags = data.pop("tags", None)
+    if tags is not None:
+        _reject_new_multiple_project_labels_on_event(conn, str(data.get("uid")), tags)
     data.pop("reminders", None)
     data.pop("exdates", None)
     cols = [
@@ -1767,17 +1769,71 @@ class MultipleProjectLabelsError(ValueError):
     test_single_project_per_task.py for the "don't silently corrupt existing
     data" requirement."""
 
-    def __init__(self, project_names: list[str]):
+    def __init__(self, project_names: list[str], noun: str = "task"):
         self.project_names = list(project_names)
         names = ", ".join(self.project_names)
-        super().__init__(f"A task may belong to only one project label at a time (got: {names}).")
+        super().__init__(f"A {noun} may belong to only one project label at a time (got: {names}).")
 
 
-def _reject_multiple_project_labels(conn: sqlite3.Connection, tags: list[str]) -> None:
+def _reject_multiple_project_labels(conn: sqlite3.Connection, tags: list[str], noun: str = "task") -> None:
     project_names = {cfg["name"] for cfg in list_project_labels(conn)}
     selected = sorted({t for t in tags if t in project_names}, key=str.lower)
     if len(selected) > 1:
-        raise MultipleProjectLabelsError(selected)
+        raise MultipleProjectLabelsError(selected, noun)
+
+
+def project_picker_context(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Context for the task/event forms' Project dropdown (project-picker
+    slice, 2026-09-25). Projects are still stored as labels; the forms just
+    split them out of the Labels picker because assigning a project means
+    something different from tagging.
+
+    `project_items` is the dropdown's options: "No project" first, then
+    every open project. `project_names` is every project label, archived
+    ones included. The template uses it to find the item's current project
+    and to keep projects out of the Labels picker, and it adds an archived
+    project back as an option when that's the current value, so saving an
+    old item doesn't silently drop it."""
+    projects = list_project_labels(conn)
+    return {
+        "project_items": [{"uid": "", "name": "No project"}]
+        + [{"uid": p["name"], "name": p["name"]} for p in projects if not p.get("archived_at")],
+        "project_names": [p["name"] for p in projects],
+    }
+
+
+def apply_project_choice(conn: sqlite3.Connection, tags: list[str], project: str | None) -> list[str]:
+    """The Project dropdown's value folded back into an item's label list:
+    every project label is dropped from `tags`, then the chosen one (if any,
+    and only if it really is a project label) is added. Makes the dropdown
+    the one authority over which project an item has. A project name typed
+    into the Labels picker's "new label" box is dropped rather than creating
+    a second project."""
+    project_names = {cfg["name"] for cfg in list_project_labels(conn)}
+    kept = [t for t in tags if t not in project_names]
+    project = (project or "").strip()
+    if project and project in project_names:
+        kept.append(project)
+    return kept
+
+
+def _reject_new_multiple_project_labels_on_event(conn: sqlite3.Connection, uid: str, tags: list[str]) -> None:
+    """One project per event (project-picker slice, 2026-09-25, Peter: "one
+    project per data model"). Same rule as tasks, with one difference: an
+    event that already carries the same set of project labels is let
+    through. Events are re-saved whole by non-form paths (the week grid's
+    drag-to-reschedule, work-session time edits) and could already hold
+    two projects from before this rule existed. Rejecting those would break
+    an unrelated edit rather than protect anything, so only a *new*
+    combination is refused."""
+    project_names = {cfg["name"] for cfg in list_project_labels(conn)}
+    selected = {t for t in tags if t in project_names}
+    if len(selected) <= 1:
+        return
+    current = set(list_labels_for_object(conn, "event", uid)) & project_names
+    if selected == current:
+        return
+    raise MultipleProjectLabelsError(sorted(selected, key=str.lower), "event")
 
 
 def upsert_task(

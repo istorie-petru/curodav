@@ -5,7 +5,7 @@ import json
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Form, Header, Request
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import db, grid_layout, habit_heatmap, habit_view, recurrence_expand
@@ -1251,6 +1251,7 @@ def new_event_form(
             "prefill_all_day": prefill_all_day,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            **db.project_picker_context(conn),
             "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
@@ -1267,6 +1268,8 @@ def create_event(
     meeting_url: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
+    project: str = Form(""),
+    project_field: str = Form(""),
     recurrence: str = Form(""),
     reminders: str = Form(""),
     holiday_calendar: str = Form(""),
@@ -1276,6 +1279,7 @@ def create_event(
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
+    tags = dashboard_router._with_project(conn, tags, project, project_field)
     now = datetime.now(timezone.utc).isoformat()
     row = {
         "uid": str(uuid.uuid4()),
@@ -1298,7 +1302,10 @@ def create_event(
         "created_at": now,
         "updated_at": now,
     }
-    db.upsert_event(conn, row)
+    try:
+        db.upsert_event(conn, row)
+    except db.MultipleProjectLabelsError as exc:
+        raise HTTPException(400, str(exc))
     return respond(x_requested_with, "/calendar", status_code=201, ok=True, uid=row["uid"])
 
 
@@ -1361,6 +1368,7 @@ def edit_event_form(uid: str, request: Request, conn=Depends(get_db)):
             "event": event,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            **db.project_picker_context(conn),
             "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
@@ -1378,6 +1386,8 @@ def update_event(
     meeting_url: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
+    project: str = Form(""),
+    project_field: str = Form(""),
     recurrence: str = Form(""),
     reminders: str = Form(""),
     holiday_calendar: str = Form(""),
@@ -1387,6 +1397,7 @@ def update_event(
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
+    tags = dashboard_router._with_project(conn, tags, project, project_field)
     existing = db.get_event(conn, uid) or {}
     # 1.4 (§ Task & calendar semantics): "changing the title of a
     # work-allocation event changes the associated task rather than
@@ -1416,7 +1427,10 @@ def update_event(
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     )
-    db.upsert_event(conn, row)
+    try:
+        db.upsert_event(conn, row)
+    except db.MultipleProjectLabelsError as exc:
+        raise HTTPException(400, str(exc))
     if work_task_uid:
         task = db.get_task(conn, work_task_uid)
         if task and task.get("title") != title:
