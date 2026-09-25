@@ -128,21 +128,25 @@
      variables serve every .cal-* consumer and every var(--cal-*)
      reference in both themes, zero per-use overrides. Foregrounds are
      picked for contrast per hue: white on the deeper mids, near-black
-     on the two inherently light hues (yellow, lime). */
-  --cal-bg-red:#c6594f;   --cal-fg-red:#ffffff;
-  --cal-bg-orange:#bf7a33;--cal-fg-orange:#ffffff;
+     on the two inherently light hues (yellow, lime). 2026-09-25 (UI audit
+     C-12): eight white-text hues measured 3.36-4.26:1 (orange/mint worst),
+     so they were darkened within the same hue until white text clears
+     WCAG AA 4.5:1 on all 16 swatches; the pastel `--tag-*` pill pairs are
+     separate tokens and unaffected. */
+  --cal-bg-red:#c35045;   --cal-fg-red:#ffffff;
+  --cal-bg-orange:#a1672b;--cal-fg-orange:#ffffff;
   --cal-bg-yellow:#b59b33;--cal-fg-yellow:#1d1d1f;
   --cal-bg-lime:#96a93e;  --cal-fg-lime:#1d1d1f;
-  --cal-bg-green:#3f8f60; --cal-fg-green:#ffffff;
-  --cal-bg-mint:#2f9c8a;  --cal-fg-mint:#ffffff;
-  --cal-bg-teal:#2f8fa3;  --cal-fg-teal:#ffffff;
-  --cal-bg-cyan:#2f86ab;  --cal-fg-cyan:#ffffff;
+  --cal-bg-green:#398156; --cal-fg-green:#ffffff;
+  --cal-bg-mint:#278172;  --cal-fg-mint:#ffffff;
+  --cal-bg-teal:#2a7f91;  --cal-fg-teal:#ffffff;
+  --cal-bg-cyan:#2c7d9f;  --cal-fg-cyan:#ffffff;
   --cal-bg-blue:#3778bd;  --cal-fg-blue:#ffffff;
   --cal-bg-indigo:#575dcf;--cal-fg-indigo:#ffffff;
   --cal-bg-purple:#8a56c1;--cal-fg-purple:#ffffff;
   --cal-bg-magenta:#ac4e93;--cal-fg-magenta:#ffffff;
-  --cal-bg-pink:#c1577e;  --cal-fg-pink:#ffffff;
-  --cal-bg-brown:#967a44; --cal-fg-brown:#ffffff;
+  --cal-bg-pink:#be4e77;  --cal-fg-pink:#ffffff;
+  --cal-bg-brown:#8b713f; --cal-fg-brown:#ffffff;
   --cal-bg-gray:#70767d;  --cal-fg-gray:#ffffff;
   --cal-bg-slate:#5b6b7d; --cal-fg-slate:#ffffff;
 
@@ -3346,6 +3350,21 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .time-grid-head.day{grid-template-columns:1fr;}
 .time-grid-head .thd{text-align:center; padding:8px 4px; font-size:var(--text-sm); font-weight:var(--font-weight-bold); border-bottom:1px solid var(--separator);}
 .time-grid-head .thd.is-today{color:var(--fg-primary); font-weight:var(--font-weight-bold);}
+/* 2026-09-25 (UI audit C-6/C-23): Week headers link to that day's Day view,
+   and today's day number sits in an accent pill (before, today's header
+   looked exactly like every other day). Fixed 24px pill height on every
+   number so today's row doesn't grow taller than its neighbours. */
+.time-grid-head .thd-link{color:inherit; text-decoration:none; display:inline-flex; align-items:center; gap:2px; border-radius:999px; padding:0 2px 0 6px;}
+.time-grid-head .thd-link:hover .thd-dow{text-decoration:underline;}
+.time-grid-head .thd-num{display:inline-flex; align-items:center; justify-content:center; min-width:24px; height:24px; padding:0 4px; border-radius:999px; box-sizing:border-box;}
+.time-grid-head .thd.is-today .thd-num{background:var(--accent); color:var(--fg-on-accent);}
+.time-grid-head.day .thd-link{gap:6px;}
+/* Phones: seven ~40px columns can't fit "Mon 21" on one line -- weekday
+   stacks over the number (the old wrapping text did the same). */
+@media (max-width:720px){
+  .time-grid-head.week .thd{padding:4px 0; min-width:0;}
+  .time-grid-head.week .thd-link{flex-direction:column; gap:1px; padding:0;}
+}
 /* 2026-08-31 -- same past-day dimming as Month's .month-day-cell.is-past,
    applied per-column here since Week/Day split a day across three
    separate elements (header cell, all-day strip cell, hour-grid column)
@@ -3366,7 +3385,11 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .allday-cols.week{grid-template-columns:repeat(7,1fr);}
 .allday-cols.day{grid-template-columns:1fr;}
 .allday-col{display:flex; flex-direction:column; gap:1px; padding:2px 4px 4px; border-left:1px solid var(--separator); overflow:hidden;}
-.allday-col.is-past{opacity:.5;}
+/* 2026-09-25 (UI audit C-24): past days fade their rows, but NOT an open
+   task that's still due there (`.is-overdue`, set by the templates) -- an
+   overdue task is the one thing on a past day that still needs attention,
+   so dimming it read as "done". */
+.allday-col.is-past > :not(.is-overdue){opacity:.5;}
 /* Week all-day spanning bars (2026-09-25, UI audit C-8) -- same absolute
    bar layer + .month-bar-lane/col/span geometry as Month/4-Week, laid over
    the 7 .allday-col columns. top:4px clears the columns' own 2px top
@@ -3383,6 +3406,10 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
   overflow:hidden; padding:1px 0; color:var(--fg-primary); text-decoration:none;
 }
 .allday-task > *{overflow:hidden; text-overflow:ellipsis;}
+/* 2026-09-25 (UI audit C-3): titles are wrapped in .allday-title so the
+   ellipsis above has an element to apply to; the icon/dot never shrinks. */
+.allday-task > .allday-title{min-width:0; flex:0 1 auto; white-space:nowrap;}
+.allday-task > .icon, .allday-task > .color-dot{flex:none;}
 .allday-task .color-dot{margin:0;}
 .allday-task:hover{text-decoration:underline;}
 /* Week all-day row drag-to-move (static/calendar_week_allday_drag.js,
@@ -3433,6 +3460,14 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    instead of just the block silently jumping between columns. */
 .time-col.drop-hover{background-color:var(--accent-neutral-subtle);}
 .time-col.is-past{opacity:.55;}
+/* 2026-09-25 (UI audit C-7): current-time line in today's column, placed
+   and moved every minute by static/calendar_now.js. Above events
+   (z-index 3) but click-through, so it never blocks a drag or a create. */
+.now-line{
+  position:absolute; left:0; right:0; height:2px; margin-top:-1px; background:var(--danger);
+  z-index:4; pointer-events:none;
+}
+.now-line::before{content:""; position:absolute; left:-5px; top:-4px; width:10px; height:10px; border-radius:50%; background:var(--danger);}
 /* Hover/drag-create preview ghost (Schedule grid, static/schedule_grid.js)
    -- a faint outline showing where a click (or click-drag, for a custom
    length) would create a new class, same idea as the reference app's
@@ -3458,7 +3493,21 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
   z-index:30; cursor:grabbing;
 }
 .time-event .te-name{font-weight:var(--font-weight-bold); display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-.time-event .te-time{opacity:.85; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:10.5px;}
+/* 2026-09-25 (UI audit C-12): .te-time was opacity:.85, which dropped white
+   time text to 2.86:1 on the lighter swatches -- full opacity now, the
+   smaller size alone sets it apart from the bold name. */
+.time-event .te-time{display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:10.5px;}
+/* 2026-09-25 (UI audit C-18): blocks too short for two lines (grid_layout's
+   is_short, e.g. 30 minutes = 24px) put name and time on one line instead
+   of cutting the time line through the middle; extra lines (location) hide. */
+.time-event.is-short{display:flex; align-items:baseline; gap:6px; padding-top:2px; padding-bottom:0;}
+.time-event.is-short .te-name{flex:0 1 auto; min-width:0;}
+.time-event.is-short .te-time{flex:0 1000 auto; min-width:0;}
+.time-event.is-short .te-time ~ .te-time{display:none;}
+/* 2026-09-25 (UI audit C-19): cascaded overlaps (grid_layout._cascade_clusters)
+   stack on top of each other -- a ring in the page background colour
+   separates each block from the one it covers. */
+.time-event.is-cascaded:not(.dragging){box-shadow:0 0 0 1px var(--bg-elevated), 0 1px 2px rgba(0,0,0,.1);}
 .time-event .te-resize-handle{position:absolute; left:0; right:0; bottom:0; height:6px; cursor:ns-resize;}
 
 /* Sleep Time / Leisure Time hatching (1.9 side work, Settings > Sleep &
@@ -3615,6 +3664,25 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    back toward the earlier 84px "3 rows" version that read as oversized. */
 #unscheduled-panel-body{height:36px; overflow-y:auto; scrollbar-width:none;}
 #unscheduled-panel-body::-webkit-scrollbar{display:none;}
+/* 2026-09-25 (UI audit C-20): with the card chrome gone (flat UI), the
+   36px box's 14px of slack + the aside's 16px bottom padding + the grid
+   card's 16px top padding read as ~62px of dead space between the chips
+   and the day headers. The box is now one 22px chip row + 2px (still a
+   FIXED height, so the no-reflow reason above holds), and the two paddings
+   that face each other across the flex gap are dropped -- the gap alone
+   separates them. */
+#unscheduled-panel-body{height:24px;}
+main.main-calendar .project-calendar-unscheduled{padding-bottom:0;}
+main.main-calendar .project-calendar-layout > .project-calendar-grid{padding-top:0;}
+/* 2026-09-25 (UI audit C-9): on phones the chips wrap to 2+ rows but the
+   fixed one-row box cut the second row off with no visible scrollbar --
+   the box grows with its content there (up to ~3 rows, then a visible
+   scrollbar). The no-reflow reason above is about desktop mouse drags
+   between the panel and the grid; on a phone the grid is below the fold. */
+@media (max-width:720px){
+  #unscheduled-panel-body{height:auto; max-height:80px; scrollbar-width:thin;}
+  #unscheduled-panel-body::-webkit-scrollbar{display:block; width:4px;}
+}
 /* The "No unscheduled work -- ..." empty-state sentence (_calendar_week_
    grid.html) is long enough to wrap to 2-3 lines inside the fixed 36px
    single-row height above on a narrow phone, clipping instead of reading
@@ -3899,15 +3967,22 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    can't be, since routers/calendar.py's day < today only ever fires for
    days strictly before today, but keeping the rule order today-safe
    costs nothing). */
-.month-day-cell.is-past{opacity:.55;}
+/* 2026-09-25 (UI audit C-24): the fade moved from the whole cell onto its
+   day number and rows, skipping `.is-overdue` (an open task still due on
+   a past day -- see .allday-col.is-past's comment); the "+N more" button
+   fades with the rest. */
+.month-day-cell.is-past > .month-day-num,
+.month-day-cell.is-past .month-day-bottom > :not(.is-overdue){opacity:.55;}
 .month-day-num{font-weight:var(--font-weight-bold); font-size:var(--text-sm); color:var(--fg-tertiary); text-decoration:none; height:var(--month-daynum-h); display:flex; align-items:center; margin-bottom:var(--month-daynum-gap);}
-.month-day-num span{display:flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; line-height:1;}
+.month-day-num span{display:flex; align-items:center; justify-content:center; width:var(--month-daynum-h); height:var(--month-daynum-h); border-radius:50%; line-height:1;}
 /* Today's day number, circled in the accent color -- same convention
    `.mini-cal-day.is-today .mini-cal-day-num` already established for the
    dashboard mini calendar, reused verbatim rather than inventing a new
-   "today" treatment. */
-.month-day-cell.is-today .month-day-num span{background:var(--accent-neutral); color:var(--fg-on-accent-neutral); font-weight:var(--font-weight-bold); width:24px; height:24px;}
-[data-theme="dark"] .month-day-cell.is-today .month-day-num span{background:#494949;}
+   "today" treatment. 2026-09-25 (UI audit C-13): the circle was
+   --accent-neutral (#efefef, 1.14:1 on white) and grew 18->24px, nudging
+   today's number sideways -- every number now sits in the same fixed
+   row-height circle and today's is filled with the real accent colour. */
+.month-day-cell.is-today .month-day-num span{background:var(--accent); color:var(--fg-on-accent); font-weight:var(--font-weight-bold);}
 .month-day-bottom{display:flex; flex-direction:column; gap:1px; overflow:hidden;}
 /* 2026-08-08 follow-up: a task and a single-day timed event (both
    `kind:"event"`/`kind:"task"` in routers/calendar.py's _month_grid)
@@ -4733,21 +4808,40 @@ main.main-shell > .toolbar.top-app-bar{
 .toast-confirm-typed .toast-action{flex:1 1 0; text-align:center;}
 .toast-typed-input.is-armed{border-color:var(--success); box-shadow:0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent);}
 
-/* Month/4-Week "+N more" overflow toast (2026-09-09, FullCalendar-parity
-   interactions slice 3) -- ccToast's default .toast-actions row (flex-end,
-   a couple of pill buttons) isn't built for the 3-6 stacked list items this
-   toast can carry, one per hidden event/task on that day. Stacks them
-   full-width instead, each row left-aligned and truncated rather than
-   wrapping, same overflow feel .month-item-title already has in the grid
-   itself. */
-.toast-overflow{max-width:320px;}
-.toast-overflow .toast-actions{flex-direction:column; align-items:stretch; gap:2px; max-height:220px; overflow-y:auto;}
-.toast-overflow .toast-action.toast-overflow-item{
-  align-self:stretch; text-align:left; font-weight:var(--font-weight-regular); color:var(--fg-primary);
-  padding:var(--space-2); border-radius:var(--radius-sm);
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+/* Month/4-Week "+N more" day popover (2026-09-25, UI audit C-10 --
+   replaces the 2026-09-09 `.toast-overflow` success toast, see
+   static/calendar_month_overflow.js). Anchored over the day cell on
+   desktop, a bottom sheet with a scrim at <=720px. Rows: colour dot (or the
+   task's icon), a fixed-width time column so titles line up, title. */
+.cal-popover{
+  position:fixed; z-index:var(--z-overlay-panel); width:280px; max-width:calc(100vw - 16px);
+  max-height:min(420px, calc(100vh - 16px)); display:flex; flex-direction:column;
+  background:var(--bg-elevated); color:var(--fg-primary); border:1px solid var(--border);
+  border-radius:var(--radius-md); box-shadow:var(--elevation-3); padding:8px 8px 6px;
 }
-.toast-overflow .toast-action.toast-overflow-item:hover{background:var(--row-alt);}
+.cal-popover-head{display:flex; align-items:center; gap:8px; padding:2px 2px 6px 8px;}
+.cal-popover-title{margin:0; flex:1 1 auto; min-width:0; font-size:var(--text-base); font-weight:var(--font-weight-bold);}
+.cal-popover-title:focus{outline:none;}
+.cal-popover-close{flex:none; width:28px; height:28px; font-size:18px; line-height:1;}
+.cal-popover-list{overflow-y:auto; display:flex; flex-direction:column; gap:1px;}
+.cal-pop-row{
+  display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:var(--radius-sm);
+  color:var(--fg-primary); text-decoration:none; font-size:13px; min-width:0;
+}
+.cal-pop-row:hover, .cal-pop-row:focus-visible{background:var(--accent-neutral-subtle); text-decoration:none;}
+.cal-pop-row .color-dot, .cal-pop-row .icon{flex:none;}
+.cal-pop-row .color-dot{margin:0 1.5px;} /* 9px dot centred in the 12px icon column */
+.cal-pop-time{flex:none; width:44px; font-size:12px; color:var(--fg-secondary); font-variant-numeric:tabular-nums;}
+.cal-pop-title{flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.cal-popover-foot{border-top:1px solid var(--separator); margin-top:6px; padding:6px 8px 0;}
+.cal-popover-day-link{font-size:13px; font-weight:var(--font-weight-bold); color:var(--fg-primary); text-decoration:underline; text-underline-offset:2px;}
+.cal-popover-backdrop{position:fixed; inset:0; z-index:var(--z-modal-stacked); background:var(--overlay-scrim);}
+.cal-popover.is-sheet{
+  z-index:var(--z-modal-stacked); left:0; right:0; bottom:0; top:auto; width:auto; max-width:none;
+  max-height:70vh; border-radius:var(--radius-lg) var(--radius-lg) 0 0; border-bottom:0;
+  padding:12px 12px calc(12px + env(safe-area-inset-bottom));
+}
+.cal-popover.is-sheet .cal-pop-row{padding:10px 8px; font-size:var(--text-base);}
 @media (min-width:721px){
   .toast-stack{left:auto; align-items:flex-end;}
   /* Remove max-width constraint on desktop so content uses full width */
@@ -6127,14 +6221,17 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .mini-cal-day:hover .mini-cal-day-num{background:var(--row-alt);}
 .mini-cal-day:hover{text-decoration:none;}
 .mini-cal-day.is-out{color:var(--fg-tertiary); opacity:.5;}
-.mini-cal-day.is-today .mini-cal-day-num{background:var(--accent-neutral); color:var(--fg-on-accent-neutral); font-weight:var(--font-weight-bold); width:32px; height:32px;}
-[data-theme="dark"] .mini-cal-day.is-today .mini-cal-day-num{background:#494949;}
+/* 2026-09-25 (UI audit C-13/C-14): today = accent fill at the same 26px as
+   every other day (was a near-invisible #efefef circle that grew to 32px
+   and made its row taller); the busy-day dot was --accent-neutral too
+   (1.14:1 light, 1.03:1 dark) -- now --fg-tertiary, white on today. */
+.mini-cal-day.is-today .mini-cal-day-num{background:var(--accent); color:var(--fg-on-accent); font-weight:var(--font-weight-bold);}
 .mini-cal-day.has-activity .mini-cal-day-num::after{
   content:""; position:absolute; bottom:-1px; left:50%; transform:translateX(-50%);
-  width:4px; height:4px; border-radius:50%; background:var(--accent-neutral);
+  width:4px; height:4px; border-radius:50%; background:var(--fg-tertiary);
 }
-.mini-cal-day.is-today.has-activity .mini-cal-day-num::after{background:var(--fg-on-accent-neutral);}
-.mini-cal-day.is-today.has-activity::after{background:var(--fg-on-accent-neutral);}
+.mini-cal-day.is-today.has-activity .mini-cal-day-num::after{background:var(--fg-on-accent);}
+.mini-cal-day.is-today.has-activity::after{background:var(--fg-on-accent);}
 
 /* Calendar + Agenda widget (_widget_calendar_agenda.html) -- a mini month
    calendar on top + a compact 7-day agenda below it, designed to sit at
@@ -6581,8 +6678,18 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   text-decoration:none; color:var(--fg-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 .week-overview-empty{font-size:12px; color:var(--fg-tertiary);}
+/* 2026-09-25 (UI audit C-16): plain 1fr columns grew to fit their longest
+   nowrap title and pushed the grid past the card -- minmax(0,1fr) keeps
+   seven equal columns and lets titles ellipsize (.wo-title). Events lead,
+   sorted by time, with their colour dot + start time; tasks follow. */
+.week-overview-grid{grid-template-columns:repeat(7,minmax(0,1fr));}
+.week-overview-day{min-width:0;}
+.week-overview-item > .widget-event-dot, .week-overview-item > .icon{flex:none;}
+.wo-time{flex:none; font-size:12px; color:var(--fg-secondary); font-variant-numeric:tabular-nums;}
+.wo-title{min-width:0; overflow:hidden; text-overflow:ellipsis;}
+.week-overview-day.is-today{border-color:var(--accent);}
 @media (max-width:720px){
-  .week-overview-grid{grid-template-columns:repeat(2,1fr);}
+  .week-overview-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
 }
 
 /* Weekly Schedule widget (2026-08-15, _widget_weekly_schedule.html) -- a
@@ -7870,6 +7977,15 @@ button.habit-month-day:hover{box-shadow:0 0 0 1px var(--fg-primary) inset;}
 .agenda-habit-check.is-qty{background:var(--accent-neutral-subtle);}
 .agenda-habit-title{flex:1; min-width:0; color:var(--fg-primary); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .agenda-habit-meta{font-size:var(--text-sm); color:var(--fg-tertiary); white-space:nowrap;}
+/* 2026-09-25 (UI audit H-09): habit rows line up with the task/event rows
+   around them -- the check sits in the same 36px leading column as a
+   task's .widget-row-icon (so titles start at the same x), titles use the
+   rows' 13px instead of the inherited 15px, and the row is 32px tall like
+   a task row. */
+.agenda-habits .agenda-habit{gap:4px; padding:3px 0;}
+.agenda-habit > .form-inline{flex:none; width:36px; display:flex; justify-content:center;}
+.agenda-habit-check.is-qty{min-width:32px; padding:0 3px;}
+.agenda-habits .agenda-habit-title{font-size:13px;}
 .allday-habit-form{display:block;}
 /* appearance/background/padding reset + font-size (2026-09-25): `font:inherit`
    here (0,1,1) out-ranked `.allday-task`'s own 12px (0,1,0), and the

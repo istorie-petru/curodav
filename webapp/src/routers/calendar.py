@@ -1189,6 +1189,11 @@ def _day_view_context(conn, request, day, label):
         "calendar_view": "day",
         "today_iso": date.today().isoformat(),
         "day": day,
+        # 2026-09-25 (UI audit C-17): readable "Fri, Sep 25, 2026" for the
+        # header nav label/<title>/sr-only h1 instead of the raw ISO date;
+        # `day_date` feeds the grid header's weekday + day-number pill.
+        "day_label": f"{d.strftime('%a, %b')} {d.day}, {d.year}",
+        "day_date": d,
         "prev_day": (d - timedelta(days=1)).isoformat(),
         "next_day": (d + timedelta(days=1)).isoformat(),
         "all_day": all_day,

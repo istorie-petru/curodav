@@ -299,8 +299,22 @@
       if (start === null || end === null) return placeholder;
       if (mode === "time") return start + "–" + end;
       if (!state.date) return placeholder;
+      if (isAllDay()) return fmtDate(state.date) + " · All day";
       return fmtDate(state.date) + " · " + start + "–" + end;
     }
+
+    // 2026-09-25 (UI audit C-22): with the event form's "All day" box
+    // checked the summary still read "00:00–23:59" (the comment in
+    // style.css pointed at a `:has(#all_day:checked)` rule that no longer
+    // hides anything). Range mode now shows "<date> · All day" while the
+    // enclosing form's #all_day is checked, and re-renders when it toggles.
+    const allDayBox = mode === "range" && container.closest("form")
+      ? container.closest("form").querySelector('input[name="all_day"][type="checkbox"]')
+      : null;
+    function isAllDay() {
+      return !!(allDayBox && allDayBox.checked);
+    }
+    if (allDayBox) allDayBox.addEventListener("change", () => updateTrigger());
 
     function updateTrigger() {
       value.textContent = labelText();

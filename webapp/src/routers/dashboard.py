@@ -582,10 +582,16 @@ def _render_mini_month_calendar(conn, config: dict, nav: dict | None = None) -> 
     prev/next convention routers/calendar.py's month_view already uses --
     plain full-page links, no JS required. Defaults to the real today's
     month when nav is absent (first load, or any other widget type)."""
+    # 2026-09-25 (UI audit C-15): honour Settings > General "Week starts
+    # on" like the real Month/4-Week views do -- this was hardcoded Monday.
+    # Imported here (not at module top) to keep this fix to this widget.
+    from ..deps import WEEK_START_KEY
+
+    week_start = db.get_app_meta(conn, WEEK_START_KEY) or "monday"
     today = date.today()
     year = (nav or {}).get("year") or today.year
     month = (nav or {}).get("month") or today.month
-    cal = py_calendar.Calendar(firstweekday=0)
+    cal = py_calendar.Calendar(firstweekday=6 if week_start == "sunday" else 0)
     weeks_raw = cal.monthdatescalendar(year, month)
     month_start = weeks_raw[0][0].isoformat()
     month_end = weeks_raw[-1][-1].isoformat()
@@ -610,8 +616,12 @@ def _render_mini_month_calendar(conn, config: dict, nav: dict | None = None) -> 
     ]
     prev_month, prev_year = (12, year - 1) if month == 1 else (month - 1, year)
     next_month, next_year = (1, year + 1) if month == 12 else (month + 1, year)
+    weekday_initials = ["M", "T", "W", "T", "F", "S", "S"]
+    if week_start == "sunday":
+        weekday_initials = weekday_initials[6:] + weekday_initials[:6]
     return {
         "weeks": weeks,
+        "weekday_initials": weekday_initials,
         "month_label": date(year, month, 1).strftime("%B %Y"),
         "prev_year": prev_year,
         "prev_month": prev_month,

@@ -47,8 +47,12 @@
     <div class="time-grid-wrap">
     <div class="time-grid-top">
     <div class="time-grid-head week">
+        {# 2026-09-25 (UI audit C-6/C-23): the day number is a plain
+           `day.date.day` ("Thu 1", not strftime's zero-padded "Thu 01"),
+           today's number gets the accent pill, and each header links to
+           that day's Day view (same label filter carried over). #}
         {% for day in days %}
-        <div class="thd {% if day.is_today %}is-today{% endif %} {% if day.is_past %}is-past{% endif %}">{{ day.date.strftime('%a %d') }}</div>
+        <div class="thd {% if day.is_today %}is-today{% endif %} {% if day.is_past %}is-past{% endif %}"><a class="thd-link" href="/calendar/day/{{ day.iso }}{% if active_label %}?label={{ active_label | urlencode }}{% endif %}" title="Open {{ day.date.strftime('%A') }} in Day view"{% if day.is_today %} aria-current="date"{% endif %}><span class="thd-dow">{{ day.date.strftime('%a') }}</span> <span class="thd-num">{{ day.date.day }}</span></a></div>
         {% endfor %}
     </div>
     <div class="time-grid-allday week">
@@ -78,7 +82,7 @@
             <div class="allday-col{% if day.is_past %} is-past{% endif %}" data-date="{{ day.iso }}">
                 {% if week_lane_count %}<div class="week-bars-spacer month-bars-offset-{{ week_lane_count }}" aria-hidden="true"></div>{% endif %}
                 {% for t in day.tasks %}
-                <a class="allday-task" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}" data-uid="{{ t.uid }}" data-due="{{ t.due_at }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }} {{ t.title }}</a>
+                <a class="allday-task{% if day.is_past and t.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}" data-uid="{{ t.uid }}" data-due="{{ t.due_at }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }}<span class="allday-title">{{ t.title }}</span></a>
                 {% endfor %}
             </div>
             {% endfor %}
@@ -108,7 +112,7 @@
                 {% endfor %}
                 {% for e in day.timed %}
                 {% if e.is_allocation %}
-                <div class="time-event work-allocation cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-task-uid="{{ e.task_uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
+                <div class="time-event work-allocation cal-{{ e.calendar_color }}{% if e.is_short %} is-short{% endif %}{% if e.is_cascaded %} is-cascaded{% endif %}" data-uid="{{ e.uid }}" data-task-uid="{{ e.task_uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
                      data-style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%; --wa-border:var(--cal-bg-{{ e.calendar_color }});">
                     {# Plain span, not a link -- direct feedback: "why can't
                        it function like any other event so that the whole
@@ -141,7 +145,7 @@
                     <span class="te-resize-handle" data-uid="{{ e.uid }}"></span>
                 </div>
                 {% else %}
-                <a class="time-event cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
+                <a class="time-event cal-{{ e.calendar_color }}{% if e.is_short %} is-short{% endif %}{% if e.is_cascaded %} is-cascaded{% endif %}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
                    href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal
                    data-style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%;">
                     <span class="te-name">{{ e.title }}</span>
