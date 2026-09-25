@@ -60,27 +60,26 @@
                         <span class="month-item-title">{{ item.event.title }}</span>
                     </a>
                 {% else %}
-                    <a class="month-task-item month-due-task-item" href="/tasks/{{ item.task.uid }}/edit" data-modal title="{{ item.task.title }}" data-uid="{{ item.task.uid }}" data-due="{{ item.task.due_at }}">{{ icon(label_icon(request, item.task.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }} <span class="month-item-title">{{ item.task.title }}</span></a>
+                    <a class="month-task-item month-due-task-item{% if day.is_past and item.task.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ item.task.uid }}/edit" data-modal title="{{ item.task.title }}" data-uid="{{ item.task.uid }}" data-due="{{ item.task.due_at }}">{{ icon(label_icon(request, item.task.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }} <span class="month-item-title">{{ item.task.title }}</span></a>
                 {% endif %}
             {% endfor %}
             {% if day.overflow_count %}
-                <!-- 2026-09-09 (FullCalendar-parity interactions, slice 3):
-                     "+N more" no longer navigates to Day view -- it opens
-                     an info toast (calendar_month_overflow.js) listing the
-                     hidden items as click-through buttons, each opening
-                     that item's own edit modal via window.CCModal.open.
-                     The actual overflow items live in this sibling
-                     <template> (inert, never rendered) instead of a fresh
-                     fetch, reusing the exact href-building logic the
-                     visible day.rows loop above already uses so the two
-                     never drift apart. -->
-                <button type="button" class="month-more-link" aria-label="{{ day.overflow_count }} more">+{{ day.overflow_count }}<span class="month-more-word"> more</span></button>
-                <template class="month-overflow-data">
-                    {% for item in day.overflow %}
+                <!-- 2026-09-25 (UI audit C-10): "+N more" opens an anchored
+                     popover (calendar_month_overflow.js) titled with the
+                     day's date, listing ALL of that day's rows -- dot/icon,
+                     time, title -- plus an "Open day" link; a bottom sheet
+                     on phones. It replaced the 2026-09-09 success-style
+                     toast that popped up bottom-right, far from the day,
+                     with bare titles only. The rows live in this inert
+                     <template> (no second request), rendered with the same
+                     href logic as the visible rows above. -->
+                <button type="button" class="month-more-link" aria-haspopup="dialog" aria-label="{{ day.overflow_count }} more on {{ day.date.strftime('%A, %B') }} {{ day.date.day }}">+{{ day.overflow_count }}<span class="month-more-word"> more</span></button>
+                <template class="month-overflow-data" data-title="{{ day.date.strftime('%A, %B') }} {{ day.date.day }}" data-day-url="/calendar/day/{{ day.iso }}{% if active_label %}?label={{ active_label | urlencode }}{% endif %}">
+                    {% for item in day.rows + day.overflow %}
                         {% if item.kind == "event" %}
-                            <a href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal>{{ item.event.title }}</a>
+                            <a class="cal-pop-row" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal><span class="color-dot cal-{{ item.event.calendar_color }}"></span><span class="cal-pop-time">{% if item.event.start_at %}{{ item.event.start_at | fmt_time }}{% endif %}</span><span class="cal-pop-title">{{ item.event.title }}</span></a>
                         {% else %}
-                            <a href="/tasks/{{ item.task.uid }}/edit" data-modal>{{ item.task.title }}</a>
+                            <a class="cal-pop-row cal-pop-task{% if day.is_past and item.task.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ item.task.uid }}/edit" data-modal>{{ icon(label_icon(request, item.task.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }}<span class="cal-pop-time">Task</span><span class="cal-pop-title">{{ item.task.title }}</span></a>
                         {% endif %}
                     {% endfor %}
                 </template>

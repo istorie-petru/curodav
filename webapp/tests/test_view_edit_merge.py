@@ -208,6 +208,13 @@ class TestStableHeightMarker:
             seed(conn, f"{name}1")
             for label, fn in (("view", views), ("form", forms)):
                 body = fn(conn, f"{name}1").body.decode()
+                if (name, label) == ("event", "view"):
+                    # 2026-09-25 (UI audit C-21): the event VIEW sizes to its
+                    # content (the fixed height left ~430px blank); only the
+                    # edit form keeps the stable-height marker.
+                    assert 'id="modal-target">' in body
+                    assert 'class="modal-stable-height"' not in body
+                    continue
                 assert 'id="modal-target" class="modal-stable-height"' in body, (name, label)
 
     def test_modal_js_toggles_stable_height_and_swap_animation(self):

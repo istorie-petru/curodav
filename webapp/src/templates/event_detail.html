@@ -51,8 +51,15 @@
      for "Save"), and #modal-target carries the modal-stable-height marker
      so modal.js keeps the dialog one fixed size in both states while the
      header/body/footer cross-fade when the Edit link swaps them in
-     place -- one continuous modal instead of a hard page swap. -->
-<div id="modal-target" class="modal-stable-height">
+     place -- one continuous modal instead of a hard page swap.
+
+     2026-09-25 (UI audit C-21): the view state no longer carries that
+     marker -- a typical event's details are a few rows, and the locked
+     78vh height left ~430px of blank dialog under them. The view now sizes
+     to its content; the edit form (event_form.html) keeps the fixed
+     height, so Edit grows the dialog once instead of every view being
+     mostly empty. -->
+<div id="modal-target">
 {% if event %}
 <div class="modal-header">
     <div class="detail-header-inner">

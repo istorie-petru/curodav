@@ -126,3 +126,41 @@ class TestSleepHourCollapse:
         hours = visible_hours((0, 6 * 60 + 30))
         assert hours[0]["hour"] == 7
         assert hours[0]["top_px"] == 0.5 * PX_PER_HOUR
+
+
+class TestCascadeAndShortBlocks:
+    """2026-09-25 (UI audit C-19/C-18)."""
+
+    def test_three_staggered_overlaps_cascade_instead_of_thin_lanes(self):
+        laid = layout_day(
+            [_ev("a", "14:00", "16:00"), _ev("b", "15:00", "17:00"), _ev("c", "15:30", "16:30")]
+        )
+        by_uid = {e["uid"]: e for e in laid}
+        assert [by_uid[u]["left_pct"] for u in "abc"] == [0, 25, 50]
+        # each block runs to the column's right edge
+        assert all(e["left_pct"] + e["width_pct"] == 100 for e in laid)
+        assert all(e["is_cascaded"] for e in laid)
+        # later-starting events come later in DOM order (painted on top)
+        assert [e["uid"] for e in laid] == ["a", "b", "c"]
+
+    def test_near_simultaneous_starts_keep_side_by_side_lanes(self):
+        laid = layout_day(
+            [_ev("a", "14:00", "16:00"), _ev("b", "14:15", "17:00"), _ev("c", "15:30", "16:30")]
+        )
+        assert not any(e.get("is_cascaded") for e in laid)
+        assert all(round(e["width_pct"], 1) == round(100 / 3, 1) for e in laid)
+
+    def test_two_lane_overlap_is_never_cascaded(self):
+        laid = layout_day([_ev("a", "09:00", "11:00"), _ev("b", "10:00", "12:00")])
+        assert not any(e.get("is_cascaded") for e in laid)
+
+    def test_deep_cascade_keeps_last_block_at_least_40_percent_wide(self):
+        laid = layout_day([_ev(str(i), f"{9 + i:02d}:00", "18:00") for i in range(6)])
+        assert all(e.get("is_cascaded") for e in laid)
+        assert min(e["width_pct"] for e in laid) >= 40
+
+    def test_thirty_minute_event_is_short_hour_event_is_not(self):
+        laid = layout_day([_ev("a", "09:00", "09:30"), _ev("b", "11:00", "12:00")])
+        by_uid = {e["uid"]: e for e in laid}
+        assert by_uid["a"]["is_short"] is True
+        assert by_uid["b"]["is_short"] is False
