@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Edit group{% endblock %}
+{% block content %}
+{# A group's own look (2026-09-25, UI audit L3; routers/label_pages.py::
+   edit_group_modal / update_group). Groups used to share one hard-coded
+   `layers` icon, so every group looked the same in the collapsed rail.
+   Only color + icon live here: a group is the text in its labels' Group
+   field, so renaming it or adding members is done on the labels. Same
+   color/icon picker partials as the label form (inline fields, like
+   quick_add.html's Label tab). "No icon" shows the group's first letter
+   in the rail, which is why its swatch is the `type` (letter) glyph. #}
+<div id="modal-target">
+<div class="modal-header">
+<h1>Edit group</h1>
+</div>
+<div class="modal-body">
+<form method="post" id="group-form" action="/groups/{{ group.name|urlencode }}/update">
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label>Name</label>
+            <p class="group-form-name">{{ group.name }}</p>
+            <span class="field-hint">To rename the group or change its members, edit the Group field on its labels.</span>
+        </div>
+        <div class="field">
+            <label>Color</label>
+            {% set cp_current = group.color or 'gray' %}
+            {% set cp_colors = colors %}
+            {% set cp_form_id = 'group-form' %}
+            {% include "_color_swatch_picker.html" %}
+        </div>
+        <div class="field">
+            <label>Icon</label>
+            {% set ip_current = group.icon %}
+            {% set ip_groups = icon_groups %}
+            {% set ip_form_id = 'group-form' %}
+            {% set ip_default_icon = 'type' %}
+            {% include "_icon_swatch_picker.html" %}
+            <span class="field-hint">No icon: the sidebar shows the group's first letter.</span>
+        </div>
+    </div>
+</form>
+</div>
+{% set footer_back_url = '/groups/' ~ group.name %}
+{% set footer_back_label = 'Cancel' %}
+{% set footer_primary_form = 'group-form' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

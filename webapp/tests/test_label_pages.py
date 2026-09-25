@@ -340,7 +340,9 @@ class TestLabelPillLinks:
         db.upsert_task(conn, {"uid": "t1", "title": "Draft", "description": "", "status": "active",
                               "tags": ["Road trip"], "created_at": _now()})
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
-        assert 'href="/labels/Road%20trip/preview" data-modal' in body
+        # 2026-09-25 (UI audit L11): the task modal's own URL rides along
+        # as `from`, so the preview can offer "Back" to it.
+        assert 'href="/labels/Road%20trip/preview?from=/tasks/t1" data-modal' in body
 
     def test_kanban_card_pills_open_the_preview(self, conn):
         db.upsert_label_config(conn, {"name": "Gym"})

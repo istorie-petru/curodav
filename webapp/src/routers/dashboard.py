@@ -2095,7 +2095,9 @@ def today_redirect():
 
 
 @router.get("/quick/add")
-def quick_add_form(request: Request, default_tab: str = "task", scope: str = "", conn=Depends(get_db)):
+def quick_add_form(
+    request: Request, default_tab: str = "task", scope: str = "", label: str = "", conn=Depends(get_db)
+):
     # Merged task/event/contact/label quick-add (2026-08-10, grew Contact/
     # Label tabs 2026-09-14) -- the sidebar's single global "+" button
     # opens this instead of four separate New task / New event / New
@@ -2108,7 +2110,7 @@ def quick_add_form(request: Request, default_tab: str = "task", scope: str = "",
     # vocab lists are imported lazily from .tasks/.labels so this module
     # (which both of those import at load time) doesn't create a circular
     # import.
-    from .labels import COLORS, ICON_GROUPS
+    from .labels import COLORS, LABEL_ICON_GROUPS
     from .tasks import STATUS_ITEMS, STATUSES
 
     if default_tab not in ("task", "event", "contact", "label"):
@@ -2129,6 +2131,13 @@ def quick_add_form(request: Request, default_tab: str = "task", scope: str = "",
         allowed = db.label_selector_scope(conn, scope)
         if allowed is not None:
             tag_names = allowed
+    # 2026-09-25 (UI audit L1 + label page empty state): `label` is the
+    # label page the modal was opened from. It's prefilled on the Task,
+    # Event and Contact tabs (still removable); a project label lands in
+    # the Project dropdown, since _project_field.html reads the same list.
+    label = (label or "").strip()
+    if label and label not in tag_names:
+        tag_names = sorted(tag_names + [label], key=str.lower)
     return templates.TemplateResponse(
         "quick_add.html",
         {
@@ -2145,6 +2154,7 @@ def quick_add_form(request: Request, default_tab: str = "task", scope: str = "",
             "status_items": STATUS_ITEMS,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            "prefill_tags": [label] if label else [],
             **db.project_picker_context(conn),
             "today": date.today().isoformat(),
             "habit_label": db.get_task_habit_settings(conn)["habit_label"],
@@ -2171,7 +2181,7 @@ def quick_add_form(request: Request, default_tab: str = "task", scope: str = "",
             # changed client-side).
             "l": None,
             "colors": COLORS,
-            "icon_groups": ICON_GROUPS,
+            "icon_groups": LABEL_ICON_GROUPS,  # nav icons reserved (UI audit L3)
             "role": "none",
             "group_options": [g["name"] for g in db.list_groups(conn)],
         },

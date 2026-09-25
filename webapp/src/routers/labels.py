@@ -82,6 +82,15 @@ def _clean_group(label_group) -> str | None:
     return " ".join(label_group.split())[:60] or None
 
 
+def _clean_description(description) -> str | None:
+    """The label form's Description (2026-09-25, UI audit L17): trimmed,
+    capped at 500 characters, blank = none. Same isinstance guard as
+    _clean_group for direct calls from tests."""
+    if not isinstance(description, str):
+        return None
+    return description.strip()[:500] or None
+
+
 def _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks_widget, contacts_widget,
                  sidebar_pin="", widget_pin="") -> dict:
     """labels-as-modules slice b (2026-09-25): the label form's Deadline and
@@ -267,6 +276,34 @@ ICON_GROUPS: dict[str, list[str]] = {
 
 LABEL_ICONS = [name for group in ICON_GROUPS.values() for name in group]
 
+# 2026-09-25 (UI audit L3): the icons the nav rail itself uses (base.html:
+# Home, Calendar, Planner, Tasks, Habits, Contacts, Search, Settings, the
+# sidebar toggle). A label or group pinned in the rail with one of these
+# looked like a second Home/Calendar entry, so the label and group icon
+# pickers don't offer them. ICON_GROUPS itself is unchanged (habits use it
+# and never appear in the rail). A label that already has one keeps it:
+# icon_groups_for() adds it back as a "Current" option.
+NAV_RESERVED_ICONS = frozenset({
+    "home", "calendar", "clock", "check-square", "repeat", "address-book",
+    "command", "settings", "sidebar",
+})
+
+LABEL_ICON_GROUPS: dict[str, list[str]] = {
+    group: [n for n in names if n not in NAV_RESERVED_ICONS]
+    for group, names in ICON_GROUPS.items()
+}
+
+
+def icon_groups_for(current: str | None) -> dict[str, list[str]]:
+    """The label/group icon picker's groups. When `current` isn't offered
+    (a reserved nav icon, or one since dropped from the list), it's added
+    back first under "Current": the picker's radios are the form's only
+    `icon` field, so with no radio for it, saving would silently clear it."""
+    offered = {n for names in LABEL_ICON_GROUPS.values() for n in names}
+    if current and current not in offered:
+        return {"Current": [current], **LABEL_ICON_GROUPS}
+    return LABEL_ICON_GROUPS
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -302,6 +339,8 @@ def labels_regions(region: str, request: Request, conn=Depends(get_db)):
 
 
 def _labels_context(conn, request: Request) -> dict:
+    from .label_pages import deadline_info
+
     labels = db.list_labels(conn)
     for lbl in labels:
         # Status is only needed for is_project rows (the badge shows it) --
@@ -309,6 +348,9 @@ def _labels_context(conn, request: Request) -> dict:
         # on every label.
         if lbl.get("is_project") or lbl.get("has_deadline"):
             lbl["project_status"] = db.project_status(conn, lbl)
+        # 2026-09-25 (UI audit L7): the row's deadline badge, same states
+        # as the label's page (overdue / due soon / later / archived).
+        lbl["deadline"] = deadline_info(lbl)
 
     # Sorted by group, then type (project before plain), then name
     # (2026-09-13 request, "sorted by Groups first, then by type"). Since
@@ -324,7 +366,10 @@ def _labels_context(conn, request: Request) -> dict:
             by_group.setdefault(group, []).append(lbl)
         else:
             ungrouped.append(lbl)
-    label_groups = [{"name": g, "labels": by_group[g]} for g in sorted(by_group, key=str.lower)]
+    # 2026-09-25 (UI audit L3): each group row shows the group's own icon.
+    label_groups = [
+        {"name": g, "labels": by_group[g], **db.get_group_style(conn, g)} for g in sorted(by_group, key=str.lower)
+    ]
 
     return {
         "request": request,
@@ -365,7 +410,7 @@ def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
             "request": request,
             "l": cfg,
             "colors": COLORS,
-            "icon_groups": ICON_GROUPS,
+            "icon_groups": icon_groups_for(cfg.get("icon")),
             "role": _label_role(cfg),
             "group_options": [g["name"] for g in db.list_groups(conn)],
             # 2026-08-30 (direct request): a label's banner used to be
@@ -452,7 +497,7 @@ def update_label(
         "color": color if color in COLORS else "blue",
         "icon": icon,
         "label_group": _clean_group(label_group),
-        "description": description,
+        "description": _clean_description(description),
         "is_project": is_project,
         "created_at": existing.get("created_at") or _now(),
         **page,
@@ -499,7 +544,7 @@ def new_label_modal(request: Request, conn=Depends(get_db)):
             "request": request,
             "l": None,
             "colors": COLORS,
-            "icon_groups": ICON_GROUPS,
+            "icon_groups": LABEL_ICON_GROUPS,
             "role": "none",
             "group_options": [g["name"] for g in db.list_groups(conn)],
         },
@@ -512,6 +557,7 @@ def create_label(
     color: str = Form("blue"),
     icon: str = Form(""),
     label_group: str = Form(""),
+    description: str = Form(""),
     role: str = Form("none"),
     page_fields: str = Form(""),
     deadline_date: str = Form(""),
@@ -546,6 +592,8 @@ def create_label(
         "color": color if color in COLORS else "blue",
         "icon": icon,
         "label_group": _clean_group(label_group),
+        # 2026-09-25 (UI audit L17): the form has a Description field now.
+        "description": _clean_description(description),
         "is_project": 1 if role == "project" else 0,
         "created_at": _now(),
         **page,

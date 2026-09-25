@@ -1,0 +1,21 @@
+{# One empty state for a label nothing carries yet (2026-09-25, UI audit
+   flesh-out item 6). A brand-new label's page used to show an empty
+   Agenda, "No contacts match this filter." and four "No tasks" columns --
+   three separate empties that each said less than this one does. Each
+   button opens the quick-add modal on its tab with this label already
+   picked (routers/dashboard.py::quick_add_form's `label`), so the first
+   item lands on this page. `label_usage_count` comes from
+   routers/label_pages.py::_page_common. #}
+{% if label_usage_count == 0 %}
+{% set _qa = '/quick/add?label=' ~ (label.name|urlencode) ~ ('&scope=' ~ (page_label_scope|urlencode) if page_label_scope else '') %}
+<div class="label-empty-state">
+    <span class="label-empty-icon" data-style="color: var(--cal-text-{{ label.color or 'blue' }}, var(--fg-secondary))">{{ icon(label.icon or ('folder' if label.is_project else 'tag')) }}</span>
+    <p class="label-empty-title">Nothing tagged {{ label.name }} yet</p>
+    <p class="label-empty-hint">Anything you add here gets the {{ label.name }} label.</p>
+    <div class="label-empty-actions">
+        <a href="{{ _qa }}&amp;default_tab=task" data-modal class="btn outlined">{{ icon('check-square', 'icon-sm') }} New task</a>
+        <a href="{{ _qa }}&amp;default_tab=event" data-modal class="btn outlined">{{ icon('calendar', 'icon-sm') }} New event</a>
+        <a href="{{ _qa }}&amp;default_tab=contact" data-modal class="btn outlined">{{ icon('address-book', 'icon-sm') }} New contact</a>
+    </div>
+</div>
+{% endif %}

@@ -14,7 +14,9 @@
 {# Narrow header (2026-09-25, ui-cleanup item 2): the label's icon in its
    color (layers for a group page), its own banner or the default behind
    it. Replaces the hero banner + icon-tile straddle. #}
-{% call page_header_narrow(label.name, label.icon or 'tag', banner=banner, banner_image_scope=banner_image_scope, icon_color=(label.color if not group_labels else none)) %}
+{# 2026-09-25 (UI audit L3): a group page's icon is the group's own
+   color now too (routers/label_pages.py::group_page). #}
+{% call page_header_narrow(label.name, label.icon or 'tag', banner=banner, banner_image_scope=banner_image_scope, icon_color=label.color) %}
     <!-- 2026-08-29 (sidebar redesign item 13d): edit mode is now a
          persistent, app-wide Settings > Appearance toggle instead of a
          per-page `?edit=1` query param with its own "Edit mode"/"Done"
@@ -43,6 +45,13 @@
         <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Reset layout</button>
     </form>
     {% endif %}
+    {# 2026-09-25 (label page flesh-out): Edit label + Archive on a
+       label's page; Edit group (color + icon, UI audit L3) on a group's. #}
+    {% if group_style is defined %}
+    <a href="/groups/{{ label.name|urlencode }}/edit" data-modal class="btn ghost">{{ icon('edit', 'icon-sm') }} Edit group</a>
+    {% elif not edit_mode %}
+    {% include "_label_page_actions.html" %}
+    {% endif %}
     <!-- 2026-08-29 (direct request): the quick capture "+" button that
          used to live here outside edit mode is gone -- obsolete now that
          the sidebar rail has its own global "+ New" (13c, base.html),
@@ -50,7 +59,8 @@
 {% endcall %}
 
 {% include "_label_status.html" %}
-{% if label.description %}<p>{{ label.description }}</p>{% endif %}
+{% if label.description %}<p class="label-description">{{ label.description }}</p>{% endif %}
+{% if group_style is not defined %}{% include "_label_empty_state.html" %}{% endif %}
 
 {# A group's page lists its labels (slice c): the collapsed sidebar can't
    expand a group, so this is the always-available way in. #}

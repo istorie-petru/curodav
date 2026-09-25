@@ -162,7 +162,12 @@ class TestPageHeaderNarrowRollout:
         body = label_pages.label_page("CS101", _bare_request("/labels/CS101"), conn=conn).body.decode()
         header = body[body.index('class="page-header-narrow'):][:800]
         assert "#icon-book" in header
-        assert 'data-style="color: var(--cal-accent-red, var(--cal-accent-blue))"' in header
+        # 2026-09-25 (UI audit L2/L5): the color travels as custom
+        # properties so the CSS can pick the fill tone (white chip over a
+        # banner) or the text-safe tone (no banner).
+        assert 'page-header-narrow-icon has-color' in header
+        assert '--hdr-icon-fill: var(--cal-accent-red, var(--cal-accent-blue))' in header
+        assert '--hdr-icon-text: var(--cal-text-red, var(--cal-text-blue))' in header
         assert ">CS101</h2>" in header
         assert "label-icon-tile" not in body
 

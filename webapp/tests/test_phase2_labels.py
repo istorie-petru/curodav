@@ -457,9 +457,9 @@ class TestGeneratedSpacePage:
         db.upsert_label_config(conn, {"name": "CS101", "parent_name": "University", "created_at": _now()})
         resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
         assert resp.context["page_label_scope"] == "CS101"
-        # default_tab=label, not task -- this page's own active_tab is
-        # "label" (base.html's _qa_defaults maps that to the Label tab).
-        assert "/quick/add?default_tab=label&amp;scope=CS101" in resp.body.decode()
+        # 2026-09-25 (UI audit L1): a label's page opens the Task tab with
+        # the label prefilled, not New label.
+        assert "/quick/add?default_tab=task&amp;scope=CS101&amp;label=CS101" in resp.body.decode()
 
     def test_label_with_no_config_row_still_renders(self, conn):
         db.upsert_task(conn, {"uid": "t1", "title": "X", "description": "", "status": "active",
@@ -730,8 +730,9 @@ class TestSettingsLabelsTableIconInsteadOfDot:
         # attribute in a real browser; dynamic_styles.js applies
         # `data-style` via the CSSOM instead, which style-src doesn't
         # govern at all.
-        assert 'class="label-cell-icon" data-style="color: var(--cal-accent-red)"' in body
-        assert 'class="label-name" data-style="color: var(--cal-accent-red)">Urgent<' in body
+        # 2026-09-25 (UI audit L5): the text-safe --cal-text-* tone.
+        assert 'class="label-cell-icon" data-style="color: var(--cal-text-red)"' in body
+        assert 'class="label-name" data-style="color: var(--cal-text-red)">Urgent<' in body
 
     def test_manage_page_falls_back_to_tag_icon_when_none_configured(self, conn):
         # Same "always render *something*" behavior the old color-dot had
@@ -742,7 +743,7 @@ class TestSettingsLabelsTableIconInsteadOfDot:
         resp = labels_router.manage_labels(_request("/settings/labels"), conn=conn)
         body = resp.body.decode()
         assert "#icon-tag" in body
-        assert 'data-style="color: var(--cal-accent-blue)"' in body
+        assert 'data-style="color: var(--cal-text-blue)"' in body
 
     def test_async_region_fragment_matches_the_same_treatment(self, conn):
         self._label(conn, "Focus", color="purple", icon_name="target")
@@ -750,8 +751,9 @@ class TestSettingsLabelsTableIconInsteadOfDot:
         body = resp.body.decode()
         assert "color-dot" not in body
         assert "#icon-target" in body
-        assert 'class="label-cell-icon" data-style="color: var(--cal-accent-purple)"' in body
-        assert 'class="label-name" data-style="color: var(--cal-accent-purple)">Focus<' in body
+        # 2026-09-25 (UI audit L5): the text-safe --cal-text-* tone.
+        assert 'class="label-cell-icon" data-style="color: var(--cal-text-purple)"' in body
+        assert 'class="label-name" data-style="color: var(--cal-text-purple)">Focus<' in body
 
 
 # --------------------------------------------------------------------- #
