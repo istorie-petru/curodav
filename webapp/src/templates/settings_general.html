@@ -195,6 +195,14 @@
             <input type="time" name="digest_time" value="{{ push_digest_time }}" step="300" required></label>
         <button type="submit" class="btn tonal btn-sm">Save</button>
     </form>
+    {# The VAPID contact (src/push.py): sent to push services with each
+       notification so they can reach whoever runs this server. #}
+    <form class="push-contact-form" method="post" action="/settings/push-contact">
+        <label class="push-contact"><span class="settings-field-label">Contact email for push services
+            <span class="settings-field-hint">Push services (Google, Mozilla, Apple) use it to reach you about delivery problems. Leave blank for the default.</span></span>
+            <input type="email" name="email" value="{{ push_contact_email }}" maxlength="254" autocomplete="email" placeholder="you@example.com"></label>
+        <button type="submit" class="btn tonal btn-sm">Save</button>
+    </form>
 </div>
 {% endblock %}
 {% block extra_scripts %}<script defer src="{{ static_url('push_settings.js') }}"></script>{% endblock %}

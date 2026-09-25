@@ -7854,6 +7854,11 @@ button.allday-habit{width:100%; text-align:left; border:none; cursor:pointer; fo
 .push-types legend{padding:0; margin-bottom:4px;}
 .push-type{display:flex; align-items:center; gap:var(--space-2); font-size:var(--text-sm);}
 .push-digest{display:flex; flex-direction:column; gap:4px;}
+/* Push contact email: same row shape as the types form above. */
+.push-contact-form{display:flex; flex-wrap:wrap; align-items:flex-end; gap:var(--space-3); padding:var(--space-3) var(--space-2) var(--space-2); border-top:1px solid var(--separator);}
+.push-contact{display:flex; flex-direction:column; gap:4px; flex:0 1 360px; min-width:0;}
+.push-contact .settings-field-hint{display:block; font-weight:var(--font-weight-regular); color:var(--fg-tertiary); font-size:var(--text-sm); margin-top:2px;}
+.push-contact input{width:100%;}
 /* Habit day amount popup (static/habit_day.js, 2026-09-25) -- deliberately
    tiny: a date line, one number box (placeholder = the daily target),
    Cancel/Save. Native <dialog>, so it sits above the view modal. */

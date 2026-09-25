@@ -23,6 +23,7 @@ import base64
 import json
 import logging
 import os
+import re
 from datetime import datetime, timezone
 
 from cryptography.hazmat.primitives import serialization
@@ -37,9 +38,14 @@ _PRIVATE_KEY_META = "push_vapid_private_pem"
 # The VAPID "sub" claim: push services want a contact they can reach
 # about abusive traffic -- a `mailto:` address or a bare `https://` ORIGIN
 # (py_vapid rejects anything with a path, which a first version of this
-# default had: caught by the live scheduler check, 2026-09-24). Set
-# CC_PUSH_CONTACT=mailto:you@yourdomain to use your own.
+# default had: caught by the live scheduler check, 2026-09-24). Set your
+# own email in Settings > General > Notifications (stored in app_meta
+# under CONTACT_KEY, wins over the env var) or CC_PUSH_CONTACT=mailto:...
 DEFAULT_CONTACT = "https://github.com"
+CONTACT_KEY = "push_contact_email"
+# Deliberately stricter than py_vapid's _check_sub, whose mailto branch
+# isn't end-anchored (it would accept trailing junk, newlines included).
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+")
 # How long a push service may hold an undelivered notification (seconds).
 _TTL = 6 * 60 * 60
 
@@ -63,7 +69,28 @@ def public_key(conn) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
 
 
-def _contact() -> str:
+def normalize_email(value: str | None) -> str | None:
+    """A Settings-entered address (with or without a `mailto:` prefix) as
+    a bare lowercase-domain email, or None if it isn't a plausible one."""
+    value = (value or "").strip()
+    if value.lower().startswith("mailto:"):
+        value = value[7:]
+    if len(value) > 254 or not _EMAIL_RE.fullmatch(value):
+        return None
+    local, domain = value.rsplit("@", 1)
+    return f"{local}@{domain.lower()}"
+
+
+def contact_email(conn) -> str:
+    """The email saved in Settings, or "" if none."""
+    return db.get_app_meta(conn, CONTACT_KEY) or ""
+
+
+def _contact(conn=None) -> str:
+    if conn is not None:
+        saved = normalize_email(contact_email(conn))
+        if saved:
+            return f"mailto:{saved}"
     value = (os.environ.get("CC_PUSH_CONTACT") or "").strip()
     if value and not _check_sub(value):
         log.warning("CC_PUSH_CONTACT %r isn't a mailto: address or https:// origin; using the default", value)
@@ -77,6 +104,7 @@ def send_to_all(conn, title: str, body: str, url: str = "/", tag: str | None = N
     tests (pywebpush.webpush's signature)."""
     payload = json.dumps({"title": title, "body": body, "url": url, "tag": tag})
     vapid = _vapid(conn)
+    contact = _contact(conn)
     now = datetime.now(timezone.utc).isoformat()
     sent = failed = pruned = 0
     for sub in db.list_push_subscriptions(conn):
@@ -86,7 +114,7 @@ def send_to_all(conn, title: str, body: str, url: str = "/", tag: str | None = N
                 subscription_info=info,
                 data=payload,
                 vapid_private_key=vapid,
-                vapid_claims={"sub": _contact()},
+                vapid_claims={"sub": contact},
                 ttl=_TTL,
                 timeout=10,
             )

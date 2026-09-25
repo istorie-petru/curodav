@@ -167,3 +167,55 @@ class TestWiring:
         req = Request({"type": "http", "method": "GET", "path": "/settings/general", "headers": [], "query_string": b""})
         body = settings_router.settings_general(req, conn=conn).body.decode()
         assert 'id="push-settings"' in body and "push_settings.js" in body
+
+
+class TestContactSetting:
+    """Settings > General > Notifications: the push-service contact email
+    (VAPID `sub` claim), saved in app_meta, wins over CC_PUSH_CONTACT."""
+
+    @pytest.mark.parametrize("raw,expected", [
+        ("me@Example.ORG", "me@example.org"),
+        ("  mailto:me@example.org ", "me@example.org"),
+        ("me@example.org\nX-Evil: 1", None),
+        ("me@localhost", None),
+        ("not an email", None),
+        ("", None),
+    ])
+    def test_normalize_email(self, raw, expected):
+        assert push.normalize_email(raw) == expected
+
+    def test_saved_email_wins_over_env(self, conn, monkeypatch):
+        from src.routers import settings as settings_router
+
+        monkeypatch.setenv("CC_PUSH_CONTACT", "mailto:env@example.org")
+        assert push._contact(conn) == "mailto:env@example.org"
+        resp = settings_router.set_push_contact(email="me@example.org", conn=conn)
+        assert resp.status_code == 303
+        assert push._contact(conn) == "mailto:me@example.org"
+        settings_router.set_push_contact(email="  ", conn=conn)  # blank clears
+        assert push.contact_email(conn) == ""
+        assert push._contact(conn) == "mailto:env@example.org"
+
+    def test_invalid_email_keeps_old_and_reports(self, conn):
+        from src.routers import settings as settings_router
+
+        settings_router.set_push_contact(email="me@example.org", conn=conn)
+        resp = settings_router.set_push_contact(email="nope", conn=conn)
+        assert "error=" in resp.headers["location"]
+        assert push.contact_email(conn) == "me@example.org"
+
+    def test_send_uses_saved_email(self, conn):
+        db.upsert_push_subscription(conn, SUB["endpoint"], "BPk", "xyz", None, "now")
+        db.set_app_meta(conn, push.CONTACT_KEY, "me@example.org")
+        calls = []
+        push.send_to_all(conn, "Hi", "Body", sender=lambda **kw: calls.append(kw))
+        assert calls[0]["vapid_claims"] == {"sub": "mailto:me@example.org"}
+
+    def test_settings_page_renders_field(self, conn):
+        from src.routers import settings as settings_router
+
+        db.set_app_meta(conn, push.CONTACT_KEY, "me@example.org")
+        req = Request({"type": "http", "method": "GET", "path": "/settings/general", "headers": [], "query_string": b""})
+        body = settings_router.settings_general(req, conn=conn).body.decode()
+        assert 'action="/settings/push-contact"' in body
+        assert 'name="email" value="me@example.org"' in body

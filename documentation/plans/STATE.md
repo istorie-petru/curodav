@@ -886,7 +886,13 @@ session start.
   and Contacts-row label pills aren't clickable; a work session added
   inside a habit/task modal reloads the page on close; habits aren't in the
   week/4-week grids; the habit check-in histogram uses the server's time
-  zone; the optional `CC_PUSH_CONTACT` env var.
+  zone.
+
+  **2026-09-25 follow-up**: the push contact email (VAPID `sub` claim) is
+  now settable in Settings > General > Notifications (app_meta
+  `push_contact_email`; wins over `CC_PUSH_CONTACT`, which still works as
+  a fallback). Also: `run.sh` seeds the gitignored `.dev/radicale/users`
+  on a fresh clone, and `materialize_all` no-ops on a None bridge.
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-
