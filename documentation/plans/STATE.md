@@ -783,6 +783,18 @@ session start.
   v117 -> v118. **Peter's first real test**: Settings > General > Turn on
   > Send test (iPhone: Add to Home Screen first).
 
+  **2026-09-25 follow-up (direct request) -- smarter clickable heatmap.**
+  View-modal heatmap clickable again (Peter reversed the 08-29 view-only
+  call); amount habits open a tiny amount popup (placeholder = target,
+  Enter-empty logs it) in the heatmap, month calendar and 7-day strips
+  (`static/habit_day.js`, base.html + SHELL_ASSETS); period habits have
+  no heatmap; view-modal Work sessions collapsed by default (still in the
+  edit modal). Heatmap now shades partial days. Verified live (popup
+  placeholder 8, Esc closes only the popup, empty Enter = 8 / level-4,
+  3 -> level-2, no reload after a popup edit, Gym has no heatmap, work
+  sessions collapsed -> stay open while adding one). Full suite **2,436
+  passed**. `sw.js` v118 -> v119.
+
   **Next slice**: labels-as-modules (item 4) -- **re-confirm the
   reversal's exact scope with Peter first, do not start without it**
   (reverses the 2026-09-16 Spaces/Projects Kanban+Agenda pages; break into

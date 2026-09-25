@@ -77,7 +77,10 @@ class TestCheckinWidget:
         assert 'action="/tasks/h2/completions"' in html
         assert f'name="completion_date" value="{today}"' in html
         assert "/habits/" not in html  # no retired entity endpoints
-        assert html.count('class="form-inline habit-action habit-day-form"') == 14  # 7-day strip per row
+        # 7-day strip per row: toggles for the plain habit, amount-popup
+        # triggers for the 8-glasses one (2026-09-25).
+        assert html.count('class="form-inline habit-action habit-day-form"') == 7
+        assert html.count('class="habit-day habit-amount-trigger') == 7
 
     def test_todo_first_and_all_done_summary(self, conn):
         _habit(conn, "h1", "Aaa")

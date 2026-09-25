@@ -1151,6 +1151,24 @@ check-ins. Bars are CSS (heights via `data-style`, CSP-safe), each in its
 own fixed track -- a first version let the labels squash every tall bar
 to the same height; caught in the live check and fixed.
 
+**Follow-up, 2026-09-25 (Peter: "I won't be against a clickable heatmap,
+but ... smarter").** The view modal's year heatmap is clickable again
+(reversing the 2026-08-29 view-only call, test updated): plain/avoid
+habits toggle a day; an **amount habit** (target > 1) opens a tiny
+native `<dialog>` (`static/habit_day.js`, loaded app-wide) with one
+number box whose placeholder is the target -- Enter on an empty box logs
+the target, 0 clears, Escape closes only the popup. The same popup
+drives amount habits' month-calendar days and the Habits page / widget
+7-day strip (no more one-click "1" for an 8-glasses habit). The habit
+heatmap now paints real values against the target
+(`habit_heatmap.heatmap_weeks`), so a partial day is lighter. **Period
+habits** ("3x a week", "once a month") get no heatmap -- the month
+calendar stays. **Work sessions**: still in the edit modal; in the view
+modal they're a `<details>` collapsed by default (kept open across the
+modal's own in-place refreshes once opened, collapsed again next time).
+`CCModal.markChangedWith(change)` added so a popup save inside the
+modal refreshes the page's region on close, not a full reload.
+
 **Not adopted, as planned:** focus/Pomodoro timer, checklists inside a
 habit (tasks are flat on purpose), third-party import, app lock,
 launcher icons, gamification, share cards. Reminders ride on item 7 (Web

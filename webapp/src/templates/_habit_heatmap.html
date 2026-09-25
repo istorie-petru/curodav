@@ -4,8 +4,11 @@
      routers/tasks.py's /tasks/{uid}/completion/{date}/toggle ("no entry ->
      create; existing -> clear"), so clicking a day is a single no-JS
      request. `action_prefix` overrides that endpoint prefix. -->
-{% macro heatmap(uid, weeks, action_prefix=none, extra_class='', extra_attrs='', interactive=true) %}
-{# `interactive=false` (2026-08-29, the habit view modal's "a heatmap
+{% macro heatmap(uid, weeks, action_prefix=none, extra_class='', extra_attrs='', interactive=true, form_attrs='', amount=none) %}
+{# `form_attrs`: extra attributes for each day's toggle <form> (e.g. the
+   habit view modal's keep-open wiring). `amount` ({url, target, unit}):
+   an amount habit -- days become popup triggers, not toggles.
+   `interactive=false` (2026-08-29, the habit view modal's "a heatmap
    graph should be able to be visible... not interactable") renders the
    exact same grid as a plain `<span>` per day instead of a `<form>`/
    `<button>` -- no click target, no toggle route hit at all, view-only.
@@ -21,8 +24,15 @@
             {% for day in week %}
             {% if day.is_future %}
             <span class="heatmap-cell level-future"></span>
+            {% elif interactive and amount %}
+            {# 2026-09-25: an amount habit's day opens the small amount
+               popup (static/habit_day.js) instead of toggling to 1. #}
+            <button type="button" class="heatmap-cell level-{{ day.level }} habit-amount-trigger"
+                    data-url="{{ amount.url }}" data-date="{{ day.date }}" data-value="{{ day.value|int if day.value else '' }}"
+                    data-target="{{ amount.target|int }}" data-unit="{{ amount.unit or '' }}"
+                    title="{{ day.date }}{% if day.value %} &mdash; {{ day.value|int }}{% endif %}"></button>
             {% elif interactive %}
-            <form method="post" action="{{ _prefix }}/{{ day.date }}/toggle" class="heatmap-cell-form">
+            <form method="post" action="{{ _prefix }}/{{ day.date }}/toggle" class="heatmap-cell-form" {{ form_attrs|safe }}>
                 <button type="submit" class="heatmap-cell level-{{ day.level }}" title="{{ day.date }}{% if day.value %} &mdash; {{ day.value }}{% endif %}"></button>
             </form>
             {% else %}

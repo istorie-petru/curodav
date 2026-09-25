@@ -815,6 +815,15 @@ def task_detail(uid: str, request: Request, month: str | None = None, conn=Depen
         ctx["habit_label"] = db.get_task_habit_settings(conn)["habit_label"]
         # Habits H3 (2026-09-24): month calendar + day notes + "Log a day".
         rows = db.list_task_completions(conn, uid)
+        # 2026-09-25 (Peter: clickable heatmap, "smarter" for amount
+        # habits): the habit heatmap paints real values against the daily
+        # target (partial days lighter) and each cell carries its value
+        # for the amount popup (static/habit_day.js).
+        ctx["completion_weeks"] = habit_heatmap.heatmap_weeks(
+            {r["due_date"]: r.get("value") or 0 for r in rows},
+            task.get("target_per_day") or 1,
+            habit_heatmap.DETAIL_WEEKS,
+        )
         ctx["habit_month"] = habit_view.month_calendar(uid, rows, month if isinstance(month, str) else None)
         ctx["habit_notes"] = habit_view.recent_notes(rows)
         # Habits H8: strength (on habit_stats), per-month counts, usual hour.

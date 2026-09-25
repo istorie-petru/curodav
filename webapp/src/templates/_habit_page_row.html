@@ -49,6 +49,17 @@
     <ol class="habit-week" aria-label="Last seven days">
         {% for d in h.week %}
         <li>
+            {% if h.is_quantity %}
+            {# 2026-09-25: an amount habit's day opens the small amount
+               popup (static/habit_day.js), target as the placeholder. #}
+            <button type="button" class="habit-day habit-amount-trigger{% if d.done %} is-done{% endif %}{% if d.is_today %} is-today{% endif %}{% if d.excluded %} is-excluded{% endif %}"
+                    data-url="{{ h.plus_url }}" data-date="{{ d.iso }}" data-value="{{ d.value|int if d.value else '' }}"
+                    data-target="{{ h.target|int }}" data-unit="{{ h.unit }}"
+                    title="{{ d.day_name }} {{ d.iso }}{% if d.done %} -- {{ d.value|int }}{% endif %} -- click to set the amount">
+                <span class="habit-day-initial" aria-hidden="true">{{ d.initial }}</span>
+                <span class="sr-only">{{ d.day_name }} {{ d.iso }}{% if d.done %}, {{ d.value|int }}{% endif %}</span>
+            </button>
+            {% else %}
             <form method="post" action="{{ d.toggle_url }}" class="form-inline habit-action habit-day-form">
                 <button type="submit" class="habit-day{% if d.done %} {{ 'is-relapse' if h.is_avoid else 'is-done' }}{% endif %}{% if d.is_today %} is-today{% endif %}{% if d.excluded %} is-excluded{% endif %}"
                         aria-pressed="{{ 'true' if d.done else 'false' }}"
@@ -57,6 +68,7 @@
                     <span class="sr-only">{{ d.day_name }} {{ d.iso }}{% if d.done %}, done{% endif %}</span>
                 </button>
             </form>
+            {% endif %}
         </li>
         {% endfor %}
     </ol>

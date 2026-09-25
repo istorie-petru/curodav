@@ -101,12 +101,18 @@
    form) is a keep-open modal form (modal.js re-renders this modal in place; closing it refreshes the
    page's own live region via data-cc-change="task"). #}
 {% set _keep = 'data-modal-keep-open data-cc-change="task" data-cc-action="checkin"' %}
+{# 2026-09-25 (Peter): the year heatmap is clickable again (reversing the
+   2026-08-29 view-only call) -- a click toggles the day, or for an amount
+   habit opens the small amount popup (static/habit_day.js) with the
+   target as its placeholder. A "3x a week" / "once a month" (period)
+   habit has no heatmap at all: a per-day grid doesn't describe it. #}
+{% set _is_amount = task.target_per_day and task.target_per_day > 1 and task.habit_kind != 'avoid' %}
+{% set _amount = {'url': '/tasks/' ~ task.uid ~ '/completions', 'target': task.target_per_day, 'unit': task.habit_unit} if _is_amount else none %}
+{% if not (habit_stats and habit_stats.kind == 'period') %}
 <div class="detail-card detail-section-gap">
-    {# View-only on purpose (2026-08-29, Peter: the view modal's heatmap
-       should be "visible... not interactable") -- days are edited from
-       the month calendar below instead. #}
-    {{ heatmap(task.uid, completion_weeks, action_prefix='/tasks/' ~ task.uid ~ '/completion', extra_class='heatmap-wide' ~ (' heatmap-avoid' if task.habit_kind == 'avoid' else ''), interactive=false) }}
+    {{ heatmap(task.uid, completion_weeks, action_prefix='/tasks/' ~ task.uid ~ '/completion', extra_class='heatmap-wide' ~ (' heatmap-avoid' if task.habit_kind == 'avoid' else ''), interactive=true, form_attrs=_keep, amount=_amount) }}
 </div>
+{% endif %}
 
 <section class="habit-month detail-plain-section{% if task.habit_kind == 'avoid' %} is-avoid{% endif %}" aria-label="Month calendar">
     <div class="habit-month-head">
@@ -120,11 +126,18 @@
         {% if d.is_future or not d.in_month %}
         <span class="habit-month-day{% if not d.in_month %} is-outside{% endif %}{% if d.is_future %} is-future{% endif %}{% if d.done %} is-done{% endif %}">{{ d.day }}</span>
         {% else %}
+        {% if _is_amount %}
+        <button type="button" class="habit-month-day habit-amount-trigger{% if d.done %} is-done{% endif %}{% if d.is_today %} is-today{% endif %}{% if d.note %} has-note{% endif %}"
+                data-url="{{ _amount.url }}" data-date="{{ d.iso }}" data-value="{{ d.value|int if d.value else '' }}"
+                data-target="{{ task.target_per_day|int }}" data-unit="{{ task.habit_unit or '' }}"
+                title="{{ d.iso }}{% if d.done %} -- {{ d.value|int }}{% endif %}{% if d.note %}: {{ d.note }}{% endif %}">{{ d.day }}</button>
+        {% else %}
         <form method="post" action="{{ d.toggle_url }}" class="form-inline" {{ _keep|safe }}>
             <button type="submit" class="habit-month-day{% if d.done %} is-done{% endif %}{% if d.is_today %} is-today{% endif %}{% if d.note %} has-note{% endif %}"
                     title="{{ d.iso }}{% if d.done %} -- done{% if task.target_per_day and task.target_per_day > 1 %} ({{ d.value|int }}){% endif %}{% endif %}{% if d.note %}: {{ d.note }}{% endif %}"
                     aria-pressed="{{ 'true' if d.done else 'false' }}">{{ d.day }}</button>
         </form>
+        {% endif %}
         {% endif %}
         {% endfor %}{% endfor %}
     </div>
@@ -212,9 +225,14 @@
      (style.css), same as task_detail.html's own Work sessions card the
      same day. The heatmap card right above stays a real .detail-card,
      unaffected -- the feedback was about Work sessions specifically. -->
-<div class="detail-plain-section">
+{# 2026-09-25 (Peter): Work sessions live in the edit modal
+   (habit_task_form.html); here they stay available but collapsed by
+   default. static/habit_day.js keeps it open across this modal's own
+   in-place refreshes once opened. #}
+<details class="detail-plain-section habit-work-sessions" data-uid="{{ task.uid }}">
+    <summary class="habit-work-sessions-summary">Work sessions{% if work_allocations %} <span class="checklist-progress">{{ work_allocations|length }}</span>{% endif %}</summary>
     {{ task_work_allocations_section(task, work_allocations, work_hours) }}
-</div>
+</details>
 
 </div>
 

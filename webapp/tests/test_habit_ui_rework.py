@@ -138,11 +138,14 @@ class TestHabitTaskViewModal:
         assert "heatmap-grid" in body
         assert "Daily" in body
 
-    def test_heatmap_is_not_interactive(self, conn):
+    def test_heatmap_is_clickable(self, conn):
+        # 2026-09-25 (Peter): the view modal's heatmap is clickable again,
+        # reversing the 2026-08-29 view-only call -- see test_habit_detail.py
+        # for the amount-popup and period-habit cases.
         _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
         resp = tasks_router.task_detail("h1", _request("/tasks/h1"), conn=conn)
         body = resp.body.decode()
-        assert "heatmap-cell-form" not in body
+        assert 'class="heatmap-cell-form" data-modal-keep-open data-cc-change="task"' in body
 
     def test_no_status_due_start_meta(self, conn):
         _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")

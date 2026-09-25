@@ -1,5 +1,5 @@
 """Habits H3 (2026-09-24, plans/ui-cleanup-2026-09.md item 14): the habit
-detail modal -- view-only year grid, clickable month calendar, day notes, "Log a
+detail modal -- clickable year grid (2026-09-25; view-only before), month calendar, day notes, "Log a
 day" -- plus note storage on task_completions, date validation on the
 completion endpoints, and the backup restore keeping value/note."""
 
@@ -101,7 +101,7 @@ class TestDetailModal:
         db.upsert_task_completion(conn, "h1", TODAY.isoformat(), _now(), 1, "morning run")
         req = Request({"type": "http", "method": "GET", "path": "/tasks/h1", "headers": [], "query_string": b""})
         body = tasks_router.task_detail("h1", req, conn=conn).body.decode()
-        assert "heatmap-cell-form" not in body  # year grid stays view-only (2026-08-29 request)
+        assert 'class="heatmap-cell-form" data-modal-keep-open data-cc-change="task"' in body  # clickable (2026-09-25)
         assert 'class="form-inline" data-modal-keep-open data-cc-change="task"' in body  # month days
         assert 'class="habit-month-grid"' in body
         assert 'action="/tasks/h1/completions" class="habit-log-form" data-modal-keep-open' in body
@@ -121,3 +121,61 @@ class TestBackupRestoreKeepsValueAndNote:
         export_router.restore_backup_payload(conn, payload)
         back = db.get_task_completion(conn, "h1", "2026-09-01")
         assert (back["value"], back["note"]) == (5, "tired")
+
+
+class TestSmarterHeatmap:
+    """2026-09-25 (Peter): clickable heatmap, smarter per habit shape --
+    an amount habit's days open the small amount popup (placeholder = the
+    target) instead of toggling; a "3x a week" / "once a month" (period)
+    habit gets no heatmap; Work sessions are collapsed in the view modal."""
+
+    def _detail(self, conn, uid):
+        req = Request({"type": "http", "method": "GET", "path": f"/tasks/{uid}", "headers": [], "query_string": b""})
+        return tasks_router.task_detail(uid, req, conn=conn).body.decode()
+
+    def test_amount_habit_days_are_popup_triggers(self, conn):
+        _habit(conn, "w1", target=8)
+        db.upsert_task(conn, {**db.get_task(conn, "w1"), "habit_unit": "glasses"})
+        db.upsert_task_completion(conn, "w1", TODAY.isoformat(), _now(), 3)
+        body = self._detail(conn, "w1")
+        assert "heatmap-cell-form" not in body  # no one-click toggles for an amount habit
+        assert 'habit-amount-trigger"' in body and 'data-url="/tasks/w1/completions"' in body
+        assert f'data-date="{TODAY.isoformat()}" data-value="3"' in body
+        assert 'data-target="8" data-unit="glasses"' in body
+        # month calendar days too
+        assert 'class="habit-month-day habit-amount-trigger' in body
+
+    def test_amount_level_reflects_partial_days(self, conn):
+        _habit(conn, "w1", target=8)
+        db.upsert_task_completion(conn, "w1", TODAY.isoformat(), _now(), 2)
+        body = self._detail(conn, "w1")
+        cell = body[body.index(f'data-date="{TODAY.isoformat()}" data-value="2"') - 200:][:220]
+        assert "level-4" not in cell  # 2 of 8 isn't a full day
+
+    @pytest.mark.parametrize("rrule,per", [("FREQ=WEEKLY", 3), ("FREQ=MONTHLY", None)])
+    def test_period_habits_have_no_heatmap(self, conn, rrule, per):
+        _habit(conn, "p1")
+        db.upsert_task(conn, {**db.get_task(conn, "p1"), "recurrence": rrule, "habits_per_period": per})
+        body = self._detail(conn, "p1")
+        assert 'class="heatmap' not in body
+        assert 'class="habit-month-grid"' in body  # the month calendar stays
+
+    def test_work_sessions_collapsed_in_view_and_present_in_edit(self, conn):
+        _habit(conn, "h1")
+        body = self._detail(conn, "h1")
+        assert '<details class="detail-plain-section habit-work-sessions" data-uid="h1">' in body
+        req = Request({"type": "http", "method": "GET", "path": "/tasks/h1/edit", "headers": [], "query_string": b""})
+        form = tasks_router.edit_task_form("h1", req, conn=conn).body.decode()
+        assert 'action="/tasks/h1/work-allocations"' in form
+
+
+class TestPageStripAmount:
+    def test_strip_uses_popup_for_amount_habits(self, conn):
+        from src.routers import habits as habits_router
+
+        _habit(conn, "w1", target=8)
+        _habit(conn, "d1")
+        req = Request({"type": "http", "method": "GET", "path": "/habits", "headers": [], "query_string": b""})
+        body = habits_router.habits_page(req, conn=conn).body.decode()
+        assert body.count('class="habit-day habit-amount-trigger') == 7  # w1's strip
+        assert body.count('class="form-inline habit-action habit-day-form"') == 7  # d1's strip

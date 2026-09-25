@@ -7812,3 +7812,18 @@ button.allday-habit{width:100%; text-align:left; border:none; cursor:pointer; fo
 .push-types legend{padding:0; margin-bottom:4px;}
 .push-type{display:flex; align-items:center; gap:var(--space-2); font-size:var(--text-sm);}
 .push-digest{display:flex; flex-direction:column; gap:4px;}
+/* Habit day amount popup (static/habit_day.js, 2026-09-25) -- deliberately
+   tiny: a date line, one number box (placeholder = the daily target),
+   Cancel/Save. Native <dialog>, so it sits above the view modal. */
+.habit-amount-dialog{width:min(260px, calc(100vw - 32px)); padding:var(--space-3); border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--bg-elevated); color:var(--fg-primary); box-shadow:var(--elevation-2, 0 8px 24px rgba(0,0,0,.18));}
+.habit-amount-dialog::backdrop{background:rgba(0,0,0,.25);}
+.habit-amount-form{display:flex; flex-direction:column; gap:var(--space-2); margin:0;}
+.habit-amount-label{font-size:var(--text-sm); color:var(--fg-secondary);}
+.habit-amount-form input{width:100%; font-size:var(--text-lg); font-variant-numeric:tabular-nums;}
+.habit-amount-form input::placeholder{color:var(--fg-tertiary);}
+.habit-amount-actions{display:flex; justify-content:flex-end; gap:var(--space-2);}
+.habit-amount-trigger{cursor:pointer;}
+button.heatmap-cell{border:none; padding:0;}
+/* Work sessions in the habit view modal: collapsed by default. */
+.habit-work-sessions-summary{cursor:pointer; font-weight:var(--font-weight-bold); padding:var(--space-1) 0; list-style-position:inside;}
+.habit-work-sessions[open] .habit-work-sessions-summary{margin-bottom:var(--space-2);}

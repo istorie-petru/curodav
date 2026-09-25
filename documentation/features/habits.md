@@ -29,7 +29,9 @@ habit never has to look like a task (status/due date/Kanban) anywhere:
 - **Calendar day view** (H7) -- the all-day row lists the habits scheduled
   that day; past and today are checkable in place.
 - **Detail modal** (`habit_task_detail.html`) -- streak/best/kept/strength
-  stats, Insights (days per month, usual check-in hour), a
+  stats, a clickable year heatmap (not for "X times per week/month"
+  habits; amount habits open a small amount popup, `static/habit_day.js`),
+  Insights (days per month, usual check-in hour), a
   view-only 53-week heatmap, a clickable month calendar (`?month=`), a
   "Log a day" form (date, amount, note) and recent day notes
   (`task_completions.note`). Edit form: `habit_task_form.html`.

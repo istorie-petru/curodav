@@ -558,7 +558,10 @@
 // browser's own byte-compare anyway; bumped for the shell convention).
 // v118 (2026-09-24, same session): Web Push P3 -- style.css gained the
 // reminder-types / digest-time form rules.
-const CACHE_NAME = "cc-shell-v118";
+// v119 (2026-09-25): clickable habit heatmap -- new base.html-loaded
+// habit_day.js (amount popup; added to SHELL_ASSETS), modal.js gained
+// CCModal.markChangedWith, style.css the popup/work-sessions rules.
+const CACHE_NAME = "cc-shell-v119";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",
@@ -570,6 +573,7 @@ const SHELL_ASSETS = [
   "/static/a11y_icon_labels.js",
   "/static/dynamic_styles.js",
   "/static/modal.js",
+  "/static/habit_day.js",
   "/static/tag_input.js",
   "/static/recurrence_picker.js",
   "/static/reminders_picker.js",

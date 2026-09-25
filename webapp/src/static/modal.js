@@ -860,6 +860,14 @@
     // stay-open flow) -- that form is a plain add-and-close form now.
     markChanged: function () {
       pendingReload = true;
+      pendingForceReload = true;
+    },
+    // 2026-09-25 (static/habit_day.js): like markChanged, but closing
+    // dispatches `change` (the page refreshes its live region) instead
+    // of a full reload -- same as a keep-open form with data-cc-change.
+    markChangedWith: function (change) {
+      pendingReload = true;
+      pendingChange = change;
     },
     refresh: function () {
       return refreshModalContent();
