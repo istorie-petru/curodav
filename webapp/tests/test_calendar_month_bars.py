@@ -532,3 +532,30 @@ class TestItemDragGhostStructural:
         block = css[idx:idx + 250]
         assert "pointer-events:none" in block
         assert "position:fixed" in block
+
+
+class TestMonthBarSpacing:
+    """2026-09-25 direct report: all-day bars sat glued to (actually 1px
+    over) the day number and flush against the column gridlines. The bar
+    layer's top must be built from the same tokens as the day cell's own
+    padding + day-number gap, so bars and text rows start at the same y."""
+
+    def test_bar_layer_top_matches_the_cell_padding_and_daynum_gap(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        assert "top:calc(var(--month-cell-pad-top) + var(--month-daynum-h) + var(--month-daynum-gap));" in css
+        assert "padding:var(--month-cell-pad-top) 4px 4px;" in css
+        assert "margin-bottom:var(--month-daynum-gap);}" in css
+
+    def test_bars_are_inset_from_the_column_gridlines(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        for i in range(1, 8):
+            assert f".month-bar-col-{i}{{left:calc({i - 1}/7 * 100% + 3px);}}" in css
+            assert f".month-bar-span-{i}{{width:calc({i}/7 * 100% - 6px);}}" in css
+
+    def test_lane_offset_leaves_room_below_the_last_bar(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        for i in range(1, 9):
+            assert (
+                f".month-bars-offset-{i}{{margin-top:calc({i} * (var(--month-bar-h) + var(--month-bar-gap))"
+                " + var(--month-bars-after-gap));}"
+            ) in css

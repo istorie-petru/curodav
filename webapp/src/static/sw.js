@@ -561,7 +561,9 @@
 // v119 (2026-09-25): clickable habit heatmap -- new base.html-loaded
 // habit_day.js (amount popup; added to SHELL_ASSETS), modal.js gained
 // CCModal.markChangedWith, style.css the popup/work-sessions rules.
-const CACHE_NAME = "cc-shell-v121";
+// v122 (2026-09-25): Month/4-Week all-day bar spacing -- style.css bar
+// layer now clears the day number and insets from the column gridlines.
+const CACHE_NAME = "cc-shell-v122";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

@@ -3802,6 +3802,15 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    and are dropped with the lane system; only the day-number row height
    survives. */
 :root{--month-daynum-h:22px;}
+/* 2026-09-25 (direct report: "spacing between the calendar day number and
+   the full bg event"): the bar layer used to sit at top:--month-daynum-h
+   from the week row, ignoring the cell's own 3px top padding and the day
+   number's bottom margin -- so a bar started 3px INSIDE the day-number box
+   (the 24px today circle overlapped it) and 5px above where each cell's
+   own item list starts. These two tokens are that padding and gap, shared
+   by `.month-day-cell`/`.month-day-num` and `.month-week-bars` below so the
+   bar layer and the text rows start at the same y by construction. */
+:root{--month-cell-pad-top:3px; --month-daynum-gap:4px;}
 .month-weekday-row{display:grid; grid-template-columns:repeat(7,1fr); padding:0 0 4px;}
 .month-weekday-row span{text-align:left; font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-tertiary); padding-left:4px;}
 .month-week-grid{
@@ -3813,7 +3822,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .month-week-grid:last-child{border-bottom:1px solid var(--separator);}
 .month-day-cell{
   grid-row:1 / -1; display:flex; flex-direction:column; min-height:90px;
-  padding:3px 4px 4px; cursor:pointer; position:relative; z-index:1;
+  padding:var(--month-cell-pad-top) 4px 4px; cursor:pointer; position:relative; z-index:1;
   border-right:1px solid var(--separator); min-width:0;
 }
 .month-day-cell:last-child{border-right:none;}
@@ -3876,7 +3885,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    days strictly before today, but keeping the rule order today-safe
    costs nothing). */
 .month-day-cell.is-past{opacity:.55;}
-.month-day-num{font-weight:var(--font-weight-bold); font-size:var(--text-sm); color:var(--fg-tertiary); text-decoration:none; height:var(--month-daynum-h); display:flex; align-items:center; margin-bottom:2px;}
+.month-day-num{font-weight:var(--font-weight-bold); font-size:var(--text-sm); color:var(--fg-tertiary); text-decoration:none; height:var(--month-daynum-h); display:flex; align-items:center; margin-bottom:var(--month-daynum-gap);}
 .month-day-num span{display:flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; line-height:1;}
 /* Today's day number, circled in the accent color -- same convention
    `.mini-cal-day.is-today .mini-cal-day-num` already established for the
@@ -3975,8 +3984,13 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    reintroduce; this pass reintroduces layering for all-day events only,
    with this offset as the fix for that exact failure mode. */
 :root{--month-bar-h:16px; --month-bar-gap:2px;}
+/* Extra room between the last bar lane and a cell's first text row -- the
+   lane-to-lane gap alone (2px) made a bar read as glued to the row under
+   it (2026-09-25, same report as --month-daynum-gap above). */
+:root{--month-bars-after-gap:3px;}
 .month-week-bars{
-  position:absolute; left:0; right:0; top:var(--month-daynum-h);
+  position:absolute; left:0; right:0;
+  top:calc(var(--month-cell-pad-top) + var(--month-daynum-h) + var(--month-daynum-gap));
   pointer-events:none; z-index:2;
 }
 .month-bar{
@@ -4027,7 +4041,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    events landing on generated content still target the host element for
    dispatch purposes, so `e.target === handleLeft` still holds anywhere
    inside this expanded box. Extended further left/right (into the ~4px
-   dead zone `.month-bar-span-N`'s own `- 4px` width already reserves
+   dead zone `.month-bar-col-N`/`-span-N`'s 3px-per-side inset already reserves
    between adjacent bars, plus a little into the day cell itself) than
    up/down (kept small to avoid bleeding into an adjacent lane's own bar,
    only --month-bar-gap:2px away). */
@@ -4064,29 +4078,29 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .month-bar-lane-5{top:calc(5 * (var(--month-bar-h) + var(--month-bar-gap)));}
 .month-bar-lane-6{top:calc(6 * (var(--month-bar-h) + var(--month-bar-gap)));}
 .month-bar-lane-7{top:calc(7 * (var(--month-bar-h) + var(--month-bar-gap)));}
-.month-bar-col-1{left:calc(0/7 * 100%);}
-.month-bar-col-2{left:calc(1/7 * 100%);}
-.month-bar-col-3{left:calc(2/7 * 100%);}
-.month-bar-col-4{left:calc(3/7 * 100%);}
-.month-bar-col-5{left:calc(4/7 * 100%);}
-.month-bar-col-6{left:calc(5/7 * 100%);}
-.month-bar-col-7{left:calc(6/7 * 100%);}
-.month-bar-span-1{width:calc(1/7 * 100% - 4px);}
-.month-bar-span-2{width:calc(2/7 * 100% - 4px);}
-.month-bar-span-3{width:calc(3/7 * 100% - 4px);}
-.month-bar-span-4{width:calc(4/7 * 100% - 4px);}
-.month-bar-span-5{width:calc(5/7 * 100% - 4px);}
-.month-bar-span-6{width:calc(6/7 * 100% - 4px);}
-.month-bar-span-7{width:calc(7/7 * 100% - 4px);}
+.month-bar-col-1{left:calc(0/7 * 100% + 3px);}
+.month-bar-col-2{left:calc(1/7 * 100% + 3px);}
+.month-bar-col-3{left:calc(2/7 * 100% + 3px);}
+.month-bar-col-4{left:calc(3/7 * 100% + 3px);}
+.month-bar-col-5{left:calc(4/7 * 100% + 3px);}
+.month-bar-col-6{left:calc(5/7 * 100% + 3px);}
+.month-bar-col-7{left:calc(6/7 * 100% + 3px);}
+.month-bar-span-1{width:calc(1/7 * 100% - 6px);}
+.month-bar-span-2{width:calc(2/7 * 100% - 6px);}
+.month-bar-span-3{width:calc(3/7 * 100% - 6px);}
+.month-bar-span-4{width:calc(4/7 * 100% - 6px);}
+.month-bar-span-5{width:calc(5/7 * 100% - 6px);}
+.month-bar-span-6{width:calc(6/7 * 100% - 6px);}
+.month-bar-span-7{width:calc(7/7 * 100% - 6px);}
 .month-bars-offset-0{margin-top:0;}
-.month-bars-offset-1{margin-top:calc(1 * (var(--month-bar-h) + var(--month-bar-gap)));}
-.month-bars-offset-2{margin-top:calc(2 * (var(--month-bar-h) + var(--month-bar-gap)));}
-.month-bars-offset-3{margin-top:calc(3 * (var(--month-bar-h) + var(--month-bar-gap)));}
-.month-bars-offset-4{margin-top:calc(4 * (var(--month-bar-h) + var(--month-bar-gap)));}
-.month-bars-offset-5{margin-top:calc(5 * (var(--month-bar-h) + var(--month-bar-gap)));}
-.month-bars-offset-6{margin-top:calc(6 * (var(--month-bar-h) + var(--month-bar-gap)));}
-.month-bars-offset-7{margin-top:calc(7 * (var(--month-bar-h) + var(--month-bar-gap)));}
-.month-bars-offset-8{margin-top:calc(8 * (var(--month-bar-h) + var(--month-bar-gap)));}
+.month-bars-offset-1{margin-top:calc(1 * (var(--month-bar-h) + var(--month-bar-gap)) + var(--month-bars-after-gap));}
+.month-bars-offset-2{margin-top:calc(2 * (var(--month-bar-h) + var(--month-bar-gap)) + var(--month-bars-after-gap));}
+.month-bars-offset-3{margin-top:calc(3 * (var(--month-bar-h) + var(--month-bar-gap)) + var(--month-bars-after-gap));}
+.month-bars-offset-4{margin-top:calc(4 * (var(--month-bar-h) + var(--month-bar-gap)) + var(--month-bars-after-gap));}
+.month-bars-offset-5{margin-top:calc(5 * (var(--month-bar-h) + var(--month-bar-gap)) + var(--month-bars-after-gap));}
+.month-bars-offset-6{margin-top:calc(6 * (var(--month-bar-h) + var(--month-bar-gap)) + var(--month-bars-after-gap));}
+.month-bars-offset-7{margin-top:calc(7 * (var(--month-bar-h) + var(--month-bar-gap)) + var(--month-bars-after-gap));}
+.month-bars-offset-8{margin-top:calc(8 * (var(--month-bar-h) + var(--month-bar-gap)) + var(--month-bars-after-gap));}
 /* Month-view click-and-hold drag-to-create range (static/calendar_month.js)
    -- highlights every day cell between the press-down day and whatever
    day the cursor is currently over, inclusive, regardless of drag

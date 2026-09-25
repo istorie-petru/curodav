@@ -326,5 +326,6 @@ class TestShellCacheVersion:
         # v119 (2026-09-25): habit amount popup (habit_day.js) + modal.js.
         # v120 (2026-09-25): sidebar group chevron fix (style.css).
         # v121 (2026-09-25): narrow banners on dashboards + modal covers.
+        # v122 (2026-09-25): month all-day bar spacing (style.css).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v121"' in script
+        assert 'CACHE_NAME = "cc-shell-v122"' in script
