@@ -40,7 +40,8 @@
         <!-- Labels -- chip multiselect (2026-08-07, modal-input-design
              Phase B), same pattern as task_form.html -- see that
              template's own comment. -->
-        {% set pf_tags = event.tags if event else [] %}
+        {# 2026-09-25 (UI audit L1): prefill_tags = the label page quick-add was opened from. #}
+        {% set pf_tags = event.tags if event else (prefill_tags or []) %}
         {% set pf_form_id = 'event-form' %}
         {% include "_project_field.html" %}
         <div class="field">
@@ -49,7 +50,7 @@
             {% set ms_label = 'Labels' %}
             {# Projects have their own dropdown above (_project_field.html). #}
             {% set ms_items = tag_name_items | rejectattr('uid', 'in', project_names | default([])) | list %}
-            {% set ms_selected = event.tags if event else [] %}
+            {% set ms_selected = event.tags if event else (prefill_tags or []) %}
             {% set ms_mode = 'select' %}
             {% set ms_allow_new = true %}
             {% set ms_pill = true %}

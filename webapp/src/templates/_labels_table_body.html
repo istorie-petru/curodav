@@ -75,7 +75,12 @@
     <td></td>
     <td>
         <div class="label-cell">
-            <span class="label-cell-icon">{{ icon('layers', 'icon-sm') }}</span>
+            {# 2026-09-25 (UI audit L3): the group's own icon (Edit group), or its first letter. #}
+            {% if group.icon %}
+            <span class="label-cell-icon" data-style="color: var(--cal-text-{{ group.color or 'gray' }})">{{ icon(group.icon, 'icon-sm') }}</span>
+            {% else %}
+            <span class="label-cell-icon labels-group-monogram" data-style="--monogram-bg: var(--cal-bg-{{ group.color or 'gray' }}); --monogram-fg: var(--cal-fg-{{ group.color or 'gray' }})" aria-hidden="true">{{ group.name[:1] | upper }}</span>
+            {% endif %}
             <span class="label-name">{{ group.name }}</span>
         </div>
     </td>
@@ -92,7 +97,11 @@
 </tr>
 {% endmacro %}
 {% macro _label_row(l) %}
-<tr data-label-name="{{ l.name }}" data-label-group="{{ l.label_group or '' }}">
+{# 2026-09-25 (UI audit L7): a group's members are indented under its row
+   (`.labels-member-row`), and the ungrouped labels get their own "No
+   group" heading row (below), so they no longer read as members of
+   whichever group happens to come last. #}
+<tr data-label-name="{{ l.name }}" data-label-group="{{ l.label_group or '' }}"{% if l.label_group %} class="labels-member-row"{% endif %}>
     {# 2026-09-14: mirrors the row markup this table has used since the
        solid-color-dot -> icon swap (icon + name both painted with
        var(--cal-accent-{color})) -- unchanged by slice 2, just no
@@ -112,8 +121,16 @@
     </td>
     <td>
         <div class="label-cell">
-            <span class="label-cell-icon" data-style="color: var(--cal-accent-{{ l.color or 'blue' }})">{{ icon(l.icon or 'tag', 'icon-sm') }}</span>
-            <span class="label-name" data-style="color: var(--cal-accent-{{ l.color or 'blue' }})">{{ l.name }}</span>
+            {# 2026-09-25 (UI audit L5): --cal-text-* instead of the
+               --cal-accent-* fill tone, which measured 1.96-2.70:1 as
+               text on the dark theme. #}
+            <span class="label-cell-icon" data-style="color: var(--cal-text-{{ l.color or 'blue' }})">{{ icon(l.icon or 'tag', 'icon-sm') }}</span>
+            <span class="label-name" data-style="color: var(--cal-text-{{ l.color or 'blue' }})">{{ l.name }}</span>
+            {# 2026-09-25 (UI audit L7): what used to be invisible here --
+               project, archived, and the deadline with its state. #}
+            {% if l.is_project %}<span class="cell-tag tag-gray label-row-badge">{{ icon('folder', 'icon-sm') }} Project</span>{% endif %}
+            {% if l.archived_at %}<span class="cell-tag tag-gray label-row-badge">{{ icon('archive', 'icon-sm') }} Archived</span>{% endif %}
+            {% if l.deadline %}<span class="cell-tag tag-{{ l.deadline.color }} label-row-badge label-deadline is-{{ l.deadline.state }}">{{ icon('flag', 'icon-sm') }} {{ l.deadline.text }}</span>{% endif %}
         </div>
     </td>
     <td class="col-opt-2">
@@ -149,6 +166,12 @@
             {{ _group_row(group) }}
             {% for l in group.labels %}{{ _label_row(l) }}{% endfor %}
         {% endfor %}
+        {% if label_groups and ungrouped_labels %}
+        <tr class="labels-space-row labels-nogroup-row" data-label-group="">
+            <td></td>
+            <td colspan="3"><div class="label-cell"><span class="label-name">No group</span></div></td>
+        </tr>
+        {% endif %}
         {% for l in ungrouped_labels %}{{ _label_row(l) }}{% endfor %}
         {% if not labels %}
         {{ empty_state_row(4, "No labels yet. Click &lsquo;+ New Label&rsquo; to create your first one.", css_class='empty-state') }}

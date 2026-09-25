@@ -157,6 +157,18 @@
   --cal-accent-green:var(--cal-bg-green);--cal-accent-mint:var(--cal-bg-mint);--cal-accent-teal:var(--cal-bg-teal);--cal-accent-cyan:var(--cal-bg-cyan);
   --cal-accent-blue:var(--cal-bg-blue);--cal-accent-indigo:var(--cal-bg-indigo);--cal-accent-purple:var(--cal-bg-purple);--cal-accent-magenta:var(--cal-bg-magenta);
   --cal-accent-pink:var(--cal-bg-pink);--cal-accent-brown:var(--cal-bg-brown);--cal-accent-gray:var(--cal-bg-gray);--cal-accent-slate:var(--cal-bg-slate);
+  /* 2026-09-25 (UI audit L5): a label's color used as TEXT (Settings >
+     Labels names, a label page's header icon, group glyphs in the rail).
+     --cal-accent-* is a mid-tone meant as a fill, and as text it measured
+     1.96-2.70:1 on the dark theme's surfaces (and yellow/lime ~2.6:1 on
+     white). These are the same hues moved in lightness until each clears
+     4.6:1: darker here (on white), lighter in [data-theme="dark"] (on
+     #3e3e3e, the darker of the two dark surfaces it sits on). Fills keep
+     using --cal-accent-*/--cal-bg-*. */
+  --cal-text-red:#c24e43;--cal-text-orange:#9f652a;--cal-text-yellow:#857226;--cal-text-lime:#6b782c;
+  --cal-text-green:#398156;--cal-text-mint:#278172;--cal-text-teal:#297e8f;--cal-text-cyan:#2c7d9f;
+  --cal-text-blue:#3675b9;--cal-text-indigo:#575dcf;--cal-text-purple:#8a56c1;--cal-text-magenta:#ac4e93;
+  --cal-text-pink:#bd4c75;--cal-text-brown:#8b713f;--cal-text-gray:#6e737a;--cal-text-slate:#5b6b7d;
 
   --font-system:"Noto Sans","Segoe UI",Cantarell,Ubuntu,Roboto,"Helvetica Neue",Arial,sans-serif;
   /* Type-scale consolidation (2026-09-24): was 8 sizes (xs 13/sm 14/base
@@ -250,6 +262,11 @@
 }
 [data-theme="dark"]{
   color-scheme:dark;
+  /* 2026-09-25 (UI audit L5): label colors as text, see :root's --cal-text-*. */
+  --cal-text-red:#dc9a94;--cal-text-orange:#d7a068;--cal-text-yellow:#c5a937;--cal-text-lime:#a0b442;
+  --cal-text-green:#68bd8b;--cal-text-mint:#3abfa9;--cal-text-teal:#52b8cd;--cal-text-cyan:#66b4d5;
+  --cal-text-blue:#84aedb;--cal-text-indigo:#a2a6e5;--cal-text-purple:#bea1dc;--cal-text-magenta:#d199c2;
+  --cal-text-pink:#da9ab1;--cal-text-brown:#c1a775;--cal-text-gray:#a8acb1;--cal-text-slate:#a2aebb;
 
   --accent-neutral:#414141;--accent-neutral-hover:#4b4b4b;--accent-neutral-active:#3a3a3a;--accent-neutral-subtle:rgba(255,255,255,.08);--accent-neutral-subtle-strong:rgba(255,255,255,.14);
   --success:#30d158;--warning:#ff9f0a;--danger:#ff453a;--info:#64d2ff;
@@ -934,6 +951,21 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
 .sidebar-tree-toggle .icon{width:14px; height:14px; transition:transform var(--dur-fast) var(--ease-standard);}
 .sidebar-tree-toggle[aria-expanded="true"] .icon{transform:rotate(90deg);}
 .sidebar-tree-children{display:none; width:100%; flex-direction:column;}
+/* 2026-09-25 (UI audit L3): a group's rail entry shows its own icon, or
+   (no icon picked) its first letter on a small chip in its color --
+   base.html. Both are <span>s inside .tab-btn, so these selectors carry
+   three classes to beat `html[data-sidebar-expanded] .tab-btn span` and
+   the mobile drawer's `.tab-btn span` (which make any span a text block). */
+.tab-btn.tab-btn-space .sidebar-group-monogram{
+  display:inline-flex; align-items:center; justify-content:center; flex:none;
+  width:20px; height:20px; margin:0; border-radius:6px;
+  background:var(--monogram-bg, var(--cal-bg-gray)); color:var(--monogram-fg, #fff);
+  font-size:12px; font-weight:var(--font-weight-bold); line-height:1; overflow:visible;
+}
+.tab-btn.tab-btn-space .sidebar-group-glyph{display:inline-flex; flex:none; margin:0; overflow:visible;}
+/* 2026-09-25 (UI audit L10): the group whose pinned member's page is open
+   (that member's own row carries .active). */
+.tab-btn.tab-btn-space.has-active-child{color:var(--fg-primary);}
 
 /* 2026-08-30 follow-up (direct report -- expanded mode's left/right
    padding didn't match): this label sits directly inside `.tabbar`, which
@@ -1656,6 +1688,24 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 #labels-table-wrapper thead th{padding:8px 8px;}
 #labels-table-wrapper tbody td{padding:6px 8px;}
 #labels-table-wrapper .labels-space-row td{padding:6px 8px;}
+/* 2026-09-25 (UI audit L7): group members indented under their group's
+   row; the "No group" heading row is untinted (it's not a group); the
+   project / archived / deadline badges sit after the name. The label
+   cell may wrap on a narrow screen so badges drop below the name rather
+   than widen the table. */
+#labels-table-wrapper .labels-member-row .label-cell{padding-left:22px;}
+#labels-table-wrapper .labels-nogroup-row td{background:none;}
+#labels-table-wrapper .labels-nogroup-row .label-name{color:var(--fg-secondary);}
+#labels-table-wrapper .label-cell{flex-wrap:wrap; row-gap:4px;}
+.label-row-badge{font-size:11px;}
+.label-row-badge .icon{width:12px; height:12px;}
+/* A group without an icon: its first letter on a chip (UI audit L3),
+   same look as the rail's .sidebar-group-monogram. */
+.label-cell-icon.labels-group-monogram{
+  align-items:center; justify-content:center; width:16px; height:16px; border-radius:4px;
+  background:var(--monogram-bg, var(--cal-bg-gray)); color:var(--monogram-fg, #fff);
+  font-size:10px; font-weight:var(--font-weight-bold); line-height:1;
+}
 
 .group-badge {
     display: inline-block; padding: 2px 8px; border-radius: var(--radius-pill);
@@ -2974,6 +3024,14 @@ img.avatar-circle{object-fit:cover;}
    one long vertical stack, same idea as .field-grid but for checkboxes
    rather than fixed fields. */
 .field-toggle-group{display:flex; flex-wrap:wrap; gap:4px var(--space-4); margin-top:4px;}
+/* 2026-09-25 (UI audit L16): in the label form the checkbox options are
+   <label class="field-toggle"> elements, so `.field label` above styled
+   them as uppercase field headings ("Page: [ ] DASHBOARD"). They're
+   options, so plain sentence-case text. */
+.label-page-fields label.field-toggle{
+  text-transform:none; letter-spacing:normal; font-weight:var(--font-weight-regular);
+  font-size:var(--text-base); color:var(--fg-primary);
+}
 /* Recurrence/Reminders pickers (static/recurrence_picker.js,
    static/reminders_picker.js) -- both progressively enhance a plain text
    input into real controls while keeping the original input as the actual
@@ -4446,10 +4504,15 @@ button.month-more-link{
   .sidebar-section-label{display:block; width:100%; padding:10px 8px 4px; font-size:10px; font-weight:var(--font-weight-bold); letter-spacing:.06em; text-transform:uppercase; color:var(--fg-tertiary); text-align:left;}
   .sidebar-tree-item{display:flex; width:100%; flex-direction:column; align-items:stretch;}
   .sidebar-tree-row{display:flex; align-items:center; width:100%; justify-content:flex-start; gap:4px;}
-  .sidebar-tree-toggle{display:flex;}
+  /* 2026-09-25 (UI audit L9): the chevron was a 20x20 tap target; 44px
+     like every other row in this drawer. */
+  .sidebar-tree-toggle{display:flex; width:44px; height:44px; margin-left:0;}
   .sidebar-tree-row:has(.sidebar-tree-toggle[aria-expanded="true"]) + .sidebar-tree-children{display:flex;}
   .sidebar-tree-row > .tab-btn{flex:1 1 auto; width:auto; min-width:0;}
-  .tab-btn-child{padding-left:34px;}
+  /* 2026-09-25 (UI audit L8): `.tab-btn{padding:6px 8px}` just below has
+     the same specificity and comes later, so it erased this indent and
+     group members sat flush with their group. Two classes now. */
+  .tab-btn.tab-btn-child{padding-left:34px;}
   /* Every rail entry becomes a full-width icon+label row -- a touch list,
      not the desktop rail's icon-only column. min-height 44px (not
      desktop-expanded's 36px) meets the standard mobile touch-target floor
@@ -7221,6 +7284,36 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   display:flex; color:var(--accent);
 }
 .page-header-narrow-icon .icon{width:1.15em; height:1.15em;}
+/* 2026-09-25 (UI audit L2/L5): a label/group page's icon in the label's
+   color (_page_header_narrow.html's `icon_color`). Over a banner photo it
+   gets a white chip so the color has something to read against; with no
+   banner it's the text-safe --cal-text-* tone. */
+.page-header-narrow-icon.has-color{color:var(--hdr-icon-text, var(--accent));}
+.page-header-narrow.has-banner .page-header-narrow-icon.has-color{
+  color:var(--hdr-icon-fill, var(--accent)); background:#fff; text-shadow:none;
+  padding:5px; border-radius:var(--radius-sm); box-shadow:0 1px 3px rgba(0,0,0,.25);
+}
+.page-header-narrow.has-banner .page-header-narrow-icon.has-color .icon{width:18px; height:18px;}
+/* Label page pieces under the header (2026-09-25, UI audit L6/L12 +
+   flesh-out item 6): the status row's "Archived on ... · Unarchive" line,
+   the description, the Tasks heading over the Kanban board, and the one
+   combined empty state for a label nothing carries yet. */
+.label-status{align-items:center; gap:var(--space-2); flex-wrap:wrap;}
+.label-archived-line{display:inline-flex; align-items:center; gap:6px; color:var(--fg-secondary); font-size:var(--text-sm);}
+.label-archived-sep{color:var(--fg-tertiary);}
+.label-description{color:var(--fg-secondary); margin:var(--space-2) 0 var(--space-4);}
+.label-deadline-text.is-overdue{color:var(--tag-red-fg); font-weight:var(--font-weight-bold);}
+.label-deadline-text.is-soon{color:var(--tag-orange-fg); font-weight:var(--font-weight-bold);}
+.widget-header.label-section-heading{margin-top:var(--space-4);}
+.label-empty-state{
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  gap:var(--space-2); padding:48px var(--space-4) 56px;
+}
+.label-empty-icon .icon{width:36px; height:36px;}
+.label-empty-title{margin:0; font-size:var(--text-lg); font-weight:var(--font-weight-bold); color:var(--fg-primary);}
+.label-empty-hint{margin:0; color:var(--fg-secondary); font-size:var(--text-sm);}
+.label-empty-actions{display:flex; flex-wrap:wrap; justify-content:center; gap:var(--space-2); margin-top:var(--space-2);}
+.group-form-name{margin:0; font-weight:var(--font-weight-bold);}
 .page-header-narrow-title{
   margin:0; font-weight:var(--font-weight-bold); letter-spacing:-0.3px;
   font-size:var(--text-xl); line-height:1.2;

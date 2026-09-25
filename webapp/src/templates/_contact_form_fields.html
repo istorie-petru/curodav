@@ -276,7 +276,8 @@
         {% set ms_icon = 'tag' %}
         {% set ms_label = 'Labels' %}
         {% set ms_items = tag_name_items %}
-        {% set ms_selected = contact.tags if contact else [] %}
+        {# 2026-09-25 (UI audit L1): prefill_tags = the label page quick-add was opened from. #}
+        {% set ms_selected = contact.tags if contact else (prefill_tags or []) %}
         {% set ms_mode = 'select' %}
         {% set ms_allow_new = true %}
         {% set ms_pill = true %}

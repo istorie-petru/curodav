@@ -101,6 +101,13 @@
             </div>
         </div>
     </div>
+    {# 2026-09-25 (UI audit L17): a label's description was shown on its
+       page and preview but had no field, and every Save posted
+       description="" and wiped whatever an older form had stored. #}
+    <div class="field field-wide">
+        <label for="label-description-input">Description</label>
+        <textarea id="label-description-input" name="description" rows="2" maxlength="500" placeholder="Optional, shown on the label's page">{{ l.description or '' if l else '' }}</textarea>
+    </div>
 </div>
 
 {# labels-as-modules slice b (2026-09-25): any label can have a deadline
@@ -119,11 +126,17 @@
         <label>Deadline</label>
         {{ datetime_picker('deadline_date', '', l.deadline_date if (l and l.has_deadline) else '', '', 'date') }}
     </div>
+    {# 2026-09-25 (UI audit L16): "Page: [ ] DASHBOARD" didn't say what
+       the box does. It now names the choice (a widget dashboard instead
+       of the sections below), and the options render as sentence-case
+       text rather than the uppercase field-heading style (style.css,
+       .label-page-fields .field-toggle). #}
     <div class="field">
-        <label>Page</label>
+        <label>Page layout</label>
         <div class="field-toggle-group">
-            <label class="field-toggle"><input type="checkbox" name="has_dashboard" value="1" {% if l and l.has_dashboard %}checked{% endif %}> Dashboard</label>
+            <label class="field-toggle"><input type="checkbox" name="has_dashboard" value="1" {% if l and l.has_dashboard %}checked{% endif %}> Widget dashboard</label>
         </div>
+        <span class="field-hint">Off: the page shows the sections you pick.</span>
     </div>
     <div class="field">
         <label>Show in</label>
