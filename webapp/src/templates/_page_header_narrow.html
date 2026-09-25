@@ -110,7 +110,13 @@
     {% if crumbs is defined and crumbs %}
     <a class="icon-btn page-header-narrow-back" href="{{ crumbs[-1].url }}" aria-label="Back to {{ crumbs[-1].name }}" title="Back to {{ crumbs[-1].name }}">{{ icon('chevron-left', 'icon-sm') }}</a>
     {% endif %}
-    <span class="page-header-narrow-icon"{% if icon_color %} data-style="color: var(--cal-accent-{{ icon_color }}, var(--cal-accent-blue))"{% endif %}>{{ icon(icon_name|default('layout')) }}</span>
+    {# 2026-09-25 (UI audit L2 + L5): a label's colored icon used to be
+       painted straight onto the banner photo (1.0-1.15:1). It now sits on
+       a white chip there (style.css, .page-header-narrow-icon.has-color),
+       in the label's fill tone; with no banner it uses the label's
+       text-safe tone (--cal-text-*), readable in both themes. The colors
+       travel as custom properties so the CSS can pick per case. #}
+    <span class="page-header-narrow-icon{% if icon_color %} has-color{% endif %}"{% if icon_color %} data-style="--hdr-icon-fill: var(--cal-accent-{{ icon_color }}, var(--cal-accent-blue)); --hdr-icon-text: var(--cal-text-{{ icon_color }}, var(--cal-text-blue))"{% endif %}>{{ icon(icon_name|default('layout')) }}</span>
     <h2 class="page-header-narrow-title">{{ title }}</h2>
     {% if title_extra %}{{ title_extra }}{% endif %}
     <div class="spacer"></div>

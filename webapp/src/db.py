@@ -4407,7 +4407,8 @@ def group_from_page_key(key: str | None) -> str | None:
 def list_groups(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     """Every group: the distinct non-empty label_group values, each with its
     member labels' effective configs, sorted by name. A group exists exactly
-    as long as at least one label names it."""
+    as long as at least one label names it. 2026-09-25 (UI audit L3): each
+    also carries its own `icon`/`color` (get_group_style)."""
     rows = conn.execute(
         "SELECT name, label_group FROM label_config WHERE TRIM(COALESCE(label_group, '')) != '' "
         "ORDER BY label_group COLLATE NOCASE, name COLLATE NOCASE"
@@ -4415,8 +4416,37 @@ def list_groups(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     groups: dict[str, dict[str, Any]] = {}
     for r in rows:
         g = r["label_group"].strip()
-        groups.setdefault(g, {"name": g, "labels": []})["labels"].append(effective_label_config(conn, r["name"]))
+        if g not in groups:
+            groups[g] = {"name": g, "labels": [], **get_group_style(conn, g)}
+        groups[g]["labels"].append(effective_label_config(conn, r["name"]))
     return list(groups.values())
+
+
+def _group_style_key(group: str) -> str:
+    return f"group_style:{(group or '').strip()}"
+
+
+def get_group_style(conn: sqlite3.Connection, group: str) -> dict[str, Any]:
+    """A group's own icon + color (2026-09-25, UI audit L3). Every group
+    used to share one hard-coded `layers` icon, so the collapsed rail
+    showed identical glyphs. A group has no row of its own (it's the text
+    in label_config.label_group), so its look lives in app_meta under
+    "group_style:<name>" as JSON, like the rest of a group's per-page
+    state (group_page_key) -- no schema change. `icon` None means "show
+    the group's first letter" (base.html's monogram); `color` defaults to
+    gray."""
+    raw = get_app_meta(conn, _group_style_key(group))
+    style: dict[str, Any] = {}
+    if raw:
+        try:
+            style = json.loads(raw) or {}
+        except ValueError:
+            style = {}
+    return {"icon": style.get("icon") or None, "color": style.get("color") or "gray"}
+
+
+def set_group_style(conn: sqlite3.Connection, group: str, icon: str | None, color: str | None) -> None:
+    set_app_meta(conn, _group_style_key(group), json.dumps({"icon": icon or None, "color": color or "gray"}))
 
 
 def group_member_names(conn: sqlite3.Connection, group: str) -> list[str]:
