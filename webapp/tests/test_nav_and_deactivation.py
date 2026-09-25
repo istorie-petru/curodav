@@ -36,6 +36,7 @@ from starlette.requests import Request
 
 from src import db
 from src.routers import contacts as contacts_router
+from src.routers import label_pages
 from src.routers import dashboard as dashboard_router
 from src.routers import labels as labels_router
 from src.routers import spaces as spaces_router
@@ -153,19 +154,19 @@ class TestSpacePageNavHighlighting:
 
     def test_label_detail_sets_independent_active_tab(self, conn):
         self._make_space(conn, "Uni")
-        resp = spaces_router.space_detail("Uni", self._space_page_request("/spaces/Uni", conn), conn=conn)
+        resp = label_pages.label_page("Uni", self._space_page_request("/labels/Uni", conn), conn=conn)
         assert resp.context["active_tab"] == "space"
 
     def test_space_page_highlights_only_its_own_rail_link(self, conn):
         self._make_space(conn, "Uni")
-        resp = spaces_router.space_detail("Uni", self._space_page_request("/spaces/Uni", conn), conn=conn)
+        resp = label_pages.label_page("Uni", self._space_page_request("/labels/Uni", conn), conn=conn)
         body = resp.body.decode()
-        assert 'href="/spaces/Uni" class="tab-btn tab-btn-space active"' in body
+        assert 'href="/labels/Uni" class="tab-btn tab-btn-space active"' in body
         assert 'data-tab="settings" class="tab-btn active"' not in body
 
     def test_plain_label_page_has_no_settings_or_rail_highlight(self, conn):
         db.upsert_label_config(conn, {"name": "CS101", "created_at": _now()})
-        resp = labels_router.label_detail("CS101", self._space_page_request("/labels/CS101", conn), conn=conn)
+        resp = label_pages.label_page("CS101", self._space_page_request("/labels/CS101", conn), conn=conn)
         body = resp.body.decode()
         assert 'data-tab="settings" class="tab-btn active"' not in body
         # CS101 isn't a Space, so it has no rail link to light up either.

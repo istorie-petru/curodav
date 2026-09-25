@@ -1110,7 +1110,7 @@ class TestSpaceWidgets:
             source="calendar_tasks", view="agenda", range="today", title="", project_uid="", tags="",
             task_list_uids=[], calendar_uids=[], limit="", space_uid="space1", conn=conn,
         )
-        assert resp.headers["location"] == "/settings/labels/space1"
+        assert resp.headers["location"] == "/labels/space1"
 
     def test_add_widget_with_no_space_uid_redirects_home(self, conn):
         resp = dashboard_router.add_widget(
@@ -1136,12 +1136,12 @@ class TestSpaceWidgets:
         updated = db.get_dashboard_widget(conn, w["uid"])
         assert updated["title"] == "Renamed"
         assert updated["config"]["label_name"] == "space1"  # not clobbered by the edit form
-        assert resp.headers["location"] == "/settings/labels/space1"
+        assert resp.headers["location"] == "/labels/space1"
 
     def test_delete_widget_redirects_to_its_own_space(self, conn):
         w = self._add(conn, "A", space_uid="space1")
         resp = dashboard_router.delete_widget(w["uid"], conn=conn)
-        assert resp.headers["location"] == "/settings/labels/space1"
+        assert resp.headers["location"] == "/labels/space1"
         assert db.get_dashboard_widget(conn, w["uid"]) is None
 
     def test_add_widget_redirects_straight_to_spaces_for_a_real_space(self, conn):
@@ -1153,7 +1153,7 @@ class TestSpaceWidgets:
             source="calendar_tasks", view="agenda", range="today", title="", project_uid="", tags="",
             task_list_uids=[], calendar_uids=[], limit="", space_uid="space1", conn=conn,
         )
-        assert resp.headers["location"] == "/spaces/space1"
+        assert resp.headers["location"] == "/labels/space1"
 
     def test_reorder_does_not_mix_widgets_from_different_pages(self, conn):
         home_a = self._add(conn, "Home A")
@@ -1425,7 +1425,7 @@ class TestSpacesProjectsCardsIncludesProjects:
         by_name = {c["name"]: c for c in data["cards"]}
         assert by_name["NoIcon"]["icon"] == "folder"
         assert by_name["Iconed"]["icon"] == "rocket"
-        assert by_name["NoIcon"]["href"] == "/projects/NoIcon"
+        assert by_name["NoIcon"]["href"] == "/labels/NoIcon"
 
     def test_scope_everything_also_includes_projects(self, conn):
         # scope=="everything" opts a Space/Project page's own widget

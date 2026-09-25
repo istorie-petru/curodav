@@ -45,7 +45,7 @@ class TestDefaults:
         assert cfg["has_dashboard"] is False
         assert cfg["agenda_widget"] is True
         assert cfg["tasks_widget"] is True
-        assert cfg["contacts_widget"] is False
+        assert cfg["contacts_widget"] is True
         assert cfg["is_archived"] is False
 
     def test_upsert_round_trips_module_fields(self, conn):
@@ -128,6 +128,18 @@ class TestBackfill:
             assert db.effective_label_config(c, "School")["sidebar_pin"] is True
 
 
+class TestContactsDefaultFix:
+    def test_slice_a_rows_get_contacts_turned_on_once(self, conn):
+        _legacy(conn, "Old", contacts_widget=0)
+        conn.execute("DELETE FROM app_meta WHERE key = ?", (db._CONTACTS_WIDGET_DEFAULT_FIXED_KEY,))
+        db.backfill_label_modules(conn)
+        assert db.effective_label_config(conn, "Old")["contacts_widget"] is True
+        # Runs once: a later explicit "off" sticks.
+        db.upsert_label_config(conn, {"name": "Old", "contacts_widget": 0})
+        db.backfill_label_modules(conn)
+        assert db.effective_label_config(conn, "Old")["contacts_widget"] is False
+
+
 class TestLegacyWriteMirror:
     def test_making_a_space(self, conn):
         db.upsert_label_config(conn, {"name": "Home", "generate_space": 1})
@@ -148,16 +160,20 @@ class TestLegacyWriteMirror:
         db.upsert_label_config(conn, {"name": "Garden", "parent_name": None})
         assert db.effective_label_config(conn, "Garden")["label_group"] == "Outdoors"
 
-    def test_project_dates_set_and_clear_the_deadline(self, conn):
+    def test_old_backup_project_dates_become_the_deadline(self, conn):
+        # Only a pre-2026-09-25 backup restore still sends end_date; the
+        # label form writes deadline_date itself (slice b).
         db.upsert_label_config(conn, {"name": "Move", "is_project": 1, "start_date": "2026-10-01", "end_date": "2026-11-01"})
         cfg = db.effective_label_config(conn, "Move")
         assert cfg["has_deadline"] is True and cfg["deadline_date"] == "2026-11-01"
         assert cfg["has_dashboard"] is True and cfg["widget_pin"] is True
-        db.upsert_label_config(conn, {"name": "Move", "start_date": "2026-10-01", "end_date": "2026-12-15"})
-        assert db.effective_label_config(conn, "Move")["deadline_date"] == "2026-12-15"
-        db.upsert_label_config(conn, {"name": "Move", "is_project": 0, "start_date": None, "end_date": None, "archived_at": None})
+
+    def test_switching_project_off_keeps_the_deadline(self, conn):
+        # Slice b: a deadline is a plain label field now, not project-only.
+        db.upsert_label_config(conn, {"name": "Move", "is_project": 1, "has_deadline": 1, "deadline_date": "2026-11-01"})
+        db.upsert_label_config(conn, {"name": "Move", "is_project": 0})
         cfg = db.effective_label_config(conn, "Move")
-        assert cfg["has_deadline"] is False and cfg["deadline_date"] is None
+        assert cfg["has_deadline"] is True and cfg["deadline_date"] == "2026-11-01"
 
     def test_end_date_on_a_non_project_is_not_a_deadline(self, conn):
         db.upsert_label_config(conn, {"name": "Plain", "end_date": "2026-11-01"})

@@ -225,7 +225,7 @@ row-mate visibly share the new, correct height. No automated test added
 (`audit-fixes-2.0.md` item 4's own note still holds: "No test harness for
 JS behavior in this suite").
 
-## 4. Labels-as-modules + sidebar/dashboard rework (final, merged form) — IN PROGRESS (slice a shipped 2026-09-25)
+## 4. Labels-as-modules + sidebar/dashboard rework (final, merged form) — IN PROGRESS (slices a + b shipped 2026-09-25)
 
 **Scope re-confirmed with Peter, 2026-09-25**. This overrides the "final
 model" wording below wherever the two disagree:
@@ -246,7 +246,8 @@ model" wording below wherever the two disagree:
 **Slice a — SHIPPED 2026-09-25 (schema + backfill, no UI change).** New
 `label_config` columns `sidebar_pin`, `widget_pin`, `has_deadline`,
 `deadline_date`, `has_dashboard`, `agenda_widget` (default on),
-`tasks_widget` (default on) and `contacts_widget` (default off).
+`tasks_widget` (default on) and `contacts_widget` (default on — slice a
+shipped it off by mistake; slice b corrected it with a one-time fix).
 `archived_at` stays the archive flag, exposed as `is_archived` in
 `effective_label_config`. There's a one-time `db.backfill_label_modules`
 (app_meta marker `label_modules_backfilled`):
@@ -265,7 +266,45 @@ interim: delete them once slice b stops writing the legacy fields.** Pins
 are one-way: turning off a Space/Project doesn't unpin. Tests:
 `test_label_modules.py` (18).
 
-**Open for slice b/c (decide when building, not now):** after the
+**Slice b — SHIPPED 2026-09-25 (URL/routing collapse).** One page for
+every label at **`/labels/<name>`** (new `routers/label_pages.py`):
+- **Which page:** `has_dashboard` (or a Space, until slice c) gets the
+  widget grid (`label_detail.html`). Every other label gets the new
+  `label_sections.html`, which has only the switched-on Agenda / Contacts /
+  Tasks sections. It replaces `label_kanban_detail.html` and
+  `project_detail.html`, both deleted.
+- **Redirects:** `/spaces/<n>`, `/projects/<n>`, `/projects/<n>/calendar`
+  and `/settings/labels/<n>` all 301 to `/labels/<n>`. Every in-app link
+  (sidebar, Settings > Labels, Spaces & Projects widget, search, widget and
+  banner return URLs) points there directly.
+- **Deadline and archive:** any label with a deadline (or a project) shows
+  a status row: computed status, deadline pill, and an Archive button
+  (asks first unless Pending Archiving) or Unarchive (`_label_status.html`,
+  `POST /labels/<n>/archive` and `/unarchive`). `project_status` reads
+  `deadline_date`.
+- **Label form:** gains Deadline (any label; empty means none) and Page
+  (Dashboard checkbox; Sections toggles, shown only when Dashboard is
+  off). Both are hidden for the Space role. A `page_fields` marker makes
+  sure a post without these fields can't blank them.
+- **Removed:** `promote`/`dates`/`demote`, `/projects/<n>/archive`,
+  `find_overlapping_project`, start/end dates in the form, and the
+  "project needs dates" validation. Changing role no longer
+  archives/unarchives anything.
+
+The interim mirror stays: the form still writes
+`generate_space`/`parent_name`/`is_project`, which slice c retires. Its
+"demote clears the deadline" branch is gone, because a deadline is a plain
+label field now. Tests: new `test_label_pages.py` (27);
+`test_project_detail.py`/`test_project_stack.py` moved onto the new route,
+and 8 other test files had URL expectations updated.
+
+**Deliberately not done in b:** the sidebar still renders Spaces +
+children + a Projects section (slice c); the icon_tile banner (item 2);
+`is_project` itself (still drives one-project-per-task and the Tasks
+table's project grouping — **needs a decision from Peter before slice c
+removes the Project role**).
+
+**Open for slice c (decide when building, not now):** after the
 backfill, a Space's own label sits in its own group, and its existing
 widgets stay on the *label's* dashboard. Slice c must decide whether to move
 them to the new *group* dashboard. Also, free-text `label_group` values from

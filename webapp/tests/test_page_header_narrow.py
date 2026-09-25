@@ -32,6 +32,7 @@ from starlette.requests import Request
 
 from src import db
 from src.routers import calendar as calendar_router
+from src.routers import label_pages
 from src.routers import contacts as contacts_router
 from src.routers import labels as labels_router
 from src.routers import notes as notes_router
@@ -156,7 +157,7 @@ class TestPageHeaderNarrowRollout:
         # Space/label pages keep the full banner system -- not converted
         # to the narrow variant in this slice (see STATE.md's own note).
         db.upsert_label_config(conn, {"name": "CS101", "created_at": _now()})
-        resp = labels_router.label_detail("CS101", _bare_request("/labels/CS101"), conn=conn)
+        resp = label_pages.label_page("CS101", _bare_request("/labels/CS101"), conn=conn)
         assert 'class="page-header-narrow"' not in resp.body.decode()
 
 

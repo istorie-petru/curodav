@@ -30,6 +30,7 @@ from starlette.requests import Request
 
 from src import db
 from src.routers import contacts as contacts_router
+from src.routers import label_pages
 from src.routers import labels as labels_router
 from src.routers import projects as projects_router
 from src.routers import spaces as spaces_router
@@ -74,7 +75,7 @@ def _make_space(conn, name, **extra):
 class TestNestedTreeRendering:
     def test_space_with_no_children_renders_no_toggle_or_children_div(self, conn):
         _make_space(conn, "Uni")
-        resp = spaces_router.space_detail("Uni", _request("/spaces/Uni", conn), conn=conn)
+        resp = label_pages.label_page("Uni", _request("/labels/Uni", conn), conn=conn)
         body = resp.body.decode()
         assert 'data-space-name="Uni"' in body
         assert "sidebar-tree-item has-children" not in body
@@ -88,53 +89,51 @@ class TestNestedTreeRendering:
         # html[data-sidebar-expanded], not tested here since this suite
         # only sees rendered markup, not applied CSS).
         _make_space(conn, "Uni")
-        resp = spaces_router.space_detail("Uni", _request("/spaces/Uni", conn), conn=conn)
+        resp = label_pages.label_page("Uni", _request("/labels/Uni", conn), conn=conn)
         body = resp.body.decode()
         assert '<div class="sidebar-section-label" aria-hidden="true">Spaces</div>' in body
 
     def test_no_group_header_label_with_no_spaces(self, conn):
         db.upsert_label_config(conn, {"name": "Solo", "created_at": _now()})
-        resp = labels_router.label_detail("Solo", _request("/settings/labels/Solo", conn), conn=conn)
+        resp = label_pages.label_page("Solo", _request("/labels/Solo", conn), conn=conn)
         body = resp.body.decode()
         assert "sidebar-section-label" not in body
 
     def test_space_with_plain_child_label_nests_it_with_settings_link(self, conn):
         _make_space(conn, "Uni")
         db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
-        resp = spaces_router.space_detail("Uni", _request("/spaces/Uni", conn), conn=conn)
+        resp = label_pages.label_page("Uni", _request("/labels/Uni", conn), conn=conn)
         body = resp.body.decode()
         assert 'data-space-name="Uni"' in body
         assert "sidebar-tree-item has-children" in body
         assert "sidebar-tree-toggle" in body
-        assert 'href="/settings/labels/CS101" class="tab-btn tab-btn-child' in body
+        assert 'href="/labels/CS101" class="tab-btn tab-btn-child' in body
 
-    def test_space_child_that_is_itself_a_space_links_to_spaces_page(self, conn):
+    def test_space_child_that_is_itself_a_space_links_to_its_label_page(self, conn):
         _make_space(conn, "Uni")
         _make_space(conn, "Thesis", parent_name="Uni")
-        resp = spaces_router.space_detail("Uni", _request("/spaces/Uni", conn), conn=conn)
+        resp = label_pages.label_page("Uni", _request("/labels/Uni", conn), conn=conn)
         body = resp.body.decode()
-        assert 'href="/spaces/Thesis" class="tab-btn tab-btn-child' in body
-        # Not the settings-page form -- it's a Space, not a plain label.
-        assert 'href="/settings/labels/Thesis" class="tab-btn tab-btn-child' not in body
+        assert 'href="/labels/Thesis" class="tab-btn tab-btn-child' in body
 
     def test_child_page_marks_child_link_active_and_parent_toggle_open(self, conn):
         _make_space(conn, "Uni")
         db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
-        resp = labels_router.label_detail("CS101", _request("/settings/labels/CS101", conn), conn=conn)
+        resp = label_pages.label_page("CS101", _request("/labels/CS101", conn), conn=conn)
         body = resp.body.decode()
-        assert 'href="/settings/labels/CS101" class="tab-btn tab-btn-child active"' in body
+        assert 'href="/labels/CS101" class="tab-btn tab-btn-child active"' in body
         assert 'aria-expanded="true" aria-label="Toggle Uni projects"' in body
 
     def test_other_page_leaves_parent_toggle_closed_by_default(self, conn):
         _make_space(conn, "Uni")
         db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
-        resp = spaces_router.space_detail("Uni", _request("/spaces/Uni", conn), conn=conn)
+        resp = label_pages.label_page("Uni", _request("/labels/Uni", conn), conn=conn)
         body = resp.body.decode()
         assert 'aria-expanded="false" aria-label="Toggle Uni projects"' in body
 
     def test_plain_label_with_no_space_children_relationship_is_unaffected(self, conn):
         db.upsert_label_config(conn, {"name": "Solo", "created_at": _now()})
-        resp = labels_router.label_detail("Solo", _request("/settings/labels/Solo", conn), conn=conn)
+        resp = label_pages.label_page("Solo", _request("/labels/Solo", conn), conn=conn)
         body = resp.body.decode()
         assert "data-space-name" not in body
         assert "sidebar-tree-toggle" not in body
@@ -143,7 +142,7 @@ class TestNestedTreeRendering:
 class TestExpandToggle:
     def test_expand_toggle_present_when_spaces_exist(self, conn):
         _make_space(conn, "Uni")
-        resp = spaces_router.space_detail("Uni", _request("/spaces/Uni", conn), conn=conn)
+        resp = label_pages.label_page("Uni", _request("/labels/Uni", conn), conn=conn)
         body = resp.body.decode()
         assert 'id="sidebar-expand-toggle"' in body
 
@@ -153,7 +152,7 @@ class TestExpandToggle:
         # Spaces list where it only existed for accounts with >=1 Space --
         # see base.html's relocation comment.
         db.upsert_label_config(conn, {"name": "Solo", "created_at": _now()})
-        resp = labels_router.label_detail("Solo", _request("/settings/labels/Solo", conn), conn=conn)
+        resp = label_pages.label_page("Solo", _request("/labels/Solo", conn), conn=conn)
         body = resp.body.decode()
         assert 'id="sidebar-expand-toggle"' in body
 
@@ -164,7 +163,7 @@ class TestExpandToggle:
         # symbol instead, so the two controls don't share a glyph with two
         # different meanings.
         db.upsert_label_config(conn, {"name": "Solo", "created_at": _now()})
-        resp = labels_router.label_detail("Solo", _request("/settings/labels/Solo", conn), conn=conn)
+        resp = label_pages.label_page("Solo", _request("/labels/Solo", conn), conn=conn)
         body = resp.body.decode()
         toggle_start = body.index('id="sidebar-expand-toggle"')
         toggle_markup = body[toggle_start : toggle_start + 200]
@@ -189,28 +188,28 @@ class TestProjectsSection:
         # rendering, so this exercises the real page directly, same as
         # visiting it would.
         self._make_project(conn, "Website Relaunch")
-        resp = projects_router.project_detail(
-            "Website Relaunch", _request("/projects/Website Relaunch", conn), conn=conn
+        resp = label_pages.label_page(
+            "Website Relaunch", _request("/labels/Website Relaunch", conn), conn=conn
         )
         body = resp.body.decode()
         assert '<div class="sidebar-section-label" aria-hidden="true">Projects</div>' in body
-        assert 'href="/projects/Website Relaunch" class="tab-btn tab-btn-project' in body
+        assert 'href="/labels/Website Relaunch" class="tab-btn tab-btn-project' in body
 
     def test_project_nested_under_a_space_is_not_duplicated_in_projects_section(self, conn):
         _make_space(conn, "Uni")
         self._make_project(conn, "Thesis", parent_name="Uni")
-        resp = spaces_router.space_detail("Uni", _request("/spaces/Uni", conn), conn=conn)
+        resp = label_pages.label_page("Uni", _request("/labels/Uni", conn), conn=conn)
         body = resp.body.decode()
         # Nested under Uni, as a child, now linking to its own Kanban page
         # (2026-08-30) rather than the generic label settings page...
-        assert 'href="/projects/Thesis" class="tab-btn tab-btn-child' in body
+        assert 'href="/labels/Thesis" class="tab-btn tab-btn-child' in body
         # ...not also flattened into a top-level Projects section.
         assert "tab-btn-project" not in body
         assert '>Projects</div>' not in body
 
     def test_no_projects_section_with_no_standalone_projects(self, conn):
         db.upsert_label_config(conn, {"name": "Solo", "created_at": _now()})
-        resp = labels_router.label_detail("Solo", _request("/settings/labels/Solo", conn), conn=conn)
+        resp = label_pages.label_page("Solo", _request("/labels/Solo", conn), conn=conn)
         body = resp.body.decode()
         assert "tab-btn-project" not in body
 
@@ -218,7 +217,7 @@ class TestProjectsSection:
 class TestSidebarQuickAdd:
     def test_default_page_points_quick_add_at_task_event_modal(self, conn):
         db.upsert_label_config(conn, {"name": "Solo", "created_at": _now()})
-        resp = labels_router.label_detail("Solo", _request("/settings/labels/Solo", conn), conn=conn)
+        resp = label_pages.label_page("Solo", _request("/labels/Solo", conn), conn=conn)
         body = resp.body.decode()
         # label_detail's own active_tab is "label" (a single label's page,
         # distinct from the "labels" manage table) -- 2026-09-14: this

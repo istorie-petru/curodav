@@ -15,9 +15,9 @@
      one data source") -- an unscoped instance's cards now include every
      open project alongside every Space, same set Quick Links used to
      render on its own. Each card's href/icon/meta come precomputed from
-     the render function now (a Space points at /spaces/<name> with an
-     "N projects" caption, a project points at /projects/<name> with a
-     plain "Project" caption) rather than this template hardcoding the
+     the render function now (every card points at /labels/<name>; a
+     Space gets an "N projects" caption, a project a plain "Project"
+     caption) rather than this template hardcoding the
      Space path and project-count caption inline -- one shape covers both
      kinds of card. This "cards" style also renders bare, no .widget-card
      chrome -- see routers/dashboard.py::_is_bare_tile_widget /
@@ -39,11 +39,8 @@
     {% for pv in data.previews %}
     {# This "list" style renders every non-Space label, not just
        is_project=1 ones (see routers/dashboard.py::_render_spaces_projects's
-       own `labels` sourcing) -- an actual project's row links to its own
-       Kanban page (2026-08-30, routers/projects.py::project_detail); a
-       plain label's row falls back to its generic label page, same
-       destination Settings > Labels' own rows use. #}
-    <a class="project-preview-row" href="{{ ('/projects/' ~ pv.project.name) if pv.project.is_project else ('/settings/labels/' ~ pv.project.name) }}">
+       own `labels` sourcing); every row links to /labels/<name>. #}
+    <a class="project-preview-row" href="/labels/{{ pv.project.name }}">
         <span class="cell-tag cal-{{ pv.project.color }}">{{ icon(pv.project.icon or 'folder') }} {{ pv.project.name }}</span>
         {% if pv.progress is not none %}
         <div class="project-progress-bar"><div class="project-progress-fill" data-style="width:{{ pv.progress }}%"></div></div>

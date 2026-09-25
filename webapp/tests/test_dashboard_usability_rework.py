@@ -35,6 +35,7 @@ from starlette.requests import Request
 
 from src import db, deps
 from src.routers import dashboard as dashboard_router
+from src.routers import label_pages
 from src.routers import labels as labels_router
 from src.routers import settings as settings_router
 
@@ -390,7 +391,7 @@ class TestResetToDefault:
         assert db.list_dashboard_widgets(conn, label_name="CS101") == []
 
         resp = dashboard_router.reset_dashboard(label_name="CS101", conn=conn)
-        assert resp.headers["location"] == "/settings/labels/CS101"
+        assert resp.headers["location"] == "/labels/CS101"
         types = [w["type"] for w in db.list_dashboard_widgets(conn, label_name="CS101")]
         assert types == original_types
 
@@ -510,7 +511,7 @@ class TestQuickAddButtons:
 
     def test_label_page_has_no_page_level_quick_add_button(self, conn):
         _make_project(conn, "CS101")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
+        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         assert "data-fab" not in body
         assert 'href="/tasks/new"' not in body
@@ -544,7 +545,7 @@ class TestQuickAddButtons:
         # control, same as project_detail.html's own edit-mode toolbar.
         _make_project(conn, "CS101")
         db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
+        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         assert "data-fab" not in body
         assert 'New widget' not in body
@@ -559,7 +560,7 @@ class TestQuickAddButtons:
 
     def test_label_page_no_longer_has_a_separate_quick_add_row(self, conn):
         _make_project(conn, "CS101")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
+        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         assert 'dashboard-quick-add' not in body
 
@@ -726,7 +727,7 @@ class TestLabelPageResetButton:
     def test_reset_layout_and_new_widget_are_gone_in_edit_mode(self, conn):
         _make_project(conn, "CS101")
         db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
+        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         assert '/dashboard/reset' not in body
         assert 'New widget' not in body
@@ -734,7 +735,7 @@ class TestLabelPageResetButton:
 
     def test_reset_button_absent_outside_edit_mode(self, conn):
         _make_project(conn, "CS101")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
+        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         # The reset form itself (posts to /dashboard/reset) shouldn't be
         # present outside edit mode either -- it doesn't exist on this

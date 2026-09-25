@@ -4,27 +4,11 @@
 {% from "_page_banner.html" import page_banner with context %}
 {% block title %}{{ label.name }}{% endblock %}
 {% block main_class %}main-full-width{% endblock %}
-<!-- Plain label page (2026-09-16, direct request: "plain labels should
-     generate pages like projects, with agenda and kanban, not
-     dashboards"). Until now a plain label fell through to
-     label_detail.html's customizable widget-grid dashboard -- the exact
-     "traditional dashboard" complaint routers/projects.py::project_detail
-     was rebuilt to get Projects away from (2026-08-30, see that module's
-     docstring). This template is a deliberately separate, independent
-     copy of that page's shape (Agenda card + Kanban board, no widget
-     grid) rather than a shared/generalized template -- direct choice:
-     "similar but distinct," so a plain label's page and a Project's page
-     can diverge later without one change rippling into the other.
-     routers/labels.py::label_detail builds this page's context
-     independently too, for the same reason (see that function's own
-     comment).
-
-     Spaces are NOT part of this change -- generate_space=1 labels still
-     redirect to /spaces/{name} (routers/spaces.py::space_detail), which
-     still renders label_detail.html's widget-grid dashboard unchanged; a
-     Space aggregates child labels/projects (the Spaces & Projects
-     widget), which a single Kanban board doesn't obviously fit, and
-     Peter confirmed leaving Spaces on the dashboard when asked. -->
+<!-- A label's page when it has no dashboard (labels-as-modules slice b,
+     2026-09-25; routers/label_pages.py). It shows only the sections
+     switched on in the label's settings: Agenda, Contacts, and Tasks (the
+     Kanban board). It replaced the separate plain-label and Project pages,
+     which were near-identical copies of each other. -->
 
 {% block content %}
 <div class="page-banner-wrap">
@@ -34,18 +18,11 @@
     {% endif %}
 {% endcall %}
 </div>
+{% include "_label_status.html" %}
 
-<!-- Agenda card -- every future event tagged with this label, plus every
-     open task tagged with it that has a due date, merged into one
-     chronologically sorted list. Same recipe/row shapes as
-     project_detail.html's own Agenda card (routers/labels.py::
-     label_detail builds `agenda_items` the same way routers/projects.py::
-     project_detail does) -- see that template's own comment for the full
-     rationale of each row shape. No deadline row here: a plain label has
-     no start_date/end_date the way a Project does, so `item.is_deadline`
-     never fires for this page -- the branch below is kept only so this
-     template stays a drop-in match for the same `agenda_items` shape,
-     not because a plain label can produce one today. -->
+<!-- Agenda: future events tagged with this label, its own deadline, and
+     open due-dated tasks, in one chronological list. -->
+{% if label.agenda_widget %}
 <div class="card widget-card-static">
     <div class="widget-header"><h2>{{ icon('calendar', 'icon-sm') }} Agenda</h2></div>
     <div class="widget-content">
@@ -62,23 +39,16 @@
         {% endfor %}
     </table>
     {% else %}
-    {{ widget_empty('No upcoming events or due tasks tagged with this label.') }}
+    {{ widget_empty('No upcoming events, deadline or due tasks for this label.') }}
     {% endif %}
     </div>
 </div>
 
-<!-- Contacts card (2026-09-16, direct request: "the same plain label page
-     should also show below the agenda and above the kanban a contacts
-     list widget filtered for that label") -- reuses the Dashboard's own
-     Contact List widget partial verbatim (_widget_contact_list.html,
-     expects a `data.contacts` var in scope -- Jinja `include` inherits
-     the calling template's context by default, so setting `data` here is
-     enough, no widget-config machinery needed) rather than duplicating
-     its row markup -- same name/org/email/phone stack, same
-     `.contact-list-*` CSS, every contacts row still links to
-     /contacts/{uid}. routers/labels.py::label_detail builds `contacts`
-     as every contact directly tagged with this label, capped at 20 (same
-     limit the Dashboard widget defaults to). -->
+{% endif %}
+
+<!-- Contacts: every contact tagged with this label (up to 20), reusing
+     the Dashboard's Contact List widget partial. -->
+{% if label.contacts_widget %}
 <div class="card widget-card-static">
     <div class="widget-header"><h2>{{ icon('user', 'icon-sm') }} Contacts</h2></div>
     <div class="widget-content">
@@ -87,11 +57,11 @@
     </div>
 </div>
 
-<!-- Kanban board -- every non-archived task carrying this label, grouped
-     by status. Same markup/CSS/drag-and-drop as project_detail.html's own
-     board (static/tasks_board.js, `.kanban-board`/`.kanban-column`/
-     `.kanban-cards[data-status]`/`.kanban-card[data-uid]`) -- see that
-     template's own comment for the full history of this markup. -->
+{% endif %}
+
+<!-- Tasks: every non-archived task carrying this label on a Kanban board
+     grouped by status (drag and drop via static/tasks_board.js). -->
+{% if label.tasks_widget %}
 <div class="kanban-board-wrap">
 <div class="kanban-board" id="kanban-board">
     {% for status in board_statuses %}
@@ -124,5 +94,9 @@
     {% endfor %}
 </div>
 </div>
+{% endif %}
+{% if not (label.agenda_widget or label.contacts_widget or label.tasks_widget) %}
+<p class="text-muted">Nothing is switched on for this page. Turn on Agenda, Contacts or Tasks in this label's settings.</p>
+{% endif %}
 {% endblock %}
-{% block extra_scripts %}<script defer src="{{ static_url('tasks_board.js') }}"></script>{% endblock %}
+{% block extra_scripts %}{% if label.tasks_widget %}<script defer src="{{ static_url('tasks_board.js') }}"></script>{% endif %}{% endblock %}

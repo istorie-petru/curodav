@@ -21,6 +21,7 @@ from starlette.requests import Request
 
 from src import db, deps
 from src.routers import banners as banners_router
+from src.routers import label_pages
 from src.routers import calendar as calendar_router
 from src.routers import contacts as contacts_router
 from src.routers import dashboard as dashboard_router
@@ -131,14 +132,14 @@ class TestBannerPartialRendering:
     def test_cached_remote_renders_served_url(self, conn):
         _make_label(conn, "CS101")
         _set_remote(conn, cached=True, scope="CS101")
-        body = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn).body.decode()
+        body = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn).body.decode()
         assert "/banners/image?scope=CS101" in body
         assert "cdn.example.com" not in body
 
     def test_legacy_hotlink_remote_keeps_image_url(self, conn):
         _make_label(conn, "CS101")
         _set_remote(conn, cached=False, scope="CS101")
-        body = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn).body.decode()
+        body = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn).body.decode()
         assert "https://cdn.example.com/pic.jpg" in body
         assert "/banners/image?scope=CS101" not in body
 
@@ -272,18 +273,18 @@ class TestPageBannerAvatar:
     def test_project_page_shows_avatar_with_a_banner(self, conn):
         _make_label(conn, "CS101")
         _set_remote(conn, cached=True, scope="CS101")
-        body = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn).body.decode()
+        body = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn).body.decode()
         assert 'class="page-banner-avatar-wrap"' in body
 
     def test_project_page_has_no_avatar_wrap_without_a_banner(self, conn):
         _make_label(conn, "CS101")
-        body = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn).body.decode()
+        body = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn).body.decode()
         assert "page-banner-avatar-wrap" not in body
 
     def test_space_page_shows_avatar_with_a_banner(self, conn):
         db.upsert_label_config(conn, {"name": "Work", "generate_space": 1, "created_at": _now()})
         _set_remote(conn, cached=True, scope="Work")
-        body = spaces_router.space_detail("Work", _request("/spaces/Work"), conn=conn).body.decode()
+        body = label_pages.label_page("Work", _request("/labels/Work"), conn=conn).body.decode()
         assert 'class="page-banner-avatar-wrap"' in body
 
 
@@ -340,7 +341,7 @@ class TestPageBannerNotionStyleHeaderRow:
     def test_project_page_gets_the_same_header_row(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "start_date": "2026-01-01", "end_date": "2026-12-31", "created_at": _now()})
         _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE)
-        body = projects_router.project_detail("Garden", _request("/projects/Garden"), conn=conn).body.decode()
+        body = label_pages.label_page("Garden", _request("/labels/Garden"), conn=conn).body.decode()
         assert '<div class="page-banner-header-row">' in body
 
 
@@ -357,7 +358,7 @@ class TestLabelIconTile:
     def test_space_page_gets_an_icon_tile_not_the_profile_avatar(self, conn):
         db.upsert_label_config(conn, {"name": "Work", "generate_space": 1, "color": "teal", "icon": "briefcase", "created_at": _now()})
         _set_remote(conn, cached=True, scope="Work")
-        body = spaces_router.space_detail("Work", _request("/spaces/Work"), conn=conn).body.decode()
+        body = label_pages.label_page("Work", _request("/labels/Work"), conn=conn).body.decode()
         assert 'class="label-icon-tile avatar-hero avatar-circle"' in body
         assert "--tile-swatch:var(--cal-bg-teal, var(--cal-bg-blue))" in body
         assert '<span class="avatar-circle avatar-hero">' not in body  # no profile-photo fallback rendered instead
@@ -365,7 +366,7 @@ class TestLabelIconTile:
     def test_project_page_gets_an_icon_tile_with_its_own_color(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "color": "green", "icon": "leaf", "start_date": "2026-01-01", "end_date": "2026-12-31", "created_at": _now()})
         _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE)
-        body = projects_router.project_detail("Garden", _request("/projects/Garden"), conn=conn).body.decode()
+        body = label_pages.label_page("Garden", _request("/labels/Garden"), conn=conn).body.decode()
         assert "--tile-swatch:var(--cal-bg-green, var(--cal-bg-blue))" in body
 
     def test_unrecognized_legacy_color_falls_back_to_blue_not_transparent(self, conn):
@@ -385,7 +386,7 @@ class TestLabelIconTile:
         # the current palette.
         db.upsert_label_config(conn, {"name": "Legacy", "generate_space": 1, "color": "turquoise", "icon": "folder", "created_at": _now()})
         _set_remote(conn, cached=True, scope="Legacy")
-        body = spaces_router.space_detail("Legacy", _request("/spaces/Legacy"), conn=conn).body.decode()
+        body = label_pages.label_page("Legacy", _request("/labels/Legacy"), conn=conn).body.decode()
         assert "--tile-swatch:var(--cal-bg-turquoise, var(--cal-bg-blue))" in body
 
     def test_title_no_longer_has_the_icon_prepended(self, conn):
@@ -394,7 +395,7 @@ class TestLabelIconTile:
         # name.
         db.upsert_label_config(conn, {"name": "CS101", "color": "blue", "icon": "book", "created_at": _now()})
         _set_remote(conn, cached=True, scope="CS101")
-        body = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn).body.decode()
+        body = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn).body.decode()
         title_start = body.index('class="page-banner-title"')
         title_end = body.index("</h1>", title_start)
         title_html = body[title_start:title_end]
@@ -467,7 +468,7 @@ class TestPageBannerDefaultFallback:
     def test_project_page_falls_back_to_the_default_banner(self, conn):
         _make_label(conn, "CS101")
         _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE, image_url="https://cdn.example.com/default.jpg")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
+        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
         assert resp.context["banner"]["image_url"] == "https://cdn.example.com/default.jpg"
         assert resp.context["has_own_banner"] is False
 
@@ -475,14 +476,14 @@ class TestPageBannerDefaultFallback:
         _make_label(conn, "CS101")
         _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE, image_url="https://cdn.example.com/default.jpg")
         _set_remote(conn, cached=True, scope="CS101", image_url="https://cdn.example.com/cs101-own.jpg")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
+        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
         assert resp.context["banner"]["image_url"] == "https://cdn.example.com/cs101-own.jpg"
         assert resp.context["has_own_banner"] is True
 
     def test_space_page_falls_back_to_the_default_banner(self, conn):
         db.upsert_label_config(conn, {"name": "Work", "generate_space": 1, "created_at": _now()})
         _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE, image_url="https://cdn.example.com/default.jpg")
-        resp = spaces_router.space_detail("Work", _request("/spaces/Work"), conn=conn)
+        resp = label_pages.label_page("Work", _request("/labels/Work"), conn=conn)
         assert resp.context["banner"]["image_url"] == "https://cdn.example.com/default.jpg"
         assert resp.context["has_own_banner"] is False
 
@@ -517,7 +518,7 @@ class TestBannerForTask:
         assert banner["image_url"] == "https://cdn.example.com/label.jpg"
 
     def test_falls_back_to_the_project_labels_banner(self, conn):
-        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "has_dashboard": 0, "created_at": _now()})
         _set_remote(conn, cached=True, scope="Garden", image_url="https://cdn.example.com/project.jpg")
         db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
         task = db.get_task(conn, "t1")
@@ -546,7 +547,7 @@ class TestBannerForTask:
         assert banner["image_url"] == "https://cdn.example.com/label.jpg"
 
     def test_project_with_no_parent_space_and_no_own_banner_resolves_to_none(self, conn):
-        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "has_dashboard": 0, "created_at": _now()})
         db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
         task = db.get_task(conn, "t1")
         assert db.banner_for_task(conn, task) is None
@@ -747,10 +748,10 @@ class TestBannerRendersOnTaskDetailAndKanban:
         assert f"--cover-accent:var(--cal-accent-{deps._stable_color('c1')})" in body
 
     def test_kanban_card_carries_the_resolved_project_banner(self, conn):
-        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "has_dashboard": 0, "created_at": _now()})
         _set_remote(conn, scope="Garden", image_url="https://cdn.example.com/project.jpg")
         db.upsert_task(conn, {"uid": "t1", "title": "Water the plants", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
-        resp = projects_router.project_detail("Garden", _request("/projects/Garden"), conn=conn)
+        resp = label_pages.label_page("Garden", _request("/labels/Garden"), conn=conn)
         card = [t for t in resp.context["columns"]["active"] if t["uid"] == "t1"][0]
         assert card["banner"]["image_url"] == "https://cdn.example.com/project.jpg"
         body = resp.body.decode()
@@ -758,7 +759,7 @@ class TestBannerRendersOnTaskDetailAndKanban:
         assert 'src="https://cdn.example.com/project.jpg"' in body
 
     def test_kanban_card_has_no_banner_markup_when_none_resolves(self, conn):
-        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "has_dashboard": 0, "created_at": _now()})
         db.upsert_task(conn, {"uid": "t1", "title": "Water the plants", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
-        resp = projects_router.project_detail("Garden", _request("/projects/Garden"), conn=conn)
+        resp = label_pages.label_page("Garden", _request("/labels/Garden"), conn=conn)
         assert "kanban-card-banner" not in resp.body.decode()

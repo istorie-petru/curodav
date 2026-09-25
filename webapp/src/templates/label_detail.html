@@ -1,24 +1,14 @@
 {% extends "base.html" %}
 {% from "_page_banner.html" import page_banner with context %}
 {% block title %}{{ label.name if label else "Label" }}{% endblock %}
-<!-- 2026-09-16: Space-only now. This used to be shared by Spaces, Projects,
-     and plain labels alike; Projects moved to their own Kanban+Agenda page
-     2026-08-30 (routers/projects.py::project_detail/project_detail.html),
-     and plain labels followed the same way 2026-09-16 (routers/labels.py::
-     label_detail/label_kanban_detail.html, direct request: "plain labels
-     should generate pages like projects, with agenda and kanban, not
-     dashboards"). Only routers/spaces.py::space_detail renders this
-     template now -- `is_space` is always true here, kept as a context key
-     mainly because the icon-tile fallback below still branches on it.
-
-     2026-08-08: opt out of the default 1120px-max-width centered column,
-     same fix dashboard.html already applies (see that template's own
-     comment) -- this page includes the exact same widget grid
-     (_widget_workspace.html) as Home, and app.js's masonry layout sizes
-     its 6 virtual columns off the grid's own rendered width, so a Space
-     page left in the boxed column reproduces the identical "permanent
-     empty region on the right, widgets crowded into less width than the
-     page actually has" bug Home was already fixed for. -->
+<!-- A label's widget-dashboard page (routers/label_pages.py, labels-as-
+     modules slice b, 2026-09-25): rendered for a Space, or for any label
+     with has_dashboard on. A label without a dashboard gets
+     label_sections.html instead. `is_space` is only still read by the icon
+     tile fallback below.
+     Opts out of the default 1120px-max-width centered column, like
+     dashboard.html: app.js's masonry sizes its 6 columns off the grid's
+     rendered width, so a boxed column leaves an empty strip on the right. -->
 {% block main_class %}main-full-width{% endblock %}
 {% block content %}
 <!-- Header banner + one page-action bar (2026-08-10) -- same merged
@@ -40,16 +30,20 @@
          buttons here -- see dashboard.html's own comment. -->
     {% if edit_mode %}
     <a href="/dashboard/customize?project_uid={{ label.uid }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('plus', 'icon-sm') }} New widget</a>
-    <!-- Add/Change banner (2026-08-09) -- next to New widget in edit mode.
+    {# Add/Change banner (2026-08-09) -- next to New widget in edit mode.
          Opens the banner editor modal (routers/banners.py); "Add" vs
          "Change" labels by whether THIS page has its own banner
          (2026-08-29 direct request: `has_own_banner`, not `banner` -- a
          page with no override of its own still renders `banner` truthy
          now, via the Settings > Appearance default,
-         routers/dashboard.py's _page_banner_context). -->
+         routers/dashboard.py's _page_banner_context). #}
     {# 2026-09-08: data-modal-size="wide" dropped, see dashboard.html's
        own trigger for why. #}
+    {# A label grouped under a Space follows the Space's banner
+       (2026-09-21), so it has no banner control of its own. #}
+    {% if not banner_grouped_under %}
     <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
+    {% endif %}
     <!-- Reset to default layout (item #1, dashboard usability rework,
          2026-08-07) -- Settings has no per-space subpage to host this
          (it's a single hub page, see routers/settings.py's module
@@ -69,6 +63,7 @@
 {% endcall %}
 </div>
 
+{% include "_label_status.html" %}
 {% if label.description %}<p>{{ label.description }}</p>{% endif %}
 
 <!-- 2026-09-16 (direct request: "an ancient part of the app appears, in

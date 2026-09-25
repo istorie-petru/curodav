@@ -140,21 +140,35 @@
     </div>
 </div>
 
-<!-- Project period fields -- shown only when role is "project";
-     label_role_picker.js toggles `hidden` client-side as the Role
-     radios change, matching this server-rendered initial state. -->
-<div class="field-grid label-project-fields" {% if role != 'project' %}hidden{% endif %}>
+{# labels-as-modules slice b (2026-09-25): any label can have a deadline
+   (empty = none), which replaces a Project's start/end period. "Page"
+   picks what /labels/<name> shows: the widget dashboard, or (when that's
+   off) just the ticked sections. Hidden for a Space, which is always a
+   dashboard until slice c (label_role_picker.js keeps that in sync with
+   the Role radios). `page_fields` tells the server this form carried these
+   fields, so a caller that doesn't send them can't blank them. #}
+{% from "_datetime_picker.html" import datetime_picker with context %}
+<input type="hidden" name="page_fields" value="1">
+<div class="field-grid label-page-fields" {% if role == 'space' %}hidden{% endif %}>
     <div class="field">
-        <label>Start date</label>
-        {% from "_datetime_picker.html" import datetime_picker with context %}
-        {{ datetime_picker('start_date', '', l.start_date if l else '', '', 'date') }}
+        <label>Deadline</label>
+        {{ datetime_picker('deadline_date', '', l.deadline_date if (l and l.has_deadline) else '', '', 'date') }}
     </div>
     <div class="field">
-        <label>End date</label>
-        {{ datetime_picker('end_date', '', l.end_date if l else '', '', 'date') }}
+        <label>Page</label>
+        <div class="field-toggle-group">
+            <label class="field-toggle"><input type="checkbox" name="has_dashboard" value="1" {% if l and l.has_dashboard %}checked{% endif %}> Dashboard</label>
+        </div>
+    </div>
+    <div class="field field-wide label-sections-field" {% if l and l.has_dashboard %}hidden{% endif %}>
+        <label>Sections</label>
+        <div class="field-toggle-group">
+            <label class="field-toggle"><input type="checkbox" name="agenda_widget" value="1" {% if not l or l.agenda_widget %}checked{% endif %}> Agenda</label>
+            <label class="field-toggle"><input type="checkbox" name="tasks_widget" value="1" {% if not l or l.tasks_widget %}checked{% endif %}> Tasks</label>
+            <label class="field-toggle"><input type="checkbox" name="contacts_widget" value="1" {% if not l or l.contacts_widget %}checked{% endif %}> Contacts</label>
+        </div>
     </div>
 </div>
-
 {% if l and not appearance_in_header %}
 {% set _grouped_under = banner_grouped_under if banner_grouped_under is defined else none %}
 {# 2026-08-30 (direct request): a label's banner used to be

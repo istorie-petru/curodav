@@ -53,12 +53,17 @@
       const warnRole = wrap.dataset.warnRole || "";
       const radios = Array.from(wrap.querySelectorAll('input[name="role"]'));
       const form = wrap.closest("form");
-      const fields = form ? form.querySelector(".label-project-fields") : null;
       const parentField = form ? form.querySelector(".label-parent-field") : null;
+      // labels-as-modules slice b: the Deadline/Page fields (hidden for a
+      // Space, which is always a dashboard), and the Sections toggles
+      // (only meaningful when Dashboard is off).
+      const pageFields = form ? form.querySelector(".label-page-fields") : null;
+      const dashboardBox = form ? form.querySelector('input[name="has_dashboard"]') : null;
+      const sectionsField = form ? form.querySelector(".label-sections-field") : null;
 
       const MESSAGES = {
         project:
-          "Switching away from Project removes its start/end period and lifecycle tracking. The label and everything tagged with it stay exactly as they are.",
+          "Switching away from Project stops treating this label as a project. Its deadline and everything tagged with it stay exactly as they are.",
         space:
           "This label generates a Space page other labels are grouped under. Switching away removes that page; the child labels and their own data are untouched.",
       };
@@ -70,8 +75,9 @@
 
       function sync() {
         const value = selectedRole();
-        if (fields) fields.hidden = value !== "project";
         if (parentField) parentField.hidden = value === "space";
+        if (pageFields) pageFields.hidden = value === "space";
+        if (sectionsField && dashboardBox) sectionsField.hidden = dashboardBox.checked;
         if (!form) return;
         if (value !== originalRole && warnRole && warnRole === originalRole) {
           form.setAttribute("data-confirm-sheet", MESSAGES[warnRole]);
@@ -81,6 +87,7 @@
       }
 
       radios.forEach((radio) => radio.addEventListener("change", sync));
+      if (dashboardBox) dashboardBox.addEventListener("change", sync);
       sync(); // initial state -- date fields' hidden attribute is already
               // server-rendered to match, this just covers a stale/cached
               // fragment and keeps the two code paths honest with each other.

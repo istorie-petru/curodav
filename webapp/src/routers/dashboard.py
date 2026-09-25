@@ -651,15 +651,7 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
         cards = []
         for lbl in labels:
             children = db.list_child_labels(conn, lbl["name"])
-            # `labels` here can be a Space's own children (label_name set),
-            # which -- per this function's docstring -- pools BOTH
-            # sub-Spaces and promoted projects; a project among them needs
-            # its own page (routers/projects.py), not the /spaces/ URL a
-            # sub-Space gets. When unscoped, `labels` is list_space_labels
-            # (Spaces only), so this is a no-op fallthrough there.
-            href = f"/spaces/{lbl['name']}" if lbl.get("generate_space") else (
-                f"/projects/{lbl['name']}" if lbl.get("is_project") else f"/settings/labels/{lbl['name']}"
-            )
+            href = f"/labels/{lbl['name']}"
             cards.append({
                 "uid": lbl["name"],
                 "name": lbl["name"],
@@ -683,12 +675,7 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
                 cards.append({
                     "uid": lbl["name"],
                     "name": lbl["name"],
-                    # 2026-08-30: /projects/{name} is real again (a Kanban
-                    # board, routers/projects.py::project_detail) -- was
-                    # "/tasks" while the page was a redirect stub
-                    # (2026-08-15 through 2026-08-30, see that history in
-                    # this file's git log).
-                    "href": f"/projects/{lbl['name']}",
+                    "href": f"/labels/{lbl['name']}",
                     "icon": lbl.get("icon") or "folder",
                     "color": lbl.get("color") or "blue",
                     "description": "",
@@ -1909,11 +1896,9 @@ def _build_widget_contexts(conn, widgets: list[dict], nav: dict | None = None) -
 def _return_url(label_name: str | None, _legacy: str | None = None, conn=None) -> str:
     """Where a widget-mutating POST should redirect back to -- Home ("/")
     when the acted-on widget has no page identity, or that label's
-    generated page otherwise: `/spaces/{name}` directly for a Space
-    (`conn` passed -- avoids bouncing through label_detail's own 301,
-     2026-08-28 fix, see plans/STATE.md), `/settings/labels/{name}`
-    (labels.py's label_detail, which itself 301s on to /spaces/{name}
-    for a Space) when no `conn` is available to check. Derived from the
+    page otherwise (`/labels/{name}`, routers/label_pages.py -- one URL
+    for every kind of label since labels-as-modules slice b; `conn` is no
+    longer needed and only kept for existing callers). Derived from the
     widget itself wherever one already exists (edit/resize/stack/unstack/
     delete/move/reorder below); only add_widget has no existing widget to
     derive it from, so it takes `label_name` as a hidden form field
@@ -1931,9 +1916,7 @@ def _return_url(label_name: str | None, _legacy: str | None = None, conn=None) -
     label_name = label_name or _legacy
     if not label_name:
         return "/"
-    if conn is not None and db.effective_label_config(conn, label_name).get("generate_space"):
-        return f"/spaces/{label_name}"
-    return f"/settings/labels/{label_name}"
+    return f"/labels/{label_name}"
 
 
 def widget_page_context(conn, space_uid: str | None = None, project_uid: str | None = None, nav: dict | None = None) -> dict:

@@ -807,17 +807,36 @@ session start.
   forms still write the legacy flags. New `test_label_modules.py` (18).
   Full suite **2,454 passed**. No CSS/JS change, so there's no sw.js bump.
 
-  **Next slice**: item 4 slice b, the URL/routing collapse. Move the label
-  forms onto the new fields (sidebar/widget pin, deadline, archive,
-  has_dashboard and its section toggles, text group); `/labels/<name>`
-  becomes the widget dashboard (or the toggled sections when
-  has_dashboard=no); retire `/spaces/*`, `/projects/*`,
-  label_kanban_detail.html and project_detail.html (redirect to
-  `/labels/<name>`); `project_status` reads `deadline_date`; delete the
-  interim `_mirror_legacy_module_fields`/`_rename_space_group`. Then c
-  (sidebar chevron + group pages/dashboards, which decides whether a
-  Space's widgets move to its group), then d (label-pill links), then
-  narrow banners (item 2).
+  **2026-09-25 (same session, Peter: "continue without me asking") --
+  item 4 slice b shipped: URL/routing collapse.** One label page at
+  `/labels/<name>` (`routers/label_pages.py`): widget dashboard when
+  `has_dashboard` (or a Space), otherwise `label_sections.html` with only
+  the switched-on Agenda/Contacts/Tasks. `/spaces/*`, `/projects/*` and
+  `/settings/labels/<name>` 301 there; `project_detail.html` and
+  `label_kanban_detail.html` are deleted. Any label with a deadline gets a
+  status row + Archive/Unarchive. The label form has Deadline + Page
+  (Dashboard / Sections) fields. promote/dates/demote and the overlap rule
+  are gone. **Bug fixed from slice a**: contacts_widget defaulted to off
+  (wrong: the plain label page showed Contacts), so it now defaults to on,
+  with a one-time fix for migrated rows. Also kept the 09-21 "grouped
+  label has no banner of its own" rule on the dashboard page. Verified
+  live in Chromium: redirects, both page kinds, form toggles (Dashboard
+  hides Sections, Space role hides both), save, archive -> Archived +
+  Unarchive, no overflow at 390px, no console errors. New
+  `test_label_pages.py` (27). Full suite **2,477 passed**. `label_role_picker.js`
+  isn't a SHELL_ASSET and style.css is unchanged, so there's no sw.js bump.
+
+  **Next slice**: item 4 slice c -- sidebar chevron fix + group pages.
+  Groups are `label_group` text with their own widget dashboard (new
+  storage keyed by group name). The sidebar lists groups (chevron expands
+  their labels, `sidebar_pin`); the Space role, `parent_name`, color/banner
+  inheritance and the interim `_mirror_legacy_module_fields`/
+  `_rename_space_group` go; `widget_pin` drives the Spaces & Projects
+  widget. **Ask Peter first**: (1) does the Project role/`is_project` go
+  too (it still drives one-project-per-task and the Tasks table's project
+  grouping)? (2) should a former Space's widgets move to its new group
+  dashboard? Then d (label-pill links), then narrow banners (item 2,
+  including the icon_tile banner reversal).
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-

@@ -101,7 +101,7 @@
             "/settings/labels/" ~ group.space.name ~ "/delete",
             "label",
             'Remove "' ~ group.space.name ~ '" from every object that carries it? This doesn\'t delete the label config, just clears its usage.',
-            "/spaces/" ~ group.space.name
+            "/labels/" ~ group.space.name
         ) }}
     </td>
 </tr>
@@ -155,12 +155,7 @@
         {% endif %}
     </td>
     <td>
-        {# Same is_project/generate_space precedence base.html's own
-           sidebar tree uses for a child row's href (see that file's
-           child_href) -- a plain label's own generated page is still
-           /settings/labels/{name} (label_kanban_detail.html), same route
-           this row's Edit button already lives under. #}
-        {% set _view_url = ("/spaces/" ~ l.name) if l.generate_space else (("/projects/" ~ l.name) if l.is_project else ("/settings/labels/" ~ l.name)) %}
+        {% set _view_url = "/labels/" ~ l.name %}
         {{ row_action_buttons(
             "/settings/labels/" ~ l.name ~ "/edit",
             "/settings/labels/" ~ l.name ~ "/delete",

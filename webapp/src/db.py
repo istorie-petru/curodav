@@ -491,7 +491,7 @@ CREATE TABLE IF NOT EXISTS label_config (
     has_dashboard INTEGER NOT NULL DEFAULT 0,
     agenda_widget INTEGER NOT NULL DEFAULT 1,
     tasks_widget INTEGER NOT NULL DEFAULT 1,
-    contacts_widget INTEGER NOT NULL DEFAULT 0
+    contacts_widget INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_start ON events(start_at);
@@ -961,7 +961,7 @@ _LABEL_MODULE_COLUMNS = (
     ("has_dashboard", "INTEGER NOT NULL DEFAULT 0"),
     ("agenda_widget", "INTEGER NOT NULL DEFAULT 1"),
     ("tasks_widget", "INTEGER NOT NULL DEFAULT 1"),
-    ("contacts_widget", "INTEGER NOT NULL DEFAULT 0"),
+    ("contacts_widget", "INTEGER NOT NULL DEFAULT 1"),
 )
 
 
@@ -4029,7 +4029,7 @@ _LABEL_CONFIG_DEFAULTS: dict[str, Any] = {
     "has_dashboard": 0,
     "agenda_widget": 1,
     "tasks_widget": 1,
-    "contacts_widget": 0,
+    "contacts_widget": 1,
 }
 
 # The labels-as-modules boolean flags -- normalized to 0/1 on write and to
@@ -4192,17 +4192,32 @@ def _mirror_legacy_module_fields(row: dict[str, Any], existing: dict[str, Any], 
         elif existing.get("parent_name") and existing.get("label_group") == existing.get("parent_name"):
             # Moved out of its Space -- leave the group it came from too.
             put("label_group", None)
-    if "is_project" in row and not row["is_project"]:
-        # Demoting a project drops its dates (routers/projects.py::demote),
-        # so its deadline goes with them.
-        put("has_deadline", 0)
-        put("deadline_date", None)
-    elif "end_date" in row and data.get("is_project"):
+    if "end_date" in row and data.get("is_project"):
+        # Only an old (pre-2026-09-25) backup being restored still sends a
+        # project's end_date; the label form writes deadline_date itself.
         put("deadline_date", row["end_date"] or None)
         put("has_deadline", 1 if row["end_date"] else 0)
 
 
 _LABEL_MODULES_BACKFILLED_KEY = "label_modules_backfilled"
+
+
+_CONTACTS_WIDGET_DEFAULT_FIXED_KEY = "label_modules_contacts_default_fixed"
+
+
+def _fix_contacts_widget_default(conn: sqlite3.Connection) -> None:
+    """One-time fix (slice b, 2026-09-25): slice a shipped contacts_widget
+    defaulting to off, on the wrong belief that the plain label page had no
+    Contacts card. It did (added 2026-09-16). Nothing could set the field
+    before slice b's form, so every stored value is that wrong default and
+    is safe to turn on. On a database migrated by slice a, the column
+    DEFAULT stays 0 (SQLite can't alter a default in place), but every
+    insert goes through upsert_label_config, which writes the Python-side
+    default of 1 explicitly."""
+    if get_app_meta(conn, _CONTACTS_WIDGET_DEFAULT_FIXED_KEY):
+        return
+    conn.execute("UPDATE label_config SET contacts_widget = 1")
+    set_app_meta(conn, _CONTACTS_WIDGET_DEFAULT_FIXED_KEY, "1")
 
 
 def backfill_label_modules(conn: sqlite3.Connection) -> None:
@@ -4219,11 +4234,11 @@ def backfill_label_modules(conn: sqlite3.Connection) -> None:
     - has_dashboard: Spaces, projects, and any label whose page already has
       its own widgets.
     - has_deadline/deadline_date: a project's end_date.
-    - agenda/tasks/contacts_widget: left at their defaults (agenda + tasks
-      on, contacts off, matching a plain label's current Kanban + Agenda
-      page).
+    - agenda/tasks/contacts_widget: all on, matching the plain label page
+      they replace (Agenda + Contacts + Kanban).
 
     Idempotent through its own app_meta marker."""
+    _fix_contacts_widget_default(conn)
     if get_app_meta(conn, _LABEL_MODULES_BACKFILLED_KEY):
         return
     rows = [dict(r) for r in conn.execute("SELECT * FROM label_config").fetchall()]
@@ -4296,30 +4311,6 @@ def list_project_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return [effective_label_config(conn, r["name"]) for r in rows]
 
 
-def find_overlapping_project(
-    conn: sqlite3.Connection, name: str, start_date: str | None, end_date: str | None
-) -> dict[str, Any] | None:
-    """The first other non-archived project whose [start_date, end_date]
-    period overlaps this one's, or None. Backs the "projects may not
-    overlap another project" rule (§ Project-enabled label stack) -- the
-    UI must warn and require the user to resolve the conflict rather than
-    silently accept it (see routers/projects.py's create/edit handlers).
-    A project missing either date has no bounded period yet, so it can't
-    overlap anything; an Archived project is closed history, not part of
-    "the same project context" going forward, so it's excluded."""
-    if not start_date or not end_date:
-        return None
-    for cfg in list_project_labels(conn):
-        if cfg["name"] == name or cfg.get("archived_at"):
-            continue
-        other_start, other_end = cfg.get("start_date"), cfg.get("end_date")
-        if not other_start or not other_end:
-            continue
-        if start_date <= other_end and other_start <= end_date:
-            return cfg
-    return None
-
-
 def project_status(conn: sqlite3.Connection, cfg: dict[str, Any], today: date | None = None) -> str:
     """Computed lifecycle state -- Open / Pending / Pending Archiving /
     Archived (§ Project lifecycle). Only `archived_at` is stored (the
@@ -4335,11 +4326,15 @@ def project_status(conn: sqlite3.Connection, cfg: dict[str, Any], today: date | 
       with no work yet hasn't reached a completion point to leave Open
       from).
     - Pending: every task is completed (and there's at least one), but
-      today is still before the project's end date -- completed early,
-      not yet at its deadline.
+      today is still before the deadline -- completed early.
     - Pending Archiving: every task is completed and today is on/after
-      the end date (or there's no end date) -- ready for the user to
+      the deadline (or there's no deadline) -- ready for the user to
       confirm closure.
+
+    labels-as-modules slice b (2026-09-25): reads the generic
+    `deadline_date` (when `has_deadline` is on) instead of a project's
+    `end_date`, so this works for any label with a deadline, not only
+    is_project ones.
     """
     if cfg.get("archived_at"):
         return "Archived"
@@ -4349,10 +4344,10 @@ def project_status(conn: sqlite3.Connection, cfg: dict[str, Any], today: date | 
     # routers import cycle (db.py has no dependency on routers/*).
     if not tasks or any(t.get("status") not in ("done", "archived") for t in tasks):
         return "Open"
-    end_date = cfg.get("end_date")
+    deadline = cfg.get("deadline_date") if cfg.get("has_deadline") else None
     if today is None:
         today = date.today()
-    if end_date and today < date.fromisoformat(end_date):
+    if deadline and today < date.fromisoformat(deadline):
         return "Pending"
     return "Pending Archiving"
 
@@ -4364,6 +4359,13 @@ def archive_project(conn: sqlite3.Connection, name: str) -> None:
         "UPDATE label_config SET archived_at = ? WHERE name = ?",
         (datetime.now(timezone.utc).isoformat(), name),
     )
+    conn.commit()
+
+
+def unarchive_label(conn: sqlite3.Connection, name: str) -> None:
+    """Undoes archive_project -- the label goes back to its computed
+    Open/Pending/Pending Archiving status."""
+    conn.execute("UPDATE label_config SET archived_at = NULL WHERE name = ?", (name,))
     conn.commit()
 
 

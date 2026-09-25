@@ -1,4 +1,7 @@
-"""GET /projects/{name} -- the real project page rebuilt 2026-08-30 (see
+"""A label's sections page (GET /labels/{name} with has_dashboard off,
+routers/label_pages.py, label_sections.html) -- the project page's Kanban
+board + Agenda card moved there in labels-as-modules slice b (2026-09-25);
+these tests followed it. Original history: the real project page rebuilt 2026-08-30 (see
 routers/projects.py's module docstring): a Kanban board of every task
 carrying the project's label (columns = status), with an upcoming-events
 card above it. Replaces the 2026-08-15..2026-08-30 redirect stub;
@@ -19,6 +22,7 @@ import pytest
 from starlette.requests import Request
 
 from src import db
+from src.routers import label_pages
 from src.routers import projects as projects_router
 
 _STATIC_DIR = Path(__file__).resolve().parent.parent / "src" / "static"
@@ -51,8 +55,12 @@ def _request(path="/projects/Trip"):
 
 
 def _promote(conn, name="Trip", start="2026-01-01", end="2026-12-31"):
+    # A project without a dashboard, so /labels/<name> renders the sections
+    # page (label_sections.html) this file covers. `start` is unused since
+    # 2026-09-25 (no start date any more), kept so call sites don't change.
     db.upsert_label_config(
-        conn, {"name": name, "is_project": 1, "start_date": start, "end_date": end, "created_at": _now()}
+        conn, {"name": name, "is_project": 1, "has_deadline": 1 if end else 0, "deadline_date": end,
+               "has_dashboard": 0, "created_at": _now()}
     )
 
 
@@ -71,32 +79,34 @@ def _event(conn, uid, tags, start_at):
     )
 
 
-class TestNotAProjectRedirects:
-    def test_plain_label_redirects_to_its_label_page(self, conn):
-        db.upsert_label_config(conn, {"name": "Plain", "created_at": _now()})
-        resp = projects_router.project_detail("Plain", _request("/projects/Plain"), conn=conn)
-        assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/labels/Plain"
+class TestOldUrlsRedirect:
+    """labels-as-modules slice b (2026-09-25): a label's page lives at
+    /labels/{name}; every old per-kind URL 301s there."""
 
-    def test_unknown_label_redirects_too(self, conn):
-        resp = projects_router.project_detail("Ghost", _request("/projects/Ghost"), conn=conn)
-        assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/labels/Ghost"
+    def test_project_url_redirects_to_the_label_page(self):
+        resp = projects_router.project_detail_redirect("Trip")
+        assert resp.status_code == 301
+        assert resp.headers["location"] == "/labels/Trip"
 
-    def test_demoted_project_redirects(self, conn):
-        _promote(conn, "Trip")
-        projects_router.demote("Trip", conn=conn)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
-        assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/labels/Trip"
+    def test_project_calendar_url_redirects_too(self):
+        resp = projects_router.project_calendar_redirect("Trip")
+        assert resp.headers["location"] == "/labels/Trip"
+
+    def test_names_are_url_quoted(self):
+        assert projects_router.project_detail_redirect("Road trip").headers["location"] == "/labels/Road%20trip"
+
+    def test_unknown_label_still_renders_a_page(self, conn):
+        resp = label_pages.label_page("Ghost", _request("/labels/Ghost"), conn=conn)
+        assert resp.status_code == 200
+        assert resp.template.name == "label_sections.html"
 
 
 class TestKanbanBoard:
     def test_renders_a_project_with_no_tasks(self, conn):
         _promote(conn, "Trip")
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert resp.status_code == 200
-        assert resp.context["project"]["name"] == "Trip"
+        assert resp.context["label"]["name"] == "Trip"
         assert resp.context["board_statuses"] == ["active", "in_progress", "waiting", "done"]
         assert all(resp.context["columns"][s] == [] for s in resp.context["board_statuses"])
 
@@ -105,7 +115,7 @@ class TestKanbanBoard:
         _task(conn, "t1", ["Trip"], status="active")
         _task(conn, "t2", ["Trip"], status="in_progress")
         _task(conn, "t3", ["Trip"], status="done")
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         columns = resp.context["columns"]
         assert [t["uid"] for t in columns["active"]] == ["t1"]
         assert [t["uid"] for t in columns["in_progress"]] == ["t2"]
@@ -114,7 +124,7 @@ class TestKanbanBoard:
     def test_archived_tasks_are_excluded_from_the_board(self, conn):
         _promote(conn, "Trip")
         _task(conn, "t1", ["Trip"], status="archived")
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert "archived" not in resp.context["board_statuses"]
         all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
         assert "t1" not in all_uids
@@ -124,7 +134,7 @@ class TestKanbanBoard:
         _promote(conn, "Other", start="2026-01-01", end="2026-12-31")
         _task(conn, "t1", ["Trip"], status="active")
         _task(conn, "t2", ["Other"], status="active")
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
         assert all_uids == {"t1"}
 
@@ -135,7 +145,7 @@ class TestKanbanBoard:
         _promote(conn, "Trip")
         habit_label = db.get_task_habit_settings(conn)["habit_label"]
         _task(conn, "h1", ["Trip", habit_label], status="active")
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
         assert "h1" not in all_uids
 
@@ -157,13 +167,13 @@ class TestKanbanDragAndDrop:
 
     def test_tasks_board_js_is_included(self, conn):
         _promote(conn, "Trip")
-        body = projects_router.project_detail("Trip", _request(), conn=conn).body.decode()
+        body = label_pages.label_page("Trip", _request(), conn=conn).body.decode()
         assert 'src="/static/tasks_board.js' in body
 
     def test_board_markup_matches_the_scripts_own_selectors(self, conn):
         _promote(conn, "Trip")
         _task(conn, "t1", ["Trip"], status="active")
-        body = projects_router.project_detail("Trip", _request(), conn=conn).body.decode()
+        body = label_pages.label_page("Trip", _request(), conn=conn).body.decode()
         script = (_STATIC_DIR / "tasks_board.js").read_text(encoding="utf-8")
         # Every selector tasks_board.js queries against must actually
         # appear in the rendered board -- confirms the re-wiring is
@@ -198,7 +208,7 @@ class TestKanbanResponsiveColumns:
 
     def test_board_is_wrapped_in_a_container_query_container(self, conn):
         _promote(conn, "Trip")
-        body = projects_router.project_detail("Trip", _request(), conn=conn).body.decode()
+        body = label_pages.label_page("Trip", _request(), conn=conn).body.decode()
         assert '<div class="kanban-board-wrap">' in body
         # The wrapper must actually contain the board, not just sit
         # somewhere else on the page.
@@ -248,7 +258,7 @@ class TestKanbanResponsiveColumns:
         # non-functional ancestor around it.
         _promote(conn, "Trip")
         _task(conn, "t1", ["Trip"], status="active")
-        body = projects_router.project_detail("Trip", _request(), conn=conn).body.decode()
+        body = label_pages.label_page("Trip", _request(), conn=conn).body.decode()
         assert 'id="kanban-board"' in body
         assert 'class="kanban-card" data-uid="t1" data-status="active"' in body
 
@@ -265,7 +275,7 @@ class TestAgendaCard:
     # below for that half.
     def test_no_events_renders_empty(self, conn):
         _promote(conn, "Trip", end=None)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert resp.context["agenda_items"] == []
 
     def test_only_future_events_tagged_with_the_project_show(self, conn):
@@ -275,7 +285,7 @@ class TestAgendaCard:
         _event(conn, "e_future", ["Trip"], future)
         _event(conn, "e_past", ["Trip"], past)
         _event(conn, "e_other_project", ["Other"], future)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert [e["uid"] for e in resp.context["agenda_items"]] == ["e_future"]
 
     def test_todays_earlier_event_still_shows(self, conn):
@@ -288,7 +298,7 @@ class TestAgendaCard:
         _promote(conn, "Trip", end=None)
         earlier_today = (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()
         _event(conn, "e_earlier", ["Trip"], earlier_today)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert [e["uid"] for e in resp.context["agenda_items"]] == ["e_earlier"]
 
     def test_event_dot_uses_the_events_own_label_color_not_the_default(self, conn):
@@ -297,10 +307,10 @@ class TestAgendaCard:
         the Agenda card's event dot used to be a flat var(--accent), see
         _widget_items.html's widget_event_dot()."""
         _promote(conn, "Trip", end=None)
-        db.upsert_label_config(conn, {"name": "Trip", "is_project": 1, "color": "purple", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Trip", "is_project": 1, "has_dashboard": 0, "color": "purple", "created_at": _now()})
         future = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
         _event(conn, "e_future", ["Trip"], future)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert resp.context["agenda_items"][0]["calendar_color"] == "purple"
         body = resp.body.decode()
         assert 'widget-event-dot cal-purple' in body
@@ -311,7 +321,7 @@ class TestAgendaCard:
         later = (datetime.now(timezone.utc) + timedelta(days=10)).isoformat()
         _event(conn, "e_later", ["Trip"], later)
         _event(conn, "e_soon", ["Trip"], soon)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert [e["uid"] for e in resp.context["agenda_items"]] == ["e_soon", "e_later"]
 
     def test_capped_at_eight(self, conn):
@@ -319,7 +329,7 @@ class TestAgendaCard:
         for i in range(10):
             when = (datetime.now(timezone.utc) + timedelta(days=i + 1)).isoformat()
             _event(conn, f"e{i}", ["Trip"], when)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert len(resp.context["agenda_items"]) == 8
 
 
@@ -336,7 +346,7 @@ class TestAgendaCardIncludesTasks:
         _promote(conn, "Trip", end=None)
         future = (datetime.now(timezone.utc) + timedelta(days=3)).date().isoformat()
         _task(conn, "t1", ["Trip"], due_at=future)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         items = resp.context["agenda_items"]
         assert len(items) == 1
         assert items[0]["kind"] == "task"
@@ -346,28 +356,28 @@ class TestAgendaCardIncludesTasks:
     def test_task_with_no_due_date_is_excluded(self, conn):
         _promote(conn, "Trip", end=None)
         _task(conn, "t1", ["Trip"])
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert resp.context["agenda_items"] == []
 
     def test_past_due_task_is_excluded(self, conn):
         _promote(conn, "Trip", end=None)
         past = (datetime.now(timezone.utc) - timedelta(days=3)).date().isoformat()
         _task(conn, "t1", ["Trip"], due_at=past)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert resp.context["agenda_items"] == []
 
     def test_due_today_task_still_counts_as_upcoming(self, conn):
         _promote(conn, "Trip", end=None)
         today = datetime.now(timezone.utc).date().isoformat()
         _task(conn, "t1", ["Trip"], due_at=today)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert [i["uid"] for i in resp.context["agenda_items"]] == ["t1"]
 
     def test_done_task_is_excluded(self, conn):
         _promote(conn, "Trip", end=None)
         future = (datetime.now(timezone.utc) + timedelta(days=3)).date().isoformat()
         _task(conn, "t1", ["Trip"], status="done", due_at=future)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert resp.context["agenda_items"] == []
 
     def test_task_from_another_project_is_excluded(self, conn):
@@ -375,7 +385,7 @@ class TestAgendaCardIncludesTasks:
         _promote(conn, "Other", start="2026-01-01", end="2026-12-31")
         future = (datetime.now(timezone.utc) + timedelta(days=3)).date().isoformat()
         _task(conn, "t1", ["Other"], due_at=future)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert resp.context["agenda_items"] == []
 
     def test_tasks_and_events_sort_together_by_date(self, conn):
@@ -386,7 +396,7 @@ class TestAgendaCardIncludesTasks:
         _task(conn, "t_later", ["Trip"], due_at=later_task)
         _event(conn, "e_mid", ["Trip"], mid_event)
         _task(conn, "t_soon", ["Trip"], due_at=soon_task)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         ordering = [i["uid"] for i in resp.context["agenda_items"]]
         assert ordering == ["t_soon", "e_mid", "t_later"]
 
@@ -398,14 +408,14 @@ class TestAgendaCardIncludesTasks:
         for i in range(5):
             when = (datetime.now(timezone.utc) + timedelta(days=i + 20)).date().isoformat()
             _task(conn, f"t{i}", ["Trip"], due_at=when)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert len(resp.context["agenda_items"]) == 8
 
     def test_task_row_renders_as_a_task_link_with_relative_due_date(self, conn):
         _promote(conn, "Trip", end=None)
         future = (datetime.now(timezone.utc) + timedelta(days=3)).date().isoformat()
         _task(conn, "t1", ["Trip"], due_at=future)
-        body = projects_router.project_detail("Trip", _request(), conn=conn).body.decode()
+        body = label_pages.label_page("Trip", _request(), conn=conn).body.decode()
         assert 'href="/tasks/t1"' in body
 
 
@@ -418,29 +428,29 @@ class TestProjectDeadlineAsEvent:
     def test_future_end_date_appears_as_a_deadline_entry(self, conn):
         future_end = (datetime.now(timezone.utc) + timedelta(days=20)).date().isoformat()
         _promote(conn, "Trip", end=future_end)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         items = resp.context["agenda_items"]
         assert len(items) == 1
         assert items[0]["is_deadline"] is True
-        assert items[0]["title"] == "Project deadline"
+        assert items[0]["title"] == "Deadline"
         assert items[0]["start_at"] == f"{future_end}T00:00:00"
 
     def test_deadline_dated_today_still_counts_as_upcoming(self, conn):
         today = datetime.now(timezone.utc).date().isoformat()
         _promote(conn, "Trip", end=today)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert len(resp.context["agenda_items"]) == 1
         assert resp.context["agenda_items"][0]["is_deadline"] is True
 
     def test_past_end_date_does_not_appear(self, conn):
         past_end = (datetime.now(timezone.utc) - timedelta(days=5)).date().isoformat()
         _promote(conn, "Trip", end=past_end)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert resp.context["agenda_items"] == []
 
     def test_no_end_date_means_no_deadline_entry(self, conn):
         _promote(conn, "Trip", end=None)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert resp.context["agenda_items"] == []
 
     def test_deadline_sorts_alongside_real_events_by_date(self, conn):
@@ -450,16 +460,16 @@ class TestProjectDeadlineAsEvent:
         later = (datetime.now(timezone.utc) + timedelta(days=10)).isoformat()
         _event(conn, "e_sooner", ["Trip"], sooner)
         _event(conn, "e_later", ["Trip"], later)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         ordering = [e.get("uid") or e.get("title") for e in resp.context["agenda_items"]]
-        assert ordering == ["e_sooner", "Project deadline", "e_later"]
+        assert ordering == ["e_sooner", "Deadline", "e_later"]
 
     def test_deadline_renders_with_a_deadline_pill_and_no_link(self, conn):
         future_end = (datetime.now(timezone.utc) + timedelta(days=20)).date().isoformat()
         _promote(conn, "Trip", end=future_end)
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         body = resp.body.decode()
-        assert "Project deadline" in body
+        assert "Deadline" in body
         assert "pill-red" in body
         assert "Deadline" in body
 
@@ -475,7 +485,7 @@ class TestHeaderBannerAndAvatar:
 
     def test_no_banner_set_falls_back_to_default_and_renders_plain_title(self, conn):
         _promote(conn, "Trip")
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         body = resp.body.decode()
         assert "page-banner-wrap" in body
         assert "page-banner-title-plain" in body
@@ -484,7 +494,7 @@ class TestHeaderBannerAndAvatar:
     def test_own_banner_renders_cover_and_avatar_overlap(self, conn):
         _promote(conn, "Trip")
         db.set_page_banner(conn, "Trip", {"kind": "remote", "image_url": "https://example.com/a.jpg", "alt": "x"})
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         body = resp.body.decode()
         assert "page-banner-avatar-wrap" in body
         assert "https://example.com/a.jpg" in body
@@ -493,32 +503,28 @@ class TestHeaderBannerAndAvatar:
 
     def test_add_banner_button_only_shows_in_edit_mode(self, conn):
         _promote(conn, "Trip")
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert "Add banner" not in resp.body.decode()
         db.set_app_meta(conn, "edit_mode_enabled", "1")
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         body = resp.body.decode()
         assert "Add banner" in body
-        assert "/banners/editor?scope=Trip&amp;page_url=/projects/Trip" in body
+        assert "/banners/editor?scope=Trip&amp;page_url=/labels/Trip" in body
 
     def test_change_banner_label_once_a_banner_is_set(self, conn):
         _promote(conn, "Trip")
         db.set_page_banner(conn, "Trip", {"kind": "remote", "image_url": "https://example.com/a.jpg", "alt": "x"})
         db.set_app_meta(conn, "edit_mode_enabled", "1")
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         body = resp.body.decode()
         assert "Change banner" in body
         assert "Add banner" not in body
 
-    def test_page_url_points_at_the_projects_route_not_settings_labels(self, conn):
-        # Regression guard: dashboard_router._return_url would resolve a
-        # project label to /settings/labels/{name} (it predates this page)
-        # -- the banner editor must redirect back to /projects/{name}
-        # instead, or saving a banner here bounces the user to the wrong
-        # page.
+    def test_page_url_points_at_the_label_page(self, conn):
+        # The banner editor redirects back to page_url after saving.
         _promote(conn, "Trip")
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
-        assert resp.context["page_url"] == "/projects/Trip"
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
+        assert resp.context["page_url"] == "/labels/Trip"
 
 
 class TestLabelSelectorScope:
@@ -530,9 +536,9 @@ class TestLabelSelectorScope:
     def test_project_grouped_under_a_space_sets_page_label_scope(self, conn):
         db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
         db.upsert_label_config(
-            conn, {"name": "Trip", "is_project": 1, "parent_name": "University", "start_date": "2026-01-01", "end_date": "2026-12-31", "created_at": _now()}
+            conn, {"name": "Trip", "is_project": 1, "has_dashboard": 0, "parent_name": "University", "created_at": _now()}
         )
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert resp.context["page_label_scope"] == "Trip"
         # default_tab=label, not task -- this page's own active_tab is
         # "label" (base.html's _qa_defaults maps that to the Label tab).
@@ -540,6 +546,6 @@ class TestLabelSelectorScope:
 
     def test_standalone_project_with_no_parent_space_is_unscoped(self, conn):
         _promote(conn, "Trip")
-        resp = projects_router.project_detail("Trip", _request(), conn=conn)
+        resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert resp.context["page_label_scope"] is None
         assert "&amp;scope=" not in resp.body.decode()

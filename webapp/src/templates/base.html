@@ -340,17 +340,13 @@
         {% set ns = namespace(child_active=false) %}
         {% if has_children %}
           {% for child in l.children %}
-            {# 2026-08-30: a nested child that's itself a promoted project
-               gets its own Kanban page now (routers/projects.py::
-               project_detail) -- was /settings/labels/{name} while that
-               page was a redirect stub, see that route's own comment. #}
-            {% set child_href = ('/spaces/' ~ child.name) if child.generate_space else (('/projects/' ~ child.name) if child.is_project else ('/settings/labels/' ~ child.name)) %}
+            {% set child_href = '/labels/' ~ child.name %}
             {% if request.url.path == child_href %}{% set ns.child_active = true %}{% endif %}
           {% endfor %}
         {% endif %}
         <div class="sidebar-tree-item {% if has_children %}has-children{% endif %}" data-space-name="{{ l.name }}">
           <div class="sidebar-tree-row">
-            <a href="/spaces/{{ l.name }}" class="tab-btn tab-btn-space {% if request.url.path == '/spaces/' ~ l.name %}active{% endif %}" title="{{ l.name }}">{{ icon(l.icon or 'layers') }}<span>{{ l.abbreviation or l.name }}</span></a>
+            <a href="/labels/{{ l.name }}" class="tab-btn tab-btn-space {% if request.url.path == '/labels/' ~ l.name %}active{% endif %}" title="{{ l.name }}">{{ icon(l.icon or 'layers') }}<span>{{ l.abbreviation or l.name }}</span></a>
             {% if has_children %}
             {# aria-expanded defaults to true when one of this space's own
                children is the active page -- so a direct link/reload lands
@@ -362,11 +358,7 @@
           {% if has_children %}
           <div class="sidebar-tree-children">
             {% for child in l.children %}
-            {# 2026-08-30: a nested child that's itself a promoted project
-               gets its own Kanban page now (routers/projects.py::
-               project_detail) -- was /settings/labels/{name} while that
-               page was a redirect stub, see that route's own comment. #}
-            {% set child_href = ('/spaces/' ~ child.name) if child.generate_space else (('/projects/' ~ child.name) if child.is_project else ('/settings/labels/' ~ child.name)) %}
+            {% set child_href = '/labels/' ~ child.name %}
             {# 2026-08-29 follow-up: no more `icon-sm` here -- it made a
                child's icon (12px) visibly smaller than its parent Space's
                (20px, the plain .tab-btn .icon size) for no reason tied to
@@ -398,11 +390,7 @@
         <div class="tab-separator" role="separator" aria-label="Projects"></div>
         <div class="sidebar-section-label" aria-hidden="true">Projects</div>
         {% for p in projects %}
-        {# 2026-08-30: a project's own page moved to /projects/{name} (a
-           Kanban board, routers/projects.py::project_detail) -- was
-           /settings/labels/{name} (the generic widget-grid dashboard
-           every plain label gets), see that route's own comment. #}
-        {% set project_href = ('/spaces/' ~ p.name) if p.generate_space else ('/projects/' ~ p.name) %}
+        {% set project_href = '/labels/' ~ p.name %}
         <a href="{{ project_href }}" class="tab-btn tab-btn-project {% if request.url.path == project_href %}active{% endif %}" title="{{ p.name }}">{{ icon(p.icon or 'folder') }}<span>{{ p.abbreviation or p.name }}</span></a>
         {% endfor %}
         {% endif %}
