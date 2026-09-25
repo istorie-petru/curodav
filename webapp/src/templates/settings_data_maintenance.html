@@ -272,6 +272,8 @@
 
     </div>
 </div>
+{# 2026-09-25 (UI audit F5): group divider, see .settings-divider. #}
+<hr class="settings-divider">
 
 <!-- 2b. CalDAV / Radicale sync -- 2026-09-08: read-only display now. The
      credentials this card used to collect independently (URL/username/
@@ -310,6 +312,8 @@
         </form>
     </div>
 </div>
+{# 2026-09-25 (UI audit F5): group divider, see .settings-divider. #}
+<hr class="settings-divider">
 
 <!-- 3. Maintenance & cleanup -- 2026-08-26 redesign: every row here is now
      an inline actionable control (label left, control right). The two
@@ -342,27 +346,44 @@
             </form>
         </div>
         {% endif %}
-        <form class="settings-field-row" method="post" action="/settings/task-auto-archive">
+        {# 2026-09-25 (UI audit F14): the last two native <select>s in
+           Settings now use the same single-select dropdown General/
+           Appearance switched to on 2026-09-24 (_widget_list_multiselect
+           .html, ms_mode="single" + ms_bare + ms_autosubmit). The choice
+           lists stay routers/settings.py's (value, label) tuples --
+           including _choices_with_stored_value's honest "(current)" entry
+           for a legacy stored value -- mapped to {uid, name} here. #}
+        <form class="settings-field-row" method="post" action="/settings/task-auto-archive" id="task-auto-archive-form">
             <span class="settings-field-label">Auto-archive completed tasks
                 <span class="settings-field-hint">Deletes done/archived tasks once they're this old</span>
             </span>
             <span class="spacer"></span>
-            <select name="days" data-change-submit>
-                {% for value, label in days_choices %}
-                <option value="{{ value }}" {% if task_auto_archive_days == value %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
+            {% set ms_name = 'days' %}
+            {% set ms_mode = 'single' %}
+            {% set ms_label = 'Auto-archive completed tasks' %}
+            {% set ms_items = [] %}
+            {% for value, label in days_choices %}{% set _ = ms_items.append({'uid': value, 'name': label}) %}{% endfor %}
+            {% set ms_selected = task_auto_archive_days %}
+            {% set ms_autosubmit = true %}
+            {% set ms_bare = true %}
+            {% set ms_form_id = 'task-auto-archive-form' %}
+            {% include "_widget_list_multiselect.html" %}
         </form>
-        <form class="settings-field-row" method="post" action="/settings/data-health/sync-retention">
+        <form class="settings-field-row" method="post" action="/settings/data-health/sync-retention" id="sync-retention-form">
             <span class="settings-field-label">Sync cleanup retention
                 <span class="settings-field-hint">How long deleted items are kept around before being permanently removed</span>
             </span>
             <span class="spacer"></span>
-            <select name="days" data-change-submit>
-                {% for value, label in sync_gc_days_choices %}
-                <option value="{{ value }}" {% if sync_gc.retention_days == (value | int) %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
+            {% set ms_name = 'days' %}
+            {% set ms_mode = 'single' %}
+            {% set ms_label = 'Sync cleanup retention' %}
+            {% set ms_items = [] %}
+            {% for value, label in sync_gc_days_choices %}{% set _ = ms_items.append({'uid': value, 'name': label}) %}{% endfor %}
+            {% set ms_selected = sync_gc.retention_days | string %}
+            {% set ms_autosubmit = true %}
+            {% set ms_bare = true %}
+            {% set ms_form_id = 'sync-retention-form' %}
+            {% include "_widget_list_multiselect.html" %}
         </form>
     </div>
 </div>

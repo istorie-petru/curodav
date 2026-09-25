@@ -8,6 +8,7 @@ scripts/data_health.py share) plus the Settings routes/page.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -476,7 +477,19 @@ class TestDataMaintenanceRedesign2026_08_26:
         # displaying the first preset while storing something else.
         db.set_app_meta(conn, "task_auto_archive_days", "14")
         body = self._page(conn, tmp_path)
-        assert '<option value="14" selected>14 days (current)</option>' in body
+        # 2026-09-25 (UI audit F14): the native <select> became the shared
+        # single-select dropdown -- the legacy value is the trigger's
+        # summary text and the one pre-checked radio.
+        assert '<span class="ms-summary">14 days (current)</span>' in body
+        assert re.search(r'name="days" value="14"\s+form="task-auto-archive-form"\s+checked', body)
+
+    def test_no_native_selects_left(self, conn, tmp_path):
+        # 2026-09-25 (UI audit F14): both lifecycle controls use the same
+        # autosubmitting dropdown General/Appearance use, not <select>.
+        body = self._page(conn, tmp_path)
+        assert not re.search(r"<select\s", body)
+        assert body.count('data-ms-mode="single"') == 2
+        assert 'id="sync-retention-form"' in body and 'form="sync-retention-form"' in body
 
 
 class TestSyncGcRoutes:
