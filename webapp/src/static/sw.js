@@ -563,7 +563,9 @@
 // CCModal.markChangedWith, style.css the popup/work-sessions rules.
 // v122 (2026-09-25): Month/4-Week all-day bar spacing -- style.css bar
 // layer now clears the day number and insets from the column gridlines.
-const CACHE_NAME = "cc-shell-v122";
+// v123 (2026-09-25, same session): audit regressions -- style.css
+// .field-grid mobile columns, "+N more" / Day-view habit button resets.
+const CACHE_NAME = "cc-shell-v123";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

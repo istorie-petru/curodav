@@ -3938,6 +3938,13 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .month-item-title{flex:1 1 auto; min-width:0;}
 .month-task-item:hover{text-decoration:underline;}
 .month-more-link{font-size:11px; font-weight:var(--font-weight-bold); color:var(--fg-secondary); text-decoration:none; padding-top:1px;}
+/* 2026-09-25: it's been a <button> since the 2026-09-09 overflow popover,
+   but the rule above was never reset for that -- it rendered as the
+   browser's default grey outset button (2.4:1 text in dark mode). */
+button.month-more-link{
+  appearance:none; background:none; border:0; padding:1px 0 0; font-family:inherit;
+  text-align:left; cursor:pointer; white-space:nowrap; align-self:flex-start;
+}
 .month-more-link:hover{text-decoration:underline;}
 /* All-day rows are the only colored thing left in a day cell (single-day
    timed events are quiet text above) -- a full-width row in the same
@@ -7400,10 +7407,12 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    (templates/offline.html, _offline_quick_add.html, static/offline_*.js) --
    direct request, "let's just remove offline mode. purge it." `.field-grid`
    right below is the one rule from this section kept -- it's shared with
-   the real event forms (_event_form_fields.html), not offline-specific. */
-.field-grid{
-  display:grid; grid-template-columns:1fr 1fr; gap:var(--space-3);
-}
+   the real event forms (_event_form_fields.html), not offline-specific.
+   2026-09-25: only the gap is kept here -- the grid-template-columns this
+   rule used to repeat came after (and so silently overrode) the <=720px
+   `.field-grid{grid-template-columns:1fr}` media query, leaving every
+   event/task form two 94px-wide columns on a phone. */
+.field-grid{gap:var(--space-3);}
 
 /* --------------------------------------------------------------------- */
 /* Single-user login page (2026-08-16, src/auth.py + templates/login.html)
@@ -7842,7 +7851,14 @@ button.habit-month-day:hover{box-shadow:0 0 0 1px var(--fg-primary) inset;}
 .agenda-habit-title{flex:1; min-width:0; color:var(--fg-primary); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .agenda-habit-meta{font-size:var(--text-sm); color:var(--fg-tertiary); white-space:nowrap;}
 .allday-habit-form{display:block;}
-button.allday-habit{width:100%; text-align:left; border:none; cursor:pointer; font:inherit;}
+/* appearance/background/padding reset + font-size (2026-09-25): `font:inherit`
+   here (0,1,1) out-ranked `.allday-task`'s own 12px (0,1,0), and the
+   browser's default grey button background was never cleared -- habit rows
+   rendered as 15px grey buttons next to 12px task/event rows. */
+button.allday-habit{
+  appearance:none; background:none; padding:1px 0; color:inherit;
+  width:100%; text-align:left; border:none; cursor:pointer; font:inherit; font-size:12px;
+}
 .allday-habit.is-done{opacity:.6; text-decoration:line-through;}
 /* Habits H8: insights bars in the habit detail modal (heights via
    data-style / dynamic_styles.js). */

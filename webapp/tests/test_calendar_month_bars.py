@@ -16,6 +16,7 @@ router in test_calendar_month_quickcreate.py."""
 
 from __future__ import annotations
 
+import re
 import subprocess
 from datetime import date
 from pathlib import Path
@@ -559,3 +560,28 @@ class TestMonthBarSpacing:
                 f".month-bars-offset-{i}{{margin-top:calc({i} * (var(--month-bar-h) + var(--month-bar-gap))"
                 " + var(--month-bars-after-gap));}"
             ) in css
+
+
+class TestAuditRegressions20260925:
+    """UI audit 2026-09-25: three CSS regressions found in the live app."""
+
+    def test_no_late_field_grid_rule_overrides_the_mobile_single_column(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        mobile = css.index(".field-grid{grid-template-columns:1fr;}")
+        # Any .field-grid rule after the <=720px override must not set
+        # columns again, or phones get two squeezed columns.
+        tail = css[mobile + 1:]
+        for block in re.findall(r"^\.field-grid\{[^}]*\}", tail, flags=re.M):
+            assert "grid-template-columns" not in block
+
+    def test_more_button_is_reset_from_the_browser_default(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        block = css[css.index("button.month-more-link{"):]
+        block = block[:block.index("}")]
+        assert "appearance:none" in block and "background:none" in block and "border:0" in block
+
+    def test_day_view_habit_button_matches_the_task_rows(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        block = css[css.index("button.allday-habit{"):]
+        block = block[:block.index("}")]
+        assert "background:none" in block and "font-size:12px" in block
