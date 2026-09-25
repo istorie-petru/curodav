@@ -11,9 +11,11 @@
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {{ page_header_narrow("Search", "command") }}
-<div class="toolbar top-app-bar">
-    <h1>Search</h1>
-</div>
+{# 2026-09-25 (UI audit F4): the old `.toolbar.top-app-bar` row repeated a
+   visible "Search" h1 in a shadowed bar right under the narrow header that
+   already says "Search". The real page heading stays for screen readers,
+   same as Tasks' sr-only h1. #}
+<h1 class="sr-only">Search</h1>
 <form class="search-page-form" data-command-palette-page action="/search" method="get">
     <input type="search" name="q" value="{{ q }}" placeholder="Search tasks, events, contacts..."
            class="search-page-input" data-command-palette-input autocomplete="off">
@@ -23,8 +25,11 @@
    focuses on a wide-enough viewport, matching command_palette.js's own
    mobile-skips-focus behavior for the overlay's input (search should never
    pop the on-screen keyboard on a phone; desktop keeps the convenience of
-   landing here ready to type). #}
-<script>
+   landing here ready to type).
+   2026-09-25 (UI audit sweep): carries the CSP nonce -- without it the
+   page's strict script-src refused this block and desktop never got the
+   autofocus at all (console error on every /search load). #}
+<script nonce="{{ csp_nonce() }}">
   if (!window.matchMedia || !window.matchMedia("(max-width:720px)").matches) {
     var __searchInput = document.querySelector(".search-page-input");
     if (__searchInput) __searchInput.focus();
