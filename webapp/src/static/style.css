@@ -83,6 +83,11 @@
      .heatmap-month-label). #737378 clears 4.5:1+ against --bg-elevated
      while staying visibly a step lighter than --fg-secondary (#6e6e73). */
   --border:rgba(0,0,0,.1);--border-strong:rgba(0,0,0,.18);--separator:rgba(0,0,0,.08);--row-alt:rgba(0,0,0,.025);
+  /* 2026-09-25 (UI audit F9): list-row hover wash. Rows used --row-alt
+     (2.5% black), which measured ~1.05:1 against the now-white page -- no
+     visible hover at all once the card surface went away. 5.5% reads as
+     a clear band (~1.13:1) while staying quieter than --separator lines. */
+  --row-hover:rgba(0,0,0,.055);
   --control-bg:#ffffff;--control-bg-hover:#f5f5f7;--control-border:rgba(0,0,0,.14);
   --overlay-scrim:rgba(0,0,0,.35);
 
@@ -203,6 +208,18 @@
   --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px;
   --space-6:24px; --space-8:32px; --space-10:40px; --space-12:48px;
 
+  /* 2026-09-25 (UI audit F1): the one horizontal page inset. With the card
+     boxes gone (2026-09-24) the narrow banner is the page's only visible
+     edge, but content kept five different left gutters (.card's 16px,
+     settings rows' +8px, detail modals' 20px, the habits page's centred
+     860px column...). Measured: .page-header-narrow's icon/back button
+     sits 13px inside the banner's outer edge (its 1px border + 12px
+     --space-3 padding), at every width. Content text now starts on that
+     same line, so the banner's icon, a row's first word and its hairline
+     all share one left edge, and the right edge mirrors it. Keep this
+     equal to the banner's own border + horizontal padding. */
+  --page-inset:13px;
+
   /* Material Design elevation system (§6 of the plan) */
   --elevation-0:none;
   --elevation-1:0 1px 3px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.06);
@@ -211,7 +228,8 @@
   --elevation-4:0 14px 28px rgba(0,0,0,.16),0 5px 10px rgba(0,0,0,.08);
 
   /* Tonal surfaces -- slightly tinted backgrounds at each elevation */
-  --surface-0:var(--bg-base);
+  /* --surface-0 removed 2026-09-25 (UI audit F16): unused since the page
+     canvas moved to --bg-elevated on 2026-09-24. */
   --surface-1:var(--bg-elevated);
   --surface-2:var(--bg-secondary);
   --surface-3:var(--bg-tertiary);
@@ -254,8 +272,15 @@
   --accent-neutral:#414141;--accent-neutral-hover:#4b4b4b;--accent-neutral-active:#3a3a3a;--accent-neutral-subtle:rgba(255,255,255,.08);--accent-neutral-subtle-strong:rgba(255,255,255,.14);
   --success:#30d158;--warning:#ff9f0a;--danger:#ff453a;--info:#64d2ff;
   --bg-base:#363636;--bg-elevated:#3e3e3e;--bg-secondary:#383838;--bg-tertiary:#303030;--bg-sidebar:#3b3b3b;
-  --fg-primary:#f5f5f7;--fg-secondary:#b0b0b6;--fg-tertiary:#a3a3a8;--fg-on-accent:#ffffff;--fg-on-accent-neutral:#d1d1d6;
+  --fg-primary:#f5f5f7;--fg-secondary:#b0b0b6;--fg-tertiary:#aaaaaf;--fg-on-accent:#ffffff;--fg-on-accent-neutral:#d1d1d6;
+  /* 2026-09-25 (UI audit F10): --fg-tertiary #a3a3a8 -> #aaaaaf. The page
+     body moved to --bg-elevated (#3e3e3e) on 2026-09-24, where #a3a3a8
+     measured 4.26:1 -- under WCAG AA. #aaaaaf is 4.62:1 there (5.07:1 on
+     --bg-secondary, 5.22:1 on --bg-base). The audit's suggested #b3b3b8
+     (5.12:1) would have been *lighter* than --fg-secondary (#b0b0b6,
+     4.96:1) and inverted the secondary/tertiary hierarchy. */
   --border:rgba(255,255,255,.13);--border-strong:rgba(255,255,255,.22);--separator:rgba(255,255,255,.09);--row-alt:rgba(255,255,255,.03);
+  --row-hover:rgba(255,255,255,.07); /* UI audit F9, see :root */
   --control-bg:#414141;--control-bg-hover:#494949;--control-border:rgba(255,255,255,.14);
   --overlay-scrim:rgba(0,0,0,.55);
 
@@ -631,7 +656,7 @@ button.btn:disabled::after, a.btn[aria-disabled="true"]::after{display:none;}
 .icon-btn{
   width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center;
   background:transparent; border:1px solid transparent; border-radius:var(--radius-control); cursor:pointer;
-  color:var(--fg-secondary); padding:0; font-size:15px;
+  color:var(--fg-secondary); padding:0; font-size:var(--text-base);
   transition:background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard),
              transform var(--dur-fast) var(--ease-standard);
 }
@@ -1192,7 +1217,10 @@ label.seg-btn[hidden]{display:none;}
     data-card surface this request was about, so it keeps its own
     background/border. */
 .card{
-   padding:var(--space-4); margin-bottom:var(--space-4);
+   /* 2026-09-25 (UI audit F1): horizontal padding is --page-inset (was
+      --space-4 all round), so a card's content lines up with the banner's
+      own inner edge instead of 3px past it. */
+   padding:var(--space-4) var(--page-inset); margin-bottom:var(--space-4);
 }
 /* Danger/warning-tinted card variant -- was a one-off `style="background:
    var(--tag-red-bg);border:1px solid var(--tag-red-fg)"` on the Data
@@ -1352,9 +1380,11 @@ label.seg-btn[hidden]{display:none;}
   padding:var(--space-5);
   box-shadow:var(--elevation-1);
   margin-bottom:var(--space-4);
-  transition:box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard);
 }
-.detail-card:hover{box-shadow:var(--elevation-2); transform:translateY(-1px);}
+/* 2026-09-25 (UI audit F3): the hover lift (elevation-2 + translateY(-1px))
+   and its transition are gone -- the 2026-09-24 card-model removal dropped
+   hover on every surface with no exceptions, and this panel isn't
+   clickable anyway. */
 /* A card's own heading (the Subtasks card's h2) never wants the section-
    level h2 top margin -- same "first heading inside a card" rule .card
    already has. */
@@ -1526,14 +1556,26 @@ table{width:100%; border-collapse:collapse; font-size:var(--text-base);}
    Status/Date/Labels a few px differently from its neighbor -- accepted
    trade-off, not an oversight. */
 thead th{
-  text-align:left; font-weight:var(--font-weight-bold); color:var(--fg-secondary); font-size:13px;
+  text-align:left; font-weight:var(--font-weight-bold); color:var(--fg-secondary); font-size:var(--text-sm);
   text-transform:uppercase; letter-spacing:.04em; padding:12px 8px; border-bottom:2px solid var(--separator);
   white-space:nowrap;
 }
 tbody tr{border-bottom:1px solid var(--separator);}
 tbody tr:last-child{border-bottom:none;}
-tbody tr:hover{background:var(--row-alt);}
+tbody tr:hover{background:var(--row-hover);}
 tbody td{padding:10px 8px; vertical-align:middle;}
+/* 2026-09-25 (UI audit F1): a table sitting in a .card starts its first
+   column's text on the card's own --page-inset edge (the banner's inner
+   edge) instead of 8px further in -- the outer cells drop their side
+   padding, the gaps between columns keep it. The hover wash is extended
+   back out over the card's inset with a flat box-shadow, so a hovered row
+   still reads as a band with air around its text, not a fill that starts
+   flush on the checkbox. */
+.card table :is(th, td):first-child{padding-left:0;}
+.card table :is(th, td):last-child{padding-right:0;}
+.card tbody tr:hover > td:first-child{box-shadow:calc(-1 * var(--page-inset)) 0 0 var(--row-hover);}
+.card tbody tr:hover > td:last-child{box-shadow:var(--page-inset) 0 0 var(--row-hover);}
+.card tbody tr:hover > td:only-child{box-shadow:calc(-1 * var(--page-inset)) 0 0 var(--row-hover), var(--page-inset) 0 0 var(--row-hover);}
 /* Responsive tables (see `.table-responsive` above) -- smallest phones
    (~320-375px viewport): the last few px of overflow left after both
    tiers is just the default 8px side padding on every cell. */
@@ -1812,49 +1854,10 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    icon-only (see calendar_*.html) using the existing .icon-btn size. */
 .toolbar-row .btn{height:40px; padding:0 12px; font-size:var(--text-sm);}
 .toolbar-row .filter-bar input[type="search"]{width:160px; height:40px; padding:0 9px;}
-/* 2026-08-07, revised same day (2026-08-07 evening) after the first
-   version visibly broke: putting the whole <details> (summary + body)
-   inline in row 1 and giving it flex-basis:100% when [open] pushed BOTH
-   itself *and* the New button (its next sibling) onto a cascading third/
-   fourth line instead of a clean two-row result -- flex-wrap wraps
-   everything after a 100%-width item, not just that item.
-
-   Replaced with the checkbox-hack pattern instead of <details>: a hidden
-   checkbox, a <label> styled as the icon trigger (sits inline in row 1,
-   fixed 28px size, never changes size or wraps anything), and the actual
-   filter body as a plain sibling <div> *after* .toolbar-row entirely --
-   completely outside row 1's flex layout, so it can never affect row 1's
-   wrapping no matter how wide its own content gets. `~` (general sibling
-   combinator) reveals the body and highlights the trigger when the
-   checkbox is checked; the checkbox itself is set `checked` server-side
-   (via the `open`-equivalent Jinja condition) to auto-expand when a
-   filter is active, same behavior as before, just a robuster mechanism.
-   No JS required either way -- checkboxes are as native as <details>. */
-.toolbar-filters-checkbox{
-  position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden;
-  clip:rect(0,0,0,0); white-space:nowrap; border:0;
-}
-.toolbar-filters-trigger{
-  cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:3px;
-  width:28px; height:28px; border-radius:var(--radius-control); position:relative;
-  color:var(--fg-secondary); user-select:none;
-  transition:background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
-}
-.toolbar-filters-trigger:hover{background:var(--bg-secondary); color:var(--fg-primary);}
-.toolbar-filters-checkbox:checked ~ .toolbar-row .toolbar-filters-trigger{
-  color:var(--fg-primary); background:var(--accent-neutral-subtle);
-}
-.toolbar-filters-trigger .icon{width:15px; height:15px;}
-.toolbar-filters-badge{
-  position:absolute; top:-2px; right:-2px;
-  background:var(--accent-neutral); color:var(--fg-on-accent-neutral); border-radius:var(--radius-pill);
-  min-width:14px; height:14px; padding:0 3px; font-size:9px; font-weight:var(--font-weight-bold); line-height:14px; text-align:center;
-}
-.toolbar-filters-body{
-  display:none; width:100%; flex-direction:column; gap:6px; margin-top:6px; padding-top:6px;
-  border-top:1px solid var(--separator);
-}
-.toolbar-filters-checkbox:checked ~ .toolbar-filters-body{display:flex;}
+/* 2026-09-25 (UI audit F16/F12): the checkbox-hack filter toggle
+   (.toolbar-filters-checkbox/-trigger/-badge/-body, incl. one of the three
+   9px font sizes) removed -- the two-row toolbars it lived in are gone and
+   tests/test_phase9b_toolbar_filters.py asserts the markup never renders. */
 
 /* Multi-select dropdown (app.js's generic .multiselect script) -- Calendar's
    "which calendars are visible" toggle (_calendar_nav.html) is the one
@@ -1934,6 +1937,12 @@ tbody td{padding:10px 8px; vertical-align:middle;}
   font-size:var(--text-base); cursor:pointer; white-space:nowrap;
 }
 .multiselect-option:hover{background:var(--bg-secondary);}
+/* 2026-09-25 (UI audit F13): the app-wide checkbox/radio accent is
+   --accent-neutral (#efefef in light), so the checked radio in the
+   Settings single-select dropdowns was a pale ring on a white panel --
+   barely distinguishable from the unchecked ones. Inside a dropdown the
+   checked row IS the answer, so it takes the real accent. */
+.multiselect-option input:is([type="radio"], [type="checkbox"]){accent-color:var(--accent);}
 /* Direct feedback, 2026-08-15: "depending on the data source, some Views
    should simply not be visible, not unselectable" -- dashboard_widget_
    preview.js's filterMsOptions already sets the `hidden` attribute on a
@@ -2033,24 +2042,28 @@ tbody td{padding:10px 8px; vertical-align:middle;}
   .system-status-grid{grid-template-columns:1fr;}
 }
 
+/* 2026-09-25 (UI audit F7): the three tiles were the last boxed cards
+   left after the 2026-09-24 card-model removal (tinted fill + border +
+   shadow + 16px radius, each). Now flat like the rest of the page: text
+   sits on the --page-inset edge, tiles are divided by a hairline (a
+   vertical one between columns, a horizontal one once they stack), and
+   the health tone lives in the status dot alone (.status-card-status
+   .healthy/.warning/... below) -- the per-status tinted backgrounds are
+   gone. That also fixes the dark theme's muted meta text, which measured
+   under 4.5:1 on the tinted fills (F10). */
+.system-status-grid{padding-inline:var(--page-inset); gap:0;}
 .status-card{
   position:relative;
-  background:var(--surface-container-high);
-  border:1px solid var(--separator);
-  border-radius:var(--radius-card);
-  padding:var(--space-4);
-  box-shadow:var(--elevation-1);
+  padding:var(--space-2) 0;
   display:flex; flex-direction:column; gap:var(--space-2);
+  min-width:0;
 }
-
-/* Status card backgrounds -- solid tonal fill across the whole card,
-   same --tag-* token pairing (pastel bg / saturated fg) every pill and
-   the Needs-attention card use; vars are theme-aware, no dark overrides.
-   Border is a whisper of the fg tone so the fill reads as deliberate. */
-.status-card.healthy{background:var(--tag-green-bg); border-color:color-mix(in srgb, var(--tag-green-fg) 30%, transparent);}
-.status-card.warning{background:var(--tag-yellow-bg); border-color:color-mix(in srgb, var(--tag-yellow-fg) 30%, transparent);}
-.status-card.error{background:var(--tag-red-bg); border-color:color-mix(in srgb, var(--tag-red-fg) 30%, transparent);}
-.status-card.unknown{background:var(--tag-gray-bg); border-color:color-mix(in srgb, var(--tag-gray-fg) 30%, transparent);}
+.status-card + .status-card{border-left:1px solid var(--separator); padding-left:var(--space-4);}
+.status-card:not(:last-child){padding-right:var(--space-4);}
+@media (max-width: 900px){
+  .status-card + .status-card{border-left:none; border-top:1px solid var(--separator); padding-left:0; padding-top:var(--space-3);}
+  .status-card:not(:last-child){padding-right:0; padding-bottom:var(--space-3);}
+}
 
 .status-card-header{
   display:flex; align-items:flex-start; justify-content:space-between; gap:var(--space-2);
@@ -2732,7 +2745,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 .checklist-row{display:flex; align-items:center; gap:var(--space-2); padding:var(--space-1) 0; border-bottom:1px solid var(--separator);}
 .checklist-row:last-child{border-bottom:none;}
 .checklist-row.is-done .checklist-text{color:var(--fg-tertiary); text-decoration:line-through;}
-.checklist-check{background:none; border:none; cursor:pointer; font-size:15px; padding:0; width:20px; color:var(--fg-secondary);}
+.checklist-check{background:none; border:none; cursor:pointer; font-size:var(--text-base); padding:0; width:20px; color:var(--fg-secondary);}
 .checklist-check.is-done{color:var(--success);}
 .checklist-text{flex:1;}
 /* Icon-only remove button (checklist rows, Relations card unlink, Work
@@ -2847,12 +2860,16 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    div standing in for the `<tr>` a card-list doesn't have. See
    static/bulk_select.js's `rowSelector` option and _contacts_body.html's
    own comment. */
+/* 2026-09-25 (UI audit F1): no left padding -- the row-select checkbox
+   starts on the card's --page-inset edge, under the banner's icon, like
+   Tasks' checkboxes. The hover/selected wash extends back out over the
+   inset with flat box-shadows, same as .card table rows. */
 .contact-row-wrap{
-  display:flex; align-items:center; gap:var(--space-2); padding-left:var(--space-2); border-bottom:1px solid var(--separator);
+  display:flex; align-items:center; gap:var(--space-2); padding-left:0; border-bottom:1px solid var(--separator);
 }
 .contact-row-wrap:last-child{border-bottom:none;}
-.contact-row-wrap:hover{background:var(--row-alt);}
-.contact-row-wrap.is-selected{background:var(--accent-neutral-subtle);}
+.contact-row-wrap:hover{background:var(--row-hover); box-shadow:calc(-1 * var(--page-inset)) 0 0 var(--row-hover), var(--page-inset) 0 0 var(--row-hover);} /* --row-hover: UI audit F9 */
+.contact-row-wrap.is-selected{background:var(--accent-neutral-subtle); box-shadow:calc(-1 * var(--page-inset)) 0 0 var(--accent-neutral-subtle), var(--page-inset) 0 0 var(--accent-neutral-subtle);}
 .contact-row-wrap .row-select{flex:none;}
 .contact-row{
   display:flex; align-items:center; gap:var(--space-3); padding:var(--space-2) var(--space-1); flex:1; min-width:0;
@@ -3130,7 +3147,7 @@ img.avatar-circle{object-fit:cover;}
 .stepper-input::-webkit-outer-spin-button, .stepper-input::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
 .stepper-btn{
   flex:none; border:none; background:var(--bg-secondary); color:var(--fg-secondary); width:30px;
-  font-size:15px; font-weight:var(--font-weight-bold); cursor:pointer; line-height:1;
+  font-size:var(--text-base); font-weight:var(--font-weight-bold); cursor:pointer; line-height:1;
 }
 .stepper-btn:hover{background:var(--control-bg-hover); color:var(--fg-primary);}
 .stepper-btn:active{opacity:.7;}
@@ -5111,7 +5128,7 @@ body.command-palette-open{overflow:hidden;}
 }
 .command-palette-input-row > .icon{color:var(--fg-tertiary); flex:none;}
 .command-palette-input{
-  flex:1; min-width:0; border:none; background:transparent; font-size:17px;
+  flex:1; min-width:0; border:none; background:transparent; font-size:var(--text-lg);
   color:var(--fg-primary); padding:var(--space-2) var(--space-1); box-sizing:border-box;
 }
 /* The base form-control rule (input:focus{box-shadow:0 0 0 3px ...})
@@ -5247,9 +5264,13 @@ body.command-palette-open{overflow:hidden;}
    as .command-palette-row above, laid over the app's ordinary .checklist
    card styling (search.html's results list is a plain .checklist) rather
    than duplicating it. */
+/* 2026-09-25 (UI audit F1): the input box spans the banner's full width and
+   its typed text starts at --page-inset, the banner's own inner edge; the
+   result rows below sit on that same edge. */
 .search-page-form{margin-bottom:var(--space-4);}
+.search-page-results{padding-inline:var(--page-inset);}
 .search-page-input{
-  width:100%; padding:var(--space-3) var(--space-4); border-radius:var(--radius-control);
+  width:100%; padding:var(--space-3) var(--page-inset); border-radius:var(--radius-control);
   border:1px solid var(--border); background:var(--bg-secondary); color:var(--fg-primary); font-size:var(--text-base);
 }
 .search-result-subtitle{display:block; font-size:var(--text-sm); color:var(--fg-tertiary);}
@@ -5309,7 +5330,7 @@ body.command-palette-open{overflow:hidden;}
    just names it (read-only) rather than offering a choice. */
 .cropper-ratio-label{font-size:var(--text-sm); color:var(--fg-secondary);}
 .cropper-rotate-group{display:flex; gap:var(--space-1);}
-.cropper-rotate-group .icon-btn{font-size:18px; width:32px; height:32px;}
+.cropper-rotate-group .icon-btn{font-size:var(--text-xl); width:32px; height:32px;}
 .cropper-footer{
   display:flex; align-items:center; justify-content:flex-end; gap:var(--space-2);
   padding:var(--space-4) var(--space-5);
@@ -5638,12 +5659,12 @@ body.command-palette-open{overflow:hidden;}
    smaller one `.btn-sm` was always meant to give it. Matching the
    selector's own element+class shape (rather than reaching for
    `!important`) is what actually wins the cascade now. */
-button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
+button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 
 /* Row hover feedback -- .calendar-row had none before (unlike the plain
    <table> rows elsewhere, which already highlight via `tbody tr:hover`).
    Purely a hover cue, doesn't affect layout. */
-.calendar-row:hover{background:var(--row-alt);}
+.calendar-row:hover{background:var(--row-hover);} /* --row-hover: UI audit F9 */
 /* Groups a row's secondary actions (Open, Merge, Archive/Delete) so they
    collapse to a single flex item instead of each competing for row space
    on its own (2026-08-02 manage-page cleanup). */
@@ -5651,7 +5672,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 /* One-line orientation text above the page's lists (2026-08-02) -- this
    page's rows save on change with no visible "Save" button, which isn't
    obvious without a hint the first time. */
-.settings-hint{font-size:13px; color:var(--fg-tertiary); margin:0 0 8px;}
+.settings-hint{font-size:var(--text-sm); color:var(--fg-tertiary); margin:0 0 8px;}
 /* Row symmetry (2026-08-02 -- "make the layout more neat ... more
    symmetrical"). Every icon-btn is already a fixed 28x28 square, but two
    things on the Projects page weren't: the "Lists"/"Lists (N)" button
@@ -5681,7 +5702,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .space-group-projects{
   margin:2px 0 0 13px; padding-left:14px; border-left:2px solid var(--separator);
 }
-.space-group-empty-hint{font-size:13px; color:var(--fg-tertiary); padding:8px 0 8px 2px;}
+.space-group-empty-hint{font-size:var(--text-sm); color:var(--fg-tertiary); padding:8px 0 8px 2px;}
 
 .project-row-block{margin-bottom:4px;}
 /* Project -> linked WebDAV collections (2026-08-02, reworked twice same
@@ -5730,7 +5751,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 
 /* projects_manage.html/project_detail.html */
 .project-icon-input{max-width:64px; flex:none; text-align:center;}
-.project-open-link{flex:none; font-size:13px; color:var(--fg-tertiary); white-space:nowrap;}
+.project-open-link{flex:none; font-size:var(--text-sm); color:var(--fg-tertiary); white-space:nowrap;}
 .project-open-link:hover{color:var(--fg-primary);}
 .project-cover{
   width:100%; max-height:180px; object-fit:cover; border-radius:var(--radius-md);
@@ -5745,51 +5766,9 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 }
 .project-progress-fill{height:100%; background:var(--accent-neutral);}
 
-/* projects.html (side work, 2026-08-15 direct feedback: "square colored
-   cards... open with click, not an open button"). The whole card is one
-   `<a>` (no separate Open button/link inside it), colored with the
-   project's own `.cal-*` swatch as a full-bleed background rather than
-   just a small tag pill -- the same palette every other .cal-* consumer
-   (calendar events, label chips) already uses, so a project's color here
-   is the same color it shows everywhere else, not a second palette.
-   `aspect-ratio:1` keeps every card square regardless of content length;
-   `auto-fill`/`minmax` wraps to however many columns fit rather than a
-   fixed count, same responsive approach as .habit-task-grid/.today-grid
-   above use fixed 2-column instead -- this grid can hold many more items
-   than either of those, so a fixed column count would either waste width
-   on a wide screen or crowd a narrow one. */
-.project-grid{
-  display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr));
-  gap:var(--space-4); margin-bottom:var(--space-4);
-}
-.project-card-square{
-  aspect-ratio:1; display:flex; flex-direction:column; justify-content:space-between;
-  padding:var(--space-4); border-radius:var(--radius-lg); text-decoration:none;
-  box-shadow:var(--elevation-1);
-  transition:transform var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
-}
-.project-card-square:hover, .project-card-square:focus-visible{
-  transform:translateY(-2px); box-shadow:var(--elevation-3); text-decoration:none;
-}
-/* Archived projects stay visible (historical record, per db.project_status's
-   own docstring) but visually recede rather than competing with the
-   still-live cards for attention. */
-.project-card-square.is-archived{opacity:.5;}
-.project-card-square.is-archived:hover{opacity:.85;}
-.project-card-square-status{
-  display:inline-block; font-size:10px; font-weight:var(--font-weight-bold); text-transform:uppercase; letter-spacing:.04em;
-  padding:2px 7px; border-radius:var(--radius-pill); background:rgba(0,0,0,.22); margin-bottom:8px;
-}
-.project-card-square-title{
-  display:flex; align-items:center; gap:6px; font-weight:var(--font-weight-bold); font-size:15px; line-height:1.3;
-  overflow-wrap:anywhere;
-}
-.project-card-square-footer{font-size:12px; opacity:.92; margin:0;}
-.project-card-square .project-progress-bar{background:rgba(0,0,0,.22);}
-.project-card-square .project-progress-fill{background:currentColor; opacity:.9;}
-@media (max-width:480px){
-  .project-grid{grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));}
-}
+/* 2026-09-25 (UI audit F16): projects.html's square project cards
+   (.project-grid/.project-card-square*) removed with their last consumer
+   gone -- zero references in templates, JS or Python. */
 /* habits: _habit_heatmap.html, habits_list.html, habit_detail.html.
    GitHub-contribution-graph layout: a row of month labels above a row of
    week-columns, each column a flex-stack of 7 day cells. No per-habit
@@ -5855,51 +5834,12 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .heatmap-wide .heatmap-week{flex:1;}
 .heatmap-wide .heatmap-cell{width:100%; height:auto; aspect-ratio:1;}
 
-/* Tasks > Habits' card grid (2026-08-08, direct feedback: "in a 2 column
-   grid") -- reuses .habit-card/.habit-card-header/.habit-streaks as-is
-   (same visual language as the standalone Habits feature), just wrapped
-   in a real 2-column grid instead of the single vertical stack
-   habits_list.html uses, since this page can show several habit-tasks at
-   once and a single column would push the heatmaps far down the page.
-   Collapses to 1 column at the same mobile breakpoint .field-grid uses. */
-.habit-task-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:var(--space-4); margin-bottom:var(--space-4);}
-.habit-task-grid .habit-card{margin-bottom:0;}
-@media (max-width:720px){
-  .habit-task-grid{grid-template-columns:1fr;}
-}
-/* Today (1.7, "Today -- execution") -- same two-column-collapsing-to-one
-   grid shape as .habit-task-grid above (this page's own Due&Overdue /
-   Today's schedule cards side by side), plus .today-grid-full for the
-   Important & urgent card, which always spans both columns regardless of
-   viewport since it's a single list, not a paired comparison. */
-.today-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:var(--space-4); margin-bottom:var(--space-4);}
-.today-grid-full{grid-column:1/-1;}
-@media (max-width:720px){
-  .today-grid{grid-template-columns:1fr;}
-}
-/* "View full year" expand toggle (2026-08-08 direct feedback) -- CSS
-   Grid's `grid-column` (which line an item starts/ends on) is a discrete
-   placement property, not a continuously-interpolatable one, so browsers
-   can't smoothly animate the reflow itself the way they can a width or
-   transform -- there's no CSS-only way around that. What *is* smoothly
-   animatable, and is what actually reads as "an animation" to someone
-   using it, is the newly-revealed full-year heatmap fading/sliding in
-   once the reflow has already happened -- static/task_habit_checkin.js
-   toggles `.is-expanded` (instant grid-column change) and `hidden` on the
-   two heatmap variants together, and this transition covers the reveal.
-   prefers-reduced-motion already disables all transitions globally (see
-   this file's base-reset section), so no separate override needed here. */
-.habit-card.is-expanded{grid-column:1 / -1;}
-.habit-card-heatmap-full{
-  animation:cc-habit-card-reveal var(--dur-normal) var(--ease-standard);
-}
-@keyframes cc-habit-card-reveal{
-  from{opacity:0; transform:translateY(-4px);}
-  to{opacity:1; transform:translateY(0);}
-}
-.habit-card-expand-btn{margin-left:auto;}
-.habit-card{margin-bottom:16px;}
-.habit-card-header{display:flex; align-items:center; gap:10px; margin-bottom:8px;}
+/* 2026-09-25 (UI audit F16): dead habit-card rules removed -- the Tasks >
+   Habits 2-column .habit-task-grid, .today-grid, the "View full year"
+   expand (.habit-card.is-expanded/.habit-card-heatmap-full/
+   .habit-card-expand-btn and its keyframes), .habit-card-header and the
+   old .habit-card{margin-bottom} (overridden by the Habits page rule
+   further down anyway). Zero references in templates, JS or Python. */
 .habit-streaks{display:flex; gap:14px; font-size:13px; color:var(--fg-tertiary); margin-top:6px;}
 .habit-streaks strong{color:var(--fg-primary);}
 /* Habit detail modal (_habit_detail_body.html), 2026-09-07 (audit-fixes-
@@ -5909,7 +5849,6 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    instead of touching the base rules above (which the Dashboard habit-
    card grid also uses and shouldn't pick up detail-modal-only spacing). */
 .habit-streaks-detail{margin-bottom:12px;}
-.habit-log-card{margin-top:16px;}
 .habit-log-submit-field{align-self:flex-end;}
 .habit-archive-row{margin-top:20px;}
 .habit-entries-list{margin-top:8px;}
@@ -6177,7 +6116,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   display:flex; align-items:center; gap:var(--space-2); padding:var(--space-2) var(--space-1);
   border-radius:var(--radius-sm); text-decoration:none; color:inherit;
 }
-.contact-list-row:hover{background:var(--row-alt); text-decoration:none;}
+.contact-list-row:hover{background:var(--row-hover); text-decoration:none;} /* --row-hover: UI audit F9 */
 .contact-list-main{display:flex; flex-direction:column; gap:1px; min-width:0; flex:1;}
 .contact-list-name{font-size:var(--text-base); font-weight:var(--font-weight-bold); color:var(--fg-primary);}
 .contact-list-org{font-size:var(--text-sm); color:var(--fg-secondary);}
@@ -6250,9 +6189,11 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .widget-card[data-span="3"] .at-a-glance-row,
 .widget-card[data-span="4"] .at-a-glance-row,
 .widget-card[data-span="6"] .at-a-glance-row{gap:var(--space-2);}
+/* 2026-09-25 (UI audit F12): was 9px -- below the type scale; now the
+   smallest token, ellipsizing where a narrow tile runs out of room. */
 .widget-card[data-span="3"] .at-a-glance-stat .widget-section-label,
 .widget-card[data-span="4"] .at-a-glance-stat .widget-section-label,
-.widget-card[data-span="6"] .at-a-glance-stat .widget-section-label{font-size:9px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.widget-card[data-span="6"] .at-a-glance-stat .widget-section-label{font-size:var(--text-sm); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 
 /* Habit Check-in widget (_widget_habit_checkin.html) -- habits H4
    (2026-09-24): its rows are the Habits page's own .habit-card (see the
@@ -6329,6 +6270,14 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    button (flush left, matching the other rows) without shrinking the
    button itself, so the tap target stays full-size at every breakpoint. */
 .widget-row-icon .icon-btn{justify-content:flex-start;}
+/* 2026-09-25 (UI audit F19): in one Agenda widget a task row measured
+   37px (42px on touch) against 35px for an event row -- the checkbox's
+   28px (40px coarse-pointer) icon-btn box was taller than a line of text
+   and set the row height. Negative block margins let the box overhang
+   into the cell's own padding instead: every row is text-height, and the
+   tap target keeps its full size. */
+.widget-row-icon .icon-btn{margin-block:-4px;}
+@media (pointer:coarse){ .widget-row-icon .icon-btn{margin-block:-10px;} }
 /* Event row leading marker (2026-09-13, direct request: "circle dot like
    in mockup") -- sits in the same `.widget-row-icon` 26px slot a task's
    checkbox occupies, so an Agenda widget's Overdue/Tasks/Events rows all
@@ -6344,7 +6293,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   display:inline-block; width:7px; height:7px; border-radius:50%;
 }
 .widget-config{margin-top:12px; border-top:1px solid var(--separator); padding-top:8px;}
-.widget-config summary{cursor:pointer; font-size:13px; color:var(--fg-tertiary); display:flex; align-items:center; gap:4px;}
+.widget-config summary{cursor:pointer; font-size:var(--text-sm); color:var(--fg-tertiary); display:flex; align-items:center; gap:4px;}
 .widget-checkbox-row{display:flex; flex-wrap:wrap; gap:4px 14px;}
 .widget-checkbox-row .field-toggle{flex-direction:row-reverse; justify-content:flex-end; gap:5px; margin-bottom:0;}
 /* Labels/Task lists/Calendars in the widget builder (dashboard.html's
@@ -6444,7 +6393,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
     surface with its own elevation. */
 .widget-customize-existing{margin:4px 0 14px; border:1px solid var(--separator); border-radius:var(--radius-md); background:var(--surface-container);}
 .widget-customize-existing > summary{
-   cursor:pointer; font-size:13px; font-weight:var(--font-weight-bold); color:var(--fg-secondary);
+   cursor:pointer; font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary);
    padding:8px 10px; display:flex; align-items:center; gap:6px; user-select:none;
 }
 .widget-customize-existing > summary:hover{color:var(--fg-primary);}
@@ -6457,21 +6406,25 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .widget-customize-edit{flex:1; min-width:0;}
 .widget-customize-footer{margin-top:var(--space-4); text-align:right;}
 .widget-builder{display:grid; grid-template-columns:1fr 1fr; gap:var(--space-4); align-items:start;}
-.widget-builder-config{
-   background:var(--surface-container-high); border-radius:var(--radius-lg);
-   padding:var(--space-4); box-shadow:var(--elevation-1);
-}
+/* 2026-09-25 (UI audit F15): the form and preview columns were each a
+   raised white panel (surface + radius + elevation-1) inside the dialog,
+   with the dashed preview box as a third frame nested in the second. Now
+   the columns sit flat on the dialog body, split by one hairline; the
+   dashed box stays as the only frame -- it's what says "preview of an
+   unsaved widget" (see .widget-preview-content below). */
+.widget-builder{gap:var(--space-5);}
+.widget-builder-config{padding:0;}
 .widget-builder-preview{
    position:sticky; top:var(--space-3);
-   background:var(--surface-container-high); border-radius:var(--radius-lg);
-   padding:var(--space-4); box-shadow:var(--elevation-1);
+   padding:0 0 0 var(--space-5); border-left:1px solid var(--separator);
 }
 /* .widget-builder-disabled removed 2026-08-08 -- the "Custom widgets"
    toggle it was the fallback state for is gone; the Widget Builder is
    always shown now (see _modal_widget_customize.html's own comment). */
 @media (max-width:720px){
    .widget-builder{grid-template-columns:1fr;}
-   .widget-builder-preview{position:static;}
+   /* stacked: the divider turns horizontal (UI audit F15) */
+   .widget-builder-preview{position:static; border-left:none; padding:var(--space-4) 0 0; border-top:1px solid var(--separator);}
 }
 
 /* Live preview (dashboard.html's Add-widget form, static/
@@ -6505,24 +6458,9 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
     the field to be reachable at all. */
 .widget-range-field.is-hidden{display:none;}
 
-/* MD3 Card variant for widget cards in the customize modal --
-    elevated surface with clear visual boundary, replacing the
-    generic .card style inside the modal context. */
-.widget-customize-card{
-   background:var(--surface-container-high); border-radius:var(--radius-lg);
-   box-shadow:var(--elevation-1); padding:var(--space-3); margin-bottom:var(--space-2);
-   transition:box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-normal) var(--ease-standard);
-}
-.widget-customize-card:hover{box-shadow:var(--elevation-2);}
-
-/* Widget card header inside the customize modal -- MD3 list-item
-    pattern: icon + title + subtitle + trailing actions in a row. */
-.widget-customize-card-header{
-   display:flex; align-items:center; gap:var(--space-3);
-   padding:var(--space-2) 0;
-}
-.widget-customize-card-header .widget-customize-name{flex:1; font-size:var(--text-base); font-weight:var(--font-weight-bold);}
-.widget-customize-card-actions{display:flex; gap:2px; flex:none;}
+/* 2026-09-25 (UI audit F16): the .widget-customize-card* rules (an MD3
+   elevated card per widget in the old customize modal) were removed --
+   no template, JS or Python referenced any of those classes anymore. */
 
 /* Section divider inside the customize modal -- a subtle
     horizontal rule with a label, MD3's "section divider" pattern. */
@@ -6577,7 +6515,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .week-overview-day-label{font-size:12px; font-weight:var(--font-weight-bold); color:var(--fg-tertiary); margin-bottom:4px;}
 .week-overview-day.is-today .week-overview-day-label{color:var(--fg-primary); font-weight:var(--font-weight-bold);}
 .week-overview-item{
-  display:flex; align-items:center; gap:4px; font-size:13px; padding:2px 0;
+  display:flex; align-items:center; gap:4px; font-size:var(--text-sm); padding:2px 0;
   text-decoration:none; color:var(--fg-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 .week-overview-empty{font-size:12px; color:var(--fg-tertiary);}
@@ -6611,7 +6549,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .weekly-schedule-grid[data-cols="7"]{grid-template-columns:repeat(7,1fr);}
 .weekly-schedule-col{display:flex; flex-direction:column; min-width:0;}
 .weekly-schedule-day-label{
-  font-size:13px; font-weight:var(--font-weight-bold); color:var(--fg-tertiary); margin-bottom:8px; text-align:center;
+  font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-tertiary); margin-bottom:8px; text-align:center;
 }
 .weekly-schedule-col-body{
   display:flex; flex-direction:column; gap:8px;
@@ -6623,7 +6561,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
   border-radius:var(--radius-sm); padding:10px 12px; text-decoration:none; color:var(--fg-primary);
 }
 .weekly-schedule-block-time{font-size:11px; font-weight:var(--font-weight-bold); color:var(--fg-tertiary);}
-.weekly-schedule-block-title{font-size:13px; font-weight:var(--font-weight-bold); line-height:1.3; word-break:break-word;}
+.weekly-schedule-block-title{font-size:var(--text-sm); font-weight:var(--font-weight-bold); line-height:1.3; word-break:break-word;}
 .weekly-schedule-agenda{width:100%;}
 
 /* Schedule > Export modal (routers/schedule.py, schedule_export.html):
@@ -6673,6 +6611,23 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    own layout, so moving between them feels like one place, not a
    collection of unrelated screens. */
 .settings-group{margin-bottom:var(--space-5);}
+/* 2026-09-25 (UI audit F5): divider between a Settings page's groups. With
+   the card boxes gone, consecutive groups (General's display rows vs. its
+   push-notification rows, Data & Maintenance's status/connection/cleanup
+   blocks) only had a ~48px gap between them and read as one long list.
+   A divider rather than a named section label: Peter removed every
+   Settings section label on 2026-09-08 as redundant with the page title.
+   It runs the banner's full width (row separators stop at --page-inset),
+   in the stronger --border tone, so "new group" and "next row" read as two
+   different things. Negative top margin pulls it up into the previous
+   card's bottom margin, so the gap is even (~24px) on both sides. */
+.settings-divider{
+  border:0; border-top:1px solid var(--border);
+  margin:calc(-1 * var(--space-2)) 0 var(--space-2);
+}
+/* D&M wraps each group in .settings-group, whose own bottom margin would
+   otherwise stack on top of the card's. */
+.settings-group:has(+ .settings-divider){margin-bottom:0;}
 .settings-row{text-decoration:none; color:var(--fg); gap:var(--space-3);}
 .settings-row:hover{color:var(--fg-primary);}
 .settings-row-icon{color:var(--fg-tertiary); display:inline-flex;}
@@ -6703,7 +6658,11 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    editing shape every child page (General/Appearance/Widgets/Advanced)
    uses for its actual controls, direct descendant of .card like
    .settings-row/.calendar-row already are. */
-.settings-field-row{display:flex; align-items:center; gap:var(--space-3); padding:var(--space-3) var(--space-2);}
+/* 2026-09-25 (UI audit F1/F6): no side padding -- the row's label starts on
+   the card's --page-inset edge, the same line as the banner's icon and
+   the .settings-hint paragraphs above/below it (those were 8px left of
+   the rows' labels). */
+.settings-field-row{display:flex; align-items:center; gap:var(--space-3); padding:var(--space-3) 0;}
 .settings-field-row + .settings-field-row{border-top:1px solid var(--separator);}
 /* max-width, not a media-query-gated one -- a half-width desktop window
    (e.g. ~960px, half of a 1920 display) is still well above the 720px
@@ -6716,6 +6675,17 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .settings-field-row .settings-field-hint{display:block; font-weight:var(--font-weight-regular); color:var(--fg-tertiary); font-size:var(--text-sm); margin-top:2px;}
 .settings-field-row .spacer{flex:1;}
 .settings-field-row input[type="text"]{max-width:220px;}
+/* 2026-09-25 (UI audit F2): at 390px Settings > Your Profile overflowed by
+   14px and "Nickname" wrapped to five lines -- the text input kept its
+   intrinsic ~200px width (flex items default to min-width:auto) and
+   squeezed the label into a sliver. The label may shrink (min-width:0,
+   words wrap normally), the text input shrinks from 220px down to 120px,
+   and the other controls (dropdown triggers, buttons, forms around a
+   button) keep their one-line width. */
+.settings-field-row .settings-field-label{min-width:0; flex:0 1 auto; overflow-wrap:anywhere;}
+.settings-field-row input[type="text"]{flex:0 1 220px; min-width:120px; width:auto;}
+.settings-field-row > :is(.multiselect, .btn, form, .push-types-actions){flex-shrink:0;}
+.settings-field-row .ms-trigger, .settings-field-row .btn{white-space:nowrap;}
 
 /* Labels manage page search box (labels_manage.html) -- reuses the same
    filter-input look tasks_list.html's own search field already has, not a
@@ -7782,7 +7752,11 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
    no-card-chrome direction as the rest of the app since item 5. Row =
    one-tap check | name + schedule/streak | last-7-days strip; on a narrow
    container the strip drops to its own line under the name. */
-.habits-body{max-width:860px; width:100%; margin:0 auto;}
+/* 2026-09-25 (UI audit F17): was a centred 860px column (text at x=316 on
+   a 1440 window under a banner starting at 72; 12px gutter on phones).
+   Now the page-wide --page-inset gutter like every other list page, so
+   the rows line up under the banner's icon. */
+.habits-body{width:100%; padding-inline:var(--page-inset);}
 .habits-section{margin-top:var(--space-6);}
 .habits-section-title{font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary); text-transform:uppercase; letter-spacing:.04em; margin:0 0 var(--space-2); display:flex; align-items:center; gap:var(--space-2);}
 .habits-section-count{font-weight:var(--font-weight-regular); color:var(--fg-tertiary);}
