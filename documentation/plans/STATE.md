@@ -17,6 +17,33 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-25 (later session) -- UI/UX audit of the newest
+  features + the card-model removal, per Peter's request (four parallel
+  auditor agents, real headless Chromium, 1440/900/390, light+dark,
+  measured not eyeballed). Full findings list, ranked flesh-out proposals
+  and the three items needing Peter's call are in the new
+  `plans/ui-audit-2026-09-25.md` -- read that, not this entry, to pick the
+  next slice. ~80 findings, no P0; the headline bug is H-01 (an amount
+  habit counts as done after one unit: streak +1, "All done for now").
+
+  Fixed this session (all with regression tests): Peter's reported
+  Month/4-Week all-day bar spacing (bars overlapped the day number by
+  1px and sat flush on gridlines -> 6px gap, 3px inset, shared tokens so
+  bars and text rows start at the same y); `.field-grid` stuck at two
+  columns on phones (leftover Offline-Mode rule after the media query);
+  "+N more" and Day-view habit rows rendering as default grey browser
+  buttons. SW cache v121 -> v123. Full suite green (2,451).
+
+  **Preview seeding**: a fresh container's DB is empty; the session's
+  scratchpad `seed.py` pattern (label_config with *named* colours like
+  "blue", task statuses `active`/`in_progress`/`done`, all-day events
+  stored inclusive `T00:00`..last-day`T23:59`) is what to rebuild if a
+  future session needs realistic screenshots. Don't `pkill -f src.main`
+  from a shell -- it matches the shell's own command line and kills it.
+
+  **Next slice suggestion**: H-01/H-02/C-5 (amount habits done only at
+  target, partial state shown) -- a real correctness bug, S-M.
+
 - **Shipped:** 2026-09-24 -- Peter sent one message bundling ~17 distinct
   UI/UX change requests (labels-as-modules rework, narrow banners
   everywhere, card-model removal, icon set swap, Web Push notifications,
