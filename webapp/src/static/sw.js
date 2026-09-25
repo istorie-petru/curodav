@@ -565,7 +565,10 @@
 // layer now clears the day number and insets from the column gridlines.
 // v123 (2026-09-25, same session): audit regressions -- style.css
 // .field-grid mobile columns, "+N more" / Day-view habit button resets.
-const CACHE_NAME = "cc-shell-v123";
+// v124 (2026-09-25, same session): audit decisions -- dashboard columns
+// stack independently (app.js), pills never wrap, phone month view hides
+// times, Week all-day spanning bars (style.css + calendar_week_allday_drag.js).
+const CACHE_NAME = "cc-shell-v124";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

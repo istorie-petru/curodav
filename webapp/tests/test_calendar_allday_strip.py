@@ -122,20 +122,39 @@ class TestWeekViewStrip:
         assert hits[0][1] == due
 
 
-    def test_all_day_event_renders_as_text_row_with_color_dot(self, conn):
+    def test_all_day_event_renders_as_a_spanning_bar(self, conn):
+        # 2026-09-25 direct decision (UI audit C-8) replaced the 2026-08 "quiet
+        # text row with a color dot" with one filled spanning bar per event,
+        # same look as Month/4-Week.
         monday = _this_monday()
         iso = monday.isoformat()
         _seed_event(conn, "allday1", start_at=f"{iso}T00:00:00", end_at=f"{iso}T23:59:00", all_day=True)
         resp = calendar_router.week_view(_request("/calendar/week"), conn=conn)
         body = resp.body.decode()
-        # No filled chip background -- a quiet text row with a small
-        # colored calendar dot, the same look a timed event has in Month.
         assert "allday-chip" not in body
-        assert 'class="allday-task"' in body
-        assert 'class="color-dot cal-blue"' in body
-        assert "allday1" in body
+        assert re.search(r'class="month-bar allday-bar cal-blue month-bar-lane-0 month-bar-col-1 month-bar-span-1"', body)
+        assert 'data-uid="allday1"' in body
         # all-day events live in the strip, not the timed hour grid
         assert {e["uid"] for e in resp.context["days"][0]["all_day"]} == {"allday1"}
+
+    def test_multiday_all_day_event_is_one_bar_not_a_row_per_day(self, conn):
+        monday = _this_monday()
+        d1 = (monday + timedelta(days=1)).isoformat()
+        d3 = (monday + timedelta(days=3)).isoformat()
+        _seed_event(conn, "trip", start_at=f"{d1}T00:00:00", end_at=f"{d3}T23:59:00", all_day=True)
+        resp = calendar_router.week_view(_request("/calendar/week"), conn=conn)
+        body = resp.body.decode()
+        assert body.count('data-uid="trip"') == 1
+        assert "month-bar-col-2 month-bar-span-3" in body
+        assert resp.context["week_lane_count"] == 1
+        # every day column reserves the bar lane so task chips start below it
+        assert len(re.findall(r'class="week-bars-spacer month-bars-offset-1"', body)) == 7
+
+    def test_no_bars_means_no_bar_layer_or_spacer(self, conn):
+        resp = calendar_router.week_view(_request("/calendar/week"), conn=conn)
+        body = resp.body.decode()
+        assert 'class="week-allday-bars"' not in body
+        assert 'class="week-bars-spacer' not in body
 
     def test_all_day_event_stays_out_of_timed_grid(self, conn):
         monday = _this_monday()

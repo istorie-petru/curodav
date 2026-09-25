@@ -585,3 +585,33 @@ class TestAuditRegressions20260925:
         block = css[css.index("button.allday-habit{"):]
         block = block[:block.index("}")]
         assert "background:none" in block and "font-size:12px" in block
+
+
+class TestAuditDecisions20260925:
+    """Peter's answers to the 2026-09-25 audit's open questions."""
+
+    def test_pills_never_wrap(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        for sel in (".pill-static", ".cell-tag"):
+            block = re.search(r"^" + re.escape(sel) + r"\{[^}]*\}", css, flags=re.M).group(0)
+            assert "white-space:nowrap" in block and "flex-shrink:0" in block, sel
+
+    def test_month_view_hides_times_on_phones(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        assert "@media (max-width:720px){.month-item-time{display:none;} .month-more-word{display:none;}}" in css
+        for name in ("_calendar_fourweek_grid.html", "_calendar_month_grid.html"):
+            tpl = (_STATIC_DIR.parent / "templates" / name).read_text()
+            assert '<span class="month-more-word"> more</span>' in tpl
+
+    def test_dashboard_columns_stack_independently(self):
+        script = (_STATIC_DIR / "app.js").read_text()
+        assert "const colBottom = new Array(cols).fill(0);" in script
+        # no shared row height is stamped onto cards any more
+        assert "entry.card.style.height = `${rowHeight}px`;" not in script
+
+    def test_week_bar_drag_resolves_days_by_pointer_x(self):
+        script = (_STATIC_DIR / "calendar_week_allday_drag.js").read_text()
+        assert '.allday-task[data-uid], .allday-bar[data-uid]' in script
+        assert 'el.closest(".allday-col") || colAtX(e.clientX)' in script
+        subprocess.run(["node", "--check", str(_STATIC_DIR / "calendar_week_allday_drag.js")], check=True)
+        subprocess.run(["node", "--check", str(_STATIC_DIR / "app.js")], check=True)

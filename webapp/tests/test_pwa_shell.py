@@ -328,5 +328,6 @@ class TestShellCacheVersion:
         # v121 (2026-09-25): narrow banners on dashboards + modal covers.
         # v122 (2026-09-25): month all-day bar spacing (style.css).
         # v123 (2026-09-25): audit regressions (field-grid, button resets).
+        # v124 (2026-09-25): audit decisions (dashboard columns, pills, week bars).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v123"' in script
+        assert 'CACHE_NAME = "cc-shell-v124"' in script

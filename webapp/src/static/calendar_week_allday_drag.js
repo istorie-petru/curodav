@@ -63,9 +63,23 @@
 
   // Returns { type: "allday", el } | { type: "timed", el } | null -- the
   // union of both drop-target kinds a row item can now land on.
+  // 2026-09-25 (spanning bars): a `.allday-bar` lives in its own layer over
+  // the columns, not inside one, so a point over any bar (including the one
+  // being dragged) is resolved to the day column under that X instead.
+  function colAtX(x) {
+    return cols.find((c) => {
+      const r = c.getBoundingClientRect();
+      return x >= r.left && x < r.right;
+    }) || null;
+  }
+
   function dropTargetAtPoint(x, y) {
     const el = document.elementFromPoint(x, y);
     if (!el) return null;
+    if (el.closest(".week-allday-bars")) {
+      const col = colAtX(x);
+      return col ? { type: "allday", el: col } : null;
+    }
     const allday = el.closest(".allday-col");
     if (allday) return { type: "allday", el: allday };
     const timed = el.closest(".time-col");
@@ -104,7 +118,9 @@
       dragging = false;
       startX = e.clientX;
       startY = e.clientY;
-      originCol = el.closest(".allday-col");
+      // A bar spans several days: the day grabbed is the one under the
+      // pointer, and the drop shifts start AND end by the same delta.
+      originCol = el.closest(".allday-col") || colAtX(e.clientX);
       document.addEventListener("pointermove", move);
       document.addEventListener("pointerup", end);
     }
@@ -248,7 +264,7 @@
   // a fresh #week-grid region (async-CRUD, features/async-crud.md) so the
   // newly-rendered chips get their pointerdown bindings again.
   function init() {
-    items = Array.from(document.querySelectorAll(".allday-task[data-uid]"));
+    items = Array.from(document.querySelectorAll(".allday-task[data-uid], .allday-bar[data-uid]"));
     if (!items.length) return;
     cols = Array.from(document.querySelectorAll(".allday-col"));
     timeCols = Array.from(document.querySelectorAll(".time-col"));

@@ -69,7 +69,7 @@
                      calendar_month_overflow.js wiring (class-selector
                      only, no container-id dependency, same reasoning as
                      the rest of this file's header comment). -->
-                <button type="button" class="month-more-link">+{{ day.overflow_count }} more</button>
+                <button type="button" class="month-more-link" aria-label="{{ day.overflow_count }} more">+{{ day.overflow_count }}<span class="month-more-word"> more</span></button>
                 <template class="month-overflow-data">
                     {% for item in day.overflow %}
                         {% if item.kind == "event" %}

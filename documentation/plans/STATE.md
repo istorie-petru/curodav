@@ -41,6 +41,18 @@ session start.
   future session needs realistic screenshots. Don't `pkill -f src.main`
   from a shell -- it matches the shell's own command line and kills it.
 
+  Same session, follow-up: Peter answered the audit's three open questions
+  and they shipped -- dashboard columns stack independently (app.js
+  layout(): per-column `colBottom`, natural card heights, replacing the
+  2026-09-21 shared row height), pills never wrap (`.pill-static`/
+  `.cell-tag` nowrap + flex-shrink:0; titles may still wrap), phone month
+  view hides event times ("+N more" -> "+N"), Week all-day strip draws
+  one spanning bar per event (`_week_bars` reused; drag-to-another-day
+  kept). SW cache v124. Suite: 2,455 passed. Verified live (drag of a bar
+  moved it a day; 0 widget overlaps at 390/900/1440) -- but the seeded
+  dashboards only have 2-3 widgets, so a many-row dashboard hasn't been
+  eyeballed yet.
+
   **Next slice suggestion**: H-01/H-02/C-5 (amount habits done only at
   target, partial state shown) -- a real correctness bug, S-M.
 

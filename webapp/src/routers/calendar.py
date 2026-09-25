@@ -945,9 +945,20 @@ def _week_view_context(conn, request, date_, label):
     # after a prev/next AJAX swap) instead of three copies that could drift.
     label_text = f"{week_start_date.strftime('%b %d')} – {week_end_date.strftime('%b %d, %Y')}"
 
+    # 2026-09-25 direct decision (UI audit C-8): the All day strip draws
+    # all-day events as ONE spanning bar per week, lane-packed by the same
+    # _week_bars Month/4-Week use, instead of repeating a row in every day
+    # column. `day.all_day` above stays computed (other callers/tests read
+    # it); the template just stops rendering events from it.
+    week_bars, week_lane_count = _week_bars(
+        [d["date"] for d in days], [e for e in events if _is_bar_worthy(e)]
+    )
+
     return {
         "request": request,
         "active_tab": "calendar_week",
+        "week_bars": week_bars,
+        "week_lane_count": week_lane_count,
         "calendar_view": "week",
         "today_iso": date.today().isoformat(),
         "days": days,

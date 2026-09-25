@@ -74,7 +74,7 @@
                      fetch, reusing the exact href-building logic the
                      visible day.rows loop above already uses so the two
                      never drift apart. -->
-                <button type="button" class="month-more-link">+{{ day.overflow_count }} more</button>
+                <button type="button" class="month-more-link" aria-label="{{ day.overflow_count }} more">+{{ day.overflow_count }}<span class="month-more-word"> more</span></button>
                 <template class="month-overflow-data">
                     {% for item in day.overflow %}
                         {% if item.kind == "event" %}

@@ -1696,7 +1696,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 
 .cell-tag{
   display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border-radius:var(--radius-sm);
-  font-size:var(--text-sm); font-weight:var(--font-weight-bold); white-space:nowrap;
+  font-size:var(--text-sm); font-weight:var(--font-weight-bold); white-space:nowrap; flex-shrink:0;
 }
 /* Wherever multiple tags sit back-to-back in the same cell (Tasks table's
    Tags column, task/contact detail's Tags row) -- a CSS rule instead of
@@ -2564,6 +2564,10 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 .pill-static{
   display:inline-flex; align-items:center; gap:5px; border-radius:var(--radius-sm); padding:3px 8px; font-size:var(--text-sm);
   font-weight:var(--font-weight-bold);
+  /* 2026-09-25 direct rule: "pills should NEVER be two lines" (titles may
+     wrap). nowrap keeps "27 Sep"/"Today 09:00" on one line; flex-shrink:0
+     makes a flex row hand the squeeze to the title beside the pill. */
+  white-space:nowrap; flex-shrink:0;
 }
 .pill-gray{background-color:var(--tag-gray-bg); color:var(--tag-gray-fg);}
 .pill-orange{background-color:var(--tag-orange-bg); color:var(--tag-orange-fg);}
@@ -3363,6 +3367,17 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .allday-cols.day{grid-template-columns:1fr;}
 .allday-col{display:flex; flex-direction:column; gap:1px; padding:2px 4px 4px; border-left:1px solid var(--separator); overflow:hidden;}
 .allday-col.is-past{opacity:.5;}
+/* Week all-day spanning bars (2026-09-25, UI audit C-8) -- same absolute
+   bar layer + .month-bar-lane/col/span geometry as Month/4-Week, laid over
+   the 7 .allday-col columns. top:4px clears the columns' own 2px top
+   padding plus a 2px breathing gap; each column's .week-bars-spacer
+   (.month-bars-offset-N) reserves the same lanes so task chips start below
+   the last bar. Past-day fading stays per column, bars stay full opacity
+   (a bar can span past and future days). */
+.allday-cols.week{position:relative;}
+.week-allday-bars{position:absolute; left:0; right:0; top:4px; pointer-events:none; z-index:2;}
+.week-bars-spacer{flex:none; height:0;}
+.allday-bar.dragging{opacity:.4;}
 .allday-task{
   display:flex; align-items:center; gap:4px; font-size:12px; white-space:nowrap;
   overflow:hidden; padding:1px 0; color:var(--fg-primary); text-decoration:none;
@@ -3909,6 +3924,11 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .month-task-item > *{overflow:hidden; text-overflow:ellipsis;}
 .month-task-item .color-dot{margin:0;}
 .month-item-time{flex:none; color:var(--fg-tertiary); font-variant-numeric:tabular-nums; font-weight:var(--font-weight-bold);}
+/* 2026-09-25 direct decision (UI audit C-11): on a phone a 4-Week/Month
+   cell is ~47px wide, so the start time ate the whole row ("09:0") and the
+   title never showed. Hide the time there; the color dot + title stay, and
+   the time is one tap away in the event modal. */
+@media (max-width:720px){.month-item-time{display:none;} .month-more-word{display:none;}}
 /* 2026-08-29 (direct request, "the calendar page still has problems"
    follow-up) -- the event/task title in a month-view row used to be a bare
    text node after the dot/time spans (_calendar_month_grid.html), not
@@ -4024,7 +4044,7 @@ button.month-more-link{
    separate bar per week row, this function's own docstring) is move-only,
    no handle on the edge that's a week-row clip rather than the event's own
    boundary. */
-.month-bar-label{display:block;}
+.month-bar-label{display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .month-bar-resize-handle{
   position:absolute; top:0; bottom:0; width:8px; cursor:ew-resize;
 }
