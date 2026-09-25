@@ -48,14 +48,20 @@
 
 <div class="modal-body">
 <div class="detail-meta-panel">
-    <div class="detail-meta-grid">
+    {# 2026-09-25 (UI audit H-11): `habit-stats-grid` keeps these short
+       stats three to a row on phones (the generic grid drops to one
+       column <=720px, so six stats filled the first screen), and the
+       Streak value is just the count ("2 days") -- "Streak / 2 days
+       streak" said it twice. #}
+    <div class="detail-meta-grid habit-stats-grid">
         <div class="detail-meta-item">
             <span class="detail-meta-label">Recurrence</span>
             <span class="detail-meta-value">{{ habit_cadence_label(task) }}</span>
         </div>
+        {% set _unit = habit_stats.unit if habit_stats else 'day' %}
         <div class="detail-meta-item">
-            <span class="detail-meta-label">Streak</span>
-            <span class="detail-meta-value">{% if task.habit_kind == 'avoid' %}{{ current_streak }} day{{ 's' if current_streak != 1 }} clean{% else %}{{ habit_streak_text(request, current_streak, habit_stats.unit if habit_stats else 'day') }}{% endif %}</span>
+            <span class="detail-meta-label">{{ 'Clean streak' if task.habit_kind == 'avoid' else 'Streak' }}</span>
+            <span class="detail-meta-value">{{ current_streak }} {{ _unit }}{{ 's' if current_streak != 1 }}</span>
         </div>
         {% if habit_stats %}
         <div class="detail-meta-item">
@@ -108,16 +114,22 @@
    habit has no heatmap at all: a per-day grid doesn't describe it. #}
 {% set _is_amount = task.target_per_day and task.target_per_day > 1 and task.habit_kind != 'avoid' %}
 {% set _amount = {'url': '/tasks/' ~ task.uid ~ '/completions', 'target': task.target_per_day, 'unit': task.habit_unit} if _is_amount else none %}
+{# 2026-09-25 (UI audit H-10): a plain section, not a .detail-card that
+   lifted on hover. UI audit H-03: on a touch screen the year grid's
+   ~7px cells are view-only (style.css, pointer:coarse) -- a thumb
+   toggled the neighbouring day with no undo; the month calendar below
+   is the touch-sized editor, and the hint says so. #}
 {% if not (habit_stats and habit_stats.kind == 'period') %}
-<div class="detail-card detail-section-gap">
+<div class="detail-plain-section habit-year-heatmap">
     {{ heatmap(task.uid, completion_weeks, action_prefix='/tasks/' ~ task.uid ~ '/completion', extra_class='heatmap-wide' ~ (' heatmap-avoid' if task.habit_kind == 'avoid' else ''), interactive=true, form_attrs=_keep, amount=_amount) }}
+    <p class="habit-heatmap-touch-hint">To change a day, tap it in the month below.</p>
 </div>
 {% endif %}
 
 <section class="habit-month detail-plain-section{% if task.habit_kind == 'avoid' %} is-avoid{% endif %}" aria-label="Month calendar">
     <div class="habit-month-head">
         <a href="{{ habit_month.prev_url }}" data-modal class="icon-btn" title="Previous month" aria-label="Previous month">{{ icon('chevron-left', 'icon-sm') }}</a>
-        <h2 class="habit-month-title">{{ habit_month.label }} <span class="text-muted">&middot; {{ habit_month.done_count }} day{{ 's' if habit_month.done_count != 1 }}</span></h2>
+        <h2 class="habit-month-title">{{ habit_month.label }} <span class="text-muted">&middot; {{ habit_month.done_count }} day{{ 's' if habit_month.done_count != 1 }}{% if _is_amount %} at target{% endif %}</span></h2>
         {% if habit_month.next_url %}<a href="{{ habit_month.next_url }}" data-modal class="icon-btn" title="Next month" aria-label="Next month">{{ icon('chevron-right', 'icon-sm') }}</a>{% else %}<span class="icon-btn-placeholder"></span>{% endif %}
     </div>
     <div class="habit-month-grid" role="grid">
@@ -127,14 +139,16 @@
         <span class="habit-month-day{% if not d.in_month %} is-outside{% endif %}{% if d.is_future %} is-future{% endif %}{% if d.done %} is-done{% endif %}">{{ d.day }}</span>
         {% else %}
         {% if _is_amount %}
-        <button type="button" class="habit-month-day habit-amount-trigger{% if d.done %} is-done{% endif %}{% if d.is_today %} is-today{% endif %}{% if d.note %} has-note{% endif %}"
+        {# UI audit H-02: done only at target; a partial day is lighter,
+           same as the strip and the year heatmap. #}
+        <button type="button" class="habit-month-day habit-amount-trigger{% if d.done %} is-done{% elif d.partial %} is-partial{% endif %}{% if d.is_today %} is-today{% endif %}{% if d.note %} has-note{% endif %}"
                 data-url="{{ _amount.url }}" data-date="{{ d.iso }}" data-value="{{ d.value|int if d.value else '' }}"
                 data-target="{{ task.target_per_day|int }}" data-unit="{{ task.habit_unit or '' }}"
-                title="{{ d.iso }}{% if d.done %} -- {{ d.value|int }}{% endif %}{% if d.note %}: {{ d.note }}{% endif %}">{{ d.day }}</button>
+                title="{{ d.iso }}{% if d.value %}: {{ d.value|int }} of {{ task.target_per_day|int }}{% endif %}{% if d.note %}. {{ d.note }}{% endif %}">{{ d.day }}</button>
         {% else %}
         <form method="post" action="{{ d.toggle_url }}" class="form-inline" {{ _keep|safe }}>
             <button type="submit" class="habit-month-day{% if d.done %} is-done{% endif %}{% if d.is_today %} is-today{% endif %}{% if d.note %} has-note{% endif %}"
-                    title="{{ d.iso }}{% if d.done %} -- done{% if task.target_per_day and task.target_per_day > 1 %} ({{ d.value|int }}){% endif %}{% endif %}{% if d.note %}: {{ d.note }}{% endif %}"
+                    title="{{ d.iso }}{% if d.done %}: {{ 'relapse' if task.habit_kind == 'avoid' else 'done' }}{% endif %}{% if d.note %}. {{ d.note }}{% endif %}"
                     aria-pressed="{{ 'true' if d.done else 'false' }}">{{ d.day }}</button>
         </form>
         {% endif %}
@@ -174,6 +188,11 @@
 </section>
 {% endif %}
 
+{# 2026-09-25 (UI audit H-12): no Pause for an avoid habit -- its clean
+   streak ignores pauses, so the control did nothing. UI audit H-15:
+   "Until" starts empty (both dates defaulting to today paused one day by
+   accident), and the buttons match the inputs' height (style.css). #}
+{% if task.habit_kind != 'avoid' %}
 <section class="detail-plain-section habit-pause" aria-labelledby="habit-pause-h">
     {# Habits H6: pause just this habit (a vacation from it). #}
     <h2 class="habit-section-h" id="habit-pause-h">Pause</h2>
@@ -190,10 +209,11 @@
     <form method="post" action="/habits/pauses" class="habit-pause-form" {{ _keep|safe }}>
         <input type="hidden" name="task_uid" value="{{ task.uid }}">
         <label class="habit-log-field"><span>From</span><input type="date" name="start_date" value="{{ today_iso }}" required data-no-autofocus></label>
-        <label class="habit-log-field"><span>Until</span><input type="date" name="end_date" value="{{ today_iso }}" required data-no-autofocus></label>
-        <button type="submit" class="btn tonal btn-sm">{{ icon('pause', 'icon-sm') }} Pause this habit</button>
+        <label class="habit-log-field"><span>Until</span><input type="date" name="end_date" min="{{ today_iso }}" required data-no-autofocus></label>
+        <button type="submit" class="btn tonal">{{ icon('pause', 'icon-sm') }} Pause this habit</button>
     </form>
 </section>
+{% endif %}
 
 <section class="detail-plain-section habit-log" aria-labelledby="habit-log-h">
     <h2 class="habit-section-h" id="habit-log-h">{{ 'Log a relapse' if task.habit_kind == 'avoid' else 'Log a day' }}</h2>
@@ -202,13 +222,18 @@
             <input type="date" name="completion_date" value="{{ today_iso }}" max="{{ today_iso }}" required data-no-autofocus></label>
         {% if task.target_per_day and task.target_per_day > 1 and task.habit_kind != 'avoid' %}
         <label class="habit-log-field habit-log-value"><span>Amount{% if task.habit_unit %} ({{ task.habit_unit }}){% endif %}</span>
-            <input type="number" name="value" min="0" max="999999" step="1" value="{{ task.target_per_day|int }}" data-no-autofocus></label>
+            {# UI audit H-13: empty, target as the placeholder -- a
+               note-only save keeps the day's logged amount (routers/
+               tasks.py set_task_completion); it used to overwrite 1 with
+               the prefilled 8. #}
+            <input type="number" name="value" min="0" max="999999" step="1" placeholder="{{ task.target_per_day|int }}" data-no-autofocus></label>
         {% else %}
         <input type="hidden" name="value" value="1">
         {% endif %}
         <label class="habit-log-field habit-log-note"><span>Note</span>
             <input type="text" name="note" maxlength="500" placeholder="What happened? (optional)" data-no-autofocus></label>
-        <button type="submit" class="btn tonal btn-sm">{{ icon('check-square', 'icon-sm') }} Save day</button>
+        {# UI audit H-12: an avoid habit logs a relapse, not a "day". #}
+        <button type="submit" class="btn tonal">{% if task.habit_kind == 'avoid' %}{{ icon('x-circle', 'icon-sm') }} Log relapse{% else %}{{ icon('check-square', 'icon-sm') }} Save day{% endif %}</button>
     </form>
     {% if habit_notes %}
     <ul class="habit-notes">

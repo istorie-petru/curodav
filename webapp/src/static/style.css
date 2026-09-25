@@ -6268,7 +6268,11 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 @media (prefers-reduced-motion: reduce){ .habit-widget-summary.is-all-done .icon{animation:none;} }
 .habit-list--widget .habit-card{padding:var(--space-2) 0;}
 .habit-list--widget .habit-card:last-child{border-bottom:none;}
-.habit-list--widget .habit-check-btn{min-width:34px; height:34px;}
+/* 2026-09-25 (UI audit H-06): a fixed 34px circle, not a 40x34 oval
+   (the base rule's min-width:40px + padding widened it); the n/target
+   amount check keeps its pill width. */
+.habit-list--widget .habit-check-btn{min-width:34px; width:34px; height:34px; padding:0;}
+.habit-list--widget .habit-check-btn.habit-check-qty{width:auto; padding:0 var(--space-2);}
 .habit-list--widget .habit-day{width:24px; height:24px;}
 /* Widget header/title + section-label typography (2026-08-30 design pass,
    same slice as the card-chrome comment above) -- .widget-header h2
@@ -7795,13 +7799,26 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .habit-card-title:hover{text-decoration:underline;}
 .habit-card-meta{display:flex; flex-wrap:wrap; gap:0 var(--space-2); font-size:var(--text-sm); color:var(--fg-secondary);}
 .habit-card-meta > span + span::before{content:"\00b7"; margin-right:var(--space-2); color:var(--fg-tertiary);}
+/* 2026-09-25 (UI audit H-07): each meta item stays on one line, so a
+   wrap moves a whole item (with its "·") instead of orphaning the dot. */
+.habit-card-meta > span{white-space:nowrap;}
 .habit-check-btn{display:inline-flex; align-items:center; justify-content:center; min-width:40px; height:40px; padding:0 var(--space-2); border-radius:var(--radius-pill); border:2px solid var(--border-strong); background:transparent; color:var(--fg-tertiary); cursor:pointer;}
 .habit-check-btn .icon{width:20px; height:20px;}
 .habit-check-btn:hover{border-color:var(--accent); color:var(--accent);}
 .habit-check-btn.is-done{background:var(--accent); border-color:var(--accent); color:var(--fg-on-accent);}
 .habit-check-qty{font-size:var(--text-sm); font-variant-numeric:tabular-nums; color:var(--fg-primary);}
 .habit-qty-target{color:inherit; opacity:.7;}
+/* 2026-09-25 (UI audit H-01/H-02): an amount habit below its target is
+   "partial" -- the same lighter accent the year heatmap uses for a
+   part-filled day (level 1-3), on the check, the strip and the month
+   calendar alike. Only the target fills it solid. */
+.habit-check-btn.is-partial{border-color:var(--accent); background:color-mix(in srgb, var(--accent) 22%, transparent);}
 .habit-card.is-done-today .habit-card-title{color:var(--fg-secondary);}
+/* UI audit H-05: the row a check-in just re-rendered (it may have moved
+   between To do and On track) flashes once so it's easy to find. */
+.habit-card.is-just-updated{animation:habit-row-flash 1.2s ease-out;}
+@keyframes habit-row-flash{0%{background:var(--accent-subtle);} 100%{background:transparent;}}
+@media (prefers-reduced-motion: reduce){ .habit-card.is-just-updated{animation:none;} }
 .habit-week{display:flex; gap:4px; list-style:none; margin:0; padding:0;}
 .habit-day{width:28px; height:28px; border-radius:var(--radius-sm); border:none; padding:0; background:var(--accent-neutral-subtle-strong); color:var(--fg-tertiary); font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center;}
 .habit-day:hover{box-shadow:0 0 0 1px var(--fg-primary) inset;}
@@ -7809,6 +7826,14 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .habit-day.is-today{box-shadow:0 0 0 2px var(--accent) inset;}
 .habit-day.is-today.is-done{box-shadow:none;}
 .habit-day.is-excluded:not(.is-done){opacity:.45;}
+/* UI audit H-02: partial amount day (see .habit-check-btn.is-partial). */
+.habit-day.is-partial{background:color-mix(in srgb, var(--accent) 35%, transparent); color:var(--fg-primary);}
+/* UI audit H-16 / flesh-out 9: a day the habit isn't scheduled on (Tue
+   for a Mon/Wed/Fri habit) -- an outlined, empty cell, so it no longer
+   reads as a missed (grey-filled) day. Still clickable: doing it anyway
+   counts toward that week's window. */
+.habit-day.is-off:not(.is-done):not(.is-partial):not(.is-relapse){background:transparent; box-shadow:0 0 0 1px var(--separator) inset; color:var(--fg-tertiary);}
+.habit-day.is-off.is-today:not(.is-done){box-shadow:0 0 0 2px var(--accent) inset;}
 @container habitlist (max-width: 520px){
   .habit-card{grid-template-columns:auto minmax(0,1fr); grid-template-areas:"check main" "check week";}
   .habit-week{justify-content:flex-start;}
@@ -7821,9 +7846,23 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:13px;}
 .habit-day-chip input:checked + span{background:var(--accent); border-color:var(--accent); color:var(--fg-on-accent);}
 .habit-day-chip input:focus-visible + span{outline:2px solid var(--accent); outline-offset:2px;}
 .habit-days-hint{font-size:var(--text-sm); color:var(--fg-tertiary); margin:var(--space-1) 0 0;}
+/* 2026-09-25 (UI audit H-14): an avoid habit has no unit, schedule or
+   target -- hide those fields (habit_day.js toggles .is-avoid on Kind). */
+.habit-task-form.is-avoid .habit-build-only{display:none;}
 /* Habit detail modal (habit_task_detail.html, habits H3): month calendar,
    "Log a day" form, recent day notes. Same accent-filled "done" language
    as the Habits page strip and the year grid. */
+/* 2026-09-25 (UI audit H-11): the habit's six short stats stay three to
+   a row on phones instead of the generic one-column stack. */
+.detail-meta-grid.habit-stats-grid{grid-template-columns:repeat(3, minmax(0,1fr));}
+/* UI audit H-03: on touch screens the year grid is view-only -- its
+   ~7px cells can't be hit reliably; the month calendar edits. */
+.habit-heatmap-touch-hint{display:none; margin:var(--space-1) 0 0; font-size:var(--text-sm); color:var(--fg-tertiary);}
+@media (pointer: coarse){
+  .habit-year-heatmap .heatmap-cell-form,
+  .habit-year-heatmap .heatmap-cell{pointer-events:none;}
+  .habit-year-heatmap .habit-heatmap-touch-hint{display:block;}
+}
 .habit-month-head{display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); margin-bottom:var(--space-2);}
 .habit-month-title{font-size:var(--text-base); font-weight:var(--font-weight-bold); margin:0;}
 .icon-btn-placeholder{display:inline-block; width:32px;}
@@ -7835,6 +7874,8 @@ button.habit-month-day:hover{box-shadow:0 0 0 1px var(--fg-primary) inset;}
 .habit-month-day.is-done{background:var(--accent); color:var(--fg-on-accent);}
 .habit-month-day.is-today{box-shadow:0 0 0 2px var(--accent) inset;}
 .habit-month-day.is-today.is-done{box-shadow:none;}
+/* UI audit H-02: partial amount day, same lighter fill as the strip. */
+.habit-month-day.is-partial{background:color-mix(in srgb, var(--accent) 35%, transparent);}
 .habit-month-day.is-outside{background:transparent; color:var(--fg-tertiary); cursor:default;}
 .habit-month-day.is-future{background:transparent; color:var(--fg-tertiary); cursor:default;}
 .habit-month-day.has-note::after{content:""; position:absolute; bottom:4px; left:50%; width:4px; height:4px; margin-left:-2px; border-radius:50%; background:currentColor;}
@@ -7859,6 +7900,10 @@ button.habit-month-day:hover{box-shadow:0 0 0 1px var(--fg-primary) inset;}
 /* Habits H6: vacation / pause. */
 .habits-vacation{border-top:1px solid var(--separator); padding-top:var(--space-4);}
 .habit-pause-form{display:flex; flex-wrap:wrap; align-items:flex-end; gap:var(--space-2); margin-top:var(--space-2);}
+/* 2026-09-25 (UI audit H-15): the submit sits level with the 41px date /
+   number inputs beside it, not a 25-33px chip. */
+.habit-pause-form > .btn,
+.habit-log-form > .btn{min-height:41px;}
 .habit-pause-row{display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); font-size:var(--text-sm); padding:var(--space-1) 0;}
 .habit-paused-badge{display:inline-flex; align-items:center; gap:4px; color:var(--fg-primary);}
 .habit-paused-badge .icon{width:14px; height:14px;}
@@ -7880,6 +7925,9 @@ button.allday-habit{
   width:100%; text-align:left; border:none; cursor:pointer; font:inherit; font-size:12px;
 }
 .allday-habit.is-done{opacity:.6; text-decoration:line-through;}
+/* UI audit C-5: an amount habit's n/target count in the Day view. */
+.allday-habit-count{display:inline-block; min-width:28px; padding:0 4px; margin-right:2px; border-radius:var(--radius-sm); background:var(--accent-neutral-subtle); font-variant-numeric:tabular-nums; text-align:center;}
+.allday-habit.is-partial .allday-habit-count{background:color-mix(in srgb, var(--accent) 35%, transparent);}
 /* Habits H8: insights bars in the habit detail modal (heights via
    data-style / dynamic_styles.js). */
 .habit-bars-label{font-size:var(--text-sm); color:var(--fg-secondary); margin:var(--space-2) 0 var(--space-1);}
@@ -7898,22 +7946,31 @@ button.allday-habit{
    sets display, which would otherwise override the [hidden] attribute
    push_settings.js toggles. */
 #push-settings button[hidden]{display:none;}
-/* Web Push P3: reminder types + digest time (Settings > General). */
-.push-types-form{display:flex; flex-wrap:wrap; align-items:flex-end; gap:var(--space-3); padding:var(--space-3) var(--space-2) var(--space-2); border-top:1px solid var(--separator);}
-.push-types{border:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; min-width:0;}
-.push-types legend{padding:0; margin-bottom:4px;}
+/* Web Push P3: reminder types + digest time + contact email (Settings >
+   General). 2026-09-25 (UI audit H-19): one form of ordinary
+   .settings-field-rows (bold labels, hairlines between rows) with a
+   single Save row; the old .push-types-form/.push-contact-form column
+   layouts are gone. */
+.push-prefs-form{margin:0; border-top:1px solid var(--separator);}
+.push-types{display:flex; flex-direction:column; gap:4px; min-width:0;}
 .push-type{display:flex; align-items:center; gap:var(--space-2); font-size:var(--text-sm);}
-.push-digest{display:flex; flex-direction:column; gap:4px;}
-/* Push contact email: same row shape as the types form above. */
-.push-contact-form{display:flex; flex-wrap:wrap; align-items:flex-end; gap:var(--space-3); padding:var(--space-3) var(--space-2) var(--space-2); border-top:1px solid var(--separator);}
-.push-contact{display:flex; flex-direction:column; gap:4px; flex:0 1 360px; min-width:0;}
-.push-contact .settings-field-hint{display:block; font-weight:var(--font-weight-regular); color:var(--fg-tertiary); font-size:var(--text-sm); margin-top:2px;}
-.push-contact input{width:100%;}
+.push-types-row{align-items:flex-start;}
+#push-contact-email{width:min(260px, 100%);}
+.push-prefs-actions{padding-top:var(--space-2);}
+/* UI audit H-20: this device's notifications are off/blocked -- the
+   reminder rows read as not in effect here. */
+#push-settings.is-push-inactive .push-prefs-form .settings-field-row:not(.push-prefs-actions){opacity:.55;}
+#push-settings.is-push-inactive .push-prefs-form .settings-field-row:focus-within{opacity:1;}
+.push-inactive-hint[hidden]{display:none;}
 /* Habit day amount popup (static/habit_day.js, 2026-09-25) -- deliberately
    tiny: a date line, one number box (placeholder = the daily target),
    Cancel/Save. Native <dialog>, so it sits above the view modal. */
 .habit-amount-dialog{width:min(260px, calc(100vw - 32px)); padding:var(--space-3); border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--bg-elevated); color:var(--fg-primary); box-shadow:var(--elevation-2, 0 8px 24px rgba(0,0,0,.18));}
 .habit-amount-dialog::backdrop{background:rgba(0,0,0,.25);}
+/* UI audit H-17: placed next to the tapped day (habit_day.js sets
+   top/left); a light backdrop since the page stays the context. */
+.habit-amount-dialog.is-anchored{position:fixed; margin:0;}
+.habit-amount-dialog.is-anchored::backdrop{background:rgba(0,0,0,.08);}
 .habit-amount-form{display:flex; flex-direction:column; gap:var(--space-2); margin:0;}
 .habit-amount-label{font-size:var(--text-sm); color:var(--fg-secondary);}
 .habit-amount-form input{width:100%; font-size:var(--text-lg); font-variant-numeric:tabular-nums;}

@@ -127,6 +127,7 @@ from ..deps import (
     get_db,
     respond,
     templates,
+    wants_json,
 )
 from .dashboard import DISPLAY_NAME_KEY
 from .export import _redirect_with_error, _redirect_with_note, export_context
@@ -733,11 +734,29 @@ def set_time_format(time_format: str = Form("24h"), conn=Depends(get_db)):
 def set_notifications(
     types: list[str] = Form([]),
     digest_time: str = Form("08:00"),
+    email: str | None = Form(None),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     """Web Push P3 (2026-09-24): which reminder types are on (app-wide --
     every subscribed device gets the same ones) and the morning digest
-    time for tasks/habits due today. A malformed time keeps the old one."""
+    time for tasks/habits due today. A malformed time keeps the old one.
+
+    2026-09-25 (UI audit H-19): the Notifications card is one form now,
+    so this also saves the push contact `email` when sent (same rules as
+    set_push_contact below, which stays for old clients), answers a fetch
+    with JSON (push_settings.js toasts "Saved"), and a plain post returns
+    to #push-settings instead of the top of the page. An invalid email is
+    checked first, so nothing is half-saved."""
+    fetch = isinstance(x_requested_with, str) and wants_json(x_requested_with)
+    normalized_email = None
+    if isinstance(email, str) and email.strip():
+        normalized_email = push.normalize_email(email)
+        if normalized_email is None:
+            message = "That doesn't look like an email address. Nothing was saved."
+            if fetch:
+                return JSONResponse({"error": message}, status_code=400)
+            return _redirect_with_error("/settings/general", message)
     chosen = [t for t in reminders.TYPES if isinstance(types, list) and t in types]
     db.set_app_meta(conn, reminders.TYPES_KEY, ",".join(chosen))
     try:
@@ -746,7 +765,11 @@ def set_notifications(
             db.set_app_meta(conn, reminders.DIGEST_TIME_KEY, f"{h:02d}:{m:02d}")
     except (ValueError, TypeError):
         pass
-    return RedirectResponse(url="/settings/general", status_code=303)
+    if isinstance(email, str):
+        db.set_app_meta(conn, push.CONTACT_KEY, normalized_email or "")
+    if fetch:
+        return JSONResponse({"ok": True})
+    return RedirectResponse(url="/settings/general#push-settings", status_code=303)
 
 
 @router.post("/settings/push-contact")

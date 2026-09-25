@@ -93,7 +93,9 @@
          terminology above (2026-09-24 direct request). -->
     <form class="settings-field-row" method="post" action="/settings/habit-streak-terminology" id="habit-streak-terminology-form">
         <span class="settings-field-label">Habit streak terminology
-            <span class="settings-field-hint">Wording for the Habits group's streak readout</span>
+            {# 2026-09-25 (UI audit H-21): the Tasks table's Habits group is
+               gone; the streak text shows on the Habits page and widget. #}
+            <span class="settings-field-hint">Wording for habit streaks on the Habits page and the Habit check-in widget</span>
         </span>
         <span class="spacer"></span>
         {% set ms_name = 'terminology' %}
@@ -183,25 +185,60 @@
         <button type="button" class="btn ghost btn-sm" id="push-disable" hidden>Turn off</button>
     </div>
     {# Web Push P3: which reminders go out (app-wide) and when the morning
-       digest does. Plain form, saves with its own button. #}
-    <form class="push-types-form" method="post" action="/settings/notifications">
-        <fieldset class="push-types">
-            <legend class="settings-field-label">Remind me about</legend>
-            {% for key, label in push_types %}
-            <label class="push-type"><input type="checkbox" name="types" value="{{ key }}"{% if key in push_types_on %} checked{% endif %}> {{ label }}</label>
-            {% endfor %}
-        </fieldset>
-        <label class="push-digest"><span class="settings-field-label">Morning reminder at</span>
-            <input type="time" name="digest_time" value="{{ push_digest_time }}" step="300" required></label>
-        <button type="submit" class="btn tonal btn-sm">Save</button>
-    </form>
-    {# The VAPID contact (src/push.py): sent to push services with each
-       notification so they can reach whoever runs this server. #}
-    <form class="push-contact-form" method="post" action="/settings/push-contact">
-        <label class="push-contact"><span class="settings-field-label">Contact email for push services
-            <span class="settings-field-hint">Push services (Google, Mozilla, Apple) use it to reach you about delivery problems. Leave blank for the default.</span></span>
-            <input type="email" name="email" value="{{ push_contact_email }}" maxlength="254" autocomplete="email" placeholder="you@example.com"></label>
-        <button type="submit" class="btn tonal btn-sm">Save</button>
+       digest does, plus the VAPID contact (src/push.py) sent to push
+       services with each notification.
+
+       2026-09-25 (UI audit H-19): one form, one Save, in the same
+       settings rows as the rest of this page (bold labels); push_settings
+       .js saves it with fetch and confirms in a toast instead of a reload
+       that jumped to the top. The digest time is a select in the app's
+       own 12h/24h format (a native time input followed the browser
+       locale, so it showed 12h even with 24-hour time on). No-JS: posts
+       and redirects back to #push-settings. UI audit H-20: the rows dim
+       while this device's notifications are off or blocked. #}
+    <form class="push-prefs-form" id="push-prefs-form" method="post" action="/settings/notifications">
+        <div class="settings-field-row push-types-row">
+            <span class="settings-field-label" id="push-types-label">Remind me about
+                <span class="settings-field-hint push-inactive-hint" hidden>Reminders go to devices with notifications on.</span>
+            </span>
+            <span class="spacer"></span>
+            <span class="push-types" role="group" aria-labelledby="push-types-label">
+                {% for key, label in push_types %}
+                <label class="push-type"><input type="checkbox" name="types" value="{{ key }}"{% if key in push_types_on %} checked{% endif %}> {{ label }}</label>
+                {% endfor %}
+            </span>
+        </div>
+        <div class="settings-field-row">
+            <span class="settings-field-label">Morning reminder at</span>
+            <span class="spacer"></span>
+            {# Half-hour slots (plus the saved time if it's off-grid), shown
+               with fmt_time; the app's single-choice dropdown, like every
+               other setting on this page. #}
+            {% set _slots = [] %}
+            {% for h in range(24) %}{% for m in (0, 30) %}{% set _ = _slots.append('%02d:%02d'|format(h, m)) %}{% endfor %}{% endfor %}
+            {% if push_digest_time not in _slots %}{% set _ = _slots.append(push_digest_time) %}{% endif %}
+            {% set ms_name = 'digest_time' %}
+            {% set ms_mode = 'single' %}
+            {% set ms_label = 'Morning reminder at' %}
+            {% set ms_items = [] %}
+            {% for t in _slots|sort %}{% set _ = ms_items.append({'uid': t, 'name': t|fmt_time}) %}{% endfor %}
+            {% set ms_selected = push_digest_time %}
+            {% set ms_autosubmit = false %}
+            {% set ms_bare = true %}
+            {% set ms_form_id = 'push-prefs-form' %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+        <div class="settings-field-row">
+            <label class="settings-field-label" for="push-contact-email">Contact email for push services
+                <span class="settings-field-hint">Push services (Google, Mozilla, Apple) use it to reach you about delivery problems. Leave blank for the default.</span>
+            </label>
+            <span class="spacer"></span>
+            <input type="email" id="push-contact-email" name="email" value="{{ push_contact_email }}" maxlength="254" autocomplete="email" placeholder="you@example.com">
+        </div>
+        <div class="settings-field-row push-prefs-actions">
+            <span class="spacer"></span>
+            <button type="submit" class="btn tonal btn-sm">Save</button>
+        </div>
     </form>
 </div>
 {% endblock %}

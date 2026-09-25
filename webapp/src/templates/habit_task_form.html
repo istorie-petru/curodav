@@ -46,7 +46,12 @@
 </div>
 <div class="modal-body">
 <div class="card">
-<form method="post" id="habit-task-form" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}" data-cc-change="task" data-cc-action="{% if task %}edit{% else %}create{% endif %}">
+{# 2026-09-25 (UI audit H-14): `.is-avoid` hides the build-only fields
+   (Unit, Recurrence, Only on, Times per period, Daily target) -- none
+   of them apply to an avoid habit. static/habit_day.js flips the class
+   when Kind changes; the fields still submit, so switching back keeps
+   their values. #}
+<form method="post" id="habit-task-form" class="habit-task-form{% if task and task.habit_kind == 'avoid' %} is-avoid{% endif %}" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}" data-cc-change="task" data-cc-action="{% if task %}edit{% else %}create{% endif %}">
     <input type="hidden" name="tags_labels" value="{{ habit_label }}">
     <div class="field-grid">
         <div class="field field-wide">
@@ -63,17 +68,17 @@
                target don't apply. #}
             <label for="habit-kind">Kind</label>
             <select name="habit_kind" id="habit-kind">
-                <option value="build"{% if not task or task.habit_kind != 'avoid' %} selected{% endif %}>Build -- do it</option>
-                <option value="avoid"{% if task and task.habit_kind == 'avoid' %} selected{% endif %}>Avoid -- log relapses</option>
+                <option value="build"{% if not task or task.habit_kind != 'avoid' %} selected{% endif %}>Build: do it</option>
+                <option value="avoid"{% if task and task.habit_kind == 'avoid' %} selected{% endif %}>Avoid: log relapses</option>
             </select>
         </div>
-        <div class="field">
+        <div class="field habit-build-only">
             <label for="habit-unit">Unit</label>
             <input type="text" name="habit_unit" id="habit-unit" maxlength="24" placeholder="e.g. glasses, min"
                    value="{{ task.habit_unit if task and task.habit_unit else '' }}"
                    title="For an amount habit (Daily target above 1): what you're counting.">
         </div>
-        <div class="field field-wide">
+        <div class="field field-wide habit-build-only">
             <!-- static/recurrence_picker.js turns this into the same
                  preset dropdown task_form.html/event_form.html use --
                  required and pre-set to "Daily" for a new habit
@@ -84,7 +89,7 @@
             <label class="field-required">Recurrence</label>
             <input type="text" name="recurrence" class="recurrence-input" value="{{ task.recurrence if task and task.recurrence else 'FREQ=DAILY' }}" required>
         </div>
-        <div class="field field-wide">
+        <div class="field field-wide habit-build-only">
             {# Habits H2 (2026-09-24): fixed-days habits. Any day checked
                makes it FREQ=WEEKLY;BYDAY=... server-side (routers/tasks.py
                _apply_habit_days), overriding the Recurrence preset above,
@@ -100,7 +105,7 @@
             </div>
             <p class="habit-days-hint">Pick days for a fixed-days habit (overrides Recurrence). Leave empty for daily, weekly or "times per period".</p>
         </div>
-        <div class="field">
+        <div class="field habit-build-only">
             <!-- Habits H1 (2026-09-24): "X times per week/month" -- only
                  used when Recurrence is a plain Weekly/Monthly (see
                  habit_schedule.py); blank = once per period. -->
@@ -109,7 +114,7 @@
                    value="{{ task.habits_per_period if task and task.habits_per_period else '' }}"
                    title="For a weekly or monthly habit: how many days per week/month count as done. Leave empty for once.">
         </div>
-        <div class="field">
+        <div class="field habit-build-only">
             <label>Daily target</label>
             <div class="stepper">
                 <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease daily target">&minus;</button>

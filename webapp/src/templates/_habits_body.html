@@ -38,8 +38,11 @@
         {% endfor %}
         <form method="post" action="/habits/pauses" class="habit-action habit-pause-form">
             <label class="habit-log-field"><span>From</span><input type="date" name="start_date" value="{{ today_iso }}" required></label>
-            <label class="habit-log-field"><span>Until</span><input type="date" name="end_date" value="{{ today_iso }}" required></label>
-            <button type="submit" class="btn tonal btn-sm">{{ icon('pause', 'icon-sm') }} Pause all habits</button>
+            {# 2026-09-25 (UI audit H-15): Until starts empty (both dates
+               defaulting to today set a one-day pause by accident); the
+               button is full height, level with the inputs. #}
+            <label class="habit-log-field"><span>Until</span><input type="date" name="end_date" min="{{ today_iso }}" required></label>
+            <button type="submit" class="btn tonal">{{ icon('pause', 'icon-sm') }} Pause all habits</button>
         </form>
         <p class="habit-days-hint">Paused days don't count for or against a streak.</p>
     </section>
@@ -47,7 +50,7 @@
 <div class="empty-state empty-state-rich">
     <div class="empty-state-icon">{{ icon('repeat') }}</div>
     <div class="empty-state-title">No habits yet</div>
-    <div class="empty-state-text">A habit is something you want to do on a schedule -- daily, a few times a week, or on set days.</div>
+    <div class="empty-state-text">A habit is something you want to do on a schedule: daily, a few times a week, or on set days.</div>
     <a class="btn primary" href="/tasks/new?habit=1" data-modal>{{ icon('plus') }} New habit</a>
 </div>
 {% endif %}
