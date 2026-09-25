@@ -310,3 +310,49 @@ class TestSettingsLabelsTable:
         assert 'name="parent_name"' not in body
         assert 'value="space"' not in body  # no Space role any more
         assert 'name="sidebar_pin"' in body and 'name="widget_pin"' in body
+
+
+class TestLabelPillLinks:
+    """Slice d (2026-09-25): label pills link to the label -- a preview
+    modal from inside detail modals and cards, never from inside another
+    control (a picker option, the Tasks table's dropdown trigger, a whole-
+    row link)."""
+
+    def test_preview_modal(self, conn):
+        db.upsert_label_config(conn, {"name": "Essay", "label_group": "Uni", "has_deadline": 1,
+                                      "deadline_date": (date.today() + timedelta(days=3)).isoformat()})
+        db.upsert_task(conn, {"uid": "t1", "title": "Draft", "description": "", "status": "active",
+                              "tags": ["Essay"], "created_at": _now()})
+        db.upsert_contact(conn, {"uid": "c1", "full_name": "Tutor", "tags": ["Essay"], "created_at": _now()})
+        resp = label_pages.label_preview("Essay", _request("/labels/Essay/preview"), conn=conn)
+        body = resp.body.decode()
+        assert resp.template.name == "label_preview_modal.html"
+        assert 'id="modal-target"' in body
+        assert resp.context["open_task_count"] == 1 and resp.context["contact_count"] == 1
+        assert [i["title"] for i in resp.context["agenda_items"]] == ["Deadline"]
+        assert 'href="/groups/Uni"' in body
+        # Open page leaves the modal; Edit swaps the form in.
+        assert '<a class="btn ghost" href="/labels/Essay">' in body
+        assert 'href="/settings/labels/Essay/edit" data-modal' in body
+
+    def test_detail_modal_pills_open_the_preview(self, conn):
+        from src.routers import tasks as tasks_router
+        db.upsert_task(conn, {"uid": "t1", "title": "Draft", "description": "", "status": "active",
+                              "tags": ["Road trip"], "created_at": _now()})
+        body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
+        assert 'href="/labels/Road%20trip/preview" data-modal' in body
+
+    def test_kanban_card_pills_open_the_preview(self, conn):
+        db.upsert_label_config(conn, {"name": "Gym"})
+        db.upsert_task(conn, {"uid": "t1", "title": "Squats", "description": "", "status": "active",
+                              "tags": ["Gym", "Legs"], "created_at": _now()})
+        body = _page(conn, "Gym").body.decode()
+        assert 'href="/labels/Legs/preview" data-modal' in body
+        assert 'href="/labels/Gym/preview"' not in body  # the page's own label isn't repeated
+
+    def test_pills_inside_other_controls_stay_plain(self, conn):
+        from src.routers import tasks as tasks_router
+        db.upsert_task(conn, {"uid": "t1", "title": "Draft", "description": "", "status": "active",
+                              "tags": ["Gym"], "created_at": _now()})
+        body = tasks_router.list_tasks(_request("/tasks"), conn=conn).body.decode()
+        assert "/labels/Gym/preview" not in body

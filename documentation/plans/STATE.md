@@ -856,11 +856,23 @@ session start.
   tests added. Full suite **2,441 passed** (lower than 2,495 because of the
   deleted Space tests). `sw.js` v119 -> v120.
 
-  **Next slice**: item 4 slice d -- label pills link to `/labels/<name>`
-  everywhere (modal from inside a widget/card, full page from the sidebar
-  or a label list -- "context-dependent", Peter 2026-09-24). Then narrow
-  banners (item 2, including the icon_tile banner reversal). Known gap: no
-  "rename group" action (you change the Group field on each label).
+  **2026-09-25 (same session, "continue") -- item 4 slice d shipped; item 4
+  is DONE.** Label pills in detail modals and on Kanban cards now open a new
+  label preview modal (`/labels/<name>/preview`: status, group, counts,
+  next 5 items, Open page + Edit). The sidebar, Settings > Labels and
+  group-page links already went to the full page. Pills inside another
+  control (picker options, the Tasks table's Labels dropdown trigger,
+  Contacts rows) stay unlinked, since a link can't nest there. Verified live
+  (task modal -> pill -> preview in place -> Open page navigates; 390px OK;
+  no console errors). Full suite **2,445 passed**. No CSS/SHELL_ASSETS
+  change, so there's no sw.js bump.
+
+  **Next slice**: narrow banners everywhere, including dashboards (item 2 in
+  `plans/ui-cleanup-2026-09.md`). Label and group pages now both render
+  through `label_detail.html`/`label_sections.html`, so this includes the
+  icon_tile banner treatment Peter listed in the 2026-09-16 reversal. Check
+  item 2's own open questions first. Known gaps from item 4: no "rename
+  group" action; Tasks-table and Contacts-row pills aren't clickable.
 
 - **Shipped:** 2026-09-21 (one long session, 12 commits -- direct request
   to "plow through all of them now" rather than the usual one-slice-per-

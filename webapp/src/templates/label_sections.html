@@ -83,7 +83,7 @@
                 <a class="kanban-card-title" href="/tasks/{{ t.uid }}" data-modal draggable="false">{{ t.title }}</a>
                 <div class="kanban-card-meta">
                     {% if t.due_at %}<span class="cell-tag tag-gray">{{ t.due_at | relative_date }}</span>{% endif %}
-                    {% for tag in t.tags %}{% if tag != label.name %}{{ label_pill(tag) }}{% endif %}{% endfor %}
+                    {% for tag in t.tags %}{% if tag != label.name %}{{ label_pill(tag, 'modal') }}{% endif %}{% endfor %}
                 </div>
             </div>
             {% else %}

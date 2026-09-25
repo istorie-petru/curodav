@@ -225,7 +225,7 @@ row-mate visibly share the new, correct height. No automated test added
 (`audit-fixes-2.0.md` item 4's own note still holds: "No test harness for
 JS behavior in this suite").
 
-## 4. Labels-as-modules + sidebar/dashboard rework (final, merged form) — IN PROGRESS (slices a, b, c shipped 2026-09-25; d left)
+## 4. Labels-as-modules + sidebar/dashboard rework (final, merged form) — DONE (slices a–d shipped 2026-09-25)
 
 **Scope re-confirmed with Peter, 2026-09-25**. This overrides the "final
 model" wording below wherever the two disagree:
@@ -366,6 +366,22 @@ whole-group view).
   label.
 - `project_label_for`'s pre-1.3 fallback still skips `generate_space` labels,
   which is now a no-op.
+
+**Slice d — SHIPPED 2026-09-25 (label-pill links).**
+- `label_pill(tag, link=...)`: `'modal'` links to a new preview modal at
+  `/labels/<name>/preview` (`label_preview_modal.html`); `'page'` links to
+  the full page.
+- The preview shows the cover, group, status/deadline, open-task and
+  contact counts, and the next 5 agenda items, with Done, **Open page**
+  (a plain link out of the modal) and Edit.
+- Pills link in the task, event, contact and habit detail modals and on
+  label-page Kanban cards.
+- **Left unlinked on purpose:** picker options (a click must toggle the
+  checkbox), the Tasks table's Labels cell (the pills sit inside the
+  dropdown's `<button>` trigger) and Contacts rows (the whole row is an
+  `<a>`), because a link can't nest inside those.
+- **Full page** from the sidebar, Settings > Labels, and a group page's
+  member links (all already done in b/c).
 
 **Open for slice c (decided above):** after the
 backfill, a Space's own label sits in its own group, and its existing

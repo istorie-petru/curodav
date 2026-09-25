@@ -70,8 +70,35 @@ def _dashboard_page(conn, request: Request, name: str, label: dict):
     return templates.TemplateResponse("label_detail.html", ctx)
 
 
-def _sections_page(conn, request: Request, name: str, label: dict):
+def _agenda_items(conn, name: str, label: dict, tasks: list[dict], limit: int) -> list[dict]:
+    """Future events tagged with this label, the label's own deadline, and
+    open due-dated tasks (from `tasks`), merged into one chronological list
+    and capped at `limit`. Same recipe the retired project/plain-label
+    pages both used; shared by the sections page and the preview modal."""
     today_iso = date.today().isoformat()
+    events = [
+        e for e in db.list_events(conn, start=datetime.now(timezone.utc).isoformat())
+        if name in (e.get("tags") or []) and e.get("start_at") and e["start_at"][:10] >= today_iso
+    ]
+    db.annotate_item_colors(conn, events)
+    deadline = label.get("deadline_date") if label.get("has_deadline") else None
+    if deadline and deadline >= today_iso and not label.get("archived_at"):
+        events.append({
+            "uid": None,
+            "title": "Deadline",
+            "start_at": f"{deadline}T00:00:00",
+            "all_day": True,
+            "is_deadline": True,
+        })
+    for t in tasks:
+        if t["status"] == "done" or not t.get("due_at") or t["due_at"][:10] < today_iso:
+            continue
+        events.append({"uid": t["uid"], "title": t["title"], "start_at": t["due_at"], "kind": "task"})
+    events.sort(key=lambda e: e["start_at"])
+    return events[:limit]
+
+
+def _sections_page(conn, request: Request, name: str, label: dict):
     tasks = [t for t in db.list_tasks_sharing_labels(conn, [name]) if t["status"] != "archived"]
     board_statuses = [s for s in tasks_router.STATUSES if s != "archived"]
     columns: dict[str, list] = {s: [] for s in board_statuses}
@@ -80,31 +107,7 @@ def _sections_page(conn, request: Request, name: str, label: dict):
             t["banner"] = db.banner_for_task(conn, t)
             columns.setdefault(t["status"], []).append(t)
 
-    agenda_items: list[dict] = []
-    if label.get("agenda_widget"):
-        # Future events tagged with this label, the label's own deadline,
-        # and open due-dated tasks, merged into one chronological list. Same
-        # recipe the retired project/plain-label pages both used.
-        events = [
-            e for e in db.list_events(conn, start=datetime.now(timezone.utc).isoformat())
-            if name in (e.get("tags") or []) and e.get("start_at") and e["start_at"][:10] >= today_iso
-        ]
-        db.annotate_item_colors(conn, events)
-        deadline = label.get("deadline_date") if label.get("has_deadline") else None
-        if deadline and deadline >= today_iso and not label.get("archived_at"):
-            events.append({
-                "uid": None,
-                "title": "Deadline",
-                "start_at": f"{deadline}T00:00:00",
-                "all_day": True,
-                "is_deadline": True,
-            })
-        for t in tasks:
-            if t["status"] == "done" or not t.get("due_at") or t["due_at"][:10] < today_iso:
-                continue
-            events.append({"uid": t["uid"], "title": t["title"], "start_at": t["due_at"], "kind": "task"})
-        events.sort(key=lambda e: e["start_at"])
-        agenda_items = events[:8]
+    agenda_items = _agenda_items(conn, name, label, tasks, 8) if label.get("agenda_widget") else []
 
     contacts = []
     if label.get("contacts_widget"):
@@ -137,6 +140,28 @@ def label_page(name: str, request: Request, conn=Depends(get_db)):
     if label.get("has_dashboard"):
         return _dashboard_page(conn, request, name, label)
     return _sections_page(conn, request, name, label)
+
+
+@router.get("/{name}/preview")
+def label_preview(name: str, request: Request, conn=Depends(get_db)):
+    """A label's compact preview modal (labels-as-modules slice d,
+    2026-09-25). A label pill inside a card or a detail modal opens this
+    rather than leaving the page (Peter, 2026-09-24: "context-dependent" --
+    modal from inside a widget/card, full page from the sidebar or a label
+    list). It shows the label's status, group, a short agenda and counts,
+    with an Open page link and an Edit button."""
+    label = db.effective_label_config(conn, name)
+    tasks = [t for t in db.list_tasks_sharing_labels(conn, [name]) if t["status"] != "archived"]
+    ctx = {
+        "request": request,
+        "label": label,
+        "banner": db.get_page_banner(conn, name),
+        "agenda_items": _agenda_items(conn, name, label, tasks, 5),
+        "open_task_count": len([t for t in tasks if t["status"] != "done"]),
+        "contact_count": len([c for c in db.list_contacts(conn) if name in (c.get("tags") or [])]),
+    }
+    ctx.update(_status_context(conn, label))
+    return templates.TemplateResponse("label_preview_modal.html", ctx)
 
 
 @router.post("/{name}/archive")
