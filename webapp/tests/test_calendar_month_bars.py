@@ -16,6 +16,7 @@ router in test_calendar_month_quickcreate.py."""
 
 from __future__ import annotations
 
+import re
 import subprocess
 from datetime import date
 from pathlib import Path
@@ -532,3 +533,85 @@ class TestItemDragGhostStructural:
         block = css[idx:idx + 250]
         assert "pointer-events:none" in block
         assert "position:fixed" in block
+
+
+class TestMonthBarSpacing:
+    """2026-09-25 direct report: all-day bars sat glued to (actually 1px
+    over) the day number and flush against the column gridlines. The bar
+    layer's top must be built from the same tokens as the day cell's own
+    padding + day-number gap, so bars and text rows start at the same y."""
+
+    def test_bar_layer_top_matches_the_cell_padding_and_daynum_gap(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        assert "top:calc(var(--month-cell-pad-top) + var(--month-daynum-h) + var(--month-daynum-gap));" in css
+        assert "padding:var(--month-cell-pad-top) 4px 4px;" in css
+        assert "margin-bottom:var(--month-daynum-gap);}" in css
+
+    def test_bars_are_inset_from_the_column_gridlines(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        for i in range(1, 8):
+            assert f".month-bar-col-{i}{{left:calc({i - 1}/7 * 100% + 3px);}}" in css
+            assert f".month-bar-span-{i}{{width:calc({i}/7 * 100% - 6px);}}" in css
+
+    def test_lane_offset_leaves_room_below_the_last_bar(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        for i in range(1, 9):
+            assert (
+                f".month-bars-offset-{i}{{margin-top:calc({i} * (var(--month-bar-h) + var(--month-bar-gap))"
+                " + var(--month-bars-after-gap));}"
+            ) in css
+
+
+class TestAuditRegressions20260925:
+    """UI audit 2026-09-25: three CSS regressions found in the live app."""
+
+    def test_no_late_field_grid_rule_overrides_the_mobile_single_column(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        mobile = css.index(".field-grid{grid-template-columns:1fr;}")
+        # Any .field-grid rule after the <=720px override must not set
+        # columns again, or phones get two squeezed columns.
+        tail = css[mobile + 1:]
+        for block in re.findall(r"^\.field-grid\{[^}]*\}", tail, flags=re.M):
+            assert "grid-template-columns" not in block
+
+    def test_more_button_is_reset_from_the_browser_default(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        block = css[css.index("button.month-more-link{"):]
+        block = block[:block.index("}")]
+        assert "appearance:none" in block and "background:none" in block and "border:0" in block
+
+    def test_day_view_habit_button_matches_the_task_rows(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        block = css[css.index("button.allday-habit{"):]
+        block = block[:block.index("}")]
+        assert "background:none" in block and "font-size:12px" in block
+
+
+class TestAuditDecisions20260925:
+    """Peter's answers to the 2026-09-25 audit's open questions."""
+
+    def test_pills_never_wrap(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        for sel in (".pill-static", ".cell-tag"):
+            block = re.search(r"^" + re.escape(sel) + r"\{[^}]*\}", css, flags=re.M).group(0)
+            assert "white-space:nowrap" in block and "flex-shrink:0" in block, sel
+
+    def test_month_view_hides_times_on_phones(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        assert "@media (max-width:720px){.month-item-time{display:none;} .month-more-word{display:none;}}" in css
+        for name in ("_calendar_fourweek_grid.html", "_calendar_month_grid.html"):
+            tpl = (_STATIC_DIR.parent / "templates" / name).read_text()
+            assert '<span class="month-more-word"> more</span>' in tpl
+
+    def test_dashboard_columns_stack_independently(self):
+        script = (_STATIC_DIR / "app.js").read_text()
+        assert "const colBottom = new Array(cols).fill(0);" in script
+        # no shared row height is stamped onto cards any more
+        assert "entry.card.style.height = `${rowHeight}px`;" not in script
+
+    def test_week_bar_drag_resolves_days_by_pointer_x(self):
+        script = (_STATIC_DIR / "calendar_week_allday_drag.js").read_text()
+        assert '.allday-task[data-uid], .allday-bar[data-uid]' in script
+        assert 'el.closest(".allday-col") || colAtX(e.clientX)' in script
+        subprocess.run(["node", "--check", str(_STATIC_DIR / "calendar_week_allday_drag.js")], check=True)
+        subprocess.run(["node", "--check", str(_STATIC_DIR / "app.js")], check=True)

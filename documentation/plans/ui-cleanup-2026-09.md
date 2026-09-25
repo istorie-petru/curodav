@@ -91,7 +91,8 @@ that fits its remaining budget.
     endpoints, and the date-grouped "Overdue" bucket split from a new
     "Past" bucket so an event no longer borrows a task's wording.
 11. **Labels-as-modules + sidebar/dashboard rework** (item 4 in Peter's
-    numbering, renumbered 15 here) — the biggest item; almost certainly
+    numbering, renumbered 15 here) — **in progress: scope re-confirmed and
+    slice a (schema + backfill) shipped 2026-09-25**, see item 4. The biggest item; almost certainly
     needs its own multi-slice breakdown (schema/module migration, then
     URL/routing collapse, then sidebar chevron fix + group pages, then
     label-pill linking). Do NOT attempt as one slice.
@@ -110,13 +111,14 @@ that fits its remaining budget.
     card-grid fallback, main list pages only. See the "Responsive tables"
     section below (it never had a numbered section of its own; the "(item
     11)" this line used to carry was a numbering slip -- 11 is Search).
-15. **Habits/routines as a distinct frontend data model** (item 14) —
-    **slice 1 of 4 shipped 2026-09-24** (Habit entity removed, shared
-    `habit_view.py`, Dashboard widget now lists habit tasks); slices 2-4
-    (Habits page, bigger widget, agenda/calendar + detail) in item 14's
-    section below.
-16. **Default dashboard layout (25/50/25)** (item 17) — depends on 15 (a
-    real Habit Check-in widget, not just today's `habit_checkin.js`).
+15. ~~**Habits/routines as a distinct frontend data model**~~ (item 14) —
+    **shipped 2026-09-24**: slice 1 (Habit entity removed, shared
+    `habit_view.py`) + H1-H8 against the Streak reference (schedule-aware
+    streaks, Habits page, detail + notes, widget, avoid/units, pause,
+    agenda/day view, insights). See item 14's section.
+16. ~~**Default dashboard layout (25/50/25)**~~ (item 17) — **shipped
+    2026-09-24** (Home seed; "Reset layout" applies it to an existing
+    dashboard).
 17. **Web Push notifications** (item 7) — mostly independent infra, large;
     fine to pick up anytime once someone's ready for a multi-session push
     (subscription flow, VAPID keys, a scheduler for wall-clock-timed
@@ -143,7 +145,32 @@ worth touching unused code in an unrelated pass); worth a straight deletion
 whenever someone's next to that file, not a "port the character-budget fix
 into it" task since nothing calls it.
 
-## 2. Narrow banners everywhere, including dashboards
+## 2. ~~Narrow banners everywhere, including dashboards~~ — SHIPPED 2026-09-25
+
+**Peter's answers (2026-09-25):** keep per-page banner images (the narrow
+strip shows the page's own image, falling back to the Settings default);
+plain icons (Home = house, label = its own icon in its color, group =
+layers); the detail/edit modal covers are in scope too.
+
+**Shipped:**
+- **Page headers:** Home (`dashboard.html`), label pages
+  (`label_detail.html`/`label_sections.html`) and group pages render
+  `page_header_narrow()`. The macro gained `banner`/`banner_image_scope`
+  (a page's own image) and `icon_color`, and edit-mode actions moved into
+  its actions slot. The avatar and the icon-tile straddle are gone, and
+  `_page_banner.html` is deleted (its CSS stays, unused).
+- **Modal covers:** a CSS-only change scoped to `.detail-header-inner`.
+  The cover is a 56px strip with a 32px icon badge and the white title
+  inside it, over a scrim (darker on photos). It covers the task, event,
+  contact, habit and label-preview modals, the label edit modal's banner
+  header and the banner editor.
+- **Found and fixed:** `.field{display:flex}` overrode `[hidden]`, so
+  fields hidden with the attribute always showed: the label form's Sections
+  toggles, the recurring-only Holiday calendar field, and the widget
+  editor's Limit/Style fields. They now hide as designed.
+
+sw.js v120 -> v121.
+
 
 "All banners should be narrow - even on dashboard pages. Remove the avatar
 from any dashboard - keep only the icon as of any narrow banner. The title
@@ -223,7 +250,170 @@ row-mate visibly share the new, correct height. No automated test added
 (`audit-fixes-2.0.md` item 4's own note still holds: "No test harness for
 JS behavior in this suite").
 
-## 4. ~~Labels-as-modules + sidebar/dashboard rework~~ (final, merged form)
+## 4. Labels-as-modules + sidebar/dashboard rework (final, merged form) — DONE (slices a–d shipped 2026-09-25)
+
+**Scope re-confirmed with Peter, 2026-09-25**. This overrides the "final
+model" wording below wherever the two disagree:
+- **Groups** are plain text (`label_group`) and each group gets its own
+  customizable widget dashboard (new storage keyed by group name, built in
+  slice c). A group is **not** a label. Spaces become groups, the
+  `parent_name` link goes away, and so does color inheritance from a Space.
+- **Projects** keep **deadline + the archive flow**: `deadline_date`, plus
+  the "confirm finished → archive" step and its computed Pending Archiving
+  status, both now generic to any label. `start_date` and the
+  period-overlap rule go.
+- **`/labels/<name>` with `has_dashboard` = yes** is the Home-style widget
+  dashboard scoped to the label (the existing `dashboard_widgets.label_name`).
+  The fixed Kanban+Agenda pages (label_kanban_detail.html,
+  project_detail.html) and the Space/Project URLs go. `has_dashboard` = no
+  shows only the toggled agenda/tasks/contacts sections.
+
+**Slice a — SHIPPED 2026-09-25 (schema + backfill, no UI change).** New
+`label_config` columns `sidebar_pin`, `widget_pin`, `has_deadline`,
+`deadline_date`, `has_dashboard`, `agenda_widget` (default on),
+`tasks_widget` (default on) and `contacts_widget` (default on — slice a
+shipped it off by mistake; slice b corrected it with a one-time fix).
+`archived_at` stays the archive flag, exposed as `is_archived` in
+`effective_label_config`. There's a one-time `db.backfill_label_modules`
+(app_meta marker `label_modules_backfilled`):
+- group: a Space's name for the Space itself and its children; other
+  labels keep any free-text group;
+- sidebar_pin: Spaces, children of real Spaces, and projects;
+- widget_pin: Spaces and projects;
+- has_dashboard: Spaces, projects, and labels that already have their own
+  widgets;
+- deadline: a project's `end_date`.
+
+`_mirror_legacy_module_fields` in `upsert_label_config` keeps the new
+fields in step while the forms still write the legacy flags, and
+`_rename_space_group` does the same for rename and merge. **Both are
+interim: delete them once slice b stops writing the legacy fields.** Pins
+are one-way: turning off a Space/Project doesn't unpin. Tests:
+`test_label_modules.py` (18).
+
+**Slice b — SHIPPED 2026-09-25 (URL/routing collapse).** One page for
+every label at **`/labels/<name>`** (new `routers/label_pages.py`):
+- **Which page:** `has_dashboard` (or a Space, until slice c) gets the
+  widget grid (`label_detail.html`). Every other label gets the new
+  `label_sections.html`, which has only the switched-on Agenda / Contacts /
+  Tasks sections. It replaces `label_kanban_detail.html` and
+  `project_detail.html`, both deleted.
+- **Redirects:** `/spaces/<n>`, `/projects/<n>`, `/projects/<n>/calendar`
+  and `/settings/labels/<n>` all 301 to `/labels/<n>`. Every in-app link
+  (sidebar, Settings > Labels, Spaces & Projects widget, search, widget and
+  banner return URLs) points there directly.
+- **Deadline and archive:** any label with a deadline (or a project) shows
+  a status row: computed status, deadline pill, and an Archive button
+  (asks first unless Pending Archiving) or Unarchive (`_label_status.html`,
+  `POST /labels/<n>/archive` and `/unarchive`). `project_status` reads
+  `deadline_date`.
+- **Label form:** gains Deadline (any label; empty means none) and Page
+  (Dashboard checkbox; Sections toggles, shown only when Dashboard is
+  off). Both are hidden for the Space role. A `page_fields` marker makes
+  sure a post without these fields can't blank them.
+- **Removed:** `promote`/`dates`/`demote`, `/projects/<n>/archive`,
+  `find_overlapping_project`, start/end dates in the form, and the
+  "project needs dates" validation. Changing role no longer
+  archives/unarchives anything.
+
+The interim mirror stays: the form still writes
+`generate_space`/`parent_name`/`is_project`, which slice c retires. Its
+"demote clears the deadline" branch is gone, because a deadline is a plain
+label field now. Tests: new `test_label_pages.py` (27);
+`test_project_detail.py`/`test_project_stack.py` moved onto the new route,
+and 8 other test files had URL expectations updated.
+
+**Deliberately not done in b:** the sidebar still renders Spaces +
+children + a Projects section (slice c); the icon_tile banner (item 2);
+`is_project` itself (still drives one-project-per-task and the Tasks
+table's project grouping — **needs a decision from Peter before slice c
+removes the Project role**).
+
+**Project-picker slice — SHIPPED 2026-09-25 (inserted before slice c).**
+Peter's decisions:
+- the Project role stays;
+- a project is still stored as a label, but the task and event forms ask
+  for it in its own single-choice **Project** dropdown, because assigning
+  a project means something different from tagging;
+- **one project per task and per event**;
+- lists and cards are unchanged (no separate project display);
+- contacts and habits get no dropdown and keep their plain Labels picker.
+
+How it's built:
+- `_project_field.html` offers "No project", then the open projects, plus
+  the item's current project marked "(archived)" if it has one.
+- The Labels picker no longer lists project labels.
+- The server swaps the item's project label for the chosen one
+  (`db.apply_project_choice` via `dashboard._with_project`), but only when
+  the form sends the `project_field` marker.
+- Events now enforce one project. An event that already has the same two
+  projects can still be re-saved, so a week-grid drag doesn't fail.
+- Offline sync's §7c batch check covers events too.
+
+Tests: `test_project_picker.py` (18).
+
+**Slice c — SHIPPED 2026-09-25 (groups + sidebar).** Peter said "continue"
+without answering the widget question, so I decided it while building: a
+former Space's widgets move to its group page (the Space page was always the
+whole-group view).
+
+- **Groups:** a group is the text `label_group`. Its page is
+  `/groups/<name>` (`label_pages.group_router`): a widget dashboard scoped to
+  every member label, plus a row of member-label links.
+- **Group storage:** it reuses the per-page storage (widgets, seeded marker,
+  banner) under the page key `group:<name>` (`db.group_page_key`), so the
+  widget, reset, banner and return-URL code needed no changes. Label names
+  can't start with `group:`.
+- **Sidebar:** a Groups section (chevron reveals the members with
+  `sidebar_pin`), then Pinned (pinned labels with no group). The chevron bug
+  was the expanded rail's `.tab-btn{width:100%}` pushing it past
+  `.tabbar{overflow:hidden}`; fixed with a `flex:1; min-width:0` link, which
+  also covers mobile. The collapsed rail still has no chevron (no room), so
+  the group page lists every member.
+- **Removed:** the Space role, the parent_name dropdown (now a free-text Group
+  field with suggestions), colour/banner inheritance (every label picks its
+  own), `list_space_labels`/`list_child_labels`/`_rename_space_group`, and
+  `scripts/migrate_spaces_direct_tags.py`.
+- **Label form:** gains "Show in: Sidebar / Groups & Labels widget".
+- **Widget:** the "Spaces & Projects" widget is shown as "Groups & Labels"
+  and driven by `widget_pin` and groups.
+- **Settings > Labels:** one header row per group (links to its page), then
+  its labels.
+- **Migration:** a one-time `db.migrate_spaces_to_groups`. Each Space's
+  widgets and config move to `group:<name>`, its banner is copied there, and
+  the Space label becomes a plain label with no dashboard. `parent_name` is
+  cleared.
+- **Backup restores:** `_mirror_legacy_module_fields` stays, but only for
+  restoring pre-2026-09-25 backups.
+
+**Known gaps:**
+- There is no "rename group" action; you change the Group field on each
+  label.
+- `project_label_for`'s pre-1.3 fallback still skips `generate_space` labels,
+  which is now a no-op.
+
+**Slice d — SHIPPED 2026-09-25 (label-pill links).**
+- `label_pill(tag, link=...)`: `'modal'` links to a new preview modal at
+  `/labels/<name>/preview` (`label_preview_modal.html`); `'page'` links to
+  the full page.
+- The preview shows the cover, group, status/deadline, open-task and
+  contact counts, and the next 5 agenda items, with Done, **Open page**
+  (a plain link out of the modal) and Edit.
+- Pills link in the task, event, contact and habit detail modals and on
+  label-page Kanban cards.
+- **Left unlinked on purpose:** picker options (a click must toggle the
+  checkbox), the Tasks table's Labels cell (the pills sit inside the
+  dropdown's `<button>` trigger) and Contacts rows (the whole row is an
+  `<a>`), because a link can't nest inside those.
+- **Full page** from the sidebar, Settings > Labels, and a group page's
+  member links (all already done in b/c).
+
+**Open for slice c (decided above):** after the
+backfill, a Space's own label sits in its own group, and its existing
+widgets stay on the *label's* dashboard. Slice c must decide whether to move
+them to the new *group* dashboard. Also, free-text `label_group` values from
+before 2026-09-14 (if Peter's DB has any) will show up as groups once slice
+c renders groups.
 
 This merges three passes at the same idea across one message, in the most
 refined form (later statements override earlier ones where they conflict):
@@ -387,7 +577,7 @@ its own). Checked `SHELL_ASSETS` membership before concluding this,
 per this session's own established habit. `test_pwa_shell.py`'s
 version-string assertion updated to match.
 
-## 7. Web Push notifications
+## 7. ~~Web Push notifications~~ — SHIPPED 2026-09-24 (P1-P3; first real-device test pending)
 
 Leisure/sleep-time start, event start, tasks due today (generic phrasing
 when more than one — "you have multiple tasks due today," not a list),
@@ -408,6 +598,72 @@ server-side scheduler capable of firing at specific wall-clock moments (no
 existing background scheduler in this app as of 2026-09 — confirm, don't
 assume), and copy for each notification type. Large, mostly new
 infrastructure — budget multiple sessions.
+
+**Audit (2026-09-24):** no subscription flow, no VAPID keys, no push
+handler in `sw.js`, no scheduler -- confirmed. The one background thread
+is the Radicale sync loop (`sync.start_background_sync`, started in
+main.py's lifespan). The one existing reminder concept is events'
+`reminders_json` (imported VALARMs); tasks and habits have none.
+`plans/ofline-first-pwa.md` is unrelated (offline data, not
+notifications).
+
+**P1 -- shipped 2026-09-24 (plumbing).** New dependency `pywebpush`
+(brings `cryptography`; VAPID JWT + RFC 8291 encryption). `src/push.py`:
+one P-256 VAPID key pair per install, generated on first use into
+app_meta (`push_vapid_private_pem`; no UI to paste keys -- regenerating
+would orphan every subscription), `send_to_all(title, body, url, tag)`
+with pruning on 404/410 and never raising on network errors; contact
+claim `CC_PUSH_CONTACT` env or the repo URL. `push_subscriptions` table
+(endpoint PK, keys, UA, created/last_ok). `routers/push.py`: GET
+`/push/public-key`, POST `/push/subscribe` (https endpoints only, key
+sizes bounded -- no fetching arbitrary URLs), `/push/unsubscribe`,
+`/push/test`. `sw.js`: `push` -> showNotification, `notificationclick` ->
+focus/navigate an app tab, same-origin URLs only. Settings > General:
+"Notifications on this device" card (`static/push_settings.js`: Turn on /
+Send test / Turn off, per device; explains iPhone needs Add to Home
+Screen). **Not verifiable here**: headless Chromium has no push service
+("Registration failed - permission denied"), and this sandbox can't reach
+FCM/Mozilla/Apple -- the send path is covered with an injected fake
+sender. First real check has to be Peter's phone/browser: Settings >
+General > Turn on > Send test.
+
+**P2 -- shipped 2026-09-24 (scheduler + reminders).** `src/reminders.py`:
+`due_notifications(conn, now)` computes everything due at a local wall-
+clock minute -- **events** at start or at each of their own `reminders`
+offsets (imported VALARMs; timed only, cancelled = status "archived"
+skipped, looks at tomorrow too so an offset can cross midnight);
+**tasks** and **habits** as one morning digest each ("“X” is due today" /
+"You have 3 tasks due today. One at a time." / "3 habits lined up for
+today. You've got this."), from the digest time (app_meta
+`push_digest_time`, default 08:00) until 21:00; **sleep/leisure** block
+starts ("Wind-down time" / the block's label), skipping 00:00 blocks
+(last night's continuation). A moment fires within a 15-minute grace
+window, then is skipped rather than arriving late. `run_once` sends via
+`push.send_to_all`, records keys in the new `push_sent` table (never
+twice, survives restarts; pruned after 3 days), leaves a key unrecorded
+when every device failed so the next tick retries, and does nothing
+while no device is subscribed. `start_scheduler` = a daemon thread
+started/stopped in main.py's lifespan (same pattern as the sync loop).
+**Live-check bug, fixed**: the VAPID contact default (the repo URL) was
+rejected by py_vapid -- `sub` must be a `mailto:` or a bare https
+*origin*; default is now `https://github.com`, `CC_PUSH_CONTACT` is
+validated. A new test runs pywebpush's real signing + encryption
+(`curl=True`, no network) and was confirmed to fail on the old default.
+Live: the thread fired on the minute, retried after failures within the
+window, and got all the way to the HTTP POST (blocked by this sandbox).
+
+**P3 -- shipped 2026-09-24 (settings).** Settings > General's
+Notifications card gains "Remind me about" (Events when they start /
+Tasks due today / Habits due today / Sleep & leisure time starting --
+app_meta `push_types`, missing = all on, empty = all off) and "Morning
+reminder at" (`push_digest_time`, validated HH:MM, bad input keeps the
+old value). App-wide, not per device. `reminders.due_notifications`
+filters by the enabled types. POST `/settings/notifications`.
+
+**Still open (needs Peter):** a real-device check -- Settings > General >
+Turn on > Send test on the phone (iPhone: Add to Home Screen first) --
+nothing in this sandbox can reach a push service. Optionally set
+`CC_PUSH_CONTACT=mailto:you@domain` on the server.
 
 ## 8. ~~`main-shell-body`'s `margin-bottom: 6dvh`~~ — SHIPPED 2026-09-24
 
@@ -829,7 +1085,7 @@ match.
 top rather than being rewritten past-tense, matching how it already
 documents the gap between the v1 spec and what shipped.
 
-## 14. Habits/routines as a distinct frontend data model — IN PROGRESS (slice 1 + H1 shipped 2026-09-24; H2-H8 next)
+## 14. ~~Habits/routines as a distinct frontend data model~~ — SHIPPED 2026-09-24 (slice 1 + H1-H8)
 
 "I also think that we strongly need to make habits/routines a different
 data model, at least in the frontend. They can still be tasks in the
@@ -976,6 +1232,138 @@ H2**: the recurrence picker only offers presets, so a fixed-weekday
 (BYDAY) habit can't be created from the UI yet -- the engine supports it;
 add a weekday picker to the habit form.
 
+**H2 -- shipped 2026-09-24.** `/habits` is a real page again
+(routers/habits.py: `habits_page`, `habits_regions` fragment; any other
+`/habits/...` URL redirects to it; `/tasks/habits` too). Nav rail entry
+(`repeat` icon) after Tasks. Rows (`_habit_page_row.html`) from
+`habit_view.habit_items`: one-tap check (or `n/target` +1 button), title
+-> detail modal, cadence + period progress + streak (tooltip: best + %
+kept), and a 7-day strip where each day is a toggle form (new
+`habit_view.week_strip`). Sections: "To do" (`due_today`) above "On track"
+("All done for now" when nothing's left). `static/habits_page.js` submits
+every form with fetch and re-renders `#habits-body` from the server (no
+client-side streak guessing); it also claims `cc-entity-changed` task
+events so modal create/edit/delete refreshes in place. The Tasks table's
+Habits group is gone (`_build_task_groups`, `_tasks_body.html`,
+`_habit_row.html` deleted). **Weekday picker**: the habit form's "Only on"
+chips post `habit_days`; any checked -> `FREQ=WEEKLY;BYDAY=...`
+(routers/tasks.py `_apply_habit_days`), none checked strips a previous
+BYDAY; forms without the chips are untouched. Container query drops the
+strip under the title below 520px. Leftover dead CSS for the old Tasks
+Habits table removed in the same slice. Not done (by design, later
+slices): archived-habits fold (H3/H6), bigger widget (H4).
+
+**H3 -- shipped 2026-09-24.** Habit detail modal: a Mon-first **month
+calendar** (`habit_view.month_calendar`, `?month=YYYY-MM`, prev/next
+arrows, never past this month) whose days toggle in place; **"Log a day"**
+form (date, amount for an amount habit, note) posting to
+`/tasks/{uid}/completions`; **recent notes** list; a dot marks days with a
+note. New `task_completions.note` (upsert keeps an existing note unless a
+new one is sent; `""` clears). Both completion endpoints now reject a
+malformed or future date (400). **Deviation from the plan, on purpose**:
+the year grid stays view-only -- Peter asked for exactly that on
+2026-08-29 and a test guards it; the month calendar is the editing
+surface instead. modal.js: a `data-modal-keep-open` form with
+`data-cc-change` now dispatches that change on close (page refreshes its
+live region) instead of a full reload, navigating inside an open modal
+keeps the pending change, and `data-no-autofocus` opts inputs out of
+open-focus. **Also fixed**: backup restore dropped each completion's
+`value` (amount habits came back as 1) -- it now keeps `value` and `note`.
+
+**H4 -- shipped 2026-09-24.** The Dashboard Habit Check-in widget renders
+the Habits page's own row (`_habit_page_row.html`: one-tap check / +1,
+schedule + streak, 7-day tap-a-day strip), still-to-do first, with an
+"n of N done" summary and an "All done for now" state (a small icon pop,
+off under `prefers-reduced-motion`). The row's container query drops the
+strip under the title in a narrow (25%) column, so it's ready for item
+15's layout. `static/habit_checkin.js` (optimistic client-side updates)
+is replaced by `static/habit_actions.js`, shared with /habits: submit with
+fetch, then re-render the containing region (the widget card from
+`/dashboard/widgets/<uid>`, or `#habits-body`). The widget now declares
+`uses: {"tasks"}`, so a habit created/edited in a modal refreshes it
+too. Clicks inside the widget builder's live preview are ignored. Also
+fixed a stray 16px `li` margin on habit rows (page and widget).
+
+**H5 -- shipped 2026-09-24.** New nullable `tasks.habit_kind` ('avoid' or
+NULL = build) and `tasks.habit_unit` (both sync fields; habit form "Kind"
+select + "Unit" input, preserved when a plain task form saves). **Avoid
+habits** log relapses through the same completion endpoints:
+`habit_schedule._avoid_stats` counts clean days from creation (or the
+first relapse) -- current = clean run ending today, longest, clean rate,
+`relapsed_today`; never "to do"; cadence reads "Avoid"; schedule/target/
+exclusions don't apply. UI: a shield "log relapse" button (red when
+relapsed today), relapse days red in the strip / month calendar / year
+grid (`heatmap-avoid`), "N days clean" / "Relapsed today", detail "Log a
+relapse". **Units**: "8 glasses a day" in the row meta, "Amount
+(glasses)" in the log form, in the +1 tooltip.
+
+**H6 -- shipped 2026-09-24.** New `habit_pauses` table (uid, task_uid
+NULL = all habits, inclusive start/end). `POST /habits/pauses` (ISO dates,
+end >= start, <= 366 days, known habit; past ranges allowed on purpose --
+"forgot to set it before leaving") and `POST /habits/pauses/{uid}/delete`.
+`habit_schedule.habit_stats(paused_dates=...)`: a paused due day is
+neutral; a week/month window with any paused day is neutral unless kept
+anyway; paused today -> not "to do". Habits page: a "Paused" section,
+"Paused until <date>" on the row, and a "Vacation" block (pause all
+habits from/until, list + remove). Detail modal: "Pause this habit" form
++ list. A habit's own pauses are deleted with it; pauses ride along in
+the JSON backup/restore (idempotent). Avoid habits ignore pauses in their
+stats (a pause doesn't make relapses count less).
+
+**H7 -- shipped 2026-09-24.** **Agenda widget**: new "habits" Show option
+(`AGENDA_SHOWS`, on in `AGENDA_DEFAULT_SHOW`, offered in the builder/edit
+Show dropdowns; a saved Show list without it keeps habits out): today's
+still-to-do build habits as one-tap rows (checkbox or n/target +1), in
+both the Today (flat) and Next-7-days (days) layouts, page-scoped.
+**Calendar day view**: the all-day row lists the habits scheduled that
+day (`habit_view.habits_for_day` + `habit_schedule.is_due_on`: weekday
+habits on their days, every-N-days on their beat, period habits any day;
+avoid, paused and non-working days left out); past/today toggle in place,
+future is read-only. `habit_actions.js` handles both (the day view by
+dispatching a task change, which async_calendar.js already answers by
+re-rendering `#day-grid` with scroll kept and drag re-bound). Hidden when
+the day view is label-filtered. Not done: habits in the week/4-week
+grids (dense already; revisit if wanted).
+
+**H8 -- shipped 2026-09-24.** **Strength** (`habit_schedule._strength`,
+on every `habit_stats`): Loop Habit Tracker-style EMA over due windows,
+decay 0.5 ** (length * sqrt(target/length) / 13) per window (~13-day
+half-life daily, ~5 weeks weekly) -- one miss dents it, the streak is
+what zeroes; avoid habits score clean days. Shown in the detail modal
+and the Habits-row streak tooltip. **Insights** (`habit_view.insights`,
+detail modal): logged days (relapses for avoid) per month for 12 months,
+and a 24-hour "when you check in" histogram + "usually around HH:00" --
+counting only check-ins made on the day they're for (a backfill's
+timestamp says nothing about when it was done), in the server's local
+time zone (no per-user zone setting exists; flagged), hidden under 5 such
+check-ins. Bars are CSS (heights via `data-style`, CSP-safe), each in its
+own fixed track -- a first version let the labels squash every tall bar
+to the same height; caught in the live check and fixed.
+
+**Follow-up, 2026-09-25 (Peter: "I won't be against a clickable heatmap,
+but ... smarter").** The view modal's year heatmap is clickable again
+(reversing the 2026-08-29 view-only call, test updated): plain/avoid
+habits toggle a day; an **amount habit** (target > 1) opens a tiny
+native `<dialog>` (`static/habit_day.js`, loaded app-wide) with one
+number box whose placeholder is the target -- Enter on an empty box logs
+the target, 0 clears, Escape closes only the popup. The same popup
+drives amount habits' month-calendar days and the Habits page / widget
+7-day strip (no more one-click "1" for an 8-glasses habit). The habit
+heatmap now paints real values against the target
+(`habit_heatmap.heatmap_weeks`), so a partial day is lighter. **Period
+habits** ("3x a week", "once a month") get no heatmap -- the month
+calendar stays. **Work sessions**: still in the edit modal; in the view
+modal they're a `<details>` collapsed by default (kept open across the
+modal's own in-place refreshes once opened, collapsed again next time).
+`CCModal.markChangedWith(change)` added so a popup save inside the
+modal refreshes the page's region on close, not a full reload.
+
+**Not adopted, as planned:** focus/Pomodoro timer, checklists inside a
+habit (tasks are flat on purpose), third-party import, app lock,
+launcher icons, gamification, share cards. Reminders ride on item 7 (Web
+Push); `habit_schedule.is_due_on` is ready for its "is this habit due
+today" check.
+
 **Order and why:** H1 first -- every later surface shows streaks, and
 they're wrong today for non-daily habits. H2 (the page), then H3
 (detail + notes, the only real schema growth besides H5/H6), then H4
@@ -985,14 +1373,27 @@ week" habits matter to you, or are RRULE weekdays enough? (2) avoid
 habits -- wanted? (3) should the Habits page replace the Tasks-table
 group outright (plan assumes yes, per your earlier answer)?
 
-## 15. Default dashboard layout
+## 15. ~~Default dashboard layout~~ — SHIPPED 2026-09-24
+
+**Shipped.** Home's default seed (`_seed_agenda_stack_layout`, Home only)
+is now one 12-column row: **Today** agenda at quarter width (Show =
+overdue/tasks/events -- habits left out since the Habit Check-in widget
+sits beside it), the **At a glance + Upcoming** stack at half, and a
+quarter-width **Habit Check-in** ("Habits"). Label (Space/Project) pages
+keep their half/half pair. The seed is one-time per install, so an
+existing dashboard doesn't change by itself -- **"Reset layout"** (edit
+mode, or Settings > Data & Maintenance) re-seeds to it. Verified live at
+1440/1024/390px: three columns side by side at 25/50/25 on desktop,
+stacked on a phone, no overflow.
+
 
 New default widget layout for Home:
 - 25% Today Agenda (tasks + events)
 - 50% Stack "At a glance" + Upcoming (tasks + events)
 - 25% Habit Check-in
 
-Depends on item 14 landing enough that "Habit Check-in" is a real,
+**Unblocked 2026-09-24** by item 14's H4 (the widget is now the Habits
+page's row list, narrow-column ready). Depends on item 14 landing enough that "Habit Check-in" is a real,
 sizeable widget rather than today's `habit_checkin.js` behavior (audit what
 that script currently does before assuming it needs to be built new).
 Interacts with the same masonry/widget-grid code item 3's bug lives in —

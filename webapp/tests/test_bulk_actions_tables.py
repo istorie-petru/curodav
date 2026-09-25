@@ -93,18 +93,6 @@ class TestTasksBulkDelete:
         assert resp.status_code == 400
 
 
-class TestHabitRowCheckbox:
-    def test_habit_group_task_row_carries_row_select(self, conn):
-        habit_label = db.get_task_habit_settings(conn)["habit_label"]
-        db.upsert_task(
-            conn,
-            {
-                "uid": "t1", "title": "Meditate", "description": "", "status": "active",
-                "tags": [habit_label], "recurrence": "FREQ=DAILY", "created_at": _now(),
-            },
-        )
-        body = tasks_router.list_tasks(Request({"type": "http", "method": "GET", "path": "/tasks", "query_string": b"", "scheme": "http", "server": ("t", 80), "root_path": "", "headers": []}), conn=conn).body.decode()
-        assert 'class="row-select" data-uid="t1" aria-label' in body
 
 class TestLabelsBulkDelete:
     def test_clears_every_selected_label(self, conn):

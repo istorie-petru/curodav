@@ -32,6 +32,11 @@ dependencies = [
     # not just the magic-byte sniffing src/image_sniff.py already did
     # without one).
     "pillow>=10",
+    # 2026-09-24 (plans/ui-cleanup-2026-09.md item 7, Web Push): VAPID
+    # signing + RFC 8291 payload encryption for push notifications
+    # (src/push.py). Brings in `cryptography` -- the first crypto
+    # dependency; hand-rolling ECDH/HKDF/AES-GCM for this would be worse.
+    "pywebpush>=2.0",
 ]
 
 [project.scripts]

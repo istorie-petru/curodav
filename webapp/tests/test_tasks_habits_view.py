@@ -102,61 +102,30 @@ class TestListHabitTasks:
         assert titles == ["Aaa", "Zzz"]
 
 
-class TestHabitsViewRetired:
-    """2026-08-28 "major rework" session (items 2+3): the dedicated Tasks >
-    Habits page is gone -- `GET /tasks/habits` now redirects to the plain
-    Table view, where every habit-labeled task renders as a row in the
-    Habits group instead (routers/tasks.py's _habit_group_items/
-    _build_task_groups)."""
 
-    def test_habits_view_redirects_to_tasks(self, conn):
+class TestTasksPageNoLongerShowsHabits:
+    """Habits H2 (2026-09-24): habits moved to their own page (/habits,
+    see test_habits_page.py); the Tasks table's Habits group is gone."""
+
+    def test_tasks_habits_url_redirects_to_habits_page(self, conn):
         resp = tasks_router.habits_view_redirect()
         assert resp.status_code == 302
-        assert resp.headers["location"] == "/tasks"
+        assert resp.headers["location"] == "/habits"
 
-    def test_habit_labeled_task_appears_in_the_habits_group_with_streak(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate")
-        today = date.today().isoformat()
-        db.upsert_task_completion(conn, "h1", today, _now())
-
+    def test_no_habits_group_and_habit_task_not_in_any_group(self, conn):
+        _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
+        _seed_task(conn, "t1", title="Plain")
         resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
-        habits_group = next(g for g in resp.context["groups"] if g["kind"] == "habits")
-        items = habits_group["habit_items"]
-        assert len(items) == 1
-        item = items[0]
-        assert item["uid"] == "h1"
-        assert item["current_streak"] == 1
-        assert item["today_value"] == 1
+        groups = resp.context["groups"]
+        assert all(g["kind"] != "habits" for g in groups)
+        uids = [t["uid"] for g in groups for t in g.get("tasks", [])]
+        assert uids == ["t1"]
+        assert 'id="habits-table"' not in resp.body.decode()
 
-    def test_quantity_habit_task_reports_is_quantity_and_next_value(self, conn):
-        _seed_task(conn, "h2", tags=["Habit"], title="Water", target_per_day=8)
-        today = date.today().isoformat()
-        db.upsert_task_completion(conn, "h2", today, _now(), value=3)
-
+    def test_only_habits_means_tasks_empty_state(self, conn):
+        _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
         resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
-        habits_group = next(g for g in resp.context["groups"] if g["kind"] == "habits")
-        item = habits_group["habit_items"][0]
-        assert item["is_quantity"] is True
-        assert item["today_value"] == 3
-        assert item["next_value"] == 4
-
-    def test_plain_tasks_never_appear_in_the_habits_group(self, conn):
-        _seed_task(conn, "plain")
-        resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
-        habits_group = next(g for g in resp.context["groups"] if g["kind"] == "habits")
-        assert habits_group["habit_items"] == []
-
-    def test_habit_labeled_task_excluded_from_project_and_unassigned_groups(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate")
-        resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
-        unassigned = next(g for g in resp.context["groups"] if g["kind"] == "unassigned")
-        assert unassigned["tasks"] == []
-
-    def test_habit_task_carries_its_own_labels(self, conn):
-        _seed_task(conn, "h1", tags=["Habit", "Garden"], title="Meditate")
-        resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
-        habits_group = next(g for g in resp.context["groups"] if g["kind"] == "habits")
-        assert "Garden" in habits_group["habit_items"][0]["tags"]
+        assert resp.context["has_any"] is False
 
 
 class TestSetTaskCompletion:
@@ -234,61 +203,6 @@ class TestToggleTaskCompletion:
         assert resp.status_code == 200
         assert db.get_task_completion(conn, "h1", today) is None
 
-
-class TestHabitRowAsyncSubmit:
-    """The Habits group's check-in form (_habit_row.html) needs
-    `data-cc-change` for async_crud.js's global data-cc-change submit
-    listener (loaded in base.html) to intercept it at all -- without it, a
-    submit falls through to a plain native form submit (full-page reload,
-    reported directly). Guards against that gap silently coming back by
-    rendering the real page template, same pattern as
-    test_phase1_derived_states.py's own template-render assertions.
-
-    2026-08-28 follow-ups: first the checkbox/"+1"/reset trio became one
-    always-visible `<input type="number">`; same day, direct feedback
-    ("like Notion... click twice and it becomes editable in a non-discrete
-    way") turned that visible input into a `data-inline-edit` span (plain
-    text by default, static/inline_edit.js swaps in a real input on
-    double-click) plus a hidden `name="value"` input carrying the actual
-    value, both wrapped in the same `.habit-checkin-value` form."""
-
-    def _render_tasks_page(self, conn, req=None):
-        req = req or _request("/tasks")
-        resp = tasks_router.list_tasks(req, conn=conn)
-        ctx = {"request": req, **resp.context}
-        return tasks_router.templates.get_template("tasks_list.html").render(ctx)
-
-    def test_plain_habit_task_has_data_cc_change_task(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate")
-        body = self._render_tasks_page(conn)
-        assert 'class="form-inline habit-checkin-value" data-cc-change="task" data-cc-action="checkin"' in body
-        assert 'data-inline-edit data-field="value" data-min="0" data-max="999999"' in body
-        assert 'type="hidden" name="value" value="0"' in body
-
-    def test_quantity_habit_shows_target_and_today_value(self, conn):
-        _seed_task(conn, "h2", tags=["Habit"], title="Water", target_per_day=8)
-        today = date.today().isoformat()
-        db.upsert_task_completion(conn, "h2", today, _now(), value=3)
-        body = self._render_tasks_page(conn)
-        assert 'type="hidden" name="value" value="3"' in body
-        assert '>3</span>' in body  # the inline-edit cell's own display text
-        assert 'habit-checkin-target">/ 8</span>' in body
-
-    def test_due_column_renders_streak_text_standard_by_default(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate")
-        today = date.today().isoformat()
-        db.upsert_task_completion(conn, "h1", today, _now())
-        body = self._render_tasks_page(conn)
-        assert "1 day streak" in body
-
-    def test_due_column_renders_playful_streak_text_when_configured(self, conn, tmp_path):
-        db.set_app_meta(conn, "habit_streak_terminology", "playful")
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate")
-        for i in range(8):
-            db.upsert_task_completion(conn, "h1", (date.today() - timedelta(days=i)).isoformat(), _now())
-        req = _request_with_app("/tasks", tmp_path / "cache.sqlite")
-        body = self._render_tasks_page(conn, req=req)
-        assert "This week has been full" in body
 
 
 class TestHabitSettings:

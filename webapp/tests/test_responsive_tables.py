@@ -64,7 +64,6 @@ class TestWrappersOptIn:
         "template,wrapper",
         [
             ("_tasks_body.html", '<div id="task-table" class="card table-scroll table-responsive task-group-card">'),
-            ("_tasks_body.html", '<div class="card table-scroll table-responsive task-table-habits">'),
             ("labels_manage.html", '<div class="card table-scroll table-responsive" id="labels-table-wrapper">'),
             ("settings_holidays.html", '<div class="card table-scroll table-responsive" id="holidays-table-wrapper">'),
             ("settings_time_blocks.html", '<div class="card table-scroll table-responsive" id="time-block-table-wrapper">'),
@@ -83,12 +82,6 @@ class TestHeaderBodyAlignment:
         assert header == [None, None, "col-opt-2", None, "col-opt-1", None]
         assert _cells(_macro(_read("_task_row.html"), "task_row"), "td") == header
 
-    def test_habits_table(self):
-        body = _read("_tasks_body.html")
-        habits = _between(body, '<table class="task-table" id="habits-table">', "</table>")
-        header = _thead(habits)
-        assert header == [None, None, None, "col-opt-1", "col-opt-2", "col-opt-1", None]
-        assert _cells(_macro(_read("_habit_row.html"), "habit_row"), "td") == header
 
     def test_labels_table(self):
         text = _read("_labels_table_body.html")

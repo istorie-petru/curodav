@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill, widget_complete_button, widget_event_dot %}
+{% from "_label_pill.html" import label_pill with context %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% block title %}{{ label.name }}{% endblock %}
+{% block main_class %}main-full-width{% endblock %}
+<!-- A label's page when it has no dashboard (labels-as-modules slice b,
+     2026-09-25; routers/label_pages.py). It shows only the sections
+     switched on in the label's settings: Agenda, Contacts, and Tasks (the
+     Kanban board). It replaced the separate plain-label and Project pages,
+     which were near-identical copies of each other. -->
+
+{% block content %}
+{# Narrow header (2026-09-25, ui-cleanup item 2), same as label_detail.html. #}
+{% call page_header_narrow(label.name, label.icon or 'tag', banner=banner, banner_image_scope=banner_image_scope, icon_color=label.color) %}
+    {% if edit_mode %}
+    <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
+    {% endif %}
+{% endcall %}
+{% include "_label_status.html" %}
+
+<!-- Agenda: future events tagged with this label, its own deadline, and
+     open due-dated tasks, in one chronological list. -->
+{% if label.agenda_widget %}
+<div class="card widget-card-static">
+    <div class="widget-header"><h2>{{ icon('calendar', 'icon-sm') }} Agenda</h2></div>
+    <div class="widget-content">
+    {% if agenda_items %}
+    <table>
+        {% for item in agenda_items %}
+        {% if item.kind == 'task' %}
+        {{ widget_link_row('/tasks/' ~ item.uid, item.title, leading=widget_complete_button(item.uid), leading_class='widget-row-icon', right=widget_pill((item.start_at | relative_date), 'gray')) }}
+        {% elif item.is_deadline %}
+        {{ widget_link_row(none, item.title, leading=icon('flag', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill('Deadline · ' ~ (item.start_at | relative_date), 'red')) }}
+        {% else %}
+        {{ widget_link_row('/events/' ~ item.uid, item.title, leading=widget_event_dot(item.calendar_color), leading_class='widget-row-icon', right=widget_pill(((item.start_at | relative_date) ~ (' ' ~ (item.start_at | fmt_time) if not item.all_day else '')), 'blue')) }}
+        {% endif %}
+        {% endfor %}
+    </table>
+    {% else %}
+    {{ widget_empty('No upcoming events, deadline or due tasks for this label.') }}
+    {% endif %}
+    </div>
+</div>
+
+{% endif %}
+
+<!-- Contacts: every contact tagged with this label (up to 20), reusing
+     the Dashboard's Contact List widget partial. -->
+{% if label.contacts_widget %}
+<div class="card widget-card-static">
+    <div class="widget-header"><h2>{{ icon('user', 'icon-sm') }} Contacts</h2></div>
+    <div class="widget-content">
+    {% set data = {'contacts': contacts} %}
+    {% include "_widget_contact_list.html" %}
+    </div>
+</div>
+
+{% endif %}
+
+<!-- Tasks: every non-archived task carrying this label on a Kanban board
+     grouped by status (drag and drop via static/tasks_board.js). -->
+{% if label.tasks_widget %}
+<div class="kanban-board-wrap">
+<div class="kanban-board" id="kanban-board">
+    {% for status in board_statuses %}
+    <div class="kanban-column" data-status="{{ status }}">
+        <div class="kanban-column-head">
+            <span class="cell-tag tag-{{ status_colors[status] }}">{{ status_labels[status] }}</span>
+            <span class="kanban-count">{{ columns[status]|length }}</span>
+        </div>
+        <div class="kanban-cards" data-status="{{ status }}">
+            {% for t in columns[status] %}
+            <div class="kanban-card" data-uid="{{ t.uid }}" data-status="{{ t.status }}">
+                {% if t.banner %}
+                {% if t.banner.version %}
+                <img class="kanban-card-banner" src="/banners/image?scope={{ t.banner.scope|urlencode }}&amp;v={{ t.banner.version }}" alt="" draggable="false">
+                {% else %}
+                <img class="kanban-card-banner" src="{{ t.banner.image_url }}" alt="" referrerpolicy="no-referrer" draggable="false">
+                {% endif %}
+                {% endif %}
+                <a class="kanban-card-title" href="/tasks/{{ t.uid }}" data-modal draggable="false">{{ t.title }}</a>
+                <div class="kanban-card-meta">
+                    {% if t.due_at %}<span class="cell-tag tag-gray">{{ t.due_at | relative_date }}</span>{% endif %}
+                    {% for tag in t.tags %}{% if tag != label.name %}{{ label_pill(tag, 'modal') }}{% endif %}{% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div class="kanban-empty">No tasks</div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+</div>
+{% endif %}
+{% if not (label.agenda_widget or label.contacts_widget or label.tasks_widget) %}
+<p class="text-muted">Nothing is switched on for this page. Turn on Agenda, Contacts or Tasks in this label's settings.</p>
+{% endif %}
+{% endblock %}
+{% block extra_scripts %}{% if label.tasks_widget %}<script defer src="{{ static_url('tasks_board.js') }}"></script>{% endif %}{% endblock %}

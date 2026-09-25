@@ -475,7 +475,23 @@ CREATE TABLE IF NOT EXISTS label_config (
     start_date TEXT,
     end_date TEXT,
     archived_at TEXT,
-    created_at TEXT
+    created_at TEXT,
+    -- 2026-09-25 (labels-as-modules, plans/ui-cleanup-2026-09.md item 4,
+    -- slice a): generic per-label module fields that replace the Space/
+    -- Project special cases. Written and backfilled here; the UI still
+    -- reads generate_space/is_project until slices b-d switch it over
+    -- (see _mirror_legacy_module_fields for the interim sync).
+    -- `label_group` (above) is the group, plain text -- Peter's call,
+    -- 2026-09-25: groups are text, not labels. `archived_at` (above) is
+    -- the archive flag; `start_date` is kept on disk but not used any more.
+    sidebar_pin INTEGER NOT NULL DEFAULT 0,
+    widget_pin INTEGER NOT NULL DEFAULT 0,
+    has_deadline INTEGER NOT NULL DEFAULT 0,
+    deadline_date TEXT,
+    has_dashboard INTEGER NOT NULL DEFAULT 0,
+    agenda_widget INTEGER NOT NULL DEFAULT 1,
+    tasks_widget INTEGER NOT NULL DEFAULT 1,
+    contacts_widget INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_start ON events(start_at);
@@ -616,8 +632,48 @@ CREATE TABLE IF NOT EXISTS task_completions (
     -- has -- a plain recurring task's own checkbox-only completion still
     -- always writes 1 here, so this is purely additive.
     value REAL NOT NULL DEFAULT 1,
+    -- 2026-09-24 (habits H3): optional day note; also added to existing
+    -- databases via _ensure_column in init_schema.
+    note TEXT,
     PRIMARY KEY (task_uid, due_date)
 );
+
+-- 2026-09-24 (plans/ui-cleanup-2026-09.md item 7, Web Push slice P1): one
+-- row per browser/device that turned notifications on. `endpoint` is the
+-- push service URL (unique per subscription); p256dh/auth are the
+-- subscription's public key + secret the payload is encrypted to (not
+-- credentials for this app). Pruned automatically when the push service
+-- answers 404/410 (the browser dropped it).
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    endpoint TEXT PRIMARY KEY,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    user_agent TEXT,
+    created_at TEXT,
+    last_ok_at TEXT
+);
+
+-- Web Push P2 (2026-09-24): which reminders already went out -- one row
+-- per reminder key (e.g. "event:<uid>:<start>:<minutes>",
+-- "tasks:<date>"), so the scheduler never sends one twice, even across a
+-- restart. Pruned after a few days.
+CREATE TABLE IF NOT EXISTS push_sent (
+    key TEXT PRIMARY KEY,
+    sent_at TEXT NOT NULL
+);
+
+-- 2026-09-24 (habits H6): vacation / pause ranges. `task_uid` NULL pauses
+-- every habit; otherwise one habit. Paused days are neutral for streaks
+-- (habit_schedule.habit_stats' `paused_dates`). Local-only like
+-- task_completions; start/end are inclusive ISO dates.
+CREATE TABLE IF NOT EXISTS habit_pauses (
+    uid TEXT PRIMARY KEY,
+    task_uid TEXT,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    created_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_habit_pauses_task ON habit_pauses(task_uid);
 
 -- 2026-08-08 ("add habits page as a view on tasks") -- app-wide setting
 -- for which label name marks a task as habit-tracked (hidden from every
@@ -892,6 +948,21 @@ CREATE TABLE IF NOT EXISTS label_aliases (
     created_at TEXT
 );
 """
+
+
+# labels-as-modules slice a (2026-09-25) -- label_config's module columns,
+# shared by init_schema's _ensure_column pass and upsert_label_config.
+# Keep in sync with the label_config CREATE TABLE above.
+_LABEL_MODULE_COLUMNS = (
+    ("sidebar_pin", "INTEGER NOT NULL DEFAULT 0"),
+    ("widget_pin", "INTEGER NOT NULL DEFAULT 0"),
+    ("has_deadline", "INTEGER NOT NULL DEFAULT 0"),
+    ("deadline_date", "TEXT"),
+    ("has_dashboard", "INTEGER NOT NULL DEFAULT 0"),
+    ("agenda_widget", "INTEGER NOT NULL DEFAULT 1"),
+    ("tasks_widget", "INTEGER NOT NULL DEFAULT 1"),
+    ("contacts_widget", "INTEGER NOT NULL DEFAULT 1"),
+)
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, coldef: str) -> None:
@@ -1265,6 +1336,9 @@ def init_schema(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "label_config", "start_date", "TEXT")
     _ensure_column(conn, "label_config", "end_date", "TEXT")
     _ensure_column(conn, "label_config", "archived_at", "TEXT")
+    # 2026-09-25 labels-as-modules slice a -- see the CREATE TABLE comment.
+    for col, decl in _LABEL_MODULE_COLUMNS:
+        _ensure_column(conn, "label_config", col, decl)
     # CREATE INDEX statements that were moved out of SCHEMA_SQL
     # because they reference columns that may not exist yet in an
     # existing DB (the table predates the column).  `_ensure_column`
@@ -1283,6 +1357,12 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # recurrence is a plain FREQ=WEEKLY/MONTHLY -- see habit_schedule.py.
     # NULL = once per period (the RRULE alone).
     _ensure_column(conn, "tasks", "habits_per_period", "INTEGER")
+    # 2026-09-24 (habits H3): a short "what happened" note on a logged day.
+    _ensure_column(conn, "task_completions", "note", "TEXT")
+    # 2026-09-24 (habits H5): an amount habit's unit ("glasses", "min")
+    # and the habit kind -- NULL/'build' = do it, 'avoid' = log relapses.
+    _ensure_column(conn, "tasks", "habit_unit", "TEXT")
+    _ensure_column(conn, "tasks", "habit_kind", "TEXT")
     _ensure_column(conn, "task_completions", "value", "REAL NOT NULL DEFAULT 1")
     # 2026-08-29 (STATE.md backlog item 3, direct request): extends the 1.6
     # non-working-day policy (see the `events` CREATE TABLE comment) to
@@ -1373,6 +1453,11 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # be set, but that covers entity columns only -- the flag lives in
     # event_task_relations, which that pass never reads.
     backfill_work_allocation_flags(conn)
+    # 2026-09-25 -- one-time backfill of the labels-as-modules fields from
+    # generate_space/is_project/parent_name/end_date (see the function).
+    backfill_label_modules(conn)
+    # 2026-09-25 -- one-time: Spaces become text groups (see the function).
+    migrate_spaces_to_groups(conn)
     conn.commit()
 
 
@@ -1483,6 +1568,8 @@ def upsert_event(
     data["exclude_saturday"] = 1 if data.get("exclude_saturday") else 0
     data["exclude_sunday"] = 1 if data.get("exclude_sunday") else 0
     tags = data.pop("tags", None)
+    if tags is not None:
+        _reject_new_multiple_project_labels_on_event(conn, str(data.get("uid")), tags)
     data.pop("reminders", None)
     data.pop("exdates", None)
     cols = [
@@ -1684,17 +1771,71 @@ class MultipleProjectLabelsError(ValueError):
     test_single_project_per_task.py for the "don't silently corrupt existing
     data" requirement."""
 
-    def __init__(self, project_names: list[str]):
+    def __init__(self, project_names: list[str], noun: str = "task"):
         self.project_names = list(project_names)
         names = ", ".join(self.project_names)
-        super().__init__(f"A task may belong to only one project label at a time (got: {names}).")
+        super().__init__(f"A {noun} may belong to only one project label at a time (got: {names}).")
 
 
-def _reject_multiple_project_labels(conn: sqlite3.Connection, tags: list[str]) -> None:
+def _reject_multiple_project_labels(conn: sqlite3.Connection, tags: list[str], noun: str = "task") -> None:
     project_names = {cfg["name"] for cfg in list_project_labels(conn)}
     selected = sorted({t for t in tags if t in project_names}, key=str.lower)
     if len(selected) > 1:
-        raise MultipleProjectLabelsError(selected)
+        raise MultipleProjectLabelsError(selected, noun)
+
+
+def project_picker_context(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Context for the task/event forms' Project dropdown (project-picker
+    slice, 2026-09-25). Projects are still stored as labels; the forms just
+    split them out of the Labels picker because assigning a project means
+    something different from tagging.
+
+    `project_items` is the dropdown's options: "No project" first, then
+    every open project. `project_names` is every project label, archived
+    ones included. The template uses it to find the item's current project
+    and to keep projects out of the Labels picker, and it adds an archived
+    project back as an option when that's the current value, so saving an
+    old item doesn't silently drop it."""
+    projects = list_project_labels(conn)
+    return {
+        "project_items": [{"uid": "", "name": "No project"}]
+        + [{"uid": p["name"], "name": p["name"]} for p in projects if not p.get("archived_at")],
+        "project_names": [p["name"] for p in projects],
+    }
+
+
+def apply_project_choice(conn: sqlite3.Connection, tags: list[str], project: str | None) -> list[str]:
+    """The Project dropdown's value folded back into an item's label list:
+    every project label is dropped from `tags`, then the chosen one (if any,
+    and only if it really is a project label) is added. Makes the dropdown
+    the one authority over which project an item has. A project name typed
+    into the Labels picker's "new label" box is dropped rather than creating
+    a second project."""
+    project_names = {cfg["name"] for cfg in list_project_labels(conn)}
+    kept = [t for t in tags if t not in project_names]
+    project = (project or "").strip()
+    if project and project in project_names:
+        kept.append(project)
+    return kept
+
+
+def _reject_new_multiple_project_labels_on_event(conn: sqlite3.Connection, uid: str, tags: list[str]) -> None:
+    """One project per event (project-picker slice, 2026-09-25, Peter: "one
+    project per data model"). Same rule as tasks, with one difference: an
+    event that already carries the same set of project labels is let
+    through. Events are re-saved whole by non-form paths (the week grid's
+    drag-to-reschedule, work-session time edits) and could already hold
+    two projects from before this rule existed. Rejecting those would break
+    an unrelated edit rather than protect anything, so only a *new*
+    combination is refused."""
+    project_names = {cfg["name"] for cfg in list_project_labels(conn)}
+    selected = {t for t in tags if t in project_names}
+    if len(selected) <= 1:
+        return
+    current = set(list_labels_for_object(conn, "event", uid)) & project_names
+    if selected == current:
+        return
+    raise MultipleProjectLabelsError(sorted(selected, key=str.lower), "event")
 
 
 def upsert_task(
@@ -1753,7 +1894,7 @@ def upsert_task(
         "uid", "title", "description",
         "start_at", "due_at", "status", "progress",
         "recurrence", "completed_at", "created_at", "updated_at",
-        "target_per_day", "habits_per_period",
+        "target_per_day", "habits_per_period", "habit_unit", "habit_kind",
         # 2026-08-29 (STATE.md backlog item 3) -- only meaningful for a
         # recurring task, same convention as events: missing key -> column
         # default (NULL/0).
@@ -1809,6 +1950,8 @@ def delete_task(
     # Mirror of delete_event's relation cleanup -- the linked event survives,
     # only this task's rows go.
     conn.execute("DELETE FROM event_task_relations WHERE task_uid = ?", (uid,))
+    # Habits H6: a habit's own pauses go with it (all-habit pauses stay).
+    conn.execute("DELETE FROM habit_pauses WHERE task_uid = ?", (uid,))
     conn.commit()
 
 
@@ -1887,7 +2030,7 @@ def purge_all_data(conn: sqlite3.Connection) -> None:
         # Schedule module itself (removed 2026-08-15, see plans/STATE.md);
         # schedule_settings is gone along with that module.
         "schedule_holidays", "habits",
-        "habit_entries", "task_completions", "dashboard_widgets",
+        "habit_entries", "task_completions", "habit_pauses", "push_subscriptions", "push_sent", "dashboard_widgets",
         "time_blocks",
         "published_lists", "app_meta",
     ]
@@ -3937,7 +4080,22 @@ _LABEL_CONFIG_DEFAULTS: dict[str, Any] = {
     "end_date": None,
     "archived_at": None,
     "created_at": None,
+    "sidebar_pin": 0,
+    "widget_pin": 0,
+    "has_deadline": 0,
+    "deadline_date": None,
+    "has_dashboard": 0,
+    "agenda_widget": 1,
+    "tasks_widget": 1,
+    "contacts_widget": 1,
 }
+
+# The labels-as-modules boolean flags -- normalized to 0/1 on write and to
+# bool on read, same as generate_space/is_project.
+_LABEL_MODULE_FLAGS = (
+    "sidebar_pin", "widget_pin", "has_deadline", "has_dashboard",
+    "agenda_widget", "tasks_widget", "contacts_widget",
+)
 
 
 def get_label_config(conn: sqlite3.Connection, name: str) -> dict[str, Any] | None:
@@ -3949,7 +4107,7 @@ def effective_label_config(conn: sqlite3.Connection, name: str) -> dict[str, Any
     """A label's config with every default filled in -- a label with zero
     label_config rows (mentioned only via object_labels) still fully
     works, per the table's own "sparse, optional" contract."""
-    return _resolve_inherited_color(conn, _effective_label_config(get_label_config(conn, name), name))
+    return _effective_label_config(get_label_config(conn, name), name)
 
 
 def effective_label_config_ci(conn: sqlite3.Connection, name: str) -> dict[str, Any]:
@@ -3962,27 +4120,7 @@ def effective_label_config_ci(conn: sqlite3.Connection, name: str) -> dict[str, 
     row = conn.execute(
         "SELECT * FROM label_config WHERE name = ? COLLATE NOCASE", (name,)
     ).fetchone()
-    return _resolve_inherited_color(conn, _effective_label_config(dict(row) if row else None, name))
-
-
-def _resolve_inherited_color(conn: sqlite3.Connection, cfg: dict[str, Any]) -> dict[str, Any]:
-    """Final labels-page iteration (direct request, 2026-09-21): "the
-    labels/projects grouped by space should follow the space's color...
-    remove the ability to have colors... for labels or projects grouped
-    under a space." A label/project with `parent_name` set has its own
-    stored `color` column overridden here with its parent Space's own
-    effective color -- every consumer already reads color through
-    `effective_label_config`/`_ci` (label_pill, the calendar/Agenda
-    `calendar_color` resolution, filled_card tiles, the Kanban board...),
-    so this is the one place that needs to change for the inheritance to
-    apply everywhere at once, rather than teaching every call site about
-    `parent_name`. Only one level -- a Space itself never has a
-    `parent_name` (`_validate_parent_name`/role=space form handling both
-    enforce "Spaces don't nest"), so there's nothing further to walk."""
-    parent = cfg.get("parent_name")
-    if parent and not cfg.get("generate_space"):
-        cfg["color"] = effective_label_config(conn, parent).get("color") or cfg["color"]
-    return cfg
+    return _effective_label_config(dict(row) if row else None, name)
 
 
 def annotate_item_colors(conn: sqlite3.Connection, items: list[dict[str, Any]], *, key: str = "calendar_color") -> list[dict[str, Any]]:
@@ -4019,6 +4157,9 @@ def _effective_label_config(row: dict[str, Any] | None, name: str) -> dict[str, 
         cfg.setdefault(key, default)
     cfg["generate_space"] = bool(cfg.get("generate_space"))
     cfg["is_project"] = bool(cfg.get("is_project"))
+    for flag in _LABEL_MODULE_FLAGS:
+        cfg[flag] = bool(cfg.get(flag))
+    cfg["is_archived"] = bool(cfg.get("archived_at"))
     # `uid` mirrors `name` -- a label has no surrogate id (its name IS its
     # identity, see the label_config table comment), but templates that
     # used to render a project/space's `.uid` in a link/form field (e.g.
@@ -4036,22 +4177,190 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
         "name", "color", "icon", "description", "parent_name", "label_group",
         "generate_space", "dashboard_preset_json", "abbreviation",
         "is_project", "start_date", "end_date", "archived_at",
-        "created_at",
+        "created_at", *(c for c, _ in _LABEL_MODULE_COLUMNS),
     )
     existing = get_label_config(conn, row["name"]) or {}
     data = dict(row)
-    if "generate_space" in data:
-        data["generate_space"] = 1 if data["generate_space"] else 0
-    if "is_project" in data:
-        data["is_project"] = 1 if data["is_project"] else 0
+    for flag in ("generate_space", "is_project", *_LABEL_MODULE_FLAGS):
+        if flag in data:
+            data[flag] = 1 if data[flag] else 0
     for key, default in _LABEL_CONFIG_DEFAULTS.items():
         data.setdefault(key, existing.get(key, default))
+    _mirror_legacy_module_fields(row, existing, data)
+    data["label_group"] = (data.get("label_group") or "").strip() or None
     conn.execute(
         f"INSERT INTO label_config ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)}) "
         f"ON CONFLICT(name) DO UPDATE SET " + ", ".join(f"{c}=excluded.{c}" for c in cols if c != "name"),
         [data.get(c) for c in cols],
     )
     conn.commit()
+
+
+def _mirror_legacy_module_fields(row: dict[str, Any], existing: dict[str, Any], data: dict[str, Any]) -> None:
+    """Translates the legacy Space/Project fields (generate_space,
+    parent_name, a project's end_date) into the module fields, using the
+    same rules as backfill_label_modules. Since labels-as-modules slice c
+    (2026-09-25) nothing in the app writes those legacy fields; the one
+    remaining source is restoring a backup taken before 2026-09-25
+    (routers/export.py upserts its label rows as-is). Without this, such a
+    restore would bring labels back ungrouped and unpinned. A new-field key
+    passed explicitly in `row` always wins, so a newer backup's own values
+    are kept. It only ever turns things on; it never guesses an "off"."""
+    def put(key: str, value: Any) -> None:
+        if key not in row:
+            data[key] = value
+
+    if row.get("generate_space"):
+        put("sidebar_pin", 1)
+        put("widget_pin", 1)
+        put("has_dashboard", 1)
+        if not data.get("label_group"):
+            put("label_group", data["name"])
+    if row.get("is_project"):
+        put("sidebar_pin", 1)
+        put("widget_pin", 1)
+        put("has_dashboard", 1)
+    if "parent_name" in row:
+        if row["parent_name"]:
+            put("label_group", row["parent_name"])
+            put("sidebar_pin", 1)
+        elif existing.get("parent_name") and existing.get("label_group") == existing.get("parent_name"):
+            # Moved out of its Space -- leave the group it came from too.
+            put("label_group", None)
+    if "end_date" in row and data.get("is_project"):
+        # Only an old (pre-2026-09-25) backup being restored still sends a
+        # project's end_date; the label form writes deadline_date itself.
+        put("deadline_date", row["end_date"] or None)
+        put("has_deadline", 1 if row["end_date"] else 0)
+
+
+_LABEL_MODULES_BACKFILLED_KEY = "label_modules_backfilled"
+
+
+_CONTACTS_WIDGET_DEFAULT_FIXED_KEY = "label_modules_contacts_default_fixed"
+
+
+def _fix_contacts_widget_default(conn: sqlite3.Connection) -> None:
+    """One-time fix (slice b, 2026-09-25): slice a shipped contacts_widget
+    defaulting to off, on the wrong belief that the plain label page had no
+    Contacts card. It did (added 2026-09-16). Nothing could set the field
+    before slice b's form, so every stored value is that wrong default and
+    is safe to turn on. On a database migrated by slice a, the column
+    DEFAULT stays 0 (SQLite can't alter a default in place), but every
+    insert goes through upsert_label_config, which writes the Python-side
+    default of 1 explicitly."""
+    if get_app_meta(conn, _CONTACTS_WIDGET_DEFAULT_FIXED_KEY):
+        return
+    conn.execute("UPDATE label_config SET contacts_widget = 1")
+    set_app_meta(conn, _CONTACTS_WIDGET_DEFAULT_FIXED_KEY, "1")
+
+
+_SPACES_TO_GROUPS_KEY = "label_modules_spaces_to_groups"
+
+
+def migrate_spaces_to_groups(conn: sqlite3.Connection) -> None:
+    """One-time (labels-as-modules slice c, 2026-09-25): Spaces stop being
+    a kind of label. A Space was always "this group of labels" in practice,
+    and the group itself (label_group, set by backfill_label_modules)
+    now gets its own page at /groups/<name>. For every generate_space=1
+    label:
+
+    - its dashboard widgets move to the group's page key, config included
+      (Peter's call, left open and decided when building: the Space page
+      was the whole-group view, so that is where its widgets belong);
+    - its banner is copied to the group page (the label keeps its copy);
+    - the label itself becomes an ordinary label: no dashboard (its own
+      page now shows what is tagged with it directly), generate_space off.
+
+    parent_name is cleared everywhere, because label_group replaced it.
+    Idempotent through its own app_meta marker. Runs after
+    backfill_label_modules, so every Space already has label_group set."""
+    if get_app_meta(conn, _SPACES_TO_GROUPS_KEY):
+        return
+    spaces = conn.execute(
+        "SELECT name, label_group FROM label_config WHERE generate_space = 1"
+    ).fetchall()
+    for sp in spaces:
+        name = sp["name"]
+        group = (sp["label_group"] or "").strip() or name
+        key = group_page_key(group)
+        rows = conn.execute(
+            "SELECT uid, config_json FROM dashboard_widgets WHERE label_name = ?", (name,)
+        ).fetchall()
+        has_group_widgets = conn.execute(
+            "SELECT 1 FROM dashboard_widgets WHERE label_name = ? LIMIT 1", (key,)
+        ).fetchone()
+        if rows and not has_group_widgets:
+            for r in rows:
+                try:
+                    cfg = json.loads(r["config_json"] or "{}")
+                except (json.JSONDecodeError, TypeError):
+                    cfg = {}
+                if cfg.get("label_name") == name:
+                    cfg["label_name"] = key
+                conn.execute(
+                    "UPDATE dashboard_widgets SET label_name = ?, config_json = ? WHERE uid = ?",
+                    (key, json.dumps(cfg), r["uid"]),
+                )
+            set_app_meta(conn, f"dashboard_label_{key}_seeded_v1", "1")
+        banner = get_app_meta(conn, _page_banner_key(name))
+        if banner and not get_app_meta(conn, _page_banner_key(key)):
+            set_app_meta(conn, _page_banner_key(key), banner)
+        conn.execute(
+            "UPDATE label_config SET generate_space = 0, has_dashboard = 0, label_group = ? WHERE name = ?",
+            (group, name),
+        )
+    conn.execute("UPDATE label_config SET parent_name = NULL WHERE parent_name IS NOT NULL")
+    set_app_meta(conn, _SPACES_TO_GROUPS_KEY, "1")
+
+
+def backfill_label_modules(conn: sqlite3.Connection) -> None:
+    """One-time (labels-as-modules slice a, 2026-09-25): fills the new
+    per-label module fields from the Space/Project model they replace, so
+    that when later slices switch the UI over, what's visible stays the same:
+
+    - label_group: a Space's children take the Space's name, and the Space
+      itself takes its own name. That group was the Space. A label with no
+      Space keeps whatever free-text label_group it already had.
+    - sidebar_pin: everything the sidebar shows today, which is Spaces,
+      the children of real Spaces, and projects.
+    - widget_pin: Spaces and projects (the "Spaces & Projects" widget).
+    - has_dashboard: Spaces, projects, and any label whose page already has
+      its own widgets.
+    - has_deadline/deadline_date: a project's end_date.
+    - agenda/tasks/contacts_widget: all on, matching the plain label page
+      they replace (Agenda + Contacts + Kanban).
+
+    Idempotent through its own app_meta marker."""
+    _fix_contacts_widget_default(conn)
+    if get_app_meta(conn, _LABEL_MODULES_BACKFILLED_KEY):
+        return
+    rows = [dict(r) for r in conn.execute("SELECT * FROM label_config").fetchall()]
+    spaces = {r["name"] for r in rows if r.get("generate_space")}
+    with_widgets = {
+        r["label_name"]
+        for r in conn.execute("SELECT DISTINCT label_name FROM dashboard_widgets WHERE label_name IS NOT NULL")
+    }
+    for r in rows:
+        is_space = bool(r.get("generate_space"))
+        is_project = bool(r.get("is_project"))
+        parent = r.get("parent_name") if r.get("parent_name") in spaces else None
+        group = r["name"] if is_space else (parent or r.get("label_group"))
+        has_deadline = is_project and bool(r.get("end_date"))
+        conn.execute(
+            "UPDATE label_config SET label_group = ?, sidebar_pin = ?, widget_pin = ?, "
+            "has_dashboard = ?, has_deadline = ?, deadline_date = ? WHERE name = ?",
+            (
+                group,
+                1 if (is_space or is_project or parent) else 0,
+                1 if (is_space or is_project) else 0,
+                1 if (is_space or is_project or r["name"] in with_widgets) else 0,
+                1 if has_deadline else 0,
+                r.get("end_date") if has_deadline else None,
+                r["name"],
+            ),
+        )
+    set_app_meta(conn, _LABEL_MODULES_BACKFILLED_KEY, "1")
 
 
 def list_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -4075,13 +4384,47 @@ def list_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return result
 
 
-def list_space_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """Every label with generate_space=1 -- the labels that get a
-    generated page (routers/labels.py's label_detail)."""
+GROUP_KEY_PREFIX = "group:"
+
+
+def group_page_key(group: str) -> str:
+    """The page key a group's dashboard is stored under (labels-as-modules
+    slice c, 2026-09-25). Groups are plain text (`label_config.label_group`)
+    with no table of their own, so a group's dashboard widgets, "seeded"
+    marker and banner reuse the same per-page storage a label's page uses
+    (dashboard_widgets.label_name, app_meta), keyed "group:<name>". Label
+    names can't start with this prefix (routers/labels.py's
+    _reject_reserved_label_name), so the two can't collide."""
+    return f"{GROUP_KEY_PREFIX}{group}"
+
+
+def group_from_page_key(key: str | None) -> str | None:
+    if key and key.startswith(GROUP_KEY_PREFIX):
+        return key[len(GROUP_KEY_PREFIX):] or None
+    return None
+
+
+def list_groups(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Every group: the distinct non-empty label_group values, each with its
+    member labels' effective configs, sorted by name. A group exists exactly
+    as long as at least one label names it."""
     rows = conn.execute(
-        "SELECT * FROM label_config WHERE generate_space = 1 ORDER BY name COLLATE NOCASE"
+        "SELECT name, label_group FROM label_config WHERE TRIM(COALESCE(label_group, '')) != '' "
+        "ORDER BY label_group COLLATE NOCASE, name COLLATE NOCASE"
     ).fetchall()
-    return [effective_label_config(conn, r["name"]) for r in rows]
+    groups: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        g = r["label_group"].strip()
+        groups.setdefault(g, {"name": g, "labels": []})["labels"].append(effective_label_config(conn, r["name"]))
+    return list(groups.values())
+
+
+def group_member_names(conn: sqlite3.Connection, group: str) -> list[str]:
+    rows = conn.execute(
+        "SELECT name FROM label_config WHERE TRIM(COALESCE(label_group, '')) = ? ORDER BY name COLLATE NOCASE",
+        ((group or "").strip(),),
+    ).fetchall()
+    return [r["name"] for r in rows]
 
 
 def list_project_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -4094,30 +4437,6 @@ def list_project_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
         "SELECT * FROM label_config WHERE is_project = 1 ORDER BY name COLLATE NOCASE"
     ).fetchall()
     return [effective_label_config(conn, r["name"]) for r in rows]
-
-
-def find_overlapping_project(
-    conn: sqlite3.Connection, name: str, start_date: str | None, end_date: str | None
-) -> dict[str, Any] | None:
-    """The first other non-archived project whose [start_date, end_date]
-    period overlaps this one's, or None. Backs the "projects may not
-    overlap another project" rule (§ Project-enabled label stack) -- the
-    UI must warn and require the user to resolve the conflict rather than
-    silently accept it (see routers/projects.py's create/edit handlers).
-    A project missing either date has no bounded period yet, so it can't
-    overlap anything; an Archived project is closed history, not part of
-    "the same project context" going forward, so it's excluded."""
-    if not start_date or not end_date:
-        return None
-    for cfg in list_project_labels(conn):
-        if cfg["name"] == name or cfg.get("archived_at"):
-            continue
-        other_start, other_end = cfg.get("start_date"), cfg.get("end_date")
-        if not other_start or not other_end:
-            continue
-        if start_date <= other_end and other_start <= end_date:
-            return cfg
-    return None
 
 
 def project_status(conn: sqlite3.Connection, cfg: dict[str, Any], today: date | None = None) -> str:
@@ -4135,11 +4454,15 @@ def project_status(conn: sqlite3.Connection, cfg: dict[str, Any], today: date | 
       with no work yet hasn't reached a completion point to leave Open
       from).
     - Pending: every task is completed (and there's at least one), but
-      today is still before the project's end date -- completed early,
-      not yet at its deadline.
+      today is still before the deadline -- completed early.
     - Pending Archiving: every task is completed and today is on/after
-      the end date (or there's no end date) -- ready for the user to
+      the deadline (or there's no deadline) -- ready for the user to
       confirm closure.
+
+    labels-as-modules slice b (2026-09-25): reads the generic
+    `deadline_date` (when `has_deadline` is on) instead of a project's
+    `end_date`, so this works for any label with a deadline, not only
+    is_project ones.
     """
     if cfg.get("archived_at"):
         return "Archived"
@@ -4149,10 +4472,10 @@ def project_status(conn: sqlite3.Connection, cfg: dict[str, Any], today: date | 
     # routers import cycle (db.py has no dependency on routers/*).
     if not tasks or any(t.get("status") not in ("done", "archived") for t in tasks):
         return "Open"
-    end_date = cfg.get("end_date")
+    deadline = cfg.get("deadline_date") if cfg.get("has_deadline") else None
     if today is None:
         today = date.today()
-    if end_date and today < date.fromisoformat(end_date):
+    if deadline and today < date.fromisoformat(deadline):
         return "Pending"
     return "Pending Archiving"
 
@@ -4167,42 +4490,27 @@ def archive_project(conn: sqlite3.Connection, name: str) -> None:
     conn.commit()
 
 
-def list_child_labels(conn: sqlite3.Connection, parent_name: str) -> list[dict[str, Any]]:
-    """Labels whose parent_name points at `parent_name` -- e.g. a Space's
-    nested course/project labels, for a Space page's own nav/listing."""
-    rows = conn.execute(
-        "SELECT * FROM label_config WHERE parent_name = ? ORDER BY name COLLATE NOCASE", (parent_name,)
-    ).fetchall()
-    return [effective_label_config(conn, r["name"]) for r in rows]
+def unarchive_label(conn: sqlite3.Connection, name: str) -> None:
+    """Undoes archive_project -- the label goes back to its computed
+    Open/Pending/Pending Archiving status."""
+    conn.execute("UPDATE label_config SET archived_at = NULL WHERE name = ?", (name,))
+    conn.commit()
 
 
-def label_selector_scope(conn: sqlite3.Connection, name: str) -> list[str] | None:
-    """The set of label names a Labels picker should offer while the user
-    is on `name`'s own generated page (a Space, a Project, or a plain
-    label's Kanban page) -- direct request: "On space's dashboard,
-    project pages or label's page, the label selector should only have
-    labels from that group... this should work for any space > labels
-    grouped under it." Returns None for "no restriction, show every
-    label" (a standalone Project/label with no parent Space -- today's
-    unscoped behavior, unchanged).
-
-    - A Space (`generate_space`): its own children (`list_child_labels`)
-      -- membership through a Space is already transitive-through-children
-      only (see routers/spaces.py::_label_scope's own docstring), so the
-      picker offering anything else would let someone tag an item with a
-      label that page's own aggregation then ignores.
-    - A Project or plain label grouped under a Space (`parent_name` set):
-      that Space's other children -- its own siblings -- same "everything
-      under this Space" grouping, just viewed from a child's own page.
-    - Anything else (no Space involved): None, unscoped."""
-    label = effective_label_config(conn, name)
-    if label.get("generate_space"):
-        parent = name
-    else:
-        parent = label.get("parent_name")
-    if not parent:
+def label_selector_scope(conn: sqlite3.Connection, key: str) -> list[str] | None:
+    """The label names a Labels picker should offer while the user is on
+    one page (direct request: "On space's dashboard, project pages or
+    label's page, the label selector should only have labels from that
+    group"). Since slice c (2026-09-25) that group is the text label_group:
+    a group's page offers its members, and a label's page offers the
+    members of its group. None means unscoped: Home, or a label with no
+    group."""
+    group = group_from_page_key(key)
+    if group is None:
+        group = (effective_label_config(conn, key).get("label_group") or "").strip() or None
+    if not group:
         return None
-    return [c["name"] for c in list_child_labels(conn, parent)]
+    return group_member_names(conn, group)
 
 
 def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None:
@@ -4346,7 +4654,12 @@ def set_object_project_label_uniform(conn: sqlite3.Connection, object_type: str,
 # --------------------------------------------------------------------- #
 
 def upsert_task_completion(
-    conn: sqlite3.Connection, task_uid: str, due_date: str, completed_at: str, value: float = 1
+    conn: sqlite3.Connection,
+    task_uid: str,
+    due_date: str,
+    completed_at: str,
+    value: float = 1,
+    note: str | None = None,
 ) -> None:
     """Records (or updates) that a recurring task was completed on `due_date`
     -- the row that feeds its heatmap/streak. `completed_at` is when the
@@ -4354,12 +4667,77 @@ def upsert_task_completion(
     day being checked off. `value` (2026-08-08) is only meaningful for a
     habit-labeled task with target_per_day > 1 -- every other caller
     (the plain recurring-task complete_task path) leaves it at the
-    default 1, same as before this column existed."""
+    default 1, same as before this column existed.
+
+    `note` (habits H3, 2026-09-24): None leaves an existing note alone (a
+    check-in or +1 never wipes what you wrote); "" clears it."""
     conn.execute(
-        "INSERT INTO task_completions (task_uid, due_date, completed_at, value) VALUES (?, ?, ?, ?) "
-        "ON CONFLICT(task_uid, due_date) DO UPDATE SET completed_at=excluded.completed_at, value=excluded.value",
-        (task_uid, due_date, completed_at, value),
+        "INSERT INTO task_completions (task_uid, due_date, completed_at, value, note) VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT(task_uid, due_date) DO UPDATE SET completed_at=excluded.completed_at, value=excluded.value, "
+        "note=COALESCE(excluded.note, task_completions.note)",
+        (task_uid, due_date, completed_at, value, note),
     )
+    conn.commit()
+
+
+def upsert_push_subscription(
+    conn: sqlite3.Connection, endpoint: str, p256dh: str, auth: str, user_agent: str | None, now: str
+) -> None:
+    """Web Push P1: store (or refresh the keys of) one device's subscription."""
+    conn.execute(
+        "INSERT INTO push_subscriptions (endpoint, p256dh, auth, user_agent, created_at) VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth, user_agent=excluded.user_agent",
+        (endpoint, p256dh, auth, user_agent, now),
+    )
+    conn.commit()
+
+
+def list_push_subscriptions(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    return [dict(r) for r in conn.execute("SELECT * FROM push_subscriptions ORDER BY created_at").fetchall()]
+
+
+def delete_push_subscription(conn: sqlite3.Connection, endpoint: str) -> None:
+    conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,))
+    conn.commit()
+
+
+def mark_push_subscription_ok(conn: sqlite3.Connection, endpoint: str, now: str) -> None:
+    conn.execute("UPDATE push_subscriptions SET last_ok_at = ? WHERE endpoint = ?", (now, endpoint))
+    conn.commit()
+
+
+def push_was_sent(conn: sqlite3.Connection, key: str) -> bool:
+    return conn.execute("SELECT 1 FROM push_sent WHERE key = ?", (key,)).fetchone() is not None
+
+
+def record_push_sent(conn: sqlite3.Connection, key: str, when: str) -> None:
+    conn.execute("INSERT OR IGNORE INTO push_sent (key, sent_at) VALUES (?, ?)", (key, when))
+    conn.commit()
+
+
+def prune_push_sent(conn: sqlite3.Connection, before: str) -> None:
+    conn.execute("DELETE FROM push_sent WHERE sent_at < ?", (before,))
+    conn.commit()
+
+
+def add_habit_pause(
+    conn: sqlite3.Connection, uid: str, task_uid: str | None, start_date: str, end_date: str, created_at: str
+) -> None:
+    """Habits H6: pause one habit (`task_uid`) or all (None), inclusive."""
+    conn.execute(
+        "INSERT INTO habit_pauses (uid, task_uid, start_date, end_date, created_at) VALUES (?, ?, ?, ?, ?)",
+        (uid, task_uid, start_date, end_date, created_at),
+    )
+    conn.commit()
+
+
+def list_habit_pauses(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    rows = conn.execute("SELECT * FROM habit_pauses ORDER BY start_date, end_date").fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_habit_pause(conn: sqlite3.Connection, uid: str) -> None:
+    conn.execute("DELETE FROM habit_pauses WHERE uid = ?", (uid,))
     conn.commit()
 
 
@@ -4817,9 +5195,8 @@ def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str,
     treatment as the baseline "Variant B" detail-modal header for events/
     contacts/habit-tasks too, not just tasks) -- the banner an object
     should show, if any, resolved by priority: its own directly-set plain
-    label(s) first, then its Project label, then that project's parent
-    Space (`label_config.parent_name`, the "Group" field
-    label_edit_modal.html exposes). No new storage: a label's banner
+    label(s) first, then its Project label, then that project's group's
+    page (`label_config.label_group`; was the parent Space until slice c). No new storage: a label's banner
     already exists (get_page_banner/routers/banners.py, keyed by label
     name) as the image a label's own generated dashboard page shows --
     this just resolves which one of an object's several labels wins, the
@@ -4860,11 +5237,12 @@ def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str,
             banner["scope"] = project
             return banner
         cfg = get_label_config(conn, project)
-        space = (cfg or {}).get("parent_name")
-        if space:
-            banner = get_page_banner(conn, space)
+        group = ((cfg or {}).get("label_group") or "").strip()
+        if group:
+            key = group_page_key(group)
+            banner = get_page_banner(conn, key)
             if banner:
-                banner["scope"] = space
+                banner["scope"] = key
                 return banner
     # 2026-09-07 (direct request): a task/event with no matching label/
     # Project/Space banner falls back further instead of stopping at None
@@ -4939,7 +5317,7 @@ ENTITY_SYNC_FIELDS: dict[str, set[str]] = {
     "task": {
         "title", "description", "start_at", "due_at", "status", "progress",
         "recurrence", "exdates_json", "completed_at", "target_per_day",
-        "habits_per_period",
+        "habits_per_period", "habit_unit", "habit_kind",
         "created_at", "updated_at", "deleted_at",
     },
     "event": {

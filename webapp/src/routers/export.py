@@ -295,6 +295,8 @@ def build_backup_payload(conn) -> dict[str, Any]:
         "object_labels": _export_object_labels(conn),
         "schedule_holidays": db.list_holidays(conn),
         "task_completions": db.list_task_completions(conn),
+        # Habits H6 (2026-09-24): vacation / pause ranges.
+        "habit_pauses": db.list_habit_pauses(conn),
         # 2026-08-09 Relations -- deliberate user-made links, same
         # local-only-data backup treatment as task_completions.
         "event_task_relations": db.list_event_task_relations(conn),
@@ -714,8 +716,21 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
     # the `grades` table (and db.upsert_grade) is gone. A backup file from
     # before this removal that still carries a "grades" key simply has
     # that key ignored on restore now.
+    # 2026-09-24 (habits H3): carry `value` and `note` through too -- the
+    # restore used to drop `value`, so an amount habit's counts (e.g. 5 of
+    # 8 glasses) came back as 1 after a backup round-trip.
     for row in payload.get("task_completions", []):
-        db.upsert_task_completion(conn, row["task_uid"], row["due_date"], row["completed_at"])
+        db.upsert_task_completion(
+            conn, row["task_uid"], row["due_date"], row["completed_at"],
+            row.get("value") or 1, row.get("note"),
+        )
+    existing_pauses = {p["uid"] for p in db.list_habit_pauses(conn)}
+    for row in payload.get("habit_pauses", []):
+        if row.get("uid") and row["uid"] not in existing_pauses:
+            existing_pauses.add(row["uid"])
+            db.add_habit_pause(
+                conn, row["uid"], row.get("task_uid"), row["start_date"], row["end_date"], row.get("created_at")
+            )
     # Relations reference both an event and a task, so they must restore
     # after both pools are up. add_event_task_relation is idempotent, so a
     # backup with duplicate rows (or a re-restore) is harmless.

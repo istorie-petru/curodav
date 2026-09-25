@@ -1,0 +1,23 @@
+{# A label's lifecycle row under its page banner (labels-as-modules slice b,
+   2026-09-25). Rendered only for a label with a deadline or the project
+   flag (`label_status` is None otherwise, see routers/label_pages.py).
+   Archiving is always the user's explicit call; db.project_status only
+   ever computes up to "Pending Archiving". #}
+{% if label_status %}
+{% set _status_color = {'Open': 'blue', 'Pending': 'orange', 'Pending Archiving': 'green', 'Archived': 'gray'} %}
+<div class="toolbar label-status">
+    <span class="cell-tag tag-{{ _status_color.get(label_status, 'gray') }}">{{ label_status }}</span>
+    {% if label.has_deadline and label.deadline_date %}
+    <span class="cell-tag tag-{{ 'gray' if label.archived_at else 'red' }}">{{ icon('flag', 'icon-sm') }} Deadline · {{ label.deadline_date | relative_date }}</span>
+    {% endif %}
+    {% if label_status == 'Archived' %}
+    <form method="post" action="/labels/{{ label.name|urlencode }}/unarchive" class="form-inline">
+        <button type="submit" class="btn ghost btn-sm">Unarchive</button>
+    </form>
+    {% else %}
+    <form method="post" action="/labels/{{ label.name|urlencode }}/archive" class="form-inline"{% if label_status != 'Pending Archiving' %} data-confirm-sheet="Archive {{ label.name }}? It still has open tasks or its deadline hasn't passed yet."{% endif %}>
+        <button type="submit" class="btn {{ 'primary' if label_status == 'Pending Archiving' else 'ghost' }} btn-sm">{{ icon('archive', 'icon-sm') }} Archive</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}

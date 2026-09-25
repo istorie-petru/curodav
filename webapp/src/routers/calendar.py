@@ -5,10 +5,10 @@ import json
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Form, Header, Request
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import db, grid_layout, habit_heatmap, recurrence_expand
+from .. import db, grid_layout, habit_heatmap, habit_view, recurrence_expand
 from ..deps import HIDE_SLEEP_HOURS_KEY, _four_week_position, _week_start, get_db, respond, templates, wants_json
 from . import dashboard as dashboard_router
 
@@ -945,9 +945,20 @@ def _week_view_context(conn, request, date_, label):
     # after a prev/next AJAX swap) instead of three copies that could drift.
     label_text = f"{week_start_date.strftime('%b %d')} – {week_end_date.strftime('%b %d, %Y')}"
 
+    # 2026-09-25 direct decision (UI audit C-8): the All day strip draws
+    # all-day events as ONE spanning bar per week, lane-packed by the same
+    # _week_bars Month/4-Week use, instead of repeating a row in every day
+    # column. `day.all_day` above stays computed (other callers/tests read
+    # it); the template just stops rendering events from it.
+    week_bars, week_lane_count = _week_bars(
+        [d["date"] for d in days], [e for e in events if _is_bar_worthy(e)]
+    )
+
     return {
         "request": request,
         "active_tab": "calendar_week",
+        "week_bars": week_bars,
+        "week_lane_count": week_lane_count,
         "calendar_view": "week",
         "today_iso": date.today().isoformat(),
         "days": days,
@@ -1183,6 +1194,9 @@ def _day_view_context(conn, request, day, label):
         "all_day": all_day,
         "timed": timed,
         "tasks": tasks,
+        # Habits H7 (2026-09-24): the habits scheduled on this day, in the
+        # all-day row -- checkable unless the day is in the future.
+        "habits": habit_view.habits_for_day(conn, d) if not label else [],
         "time_block_overlays": time_block_overlays,
         "hours": list(range(grid_layout.GRID_HOURS)),
         "px_per_hour": grid_layout.PX_PER_HOUR,
@@ -1248,6 +1262,7 @@ def new_event_form(
             "prefill_all_day": prefill_all_day,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            **db.project_picker_context(conn),
             "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
@@ -1264,6 +1279,8 @@ def create_event(
     meeting_url: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
+    project: str = Form(""),
+    project_field: str = Form(""),
     recurrence: str = Form(""),
     reminders: str = Form(""),
     holiday_calendar: str = Form(""),
@@ -1273,6 +1290,7 @@ def create_event(
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
+    tags = dashboard_router._with_project(conn, tags, project, project_field)
     now = datetime.now(timezone.utc).isoformat()
     row = {
         "uid": str(uuid.uuid4()),
@@ -1295,7 +1313,10 @@ def create_event(
         "created_at": now,
         "updated_at": now,
     }
-    db.upsert_event(conn, row)
+    try:
+        db.upsert_event(conn, row)
+    except db.MultipleProjectLabelsError as exc:
+        raise HTTPException(400, str(exc))
     return respond(x_requested_with, "/calendar", status_code=201, ok=True, uid=row["uid"])
 
 
@@ -1358,6 +1379,7 @@ def edit_event_form(uid: str, request: Request, conn=Depends(get_db)):
             "event": event,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            **db.project_picker_context(conn),
             "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
@@ -1375,6 +1397,8 @@ def update_event(
     meeting_url: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
+    project: str = Form(""),
+    project_field: str = Form(""),
     recurrence: str = Form(""),
     reminders: str = Form(""),
     holiday_calendar: str = Form(""),
@@ -1384,6 +1408,7 @@ def update_event(
     conn=Depends(get_db),
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
+    tags = dashboard_router._with_project(conn, tags, project, project_field)
     existing = db.get_event(conn, uid) or {}
     # 1.4 (§ Task & calendar semantics): "changing the title of a
     # work-allocation event changes the associated task rather than
@@ -1413,7 +1438,10 @@ def update_event(
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     )
-    db.upsert_event(conn, row)
+    try:
+        db.upsert_event(conn, row)
+    except db.MultipleProjectLabelsError as exc:
+        raise HTTPException(400, str(exc))
     if work_task_uid:
         task = db.get_task(conn, work_task_uid)
         if task and task.get("title") != title:

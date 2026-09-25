@@ -1,52 +1,33 @@
 {% extends "base.html" %}
-{% from "_page_banner.html" import page_banner with context %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% block title %}{{ label.name if label else "Label" }}{% endblock %}
-<!-- 2026-09-16: Space-only now. This used to be shared by Spaces, Projects,
-     and plain labels alike; Projects moved to their own Kanban+Agenda page
-     2026-08-30 (routers/projects.py::project_detail/project_detail.html),
-     and plain labels followed the same way 2026-09-16 (routers/labels.py::
-     label_detail/label_kanban_detail.html, direct request: "plain labels
-     should generate pages like projects, with agenda and kanban, not
-     dashboards"). Only routers/spaces.py::space_detail renders this
-     template now -- `is_space` is always true here, kept as a context key
-     mainly because the icon-tile fallback below still branches on it.
-
-     2026-08-08: opt out of the default 1120px-max-width centered column,
-     same fix dashboard.html already applies (see that template's own
-     comment) -- this page includes the exact same widget grid
-     (_widget_workspace.html) as Home, and app.js's masonry layout sizes
-     its 6 virtual columns off the grid's own rendered width, so a Space
-     page left in the boxed column reproduces the identical "permanent
-     empty region on the right, widgets crowded into less width than the
-     page actually has" bug Home was already fixed for. -->
+<!-- A widget-dashboard page (routers/label_pages.py): a label with
+     has_dashboard on (slice b, 2026-09-25), or a group's page (slice c,
+     where `label` is a stand-in {name, uid = "group:<name>", icon, color}
+     and `group_labels` lists the members). A label without a dashboard
+     gets label_sections.html instead.
+     Opts out of the default 1120px-max-width centered column, like
+     dashboard.html: app.js's masonry sizes its 6 columns off the grid's
+     rendered width, so a boxed column leaves an empty strip on the right. -->
 {% block main_class %}main-full-width{% endblock %}
 {% block content %}
-<!-- Header banner + one page-action bar (2026-08-10) -- same merged
-     header as dashboard.html: the banner cover (when set) plus ALL of
-     this page's actions (New / Edit mode / Done / New widget / Add-Change
-     banner / Reset layout) live together in one .page-banner-wrap -- with
-     a banner the buttons float bottom-right over the photo, without one
-     they're a plain top bar with the label title left of them. The old
-     separate .toolbar row is gone. -->
-{# 2026-09-13 (direct request): the icon no longer prefixes the title text
-   -- it moved into the banner's own avatar slot as a colored squircle
-   tile (`icon_tile` below, see _page_banner.html's own comment) instead
-   of showing both an inline icon AND the account's profile photo. #}
-<div class="page-banner-wrap">
-{% call page_banner(label.name, icon_tile={'icon': label.icon or ('layers' if is_space else 'folder'), 'color': label.color}) %}
+{# Narrow header (2026-09-25, ui-cleanup item 2): the label's icon in its
+   color (layers for a group page), its own banner or the default behind
+   it. Replaces the hero banner + icon-tile straddle. #}
+{% call page_header_narrow(label.name, label.icon or 'tag', banner=banner, banner_image_scope=banner_image_scope, icon_color=(label.color if not group_labels else none)) %}
     <!-- 2026-08-29 (sidebar redesign item 13d): edit mode is now a
          persistent, app-wide Settings > Appearance toggle instead of a
          per-page `?edit=1` query param with its own "Edit mode"/"Done"
          buttons here -- see dashboard.html's own comment. -->
     {% if edit_mode %}
     <a href="/dashboard/customize?project_uid={{ label.uid }}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('plus', 'icon-sm') }} New widget</a>
-    <!-- Add/Change banner (2026-08-09) -- next to New widget in edit mode.
+    {# Add/Change banner (2026-08-09) -- next to New widget in edit mode.
          Opens the banner editor modal (routers/banners.py); "Add" vs
          "Change" labels by whether THIS page has its own banner
          (2026-08-29 direct request: `has_own_banner`, not `banner` -- a
          page with no override of its own still renders `banner` truthy
          now, via the Settings > Appearance default,
-         routers/dashboard.py's _page_banner_context). -->
+         routers/dashboard.py's _page_banner_context). #}
     {# 2026-09-08: data-modal-size="wide" dropped, see dashboard.html's
        own trigger for why. #}
     <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
@@ -67,24 +48,19 @@
          the sidebar rail has its own global "+ New" (13c, base.html),
          reachable from every page including this one. -->
 {% endcall %}
-</div>
 
+{% include "_label_status.html" %}
 {% if label.description %}<p>{{ label.description }}</p>{% endif %}
 
-<!-- 2026-09-16 (direct request: "an ancient part of the app appears, in
-     the spaces pages, the project-scope-section. i don't want it. it
-     shouldn't exist. we already have spaces & projects widget.") -- this
-     used to be a hardcoded "Projects" card listing a Space's child
-     labels/sub-Spaces (`is_space`/`children`, still passed by
-     routers/spaces.py::space_detail -- the only route left rendering this
-     template, see this file's own header comment; `children` costs
-     nothing to keep computing even with this block gone). Removed
-     outright, not replaced -- the Spaces & Projects widget
-     (dashboard.py::_render_spaces_projects, _widget_spaces_projects.html)
-     reads the exact same db.list_child_labels(conn, name) data and is the
-     intended way to see this now; Peter confirmed no auto-seeding
-     fallback is wanted, a Space page with nothing manually added simply
-     shows no child-project list until one's added. -->
+{# A group's page lists its labels (slice c): the collapsed sidebar can't
+   expand a group, so this is the always-available way in. #}
+{% if group_labels %}
+<div class="toolbar group-labels">
+    {% for l in group_labels %}
+    <a class="cell-tag cal-{{ l.color }}" href="/labels/{{ l.name|urlencode }}">{{ icon(l.icon or 'tag', 'icon-sm') }} {{ l.name }}</a>
+    {% endfor %}
+</div>
+{% endif %}
 
 <!-- Widget grid -- the exact same customizable system as Home
      (routers/dashboard.py's widget_page_context/WIDGET_TYPES), scoped to
@@ -93,5 +69,5 @@
 {% include "_widget_workspace.html" %}
 {% endblock %}
 {% block extra_scripts %}
-<script defer src="{{ static_url('habit_checkin.js') }}"></script>
+<script defer src="{{ static_url('habit_actions.js') }}"></script>
 {% endblock %}

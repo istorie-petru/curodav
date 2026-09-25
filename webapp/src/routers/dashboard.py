@@ -85,6 +85,21 @@ def _combine_tags(tags: str, tags_labels: list[str]) -> str:
     return ",".join(parts)
 
 
+def _with_project(conn, tags: str, project, project_field) -> str:
+    """The task/event forms' Project dropdown (project-picker slice,
+    2026-09-25) folded into the same comma-separated `tags` string
+    _combine_tags produces, via db.apply_project_choice. Only applied when
+    the form actually carried the dropdown (`project_field` == "1"), so
+    every other writer (inline edits, bulk actions, quick capture, tests
+    calling the route directly) keeps its tags exactly as posted. The
+    isinstance guards cover direct calls, where an unset param is still
+    FastAPI's Form marker object."""
+    if not (isinstance(project_field, str) and project_field == "1"):
+        return tags
+    project = project if isinstance(project, str) else ""
+    return ",".join(db.apply_project_choice(conn, _tags_list(tags) if tags else [], project))
+
+
 # One-time default for the optional "Your name" Settings field: absent =
 # no name, greeting reads "Good evening" alone rather than "Good evening,
 # None". App-meta-backed (see routers/settings.py's own field for this).
@@ -121,7 +136,7 @@ def _scope_child_names(conn, label_name: str | None) -> set[str] | None:
     """The Dashboard's hard, page-level tag-membership scope for
     `label_name` (a Space/Project page's own identity, `config["label_name"]`
     on every widget seeded there) -- child labels for a Space
-    (`generate_space=1`, `db.list_child_labels`, the same query
+    (historically `generate_space=1` + child labels; a group key since slice c -- the same query
     `routers/spaces.py::_label_scope` uses for that Space's own page,
     Spaces -- labels-as-membership rework slice 3), or the label's own
     name for a plain/project label (direct membership, same rule
@@ -138,9 +153,12 @@ def _scope_child_names(conn, label_name: str | None) -> set[str] | None:
     generate_space branch)."""
     if not label_name:
         return None
-    cfg = db.get_label_config(conn, label_name)
-    if cfg and cfg.get("generate_space"):
-        return {c["name"] for c in db.list_child_labels(conn, label_name)}
+    # labels-as-modules slice c (2026-09-25): a group's page (key
+    # "group:<name>") is scoped to every member label; a label's page to
+    # the label itself. Replaces the Space -> child-labels branch.
+    group = db.group_from_page_key(label_name)
+    if group is not None:
+        return set(db.group_member_names(conn, group))
     return {label_name}
 
 
@@ -297,8 +315,10 @@ def _filtered_events_expanded(conn, config: dict, window_start: date, window_end
 
 
 AGENDA_RANGES: tuple[str, ...] = ("today", "next_7_days", "next_30_days", "all_upcoming")
-AGENDA_SHOWS: tuple[str, ...] = ("overdue", "tasks", "events")
-AGENDA_DEFAULT_SHOW: list[str] = ["overdue", "tasks", "events"]
+AGENDA_SHOWS: tuple[str, ...] = ("overdue", "tasks", "events", "habits")
+# Habits H7 (2026-09-24): "habits" -- today's still-to-do habits, one-tap
+# checkable -- is on by default for any agenda without a saved Show list.
+AGENDA_DEFAULT_SHOW: list[str] = ["overdue", "tasks", "events", "habits"]
 
 
 def _agenda_show(config: dict) -> set[str]:
@@ -322,6 +342,18 @@ def _agenda_range(config: dict) -> str:
     if range_days is None and "range_days" in config:
         return "all_upcoming"
     return "today"
+
+
+def _agenda_habits(conn, config: dict, show: set[str]) -> list[dict]:
+    """Habits H7: today's still-to-do build habits for the Agenda widget
+    (habit_view.habit_items rows, page-scoped like every item widget)."""
+    if "habits" not in show:
+        return []
+    scope_names = _scope_child_names(conn, config.get("label_name"))
+    return [
+        h for h in habit_view.habit_items(conn)
+        if h["due_today"] and not h["is_avoid"] and _passes_scope(h["tags"], scope_names)
+    ]
 
 
 def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
@@ -381,7 +413,7 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
         if "events" in show:
             events = [e for e in _filtered_events_expanded(conn, config, today, today) if e.get("start_at") and e["start_at"][:10] == today_iso]
             events.sort(key=lambda e: e.get("start_at") or "")
-        return {"mode": "flat", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "tasks": tasks, "events": events, "today": today_iso}
+        return {"mode": "flat", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "tasks": tasks, "events": events, "today": today_iso, "habits": _agenda_habits(conn, config, show)}
 
     if range_ == "next_7_days":
         end = today + timedelta(days=6)
@@ -403,7 +435,7 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
             )
             day_events = sorted([e for e in events_pool if e.get("start_at") and e["start_at"][:10] == iso], key=lambda e: e.get("start_at") or "")
             by_day.append({"date": iso, "label": d.strftime("%a %b %d"), "is_today": iso == today_iso, "tasks": day_tasks, "events": day_events})
-        return {"mode": "days", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "days": by_day, "today": today_iso}
+        return {"mode": "days", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "days": by_day, "today": today_iso, "habits": _agenda_habits(conn, config, show)}
 
     # next_30_days / all_upcoming -- same flat-list shape; only the window
     # each bounds Tasks/Events to differs (see this function's own
@@ -624,68 +656,48 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
     Space/Project page) are unaffected -- `db.list_child_labels` already
     pools both projects and sub-Spaces under that label, unlike this
     unscoped branch which otherwise only ever saw `list_space_labels`."""
+    # labels-as-modules slice c (2026-09-25): driven by groups and the
+    # per-label `widget_pin` flag instead of Spaces/projects. On a group's
+    # page it shows that group's pinned labels; on a label's page, nothing
+    # (a label has no sub-labels); on Home, every pinned label (List) or
+    # every group plus every pinned label with no group (Cards).
     style = config.get("style") or "list"
     label_name = config.get("label_name") if config.get("scope") != "everything" else None
+    pinned = [lbl for lbl in db.list_labels(conn) if lbl.get("widget_pin") and not lbl.get("archived_at")]
     if label_name:
-        labels = db.list_child_labels(conn, label_name)
-    elif style == "cards":
-        labels = db.list_space_labels(conn)
+        group = db.group_from_page_key(label_name)
+        labels = [lbl for lbl in pinned if group is not None and lbl.get("label_group") == group]
     else:
-        labels = [lbl for lbl in db.list_labels(conn) if not lbl.get("generate_space")]
+        labels = pinned
 
     if style == "cards":
         cards = []
+        if not label_name:
+            for g in db.list_groups(conn):
+                n = len(g["labels"])
+                cards.append({
+                    "uid": db.group_page_key(g["name"]),
+                    "name": g["name"],
+                    "href": f"/groups/{g['name']}",
+                    "icon": "layers",
+                    "color": "gray",
+                    "description": "",
+                    "meta": f"{n} label{'' if n == 1 else 's'}",
+                })
         for lbl in labels:
-            children = db.list_child_labels(conn, lbl["name"])
-            # `labels` here can be a Space's own children (label_name set),
-            # which -- per this function's docstring -- pools BOTH
-            # sub-Spaces and promoted projects; a project among them needs
-            # its own page (routers/projects.py), not the /spaces/ URL a
-            # sub-Space gets. When unscoped, `labels` is list_space_labels
-            # (Spaces only), so this is a no-op fallthrough there.
-            href = f"/spaces/{lbl['name']}" if lbl.get("generate_space") else (
-                f"/projects/{lbl['name']}" if lbl.get("is_project") else f"/settings/labels/{lbl['name']}"
-            )
+            if not label_name and lbl.get("label_group"):
+                continue  # already reachable through its group's card
             cards.append({
                 "uid": lbl["name"],
                 "name": lbl["name"],
-                "href": href,
-                "icon": lbl.get("icon") or "layers",
+                "href": f"/labels/{lbl['name']}",
+                "icon": lbl.get("icon") or ("folder" if lbl.get("is_project") else "tag"),
                 "color": lbl.get("color") or "blue",
                 "description": lbl.get("description") or "",
-                "meta": f"{len(children)} project{'' if len(children) == 1 else 's'}",
+                "meta": "Project" if lbl.get("is_project") else "Label",
             })
-        if not label_name:
-            # Unscoped (Home, or a scoped instance opted out via
-            # scope=="everything") -- fold in every open project too, same
-            # "every Space + every open project" set Quick Links used to
-            # render on its own. Not reachable when label_name is set: that
-            # branch already sourced `labels` from list_child_labels above,
-            # which pools projects in directly -- adding them again here
-            # would duplicate every project card on a Space/Project page.
-            for lbl in db.list_project_labels(conn):
-                if lbl.get("archived_at"):
-                    continue
-                cards.append({
-                    "uid": lbl["name"],
-                    "name": lbl["name"],
-                    # 2026-08-30: /projects/{name} is real again (a Kanban
-                    # board, routers/projects.py::project_detail) -- was
-                    # "/tasks" while the page was a redirect stub
-                    # (2026-08-15 through 2026-08-30, see that history in
-                    # this file's git log).
-                    "href": f"/projects/{lbl['name']}",
-                    "icon": lbl.get("icon") or "folder",
-                    "color": lbl.get("color") or "blue",
-                    "description": "",
-                    "meta": "Project",
-                })
         return {"style": "cards", "cards": cards}
 
-    # Progress is derived from direct object_labels membership (tasks
-    # tagged with that label) -- direct assignment only, same "not
-    # transitive through parent_name" rule every label-page query in this
-    # app follows.
     previews = []
     for lbl in labels:
         tasks = [t for t in db.list_tasks(conn) if lbl["name"] in (t.get("tags") or [])]
@@ -925,7 +937,18 @@ def _render_habit_checkin(conn, config: dict, nav: dict | None = None) -> dict:
     scope is the same `_passes_scope` tag check every other item widget
     uses now that a habit carries ordinary task labels."""
     scope_names = _scope_child_names(conn, config.get("label_name"))
-    return {"rows": [h for h in habit_view.habit_items(conn) if _passes_scope(h["tags"], scope_names)]}
+    rows = [h for h in habit_view.habit_items(conn) if _passes_scope(h["tags"], scope_names)]
+    # Habits H4 (2026-09-24): the widget renders the Habits page's own row
+    # (_habit_page_row.html) -- still to do first, then the rest -- with a
+    # "n of N done" summary and an all-done state.
+    todo = [h for h in rows if h["due_today"]]
+    rest = [h for h in rows if not h["due_today"]]
+    return {
+        "rows": todo + rest,
+        "todo_count": len(todo),
+        "total": len(rows),
+        "all_done": bool(rows) and not todo,
+    }
 
 
 def _render_scheduled_work_today(conn, config: dict, nav: dict | None = None) -> dict:
@@ -1101,7 +1124,7 @@ WIDGET_TYPES: dict[str, dict] = {
     # project_preview/filled_cards (2 types -> 1, a List/Cards style
     # toggle instead of 2 separate names).
     "spaces_projects": {
-        "label": "Spaces & Projects",
+        "label": "Groups & Labels",
         "template": "_widget_spaces_projects.html",
         "render": _render_spaces_projects,
         "uses": set(),
@@ -1111,7 +1134,9 @@ WIDGET_TYPES: dict[str, dict] = {
         "label": "Habit Check-in",
         "template": "_widget_habit_checkin.html",
         "render": _render_habit_checkin,
-        "uses": set(),
+        # Habits H4: a habit is a task, so a habit created/edited/deleted
+        # in a modal re-renders this card like any task widget.
+        "uses": {"tasks"},
         "default_width": "half",
     },
     "contact_list": {
@@ -1187,7 +1212,7 @@ WIDGET_SOURCES: dict[str, dict] = {
     # grid merged into this source's own "cards" style (Style radio, see
     # WIDGET_VIEWS' spaces_projects_view/has_style below) rather than
     # staying a second, harder-to-explain source next to this one.
-    "spaces_projects": {"label": "Spaces & Projects", "icon": "layers"},
+    "spaces_projects": {"label": "Groups & Labels", "icon": "layers"},
 }
 
 # Which views exist per source, and which of those views take a Range.
@@ -1218,7 +1243,7 @@ WIDGET_VIEWS: dict[str, dict] = {
     # gating idea as Agenda's has_show. "quick_links_view"/"streak_view"/
     # "next_deadline_view"/"organize_today_view" retired 2026-08-30 along
     # with their widget types -- see WIDGET_TYPES' own comment.
-    "spaces_projects_view": {"label": "Spaces & Projects", "source": "spaces_projects", "has_range": False, "has_style": True},
+    "spaces_projects_view": {"label": "Groups & Labels", "source": "spaces_projects", "has_range": False, "has_style": True},
     "weekly_schedule_view": {"label": "Weekly schedule", "source": "calendar_tasks", "has_range": False},
 }
 
@@ -1354,8 +1379,8 @@ def _page_scope(conn, label_name: str | None) -> str:
     rather than which of two columns was set."""
     if not label_name:
         return ""
-    cfg = db.get_label_config(conn, label_name)
-    return "space" if (cfg and cfg.get("generate_space")) else "project"
+    # A group's page keeps the old Space page's widget-type rules.
+    return "space" if db.group_from_page_key(label_name) is not None else "project"
 
 
 def _excluded_widget_types(scope: str) -> set[str]:
@@ -1404,13 +1429,13 @@ def _scoped_collections(conn, label_name: str | None) -> tuple[list[dict], list[
     unchanged. "projects" here means "labels" -- kept as the historical
     name templates already read (`projects` context key)."""
     if label_name is not None:
-        cfg = db.get_label_config(conn, label_name)
-        if cfg and cfg.get("generate_space"):
-            projects = db.list_child_labels(conn, label_name)
+        group = db.group_from_page_key(label_name)
+        if group is not None:
+            projects = [db.effective_label_config(conn, n) for n in db.group_member_names(conn, group)]
         else:
             projects = [db.effective_label_config(conn, label_name)]
     else:
-        projects = [lbl for lbl in db.list_labels(conn) if not lbl.get("generate_space")]
+        projects = db.list_labels(conn)
     return projects, [], []
 
 
@@ -1471,6 +1496,13 @@ _DEFAULT_STACK_MEMBER_TYPES: list[tuple[str, dict, str]] = [
     ("agenda", {"range": "all_upcoming", "show": ["events", "tasks"]}, "Upcoming"),
 ]
 
+# plans/ui-cleanup-2026-09.md item 15 (2026-09-24): Home's default is a
+# 25/50/25 row -- Today (tasks + events, no habits: the Habit Check-in
+# widget sits right beside it), the At a glance + Upcoming stack, and
+# Habit Check-in. Label (Space/Project) pages keep the half/half pair.
+_HOME_TODAY_AGENDA_CONFIG: dict = {"width": "quarter", "range": "today", "show": ["overdue", "tasks", "events"]}
+_HOME_HABIT_CHECKIN_CONFIG: dict = {"width": "quarter"}
+
 _MINI_CALENDAR_BACKFILL_KEY = "dashboard_mini_calendar_backfilled_v1"
 _HOME_SEEDED_KEY = "dashboard_home_seeded_v1"
 
@@ -1491,8 +1523,13 @@ def _seed_agenda_stack_layout(conn, label_name: str | None, now: str) -> None:
     column (None means Home -- see db.upsert_dashboard_widget), and each
     *widget's own config* additionally gets `label_name` set (label pages
     only) so its data query is filtered to this label, same as every
-    other label-page widget (see _effective_tags_filter)."""
-    agenda_config = dict(_DEFAULT_TODAY_AGENDA_CONFIG)
+    other label-page widget (see _effective_tags_filter).
+
+    Home only (2026-09-24, plans/ui-cleanup-2026-09.md item 15): a 25/50/25
+    row -- Today at quarter width without the habits section, the stack at
+    half, and a quarter-width Habit Check-in after it."""
+    home = label_name is None
+    agenda_config = dict(_HOME_TODAY_AGENDA_CONFIG if home else _DEFAULT_TODAY_AGENDA_CONFIG)
     if label_name:
         agenda_config["label_name"] = label_name
     db.upsert_dashboard_widget(
@@ -1519,6 +1556,14 @@ def _seed_agenda_stack_layout(conn, label_name: str | None, now: str) -> None:
             {
                 "uid": str(uuid.uuid4()), "type": wtype, "title": title, "config": member_config,
                 "position": float(i), "created_at": now, "group_uid": stack_uid, "label_name": label_name,
+            },
+        )
+    if home:
+        db.upsert_dashboard_widget(
+            conn,
+            {
+                "uid": str(uuid.uuid4()), "type": "habit_checkin", "title": "Habits",
+                "config": dict(_HOME_HABIT_CHECKIN_CONFIG), "position": 2.0, "created_at": now, "label_name": None,
             },
         )
 
@@ -1862,11 +1907,9 @@ def _build_widget_contexts(conn, widgets: list[dict], nav: dict | None = None) -
 def _return_url(label_name: str | None, _legacy: str | None = None, conn=None) -> str:
     """Where a widget-mutating POST should redirect back to -- Home ("/")
     when the acted-on widget has no page identity, or that label's
-    generated page otherwise: `/spaces/{name}` directly for a Space
-    (`conn` passed -- avoids bouncing through label_detail's own 301,
-     2026-08-28 fix, see plans/STATE.md), `/settings/labels/{name}`
-    (labels.py's label_detail, which itself 301s on to /spaces/{name}
-    for a Space) when no `conn` is available to check. Derived from the
+    page otherwise (`/labels/{name}`, routers/label_pages.py -- one URL
+    for every kind of label since labels-as-modules slice b; `conn` is no
+    longer needed and only kept for existing callers). Derived from the
     widget itself wherever one already exists (edit/resize/stack/unstack/
     delete/move/reorder below); only add_widget has no existing widget to
     derive it from, so it takes `label_name` as a hidden form field
@@ -1884,9 +1927,10 @@ def _return_url(label_name: str | None, _legacy: str | None = None, conn=None) -
     label_name = label_name or _legacy
     if not label_name:
         return "/"
-    if conn is not None and db.effective_label_config(conn, label_name).get("generate_space"):
-        return f"/spaces/{label_name}"
-    return f"/settings/labels/{label_name}"
+    group = db.group_from_page_key(label_name)
+    if group is not None:
+        return f"/groups/{group}"
+    return f"/labels/{label_name}"
 
 
 def widget_page_context(conn, space_uid: str | None = None, project_uid: str | None = None, nav: dict | None = None) -> dict:
@@ -1962,36 +2006,22 @@ def _page_banner_context(conn, scope: str) -> dict:
     is currently showing) so _page_banner.html's `/banners/image` URL
     points at the right stored image rather than looking up this page's
     own (unset) scope with the default banner's version hash."""
-    # Final labels-page iteration (direct request, 2026-09-21): "remove
-    # the ability to have... banners for labels or projects grouped
-    # under a space" -- a grouped label/Project (parent_name set, and
-    # not itself a Space) always shows its parent Space's own banner
-    # instead of one of its own, same "follow the space" treatment
-    # db.effective_label_config's own _resolve_inherited_color already
-    # gives `color`. `banner_grouped_under` (the parent's name, or None)
-    # is what each caller's own Add/Change-banner button reads to hide
-    # itself -- Home (scope="") is never grouped, so this is a no-op there.
-    grouped_under = None
-    if scope:
-        label = db.effective_label_config(conn, scope)
-        if label.get("parent_name") and not label.get("generate_space"):
-            grouped_under = label["parent_name"]
-    banner_scope_lookup = grouped_under or scope
-    own_banner = db.get_page_banner(conn, banner_scope_lookup)
+    # Since labels-as-modules slice c (2026-09-25) every label and group
+    # has its own banner; the 2026-09-21 "a label grouped under a Space
+    # shows the Space's banner" rule went with Spaces.
+    own_banner = db.get_page_banner(conn, scope)
     if own_banner:
         return {
             "banner": own_banner,
-            "has_own_banner": not grouped_under,
+            "has_own_banner": True,
             "banner_scope": scope,
-            "banner_image_scope": banner_scope_lookup,
-            "banner_grouped_under": grouped_under,
+            "banner_image_scope": scope,
         }
     return {
         "banner": db.get_page_banner(conn, PAGE_HEADER_BANNER_SCOPE),
         "has_own_banner": False,
         "banner_scope": scope,
         "banner_image_scope": PAGE_HEADER_BANNER_SCOPE,
-        "banner_grouped_under": grouped_under,
     }
 
 
@@ -2105,6 +2135,7 @@ def quick_add_form(request: Request, default_tab: str = "task", scope: str = "",
             "status_items": STATUS_ITEMS,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            **db.project_picker_context(conn),
             "today": date.today().isoformat(),
             "habit_label": db.get_task_habit_settings(conn)["habit_label"],
             # Event-side context -- same union new_event_form passes, all
@@ -2132,7 +2163,7 @@ def quick_add_form(request: Request, default_tab: str = "task", scope: str = "",
             "colors": COLORS,
             "icon_groups": ICON_GROUPS,
             "role": "none",
-            "space_options": db.list_space_labels(conn),
+            "group_options": [g["name"] for g in db.list_groups(conn)],
         },
     )
 

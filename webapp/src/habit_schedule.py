@@ -144,6 +144,8 @@ def habit_stats(
     today: date | None = None,
     excluded_dates: set[str] | None = None,
     created: date | None = None,
+    kind: str | None = None,
+    paused_dates: set[str] | None = None,
 ) -> dict:
     """Streaks and progress for one habit.
 
@@ -153,7 +155,13 @@ def habit_stats(
     window's `period_done`/`period_target` (e.g. 2 of 3 this week).
     """
     today = today or date.today()
-    excluded = excluded_dates or set()
+    if kind == "avoid":
+        return _avoid_stats(entries_by_date, today, created)
+    # Habits H6: paused (vacation) days are neutral like a non-working day
+    # for a daily/weekday habit; a period window (week/month) that
+    # includes any paused day is neutral unless it was kept anyway.
+    paused = paused_dates or set()
+    excluded = (excluded_dates or set()) | paused
     schedule = parse_schedule(rrule, per_period, created)
     done = {d for d, v in entries_by_date.items() if v and v > 0 and d <= today.isoformat()}
     dates = [date.fromisoformat(d) for d in done]
@@ -175,6 +183,9 @@ def habit_stats(
             kept = count >= schedule.per_period
             if is_open:
                 period_done = count
+            if not kept and any(d in paused for d in in_window):
+                results.append(None)
+                continue
         else:
             if w_start.isoformat() in excluded:
                 results.append(None)
@@ -194,6 +205,10 @@ def habit_stats(
             continue
         run = run + 1 if r else 0
         longest = max(longest, run)
+    target = schedule.per_period if schedule.kind == "period" else 1
+    strength = _strength(
+        [(r, (w_end - w_start).days, target) for r, (w_start, w_end) in zip(results, windows)]
+    )
     current = 0
     for r in reversed(results):
         if r is None:
@@ -209,8 +224,14 @@ def habit_stats(
     # non-working day.
     open_start = windows[-1][0] if windows else today
     kept_now = bool(results) and results[-1] is True
-    due_today = not kept_now and (schedule.kind == "period" or open_start.isoformat() not in excluded)
+    due_today = (
+        not kept_now
+        and today.isoformat() not in paused
+        and (schedule.kind == "period" or open_start.isoformat() not in excluded)
+    )
     return {
+        "strength": strength,
+        "paused_today": today.isoformat() in paused,
         "current": current,
         "longest": longest,
         "unit": schedule.unit,
@@ -220,3 +241,75 @@ def habit_stats(
         "period_target": schedule.per_period if schedule.kind == "period" else 1,
         "kind": schedule.kind,
     }
+
+
+def _avoid_stats(entries_by_date: dict[str, float], today: date, created: date | None) -> dict:
+    """Habits H5: an *avoid* habit (e.g. "no smoking") logs relapses, not
+    successes -- every day without a logged relapse, from creation (or the
+    first relapse, if earlier) through today, is a clean day. Current
+    streak = clean days ending today (today counts while it's still
+    clean), longest = the longest clean run, rate = clean / all days.
+    Never "to do": there's nothing to check off, only something to avoid.
+    The recurrence/exclusion settings don't apply."""
+    relapses = {d for d, v in entries_by_date.items() if v and v > 0 and d <= today.isoformat()}
+    starts = [date.fromisoformat(d) for d in relapses]
+    if created and created <= today:
+        starts.append(created)
+    start = max(min(starts) if starts else today, today - timedelta(days=_MAX_HISTORY_DAYS))
+    clean = [(start + timedelta(days=i)).isoformat() not in relapses for i in range((today - start).days + 1)]
+    longest = run = 0
+    for c in clean:
+        run = run + 1 if c else 0
+        longest = max(longest, run)
+    current = 0
+    for c in reversed(clean):
+        if not c:
+            break
+        current += 1
+    return {
+        "strength": _strength([(c, 1, 1) for c in clean]),
+        "current": current,
+        "longest": longest,
+        "unit": "day",
+        "rate": sum(clean) / len(clean) if clean else None,
+        "due_today": False,
+        "period_done": 0,
+        "period_target": 1,
+        "kind": "avoid",
+        "relapsed_today": today.isoformat() in relapses,
+    }
+
+
+def is_due_on(schedule: Schedule, d: date) -> bool:
+    """Habits H7: does this schedule call for the habit on day `d`? A
+    weekdays habit on its weekdays, an every-N-days habit on its N-day
+    beat (from its anchor), a period habit on any day (it's done whenever
+    in the week/month)."""
+    if schedule.kind == "weekdays":
+        return d.weekday() in schedule.weekdays
+    if schedule.kind == "every_n_days":
+        anchor = schedule.anchor or d
+        return (d - anchor).days % schedule.interval == 0
+    return True
+
+
+def _strength(windows: list[tuple[bool | None, int, int]]) -> int | None:
+    """Habits H8: a 0-100 habit strength, after Loop Habit Tracker's score
+    -- an exponential moving average over due windows, so one miss dents
+    it instead of zeroing it (a streak does zero) and a long record fades
+    in slowly. Each window is (kept, length_days, target); neutral (None)
+    windows are skipped. The decay per window follows Loop's
+    0.5 ** (sqrt(frequency) / 13) per day, with frequency = target /
+    length -- about a 13-day half-life for a daily habit, ~5 weeks for a
+    once-a-week one. None when no window has counted yet."""
+    score = 0.0
+    counted = False
+    for kept, length, target in windows:
+        if kept is None:
+            continue
+        counted = True
+        length = max(1, length)
+        freq = min(1.0, max(target, 1) / length)
+        m = 0.5 ** (length * (freq ** 0.5) / 13)
+        score = score * m + (1.0 if kept else 0.0) * (1 - m)
+    return round(score * 100) if counted else None

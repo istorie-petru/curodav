@@ -109,7 +109,7 @@ import httpx
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from .. import auth, config, data_health, db, env_file, offline_sync
+from .. import auth, config, data_health, db, env_file, offline_sync, push, reminders
 from ..image_sniff import sniff_image_type
 from ..deps import (
     ACCENT_COLOR_KEY,
@@ -234,6 +234,12 @@ def settings_general(request: Request, conn=Depends(get_db)):
             # rendered it -- "'str' object is not callable" (found via the
             # test suite, not a hunch).
             "current_week_start": db.get_app_meta(conn, WEEK_START_KEY) or "monday",
+            # Web Push P3 (2026-09-24): which reminders go out, and when
+            # the morning digest does (src/reminders.py).
+            "push_types": [(t, reminders.TYPE_LABELS[t]) for t in reminders.TYPES],
+            "push_types_on": reminders.enabled_types(conn),
+            "push_digest_time": reminders.digest_time_str(conn),
+            "push_contact_email": push.contact_email(conn),
             "current_time_format": db.get_app_meta(conn, TIME_FORMAT_KEY) or "24h",
             # 2026-08-11 -- "4-Week view: current week" (see deps.py's
             # FOUR_WEEK_POSITION_KEY): which of the four rows the Calendar
@@ -721,6 +727,44 @@ def set_time_format(time_format: str = Form("24h"), conn=Depends(get_db)):
     `data-time-format` body attribute)."""
     db.set_app_meta(conn, TIME_FORMAT_KEY, "12h" if time_format == "12h" else "24h")
     return RedirectResponse(url="/settings/general", status_code=303)
+
+
+@router.post("/settings/notifications")
+def set_notifications(
+    types: list[str] = Form([]),
+    digest_time: str = Form("08:00"),
+    conn=Depends(get_db),
+):
+    """Web Push P3 (2026-09-24): which reminder types are on (app-wide --
+    every subscribed device gets the same ones) and the morning digest
+    time for tasks/habits due today. A malformed time keeps the old one."""
+    chosen = [t for t in reminders.TYPES if isinstance(types, list) and t in types]
+    db.set_app_meta(conn, reminders.TYPES_KEY, ",".join(chosen))
+    try:
+        h, m = (int(x) for x in (digest_time or "").split(":", 1))
+        if 0 <= h < 24 and 0 <= m < 60:
+            db.set_app_meta(conn, reminders.DIGEST_TIME_KEY, f"{h:02d}:{m:02d}")
+    except (ValueError, TypeError):
+        pass
+    return RedirectResponse(url="/settings/general", status_code=303)
+
+
+@router.post("/settings/push-contact")
+def set_push_contact(email: str = Form(""), conn=Depends(get_db)):
+    """The contact email sent to push services with every notification
+    (the VAPID `sub` claim, src/push.py) -- who they reach about abusive
+    traffic. Blank clears it (falls back to CC_PUSH_CONTACT, then the
+    default); an invalid address keeps the old one and says so."""
+    if not (email or "").strip():
+        db.set_app_meta(conn, push.CONTACT_KEY, "")
+        return RedirectResponse(url="/settings/general#push-settings", status_code=303)
+    normalized = push.normalize_email(email)
+    if normalized is None:
+        return _redirect_with_error(
+            "/settings/general", "That doesn't look like an email address -- the notification contact wasn't changed."
+        )
+    db.set_app_meta(conn, push.CONTACT_KEY, normalized)
+    return RedirectResponse(url="/settings/general#push-settings", status_code=303)
 
 
 @router.post("/settings/hide-sleep-hours")

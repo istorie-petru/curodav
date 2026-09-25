@@ -35,6 +35,7 @@ from starlette.requests import Request
 
 from src import db, deps
 from src.routers import dashboard as dashboard_router
+from src.routers import label_pages
 from src.routers import labels as labels_router
 from src.routers import settings as settings_router
 
@@ -127,13 +128,12 @@ class TestScopingBugFix:
         uids = {e["uid"] for e in data["events"]}
         assert uids == {"in_scope"}
 
-    def test_space_page_scoping_pools_child_labels(self, conn):
-        _make_space(conn, "Uni")
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+    def test_group_page_scoping_pools_member_labels(self, conn):
+        db.upsert_label_config(conn, {"name": "CS101", "label_group": "Uni", "created_at": _now()})
         today = date.today().isoformat()
         _seed_task(conn, "in_scope", due_at=today, tags=["CS101"])
         _seed_task(conn, "out_of_scope", due_at=today)
-        data = dashboard_router._render_agenda(conn, {"label_name": "Uni", "range": "today", "show": ["tasks"]})
+        data = dashboard_router._render_agenda(conn, {"label_name": "group:Uni", "range": "today", "show": ["tasks"]})
         uids = {t["uid"] for t in data["tasks"]}
         assert uids == {"in_scope"}
 
@@ -165,11 +165,10 @@ class TestScopingBugFix:
         # still behave exactly as before (its own pre-existing tests in
         # test_dashboard_router.py already cover this in depth; this is a
         # quick sanity check the refactor didn't regress it).
-        _make_space(conn, "Uni")
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "Uni", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "CS101", "label_group": "Uni", "created_at": _now()})
         db.upsert_contact(conn, {"uid": "c1", "full_name": "Alice", "tags": ["CS101"], "created_at": _now()})
         db.upsert_contact(conn, {"uid": "c2", "full_name": "Bob", "tags": ["Personal"], "created_at": _now()})
-        data = dashboard_router._render_contact_list(conn, {"label_name": "Uni"})
+        data = dashboard_router._render_contact_list(conn, {"label_name": "group:Uni"})
         assert {c["uid"] for c in data["contacts"]} == {"c1"}
 
 
@@ -270,8 +269,11 @@ class TestDefaultSeedIncludesNewWidgets:
         assert top_level[0]["type"] == "agenda"
         assert top_level[0]["title"] == "Today"
         assert top_level[0]["config"]["range"] == "today"
-        assert "show" not in top_level[0]["config"]  # relies on AGENDA_DEFAULT_SHOW, not a stored override
-        assert dashboard_router.AGENDA_DEFAULT_SHOW == ["overdue", "tasks", "events"]
+        # Item 15 (2026-09-24): Home's Today leaves habits out -- the Habit
+        # Check-in widget sits right beside it.
+        assert top_level[0]["config"]["show"] == ["overdue", "tasks", "events"]
+        # Habits H7 (2026-09-24) added "habits" to the default Show list.
+        assert dashboard_router.AGENDA_DEFAULT_SHOW == ["overdue", "tasks", "events", "habits"]
 
     def test_fresh_project_label_seed_includes_at_a_glance_and_overdue_tasks(self, conn):
         _make_project(conn, "CS101")
@@ -339,13 +341,15 @@ def _canonical_default_titles(widgets):
 
 # 2026-09-13: stack trimmed from 3 members to 2 (dropped a duplicate
 # today-range Agenda) -- see dashboard_router._DEFAULT_STACK_MEMBER_TYPES.
-_DEFAULT_LAYOUT_TYPE_ORDER = ["agenda", "stack", "at_a_glance", "agenda"]
+# 2026-09-24 (plans/ui-cleanup-2026-09.md item 15): Home's default grew a
+# trailing quarter-width Habit Check-in (25/50/25 row).
+_DEFAULT_LAYOUT_TYPE_ORDER = ["agenda", "stack", "at_a_glance", "agenda", "habit_checkin"]
 # Same change also gave the seeded widgets explicit titles instead of
 # leaving them on the generic spec-label fallback -- position-ordered
 # same as _DEFAULT_LAYOUT_TYPE_ORDER above (agenda/stack/at_a_glance/
 # agenda), with the "stack" container itself keeping title=None (it has
 # no spec label of its own to fall back to and none was requested).
-_DEFAULT_LAYOUT_TITLES = ["Today", None, "At a glance", "Upcoming"]
+_DEFAULT_LAYOUT_TITLES = ["Today", None, "At a glance", "Upcoming", "Habits"]
 
 
 class TestResetToDefault:
@@ -385,7 +389,7 @@ class TestResetToDefault:
         assert db.list_dashboard_widgets(conn, label_name="CS101") == []
 
         resp = dashboard_router.reset_dashboard(label_name="CS101", conn=conn)
-        assert resp.headers["location"] == "/settings/labels/CS101"
+        assert resp.headers["location"] == "/labels/CS101"
         types = [w["type"] for w in db.list_dashboard_widgets(conn, label_name="CS101")]
         assert types == original_types
 
@@ -500,17 +504,17 @@ class TestQuickAddButtons:
         assert "data-fab" not in body
         assert 'href="/tasks/new"' not in body
         assert 'href="/events/new"' not in body
-        assert 'class="page-banner-actions"' in body
+        assert 'class="page-header-narrow-actions"' in body
         assert 'class="toolbar"' not in body
 
     def test_label_page_has_no_page_level_quick_add_button(self, conn):
         _make_project(conn, "CS101")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
+        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         assert "data-fab" not in body
         assert 'href="/tasks/new"' not in body
         assert 'href="/events/new"' not in body
-        assert 'class="page-banner-actions"' in body
+        assert 'class="page-header-narrow-actions"' in body
         assert 'class="toolbar"' not in body
 
     def test_dashboard_html_edit_mode_actions_present(self, conn):
@@ -528,7 +532,7 @@ class TestQuickAddButtons:
         assert "data-fab" not in body
         assert 'New widget' in body
         assert 'Add banner' in body
-        assert 'class="page-banner-actions"' in body
+        assert 'class="page-header-narrow-actions"' in body
 
     def test_label_page_edit_mode_actions_present(self, conn):
         # 2026-09-16 (direct request: "plain labels should generate pages
@@ -539,13 +543,13 @@ class TestQuickAddButtons:
         # control, same as project_detail.html's own edit-mode toolbar.
         _make_project(conn, "CS101")
         db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
+        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         assert "data-fab" not in body
         assert 'New widget' not in body
         assert 'Reset layout' not in body
         assert 'Add banner' in body
-        assert 'class="page-banner-actions"' in body
+        assert 'class="page-header-narrow-actions"' in body
 
     def test_dashboard_html_no_longer_has_a_separate_quick_add_row(self, conn):
         resp = dashboard_router.dashboard_view(_request(), conn=conn)
@@ -554,7 +558,7 @@ class TestQuickAddButtons:
 
     def test_label_page_no_longer_has_a_separate_quick_add_row(self, conn):
         _make_project(conn, "CS101")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
+        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         assert 'dashboard-quick-add' not in body
 
@@ -628,10 +632,9 @@ class TestQuickAddLabelScope:
         assert resp.context["tag_names"] == ["Anything"]
 
     def test_space_scope_restricts_to_its_children(self, conn):
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Historiography", "parent_name": "University", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Historiography", "label_group": "University", "created_at": _now()})
         db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Unrelated"], "created_at": _now()})
-        resp = dashboard_router.quick_add_form(_request("/quick/add"), scope="University", conn=conn)
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), scope="group:University", conn=conn)
         assert resp.context["tag_names"] == ["Historiography"]
         assert [i["name"] for i in resp.context["tag_name_items"]] == ["Historiography"]
 
@@ -640,9 +643,8 @@ class TestQuickAddLabelScope:
         # still be offered -- the scoped list is the group's full child
         # set, not an intersection with "already in use" (list_tag_names_
         # in_use's own usual precondition).
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "2nd Semester", "parent_name": "University", "created_at": _now()})
-        resp = dashboard_router.quick_add_form(_request("/quick/add"), scope="University", conn=conn)
+        db.upsert_label_config(conn, {"name": "2nd Semester", "label_group": "University", "created_at": _now()})
+        resp = dashboard_router.quick_add_form(_request("/quick/add"), scope="group:University", conn=conn)
         assert resp.context["tag_names"] == ["2nd Semester"]
 
     def test_scope_naming_an_unscoped_label_is_a_no_op(self, conn):
@@ -672,7 +674,7 @@ class TestQuickAddContactAndLabelTabs:
         assert 'enctype="multipart/form-data"' in body
         # ...and label-specific fields present.
         assert 'name="new_name"' in body
-        assert 'name="parent_name"' in body
+        assert 'name="label_group"' in body
 
     def test_contact_and_label_tabs_present(self, conn):
         resp = dashboard_router.quick_add_form(_request("/quick/add"), conn=conn)
@@ -721,7 +723,7 @@ class TestLabelPageResetButton:
     def test_reset_layout_and_new_widget_are_gone_in_edit_mode(self, conn):
         _make_project(conn, "CS101")
         db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
+        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         assert '/dashboard/reset' not in body
         assert 'New widget' not in body
@@ -729,7 +731,7 @@ class TestLabelPageResetButton:
 
     def test_reset_button_absent_outside_edit_mode(self, conn):
         _make_project(conn, "CS101")
-        resp = labels_router.label_detail("CS101", _request("/labels/CS101"), conn=conn)
+        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
         body = resp.body.decode()
         # The reset form itself (posts to /dashboard/reset) shouldn't be
         # present outside edit mode either -- it doesn't exist on this

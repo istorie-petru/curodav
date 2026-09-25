@@ -105,7 +105,7 @@
         {% if event.tags %}
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">Labels</span>
-            <span class="detail-meta-value">{% for tag in event.tags %}{{ label_pill(tag) }} {% endfor %}</span>
+            <span class="detail-meta-value">{% for tag in event.tags %}{{ label_pill(tag, 'modal') }} {% endfor %}</span>
         </div>
         {% endif %}
     </div>

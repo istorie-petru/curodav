@@ -25,6 +25,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 
 from src import db
+from src.routers import label_pages
 from src.routers import projects as projects_router
 
 
@@ -85,42 +86,22 @@ class TestLabelConfigProjectColumns:
 # --------------------------------------------------------------------- #
 
 
-class TestOverlap:
-    def test_no_conflict_when_no_other_projects(self, conn):
-        assert db.find_overlapping_project(conn, "A", "2026-01-01", "2026-02-01") is None
-
-    def test_overlapping_period_conflicts(self, conn):
-        db.upsert_label_config(conn, {"name": "A", "is_project": 1, "start_date": "2026-01-01", "end_date": "2026-02-01", "created_at": _now()})
-        conflict = db.find_overlapping_project(conn, "B", "2026-01-15", "2026-03-01")
-        assert conflict is not None and conflict["name"] == "A"
-
-    def test_adjacent_non_overlapping_period_is_fine(self, conn):
-        db.upsert_label_config(conn, {"name": "A", "is_project": 1, "start_date": "2026-01-01", "end_date": "2026-02-01", "created_at": _now()})
-        assert db.find_overlapping_project(conn, "B", "2026-02-02", "2026-03-01") is None
-
-    def test_a_project_never_conflicts_with_itself(self, conn):
-        db.upsert_label_config(conn, {"name": "A", "is_project": 1, "start_date": "2026-01-01", "end_date": "2026-02-01", "created_at": _now()})
-        assert db.find_overlapping_project(conn, "A", "2026-01-10", "2026-02-10") is None
-
-    def test_archived_projects_are_excluded_from_the_check(self, conn):
-        db.upsert_label_config(conn, {"name": "A", "is_project": 1, "start_date": "2026-01-01", "end_date": "2026-02-01", "created_at": _now()})
-        db.archive_project(conn, "A")
-        assert db.find_overlapping_project(conn, "B", "2026-01-15", "2026-02-10") is None
-
-    def test_missing_dates_never_conflict(self, conn):
-        db.upsert_label_config(conn, {"name": "A", "is_project": 1, "created_at": _now()})
-        assert db.find_overlapping_project(conn, "B", "2026-01-01", "2026-02-01") is None
-
-
-# --------------------------------------------------------------------- #
-# Lifecycle
-# --------------------------------------------------------------------- #
-
-
 class TestProjectStatus:
-    def _cfg(self, conn, name="P", start="2026-01-01", end="2026-12-31"):
-        db.upsert_label_config(conn, {"name": name, "is_project": 1, "start_date": start, "end_date": end, "created_at": _now()})
+    def _cfg(self, conn, name="P", end="2026-12-31", is_project=1):
+        db.upsert_label_config(conn, {"name": name, "is_project": is_project, "has_deadline": 1, "deadline_date": end, "created_at": _now()})
         return db.effective_label_config(conn, name)
+
+    def test_any_label_with_a_deadline_has_a_status(self, conn):
+        # labels-as-modules slice b: the lifecycle isn't project-only.
+        cfg = self._cfg(conn, end="2026-01-01", is_project=0)
+        _task(conn, "t1", ["P"], status="done")
+        assert db.project_status(conn, cfg, today=date(2026, 6, 1)) == "Pending Archiving"
+
+    def test_deadline_switched_off_is_ignored(self, conn):
+        db.upsert_label_config(conn, {"name": "P", "is_project": 1, "has_deadline": 0, "deadline_date": "2099-01-01"})
+        _task(conn, "t1", ["P"], status="done")
+        cfg = db.effective_label_config(conn, "P")
+        assert db.project_status(conn, cfg, today=date(2026, 1, 1)) == "Pending Archiving"
 
     def test_no_tasks_is_open(self, conn):
         cfg = self._cfg(conn)
@@ -189,53 +170,33 @@ class TestProjectLabelForSupersession:
 # --------------------------------------------------------------------- #
 
 
-class TestPromoteDemoteArchive:
-    def test_promote_sets_is_project_and_dates(self, conn):
-        resp = projects_router.promote(name="Trip", start_date="2026-08-11", end_date="2026-10-13", confirm_overlap="", conn=conn)
-        assert resp.status_code == 303
-        cfg = db.effective_label_config(conn, "Trip")
-        assert cfg["is_project"] is True
-        assert cfg["start_date"] == "2026-08-11"
-
-    def test_promote_with_overlap_redirects_without_saving(self, conn):
-        db.upsert_label_config(conn, {"name": "A", "is_project": 1, "start_date": "2026-01-01", "end_date": "2026-02-01", "created_at": _now()})
-        resp = projects_router.promote(name="B", start_date="2026-01-15", end_date="2026-03-01", confirm_overlap="", conn=conn)
-        assert resp.status_code == 303
-        assert "overlap=A" in resp.headers["location"]
-        assert db.get_label_config(conn, "B") is None
-
-    def test_promote_with_confirm_overlap_saves_anyway(self, conn):
-        db.upsert_label_config(conn, {"name": "A", "is_project": 1, "start_date": "2026-01-01", "end_date": "2026-02-01", "created_at": _now()})
-        resp = projects_router.promote(name="B", start_date="2026-01-15", end_date="2026-03-01", confirm_overlap="1", conn=conn)
-        assert resp.status_code == 303
-        assert db.effective_label_config(conn, "B")["is_project"] is True
-
-    def test_demote_clears_project_fields_but_keeps_label(self, conn):
-        db.upsert_label_config(conn, {"name": "Trip", "is_project": 1, "start_date": "2026-08-11", "end_date": "2026-10-13", "created_at": _now()})
-        db.add_object_label(conn, "task", "t1", "Trip")
-        resp = projects_router.demote("Trip", conn=conn)
-        assert resp.status_code == 303
-        cfg = db.effective_label_config(conn, "Trip")
-        assert cfg["is_project"] is False
-        assert cfg["start_date"] is None
-        # The label itself and its membership survive demotion.
-        assert db.list_labels_for_object(conn, "task", "t1") == ["Trip"]
+class TestArchiveAction:
+    """labels-as-modules slice b (2026-09-25): archiving moved from
+    POST /projects/{name}/archive to the label's own page, and gained an
+    undo. promote/set_dates/demote (and the start/end overlap rule) are
+    gone -- the label form sets the deadline and the Project role."""
 
     def test_archive_sets_archived_at_and_status(self, conn):
-        cfg_kwargs = {"name": "Trip", "is_project": 1, "start_date": "2026-01-01", "end_date": "2020-01-01", "created_at": _now()}
-        db.upsert_label_config(conn, cfg_kwargs)
-        resp = projects_router.archive("Trip", conn=conn)
+        db.upsert_label_config(conn, {"name": "Trip", "is_project": 1, "has_deadline": 1, "deadline_date": "2020-01-01", "created_at": _now()})
+        resp = label_pages.archive_label("Trip", conn=conn)
         assert resp.status_code == 303
+        assert resp.headers["location"] == "/labels/Trip"
         cfg = db.effective_label_config(conn, "Trip")
         assert cfg["archived_at"] is not None
         assert db.project_status(conn, cfg) == "Archived"
 
-    def test_set_dates_updates_period(self, conn):
-        db.upsert_label_config(conn, {"name": "Trip", "is_project": 1, "start_date": "2026-01-01", "end_date": "2026-02-01", "created_at": _now()})
-        resp = projects_router.set_dates("Trip", start_date="2026-03-01", end_date="2026-04-01", confirm_overlap="", conn=conn)
-        assert resp.status_code == 303
+    def test_unarchive_goes_back_to_the_computed_status(self, conn):
+        db.upsert_label_config(conn, {"name": "Trip", "is_project": 1, "created_at": _now()})
+        label_pages.archive_label("Trip", conn=conn)
+        label_pages.unarchive_label("Trip", conn=conn)
         cfg = db.effective_label_config(conn, "Trip")
-        assert cfg["start_date"] == "2026-03-01" and cfg["end_date"] == "2026-04-01"
+        assert cfg["archived_at"] is None
+        assert db.project_status(conn, cfg) == "Open"
+
+    def test_old_project_endpoints_are_gone(self):
+        for name in ("promote", "set_dates", "demote", "archive"):
+            assert not hasattr(projects_router, name)
+        assert not hasattr(db, "find_overlapping_project")
 
 
 class TestProjectPageRedirects:
@@ -258,7 +219,7 @@ class TestProjectPageRedirects:
         assert resp.status_code == 302
         assert resp.headers["location"] == "/tasks"
 
-    def test_project_calendar_redirects_to_tasks_table(self, conn):
+    def test_project_calendar_redirects_to_the_label_page(self, conn):
         resp = projects_router.project_calendar_redirect("Trip")
-        assert resp.status_code == 302
-        assert resp.headers["location"] == "/tasks"
+        assert resp.status_code == 301
+        assert resp.headers["location"] == "/labels/Trip"

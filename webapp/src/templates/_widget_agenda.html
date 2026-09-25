@@ -25,6 +25,31 @@
      same reason). -->
 
 {% from "_widget_items.html" import widget_empty, widget_section_label, widget_pill, widget_link_row, widget_complete_button, widget_event_dot %}
+{# Habits H7 (2026-09-24): today's still-to-do habits, each a one-tap
+   check (form.habit-action -> static/habit_actions.js re-renders this
+   card). #}
+{% macro habit_rows(habits) %}
+{{ widget_section_label('Habits') }}
+<ul class="agenda-habits">
+    {% for h in habits %}
+    <li class="agenda-habit">
+        {% if h.is_quantity %}
+        <form method="post" action="{{ h.plus_url }}" class="form-inline habit-action">
+            <input type="hidden" name="completion_date" value="{{ h.today }}">
+            <input type="hidden" name="value" value="{{ h.next_value|int }}">
+            <button type="submit" class="agenda-habit-check is-qty" title="Log one more ({{ h.today_value|int }} of {{ h.target|int }})">{{ h.today_value|int }}/{{ h.target|int }}</button>
+        </form>
+        {% else %}
+        <form method="post" action="{{ h.toggle_url }}" class="form-inline habit-action">
+            <button type="submit" class="agenda-habit-check" title="Mark done today" aria-label="Mark done today: {{ h.title }}">{{ icon('square', 'icon-sm') }}</button>
+        </form>
+        {% endif %}
+        <a href="{{ h.detail_url }}" data-modal class="agenda-habit-title">{{ h.title }}</a>
+        <span class="agenda-habit-meta">{{ h.recurrence_label }}</span>
+    </li>
+    {% endfor %}
+</ul>
+{% endmacro %}
 {% macro overdue_table(tasks) %}
 {{ widget_section_label('Overdue') }}
 <table>
@@ -35,6 +60,7 @@
 {% endmacro %}
 {% if data.mode == 'days' %}
 {% if data.overdue_tasks %}{{ overdue_table(data.overdue_tasks) }}{% endif %}
+{% if data.habits %}{{ habit_rows(data.habits) }}{% endif %}
 <div class="week-overview-grid">
 {% for day in data.days %}
 <div class="week-overview-day {% if day.is_today %}is-today{% endif %}">
@@ -53,8 +79,9 @@
 {% endfor %}
 </div>
 {% else %}
-{% if data.overdue_tasks or data.tasks or data.events %}
+{% if data.overdue_tasks or data.tasks or data.events or data.habits %}
 {% if data.overdue_tasks %}{{ overdue_table(data.overdue_tasks) }}{% endif %}
+{% if data.habits %}{{ habit_rows(data.habits) }}{% endif %}
 {% if data.tasks %}
 {{ widget_section_label('Tasks') }}
 <table>

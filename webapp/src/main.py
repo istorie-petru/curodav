@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import Scope
 
-from . import db, sync
+from . import db, reminders, sync
 from .auth import AuthMiddleware, CSRFMiddleware
 from .caldav_bridge import CalDavBridge
 from .config import apply_persisted_radicale_overrides, load_settings, uses_default_radicale_credentials
@@ -206,6 +206,10 @@ async def lifespan(app: FastAPI):
     thread, stop_event = sync.start_background_sync(
         bridge, settings.db_path, settings.sync_interval_seconds
     )
+    # Web Push P2 (2026-09-24): reminder scheduler -- wakes each minute,
+    # sends due event/task/habit/sleep-leisure reminders to subscribed
+    # devices (src/reminders.py). Idle when no device is subscribed.
+    _reminder_thread, reminder_stop = reminders.start_scheduler(settings.db_path)
     logger.info(
         "Started background Radicale sync every %ss", settings.sync_interval_seconds
     )
@@ -213,6 +217,7 @@ async def lifespan(app: FastAPI):
     yield
 
     stop_event.set()
+    reminder_stop.set()
 
 
 def create_app() -> FastAPI:
@@ -293,7 +298,7 @@ def create_app() -> FastAPI:
     # today_redirect and routers/calendar.py::week_redirect for the
     # bookmark-preserving redirects that replaced them, same precedent as
     # the earlier /calendar/timetable retirement).
-    from .routers import auth, banners, calendar, contacts, dashboard, export, habits, labels, notes, projects, public_lists, published_lists, pwa, quick_capture, search, settings, spaces, sync_api, tasks, timeline
+    from .routers import auth, banners, calendar, contacts, dashboard, export, habits, label_pages, labels, notes, projects, public_lists, published_lists, push, pwa, quick_capture, search, settings, spaces, sync_api, tasks, timeline
 
     # Health check (design-system unification pass, 2026-09-17, deploy
     # alignment with sibling app Pineart's own GET /api/health) -- exempted
@@ -346,9 +351,12 @@ def create_app() -> FastAPI:
     # and this is a distinct concern (parsing + create, not query).
     app.include_router(quick_capture.router)
     app.include_router(labels.router)
+    app.include_router(label_pages.router)
+    app.include_router(label_pages.group_router)
     app.include_router(spaces.router)
     app.include_router(projects.router)
     app.include_router(habits.router)
+    app.include_router(push.router)
     app.include_router(banners.router)
     app.include_router(settings.router)
     app.include_router(published_lists.router)

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_detail_cover.html" import detail_cover with context %}
+{% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill, widget_event_dot %}
+{% block title %}{{ label.name }}{% endblock %}
+{% block content %}
+{# A label's preview modal (labels-as-modules slice d, 2026-09-25;
+   routers/label_pages.py::label_preview). Opened by a label pill inside a
+   detail modal or a card (_label_pill.html's `link` argument). Same
+   detail-modal layout as event_detail.html: cover (the label's banner, or
+   a gradient in its color) + title, a meta grid, and the shared footer.
+   "Open page" is a plain link, so it leaves the modal for the full
+   /labels/<name> page; Edit swaps the label form into the modal. #}
+<div id="modal-target" class="modal-stable-height">
+<div class="modal-header">
+    <div class="detail-header-inner">
+        {{ detail_cover('var(--cal-accent-' ~ (label.color or 'blue') ~ ')', banner, icon(label.icon or ('folder' if label.is_project else 'tag'))) }}
+        <div class="detail-heading-row">
+            <div class="detail-heading-text">
+                <h1 class="detail-title">{{ label.name }}</h1>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-body">
+<div class="detail-meta-panel">
+    <div class="detail-meta-grid">
+        {% if label.label_group %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Group</span>
+            <span class="detail-meta-value"><a href="/groups/{{ label.label_group|urlencode }}">{{ icon('layers', 'icon-sm') }} {{ label.label_group }}</a></span>
+        </div>
+        {% endif %}
+        {% if label_status %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Status</span>
+            <span class="detail-meta-value">{{ label_status }}{% if label.has_deadline and label.deadline_date %} &middot; due {{ label.deadline_date | relative_date }}{% endif %}</span>
+        </div>
+        {% endif %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Open tasks</span>
+            <span class="detail-meta-value">{{ open_task_count }}</span>
+        </div>
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Contacts</span>
+            <span class="detail-meta-value">{{ contact_count }}</span>
+        </div>
+    </div>
+    {% if label.description %}
+    <div class="detail-meta-description">
+        <span class="detail-meta-label">Description</span>
+        <p>{{ label.description }}</p>
+    </div>
+    {% endif %}
+</div>
+<div class="widget-header"><h2>{{ icon('calendar', 'icon-sm') }} Coming up</h2></div>
+{% if agenda_items %}
+<table>
+    {% for item in agenda_items %}
+    {% if item.kind == 'task' %}
+    {{ widget_link_row('/tasks/' ~ item.uid, item.title, leading=icon('check-square', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill((item.start_at | relative_date), 'gray')) }}
+    {% elif item.is_deadline %}
+    {{ widget_link_row(none, item.title, leading=icon('flag', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill('Deadline · ' ~ (item.start_at | relative_date), 'red')) }}
+    {% else %}
+    {{ widget_link_row('/events/' ~ item.uid, item.title, leading=widget_event_dot(item.calendar_color), leading_class='widget-row-icon', right=widget_pill(((item.start_at | relative_date) ~ (' ' ~ (item.start_at | fmt_time) if not item.all_day else '')), 'blue')) }}
+    {% endif %}
+    {% endfor %}
+</table>
+{% else %}
+{{ widget_empty('Nothing coming up for this label.') }}
+{% endif %}
+</div>
+
+{% set footer_back_url = '/labels/' ~ label.name %}
+{% set footer_back_label = 'Done' %}
+{% set footer_extra_html %}<a class="btn ghost" href="/labels/{{ label.name|urlencode }}">{{ icon('external-link', 'icon-sm') }} Open page</a>{% endset %}
+{% set footer_primary_href = '/settings/labels/' ~ label.name ~ '/edit' %}
+{% set footer_primary_label = 'Edit' %}
+{% set footer_primary_icon = 'edit' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

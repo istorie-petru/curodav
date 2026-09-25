@@ -68,20 +68,40 @@ class TestCheckinWidget:
         _habit(conn, "h1", "Read")
         _habit(conn, "h2", "Water", target=8)
         tpl = dashboard_router.templates.env.get_template("_widget_habit_checkin.html")
-        html = tpl.render(data=dashboard_router._render_habit_checkin(conn, {}))
+        from starlette.requests import Request
+
+        req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+        html = tpl.render(request=req, data=dashboard_router._render_habit_checkin(conn, {}))
         today = date.today().isoformat()
         assert f'action="/tasks/h1/completion/{today}/toggle"' in html
         assert 'action="/tasks/h2/completions"' in html
         assert f'name="completion_date" value="{today}"' in html
-        assert "/habits/" not in html
+        assert "/habits/" not in html  # no retired entity endpoints
+        # 7-day strip per row: toggles for the plain habit, amount-popup
+        # triggers for the 8-glasses one (2026-09-25).
+        assert html.count('class="form-inline habit-action habit-day-form"') == 7
+        assert html.count('class="habit-day habit-amount-trigger') == 7
+
+    def test_todo_first_and_all_done_summary(self, conn):
+        _habit(conn, "h1", "Aaa")
+        _habit(conn, "h2", "Bbb")
+        db.upsert_task_completion(conn, "h1", date.today().isoformat(), _now())
+        data = dashboard_router._render_habit_checkin(conn, {})
+        assert [r["uid"] for r in data["rows"]] == ["h2", "h1"]
+        assert (data["todo_count"], data["total"], data["all_done"]) == (1, 2, False)
+        db.upsert_task_completion(conn, "h2", date.today().isoformat(), _now())
+        assert dashboard_router._render_habit_checkin(conn, {})["all_done"] is True
+
+    def test_widget_refreshes_on_task_changes(self):
+        assert "tasks" in dashboard_router.WIDGET_TYPES["habit_checkin"]["uses"]
 
 
-class TestHabitUrlsRedirect:
-    @pytest.mark.parametrize("path", ["/habits", "/habits/abc", "/habits/new", "/habits/abc/edit"])
-    def test_old_urls_redirect_to_tasks(self, path, tmp_path, monkeypatch):
+class TestHabitUrls:
+    @pytest.mark.parametrize("path", ["/habits/abc", "/habits/new", "/habits/abc/edit"])
+    def test_old_urls_redirect_to_the_habits_page(self, path, tmp_path, monkeypatch):
         monkeypatch.setenv("CC_DB_PATH", str(tmp_path / "cache.sqlite"))
         from src.main import app
 
         resp = TestClient(app).get(path, follow_redirects=False)
         assert resp.status_code == 302
-        assert resp.headers["location"] == "/tasks"
+        assert resp.headers["location"] == "/habits"

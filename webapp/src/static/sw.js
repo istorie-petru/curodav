@@ -535,7 +535,40 @@
 // logged on every modal open. modal.js is a SHELL_ASSETS entry.
 // v109 (2026-09-24, same session): habits H1 -- style.css's heatmap
 // levels use --accent (were near-invisible #efefef in light theme).
-const CACHE_NAME = "cc-shell-v109";
+// v110 (2026-09-24, same session): habits H2 -- style.css gained the
+// Habits page + weekday-chip rules (habits_page.js is page-specific, not
+// SHELL_ASSETS).
+// v111 (2026-09-24, same session): habits H3 -- modal.js keep-open forms
+// can dispatch data-cc-change on close instead of reloading; style.css
+// gained the habit detail month calendar / log form / notes rules.
+// v112 (2026-09-24, same session): habits H4 -- the Habit Check-in widget
+// reuses the Habits page row; style.css swapped the old .habit-checkin-*
+// rules for the widget summary. habit_checkin.js -> habit_actions.js
+// (page-specific, not SHELL_ASSETS).
+// v113 (2026-09-24, same session): habits H5 -- style.css gained the
+// avoid-habit (relapse) colors.
+// v114 (2026-09-24, same session): habits H6 -- style.css gained the
+// vacation / pause rules.
+// v115 (2026-09-24, same session): habits H7 -- style.css gained the
+// Agenda-widget / day-view habit rules.
+// v116 (2026-09-24, same session): habits H8 -- style.css gained the
+// insights bar rules.
+// v117 (2026-09-24, same session): Web Push P1 -- this file gained the
+// push / notificationclick handlers (a new sw.js is picked up by the
+// browser's own byte-compare anyway; bumped for the shell convention).
+// v118 (2026-09-24, same session): Web Push P3 -- style.css gained the
+// reminder-types / digest-time form rules.
+// v119 (2026-09-25): clickable habit heatmap -- new base.html-loaded
+// habit_day.js (amount popup; added to SHELL_ASSETS), modal.js gained
+// CCModal.markChangedWith, style.css the popup/work-sessions rules.
+// v122 (2026-09-25): Month/4-Week all-day bar spacing -- style.css bar
+// layer now clears the day number and insets from the column gridlines.
+// v123 (2026-09-25, same session): audit regressions -- style.css
+// .field-grid mobile columns, "+N more" / Day-view habit button resets.
+// v124 (2026-09-25, same session): audit decisions -- dashboard columns
+// stack independently (app.js), pills never wrap, phone month view hides
+// times, Week all-day spanning bars (style.css + calendar_week_allday_drag.js).
+const CACHE_NAME = "cc-shell-v124";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",
@@ -547,6 +580,7 @@ const SHELL_ASSETS = [
   "/static/a11y_icon_labels.js",
   "/static/dynamic_styles.js",
   "/static/modal.js",
+  "/static/habit_day.js",
   "/static/tag_input.js",
   "/static/recurrence_picker.js",
   "/static/reminders_picker.js",
@@ -680,4 +714,49 @@ self.addEventListener("fetch", (event) => {
   }
   // Everything else (JSON APIs, non-precached GETs) is left alone --
   // default browser network handling, no caching.
+});
+
+// Web Push (2026-09-24, plans/ui-cleanup-2026-09.md item 7, slice P1) --
+// src/push.py sends a small JSON payload {title, body, url, tag}; show it
+// as a notification, and on click focus an open app tab (navigating it to
+// `url`) or open a new one. Same-origin paths only: a payload can never
+// send the user off-site.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { body: event.data ? event.data.text() : "" };
+  }
+  const title = data.title || "Curodav";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.body || "",
+      icon: "/static/icons/icon-192.png",
+      badge: "/static/icons/icon-192.png",
+      tag: data.tag || undefined,
+      data: { url: data.url || "/" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  let target = "/";
+  try {
+    const u = new URL((event.notification.data && event.notification.data.url) || "/", self.location.origin);
+    if (u.origin === self.location.origin) target = u.pathname + u.search + u.hash;
+  } catch (e) {
+    target = "/";
+  }
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
+      for (const w of wins) {
+        if (new URL(w.url).origin === self.location.origin && "focus" in w) {
+          return w.focus().then(() => (w.navigate ? w.navigate(target) : null));
+        }
+      }
+      return self.clients.openWindow(target);
+    })
+  );
 });

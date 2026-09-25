@@ -95,8 +95,7 @@ class TestLabelsManageRowColorAutoSubmit:
     def test_set_label_color_via_router(self, conn):
         db.upsert_label_config(conn, {"name": "Uni", "color": "blue", "created_at": _now()})
         labels_router.set_label(
-            name="Uni", color="pink", icon="", description="", parent_name="",
-            generate_space="", return_to="", conn=conn,
+            name="Uni", color="pink", icon="", description="", return_to="", conn=conn,
         )
         cfg = db.get_label_config(conn, "Uni")
         assert cfg["color"] == "pink"
@@ -106,8 +105,7 @@ class TestLabelDetailInlineEditStoresColorAndIcon:
     def test_set_label_from_inline_edit_form(self, conn):
         db.upsert_label_config(conn, {"name": "CS101", "color": "blue", "created_at": _now()})
         labels_router.set_label(
-            name="CS101", color="purple", icon="star", description="", parent_name="",
-            generate_space="", return_to="/labels/CS101", conn=conn,
+            name="CS101", color="purple", icon="star", description="", return_to="/labels/CS101", conn=conn,
         )
         cfg = db.get_label_config(conn, "CS101")
         assert cfg["color"] == "purple"

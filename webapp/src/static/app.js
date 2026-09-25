@@ -608,6 +608,9 @@ document.addEventListener("submit", (event) => {
 // view mode -- 2026-08-02, reworked 2026-09-21 direct request: "Dashboard
 // Widgets that are on the same row should have a shared height,
 // calculated as the biggest value between the widgets on that row").
+// SUPERSEDED 2026-09-25 (direct request): columns now stack
+// independently, each card at its natural height -- see layout() below.
+// The history in the rest of this comment is kept for context.
 //
 // 2026-08-02..2026-08-30 this used to be a hand-written "skyline" best-fit
 // bin-packer: cards could start at whatever top a shorter neighbor left
@@ -732,53 +735,45 @@ document.addEventListener("submit", (event) => {
     // differently here than it did in the dry run above.
     const rows = packRows(cards, cols, effectiveSpan);
 
-    // Width only ever depends on a card's own span, so every card's width
-    // can be set -- and its real natural height measured -- in one
-    // batched write-then-read pass per row (offsetHeight forces the width
-    // write to actually apply before measuring). Direct request,
-    // 2026-09-21 ("widgets on the same row should have a shared height,
-    // calculated as the biggest value between the widgets on that row"):
-    // every card in a row is then stretched to that row's tallest
-    // measured height, not left at its own natural height -- the one real
-    // behavior change from the masonry packer this replaced.
-    let top = 0;
+    // 2026-09-25 direct request (UI audit, answering "equal-height rows
+    // leave a ~450px hole at 900px now that widget boxes are invisible"):
+    // "let each column stack independently." Replaces the 2026-09-21
+    // shared-row-height rule. Horizontal placement is unchanged (strict
+    // DOM-order row wrapping, packRows above) -- only the vertical is new:
+    // each card keeps its own natural height and starts right under the
+    // lowest bottom among the virtual columns it spans (`colBottom`), so a
+    // short widget no longer leaves dead space that pushes the next row
+    // down. Width is still written before measuring, and any height a
+    // previous pass stamped is cleared (the 2026-09-24 stale-height fix --
+    // kept even though this pass no longer writes heights, since a page
+    // loaded from an older cached app.js could still carry one).
+    const colBottom = new Array(cols).fill(0);
     rows.forEach((row) => {
-      let left = 0;
-      let rowHeight = 0;
+      let colStart = 0;
       const entries = row.map(({ card, span }) => {
         const width = span * colWidth + (span - 1) * GAP;
         card.style.width = `${width}px`;
-        // Clear any row height a PREVIOUS layout() pass stamped onto this
-        // card before measuring below -- 2026-09-24 bug fix (direct
-        // report: "the height of dashboard widgets doesn't update after
-        // enlarging the sidebar"). Without this, offsetHeight just echoes
-        // back that stale explicit height instead of the card's real
-        // natural height at its new width/content, so a card can never
-        // grow OR shrink again after its first layout() pass -- not
-        // specific to the sidebar, any later relayout (new content, a
-        // resize) was equally stuck once a height had been set once.
         card.style.height = "";
-        return { card, span, width };
+        const entry = { card, span, width, colStart };
+        colStart += span;
+        return entry;
       });
       entries.forEach((entry) => {
         entry.height = entry.card.offsetHeight;
-        rowHeight = Math.max(rowHeight, entry.height);
       });
       entries.forEach((entry) => {
-        entry.card.style.left = `${left}px`;
+        const spanned = colBottom.slice(entry.colStart, entry.colStart + entry.span);
+        const top = Math.max(0, ...spanned);
+        entry.card.style.left = `${entry.colStart * (colWidth + GAP)}px`;
         entry.card.style.top = `${top}px`;
-        entry.card.style.height = `${rowHeight}px`;
-        left += entry.width + GAP;
+        const bottom = top + entry.height + GAP;
+        for (let c = entry.colStart; c < entry.colStart + entry.span; c += 1) colBottom[c] = bottom;
       });
-      top += rowHeight + GAP;
     });
 
-    // `top` already has one trailing GAP past the last row's bottom edge
-    // (added unconditionally inside the loop above, same as every other
-    // row-to-row gap) -- strip it back off so the grid's own height
-    // doesn't reserve an extra gap's worth of space past the real last
-    // card.
-    grid.style.height = `${Math.max(0, top - GAP)}px`;
+    // Every column's bottom carries one trailing GAP past its last card --
+    // strip it back off so the grid doesn't reserve an extra gap.
+    grid.style.height = `${Math.max(0, Math.max(...colBottom) - GAP)}px`;
   }
 
   let rafId = null;

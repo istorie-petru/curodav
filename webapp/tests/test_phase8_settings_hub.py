@@ -104,8 +104,10 @@ class TestSettingsHub:
             assert name in body
         # Habits is not a hub category (2026-08-08 follow-up #3): it's
         # reached from Tasks > Habits, so a hub shortcut would duplicate
-        # an already-contextual destination.
-        assert ">Habits<" not in body
+        # an already-contextual destination. (Since habits H2 the nav rail
+        # carries a Habits link to /habits -- that's the page, not a hub
+        # category, so check for a settings-scoped habits link instead.)
+        assert 'href="/settings/habits"' not in body
         # "Widgets" was its own category (Custom widgets toggle + reset
         # layout) -- removed 2026-08-08 when the toggle itself was removed
         # (see routers/settings.py's module docstring); the one remaining
@@ -276,14 +278,12 @@ class TestDataAndBackupCategoryRemoved:
         assert not hasattr(settings_router, "settings_data")
         assert not hasattr(settings_router, "DATA_ENTRIES")
 
-    def test_habits_list_page_is_retired_redirects_to_tasks(self, conn):
-        # 2026-08-28 "major rework" session (item 2): the standalone Habits
-        # list page (and its "straight to Settings" breadcrumb) is gone --
-        # every Habit entity now renders as a row in the Tasks table's own
-        # Habits group instead (routers/tasks.py's _habit_group_items).
-        resp = habits_router.list_habits_redirect()
+    def test_old_habit_urls_redirect_to_the_habits_page(self, conn):
+        # Habits H2 (2026-09-24): /habits is a real page again; any other
+        # old /habits/... URL lands on it.
+        resp = habits_router.habit_page_redirect("abc/edit")
         assert resp.status_code == 302
-        assert resp.headers["location"] == "/tasks"
+        assert resp.headers["location"] == "/habits"
 
     def test_published_lists_page_breadcrumbs_straight_to_settings(self, conn):
         resp = published_lists_router.list_index(_request_with_radicale("/published-lists"), conn=conn)

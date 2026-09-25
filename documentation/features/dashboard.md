@@ -41,11 +41,11 @@ from the 12 the section header above once counted.
 
 | Type | Shows | Default width |
 |---|---|---|
-| `agenda` | Consolidated: Range (`today` / `next_7_days` / `next_30_days` / `all_upcoming`, `config["range"]`) picks how far out; Show (`config["show"]`, a subset of `overdue`/`tasks`/`events`, default all three) picks which sections render. `today`/`all_upcoming` render a flat list (Overdue always its own section regardless of Range); `next_7_days`/`next_30_days` render a day-by-day grid. `limit` applies to the `all_upcoming` Tasks/Events sections only. | half |
+| `agenda` | Consolidated: Range (`today` / `next_7_days` / `next_30_days` / `all_upcoming`, `config["range"]`) picks how far out; Show (`config["show"]`, a subset of `overdue`/`tasks`/`events`/`habits`, default all four -- `habits` added 2026-09-24: today's still-to-do habits as one-tap rows, in the Today and Next-7-days layouts) picks which sections render. `today`/`all_upcoming` render a flat list (Overdue always its own section regardless of Range); `next_7_days`/`next_30_days` render a day-by-day grid. `limit` applies to the `all_upcoming` Tasks/Events sections only. | half |
 | `at_a_glance` | 3-number stats strip (Overdue / Due today / Due this week), each linking to the matching filtered Tasks view | third |
 | `mini_month_calendar` | month grid, busy dots only, prev/next | half |
 | `spaces_projects` | Consolidated: Style (`config["style"]`, `list` default or `cards`) picks List (project/label rows + progress bar) or Cards (Material-You filled squares, no `.widget-card` chrome — see `.widget-card--bare` — one per Space linking to `/spaces/{name}`, plus, when unscoped, one per open project linking to `/tasks`; 2026-08-30 merge, see above). Scope (`config["scope"]`, `space` default or `everything`, Space/Project pages only) picks whether a page's own instance stays auto-scoped to that page's children (projects AND sub-Spaces both) or shows the app-wide list instead | third |
-| `habit_checkin` | check-off-today per active habit (a habit-labeled task, via `habit_view.habit_items`; checkbox for target=1, count + `+1` stepper for target>1), no-JS forms | half |
+| `habit_checkin` | the Habits page's row per active habit (one-tap check or +1, schedule + streak, 7-day strip), still-to-do first, "n of N done"; no-JS forms, `habit_actions.js` re-renders the card | half |
 | `contact_list` | contacts filtered by labels, `limit` | third |
 | `scheduled_work_today` | today's work-allocation sessions + a completed-hours total — ported from the retired `/today` page (1.9 side work) | third |
 | `weekly_schedule` | a compact, **static** weekly-pattern grid of a label's long-lived recurring events (a "university timetable" without reviving the removed Schedule module, `plans/abandoned.md`) — a recurring event qualifies once its own rule spans >= 30 days from first to last occurrence (`_is_long_lived_recurrence`, filters out a short recurring reminder while keeping a real standing pattern); every qualifying event's grid slot comes straight from its own `start_at`/`end_at` weekday+time-of-day, not from expanding any one real calendar week — holidays/manual exceptions are deliberately not reflected. Only weekdays with a block become columns, the vertical range is tightened to the events' own time span (not a full 24h day), and a plain agenda-style list renders below the grid for full readable detail | half |
@@ -221,3 +221,8 @@ hand-roll an empty-state, section label, status pill, or fixed-width cell.
 `/dashboard/customize`, `/dashboard/reset`, `/dashboard/widgets` (add),
 `/dashboard/widgets/preview`, and per-widget `/{uid}/edit`, `/{uid}/delete`,
 `/{uid}/move`, `/{uid}/reorder`, `/{uid}/stack-onto`, `/{uid}/unstack`.
+
+**Default Home layout (2026-09-24, plans/ui-cleanup-2026-09.md item 15):**
+Today agenda (quarter, overdue/tasks/events) | At a glance + Upcoming stack
+(half) | Habit Check-in (quarter). Seeded once per install; "Reset layout"
+re-applies it. Space/Project pages keep the half/half Today + stack pair.

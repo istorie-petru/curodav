@@ -314,5 +314,20 @@ class TestShellCacheVersion:
         # gained .habit-checkin-name -- see sw.js's own comment.
         # v108 (2026-09-24, same session): modal.js CSP fix -- see sw.js.
         # v109 (2026-09-24, same session): habits H1 heatmap colors.
+        # v110 (2026-09-24, same session): habits H2 page styles.
+        # v111 (2026-09-24, same session): habits H3 modal.js + styles.
+        # v112 (2026-09-24, same session): habits H4 widget styles.
+        # v113 (2026-09-24, same session): habits H5 avoid-habit styles.
+        # v114 (2026-09-24, same session): habits H6 pause styles.
+        # v115 (2026-09-24, same session): habits H7 agenda/day-view styles.
+        # v116 (2026-09-24, same session): habits H8 insights styles.
+        # v117 (2026-09-24, same session): Web Push P1 handlers in sw.js.
+        # v118 (2026-09-24, same session): Web Push P3 settings styles.
+        # v119 (2026-09-25): habit amount popup (habit_day.js) + modal.js.
+        # v120 (2026-09-25): sidebar group chevron fix (style.css).
+        # v121 (2026-09-25): narrow banners on dashboards + modal covers.
+        # v122 (2026-09-25): month all-day bar spacing (style.css).
+        # v123 (2026-09-25): audit regressions (field-grid, button resets).
+        # v124 (2026-09-25): audit decisions (dashboard columns, pills, week bars).
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v109"' in script
+        assert 'CACHE_NAME = "cc-shell-v124"' in script
