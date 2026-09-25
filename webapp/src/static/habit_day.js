@@ -47,14 +47,33 @@
     return isNaN(d) ? iso : d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
   }
 
+  // 2026-09-25 (UI audit H-17): the popup opens next to the day that was
+  // tapped (below it, or above when there's no room), clamped to the
+  // viewport -- it used to open centred on the screen, far from the chip.
+  // Set through the CSSOM (allowed under the CSP; inline style="" isn't).
+  function place(trigger) {
+    const r = trigger.getBoundingClientRect();
+    const box = dialog.getBoundingClientRect();
+    const gap = 8;
+    const vw = document.documentElement.clientWidth;
+    const vh = window.innerHeight;
+    let top = r.bottom + gap;
+    if (top + box.height > vh - gap) top = Math.max(gap, r.top - gap - box.height);
+    const left = Math.min(Math.max(gap, r.left + r.width / 2 - box.width / 2), vw - box.width - gap);
+    dialog.classList.add("is-anchored");
+    dialog.style.top = Math.round(top) + "px";
+    dialog.style.left = Math.round(left) + "px";
+  }
+
   function open(trigger) {
     if (!dialog) build();
     current = trigger;
     const unit = trigger.dataset.unit || "";
-    label.textContent = prettyDate(trigger.dataset.date) + (unit ? " -- " + unit : "");
+    label.textContent = prettyDate(trigger.dataset.date) + (unit ? " \u00b7 " + unit : "");
     input.placeholder = trigger.dataset.target || "1";
     input.value = trigger.dataset.value || "";
     dialog.showModal();
+    place(trigger);
     input.focus();
     input.select();
   }
@@ -91,6 +110,17 @@
     if (!trigger) return;
     e.preventDefault();
     open(trigger);
+  });
+
+  // 2026-09-25 (UI audit H-14): the habit form hides its build-only
+  // fields (Unit, Recurrence, days, target) while Kind is "Avoid"
+  // (style.css .habit-task-form.is-avoid). Delegated: the form arrives
+  // in a modal after this script loaded.
+  document.addEventListener("change", (e) => {
+    const sel = e.target;
+    if (!sel || sel.id !== "habit-kind") return;
+    const form = sel.closest(".habit-task-form");
+    if (form) form.classList.toggle("is-avoid", sel.value === "avoid");
   });
 
   // Work sessions in the habit view modal are collapsed by default; once

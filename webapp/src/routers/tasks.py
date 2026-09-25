@@ -787,12 +787,17 @@ def task_detail(uid: str, request: Request, month: str | None = None, conn=Depen
     # context keys are still present (empty) so task_detail.html renders
     # unchanged either way and never has to branch on "is this recurring?".
     if task and task.get("recurrence"):
-        completions = {c["due_date"]: "x" for c in db.list_task_completions(conn, uid)}
+        completion_rows = db.list_task_completions(conn, uid)
+        completions = {c["due_date"]: "x" for c in completion_rows}
         excluded = _excluded_dates_for_row(conn, task, completions, date.today())
         # Habits H1 (2026-09-24): schedule-aware -- a weekly or Mon/Wed/Fri
         # task no longer "breaks" on the days it isn't due.
         pinfo = habit_view.pause_info(db.list_habit_pauses(conn), uid, date.today())
-        stats = habit_view.stats_for_task(task, {d: 1 for d in completions}, excluded, paused=pinfo["dates"])
+        # 2026-09-25 (UI audit H-01): real logged values, not 1 per row --
+        # an amount habit's day only counts once it reaches the target.
+        stats = habit_view.stats_for_task(
+            task, {c["due_date"]: c.get("value") or 1 for c in completion_rows}, excluded, paused=pinfo["dates"]
+        )
         ctx.update(
             {
                 "completions": completions,
@@ -829,7 +834,9 @@ def task_detail(uid: str, request: Request, month: str | None = None, conn=Depen
             task.get("target_per_day") or 1,
             habit_heatmap.DETAIL_WEEKS,
         )
-        ctx["habit_month"] = habit_view.month_calendar(uid, rows, month if isinstance(month, str) else None)
+        ctx["habit_month"] = habit_view.month_calendar(
+            uid, rows, month if isinstance(month, str) else None, target=habit_view.quantity_target(task)
+        )
         ctx["habit_notes"] = habit_view.recent_notes(rows)
         # Habits H8: strength (on habit_stats), per-month counts, usual hour.
         ctx["habit_insights"] = habit_view.insights(rows)
@@ -1129,9 +1136,21 @@ def set_task_completion(
     elif note is not None:
         note = note.strip()[:500]
     try:
-        parsed_value = float(value) if value else 1.0
+        parsed_value = float(value) if value else None
     except ValueError:
         parsed_value = 1.0
+    if parsed_value is None:
+        # 2026-09-25 (UI audit H-13): an empty amount (the detail modal's
+        # "Log a day" box now starts empty, target as its placeholder)
+        # keeps what the day already has -- a note-only save no longer
+        # overwrites 1 with 8 -- and on an unlogged day logs the daily
+        # target (1 for a plain habit, same as the old default).
+        existing = db.get_task_completion(conn, uid, completion_date)
+        if existing and (existing.get("value") or 0) > 0:
+            parsed_value = float(existing["value"])
+        else:
+            task_row = db.get_task(conn, uid) or {}
+            parsed_value = float(task_row.get("target_per_day") or 1)
     # 2026-08-28 follow-up (direct number input replacing the "+1"/reset
     # buttons): the input's own `max="999999"` is advisory only -- an HTML
     # `max` doesn't stop a hand-crafted request, so clamp here too. Keeps

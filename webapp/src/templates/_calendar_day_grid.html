@@ -41,10 +41,23 @@
             {% for h in habits | default([]) %}
             {% if h.is_future %}
             <span class="allday-task allday-habit" title="{{ h.title }} (habit)">{{ icon('repeat', 'icon-sm') }} {{ h.title }}</span>
+            {% elif h.is_quantity %}
+            {# 2026-09-25 (UI audit C-5): an amount habit shows n/target and
+               logs one more per tap (same +1 as the Agenda widget); it only
+               reads done at its target, lighter while partial. #}
+            <form method="post" action="{{ h.plus_url }}" class="form-inline habit-action allday-habit-form">
+                <input type="hidden" name="completion_date" value="{{ h.date }}">
+                <input type="hidden" name="value" value="{{ h.next_value|int }}">
+                <button type="submit" class="allday-task allday-habit is-qty{% if h.done %} is-done{% elif h.partial %} is-partial{% endif %}"
+                        title="{{ h.title }}: {{ h.value|int }} of {{ h.target|int }}. Click to log one more">
+                    <span class="allday-habit-count">{{ h.value|int }}/{{ h.target|int }}</span> {{ h.title }}</button>
+            </form>
             {% else %}
-            <form method="post" action="{{ h.toggle_url }}" class="form-inline habit-action allday-habit-form">
+            <form method="post" action="{{ h.toggle_url }}" class="form-inline habit-action allday-habit-form"
+                  data-undo-url="{{ h.plus_url }}" data-undo-date="{{ h.date }}" data-undo-value="{{ h.value|int }}"
+                  data-undo-message="{% if h.done %}Unchecked{% else %}Checked in{% endif %}: {{ h.title }}">
                 <button type="submit" class="allday-task allday-habit{% if h.done %} is-done{% endif %}" aria-pressed="{{ 'true' if h.done else 'false' }}"
-                        title="{{ h.title }} -- {% if h.done %}done, click to undo{% else %}click to mark done{% endif %}">{{ icon('check-circle' if h.done else 'square', 'icon-sm') }} {{ h.title }}</button>
+                        title="{{ h.title }}: {% if h.done %}done. Click to undo{% else %}click to mark done{% endif %}">{{ icon('check-circle' if h.done else 'square', 'icon-sm') }} {{ h.title }}</button>
             </form>
             {% endif %}
             {% endfor %}

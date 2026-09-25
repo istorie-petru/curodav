@@ -51,7 +51,12 @@ class TestHabitItems:
         item = habit_view.habit_items(conn, today)[0]
         assert item["is_quantity"] is True
         assert (item["today_value"], item["next_value"], item["target"]) == (3, 4, 8)
-        assert item["current_streak"] == 2
+        # 2026-09-25 (UI audit H-01): 3 of 8 is a partial day, not a kept
+        # one -- the streak is yesterday's full day only, and the habit is
+        # still to do today (this asserted 2 while any value counted).
+        assert item["current_streak"] == 1
+        assert item["due_today"] is True
+        assert (item["done_today"], item["partial_today"], item["remaining_today"]) == (False, True, 5)
         assert item["recurrence_label"] == "Daily"
         assert item["toggle_url"] == "/tasks/h1/completion/2026-09-24/toggle"
         assert item["plus_url"] == "/tasks/h1/completions"
