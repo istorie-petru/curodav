@@ -9,19 +9,15 @@
 {% from "_widget_items.html" import widget_empty %}
 {% from "_habit_page_row.html" import habit_page_row with context %}
 {% if data.rows %}
-{# 2026-09-25 (UI audit H-08): the "n of N done" count covers only habits
-   that can be done today -- an avoid habit (nothing to check off) and a
-   paused one used to count as "done". Counted here from the rows'
-   own fields so the renderer's contract doesn't change. The summary text
-   is one span (the flex gap split "1" from "of 4 done"), and the Habits
-   link stays in the all-done state too. #}
-{% set _countable = data.rows|rejectattr('is_avoid')|rejectattr('paused_today')|list %}
-{% set _open = _countable|selectattr('due_today')|list %}
+{# 2026-09-25 (UI audit H-08): done/total/all_done come from the renderer
+   (_render_habit_checkin), which leaves out avoid and paused habits. The
+   summary text is one span (a flex gap used to split "1" from "of 4
+   done"), and the Habits link stays in the all-done state too. #}
 <div class="habit-widget">
-    {% if _countable and not _open %}
+    {% if data.all_done %}
     <p class="habit-widget-summary is-all-done">{{ icon('party-popper', 'icon-sm') }} <span>All done for now</span> <a href="/habits" class="habit-widget-link">Habits</a></p>
-    {% elif _countable %}
-    <p class="habit-widget-summary"><span><strong>{{ _countable|length - _open|length }}</strong> of {{ _countable|length }} done</span> <a href="/habits" class="habit-widget-link">Habits</a></p>
+    {% elif data.total %}
+    <p class="habit-widget-summary"><span><strong>{{ data.done_count }}</strong> of {{ data.total }} done</span> <a href="/habits" class="habit-widget-link">Habits</a></p>
     {% else %}
     <p class="habit-widget-summary"><a href="/habits" class="habit-widget-link">Habits</a></p>
     {% endif %}

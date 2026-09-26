@@ -87,6 +87,18 @@
   }
 
   let lastScrollTop = null;
+  let windowScrolled = false;
+
+  // Grid y (px from 00:00) to land one hour below the sticky header: the
+  // earlier of the first timed event and now (when today is shown), else
+  // FALLBACK_HOUR. Shared by the grid-scroll and phone window-scroll paths.
+  function targetPx(root) {
+    const tops = Array.from(root.querySelectorAll(".time-col .time-event"))
+      .map((el) => parseFloat(el.style.top))
+      .filter((n) => !isNaN(n));
+    if (todayCol(root)) tops.push(nowTopPx());
+    return tops.length ? Math.min.apply(null, tops) - PX_PER_HOUR : (toGrid(FALLBACK_HOUR * 60) / 60) * PX_PER_HOUR;
+  }
 
   function autoScroll(root) {
     const scroller = root.querySelector(".time-grid-wrap");
@@ -95,20 +107,27 @@
     scroller.addEventListener("scroll", () => {
       lastScrollTop = scroller.scrollTop;
     }, { passive: true });
-    // Phones (<=720px): the grid isn't its own scroll box there (the page
-    // scrolls, see style.css's main.main-calendar height rule), and
-    // scrolling the whole page would push the header/nav off screen.
-    if (scroller.scrollHeight <= scroller.clientHeight + 1) return;
+    // Phones (<=720px): the grid isn't its own scroll box there -- the
+    // page grows and the WINDOW scrolls. 2026-09-25 (Peter: "phones need
+    // the correct scroll"): same target, applied to the window, once per
+    // page load only, and only while the page is still at the top (a
+    // browser-restored or user scroll wins). style.css lets .time-grid-top
+    // stick to the viewport there, so the day names stay visible.
+    if (scroller.scrollHeight <= scroller.clientHeight + 1) {
+      if (windowScrolled || window.scrollY > 0) return;
+      windowScrolled = true;
+      const sticky = root.querySelector(".time-grid-top");
+      const stickyH = sticky ? sticky.getBoundingClientRect().height : 0;
+      const colPageTop = col.getBoundingClientRect().top + window.scrollY;
+      window.scrollTo(0, Math.max(0, colPageTop - stickyH + targetPx(root) - 12));
+      return;
+    }
     if (scroller.scrollTop > 0) return; // restored by the caller (refreshWeek)
     if (lastScrollTop !== null) {
       scroller.scrollTop = lastScrollTop; // a swap nobody restored (Day refresh, habit check-in)
       return;
     }
-    const tops = Array.from(root.querySelectorAll(".time-col .time-event"))
-      .map((el) => parseFloat(el.style.top))
-      .filter((n) => !isNaN(n));
-    if (todayCol(root)) tops.push(nowTopPx());
-    const target = tops.length ? Math.min.apply(null, tops) - PX_PER_HOUR : (toGrid(FALLBACK_HOUR * 60) / 60) * PX_PER_HOUR;
+    const target = targetPx(root);
     // .time-col's own offset inside the scroller (sticky header + all-day
     // strip + the body's half-hour top padding) minus the sticky part that
     // covers the top of the viewport, so "target" lands just below it;

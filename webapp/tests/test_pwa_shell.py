@@ -330,5 +330,6 @@ class TestShellCacheVersion:
         # v123 (2026-09-25): audit regressions (field-grid, button resets).
         # v124 (2026-09-25): audit decisions (dashboard columns, pills, week bars).
         # v125 (2026-09-25): UI audit fixes, four areas merged.
+        # v126 (2026-09-25): phone auto-scroll, stack bar, picker week start.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v125"' in script
+        assert 'CACHE_NAME = "cc-shell-v126"' in script

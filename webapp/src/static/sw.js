@@ -573,7 +573,10 @@
 // (popover, now-line via page-specific calendar_now.js, colour tokens),
 // labels/sidebar (rail titles, group monograms, banner chip) and the flat
 // sweep (--page-inset, dividers, dead CSS removed). style.css throughout.
-const CACHE_NAME = "cc-shell-v125";
+// v126 (2026-09-25, same session): phone Week/Day auto-scroll + sticky
+// header (style.css, calendar_now.js), stack bar label (style.css),
+// date picker week start (datetime_picker.js).
+const CACHE_NAME = "cc-shell-v126";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

@@ -81,7 +81,7 @@
       if (!("pagereveal" in window)) document.documentElement.classList.add("no-cdt");
     </script>
 </head>
-<body data-px-per-hour="{{ px_per_hour|default(48) }}" data-time-format="{{ time_format(request) }}" data-edit-mode="{{ '1' if edit_mode_enabled(request) else '' }}">
+<body data-px-per-hour="{{ px_per_hour|default(48) }}" data-time-format="{{ time_format(request) }}" data-week-start="{{ week_start(request) }}" data-edit-mode="{{ '1' if edit_mode_enabled(request) else '' }}">
 <a href="#main-content" class="skip-link">Skip to main content</a>
 {% include "_icons_sprite.html" %}
 <div class="app-window">

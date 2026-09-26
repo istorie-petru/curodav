@@ -3405,6 +3405,19 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
   main.main-calendar > .calendar-viewport,
   main.main-calendar > .project-calendar-layout{margin-bottom:8dvh;}
 }
+/* 2026-09-25 (UI audit C-7, Peter: "phones need the correct scroll"):
+   below 721px the calendar page grows and the WINDOW scrolls, not the
+   grid -- but main/.calendar-viewport/.time-grid-wrap are still overflow
+   containers, so `.time-grid-top`'s position:sticky pinned to a box that
+   never scrolls and the day names/all-day strip scrolled away with the
+   hours. Letting them overflow visibly makes the viewport the sticky
+   context, so the header stays pinned while calendar_now.js scrolls the
+   window to the first event. */
+@media (max-width:720px){
+  main.main-calendar,
+  main.main-calendar .calendar-viewport,
+  main.main-calendar .time-grid-wrap{overflow:visible;}
+}
 
 /* Week/Day time grid (routers/calendar.py week_view/day_view, grid_layout.py) */
 /* --hr-h (pixels-per-hour) used to be templated into every grid's own
@@ -6189,6 +6202,8 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 }
 .widget-stack{display:flex; flex-direction:column;}
 .widget-stack-header{margin-bottom:var(--space-2);}
+/* H-18 (2026-09-25): names the stack's own edit bar. */
+.widget-stack-label{font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.04em;}
 .widget-stack-item + .widget-stack-item{margin-top:var(--space-3); padding-top:var(--space-3); border-top:1px solid var(--separator);}
 
 /* Mini Calendar widget (_widget_mini_month_calendar.html) -- a compact

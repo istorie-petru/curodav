@@ -156,9 +156,14 @@
     return new Date(year, month - 1, 1).toLocaleString("en-GB", { month: "long", year: "numeric" });
   }
 
-  // Monday-first, matching the app's own mini-calendar (M T W T F S S).
+  // Week start follows Settings > General "Week starts on" (2026-09-25,
+  // was hardcoded Monday-first) via base.html's <body data-week-start>,
+  // same source the calendar grids and the dashboard mini-calendar use.
+  const SUNDAY_FIRST = document.body && document.body.dataset.weekStart === "sunday";
+  const WEEKDAY_INITIALS = SUNDAY_FIRST ? ["S", "M", "T", "W", "T", "F", "S"] : ["M", "T", "W", "T", "F", "S", "S"];
   function firstDayOfWeekOffset(year, month) {
-    return (new Date(year, month - 1, 1).getDay() + 6) % 7;
+    const dow = new Date(year, month - 1, 1).getDay(); // 0 = Sunday
+    return SUNDAY_FIRST ? dow : (dow + 6) % 7;
   }
 
   function daysInMonth(year, month) {
@@ -404,7 +409,7 @@
 
       const weekdays = document.createElement("div");
       weekdays.className = "mini-cal-weekdays";
-      for (const wd of ["M", "T", "W", "T", "F", "S", "S"]) {
+      for (const wd of WEEKDAY_INITIALS) {
         const s = document.createElement("span");
         s.textContent = wd;
         weekdays.appendChild(s);

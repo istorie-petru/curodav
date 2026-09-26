@@ -223,3 +223,30 @@ class TestStylingHooks:
     def test_habit_actions_reads_error_body_and_offers_undo(self):
         js = (SRC / "static" / "habit_actions.js").read_text()
         assert "data.error" in js and 'label: "Undo"' in js
+
+
+class TestCheckinSummaryCountsOnlyDoableHabits:
+    """H-08 remainder (2026-09-25): the renderer, not just the template,
+    leaves avoid habits out of done/total/all_done."""
+
+    def test_avoid_habit_is_not_counted_as_done(self, conn):
+        _habit(conn, "b1", title="Meditate")
+        _habit(conn, "a1", title="No sugar", kind="avoid")
+        data = dashboard_router._render_habit_checkin(conn, {})
+        assert (data["done_count"], data["total"], data["all_done"]) == (0, 1, False)
+        db.upsert_task_completion(conn, "b1", TODAY.isoformat(), _now(), value=1)
+        data = dashboard_router._render_habit_checkin(conn, {})
+        assert (data["done_count"], data["total"], data["all_done"]) == (1, 1, True)
+
+    def test_only_avoid_habits_is_never_all_done(self, conn):
+        _habit(conn, "a1", title="No sugar", kind="avoid")
+        data = dashboard_router._render_habit_checkin(conn, {})
+        assert (data["total"], data["all_done"]) == (0, False)
+        assert len(data["rows"]) == 1  # the row itself still renders
+
+
+def test_stack_bar_is_named_and_dissolve_has_its_own_icon():
+    # H-18 (2026-09-25): "Dissolve stack" no longer shares Remove widget's x.
+    tpl = (SRC / "templates" / "_widget_workspace.html").read_text()
+    assert '<span class="widget-stack-label">Stack</span>' in tpl
+    assert 'aria-label="Dissolve stack">{{ icon(\'scissors\', \'icon-sm\') }}' in tpl

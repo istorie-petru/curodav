@@ -6,6 +6,7 @@ rendered markup, the colour tokens and the static assets."""
 from __future__ import annotations
 
 import re
+import subprocess
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -227,3 +228,32 @@ class TestEventFormAllDay:
         js = (STATIC / "datetime_picker.js").read_text(encoding="utf-8")
         assert '" · All day"' in js
         assert 'input[name="all_day"][type="checkbox"]' in js
+
+
+class TestPhoneAutoScroll:
+    """2026-09-25, Peter: "phones need the correct scroll" (C-7 on <=720px):
+    the window scrolls to the same target as desktop, once per load, and
+    the day-name header pins to the viewport instead of scrolling away."""
+
+    def test_script_scrolls_the_window_once_when_the_grid_is_not_a_scroll_box(self):
+        script = (STATIC / "calendar_now.js").read_text()
+        assert "if (windowScrolled || window.scrollY > 0) return;" in script
+        assert "window.scrollTo(0, Math.max(0, colPageTop - stickyH + targetPx(root) - 12));" in script
+        subprocess.run(["node", "--check", str(STATIC / "calendar_now.js")], check=True)
+
+    def test_calendar_containers_stop_clipping_on_phones_so_the_header_sticks(self):
+        css = (STATIC / "style.css").read_text()
+        assert (
+            "@media (max-width:720px){\n  main.main-calendar,\n  main.main-calendar .calendar-viewport,\n"
+            "  main.main-calendar .time-grid-wrap{overflow:visible;}\n}"
+        ) in css
+
+
+def test_datetime_picker_follows_week_start_setting():
+    # 2026-09-25: the picker's own month grid was hardcoded Monday-first.
+    script = (STATIC / "datetime_picker.js").read_text()
+    assert 'document.body.dataset.weekStart === "sunday"' in script
+    assert "return SUNDAY_FIRST ? dow : (dow + 6) % 7;" in script
+    base = (STATIC.parent / "templates" / "base.html").read_text()
+    assert 'data-week-start="{{ week_start(request) }}"' in base
+    subprocess.run(["node", "--check", str(STATIC / "datetime_picker.js")], check=True)

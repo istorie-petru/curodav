@@ -953,11 +953,19 @@ def _render_habit_checkin(conn, config: dict, nav: dict | None = None) -> dict:
     # "n of N done" summary and an all-done state.
     todo = [h for h in rows if h["due_today"]]
     rest = [h for h in rows if not h["due_today"]]
+    # 2026-09-25 (UI audit H-08): the "n of N done" summary and the all-done
+    # state count only habits that can be done today -- an avoid habit has
+    # nothing to check off and a paused one is on hold, so neither counts
+    # as "done" (they used to). Counted here, once, instead of in the
+    # template, so every consumer of this dict agrees.
+    countable = [h for h in rows if not h.get("is_avoid") and not h.get("paused_today")]
+    open_count = sum(1 for h in countable if h["due_today"])
     return {
         "rows": todo + rest,
-        "todo_count": len(todo),
-        "total": len(rows),
-        "all_done": bool(rows) and not todo,
+        "todo_count": open_count,
+        "total": len(countable),
+        "done_count": len(countable) - open_count,
+        "all_done": bool(countable) and not open_count,
     }
 
 
