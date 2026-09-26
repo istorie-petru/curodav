@@ -67,8 +67,19 @@ session start.
   templates from disk while Python routes stay stale, which looks like a
   half-applied merge.
 
-  **Next slice suggestion**: C-7 on phones needs Peter's call; otherwise
-  H-18 + the H-08 remainder (small), then group rename/add-members.
+  Same session, last batch (all in the audit doc's "Closed later the same
+  session" list): phone auto-scroll for Week/Day (Peter's call), H-18, the
+  H-08 remainder, date picker week start, group rename + member checklist
+  (with modal.js `data-follow-redirect` so renaming the open page's group/
+  label lands on the renamed page), and `webapp/scripts/seed_preview.py` --
+  run it for realistic preview data instead of hand-seeding. SW cache v127.
+  Suite: 2,571 passed. Restarting the dev server: find it with
+  `ps -eo pid,args | awk '$2 ~ /python$/ && $3=="-m" && $4=="src.main"'` --
+  any grep for "src.main" also matches the shell running it and kills it.
+
+  **Next slice suggestion**: deadlines in the Groups & Labels widget (S-M),
+  then per-habit reminder times (M-L); F12 font-size pass needs a
+  deliberate call on which sizes may visibly change.
 
 - **Shipped:** 2026-09-24 -- Peter sent one message bundling ~17 distinct
   UI/UX change requests (labels-as-modules rework, narrow banners

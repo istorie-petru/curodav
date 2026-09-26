@@ -4,8 +4,9 @@
 {# A group's own look (2026-09-25, UI audit L3; routers/label_pages.py::
    edit_group_modal / update_group). Groups used to share one hard-coded
    `layers` icon, so every group looked the same in the collapsed rail.
-   Only color + icon live here: a group is the text in its labels' Group
-   field, so renaming it or adding members is done on the labels. Same
+   Name and members live here too (same day, flesh-out item 7): a rename
+   moves the group's dashboard/banner/look with it, and the checklist sets
+   exactly which labels are in the group (a label is in at most one). Same
    color/icon picker partials as the label form (inline fields, like
    quick_add.html's Label tab). "No icon" shows the group's first letter
    in the rail, which is why its swatch is the `type` (letter) glyph. #}
@@ -14,13 +15,27 @@
 <h1>Edit group</h1>
 </div>
 <div class="modal-body">
-<form method="post" id="group-form" action="/groups/{{ group.name|urlencode }}/update">
+<form method="post" id="group-form" action="/groups/{{ group.name|urlencode }}/update" data-follow-redirect>
     <div class="field-grid">
         <div class="field field-wide">
-            <label>Name</label>
-            <p class="group-form-name">{{ group.name }}</p>
-            <span class="field-hint">To rename the group or change its members, edit the Group field on its labels.</span>
+            <label for="group-new-name">Name</label>
+            <input type="text" id="group-new-name" name="new_name" value="{{ group.name }}" required maxlength="80" autocomplete="off">
+            <span class="field-hint">Renaming onto another group's name merges the two.</span>
         </div>
+        <fieldset class="field field-wide group-members">
+            <legend>Labels in this group</legend>
+            <input type="hidden" name="members_submitted" value="1">
+            <div class="group-member-list">
+            {% for c in candidates %}
+                <label class="group-member-option">
+                    <input type="checkbox" name="members" value="{{ c.name }}"{% if c.member %} checked{% endif %}>
+                    <span class="group-member-name">{{ c.name }}</span>
+                    {% if c.other_group %}<span class="group-member-hint">moves from {{ c.other_group }}</span>{% endif %}
+                </label>
+            {% endfor %}
+            </div>
+            <span class="field-hint">A group needs at least one label.</span>
+        </fieldset>
         <div class="field">
             <label>Color</label>
             {% set cp_current = group.color or 'gray' %}

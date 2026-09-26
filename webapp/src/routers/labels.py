@@ -38,7 +38,7 @@ pointing at it; that's harmless and expected, not cleaned up here.
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-from urllib.parse import quote
+from urllib.parse import quote, unquote, urlparse
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -459,6 +459,7 @@ def update_label(
     contacts_widget: str = Form(""),
     sidebar_pin: str = Form(""),
     widget_pin: str = Form(""),
+    request: Request = None,
     conn=Depends(get_db),
 ):
     """The label edit modal's single Save button -- handles the unified
@@ -488,10 +489,11 @@ def update_label(
                         sidebar_pin, widget_pin)
     is_project = 1 if role == "project" else 0
 
+    renamed_from = None
     if new_name != name:
         _reject_reserved_label_name(new_name)
         db.rename_label(conn, name, new_name)
-        name = new_name
+        renamed_from, name = name, new_name
 
     existing = db.get_label_config(conn, name) or {}
     row = {
@@ -508,6 +510,13 @@ def update_label(
     # the label's page (routers/label_pages.py), not a side effect of
     # changing the role.
     db.upsert_label_config(conn, row)
+    # 2026-09-25: renamed from the label's own page -> go to the renamed
+    # label's page (the form is data-follow-redirect, see modal.js); the old
+    # URL no longer exists. From anywhere else, the labels list as before.
+    if renamed_from and request is not None:
+        ref = urlparse(request.headers.get("referer") or "")
+        if unquote(ref.path) == f"/labels/{renamed_from}":
+            return RedirectResponse(url=f"/labels/{quote(name, safe='')}", status_code=303)
     return RedirectResponse(url="/settings/labels", status_code=303)
 
 

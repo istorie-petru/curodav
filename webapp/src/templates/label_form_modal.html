@@ -69,7 +69,7 @@
 </div>
 <div class="modal-body">
 <div class="card">
-<form method="post" id="label-form" action="{{ '/settings/labels/' ~ l.name ~ '/update' if l else '/settings/labels/create' }}" data-cc-change="label" data-cc-action="{{ 'edit' if l else 'create' }}">
+<form method="post" id="label-form" action="{{ '/settings/labels/' ~ l.name ~ '/update' if l else '/settings/labels/create' }}" data-cc-change="label" data-cc-action="{{ 'edit' if l else 'create' }}" data-follow-redirect>
     {# 2026-09-14 (quick-add Contact/Label parity): the fields below used
        to live inline here -- extracted into _label_form_fields.html so
        quick_add.html's Label panel renders the exact same markup instead

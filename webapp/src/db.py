@@ -4457,6 +4457,89 @@ def group_member_names(conn: sqlite3.Connection, group: str) -> list[str]:
     return [r["name"] for r in rows]
 
 
+def _move_page_storage(conn: sqlite3.Connection, old_key: str, new_key: str) -> None:
+    """Moves one page's per-page storage (dashboard widgets, the one-time
+    "seeded" marker, the banner) from `old_key` to `new_key`, and repoints
+    any widget anywhere whose own scope names `old_key`. Same moves
+    migrate_spaces_to_groups makes for a Space -> group key, reused by
+    rename_group. The caller commits."""
+    rows = conn.execute("SELECT uid, label_name, config_json FROM dashboard_widgets").fetchall()
+    for r in rows:
+        try:
+            cfg = json.loads(r["config_json"] or "{}")
+        except (json.JSONDecodeError, TypeError):
+            cfg = {}
+        on_page = r["label_name"] == old_key
+        scoped = cfg.get("label_name") == old_key
+        if not (on_page or scoped):
+            continue
+        if scoped:
+            cfg["label_name"] = new_key
+        conn.execute(
+            "UPDATE dashboard_widgets SET label_name = ?, config_json = ? WHERE uid = ?",
+            (new_key if on_page else r["label_name"], json.dumps(cfg), r["uid"]),
+        )
+    for old_meta, new_meta in (
+        (f"dashboard_label_{old_key}_seeded_v1", f"dashboard_label_{new_key}_seeded_v1"),
+        (_page_banner_key(old_key), _page_banner_key(new_key)),
+    ):
+        value = get_app_meta(conn, old_meta)
+        if value and not get_app_meta(conn, new_meta):
+            set_app_meta(conn, new_meta, value)
+
+
+def rename_group(conn: sqlite3.Connection, old: str, new: str) -> str:
+    """Renames a group (2026-09-25, UI audit flesh-out item 7). A group is
+    only the text in its labels' label_group, plus per-page storage keyed
+    by group_page_key and its look in app_meta -- all three move with it.
+
+    Renaming onto another existing group (case-insensitively) merges: the
+    members join that group and keep ITS dashboard and look; the old
+    group's own storage is left as is (nothing points at it any more, the
+    same "harmless leftover" rule clear_label follows) rather than deleted.
+    Returns the group's resulting name (the existing group's own spelling on
+    a merge)."""
+    old = (old or "").strip()
+    new = (new or "").strip()
+    if not old or not new or old == new:
+        return old
+    existing = {g["name"].lower(): g["name"] for g in list_groups(conn) if g["name"] != old}
+    target = existing.get(new.lower())
+    conn.execute(
+        "UPDATE label_config SET label_group = ? WHERE TRIM(COALESCE(label_group, '')) = ?",
+        (target or new, old),
+    )
+    if target is None:
+        _move_page_storage(conn, group_page_key(old), group_page_key(new))
+        style = get_app_meta(conn, _group_style_key(old))
+        if style and not get_app_meta(conn, _group_style_key(new)):
+            set_app_meta(conn, _group_style_key(new), style)
+    conn.commit()
+    return target or new
+
+
+def set_group_members(conn: sqlite3.Connection, group: str, members: list[str]) -> None:
+    """Makes exactly `members` the group's labels (2026-09-25): each named
+    label gets label_group = group (moving it out of any other group -- a
+    label is in at most one), and a current member not in the list leaves
+    the group. Names without a label_config row get one, the same way
+    archiving a usage-only label does. Raises ValueError for an empty list:
+    a group exists only while a label names it, so emptying it here would
+    delete it from an edit form, which is not what that form is for."""
+    group = (group or "").strip()
+    wanted = [m.strip() for m in members if m and m.strip()]
+    if not wanted:
+        raise ValueError("A group needs at least one label.")
+    for name in group_member_names(conn, group):
+        if name not in wanted:
+            conn.execute("UPDATE label_config SET label_group = NULL WHERE name = ?", (name,))
+    for name in wanted:
+        if not get_label_config(conn, name):
+            upsert_label_config(conn, {"name": name, "created_at": datetime.now(timezone.utc).isoformat()})
+        conn.execute("UPDATE label_config SET label_group = ? WHERE name = ?", (group, name))
+    conn.commit()
+
+
 def list_project_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     """Every label with is_project=1 -- the Projects page's own listing
     (routers/projects.py). Independent of generate_space: a project can

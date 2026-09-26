@@ -335,8 +335,11 @@ def group_page(name: str, request: Request, conn=Depends(get_db)):
 # 2026-09-25 (UI audit L3, part of flesh-out item 7): a group's own icon
 # and color, so groups stop sharing one `layers` glyph in the rail. Stored
 # by db.set_group_style (app_meta, no schema change). No icon picked = the
-# rail shows the group's first letter. Renaming a group and adding members
-# still happen through each label's Group field.
+# rail shows the group's first letter. Same day, the rest of item 7: the
+# modal also renames the group (db.rename_group moves its dashboard,
+# banner and look with it) and picks its member labels
+# (db.set_group_members), which used to mean editing each label's Group
+# field one by one.
 
 
 @group_router.get("/{name}/edit")
@@ -346,11 +349,24 @@ def edit_group_modal(name: str, request: Request, conn=Depends(get_db)):
     if not db.group_member_names(conn, name):
         raise HTTPException(404, "No such group")
     style = db.get_group_style(conn, name)
+    members = set(db.group_member_names(conn, name))
+    # Every label with its current group, so the member list can say
+    # "moves from People" for a label that's in another group already.
+    group_of = {
+        r["name"]: (r["label_group"] or "").strip()
+        for r in conn.execute("SELECT name, label_group FROM label_config").fetchall()
+    }
+    candidates = [
+        {"name": n, "member": n in members, "other_group": (group_of.get(n) or "") if n not in members else ""}
+        for n in db.list_all_known_label_names(conn)
+        if not db.effective_label_config(conn, n).get("is_archived")
+    ]
     return templates.TemplateResponse(
         "group_form_modal.html",
         {
             "request": request,
             "group": {"name": name, **style},
+            "candidates": candidates,
             "colors": COLORS,
             "icon_groups": icon_groups_for(style["icon"]),
         },
@@ -358,12 +374,34 @@ def edit_group_modal(name: str, request: Request, conn=Depends(get_db)):
 
 
 @group_router.post("/{name}/update")
-def update_group(name: str, color: str = Form("gray"), icon: str = Form(""), conn=Depends(get_db)):
+def update_group(
+    name: str,
+    color: str = Form("gray"),
+    icon: str = Form(""),
+    new_name: str = Form(""),
+    members: list[str] = Form([]),
+    members_submitted: str = Form(""),
+    conn=Depends(get_db),
+):
     from .labels import COLORS
 
     if not db.group_member_names(conn, name):
         raise HTTPException(404, "No such group")
     color = color if isinstance(color, str) and color in COLORS else "gray"
     icon = icon.strip() if isinstance(icon, str) else ""
+    new_name = new_name.strip() if isinstance(new_name, str) else ""
+    members = members if isinstance(members, list) else []
+    members_submitted = members_submitted if isinstance(members_submitted, str) else ""
+    if new_name.startswith(db.GROUP_KEY_PREFIX):
+        raise HTTPException(400, "A group name can't start with \"group:\".")
+    # `members_submitted` marks a form that rendered the member checklist,
+    # so an older/partial post without it never empties the group by
+    # accident; with it, an empty list is a real (rejected) choice.
+    if members_submitted:
+        try:
+            db.set_group_members(conn, name, members)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
     db.set_group_style(conn, name, icon or None, color)
-    return RedirectResponse(url=group_url(name), status_code=303)
+    final = db.rename_group(conn, name, new_name) if new_name else name
+    return RedirectResponse(url=group_url(final), status_code=303)

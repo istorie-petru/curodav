@@ -7413,7 +7413,16 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .label-empty-title{margin:0; font-size:var(--text-lg); font-weight:var(--font-weight-bold); color:var(--fg-primary);}
 .label-empty-hint{margin:0; color:var(--fg-secondary); font-size:var(--text-sm);}
 .label-empty-actions{display:flex; flex-wrap:wrap; justify-content:center; gap:var(--space-2); margin-top:var(--space-2);}
-.group-form-name{margin:0; font-weight:var(--font-weight-bold);}
+/* Edit group modal's member checklist (2026-09-25, flesh-out item 7):
+   one label per row, wrapping into columns on wide modals; the "moves from
+   <group>" hint says a checked label leaves its current group. */
+.group-members{border:0; padding:0; margin:0; min-width:0;}
+.group-members legend{padding:0; margin-bottom:var(--space-2); font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary); text-transform:uppercase; letter-spacing:.02em;}
+.group-member-list{display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:var(--space-1) var(--space-3); max-height:220px; overflow-y:auto;}
+.field label.group-member-option{display:flex; align-items:center; gap:var(--space-2); min-height:32px; cursor:pointer; min-width:0;
+  font-size:inherit; font-weight:normal; color:var(--fg-primary); text-transform:none; letter-spacing:normal;}
+.group-member-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.group-member-hint{font-size:var(--text-sm); color:var(--fg-tertiary); white-space:nowrap;}
 .page-header-narrow-title{
   margin:0; font-weight:var(--font-weight-bold); letter-spacing:-0.3px;
   font-size:var(--text-xl); line-height:1.2;

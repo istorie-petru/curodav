@@ -503,6 +503,19 @@
               await refreshModalContent(); // re-render in place, modal stays open
             } else {
               closeModal();
+              // 2026-09-25 (group/label rename): a form marked
+              // data-follow-redirect goes where the server redirected when
+              // that's a different page. Renaming the group or label whose
+              // page is open would otherwise reload the old URL, which no
+              // longer exists (it lands on the labels list). Same page ->
+              // falls through to the normal refresh below.
+              if (form.hasAttribute("data-follow-redirect") && resp.redirected) {
+                const dest = new URL(resp.url, window.location.href);
+                if (dest.origin === window.location.origin && dest.pathname !== window.location.pathname) {
+                  window.location.href = dest.pathname + dest.search;
+                  return;
+                }
+              }
               // async-CRUD (features/async-crud.md): a form marked
               // data-cc-change opts out of the full-page reload -- on
               // success we dispatch a document-level cc-entity-changed event

@@ -576,7 +576,9 @@
 // v126 (2026-09-25, same session): phone Week/Day auto-scroll + sticky
 // header (style.css, calendar_now.js), stack bar label (style.css),
 // date picker week start (datetime_picker.js).
-const CACHE_NAME = "cc-shell-v126";
+// v127 (2026-09-25, same session): group rename + members -- modal.js
+// gained data-follow-redirect, style.css the member checklist rules.
+const CACHE_NAME = "cc-shell-v127";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

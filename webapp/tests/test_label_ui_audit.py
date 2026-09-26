@@ -299,3 +299,104 @@ class TestCss:
 
     def test_member_rows_are_indented(self):
         assert "#labels-table-wrapper .labels-member-row .label-cell{padding-left:22px;}" in CSS
+
+
+def _grouped(conn, name, group):
+    db.upsert_label_config(conn, {"name": name, "label_group": group, "created_at": _now()})
+
+
+def _post_req(referer: str = ""):
+    headers = [(b"referer", referer.encode())] if referer else []
+    return Request({"type": "http", "method": "POST", "path": "/", "query_string": b"",
+                    "scheme": "http", "server": ("testserver", 80), "root_path": "", "headers": headers})
+
+
+class TestGroupRenameAndMembers:
+    """2026-09-25 flesh-out item 7: the Edit group modal renames a group
+    and picks its members (used to mean editing each label's Group field)."""
+
+    def test_rename_moves_members_dashboard_banner_and_look(self, conn):
+        _grouped(conn, "Family", "People")
+        _grouped(conn, "Friends", "People")
+        old_key, new_key = db.group_page_key("People"), db.group_page_key("Crew")
+        db.upsert_dashboard_widget(conn, {"uid": "w1", "type": "agenda", "label_name": old_key,
+                                          "config": {"label_name": old_key}, "position": 1})
+        # a Home widget scoped to the group follows the rename too
+        db.upsert_dashboard_widget(conn, {"uid": "w2", "type": "agenda", "label_name": None,
+                                          "config": {"label_name": old_key}, "position": 2})
+        db.set_app_meta(conn, f"dashboard_label_{old_key}_seeded_v1", "1")
+        db.set_group_style(conn, "People", "users", "orange")
+        assert db.rename_group(conn, "People", "Crew") == "Crew"
+        assert db.group_member_names(conn, "Crew") == ["Family", "Friends"]
+        assert db.group_member_names(conn, "People") == []
+        rows = {r["uid"]: dict(r) for r in conn.execute("SELECT uid, label_name, config_json FROM dashboard_widgets")}
+        assert rows["w1"]["label_name"] == new_key and new_key in rows["w1"]["config_json"]
+        assert rows["w2"]["label_name"] is None and new_key in rows["w2"]["config_json"]
+        assert db.get_app_meta(conn, f"dashboard_label_{new_key}_seeded_v1") == "1"
+        assert db.get_group_style(conn, "Crew") == {"icon": "users", "color": "orange"}
+
+    def test_rename_onto_an_existing_group_merges_into_it(self, conn):
+        _grouped(conn, "Family", "People")
+        _grouped(conn, "Reading", "Hobbies")
+        db.set_group_style(conn, "Hobbies", "book", "slate")
+        assert db.rename_group(conn, "People", "hobbies") == "Hobbies"
+        assert db.group_member_names(conn, "Hobbies") == ["Family", "Reading"]
+        assert db.get_group_style(conn, "Hobbies")["icon"] == "book"  # the target keeps its look
+
+    def test_set_members_moves_labels_and_rejects_empty(self, conn):
+        _grouped(conn, "Family", "People")
+        _grouped(conn, "Reading", "Hobbies")
+        db.set_group_members(conn, "People", ["Reading", "Work"])  # Work has no config row yet
+        assert db.group_member_names(conn, "People") == ["Reading", "Work"]
+        assert db.group_member_names(conn, "Hobbies") == []
+        assert (db.get_label_config(conn, "Family") or {}).get("label_group") is None
+        with pytest.raises(ValueError):
+            db.set_group_members(conn, "People", [])
+
+    def test_update_route_renames_sets_members_and_redirects_to_new_page(self, conn):
+        _grouped(conn, "Family", "People")
+        _grouped(conn, "Work", None)
+        resp = label_pages.update_group("People", color="green", icon="", new_name="Crew",
+                                        members=["Family", "Work"], members_submitted="1", conn=conn)
+        assert resp.headers["location"] == "/groups/Crew"
+        assert db.group_member_names(conn, "Crew") == ["Family", "Work"]
+        assert db.get_group_style(conn, "Crew")["color"] == "green"
+
+    def test_update_route_rejects_emptying_but_ignores_posts_without_the_checklist(self, conn):
+        _grouped(conn, "Family", "People")
+        with pytest.raises(HTTPException) as exc:
+            label_pages.update_group("People", color="gray", icon="", new_name="", members=[],
+                                     members_submitted="1", conn=conn)
+        assert exc.value.status_code == 400
+        label_pages.update_group("People", color="gray", icon="", new_name="", members=[],
+                                 members_submitted="", conn=conn)
+        assert db.group_member_names(conn, "People") == ["Family"]
+
+    def test_edit_modal_lists_candidates_with_their_current_group(self, conn):
+        _grouped(conn, "Family", "People")
+        _grouped(conn, "Reading", "Hobbies")
+        body = label_pages.edit_group_modal("People", _request("/groups/People/edit"), conn=conn).body.decode()
+        assert 'name="new_name" value="People"' in body
+        assert 'name="members" value="Family" checked' in body
+        assert "moves from Hobbies" in body
+        assert "data-follow-redirect" in body
+
+
+class TestLabelRenameFromItsOwnPage:
+    def test_rename_from_label_page_redirects_to_the_new_page(self, conn):
+        db.upsert_label_config(conn, {"name": "Reading", "created_at": _now()})
+        resp = labels_router.update_label("Reading", new_name="Books", color="blue", icon="", label_group="",
+                                          description="", role="none", request=_post_req(
+            "http://testserver/labels/Reading"), conn=conn)
+        assert resp.headers["location"] == "/labels/Books"
+
+    def test_rename_from_elsewhere_still_lands_on_the_labels_list(self, conn):
+        db.upsert_label_config(conn, {"name": "Reading", "created_at": _now()})
+        resp = labels_router.update_label("Reading", new_name="Books", color="blue", icon="", label_group="",
+                                          description="", role="none", request=_post_req(
+            "http://testserver/settings/labels"), conn=conn)
+        assert resp.headers["location"] == "/settings/labels"
+
+    def test_modal_js_follows_a_redirect_to_a_different_page_when_asked(self):
+        script = (Path(__file__).resolve().parent.parent / "src" / "static" / "modal.js").read_text()
+        assert 'form.hasAttribute("data-follow-redirect") && resp.redirected' in script
