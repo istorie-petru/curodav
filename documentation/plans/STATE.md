@@ -17,6 +17,43 @@ session start.
 
 ## Right now
 
+- **NEXT -- Peter's queued requests (2026-09-26, received at the end of a
+  cloud session, NOT started; continue here).** Verbatim intent:
+
+  General
+  1. Tables still have broken hover selection (padding, hidden/empty
+     columns), at least on Settings > Labels -- caused by the `.card`
+     padding (the row-hover box-shadows in style.css `.card tbody tr:hover
+     > td:first-child/last-child` extend over `--page-inset`). For the
+     Labels page: remove the grouping entirely; add a Group column that
+     shows the group as a pill; sort rows by group name alphabetically.
+  2. Settings > Projects: the project's due (deadline) becomes its own
+     column instead of the badge next to the name.
+  3. Switch the whole icon library to Lucide (https://lucide.dev/icons/),
+     AGAIN, fully (templates/_icons_sprite.html + every icon name used;
+     check routers/labels.py ICON_GROUPS / habit_view.HABIT_ICONS names).
+     Add a rule: a minimum icon size, and an icon is the same size as the
+     text next to it.
+
+  Dashboard
+  4. Remove `.habit-widget-link` ("Habits" link) from the Habit Check-in
+     widget (_widget_habit_checkin.html).
+  5. Remove the toast shown when changing habit data (check-in, relapse,
+     etc.) -- static/habit_actions.js offerUndo, and the heatmap
+     `undo_url` toasts added the same day.
+
+  Calendar & Planner
+  6. The grey-out (past/dimmed) effect must apply to all-day events and
+     every other kind of item shown there, not only timed events.
+  7. Selected / today highlight: `background: var(--accent-neutral-subtle);`
+     instead of `--accent` (too strong).
+  8. Event edit: "Format" becomes a dropdown with its three options; picking
+     In person or Online shows a half-width text input next to it (same
+     half-width follow-up rule as the habit form).
+  9. Event recurrence: the two new dropdowns (preset + Ends) sit side by
+     side, not one overflowing and the other in its own section.
+  (Peter's list was cut off after item 9 -- ask if there was more.)
+
 - **Shipped:** 2026-09-26 (second pass) -- Peter's "definitive list" for
   habits. Supersedes parts of the first-pass entry below (month calendar
   and insights moved again; row sizes changed).
