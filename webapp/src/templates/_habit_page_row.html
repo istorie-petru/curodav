@@ -51,6 +51,8 @@
         <div class="habit-card-meta">
             {% if h.paused_today %}<span class="habit-paused-badge">{{ icon('pause', 'icon-sm') }} Paused until {{ h.paused_until|relative_date }}</span>{% endif %}
             <span>{{ h.recurrence_label }}</span>
+            {# Per-habit reminder time (2026-09-25). #}
+            {% if h.reminder_time and not h.is_avoid %}<span class="habit-reminder" title="Reminder at {{ h.reminder_time|fmt_time }}">{{ icon('bell', 'icon-sm') }} {{ h.reminder_time|fmt_time }}</span>{% endif %}
             {% if h.is_quantity %}<span>{% if h.remaining_today and h.today_value %}{{ h.remaining_today|int }} left today{% else %}{{ h.target|int }}{% if h.unit %} {{ h.unit }}{% endif %} a day{% endif %}</span>{% endif %}
             {% if h.is_period and h.period_target > 1 %}<span>{{ h.period_done }}/{{ h.period_target }} this {{ h.streak_unit }}</span>{% endif %}
             <span class="habit-card-streak" title="Best: {{ h.longest_streak }} {{ h.streak_unit }}{{ 's' if h.longest_streak != 1 }}{% if h.completion_rate is not none %}, {{ (h.completion_rate * 100)|round|int }}% {{ 'clean' if h.is_avoid else 'kept' }}{% endif %}{% if h.strength is not none %}, strength {{ h.strength }}%{% endif %}">{% if h.is_avoid %}{% if h.relapsed_today %}Relapsed today{% else %}{{ h.current_streak }} day{{ 's' if h.current_streak != 1 }} clean{% endif %}{% else %}{{ habit_streak_text(request, h.current_streak, h.streak_unit) }}{% endif %}</span>

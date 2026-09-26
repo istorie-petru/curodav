@@ -489,6 +489,7 @@ def create_task(
     habit_days_present: str = Form(""),
     habit_kind: str | None = Form(None),
     habit_unit: str | None = Form(None),
+    reminder_time: str | None = Form(None),
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
@@ -572,6 +573,10 @@ def create_task(
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
+    # Per-habit reminder time (2026-09-25): only habit_task_form.html sends
+    # it; stored through its own setter, never through upsert_task.
+    if isinstance(reminder_time, str):
+        db.set_task_reminder_time(conn, row["uid"], reminder_time)
     return respond(x_requested_with, "/tasks", status_code=201, uid=row["uid"])
 
 
@@ -866,6 +871,7 @@ def update_task(
     habit_days_present: str = Form(""),
     habit_kind: str | None = Form(None),
     habit_unit: str | None = Form(None),
+    reminder_time: str | None = Form(None),
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
@@ -934,6 +940,9 @@ def update_task(
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
+    # Per-habit reminder time -- same "only the habit form sends it" rule.
+    if isinstance(reminder_time, str):
+        db.set_task_reminder_time(conn, row["uid"], reminder_time)
     return respond(x_requested_with, "/tasks")
 
 

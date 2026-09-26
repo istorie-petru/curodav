@@ -250,3 +250,28 @@ def test_stack_bar_is_named_and_dissolve_has_its_own_icon():
     tpl = (SRC / "templates" / "_widget_workspace.html").read_text()
     assert '<span class="widget-stack-label">Stack</span>' in tpl
     assert 'aria-label="Dissolve stack">{{ icon(\'scissors\', \'icon-sm\') }}' in tpl
+
+
+class TestHabitReminderTimeForm:
+    """2026-09-25: the habit form's Reminder dropdown and the row's bell."""
+
+    def test_create_and_update_store_and_clear_the_time(self, conn):
+        db.save_task_habit_settings(conn, "Habit")
+        tasks_router.create_task(title="Walk", description="", due_at="", start_at="", status="active", tags="",
+                                 tags_labels=["Habit"], project="", project_field="", recurrence="FREQ=DAILY",
+                                 target_per_day="1", habits_per_period=None, habit_days=[], habit_days_present="",
+                                 habit_kind="build", habit_unit="", reminder_time="19:30", holiday_calendar="",
+                                 exclude_saturday="", exclude_sunday="", x_requested_with=None, conn=conn)
+        uid = conn.execute("SELECT uid FROM tasks WHERE title = 'Walk'").fetchone()[0]
+        assert db.get_task(conn, uid)["reminder_time"] == "19:30"
+        item = habit_view.habit_items(conn)[0]
+        assert item["reminder_time"] == "19:30"
+        db.set_task_reminder_time(conn, uid, "")
+        assert habit_view.habit_items(conn)[0]["reminder_time"] is None
+
+    def test_form_has_the_reminder_dropdown_and_row_shows_the_bell(self):
+        form = (SRC / "templates" / "habit_task_form.html").read_text()
+        assert "{% set ms_name = 'reminder_time' %}" in form
+        assert "{'uid': '', 'name': 'No reminder'}" in form
+        row = (SRC / "templates" / "_habit_page_row.html").read_text()
+        assert 'class="habit-reminder"' in row

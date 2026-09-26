@@ -255,6 +255,8 @@ def habit_item(conn, task: dict, today: date, pauses: list[dict] | None = None) 
         "uid": task["uid"],
         "title": task["title"],
         "tags": task.get("tags") or [],
+        # Per-habit reminder time (2026-09-25): "HH:MM" or None.
+        "reminder_time": task.get("reminder_time") or None,
         "is_quantity": qty_target is not None,
         "target": target,
         "today": today_iso,

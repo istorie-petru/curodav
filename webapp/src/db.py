@@ -1363,6 +1363,11 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # and the habit kind -- NULL/'build' = do it, 'avoid' = log relapses.
     _ensure_column(conn, "tasks", "habit_unit", "TEXT")
     _ensure_column(conn, "tasks", "habit_kind", "TEXT")
+    # 2026-09-25 (UI audit flesh-out: per-habit reminder times): "HH:MM"
+    # local time a habit reminds at, NULL = only the morning digest. Set by
+    # set_task_reminder_time only, never by upsert_task (sync/import paths
+    # rebuild rows without it and would wipe it).
+    _ensure_column(conn, "tasks", "reminder_time", "TEXT")
     _ensure_column(conn, "task_completions", "value", "REAL NOT NULL DEFAULT 1")
     # 2026-08-29 (STATE.md backlog item 3, direct request): extends the 1.6
     # non-working-day policy (see the `events` CREATE TABLE comment) to
@@ -2112,6 +2117,25 @@ def set_task_timeline_lane(conn: sqlite3.Connection, uid: str, lane: int | None)
     convention as every other setter in this file (see upsert_task's own
     comment on why timeline_lane is deliberately excluded there)."""
     conn.execute("UPDATE tasks SET timeline_lane = ? WHERE uid = ?", (lane, uid))
+    conn.commit()
+
+
+def normalize_reminder_time(value: str | None) -> str | None:
+    """"H:MM"/"HH:MM" (24h) -> "HH:MM"; blank or unparseable -> None."""
+    m = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*", value or "")
+    if not m:
+        return None
+    h, mi = int(m.group(1)), int(m.group(2))
+    if h > 23 or mi > 59:
+        return None
+    return f"{h:02d}:{mi:02d}"
+
+
+def set_task_reminder_time(conn: sqlite3.Connection, uid: str, value: str | None) -> None:
+    """A habit's own reminder time (2026-09-25) -- see the tasks.reminder_time
+    column comment. Dedicated setter, same reason as set_task_timeline_lane:
+    an ordinary save (or a CalDAV sync) must not be able to clear it."""
+    conn.execute("UPDATE tasks SET reminder_time = ? WHERE uid = ?", (normalize_reminder_time(value), uid))
     conn.commit()
 
 

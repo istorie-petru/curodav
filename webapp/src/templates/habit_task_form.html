@@ -118,9 +118,31 @@
             <label>Daily target</label>
             <div class="stepper">
                 <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease daily target">&minus;</button>
-                <input type="number" name="target_per_day" class="stepper-input" min="1" step="1" value="{{ task.target_per_day if task else 1 }}">
+                <input type="number" name="target_per_day" class="stepper-input" min="1" step="1" value="{{ (task.target_per_day or 1)|int if task else 1 }}">
                 <button type="button" class="stepper-btn stepper-inc" aria-label="Increase daily target">+</button>
             </div>
+        </div>
+        {# Per-habit reminder time (2026-09-25): the same half-hour
+           single-choice dropdown as Settings > General's "Morning reminder
+           at", plus "No reminder" (= only the morning digest). Build
+           habits only -- an avoid habit has nothing to check off. #}
+        <div class="field habit-build-only">
+            <label id="habit-reminder-label">Reminder</label>
+            {% set _current = task.reminder_time if task and task.reminder_time else '' %}
+            {% set _slots = [] %}
+            {% for h in range(24) %}{% for m in (0, 30) %}{% set _ = _slots.append('%02d:%02d'|format(h, m)) %}{% endfor %}{% endfor %}
+            {% if _current and _current not in _slots %}{% set _ = _slots.append(_current) %}{% endif %}
+            {% set ms_name = 'reminder_time' %}
+            {% set ms_mode = 'single' %}
+            {% set ms_label = 'Reminder' %}
+            {% set ms_items = [{'uid': '', 'name': 'No reminder'}] %}
+            {% for t in _slots|sort %}{% set _ = ms_items.append({'uid': t, 'name': t|fmt_time}) %}{% endfor %}
+            {% set ms_selected = _current %}
+            {% set ms_autosubmit = false %}
+            {% set ms_bare = true %}
+            {% set ms_form_id = 'habit-task-form' %}
+            {% include "_widget_list_multiselect.html" %}
+            <span class="field-hint">Only if the habit isn't done yet. Without one, it's in the morning reminder.</span>
         </div>
     </div>
     {% if task %}

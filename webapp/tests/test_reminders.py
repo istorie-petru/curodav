@@ -168,3 +168,57 @@ class TestSettings:
         assert 'action="/settings/notifications"' in body
         assert body.count('name="types"') == 4
         assert 'name="digest_time" value="08:00"' in body
+
+
+def _habit(conn, uid, title=None, target=1, kind="build", reminder=None):
+    db.save_task_habit_settings(conn, "Habit")
+    db.upsert_task(conn, {"uid": uid, "title": title or uid.title(), "description": "", "status": "active",
+                          "tags": ["Habit"], "recurrence": "FREQ=DAILY", "target_per_day": target,
+                          "habit_kind": kind, "created_at": _now_utc()})
+    if reminder:
+        db.set_task_reminder_time(conn, uid, reminder)
+
+
+class TestPerHabitReminderTime:
+    """2026-09-25: a habit with its own reminder time reminds at that time
+    (only while still due) and drops out of the morning digest."""
+
+    def test_normalizes_and_survives_an_ordinary_save(self, conn):
+        assert db.normalize_reminder_time("7:05") == "07:05"
+        assert db.normalize_reminder_time("24:00") is None
+        assert db.normalize_reminder_time("") is None
+        _habit(conn, "walk", reminder="19:30")
+        row = dict(db.get_task(conn, "walk"))
+        db.upsert_task(conn, {**row, "title": "Evening walk"})  # e.g. a rename or a sync re-save
+        assert db.get_task(conn, "walk")["reminder_time"] == "19:30"
+        db.set_task_reminder_time(conn, "walk", "")
+        assert db.get_task(conn, "walk")["reminder_time"] is None
+
+    def test_fires_at_its_time_and_leaves_the_digest(self, conn):
+        _habit(conn, "walk", reminder="19:30")
+        _habit(conn, "read")
+        (digest,) = reminders.due_notifications(conn, at(8, 5))
+        assert digest.key == f"habits:{TODAY}" and "Read" in digest.body  # walk isn't in it
+        # (the morning digest stays eligible until 21:00 -- only per-habit
+        # keys matter here)
+        def own(now):
+            return [n for n in reminders.due_notifications(conn, now) if n.key.startswith("habit:")]
+        assert own(at(19, 29)) == []
+        (n,) = own(at(19, 31))
+        assert n.key == f"habit:walk:{TODAY}" and n.title == "Walk" and n.body == "Still to do today."
+        assert own(at(19, 50)) == []  # past the grace window
+
+    def test_quiet_once_done_and_shows_progress_for_amounts(self, conn):
+        _habit(conn, "water", target=8, reminder="15:00")
+        db.upsert_task_completion(conn, "water", TODAY.isoformat(), _now_utc(), value=3)
+        (n,) = reminders.due_notifications(conn, at(15, 0))
+        assert n.body == "3 of 8 so far. Keep going."
+        db.upsert_task_completion(conn, "water", TODAY.isoformat(), _now_utc(), value=8)
+        assert _keys(conn, at(15, 0)) == []  # done: no reminder, and not in the digest either
+
+    def test_avoid_habits_and_disabled_type_never_remind(self, conn):
+        _habit(conn, "sugar", kind="avoid", reminder="12:00")
+        assert _keys(conn, at(12, 0)) == []
+        _habit(conn, "walk", reminder="12:00")
+        db.set_app_meta(conn, reminders.TYPES_KEY, "events,tasks")
+        assert _keys(conn, at(12, 0)) == []

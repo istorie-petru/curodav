@@ -79,8 +79,14 @@ session start.
 
   Then the Groups & Labels widget got deadline pills + group looks.
 
-  **Next slice suggestion**: per-habit reminder times (M-L); the F12
-  font-size pass needs a deliberate call on which sizes may visibly change.
+  Then per-habit reminder times (tasks.reminder_time, habit form dropdown,
+  own push at that time while still due, out of the morning digest).
+  Not yet tested on a real phone -- Web Push itself still awaits its first
+  real-device test (see item 7 in ui-cleanup-2026-09.md).
+
+  **Next slice suggestion**: the audit list is done apart from the F12
+  font-size pass, which needs Peter's call on which sizes may visibly
+  change; after that, a real-device Web Push test.
 
 - **Shipped:** 2026-09-24 -- Peter sent one message bundling ~17 distinct
   UI/UX change requests (labels-as-modules rework, narrow banners
