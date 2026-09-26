@@ -55,12 +55,24 @@ HABIT_COLORS = (
 )
 
 
+def habit_icon_choices() -> list[str]:
+    """Every icon a habit can pick (2026-09-26, Peter: the short list was
+    too small): the habit-flavoured ones above first, then the rest of the
+    app's icon library (routers/labels.py ICON_GROUPS -- imported lazily,
+    that router imports deps, which imports this module)."""
+    from .routers.labels import ICON_GROUPS
+
+    seen = set(HABIT_ICONS)
+    rest = [n for names in ICON_GROUPS.values() for n in names if n not in seen and not seen.add(n)]
+    return [*HABIT_ICONS, *rest]
+
+
 def habit_look(task: dict | None) -> dict:
     """{"icon", "color"} for a habit -- its own picks, or None (templates
     fall back to the kind's default glyph and the accent colour)."""
     icon = (task or {}).get("habit_icon")
     color = (task or {}).get("habit_color")
-    return {"icon": icon if icon in HABIT_ICONS else None, "color": color if color in HABIT_COLORS else None}
+    return {"icon": icon if icon in habit_icon_choices() else None, "color": color if color in HABIT_COLORS else None}
 
 
 _WEEKDAY_CODES = ("MO", "TU", "WE", "TH", "FR", "SA", "SU")

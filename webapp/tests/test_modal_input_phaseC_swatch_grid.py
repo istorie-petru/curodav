@@ -158,7 +158,10 @@ class TestExpandedPaletteAndGroupedIcons:
         db.upsert_label_config(conn, {"name": "Uni", "color": "blue", "created_at": _now()})
         resp = labels_router.edit_label_modal("Uni", _request("/labels/Uni/edit"), conn=conn)
         body = resp.body.decode()
-        for group_name in labels_router.ICON_GROUPS:
-            escaped = group_name.replace("&", "&amp;")
-            assert f'<div class="look-group-label">{escaped}</div>' in body
+        # 2026-09-26 (Peter): one flat grid -- no section headings, but
+        # every offered icon is still there.
+        assert "look-group-label" not in body
+        for names in labels_router.LABEL_ICON_GROUPS.values():
+            for name in names:
+                assert f'name="icon" value="{name}"' in body
 

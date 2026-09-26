@@ -338,5 +338,6 @@ class TestShellCacheVersion:
         # v131 (2026-09-26): habit edit form per the approved mockup.
         # v132 (2026-09-26): shared Look dropdown (look_picker.js), old pickers gone.
         # v133 (2026-09-26): label banner button at the end of the Look row.
+        # v134 (2026-09-26): flat icon grid, full icon library for habits.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v133"' in script
+        assert 'CACHE_NAME = "cc-shell-v134"' in script

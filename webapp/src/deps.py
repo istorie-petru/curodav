@@ -617,7 +617,7 @@ def _habit_cadence_label(task) -> str:
 templates.env.globals["habit_cadence_label"] = _habit_cadence_label
 templates.env.globals["habit_repeat_choice"] = habit_view.repeat_choice
 templates.env.globals["habit_look"] = habit_view.habit_look
-templates.env.globals["habit_icons"] = habit_view.HABIT_ICONS
+templates.env.globals["habit_icons"] = habit_view.habit_icon_choices
 templates.env.globals["habit_colors"] = habit_view.HABIT_COLORS
 
 

@@ -479,7 +479,7 @@ def _apply_habit_goal(goal, target_per_day):
 def _save_habit_look(conn, uid: str, icon, color) -> None:
     """2026-09-26: the habit form's icon + colour; anything outside
     habit_view's lists (or blank) stores the default."""
-    icon = icon if isinstance(icon, str) and icon in habit_view.HABIT_ICONS else None
+    icon = icon if isinstance(icon, str) and icon in habit_view.habit_icon_choices() else None
     color = color if isinstance(color, str) and color in habit_view.HABIT_COLORS else None
     db.set_task_habit_look(conn, uid, icon, color)
 

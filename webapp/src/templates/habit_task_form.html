@@ -64,7 +64,7 @@
            check button, the colour paints the heatmap, the strip and the
            view modal's cover. #}
         {% set _look = habit_look(task) %}
-        {{ look_picker('look-habit-task-form', 'habit-task-form', _look.color, _look.icon, habit_colors, {'': habit_icons},
+        {{ look_picker('look-habit-task-form', 'habit-task-form', _look.color, _look.icon, habit_colors, {'': habit_icons()},
                        color_field='habit_color', icon_field='habit_icon', allow_no_color=true,
                        no_color_label='Default colour', no_icon_label='Default icon', default_icon='check-circle') }}
         {# Habits H5 (2026-09-24): "avoid" habits log relapses instead of

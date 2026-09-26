@@ -77,7 +77,11 @@ session start.
     (`look_picker` called with `{% call %}`; `.look-row` /
     `.look-side-btn`), edit only. The `.modal-header-actions` header row,
     `appearance_in_header` and the inline Banner field are gone.
-  SW cache v133.
+  - Then: the Look panel's icons are one flat grid (no section headings),
+    the colour column lost its fixed 4x36px columns (Peter: even spacing),
+    and habits offer the whole icon library (`habit_view.habit_icon_choices`:
+    the habit-flavoured list first, then routers/labels.py ICON_GROUPS).
+  SW cache v134.
 
 - **Shipped:** 2026-09-26 -- habits decluttering, per Peter ("rows too
   tall, 28-32px is enough"; "I don't believe in habit vacation"; month

@@ -441,3 +441,19 @@ class TestLookEverywhereAndCancel20260926:
 
         css = (Path(__file__).resolve().parents[1] / "src" / "static" / "style.css").read_text()
         assert "#habit-target::-webkit-outer-spin-button, #habit-target::-webkit-inner-spin-button{-webkit-appearance:none" in css
+
+
+class TestHabitIconLibrary:
+    def test_habits_offer_the_full_icon_library(self, conn):
+        from src import habit_view
+        from src.routers.labels import ICON_GROUPS
+
+        choices = habit_view.habit_icon_choices()
+        assert len(choices) == len(set(choices))
+        assert all(n in choices for names in ICON_GROUPS.values() for n in names)
+        assert choices[: len(habit_view.HABIT_ICONS)] == list(habit_view.HABIT_ICONS)
+        _habit(conn, "h1", "Read")
+        tasks_router._save_habit_look(conn, "h1", "graduation-cap", "teal")
+        assert db.get_task(conn, "h1")["habit_icon"] == "graduation-cap"
+        tasks_router._save_habit_look(conn, "h1", "gavel", None)  # a label-library icon
+        assert db.get_task(conn, "h1")["habit_icon"] == "gavel"
