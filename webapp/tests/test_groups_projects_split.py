@@ -137,7 +137,8 @@ class TestLabelsVsProjects:
         db.upsert_label_config(conn, {"name": "Gym", "created_at": _now()})
         body = labels_router.edit_label_modal("Gym", _req("/settings/labels/Gym/edit"), conn=conn).body.decode()
         assert 'name="role"' not in body and 'name="deadline_date"' not in body
-        assert "/settings/labels/Gym/convert-to-project" in body
+        # 2026-09-26: Convert moved to the Labels table's actions column.
+        assert "convert-to-project" not in body
 
     def test_project_form_has_no_convert(self, conn):
         db.upsert_label_config(conn, {"name": "Thesis", "is_project": 1, "created_at": _now()})
@@ -150,6 +151,14 @@ class TestLabelsVsProjects:
                                           description="", role=None, request=_req("/x"), conn=conn)
         assert db.get_label_config(conn, "Thesis")["is_project"] == 1
         assert resp.headers["location"] == "/settings/projects"
+
+    def test_convert_is_a_row_action_on_labels_only(self, conn):
+        db.upsert_label_config(conn, {"name": "Gym", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Thesis", "is_project": 1, "created_at": _now()})
+        body = labels_router.manage_labels(_req("/settings/labels"), conn=conn).body.decode()
+        assert 'action="/settings/labels/Gym/convert-to-project" class="label-convert-form" data-convert-undo="Gym"' in body
+        projects = labels_router.manage_projects(_req("/settings/projects"), conn=conn).body.decode()
+        assert "convert-to-project" not in projects
 
     def test_convert_is_one_way(self, conn):
         db.upsert_label_config(conn, {"name": "Gym", "created_at": _now()})

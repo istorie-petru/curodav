@@ -1,163 +1,80 @@
-{# Labels table body -- shared between labels_manage.html's initial page
-   load and the async-CRUD `region=list` refresh (routers/labels.py::
-   labels_regions), same "render once, include everywhere" contract
-   _label_form_fields.html established for the label edit/create form.
+{# Labels / Projects table body (Settings > Labels and Settings >
+   Projects; routers/labels.py _labels_context `kind`). Shared by the page
+   load and the async-CRUD `region=list` refresh.
 
-   2026-09-16 (direct request, mocked up interactively first -- several
-   rounds in chat before landing here): back to a single `<table>` /
-   single `<thead>` for the whole page. The 2026-09-14 "one table per
-   Space" design (slice 2 of the Spaces rework) repeated a Label/Usage/
-   Actions header once per Space and gave Ungrouped its own separate
-   heading+table treatment; direct feedback was that the repeated headers
-   and Ungrouped's special-cased section were both unwanted -- "don't want
-   the header repeated for every group," "don't want separate behavior
-   for labels that aren't assigned." So `label_groups` and
-   `ungrouped_labels` (still computed exactly as before in routers/
-   labels.py -- this is a template-only change) now all flow into one
-   `<tbody>`: each Space's own row (`_group_row`, a colored "card" row --
-   see below) followed by its children (`_label_row`), then every
-   ungrouped label as a plain `_label_row` with no heading in front of it
-   at all, same as any child row.
+   2026-09-26 (Peter: "redo the css for the tables in labels, groups and
+   projects, it's just broken"): rebuilt on one `.entity-table` layout that
+   _groups_table_body.html uses too -- fixed column widths (select /
+   name / usage / actions) so the columns line up on every page, the
+   Actions header right-aligned over its buttons, one row height.
+   A group is a plain section row (icon + name, which opens the group's
+   view modal; its total usage; a button to its page) -- no tinted card.
+   Its labels follow, indented; "No group" is the same kind of section
+   row. Names are the default text colour, the icon carries the label's
+   colour (2026-09-21: "MAKE THEM THE DEFAULT TEXT COLOR").
 
-   A Space's row used to get a `.label-icon-tile` colored squircle (moved
-   in from the old heading in the previous pass) -- direct feedback: "the
-   .label-icon-tile for spaces is unnecessary, show only the icon like
-   for any plain label." Dropped; a Space's own row now uses the exact
-   same `.label-cell-icon` a plain label's row uses, just colored (see
-   `_group_row` below). The row still reads as a distinct "card": a light
-   `var(--tag-<color>-bg)` tint with rounded corners (style.css's
-   `.labels-space-row`) and a bold name, painted via one `data-style`
-   setting a `--row-tint` custom property that the CSS consumes -- one
-   attribute instead of one per inner span, still CSP-safe
-   (dynamic_styles.js applies `data-style` via the CSSOM, which style-src
-   doesn't restrict; see this file's own 2026-09-15 note below for why a
-   literal `style="..."` attribute can't be used here). Text/icon color
-   is deliberately left at the app's own default (2026-09-21 direct
-   request, "the font color should be the default one or one that
-   contrasts with the bg color") -- there used to be a paired
-   `--row-tint-fg` too, dropped for reading low-contrast against its own
-   tint at full-row size (see style.css's own comment on the rule that
-   used to consume it).
-
-   Usage on a Space's row is still the *total* across the Space and every
-   child (`group.labels | sum(attribute='usage_count')`), unchanged from
-   the previous pass -- it's still the only visual anchor for "this Space
-   plus everything in it" now that there's no separate heading at all.
-
-   The caller (labels_manage.html) still owns the single outer
-   `#labels-table` container -- static/bulk_select.js's `tableId` config
-   scopes its `.row-select` lookups to that container's full subtree, so
-   collapsing back to one real `<table>` inside it needed zero
-   bulk-select code changes. Each row still carries a `data-label-group`
-   attribute (a Space's own name, or "" for ungrouped/no-parent) -- not
-   read by any script today, same "self-describing hook, nothing reads it
-   yet" status the removed per-Space wrapper divs had.
-
-   2026-09-15 direct bug report ("the .label-icon-tile background-color
-   still doesn't follow the label's color") -- per-request-computed
-   colors must go through `data-style`, never a literal `style="..."`
-   attribute: this app's CSP (style-src, no `'unsafe-inline'`) silently
-   drops the latter in a real enforcing browser, confirmed via a
-   headless-Chrome render with console listening. `dynamic_styles.js`
-   applies `data-style` via the CSSOM instead, which style-src doesn't
-   restrict. Every per-request color in this file still follows that
-   convention. #}
+   Colors go through data-style (CSP: no inline style). Rows keep
+   data-label-name / data-label-group and the .row-select checkboxes that
+   static/bulk_select.js reads. On Settings > Labels a plain label's
+   actions start with Convert to project (one way; the row hides and an
+   Undo toast runs before anything is sent -- static/labels_manage.js). #}
 {% from "_row_action_buttons.html" import row_action_buttons %}
 {% from "_empty_state_row.html" import empty_state_row %}
 {% macro _group_row(group) %}
-{# A group's header row (labels-as-modules slice c, 2026-09-25). A group
-   is plain text shared by its labels, not a label itself, so the row has
-   no checkbox or edit/delete: it names the group, totals its members'
-   usage, and links to the group's page. Rename a group by changing the
-   Group field on its labels. #}
 {% set total_usage = group.labels | sum(attribute='usage_count') %}
-<tr class="labels-space-row" data-label-group="{{ group.name }}" data-style="--row-tint: var(--tag-gray-bg)">
-    <td></td>
-    <td>
+<tr class="entity-section-row" data-label-group="{{ group.name }}">
+    <td class="col-select"></td>
+    <td class="col-name">
         <div class="label-cell">
-            {# 2026-09-25 (UI audit L3): the group's own icon. 2026-09-26
-               (Peter): no first-letter badge -- the default group glyph in
-               the group's colour when none is picked. Clicking the name
-               opens the group's view modal. #}
             <span class="label-cell-icon" data-style="color: var(--cal-text-{{ group.color or 'gray' }})">{{ icon(group.icon or group_default_icon, 'icon-sm') }}</span>
             <a href="/groups/{{ group.name|urlencode }}/view" data-modal class="label-name">{{ group.name }}</a>
         </div>
     </td>
-    <td class="col-opt-2">
-        {% if total_usage > 0 %}
-            <span class="usage-badge">Used in {{ total_usage }} item{{ 's' if total_usage != 1 else '' }}</span>
-        {% else %}
-            <span class="text-muted">Not used</span>
-        {% endif %}
-    </td>
-    <td>
+    <td class="col-meta col-opt-2">{% if total_usage > 0 %}Used in {{ total_usage }} item{{ 's' if total_usage != 1 }}{% else %}<span class="text-muted">Not used</span>{% endif %}</td>
+    <td class="col-actions">
         <div class="action-buttons"><a href="/groups/{{ group.name|urlencode }}" class="icon-btn" title="Open group page">{{ icon('external-link', 'icon-sm') }}</a></div>
     </td>
 </tr>
 {% endmacro %}
 {% macro _label_row(l) %}
-{# 2026-09-25 (UI audit L7): a group's members are indented under its row
-   (`.labels-member-row`), and the ungrouped labels get their own "No
-   group" heading row (below), so they no longer read as members of
-   whichever group happens to come last. #}
-<tr data-label-name="{{ l.name }}" data-label-group="{{ l.label_group or '' }}"{% if l.label_group %} class="labels-member-row"{% endif %}>
-    {# 2026-09-14: mirrors the row markup this table has used since the
-       solid-color-dot -> icon swap (icon + name both painted with
-       var(--cal-accent-{color})) -- unchanged by slice 2, just no
-       longer followed by a Group-badge cell (see below).
-
-       2026-09-21, final word (direct report, all caps: "MAKE THEM THE
-       DEFAULT TEXT COLOR NOT STUPID COLORFUL TEXT THAT I CAN'T READ") --
-       that per-span color is now conditional: a GROUPED row already
-       sits on its own tinted background (`.labels-child-row`'s
-       `--row-tint`, same color family), so colored text on top of it
-       reads badly -- default text color instead, same call as
-       `_group_row`'s own icon/name above. An UNGROUPED row has no tint
-       to clash with, so it keeps this coloring exactly as it's always
-       had it. #}
-    <td>
+<tr class="entity-row{% if l.label_group %} is-member{% endif %}" data-label-name="{{ l.name }}" data-label-group="{{ l.label_group or '' }}">
+    <td class="col-select">
         <input type="checkbox" class="row-select" data-uid="{{ l.name }}" aria-label="Select {{ l.name }}" autocomplete="off">
     </td>
-    <td>
+    <td class="col-name">
         <div class="label-cell">
-            {# 2026-09-25 (UI audit L5): --cal-text-* instead of the
-               --cal-accent-* fill tone, which measured 1.96-2.70:1 as
-               text on the dark theme. #}
-            <span class="label-cell-icon" data-style="color: var(--cal-text-{{ l.color or 'blue' }})">{{ icon(l.icon or 'tag', 'icon-sm') }}</span>
-            <span class="label-name" data-style="color: var(--cal-text-{{ l.color or 'blue' }})">{{ l.name }}</span>
-            {# 2026-09-25 (UI audit L7): what used to be invisible here --
-               project, archived, and the deadline with its state. #}
-            {% if l.is_project and kind != 'projects' %}<span class="cell-tag tag-gray label-row-badge">{{ icon('folder', 'icon-sm') }} Project</span>{% endif %}
+            {# 2026-09-25 (UI audit L5): --cal-text-* reads on both themes. #}
+            <span class="label-cell-icon" data-style="color: var(--cal-text-{{ l.color or 'blue' }})">{{ icon(l.icon or ('folder' if l.is_project else 'tag'), 'icon-sm') }}</span>
+            <span class="label-name">{{ l.name }}</span>
             {% if l.archived_at %}<span class="cell-tag tag-gray label-row-badge">{{ icon('archive', 'icon-sm') }} Archived</span>{% endif %}
             {% if l.deadline %}<span class="cell-tag tag-{{ l.deadline.color }} label-row-badge label-deadline is-{{ l.deadline.state }}">{{ icon('flag', 'icon-sm') }} {{ l.deadline.text }}</span>{% endif %}
         </div>
     </td>
-    <td class="col-opt-2">
-        {% if l.usage_count and l.usage_count > 0 %}
-            <span class="usage-badge">Used in {{ l.usage_count }} item{{ 's' if l.usage_count != 1 else '' }}</span>
-        {% else %}
-            <span class="text-muted">Not used</span>
-        {% endif %}
-    </td>
-    <td>
-        {% set _view_url = "/labels/" ~ l.name %}
-        {{ row_action_buttons(
+    <td class="col-meta col-opt-2">{% if l.usage_count and l.usage_count > 0 %}Used in {{ l.usage_count }} item{{ 's' if l.usage_count != 1 }}{% else %}<span class="text-muted">Not used</span>{% endif %}</td>
+    <td class="col-actions">
+        {% call row_action_buttons(
             "/settings/labels/" ~ l.name ~ "/edit",
             "/settings/labels/" ~ l.name ~ "/delete",
-            "label",
-            'Remove "' ~ l.name ~ '" from every object that carries it? This doesn\'t delete the label config, just clears its usage.',
-            _view_url
-        ) }}
+            noun|default('label'),
+            'Remove "' ~ l.name ~ '" from every object that carries it? This doesn\'t delete the ' ~ noun|default('label') ~ ' itself.',
+            "/labels/" ~ l.name
+        ) %}
+        {% if kind != 'projects' and not l.is_project %}
+        <form method="post" action="/settings/labels/{{ l.name|urlencode }}/convert-to-project" class="label-convert-form" data-convert-undo="{{ l.name }}">
+            <button type="submit" class="icon-btn" title="Convert to project" aria-label="Convert {{ l.name }} to a project">{{ icon('folder-plus', 'icon-sm') }}</button>
+        </form>
+        {% endif %}
+        {% endcall %}
     </td>
 </tr>
 {% endmacro %}
-<table class="labels-table">
+<table class="entity-table labels-table">
     <thead>
         <tr>
-            <th class="col-checkbox"></th>
-            <th>{{ noun|default('label')|capitalize }}</th>
-            <th class="col-opt-2">Usage</th>
-            <th class="col-actions-narrow">Actions</th>
+            <th class="col-select"><span class="sr-only">Select</span></th>
+            <th class="col-name">{{ noun|default('label')|capitalize }}</th>
+            <th class="col-meta col-opt-2">Usage</th>
+            <th class="col-actions">Actions</th>
         </tr>
     </thead>
     <tbody id="labels-body">
@@ -166,8 +83,8 @@
             {% for l in group.labels %}{{ _label_row(l) }}{% endfor %}
         {% endfor %}
         {% if label_groups and ungrouped_labels %}
-        <tr class="labels-space-row labels-nogroup-row" data-label-group="">
-            <td></td>
+        <tr class="entity-section-row is-nogroup" data-label-group="">
+            <td class="col-select"></td>
             <td colspan="3"><div class="label-cell"><span class="label-name">No group</span></div></td>
         </tr>
         {% endif %}
@@ -175,11 +92,6 @@
         {% if not labels %}
         {{ empty_state_row(4, "No " ~ noun|default('label') ~ "s yet.", css_class='empty-state') }}
         {% endif %}
-        <!-- 2026-08-29 (STATE.md backlog item 7): same full-row "+ Add X"
-             convention as _tasks_body.html's .task-add-row -- always the
-             last row (a brand-new label starts with no Space assigned,
-             but this table has no separate Ungrouped section to anchor
-             it to anymore, so it just lives at the end). -->
         <tr class="task-add-row">
             <td colspan="4"><a href="{{ new_url|default('/settings/labels/new') }}" data-modal data-modal-size="wide">{{ icon('plus', 'icon-sm') }} Add {{ noun|default('label') }}</a></td>
         </tr>

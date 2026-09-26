@@ -2,27 +2,30 @@
    `region=list` refresh (routers/label_pages.py groups_regions). #}
 {% from "_row_action_buttons.html" import row_action_buttons %}
 {% from "_empty_state_row.html" import empty_state_row %}
-<table class="labels-table groups-table">
+{# 2026-09-26: the same .entity-table layout as the Labels/Projects list
+   (_labels_table_body.html); no select column (groups have no bulk
+   actions), plus a Labels count column. #}
+<table class="entity-table groups-table">
     <thead>
         <tr>
-            <th>Group</th>
-            <th class="col-opt-2">Labels</th>
-            <th class="col-opt-2">Usage</th>
-            <th class="col-actions-narrow">Actions</th>
+            <th class="col-name">Group</th>
+            <th class="col-meta col-opt-2">Labels</th>
+            <th class="col-meta col-opt-2">Usage</th>
+            <th class="col-actions">Actions</th>
         </tr>
     </thead>
     <tbody>
         {% for g in groups %}
-        <tr data-group-name="{{ g.name }}">
-            <td>
+        <tr class="entity-row" data-group-name="{{ g.name }}">
+            <td class="col-name">
                 <div class="label-cell">
                     <span class="label-cell-icon" data-style="color: var(--cal-text-{{ g.color or 'gray' }})">{{ icon(g.icon or group_default_icon, 'icon-sm') }}</span>
                     <a href="/groups/{{ g.name|urlencode }}/view" data-modal class="label-name">{{ g.name }}</a>
                 </div>
             </td>
-            <td class="col-opt-2">{% if g.labels %}{{ g.labels|length }} label{{ 's' if g.labels|length != 1 }}{% else %}<span class="text-muted">Empty</span>{% endif %}</td>
-            <td class="col-opt-2">{% if g.usage %}<span class="usage-badge">Used in {{ g.usage }} item{{ 's' if g.usage != 1 }}</span>{% else %}<span class="text-muted">Not used</span>{% endif %}</td>
-            <td>
+            <td class="col-meta col-opt-2">{% if g.labels %}{{ g.labels|length }} label{{ 's' if g.labels|length != 1 }}{% else %}<span class="text-muted">Empty</span>{% endif %}</td>
+            <td class="col-meta col-opt-2">{% if g.usage %}Used in {{ g.usage }} item{{ 's' if g.usage != 1 }}{% else %}<span class="text-muted">Not used</span>{% endif %}</td>
+            <td class="col-actions">
                 {{ row_action_buttons(
                     "/groups/" ~ (g.name|urlencode) ~ "/edit",
                     "/groups/" ~ (g.name|urlencode) ~ "/delete",

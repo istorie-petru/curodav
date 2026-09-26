@@ -303,7 +303,7 @@ class TestSettingsLabelsTable:
     def test_rendered_group_row_links_to_the_group_page(self, conn):
         db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni"})
         body = labels_router.manage_labels(_request("/settings/labels"), conn=conn).body.decode()
-        assert 'class="labels-space-row" data-label-group="Uni"' in body
+        assert 'class="entity-section-row" data-label-group="Uni"' in body
         assert 'href="/groups/Uni" class="icon-btn" title="Open group page"' in body
         assert 'data-uid="Uni"' not in body  # no bulk-select checkbox for a group
         assert 'data-label-name="Maths" data-label-group="Uni"' in body

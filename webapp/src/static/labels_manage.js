@@ -36,8 +36,46 @@
     // endpoint already provides.
     document.addEventListener("cc-entity-changed", (e) => {
         if (e.detail?.type === "label") {
+            e.detail.claimed = true;
             refreshLabelsTable();
         }
+    });
+
+    // 2026-09-26 (Peter): Convert to project is a row action with a
+    // confirmation toast. Same shape as a list-row delete (static/app.js):
+    // the row hides at once, the toast offers Undo, and the POST is only
+    // sent once the toast runs out -- then the list re-renders without
+    // the label (it's on Settings > Projects now).
+    document.addEventListener("submit", (e) => {
+        const form = e.target;
+        if (!(form instanceof HTMLFormElement) || !form.dataset.convertUndo) return;
+        e.preventDefault();
+        const name = form.dataset.convertUndo;
+        const row = form.closest("tr");
+        if (row) row.style.display = "none";
+        let cancelled = false;
+        const timer = setTimeout(async () => {
+            if (cancelled) return;
+            try {
+                const resp = await fetch(form.action, { method: "POST", headers: { "X-Requested-With": "fetch" }, body: new FormData(form) });
+                if (!resp.ok) throw new Error();
+                refreshLabelsTable();
+            } catch (err) {
+                if (row) row.style.display = "";
+                window.ccToast && window.ccToast({ message: "Could not convert \u201c" + name + "\u201d.", variant: "error" });
+            }
+        }, 4500);
+        window.ccToast({
+            title: "Converted to project",
+            message: "\u201c" + name + "\u201d",
+            actionLabel: "Undo",
+            onAction: () => {
+                cancelled = true;
+                clearTimeout(timer);
+                if (row) row.style.display = "";
+            },
+            duration: 4500,
+        });
     });
 
     async function refreshLabelsTable() {

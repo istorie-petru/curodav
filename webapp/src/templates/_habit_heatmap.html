@@ -4,7 +4,7 @@
      routers/tasks.py's /tasks/{uid}/completion/{date}/toggle ("no entry ->
      create; existing -> clear"), so clicking a day is a single no-JS
      request. `action_prefix` overrides that endpoint prefix. -->
-{% macro heatmap(uid, weeks, action_prefix=none, extra_class='', extra_attrs='', interactive=true, form_attrs='', amount=none) %}
+{% macro heatmap(uid, weeks, action_prefix=none, extra_class='', extra_attrs='', interactive=true, form_attrs='', amount=none, form_class='', undo_url=none, undo_title='') %}
 {# `form_attrs`: extra attributes for each day's toggle <form> (e.g. the
    habit view modal's keep-open wiring). `amount` ({url, target, unit}):
    an amount habit -- days become popup triggers, not toggles.
@@ -12,7 +12,11 @@
    graph should be able to be visible... not interactable") renders the
    exact same grid as a plain `<span>` per day instead of a `<form>`/
    `<button>` -- no click target, no toggle route hit at all, view-only.
-   Used by habit_task_detail.html's view modal. #}
+   Used by habit_task_detail.html's view modal.
+   2026-09-26: `form_class` adds classes to each day's toggle form (the
+   Habits page panel passes "habit-action" so static/habit_actions.js
+   posts it and refreshes the page), and `undo_url` gives each form the
+   data-undo-* its Undo toast needs (the day's value before the click). #}
 {% set _prefix = action_prefix or ('/tasks/' ~ uid ~ '/completion') %}
 <div class="heatmap {{ extra_class }}" {{ extra_attrs|safe }}>
     <div class="heatmap-months">
@@ -32,7 +36,7 @@
                     data-target="{{ amount.target|int }}" data-unit="{{ amount.unit or '' }}"
                     title="{{ day.date }}{% if day.value %} &mdash; {{ day.value|int }}{% endif %}"></button>
             {% elif interactive %}
-            <form method="post" action="{{ _prefix }}/{{ day.date }}/toggle" class="heatmap-cell-form" {{ form_attrs|safe }}>
+            <form method="post" action="{{ _prefix }}/{{ day.date }}/toggle" class="heatmap-cell-form{% if form_class %} {{ form_class }}{% endif %}" {{ form_attrs|safe }}{% if undo_url %} data-undo-url="{{ undo_url }}" data-undo-date="{{ day.date }}" data-undo-value="{{ day.value|int if day.value else 0 }}" data-undo-message="{{ day.date }} {{ 'cleared' if day.value else 'logged' }}{% if undo_title %}: {{ undo_title }}{% endif %}"{% endif %}>
                 <button type="submit" class="heatmap-cell level-{{ day.level }}" title="{{ day.date }}{% if day.value %} &mdash; {{ day.value }}{% endif %}"></button>
             </form>
             {% else %}

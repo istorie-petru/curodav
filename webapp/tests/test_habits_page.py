@@ -457,3 +457,23 @@ class TestHabitIconLibrary:
         assert db.get_task(conn, "h1")["habit_icon"] == "graduation-cap"
         tasks_router._save_habit_look(conn, "h1", "gavel", None)  # a label-library icon
         assert db.get_task(conn, "h1")["habit_icon"] == "gavel"
+
+
+class TestPanelHeatmapClickable:
+    """2026-09-26 (Peter): the Habits page row's history heatmap is
+    clickable -- toggles post through habit_actions.js (class habit-action)
+    with Undo data; an amount habit's days open the amount popup."""
+
+    def test_plain_habit_cells_are_habit_action_forms(self, conn):
+        _habit(conn, "h1", "Read")
+        _, body = _page(conn)
+        panel = body[body.index('id="habit-panel-h1"'):]
+        assert 'class="heatmap-cell-form habit-action"' in panel
+        assert f'data-undo-url="/tasks/h1/completions" data-undo-date="{TODAY}"' in panel
+
+    def test_amount_habit_cells_open_the_popup(self, conn):
+        _habit(conn, "w1", "Water", target=8)
+        _, body = _page(conn)
+        panel = body[body.index('id="habit-panel-w1"'):]
+        assert "heatmap-cell-form" not in panel[:3000]
+        assert 'habit-amount-trigger' in panel and 'data-url="/tasks/w1/completions"' in panel

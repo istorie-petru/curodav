@@ -106,7 +106,18 @@ session start.
       "Edit project"; a label has a quiet "Convert to project" (one way,
       confirm) under its form. `update_label` keeps is_project when no
       `role` is posted.
-  SW cache v135.
+  - Bug-fix round: Convert to project is a row action on Settings >
+    Labels (folder-plus button; the row hides, an Undo toast runs 4.5s,
+    then it POSTs -- labels_manage.js `data-convert-undo`; gone from the
+    edit modal). The Labels/Groups/Projects tables were rebuilt on one
+    `.entity-table` layout (auto layout, name column takes the rest with
+    ellipsis, fixed 150px meta / 152px actions columns, right-aligned
+    actions, section rows instead of tinted group "cards", names in
+    default text) -- the old `.labels-space-row`/`#labels-table-wrapper`
+    CSS is deleted. The Habits page panel's heatmap is clickable
+    (heatmap macro `form_class="habit-action"` + `undo_url`; amount habits
+    open the popup; view-only on touch like the modal's).
+  SW cache v136.
 
 - **Shipped:** 2026-09-26 -- habits decluttering, per Peter ("rows too
   tall, 28-32px is enough"; "I don't believe in habit vacation"; month

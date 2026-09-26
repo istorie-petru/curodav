@@ -45,15 +45,6 @@
     {% include "_label_form_fields.html" %}
 </form>
 </div>
-{# 2026-09-26 (Peter: labels and projects are different things; a label
-   shouldn't easily become a project). The one, deliberately quiet way:
-   one way only, behind a confirm. Its own form -- forms can't nest. #}
-{% if l and not is_project_form %}
-<form method="post" action="/settings/labels/{{ l.name|urlencode }}/convert-to-project" class="label-convert-form" data-follow-redirect
-      data-confirm-sheet="Turn &quot;{{ l.name }}&quot; into a project? It moves to Settings &gt; Projects and gets a deadline. This can't be undone from here.">
-    <button type="submit" class="btn ghost btn-sm">{{ icon('folder', 'icon-sm') }} Convert to project</button>
-</form>
-{% endif %}
 </div>
 {% set footer_back_url = '/settings/projects' if is_project_form else '/settings/labels' %}
 {% set footer_back_label = 'Cancel' %}

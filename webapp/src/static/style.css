@@ -1306,7 +1306,6 @@ label.seg-btn[hidden]{display:none;}
    time blocks (the other two `.col-actions-narrow` users, still only
    ever two buttons) are unaffected, `.labels-table` scoping this wider
    value to just their own column. */
-.labels-table .col-actions-narrow{width:128px;}
 
 /* _icons_sprite.html's wrapper -- was `style="display:none"` (this app's
    local icon sprite is never meant to be visible itself, only referenced
@@ -1651,100 +1650,40 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    can know). */
 .label-cell-icon { display: inline-flex; flex-shrink: 0; }
 .label-name { font-weight: var(--font-weight-bold); color: var(--fg-primary); }
-/* Settings > Labels only (direct request, 2026-09-21: "remove the bold
-   from labels that are not spaces") -- this table's own rows drop back
-   to the plain body weight, not the base `.label-name` rule's 500
-   (medium) above, which still reads heavy enough to look bold at this
-   row size/on a tinted background. `.labels-space-row` (below) still
-   overrides back to 600 for a Space's own row -- same specificity, but
-   declared later in the cascade, so it wins for that one row kind. */
-.labels-table .label-name{font-weight:var(--font-weight-regular);}
-
-/* Settings > Labels: a single table (2026-09-16, direct request --
-   "don't want the header repeated for every group" / "don't want
-   separate behavior for the labels that are not assigned"). Replaces the
-   2026-09-14 "one <table> per Space" design (each with its own repeated
-   thead, plus Ungrouped's own separate heading+table) with one `<table
-   class="labels-table">`, one `<thead>`, one `<tbody>` -- a Space's own
-   row (`.labels-space-row` below) sits inline with its children and with
-   every ungrouped label, no per-group wrapper element left at all (each
-   row still carries a bare `data-label-group` attribute, unread by any
-   script today, same "hook nothing uses yet" status the removed wrapper
-   divs had).
-
-   `.labels-space-row` is the one row per Space that reads as a "card":
-   a light hue-tinted background and rounded corners. Painted via a
-   single `data-style` on the `<tr>` that sets a `--row-tint` custom
-   property (see _labels_table_body.html) rather than one `data-style`
-   per inner span -- plain CSS below applies it to each `<td>`'s own
-   background (not the `<tr>`'s) specifically so `border-radius` on the
-   first/last cell actually clips visible background, which it can't do
-   if the color is painted on the parent `<tr>` instead. A Space's row
-   used to also get a colored `.label-icon-tile` squircle; direct
-   feedback ("the .label-icon-tile for spaces is unnecessary, show only
-   the icon like for any plain label") dropped that -- a Space's row now
-   uses the same `.label-cell-icon` glyph every plain label row uses,
-   just bold, sitting over the tinted row like everything else in it.
-
-   Rounded-corner hover follows the same per-`<td>`-background technique,
-   scoped to this table only (not the global `tbody tr:hover` rule
-   above, which every other settings table still uses unmodified).
-
-   2026-09-21 follow-up (direct request -- first tried a colored left
-   bar on a grouped label's own row, direct feedback "I don't like this,
-   I like the background color more"): `.labels-child-row` (a grouped
-   label/project's row) now shares this exact same tint/rounded-corner
-   treatment via the same `--row-tint` custom property
-   (_labels_table_body.html sets it identically for both row kinds, just
-   off the row's own -- already Space-inherited -- color), not a
-   separate lighter-weight rule. Only the bold name stays exclusive to
-   `.labels-space-row`, so the two still read as parent/child at a
-   glance despite sharing a color family.
-
-   2026-09-21, same day, second follow-up (direct request: "the font
-   color should be the default one or one that contrasts with the bg
-   color") -- text/icon color used to also be repainted via a paired
-   `--row-tint-fg` custom property (a `--tag-<color>-fg`/`-bg` pill pair,
-   e.g. `.cell-tag`'s own color scheme) -- dropped outright, `--row-tint-
-   fg` no longer set or read anywhere: that pairing is tuned for a small
-   pill chip, not a full-row wash at this size, and read low-contrast
-   against its own `--row-tint` for several of the 16 colors. The row's
-   own default text color (`.label-name`/`.label-cell-icon`'s own
-   already-contrast-checked `--fg-primary`, simply left unset here now)
-   is reliably readable against `--row-tint` in both themes and every
-   color -- the tint itself is deliberately pale/translucent (see this
-   comment block's own opening paragraph) specifically so the app's
-   normal foreground colors still read fine over it, no per-color
-   contrast pairing needed. */
-.labels-space-row td,
-.labels-child-row td{background:var(--row-tint);}
-.labels-space-row td:first-child,
-.labels-child-row td:first-child{border-radius:var(--radius-sm) 0 0 var(--radius-sm);}
-.labels-space-row td:last-child,
-.labels-child-row td:last-child{border-radius:0 var(--radius-sm) var(--radius-sm) 0;}
-.labels-space-row .label-name{font-weight:var(--font-weight-bold);}
-
-#labels-table-wrapper tbody tr:not(.labels-space-row):not(.labels-child-row):hover{background:none;}
-#labels-table-wrapper tbody tr:not(.labels-space-row):not(.labels-child-row):hover td{background:var(--row-alt);}
-#labels-table-wrapper tbody tr:not(.labels-space-row):not(.labels-child-row):hover td:first-child{border-radius:var(--radius-sm) 0 0 var(--radius-sm);}
-#labels-table-wrapper tbody tr:not(.labels-space-row):not(.labels-child-row):hover td:last-child{border-radius:0 var(--radius-sm) var(--radius-sm) 0;}
-
-/* 2026-09-16 (direct request, "the table rows are not narrow enough for
-   desktop") -- narrower than the global `tbody td`/`thead th` padding
-   above, scoped to this page only (see this file's header comment on why
-   this reopens the 2026-09-08 decision on purpose). */
-#labels-table-wrapper thead th{padding:8px 8px;}
-#labels-table-wrapper tbody td{padding:6px 8px;}
-#labels-table-wrapper .labels-space-row td{padding:6px 8px;}
-/* 2026-09-25 (UI audit L7): group members indented under their group's
-   row; the "No group" heading row is untinted (it's not a group); the
-   project / archived / deadline badges sit after the name. The label
-   cell may wrap on a narrow screen so badges drop below the name rather
-   than widen the table. */
-#labels-table-wrapper .labels-member-row .label-cell{padding-left:22px;}
-#labels-table-wrapper .labels-nogroup-row td{background:none;}
-#labels-table-wrapper .labels-nogroup-row .label-name{color:var(--fg-secondary);}
-#labels-table-wrapper .label-cell{flex-wrap:wrap; row-gap:4px;}
+/* Settings > Labels / Groups / Projects tables (_labels_table_body.html,
+   _groups_table_body.html), rebuilt 2026-09-26 (Peter: "it's just
+   broken"): fixed column widths so the columns sit in the same place on
+   all three pages, the Actions column right-aligned over its buttons,
+   one row height. A group (or "No group") is a plain section row --
+   bold name, a stronger top rule, no tint; its labels are indented
+   under it. Names are default text; the icon carries the colour. */
+/* Auto layout: a column hidden on phones (.col-opt-2) then gives its
+   space back. The name column takes whatever the fixed ones leave
+   (width:100% + max-width:0 is the table-cell ellipsis idiom). */
+.entity-table .col-name{width:100%; max-width:0;}
+.entity-table .col-select{width:36px; min-width:36px;}
+.entity-table .col-meta{width:150px; min-width:150px; color:var(--fg-secondary); font-size:var(--text-sm); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.entity-table thead .col-meta{font-size:var(--text-sm); color:var(--fg-secondary);}
+.entity-table .col-actions{width:152px; min-width:152px; text-align:right; white-space:nowrap;}
+.entity-table td.col-actions .action-buttons{justify-content:flex-end;}
+.entity-table tbody td{height:48px; padding-top:6px; padding-bottom:6px;}
+.entity-table .label-cell{display:flex; align-items:center; gap:var(--space-2); min-width:0; flex-wrap:nowrap;}
+.entity-table .label-cell-icon{color:var(--fg-secondary);}
+.entity-table .label-name{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:var(--font-weight-regular); color:var(--fg-primary); text-decoration:none;}
+.entity-table a.label-name:hover{text-decoration:underline;}
+.entity-table .label-row-badge{flex:none;}
+.entity-table .entity-row.is-member .label-cell{padding-left:24px;}
+.entity-table .entity-section-row td{height:48px; padding-top:12px; padding-bottom:4px;}
+.entity-table .entity-section-row .label-name{font-weight:var(--font-weight-bold);}
+.entity-table .entity-section-row.is-nogroup .label-name{color:var(--fg-secondary);}
+.entity-table .entity-section-row:hover{background:none;}
+.entity-table .entity-section-row:hover > td{box-shadow:none;}
+.entity-table tbody tr.entity-section-row:not(:first-child){border-top:1px solid var(--border);}
+.entity-table .label-convert-form{display:inline-flex; margin:0;}
+@container rtable (max-width:520px){
+  .entity-table .col-actions{width:124px; min-width:124px;}
+  .entity-table .entity-row.is-member .label-cell{padding-left:12px;}
+}
 .label-row-badge{font-size:var(--text-2xs);}
 .label-row-badge .icon{width:12px; height:12px;}
 
@@ -7935,8 +7874,6 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .label-form-grid[data-page="dashboard"] .label-sections-field{display:none;}
 .label-form-grid[data-page="dashboard"] .label-page-field{grid-column:1 / -1;}
 .label-form-grid[data-page="sections"] .label-page-field{grid-column:span 1;}
-/* The buried one-way "Convert to project" (label_form_modal.html). */
-.label-convert-form{margin-top:var(--space-2); display:flex; justify-content:flex-end;}
 /* The dropdown's row: the dropdown fills it; an optional square button
    (the label modal's banner upload) sits at its end, as tall as the
    trigger. */
@@ -8021,7 +7958,9 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    edit instead; the month calendar went 2026-09-26). */
 @media (pointer: coarse){
   .habit-year-heatmap .heatmap-cell-form,
-  .habit-year-heatmap .heatmap-cell{pointer-events:none;}
+  .habit-year-heatmap .heatmap-cell,
+  .habit-panel .heatmap-cell-form,
+  .habit-panel .heatmap-cell{pointer-events:none;}
 }
 .habit-section-h{font-size:var(--text-base); font-weight:var(--font-weight-bold); margin:0 0 var(--space-2);}
 .habit-log-field{display:flex; flex-direction:column; gap:2px; font-size:var(--text-sm); color:var(--fg-secondary);}

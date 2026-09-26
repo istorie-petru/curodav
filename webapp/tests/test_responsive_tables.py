@@ -85,7 +85,7 @@ class TestHeaderBodyAlignment:
 
     def test_labels_table(self):
         text = _read("_labels_table_body.html")
-        header = _thead(text[text.index('<table class="labels-table">'):])
+        header = _thead(text[text.index('<table class="entity-table labels-table">'):])
         assert header == [None, None, "col-opt-2", None]
         assert _cells(_macro(text, "_group_row"), "td") == header
         assert _cells(_macro(text, "_label_row"), "td") == header

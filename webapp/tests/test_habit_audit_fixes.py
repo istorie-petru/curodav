@@ -209,7 +209,8 @@ class TestStylingHooks:
             assert sel in self.css, sel
 
     def test_heatmap_view_only_on_touch(self):
-        assert "@media (pointer: coarse)" in self.css and ".habit-year-heatmap .heatmap-cell{pointer-events:none;}" in self.css
+        assert "@media (pointer: coarse)" in self.css and ".habit-year-heatmap .heatmap-cell," in self.css
+        assert ".habit-panel .heatmap-cell{pointer-events:none;}" in self.css
         text = (SRC / "templates" / "habit_task_detail.html").read_text()
         assert "detail-plain-section habit-year-heatmap" in text
 

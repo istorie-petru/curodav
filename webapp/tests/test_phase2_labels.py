@@ -736,7 +736,8 @@ class TestSettingsLabelsTableIconInsteadOfDot:
         # govern at all.
         # 2026-09-25 (UI audit L5): the text-safe --cal-text-* tone.
         assert 'class="label-cell-icon" data-style="color: var(--cal-text-red)"' in body
-        assert 'class="label-name" data-style="color: var(--cal-text-red)">Urgent<' in body
+        # 2026-09-26: the name is default text; the icon carries the colour.
+        assert '<span class="label-name">Urgent</span>' in body
 
     def test_manage_page_falls_back_to_tag_icon_when_none_configured(self, conn):
         # Same "always render *something*" behavior the old color-dot had
@@ -757,7 +758,7 @@ class TestSettingsLabelsTableIconInsteadOfDot:
         assert "#icon-target" in body
         # 2026-09-25 (UI audit L5): the text-safe --cal-text-* tone.
         assert 'class="label-cell-icon" data-style="color: var(--cal-text-purple)"' in body
-        assert 'class="label-name" data-style="color: var(--cal-text-purple)">Focus<' in body
+        assert '<span class="label-name">Focus</span>' in body
 
 
 # --------------------------------------------------------------------- #

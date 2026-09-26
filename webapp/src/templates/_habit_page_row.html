@@ -110,7 +110,12 @@
     {% if h.history %}
     <div class="habit-panel" id="habit-panel-{{ h.uid }}" hidden>
         {% if h.history.periods %}{{ period_grid(h.history.periods) }}
-        {% elif h.history.heatmap %}{{ heatmap(h.uid, h.history.heatmap, extra_class='heatmap-wide' ~ (' heatmap-avoid' if h.is_avoid else ''), interactive=false) }}{% endif %}
+        {# 2026-09-26 (Peter): the panel's heatmap is clickable -- a day
+           toggles through habit_actions.js (page refresh + Undo toast), an
+           amount habit's day opens the amount popup. #}
+        {% elif h.history.heatmap %}{{ heatmap(h.uid, h.history.heatmap, extra_class='heatmap-wide' ~ (' heatmap-avoid' if h.is_avoid else ''), interactive=true,
+                                              form_class='habit-action', undo_url=h.plus_url, undo_title=h.title,
+                                              amount={'url': h.plus_url, 'target': h.target, 'unit': h.unit} if h.is_quantity else none) }}{% endif %}
         {{ insights_block(h.history.insights, h.is_avoid) }}
     </div>
     {% endif %}

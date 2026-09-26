@@ -301,7 +301,8 @@ class TestCss:
         assert "text-transform:none" in rule
 
     def test_member_rows_are_indented(self):
-        assert "#labels-table-wrapper .labels-member-row .label-cell{padding-left:22px;}" in CSS
+        # 2026-09-26: the shared .entity-table rules.
+        assert ".entity-table .entity-row.is-member .label-cell{padding-left:24px;}" in CSS
 
 
 def _grouped(conn, name, group):

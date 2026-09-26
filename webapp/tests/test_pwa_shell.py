@@ -340,5 +340,6 @@ class TestShellCacheVersion:
         # v133 (2026-09-26): label banner button at the end of the Look row.
         # v134 (2026-09-26): flat icon grid, full icon library for habits.
         # v135 (2026-09-26): groups/labels/projects split, module dropdowns.
+        # v136 (2026-09-26): entity tables rebuilt, convert row action, panel heatmap clickable.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v135"' in script
+        assert 'CACHE_NAME = "cc-shell-v136"' in script
