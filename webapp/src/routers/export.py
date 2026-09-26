@@ -122,7 +122,12 @@ def export_context(conn) -> dict:
     the caller (it needs `request.app.state`, which this function has no
     use for otherwise), keeping this a plain data function."""
     return {
-        "contact_count": len(db.list_contacts(conn)),
+        # include_archived=True (item 19, 2026-09-26): a real database
+        # total, not "how many are currently visible" -- same reasoning as
+        # list_tasks' own include_habit_tasks=True just below (every count/
+        # export on this page is meant to cover the WHOLE database,
+        # archived contacts included).
+        "contact_count": len(db.list_contacts(conn, include_archived=True)),
         "event_count": len(db.list_events(conn)),
         "task_count": len(db.list_tasks(conn, include_habit_tasks=True)),
     }
@@ -165,7 +170,10 @@ def export_tasks_ics(conn=Depends(get_db)):
 
 @router.get("/contacts.vcf")
 def export_contacts_vcf(conn=Depends(get_db)):
-    parts = [vcard_rows.contact_row_to_vcard(r).strip() for r in db.list_contacts(conn)]
+    # include_archived=True: a manual .vcf export is a portability/backup
+    # action, not a "what am I looking at right now" view -- same
+    # reasoning as export_context/full_backup's own include_archived=True.
+    parts = [vcard_rows.contact_row_to_vcard(r).strip() for r in db.list_contacts(conn, include_archived=True)]
     return _attachment("contacts.vcf", ("\r\n".join(parts) + "\r\n").encode("utf-8"), "text/vcard")
 
 
@@ -225,7 +233,8 @@ def export_contacts_csv(conn=Depends(get_db)):
             _first(c.get("phones")), _first(c.get("emails")),
             c["address"] or "", ", ".join(c.get("tags") or []),
         ]
-        for c in db.list_contacts(conn)
+        # include_archived=True: see export_contacts_vcf's own comment.
+        for c in db.list_contacts(conn, include_archived=True)
     ]
     return _csv_response("contacts.csv", ["UID", "Name", "Organization", "Phone", "Email", "Address", "Tags"], rows)
 
@@ -290,7 +299,12 @@ def build_backup_payload(conn) -> dict[str, Any]:
         "exported_at": _now(),
         "events": db.list_events(conn),
         "tasks": db.list_tasks(conn, include_habit_tasks=True),
-        "contacts": db.list_contacts(conn),
+        # include_archived=True (item 19, 2026-09-26): a full backup must
+        # never silently drop an archived contact -- restoring it later
+        # has to bring the same data back, archived state included (the
+        # column itself round-trips through import_backup's own
+        # upsert_contact call unchanged, same as any other column).
+        "contacts": db.list_contacts(conn, include_archived=True),
         "labels": db.list_labels(conn),
         "object_labels": _export_object_labels(conn),
         "schedule_holidays": db.list_holidays(conn),
@@ -685,6 +699,12 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
         if row.get("completed_at") is not None:
             conn.execute("UPDATE tasks SET completed_at = ? WHERE uid = ?", (row["completed_at"], row["uid"]))
             conn.commit()
+        # Habit-only columns upsert_task never writes (dedicated setters,
+        # see db.set_task_reminder_time / set_task_habit_look).
+        if row.get("reminder_time"):
+            db.set_task_reminder_time(conn, row["uid"], row["reminder_time"])
+        if row.get("habit_icon") or row.get("habit_color"):
+            db.set_task_habit_look(conn, row["uid"], row.get("habit_icon"), row.get("habit_color"))
         count += 1
     for row in payload.get("contacts", []):
         db.upsert_contact(conn, row)

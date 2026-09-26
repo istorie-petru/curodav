@@ -44,10 +44,15 @@
             <label>Title</label>
             <input type="text" name="label" value="{{ b.label if b else '' }}" placeholder="(optional)">
         </div>
+        {# 2026-09-26: two plain time fields (typed or picked). #}
+        {% from "_date_time_fields.html" import time_field with context %}
         <div class="field">
-            <label>Hours</label>
-            {% from "_datetime_picker.html" import datetime_picker with context %}
-            {{ datetime_picker('start_time', 'end_time', b.start_time if b else '', b.end_time if b else '', 'time') }}
+            <label>From</label>
+            {{ time_field('start_time', b.start_time if b else '', required=true, label='From') }}
+        </div>
+        <div class="field">
+            <label>Until</label>
+            {{ time_field('end_time', b.end_time if b else '', required=true, label='Until') }}
         </div>
         <div class="field">
             {% set ms_mode = 'filter' %}

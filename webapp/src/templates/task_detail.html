@@ -104,10 +104,22 @@
             <span class="detail-meta-value">{{ task.recurrence }}</span>
         </div>
         {% endif %}
-        {% if task.tags %}
+        {# 2026-09-25 (UI audit L18): the project gets its own row, like
+           the form's separate Project dropdown, instead of reading as one
+           more label. #}
+        {% set _projects = project_label_names(request) %}
+        {% set _proj = (task.tags or []) | select('in', _projects) | list %}
+        {% set _plain = (task.tags or []) | reject('in', _projects) | list %}
+        {% if _proj %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Project</span>
+            <span class="detail-meta-value">{% for tag in _proj %}{{ label_pill(tag, 'modal') }} {% endfor %}</span>
+        </div>
+        {% endif %}
+        {% if _plain %}
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">Labels</span>
-            <span class="detail-meta-value">{% for tag in task.tags %}{{ label_pill(tag, 'modal') }} {% endfor %}</span>
+            <span class="detail-meta-value">{% for tag in _plain %}{{ label_pill(tag, 'modal') }} {% endfor %}</span>
         </div>
         {% endif %}
     </div>

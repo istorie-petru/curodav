@@ -377,6 +377,13 @@ def _week_bars(week_dates: list[date], all_day_events: list[dict]) -> tuple[list
                 "event": e,
                 "col_start": col_start,
                 "col_span": col_end - col_start + 1,
+                # 2026-09-26 (Peter: past-dimming must cover all-day events
+                # too, not just timed ones) -- this bar SEGMENT's own last
+                # occupied day is before today, same "fully in the past, not
+                # just started" rule every other .is-past dims by (a bar
+                # still touching today or later stays full-opacity, e.g. a
+                # multi-day trip that's still ongoing).
+                "is_past": clip_end < date.today(),
                 # FullCalendar-parity interactions, slice 2 (drag-move +
                 # edge-resize): whether this bar SEGMENT's left/right edge
                 # is the event's own real start/end, vs. a clip introduced
@@ -1189,6 +1196,11 @@ def _day_view_context(conn, request, day, label):
         "calendar_view": "day",
         "today_iso": date.today().isoformat(),
         "day": day,
+        # 2026-09-25 (UI audit C-17): readable "Fri, Sep 25, 2026" for the
+        # header nav label/<title>/sr-only h1 instead of the raw ISO date;
+        # `day_date` feeds the grid header's weekday + day-number pill.
+        "day_label": f"{d.strftime('%a, %b')} {d.day}, {d.year}",
+        "day_date": d,
         "prev_day": (d - timedelta(days=1)).isoformat(),
         "next_day": (d + timedelta(days=1)).isoformat(),
         "all_day": all_day,

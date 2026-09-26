@@ -463,6 +463,29 @@ class TestPanelInfoAndSessionStepper:
         assert resp.headers["location"] == "/calendar/week?date_=2026-08-17"
         assert len(db.list_work_allocations_for_task(conn, "t1")) == 1
 
+    def test_add_work_allocation_route_is_dual_mode(self, conn):
+        """2026-09-26 (item 11 redesign): the "Unscheduled work" row's own
+        new "+" button posts through ccApi (project_calendar.js), which
+        always sends the fetch header -- add_work_allocation must answer
+        with JSON, not its plain-form 303 redirect, or the row's own
+        region refresh would follow a redirect and discard the response
+        instead of dispatching the change event."""
+        _seed_task(conn, "t1")
+        resp = tasks_router.add_work_allocation(
+            "t1", start_at="", end_at="", x_requested_with="fetch", conn=conn
+        )
+        assert resp.status_code == 200
+        assert resp.body.decode() == '{"ok":true}'
+        assert db.first_undated_work_allocation_for_task(conn, "t1") is not None
+
+    def test_remove_latest_route_is_dual_mode(self, conn):
+        _seed_task(conn, "t1")
+        db.create_work_allocation(conn, "t1")
+        resp = tasks_router.remove_latest_work_allocation("t1", x_requested_with="fetch", conn=conn)
+        assert resp.status_code == 200
+        assert resp.body.decode() == '{"ok":true}'
+        assert db.first_undated_work_allocation_for_task(conn, "t1") is None
+
 
 class TestBackupRoundTrip:
     def test_work_allocation_flag_survives_export_and_restore(self, conn):

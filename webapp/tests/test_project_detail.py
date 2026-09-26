@@ -95,7 +95,13 @@ class TestOldUrlsRedirect:
     def test_names_are_url_quoted(self):
         assert projects_router.project_detail_redirect("Road trip").headers["location"] == "/labels/Road%20trip"
 
-    def test_unknown_label_still_renders_a_page(self, conn):
+    def test_unknown_label_redirects_to_the_labels_list(self, conn):
+        # 2026-09-25 (UI audit L13): used to render an empty 200 page.
+        resp = label_pages.label_page("Ghost", _request("/labels/Ghost"), conn=conn)
+        assert resp.status_code == 303 and resp.headers["location"] == "/settings/labels"
+
+    def test_label_known_only_through_usage_still_renders(self, conn):
+        _event(conn, "e1", ["Ghost"], (datetime.now(timezone.utc) + timedelta(days=1)).isoformat())
         resp = label_pages.label_page("Ghost", _request("/labels/Ghost"), conn=conn)
         assert resp.status_code == 200
         assert resp.template.name == "label_sections.html"
@@ -208,6 +214,9 @@ class TestKanbanResponsiveColumns:
 
     def test_board_is_wrapped_in_a_container_query_container(self, conn):
         _promote(conn, "Trip")
+        # A label nothing carries shows the one empty state instead of the
+        # board (2026-09-25 flesh-out), so give it a tagged event.
+        _event(conn, "e1", ["Trip"], (datetime.now(timezone.utc) + timedelta(days=1)).isoformat())
         body = label_pages.label_page("Trip", _request(), conn=conn).body.decode()
         assert '<div class="kanban-board-wrap">' in body
         # The wrapper must actually contain the board, not just sit
@@ -467,10 +476,12 @@ class TestProjectDeadlineAsEvent:
     def test_deadline_renders_with_a_deadline_pill_and_no_link(self, conn):
         future_end = (datetime.now(timezone.utc) + timedelta(days=20)).date().isoformat()
         _promote(conn, "Trip", end=future_end)
+        _event(conn, "e1", ["Trip"], (datetime.now(timezone.utc) + timedelta(days=1)).isoformat())
         resp = label_pages.label_page("Trip", _request(), conn=conn)
         body = resp.body.decode()
         assert "Deadline" in body
-        assert "pill-red" in body
+        # 2026-09-25 (UI audit L6): 20 days out is neutral, not red.
+        assert "pill-gray" in body and "pill-red" not in body
         assert "Deadline" in body
 
 
@@ -541,9 +552,8 @@ class TestLabelSelectorScope:
         )
         resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert resp.context["page_label_scope"] == "Trip"
-        # default_tab=label, not task -- this page's own active_tab is
-        # "label" (base.html's _qa_defaults maps that to the Label tab).
-        assert "/quick/add?default_tab=label&amp;scope=Trip" in resp.body.decode()
+        # 2026-09-25 (UI audit L1): Task tab, with the project prefilled.
+        assert "/quick/add?default_tab=task&amp;scope=Trip&amp;label=Trip" in resp.body.decode()
 
     def test_standalone_project_with_no_parent_space_is_unscoped(self, conn):
         _promote(conn, "Trip")

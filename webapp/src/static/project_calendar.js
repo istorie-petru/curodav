@@ -155,6 +155,14 @@
 
     function begin(e) {
       if (e.button !== 0) return;
+      // Item 11 redesign: the row now carries its own "+"/"..." controls
+      // (`.unscheduled-row-actions`, _unscheduled_task_item.html) -- a
+      // pointerdown there must fall through untouched (native button
+      // click/form submit), not be swallowed into a drag-start, same
+      // "let this one child's own click through" carve-out setupBlock's
+      // own pointerdown handler already has for `.work-allocation-delete`
+      // below.
+      if (e.target.closest(".unscheduled-row-actions")) return;
       e.preventDefault();
       const ghost = item.cloneNode(true);
       ghost.classList.add("drag-ghost");
@@ -504,6 +512,31 @@
         postAction(form.action, { date_: cfg.weekDate }, "unschedule");
       });
     });
+    // Item 11 redesign: the unscheduled row's own "+" (add another session)
+    // and "..." menu's "Remove latest session" -- same async-crud
+    // interception as the work-allocation delete form just above (a plain
+    // submit would 303-reload the whole page; routers/tasks.py's
+    // add_work_allocation/remove_latest_work_allocation are dual-mode for
+    // exactly this). Both already carry a `next` hidden field/fields dict
+    // from the template, but postAction only needs `date_` -- the server
+    // route's own redirect fallback (unused here) is what actually reads
+    // `next`.
+    document.querySelectorAll(".unscheduled-add-session-form").forEach((form) => {
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        postAction(form.action, { date_: cfg.weekDate }, "create");
+      });
+    });
+    document.querySelectorAll(".unscheduled-remove-latest-form").forEach((form) => {
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        postAction(form.action, { date_: cfg.weekDate }, "unschedule");
+      });
+    });
+    // The row's own "..." kebab (_action_menu.html, static/app.js's shared
+    // .action-menu convention) needs the same re-bind-after-swap treatment
+    // every other interactive element in this region gets.
+    if (window.CCActionMenu) window.CCActionMenu.init();
   }
 
   init();

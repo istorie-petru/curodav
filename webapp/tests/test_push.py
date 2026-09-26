@@ -217,5 +217,10 @@ class TestContactSetting:
         db.set_app_meta(conn, push.CONTACT_KEY, "me@example.org")
         req = Request({"type": "http", "method": "GET", "path": "/settings/general", "headers": [], "query_string": b""})
         body = settings_router.settings_general(req, conn=conn).body.decode()
-        assert 'action="/settings/push-contact"' in body
-        assert 'name="email" value="me@example.org"' in body
+        # 2026-09-25 (UI audit H-19): the contact email is part of the
+        # Notifications card's single form (/settings/notifications, one
+        # Save); /settings/push-contact stays as an endpoint only.
+        assert 'action="/settings/push-contact"' not in body
+        form = body.split('id="push-prefs-form"', 1)[1].split("</form>", 1)[0]
+        assert 'name="email" value="me@example.org"' in form
+        assert form.count('type="submit"') == 1

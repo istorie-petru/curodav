@@ -11,6 +11,10 @@ it names:
 - **Tasks** and **habits** remind on the day they're due: one morning
   digest each (generic when more than one -- "You have 3 tasks due
   today", never a list), at the digest time.
+- A habit with its own **reminder time** (2026-09-25, tasks.reminder_time)
+  reminds on its own at that time instead -- only if it's still due (not
+  yet done, not paused) when the moment comes -- and is left out of the
+  morning digest so it never pings twice. Avoid habits never remind.
 - **Sleep / leisure time** blocks remind when they start (the extra
   mechanism). A block starting at 00:00 is the continuation of the
   previous night's block (blocks can't cross midnight), so it doesn't
@@ -50,7 +54,7 @@ TYPES: tuple[str, ...] = ("events", "tasks", "habits", "blocks")
 TYPE_LABELS = {
     "events": "Events, when they start",
     "tasks": "Tasks due today (morning)",
-    "habits": "Habits due today (morning)",
+    "habits": "Habits due today (morning, or at their own time)",
     "blocks": "Sleep & leisure time starting",
 }
 
@@ -159,13 +163,49 @@ def _digest_notifications(conn, now: datetime) -> list[Notification]:
     if tasks:
         body = f"“{tasks[0]['title']}” is due today." if len(tasks) == 1 else f"You have {len(tasks)} tasks due today. One at a time."
         out.append(Notification(f"tasks:{today_iso}", "Today's tasks", body, "/tasks", "tasks-today"))
-    habits = [h for h in habit_view.habit_items(conn, now.date()) if h["due_today"] and not h["is_avoid"]]
+    habits = [
+        h for h in habit_view.habit_items(conn, now.date())
+        if h["due_today"] and not h["is_avoid"] and not h.get("reminder_time")
+    ]
     if habits:
         if len(habits) == 1:
             body = f"Time for “{habits[0]['title']}” today."
         else:
             body = f"{len(habits)} habits lined up for today. You've got this."
         out.append(Notification(f"habits:{today_iso}", "Habits", body, "/habits", "habits-today"))
+    return out
+
+
+def _habit_time_notifications(conn, now: datetime) -> list[Notification]:
+    """Habits with their own reminder time: one notification at that time,
+    today, if the habit is still due then. `due_today` is already False for
+    a done day and for a paused habit, so both stay quiet."""
+    out = []
+    today_iso = now.date().isoformat()
+    for h in habit_view.habit_items(conn, now.date()):
+        at = h.get("reminder_time")
+        if not at or h["is_avoid"] or not h["due_today"]:
+            continue
+        try:
+            hh, mm = (int(x) for x in at.split(":", 1))
+            moment = datetime.combine(now.date(), time(hh, mm))
+        except (ValueError, TypeError):
+            continue
+        if not _in_window(moment, now):
+            continue
+        if h["is_quantity"] and h.get("today_value"):
+            body = f"{h['today_value']:g} of {h['target']:g} so far. Keep going."
+        else:
+            body = "Still to do today."
+        out.append(
+            Notification(
+                key=f"habit:{h['uid']}:{today_iso}",
+                title=h["title"],
+                body=body,
+                url="/habits",
+                tag=f"habit-{h['uid']}",
+            )
+        )
     return out
 
 
@@ -209,6 +249,8 @@ def due_notifications(conn, now: datetime | None = None) -> list[Notification]:
         candidates += _event_notifications(conn, now)
     if on & {"tasks", "habits"}:
         candidates += [n for n in _digest_notifications(conn, now) if n.key.split(":", 1)[0] in on]
+    if "habits" in on:
+        candidates += _habit_time_notifications(conn, now)
     if "blocks" in on:
         candidates += _time_block_notifications(conn, now)
     return [n for n in candidates if not db.push_was_sent(conn, n.key)]

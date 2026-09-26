@@ -357,6 +357,25 @@ class TestContactFormAvatarUploadAndFieldOrder:
         ]:
             assert expected in js
 
+    def test_recurrence_picker_js_puts_both_dropdowns_in_one_flex_row(self):
+        """2026-09-26 (Peter: "the two new dropdowns side by side... not
+        one overflowing and the other in its own section") -- `wrap`/
+        `endsWrap` are appended into one `.recurrence-preset-row` container
+        instead of inserted as plain stacked siblings of the original
+        `.field`."""
+        js_path = Path(__file__).resolve().parents[1] / "src" / "static" / "recurrence_picker.js"
+        js = js_path.read_text(encoding="utf-8")
+        assert 'row.className = "recurrence-preset-row"' in js
+        assert "row.appendChild(wrap)" in js and "row.appendChild(endsWrap)" in js
+        assert "originalParent.insertBefore(row, input)" in js
+
+    def test_css_lays_the_row_out_as_equal_flex_items_with_ellipsis(self):
+        css_path = Path(__file__).resolve().parents[1] / "src" / "static" / "style.css"
+        css = css_path.read_text(encoding="utf-8")
+        assert ".recurrence-preset-row{display:flex;" in css
+        assert ".recurrence-preset-row > .multiselect{flex:1; min-width:0;}" in css
+        assert ".recurrence-preset-row .ms-summary{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}" in css
+
     def test_recurrence_picker_js_defines_every_2_weeks_preset(self):
         """2026-08-15 ("just implement odd week, even week recurrence for
         events"), reworked same-day on direct follow-up feedback ("just

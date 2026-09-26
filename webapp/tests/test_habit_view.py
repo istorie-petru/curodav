@@ -51,7 +51,12 @@ class TestHabitItems:
         item = habit_view.habit_items(conn, today)[0]
         assert item["is_quantity"] is True
         assert (item["today_value"], item["next_value"], item["target"]) == (3, 4, 8)
-        assert item["current_streak"] == 2
+        # 2026-09-25 (UI audit H-01): 3 of 8 is a partial day, not a kept
+        # one -- the streak is yesterday's full day only, and the habit is
+        # still to do today (this asserted 2 while any value counted).
+        assert item["current_streak"] == 1
+        assert item["due_today"] is True
+        assert (item["done_today"], item["partial_today"], item["remaining_today"]) == (False, True, 5)
         assert item["recurrence_label"] == "Daily"
         assert item["toggle_url"] == "/tasks/h1/completion/2026-09-24/toggle"
         assert item["plus_url"] == "/tasks/h1/completions"
@@ -79,8 +84,8 @@ class TestCheckinWidget:
         assert "/habits/" not in html  # no retired entity endpoints
         # 7-day strip per row: toggles for the plain habit, amount-popup
         # triggers for the 8-glasses one (2026-09-25).
-        assert html.count('class="form-inline habit-action habit-day-form"') == 7
-        assert html.count('class="habit-day habit-amount-trigger') == 7
+        assert html.count('class="form-inline habit-action habit-day-form"') == date.today().weekday() + 1
+        assert html.count('class="habit-day habit-amount-trigger') == date.today().weekday() + 1
 
     def test_todo_first_and_all_done_summary(self, conn):
         _habit(conn, "h1", "Aaa")

@@ -45,7 +45,8 @@ DETAIL_WEEKS = 32
 
 
 def heatmap_weeks(
-    entries_by_date: dict[str, float], target: float, weeks: int, today: date | None = None
+    entries_by_date: dict[str, float], target: float, weeks: int, today: date | None = None,
+    week_start: str = "monday",
 ) -> list[list[dict]]:
     """Builds a Monday-aligned grid of `weeks` columns x 7 day-rows ending
     on `today` (real date.today() by default; a fixed value is accepted
@@ -59,7 +60,9 @@ def heatmap_weeks(
     column)."""
     today = today or date.today()
     start = today - timedelta(days=weeks * 7 - 1)
-    start -= timedelta(days=start.weekday())  # snap back to the preceding Monday
+    # Snap back to the first day of that week -- Monday, or Sunday when
+    # Settings says so (2026-09-26, Peter: habits ignored the setting).
+    start -= timedelta(days=(start.weekday() + (1 if week_start == "sunday" else 0)) % 7)
 
     days = []
     d = start
@@ -92,7 +95,7 @@ def heatmap_weeks(
                     "level": level,
                     "is_future": is_future,
                     "weekday": day.weekday(),
-                    "month_label": day.strftime("%b") if day.day <= 7 and day.weekday() == 0 else None,
+                    "month_label": day.strftime("%b") if day.day <= 7 and day == days[week_start] else None,
                 }
             )
         result.append(col)

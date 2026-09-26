@@ -1,21 +1,21 @@
 // Inline editing for the Tasks table view (templates/tasks_list.html) --
 // status is a `.multiselect` radio-checkbox dropdown styled to look like a
 // colored pill trigger (pill-select-trigger, see style.css; 2026-08-29,
-// STATE.md backlog item 9 -- was a native <select> before that), labels is
-// a `.multiselect` checkbox dropdown over the row's own tag pills (new the
-// same slice -- previously read-only), due date is the shared themed date
-// picker (datetime_picker.js, date mode) whose Clear/day-pick fires a
-// `change` on the same hidden input contract this file listens for, and
-// title is a double-click-to-edit cell (static/inline_edit.js).
-// (Importance/Urgency used to be inline-editable
-// pill-selects too -- side work, post-1.1, removed them: both are purely
-// computed now, rendered as read-only .pill-static spans instead, see
-// _task_row.html.) Changing any of them fires a single-field
-// PATCH-ish call to POST /tasks/{uid}/update-field (routers/tasks.py)
-// instead of a full form submit, so editing a row never re-navigates the
-// page or loses scroll position -- only the edited cell's own pill color
-// (or, for Labels, its own pill list) updates in place; everything else on
-// the page is left alone.
+// STATE.md backlog item 9 -- was a native <select> before that), due date
+// is the shared themed date picker (datetime_picker.js, date mode) whose
+// Clear/day-pick fires a `change` on the same hidden input contract this
+// file listens for, and title is a double-click-to-edit cell
+// (static/inline_edit.js). (Labels was briefly an editable checkbox
+// dropdown too, 2026-08-29 - 2026-09-26 -- reverted, "labels should not be
+// inline editable"; _task_row.html's Labels cell is plain read-only pills
+// again. Importance/Urgency used to be inline-editable pill-selects too --
+// side work, post-1.1, removed them: both are purely computed now,
+// rendered as read-only .pill-static spans instead, see _task_row.html.)
+// Changing status/due_at/title fires a single-field PATCH-ish call to
+// POST /tasks/{uid}/update-field (routers/tasks.py) instead of a full form
+// submit, so editing a row never re-navigates the page or loses scroll
+// position -- only the edited cell's own pill color updates in place;
+// everything else on the page is left alone.
 //
 // Deliberately does NOT reload the page on success (unlike modal.js's
 // create/edit forms) -- a full reload after every dropdown change would
@@ -43,14 +43,13 @@
 // contract STATE.md backlog item 1 already established, just against a
 // wrapper that now contains two tables instead of one.
 //
-// A caveat shared by the Status/Labels dropdowns: static/app.js's generic
-// `.multiselect` handling portals an open panel out to #multiselect-portal,
-// so a checkbox/radio inside it is no longer a DOM descendant of its
-// `.task-status-select`/`.task-labels-select` wrapper while open -- this
-// file locates the *trigger* (which never moves) by the row's own `data-
-// uid` via `currentBody().querySelector(...)` instead of `closest()`
-// from the changed input, same reasoning static/app.js's own `wrapperFor`
-// helper documents.
+// A caveat for the Status dropdown: static/app.js's generic `.multiselect`
+// handling portals an open panel out to #multiselect-portal, so a radio
+// inside it is no longer a DOM descendant of its `.task-status-select`
+// wrapper while open -- this file locates the *trigger* (which never
+// moves) by the row's own `data-uid` via `currentBody().querySelector(...)`
+// instead of `closest()` from the changed input, same reasoning
+// static/app.js's own `wrapperFor` helper documents.
 
 (function () {
   const initialBody = document.getElementById("tasks-body");
@@ -82,31 +81,31 @@
     }
   }
 
-  // Inline status-pill / labels / due-date / title changes -- delegated so
-  // they survive a region swap. These stay optimistic with NO region
-  // refresh (the design's explicit choice): a swap after every dropdown
-  // change would lose the table's scroll/focus for no benefit.
+  // Inline status-pill / due-date / title changes -- delegated so they
+  // survive a region swap. These stay optimistic with NO region refresh
+  // (the design's explicit choice): a swap after every dropdown change
+  // would lose the table's scroll/focus for no benefit.
   //
   // Bug fix (2026-08-29, direct report: "the label inline editor still
-  // doesn't work"): the Status/Labels checks below used to be scoped
-  // `"#tasks-body input.task-status-radio"` / `"...task-label-checkbox"`,
-  // an ancestor-scoped selector that requires the input to currently be a
-  // DOM descendant of #tasks-body -- true when the dropdown is closed, but
-  // FALSE the moment it's open, because static/app.js's generic
-  // `.multiselect` handling portals the whole open panel (radios/
-  // checkboxes included) out to `#multiselect-portal`, a sibling of
-  // #tasks-body, not a descendant of it (see app.js's own header comment).
-  // Since a radio/checkbox can only ever fire `change` *while its panel is
-  // open*, that `.matches()` check was silently false on every real click,
-  // so nothing here ever ran -- app.js's own unrelated summary-sync still
-  // updated the trigger's visible text for Status (and closed the panel,
-  // single-select mode), which is why picking a status LOOKED like it
-  // worked even though the actual save never fired. Dropped the `#tasks-
-  // body` ancestor requirement for these two -- the class names alone are
-  // specific enough to this row template, unlike `input.inline-date` and
-  // `[data-inline-edit]` below, which are never portaled (only the date
-  // picker's floating calendar panel moves; its hidden input stays put)
-  // and so can keep the ancestor scoping safely.
+  // doesn't work"): the Status check below used to be scoped
+  // `"#tasks-body input.task-status-radio"`, an ancestor-scoped selector
+  // that requires the input to currently be a DOM descendant of
+  // #tasks-body -- true when the dropdown is closed, but FALSE the moment
+  // it's open, because static/app.js's generic `.multiselect` handling
+  // portals the whole open panel (radios included) out to
+  // `#multiselect-portal`, a sibling of #tasks-body, not a descendant of
+  // it (see app.js's own header comment). Since a radio can only ever fire
+  // `change` *while its panel is open*, that `.matches()` check was
+  // silently false on every real click, so nothing here ever ran --
+  // app.js's own unrelated summary-sync still updated the trigger's
+  // visible text (and closed the panel, single-select mode), which is why
+  // picking a status LOOKED like it worked even though the actual save
+  // never fired. Dropped the `#tasks-body` ancestor requirement for this
+  // one -- the class name alone is specific enough to this row template,
+  // unlike `input.inline-date` and `[data-inline-edit]` below, which are
+  // never portaled (only the date picker's floating calendar panel moves;
+  // its hidden input stays put) and so can keep the ancestor scoping
+  // safely.
   document.addEventListener("change", (e) => {
     const target = e.target;
     if (!target || !target.matches) return;
@@ -121,38 +120,6 @@
       // doesn't know about.)
       if (trigger) trigger.className = "multiselect-trigger pill-select-trigger pill-" + color;
       updateField(uid, target.dataset.field, target.value);
-    } else if (target.matches("input.task-label-checkbox")) {
-      const uid = target.dataset.uid;
-      const panel = target.closest(".multiselect-panel");
-      const checkedBoxes = panel
-        ? Array.from(panel.querySelectorAll(".task-label-checkbox:checked"))
-        : [];
-      const checked = checkedBoxes.map((cb) => cb.value);
-      const trigger = currentBody().querySelector('.task-labels-select[data-uid="' + uid + '"] .cell-tags');
-      if (trigger) {
-        // Bug fix (audit-fixes-2.1.md, direct report: "the pills revert to
-        // a blue no icon pill... a refresh fixes this"). This used to
-        // hand-build a generic '<span class="cell-tag tag-blue">Name</span>'
-        // per checked label -- it has no idea what color/icon a real label
-        // carries (that lookup lives server-side in _label_pill.html's
-        // label_pill() macro/label_color()/label_icon()), so every pill
-        // collapsed to plain blue with no icon until the next full page
-        // load re-rendered it correctly. Fix: each checkbox's own
-        // <label class="multiselect-option"> already has the real,
-        // server-rendered pill sitting right next to it (_task_row.html's
-        // dropdown-option list also calls label_pill(name)) -- clone that
-        // markup instead of reconstructing a fake one, so the trigger shows
-        // the exact same color/icon the page would render on reload.
-        trigger.innerHTML = checkedBoxes.length
-          ? checkedBoxes
-              .map((cb) => {
-                const pill = cb.parentElement.querySelector(".cell-tag");
-                return pill ? pill.outerHTML : '<span class="cell-tag tag-blue">' + escapeHtml(cb.value) + "</span>";
-              })
-              .join("")
-          : '<span class="ms-summary text-muted">No labels</span>';
-      }
-      updateField(uid, "tags", checked);
     } else if (target.matches("#tasks-body input.inline-date")) {
       updateField(target.dataset.uid, target.dataset.field, target.value);
     }
@@ -174,17 +141,6 @@
     if (!uid || !field) return;
     updateField(uid, field, e.detail.value);
   });
-
-  // Small HTML-escape for the label pills' optimistic rebuild above --
-  // tag names come from the row's own known `tag_names` list (server-
-  // rendered checkbox values), not free-typed user input, but this is
-  // cheap insurance against a label name containing HTML-significant
-  // characters rendering as markup instead of text.
-  function escapeHtml(s) {
-    const div = document.createElement("div");
-    div.textContent = s;
-    return div.innerHTML;
-  }
 
   // ------------------------------------------------------------------ //
   // Bulk select + bulk actions, 2026-08-01 -- see

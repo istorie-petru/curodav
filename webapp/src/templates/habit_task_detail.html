@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% from "_task_work_allocations.html" import task_work_allocations_section with context %}
 {% from "_habit_heatmap.html" import heatmap %}
+{% from "_habit_history.html" import period_grid %}
 {% from "_label_pill.html" import label_pill with context %}
 {% from "_detail_cover.html" import detail_cover with context %}
 {% block title %}{{ task.title if task else "Habit" }}{% endblock %}
@@ -16,8 +16,10 @@
      from this task's own check-off history (task_completions, the same
      source _completion_heatmap_weeks/_habit_group_items already read),
      current streak via the same habit_streak_text() phrasing the Habits
-     group's row uses, and the Work sessions card so sessions can be added
-     here exactly like any other task's Work sessions card.
+     group's row uses. (Originally also had a Work sessions card here --
+     removed 2026-09-26, this view modal only; see the note further down
+     and habit_task_form.html's own docstring for the edit modal, which
+     kept it.)
 
      2026-09-03 direct request ("I like variant B so much I want it to be
      the baseline for all view modal windows") -- this header had no
@@ -37,7 +39,9 @@
          margins so that padding could stay intact for every plain
          *_form.html edit modal (a bare <h1>, no cover) that relies on it. -->
     <div class="detail-header-inner">
-        {{ detail_cover('var(--cal-accent-' ~ status_colors[task.status] ~ ')', banner, icon('repeat')) }}
+        {# 2026-09-26: the habit's own colour and icon make its cover --
+           a picked colour replaces the inherited label/project banner. #}
+        {{ detail_cover('var(--cal-accent-' ~ (habit_look.color or status_colors[task.status]) ~ ')', none if habit_look.color else banner, icon(habit_look.icon or 'repeat')) }}
         <div class="detail-heading-row">
             <div class="detail-heading-text">
                 <h1 class="detail-title">{{ task.title }}</h1>
@@ -48,14 +52,20 @@
 
 <div class="modal-body">
 <div class="detail-meta-panel">
-    <div class="detail-meta-grid">
+    {# 2026-09-25 (UI audit H-11): `habit-stats-grid` keeps these short
+       stats three to a row on phones (the generic grid drops to one
+       column <=720px, so six stats filled the first screen), and the
+       Streak value is just the count ("2 days") -- "Streak / 2 days
+       streak" said it twice. #}
+    <div class="detail-meta-grid habit-stats-grid">
         <div class="detail-meta-item">
-            <span class="detail-meta-label">Recurrence</span>
+            <span class="detail-meta-label">How often</span>
             <span class="detail-meta-value">{{ habit_cadence_label(task) }}</span>
         </div>
+        {% set _unit = habit_stats.unit if habit_stats else 'day' %}
         <div class="detail-meta-item">
-            <span class="detail-meta-label">Streak</span>
-            <span class="detail-meta-value">{% if task.habit_kind == 'avoid' %}{{ current_streak }} day{{ 's' if current_streak != 1 }} clean{% else %}{{ habit_streak_text(request, current_streak, habit_stats.unit if habit_stats else 'day') }}{% endif %}</span>
+            <span class="detail-meta-label">{{ 'Clean streak' if task.habit_kind == 'avoid' else 'Streak' }}</span>
+            <span class="detail-meta-value">{{ current_streak }} {{ _unit }}{{ 's' if current_streak != 1 }}</span>
         </div>
         {% if habit_stats %}
         <div class="detail-meta-item">
@@ -108,131 +118,40 @@
    habit has no heatmap at all: a per-day grid doesn't describe it. #}
 {% set _is_amount = task.target_per_day and task.target_per_day > 1 and task.habit_kind != 'avoid' %}
 {% set _amount = {'url': '/tasks/' ~ task.uid ~ '/completions', 'target': task.target_per_day, 'unit': task.habit_unit} if _is_amount else none %}
-{% if not (habit_stats and habit_stats.kind == 'period') %}
-<div class="detail-card detail-section-gap">
+{# 2026-09-26 (Peter): one history view -- the year heatmap (clickable:
+   a click toggles the day, or opens the amount popup for an amount
+   habit), or for a "3x a week" / "once a month" habit the last 52 weeks /
+   12 months as a grid. The month calendar and the insights are gone from
+   this modal (insights: Habits page, expandable row). The habit's colour
+   paints either (habit-c-*). #}
+<div class="detail-plain-section habit-year-heatmap{% if habit_look.color %} habit-c-{{ habit_look.color }}{% endif %}">
+    {% if habit_periods %}
+    {{ period_grid(habit_periods) }}
+    {% else %}
     {{ heatmap(task.uid, completion_weeks, action_prefix='/tasks/' ~ task.uid ~ '/completion', extra_class='heatmap-wide' ~ (' heatmap-avoid' if task.habit_kind == 'avoid' else ''), interactive=true, form_attrs=_keep, amount=_amount) }}
-</div>
-{% endif %}
-
-<section class="habit-month detail-plain-section{% if task.habit_kind == 'avoid' %} is-avoid{% endif %}" aria-label="Month calendar">
-    <div class="habit-month-head">
-        <a href="{{ habit_month.prev_url }}" data-modal class="icon-btn" title="Previous month" aria-label="Previous month">{{ icon('chevron-left', 'icon-sm') }}</a>
-        <h2 class="habit-month-title">{{ habit_month.label }} <span class="text-muted">&middot; {{ habit_month.done_count }} day{{ 's' if habit_month.done_count != 1 }}</span></h2>
-        {% if habit_month.next_url %}<a href="{{ habit_month.next_url }}" data-modal class="icon-btn" title="Next month" aria-label="Next month">{{ icon('chevron-right', 'icon-sm') }}</a>{% else %}<span class="icon-btn-placeholder"></span>{% endif %}
-    </div>
-    <div class="habit-month-grid" role="grid">
-        {% for name in habit_month.day_names %}<span class="habit-month-dow" role="columnheader">{{ name[:2] }}</span>{% endfor %}
-        {% for week in habit_month.weeks %}{% for d in week %}
-        {% if d.is_future or not d.in_month %}
-        <span class="habit-month-day{% if not d.in_month %} is-outside{% endif %}{% if d.is_future %} is-future{% endif %}{% if d.done %} is-done{% endif %}">{{ d.day }}</span>
-        {% else %}
-        {% if _is_amount %}
-        <button type="button" class="habit-month-day habit-amount-trigger{% if d.done %} is-done{% endif %}{% if d.is_today %} is-today{% endif %}{% if d.note %} has-note{% endif %}"
-                data-url="{{ _amount.url }}" data-date="{{ d.iso }}" data-value="{{ d.value|int if d.value else '' }}"
-                data-target="{{ task.target_per_day|int }}" data-unit="{{ task.habit_unit or '' }}"
-                title="{{ d.iso }}{% if d.done %} -- {{ d.value|int }}{% endif %}{% if d.note %}: {{ d.note }}{% endif %}">{{ d.day }}</button>
-        {% else %}
-        <form method="post" action="{{ d.toggle_url }}" class="form-inline" {{ _keep|safe }}>
-            <button type="submit" class="habit-month-day{% if d.done %} is-done{% endif %}{% if d.is_today %} is-today{% endif %}{% if d.note %} has-note{% endif %}"
-                    title="{{ d.iso }}{% if d.done %} -- done{% if task.target_per_day and task.target_per_day > 1 %} ({{ d.value|int }}){% endif %}{% endif %}{% if d.note %}: {{ d.note }}{% endif %}"
-                    aria-pressed="{{ 'true' if d.done else 'false' }}">{{ d.day }}</button>
-        </form>
-        {% endif %}
-        {% endif %}
-        {% endfor %}{% endfor %}
-    </div>
-</section>
-
-{# Habits H8 (2026-09-24): insights -- logged days per month, and the
-   hour check-ins usually happen (routers/tasks.py habit_insights). Bar
-   heights go through data-style (CSP: no inline style). #}
-{% if habit_insights %}
-<section class="detail-plain-section habit-insights" aria-labelledby="habit-insights-h">
-    <h2 class="habit-section-h" id="habit-insights-h">Insights</h2>
-    <div class="habit-bars-label">{{ 'Relapses' if task.habit_kind == 'avoid' else 'Days logged' }} per month</div>
-    <div class="habit-bars habit-bars-months{% if task.habit_kind == 'avoid' %} is-avoid{% endif %}" role="img"
-         aria-label="{% for m in habit_insights.months %}{{ m.label }} {{ m.count }}{{ ', ' if not loop.last }}{% endfor %}">
-        {% for m in habit_insights.months %}
-        <div class="habit-bar" title="{{ m.key }}: {{ m.count }}">
-            <span class="habit-bar-count">{{ m.count if m.count else '' }}</span>
-            <span class="habit-bar-track"><span class="habit-bar-fill" data-style="height:{{ (m.height * 100)|round(1) }}%"></span></span>
-            <span class="habit-bar-label">{{ m.label[:1] }}</span>
-        </div>
-        {% endfor %}
-    </div>
-    {% if habit_insights.hours %}
-    <div class="habit-bars-label">When you check in <span class="text-muted">&middot; usually around {{ '%02d:00'|format(habit_insights.top_hour) }}</span></div>
-    <div class="habit-bars habit-bars-hours" role="img" aria-label="Check-ins by hour; most often around {{ habit_insights.top_hour }}:00">
-        {% for hr in habit_insights.hours %}
-        <div class="habit-bar" title="{{ '%02d:00'|format(hr.hour) }}: {{ hr.count }}">
-            <span class="habit-bar-track"><span class="habit-bar-fill" data-style="height:{{ (hr.height * 100)|round(1) }}%"></span></span>
-            <span class="habit-bar-label">{{ hr.hour if hr.hour % 6 == 0 else '' }}</span>
-        </div>
-        {% endfor %}
-    </div>
     {% endif %}
-</section>
-{% endif %}
+</div>
 
-<section class="detail-plain-section habit-pause" aria-labelledby="habit-pause-h">
-    {# Habits H6: pause just this habit (a vacation from it). #}
-    <h2 class="habit-section-h" id="habit-pause-h">Pause</h2>
-    {% for p in habit_pauses %}
-    <div class="habit-pause-row">
-        <span>{% if p.is_global %}All habits{% else %}Paused{% endif %} {{ p.start_date|relative_date }} &ndash; {{ p.end_date|relative_date }}</span>
-        {% if not p.is_global %}
-        <form method="post" action="/habits/pauses/{{ p.uid }}/delete" class="form-inline" {{ _keep|safe }}>
-            <button type="submit" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Remove</button>
-        </form>
-        {% endif %}
-    </div>
-    {% endfor %}
-    <form method="post" action="/habits/pauses" class="habit-pause-form" {{ _keep|safe }}>
-        <input type="hidden" name="task_uid" value="{{ task.uid }}">
-        <label class="habit-log-field"><span>From</span><input type="date" name="start_date" value="{{ today_iso }}" required data-no-autofocus></label>
-        <label class="habit-log-field"><span>Until</span><input type="date" name="end_date" value="{{ today_iso }}" required data-no-autofocus></label>
-        <button type="submit" class="btn tonal btn-sm">{{ icon('pause', 'icon-sm') }} Pause this habit</button>
-    </form>
-</section>
-
-<section class="detail-plain-section habit-log" aria-labelledby="habit-log-h">
-    <h2 class="habit-section-h" id="habit-log-h">{{ 'Log a relapse' if task.habit_kind == 'avoid' else 'Log a day' }}</h2>
-    <form method="post" action="/tasks/{{ task.uid }}/completions" class="habit-log-form" {{ _keep|safe }}>
-        <label class="habit-log-field"><span>Date</span>
-            <input type="date" name="completion_date" value="{{ today_iso }}" max="{{ today_iso }}" required data-no-autofocus></label>
-        {% if task.target_per_day and task.target_per_day > 1 and task.habit_kind != 'avoid' %}
-        <label class="habit-log-field habit-log-value"><span>Amount{% if task.habit_unit %} ({{ task.habit_unit }}){% endif %}</span>
-            <input type="number" name="value" min="0" max="999999" step="1" value="{{ task.target_per_day|int }}" data-no-autofocus></label>
-        {% else %}
-        <input type="hidden" name="value" value="1">
-        {% endif %}
-        <label class="habit-log-field habit-log-note"><span>Note</span>
-            <input type="text" name="note" maxlength="500" placeholder="What happened? (optional)" data-no-autofocus></label>
-        <button type="submit" class="btn tonal btn-sm">{{ icon('check-square', 'icon-sm') }} Save day</button>
-    </form>
-    {% if habit_notes %}
+{# 2026-09-26 (Peter): pausing (vacation) moved out of this modal into
+   the Habits page header's Pauses modal (habit_pauses.html). The
+   "Paused until" badge on the page row still shows an active pause. #}
+{# 2026-09-26 (Peter): no "Log a day" / "Log a relapse" form -- days are
+   logged from the heatmap or the Habits page strip (a phone doesn't log
+   past days). Notes already logged still list. #}
+{% if habit_notes %}
+<section class="detail-plain-section habit-notes-section" aria-label="Notes">
     <ul class="habit-notes">
         {% for n in habit_notes %}
         <li><span class="habit-note-date">{{ n.iso|relative_date }}</span> <span class="habit-note-text">{{ n.note }}</span></li>
         {% endfor %}
     </ul>
-    {% endif %}
 </section>
+{% endif %}
 
-<!-- 2026-09-03 direct follow-up ("could we also rework the work sessions
-     ... without having the background color card div") -- was
-     `.detail-card detail-section-gap`; now `.detail-plain-section`
-     (style.css), same as task_detail.html's own Work sessions card the
-     same day. The heatmap card right above stays a real .detail-card,
-     unaffected -- the feedback was about Work sessions specifically. -->
-{# 2026-09-25 (Peter): Work sessions live in the edit modal
-   (habit_task_form.html); here they stay available but collapsed by
-   default. static/habit_day.js keeps it open across this modal's own
-   in-place refreshes once opened. #}
-<details class="detail-plain-section habit-work-sessions" data-uid="{{ task.uid }}">
-    <summary class="habit-work-sessions-summary">Work sessions{% if work_allocations %} <span class="checklist-progress">{{ work_allocations|length }}</span>{% endif %}</summary>
-    {{ task_work_allocations_section(task, work_allocations, work_hours) }}
-</details>
+{# 2026-09-26 (Peter): Work sessions is gone from a habit's VIEW modal
+   (this template) -- reversed the same day for the EDIT modal only
+   ("should be able to be work scheduled -- return it to the edit modal"),
+   see habit_task_form.html's own docstring. #}
 
 </div>
 

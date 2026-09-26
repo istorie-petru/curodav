@@ -675,6 +675,19 @@ CREATE TABLE IF NOT EXISTS habit_pauses (
 );
 CREATE INDEX IF NOT EXISTS idx_habit_pauses_task ON habit_pauses(task_uid);
 
+-- 2026-09-26 (Peter: groups are standalone): a group is a row of its own,
+-- not just text on its labels. Labels still point at it by name
+-- (label_config.label_group); a group may have no labels at all. Its
+-- look (icon, color) lives here -- it used to be app_meta
+-- "group_style:<name>" -- and its page/banner stay keyed by
+-- group_page_key(name).
+CREATE TABLE IF NOT EXISTS label_groups (
+    name TEXT PRIMARY KEY COLLATE NOCASE,
+    icon TEXT,
+    color TEXT NOT NULL DEFAULT 'gray',
+    created_at TEXT
+);
+
 -- 2026-08-08 ("add habits page as a view on tasks") -- app-wide setting
 -- for which label name marks a task as habit-tracked (hidden from every
 -- normal task view/widget, shown instead on Tasks > Habits with a
@@ -1246,6 +1259,11 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # assumed -- see that module's docstring), so there's no need to parse
     # into a `date` object anywhere in this app just to round-trip it.
     _ensure_column(conn, "contacts", "birthday", "TEXT")
+    # Item 19 (2026-09-26): a real top-level archive column, not a label --
+    # see archive_contact/unarchive_contact and this table's own migration
+    # (migrate_archived_contact_label, called at the end of this function)
+    # for the fake-label predecessor this replaces.
+    _ensure_column(conn, "contacts", "archived_at", "TEXT")
     # Schedule class -> contact link, same "column added after the table
     # already existed on disk" situation as the others above. Guarded on
     # table existence (unlike every other _ensure_column call here) because
@@ -1363,6 +1381,17 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # and the habit kind -- NULL/'build' = do it, 'avoid' = log relapses.
     _ensure_column(conn, "tasks", "habit_unit", "TEXT")
     _ensure_column(conn, "tasks", "habit_kind", "TEXT")
+    # 2026-09-25 (UI audit flesh-out: per-habit reminder times): "HH:MM"
+    # local time a habit reminds at, NULL = only the morning digest. Set by
+    # set_task_reminder_time only, never by upsert_task (sync/import paths
+    # rebuild rows without it and would wipe it).
+    _ensure_column(conn, "tasks", "reminder_time", "TEXT")
+    # 2026-09-26 (Peter): a habit's own icon (sprite name, drawn in its
+    # check button) and colour (label palette name: heatmap + banner).
+    # NULL = the defaults. Set by set_task_habit_look only, same reason as
+    # reminder_time just above.
+    _ensure_column(conn, "tasks", "habit_icon", "TEXT")
+    _ensure_column(conn, "tasks", "habit_color", "TEXT")
     _ensure_column(conn, "task_completions", "value", "REAL NOT NULL DEFAULT 1")
     # 2026-08-29 (STATE.md backlog item 3, direct request): extends the 1.6
     # non-working-day policy (see the `events` CREATE TABLE comment) to
@@ -1458,6 +1487,11 @@ def init_schema(conn: sqlite3.Connection) -> None:
     backfill_label_modules(conn)
     # 2026-09-25 -- one-time: Spaces become text groups (see the function).
     migrate_spaces_to_groups(conn)
+    # 2026-09-26 -- every group named by a label has a label_groups row.
+    backfill_group_rows(conn)
+    # 2026-09-26 (item 19) -- the old fake "Archived" contact label
+    # migrates onto the real `contacts.archived_at` column.
+    migrate_archived_contact_label(conn)
     conn.commit()
 
 
@@ -1545,6 +1579,15 @@ def _attach_tags_bulk(
     for d in dicts:
         d["tags"] = by_id.get(d["uid"], [])
     return dicts
+
+
+def set_task_habit_look(conn: sqlite3.Connection, uid: str, icon: str | None, color: str | None) -> None:
+    """A habit's icon and colour (2026-09-26) -- see the tasks.habit_icon
+    column comment. Callers validate the names; blank = default."""
+    conn.execute(
+        "UPDATE tasks SET habit_icon = ?, habit_color = ? WHERE uid = ?", (icon or None, color or None, uid)
+    )
+    conn.commit()
 
 
 # --------------------------------------------------------------------- #
@@ -2112,6 +2155,25 @@ def set_task_timeline_lane(conn: sqlite3.Connection, uid: str, lane: int | None)
     convention as every other setter in this file (see upsert_task's own
     comment on why timeline_lane is deliberately excluded there)."""
     conn.execute("UPDATE tasks SET timeline_lane = ? WHERE uid = ?", (lane, uid))
+    conn.commit()
+
+
+def normalize_reminder_time(value: str | None) -> str | None:
+    """"H:MM"/"HH:MM" (24h) -> "HH:MM"; blank or unparseable -> None."""
+    m = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*", value or "")
+    if not m:
+        return None
+    h, mi = int(m.group(1)), int(m.group(2))
+    if h > 23 or mi > 59:
+        return None
+    return f"{h:02d}:{mi:02d}"
+
+
+def set_task_reminder_time(conn: sqlite3.Connection, uid: str, value: str | None) -> None:
+    """A habit's own reminder time (2026-09-25) -- see the tasks.reminder_time
+    column comment. Dedicated setter, same reason as set_task_timeline_lane:
+    an ordinary save (or a CalDAV sync) must not be able to clear it."""
+    conn.execute("UPDATE tasks SET reminder_time = ? WHERE uid = ?", (normalize_reminder_time(value), uid))
     conn.commit()
 
 
@@ -2808,7 +2870,13 @@ def _search_contacts(
 ) -> list[dict[str, Any]]:
     query = "SELECT * FROM contacts"
     params: list[str] = []
-    clauses: list[str] = []
+    # Item 19 (2026-09-26): the command palette's global search is another
+    # "not visible normally" surface, same as the Contacts page's own
+    # default -- an archived contact doesn't turn up here either unless
+    # the Contacts page itself is showing them (this function has no
+    # `include_archived` toggle of its own; the palette has no "show
+    # archived" affordance to opt in with).
+    clauses: list[str] = ["archived_at IS NULL"]
 
     if q:
         # Same "search both the dead legacy columns and the new child
@@ -3122,10 +3190,24 @@ def upsert_contact(
     # bytes and writes back the identical value, a no-op in effect, not
     # a bug).
     data["photo_version"] = hashlib.md5(data["photo_b64"].encode("ascii")).hexdigest()[:12] if data.get("photo_b64") else None
+    # Item 19 (2026-09-26): `archived_at` is a real column now, but this
+    # upsert is a FULL-field write (every column in `cols` below always
+    # gets written, unlike upsert_label_config's partial-merge shape) --
+    # so a plain "edit the name" save (routers/contacts.py's update_contact,
+    # whose row dict never mentions archived_at at all) would otherwise
+    # silently un-archive the contact on every unrelated edit. Falls back
+    # to whatever's already in the database when the caller doesn't pass
+    # it explicitly -- archive_contact/unarchive_contact (their own direct
+    # UPDATE, not this function) and a backup restore (which DOES carry
+    # the column, see export.py's full_backup) are the only two places
+    # that ever need to actually change it.
+    if "archived_at" not in data:
+        existing_row = conn.execute("SELECT archived_at FROM contacts WHERE uid = ?", (data.get("uid"),)).fetchone()
+        data["archived_at"] = existing_row["archived_at"] if existing_row else None
     cols = [
         "uid", "full_name", "title", "org",
         "phone", "email", "address", "birthday", "notes",
-        "photo_b64", "photo_type", "photo_version", "created_at", "updated_at",
+        "photo_b64", "photo_type", "photo_version", "archived_at", "created_at", "updated_at",
     ]
     values = [data.get(c) for c in cols]
     placeholders = ", ".join("?" for _ in cols)
@@ -3273,10 +3355,23 @@ def _attach_contact_phones_emails_bulk(
 def list_contacts(
     conn: sqlite3.Connection,
     q: str | None = None,
+    include_archived: bool = False,
 ) -> list[dict[str, Any]]:
+    """`include_archived` defaults False (2026-09-26, item 19 -- "archived
+    contacts don't sync"/aren't visible normally) -- same "excluded unless
+    a caller explicitly opts in" shape `list_tasks`'s own
+    `include_habit_tasks` already established. This is the ONE fetcher
+    both the Contacts page (routers/contacts.py) and Published Lists'
+    materialization (published_lists.py's `_ENTITY_FETCHERS["contact"]`)
+    call, so leaving this default False protects both call sites at once
+    -- a List can never end up including an archived contact just because
+    it matched the List's own label filter, without published_lists.py
+    needing its own separate archived-exclusion logic."""
     query = "SELECT * FROM contacts"
     params: list[str] = []
     clauses = []
+    if not include_archived:
+        clauses.append("archived_at IS NULL")
     if q:
         # Matches name, org, title, or any phone/email -- both the legacy
         # flat columns (harmless redundancy; a pre-migration value can only
@@ -3301,6 +3396,60 @@ def list_contacts(
         conn, _attach_tags_bulk(conn, "contact", [_row_to_dict(r, _CONTACT_JSON_FIELDS) for r in rows])
     )
     return [_backfill_contact_photo_version(conn, d) for d in dicts]
+
+
+def archive_contact(conn: sqlite3.Connection, uid: str) -> None:
+    """Item 19 (2026-09-26): a real top-level data-model column, not a
+    label -- replaces the old `ARCHIVED_LABEL` fake-label hack
+    (routers/contacts.py), which conflated archiving with categorization
+    once a contact could carry only one label total (item 16). Same
+    "explicit action, never automatic" shape `archive_project` already
+    uses for label_config.archived_at. No-op on an unknown uid (matches
+    every other single-object mutator's own quiet-no-op convention, e.g.
+    `remove_latest_work_allocation`)."""
+    conn.execute(
+        "UPDATE contacts SET archived_at = ? WHERE uid = ?",
+        (datetime.now(timezone.utc).isoformat(), uid),
+    )
+    conn.commit()
+
+
+def unarchive_contact(conn: sqlite3.Connection, uid: str) -> None:
+    """Undoes archive_contact -- the contact is visible/synced again."""
+    conn.execute("UPDATE contacts SET archived_at = NULL WHERE uid = ?", (uid,))
+    conn.commit()
+
+
+def migrate_archived_contact_label(conn: sqlite3.Connection) -> None:
+    """One-time migration (item 19, 2026-09-26): 'Archived' used to be a
+    top-level fake LABEL on Contacts (routers/contacts.py's since-removed
+    `ARCHIVED_LABEL`) -- every contact still carrying that tag gets the
+    tag removed and the real `contacts.archived_at` column (this item's
+    whole point) set instead. Matched case-insensitively, same convention
+    the old filter code used (a user could have typed "Archived" via the
+    label picker's free-text "new label" field, not just lowercase).
+    Idempotent via its own app_meta flag -- once run, a later admin who
+    deliberately creates a real, ordinary label that happens to be NAMED
+    "archived" is never silently re-migrated."""
+    key = "contacts_archived_label_migrated_v1"
+    if get_app_meta(conn, key):
+        return
+    rows = conn.execute(
+        "SELECT DISTINCT object_id, label_name FROM object_labels "
+        "WHERE object_type = 'contact' AND LOWER(label_name) = 'archived'"
+    ).fetchall()
+    now = datetime.now(timezone.utc).isoformat()
+    for r in rows:
+        conn.execute(
+            "DELETE FROM object_labels WHERE object_type = 'contact' AND object_id = ? AND label_name = ?",
+            (r["object_id"], r["label_name"]),
+        )
+        conn.execute(
+            "UPDATE contacts SET archived_at = COALESCE(archived_at, ?) WHERE uid = ?",
+            (now, r["object_id"]),
+        )
+    set_app_meta(conn, key, "1")
+    conn.commit()
 
 
 # --------------------------------------------------------------------- #
@@ -4187,7 +4336,7 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     for key, default in _LABEL_CONFIG_DEFAULTS.items():
         data.setdefault(key, existing.get(key, default))
     _mirror_legacy_module_fields(row, existing, data)
-    data["label_group"] = (data.get("label_group") or "").strip() or None
+    data["label_group"] = ensure_group(conn, data.get("label_group"))
     conn.execute(
         f"INSERT INTO label_config ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)}) "
         f"ON CONFLICT(name) DO UPDATE SET " + ", ".join(f"{c}=excluded.{c}" for c in cols if c != "name"),
@@ -4405,26 +4554,200 @@ def group_from_page_key(key: str | None) -> str | None:
 
 
 def list_groups(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """Every group: the distinct non-empty label_group values, each with its
-    member labels' effective configs, sorted by name. A group exists exactly
-    as long as at least one label names it."""
+    """Every group (label_groups, 2026-09-26: standalone, may be empty),
+    sorted by name, each with its `icon`/`color` and its member labels'
+    effective configs."""
+    groups: dict[str, dict[str, Any]] = {}
+    for r in conn.execute("SELECT * FROM label_groups ORDER BY name COLLATE NOCASE").fetchall():
+        groups[r["name"].lower()] = {"name": r["name"], "labels": [], "icon": r["icon"] or None,
+                                     "color": r["color"] or "gray", "created_at": r["created_at"]}
     rows = conn.execute(
         "SELECT name, label_group FROM label_config WHERE TRIM(COALESCE(label_group, '')) != '' "
-        "ORDER BY label_group COLLATE NOCASE, name COLLATE NOCASE"
+        "ORDER BY name COLLATE NOCASE"
     ).fetchall()
-    groups: dict[str, dict[str, Any]] = {}
     for r in rows:
-        g = r["label_group"].strip()
-        groups.setdefault(g, {"name": g, "labels": []})["labels"].append(effective_label_config(conn, r["name"]))
+        g = groups.get(r["label_group"].strip().lower())
+        if g is not None:
+            g["labels"].append(effective_label_config(conn, r["name"]))
     return list(groups.values())
+
+
+def get_group(conn: sqlite3.Connection, name: str) -> dict[str, Any] | None:
+    """One group's row (case-insensitive name), or None."""
+    r = conn.execute("SELECT * FROM label_groups WHERE name = ?", ((name or "").strip(),)).fetchone()
+    return dict(r) if r else None
+
+
+def ensure_group(conn: sqlite3.Connection, name: str | None) -> str | None:
+    """Creates the group if it doesn't exist yet and returns its stored
+    spelling (typing a new group name on a label creates it, as before).
+    The caller commits."""
+    name = (name or "").strip()
+    if not name:
+        return None
+    existing = get_group(conn, name)
+    if existing:
+        return existing["name"]
+    legacy = _legacy_group_style(conn, name)
+    conn.execute(
+        "INSERT INTO label_groups (name, icon, color, created_at) VALUES (?, ?, ?, ?)",
+        (name, legacy.get("icon"), legacy.get("color") or "gray", datetime.now(timezone.utc).isoformat()),
+    )
+    return name
+
+
+def backfill_group_rows(conn: sqlite3.Connection) -> None:
+    """Every group a label names gets a label_groups row, carrying its old
+    app_meta look. Cheap and idempotent (runs on every connect; a restored
+    backup's labels get their groups back the same way)."""
+    for r in conn.execute(
+        "SELECT DISTINCT TRIM(label_group) AS g FROM label_config WHERE TRIM(COALESCE(label_group, '')) != ''"
+    ).fetchall():
+        ensure_group(conn, r["g"])
+
+
+def _group_style_key(group: str) -> str:
+    return f"group_style:{(group or '').strip()}"
+
+
+def _legacy_group_style(conn: sqlite3.Connection, group: str) -> dict[str, Any]:
+    """A group's look from before 2026-09-26 (app_meta "group_style:<name>")."""
+    raw = get_app_meta(conn, _group_style_key(group))
+    try:
+        return (json.loads(raw) or {}) if raw else {}
+    except ValueError:
+        return {}
+
+
+def get_group_style(conn: sqlite3.Connection, group: str) -> dict[str, Any]:
+    """A group's own icon + color. `icon` None = the default group glyph
+    (GROUP_DEFAULT_ICON, drawn in the group's colour -- 2026-09-26, Peter:
+    no more first-letter badge); `color` defaults to gray."""
+    row = get_group(conn, group) or {}
+    return {"icon": row.get("icon") or None, "color": row.get("color") or "gray"}
+
+
+GROUP_DEFAULT_ICON = "layers"
+
+
+def set_group_style(conn: sqlite3.Connection, group: str, icon: str | None, color: str | None) -> None:
+    ensure_group(conn, group)
+    conn.execute("UPDATE label_groups SET icon = ?, color = ? WHERE name = ?", (icon or None, color or "gray", group.strip()))
+    conn.commit()
+
+
+def create_group(conn: sqlite3.Connection, name: str, icon: str | None = None, color: str | None = None) -> str:
+    """A new, empty group (Settings > Groups). Raises ValueError if the
+    name is blank or taken (case-insensitively)."""
+    name = " ".join((name or "").split())[:60]
+    if not name:
+        raise ValueError("A group needs a name.")
+    if get_group(conn, name):
+        raise ValueError(f"A group named {name} already exists.")
+    ensure_group(conn, name)
+    conn.execute("UPDATE label_groups SET icon = ?, color = ? WHERE name = ?", (icon or None, color or "gray", name))
+    conn.commit()
+    return name
+
+
+def delete_group(conn: sqlite3.Connection, name: str) -> None:
+    """Deletes a group: its labels become ungrouped (they are kept), its
+    row goes. Its page storage (dashboard, banner) is left, the same
+    "harmless leftover" rule rename_group's merge follows."""
+    name = (name or "").strip()
+    conn.execute("UPDATE label_config SET label_group = NULL WHERE TRIM(COALESCE(label_group, '')) = ? COLLATE NOCASE", (name,))
+    conn.execute("DELETE FROM label_groups WHERE name = ?", (name,))
+    conn.commit()
 
 
 def group_member_names(conn: sqlite3.Connection, group: str) -> list[str]:
     rows = conn.execute(
-        "SELECT name FROM label_config WHERE TRIM(COALESCE(label_group, '')) = ? ORDER BY name COLLATE NOCASE",
+        "SELECT name FROM label_config WHERE TRIM(COALESCE(label_group, '')) = ? COLLATE NOCASE ORDER BY name COLLATE NOCASE",
         ((group or "").strip(),),
     ).fetchall()
     return [r["name"] for r in rows]
+
+
+def _move_page_storage(conn: sqlite3.Connection, old_key: str, new_key: str) -> None:
+    """Moves one page's per-page storage (dashboard widgets, the one-time
+    "seeded" marker, the banner) from `old_key` to `new_key`, and repoints
+    any widget anywhere whose own scope names `old_key`. Same moves
+    migrate_spaces_to_groups makes for a Space -> group key, reused by
+    rename_group. The caller commits."""
+    rows = conn.execute("SELECT uid, label_name, config_json FROM dashboard_widgets").fetchall()
+    for r in rows:
+        try:
+            cfg = json.loads(r["config_json"] or "{}")
+        except (json.JSONDecodeError, TypeError):
+            cfg = {}
+        on_page = r["label_name"] == old_key
+        scoped = cfg.get("label_name") == old_key
+        if not (on_page or scoped):
+            continue
+        if scoped:
+            cfg["label_name"] = new_key
+        conn.execute(
+            "UPDATE dashboard_widgets SET label_name = ?, config_json = ? WHERE uid = ?",
+            (new_key if on_page else r["label_name"], json.dumps(cfg), r["uid"]),
+        )
+    for old_meta, new_meta in (
+        (f"dashboard_label_{old_key}_seeded_v1", f"dashboard_label_{new_key}_seeded_v1"),
+        (_page_banner_key(old_key), _page_banner_key(new_key)),
+    ):
+        value = get_app_meta(conn, old_meta)
+        if value and not get_app_meta(conn, new_meta):
+            set_app_meta(conn, new_meta, value)
+
+
+def rename_group(conn: sqlite3.Connection, old: str, new: str) -> str:
+    """Renames a group (2026-09-25, UI audit flesh-out item 7). A group is
+    only the text in its labels' label_group, plus per-page storage keyed
+    by group_page_key and its look in app_meta -- all three move with it.
+
+    Renaming onto another existing group (case-insensitively) merges: the
+    members join that group and keep ITS dashboard and look; the old
+    group's own storage is left as is (nothing points at it any more, the
+    same "harmless leftover" rule clear_label follows) rather than deleted.
+    Returns the group's resulting name (the existing group's own spelling on
+    a merge)."""
+    old = (old or "").strip()
+    new = (new or "").strip()
+    if not old or not new or old == new:
+        return old
+    existing = {g["name"].lower(): g["name"] for g in list_groups(conn) if g["name"] != old}
+    target = existing.get(new.lower())
+    conn.execute(
+        "UPDATE label_config SET label_group = ? WHERE TRIM(COALESCE(label_group, '')) = ? COLLATE NOCASE",
+        (target or new, old),
+    )
+    if target is None:
+        _move_page_storage(conn, group_page_key(old), group_page_key(new))
+        # 2026-09-26: the group's own row moves with it (look included).
+        conn.execute("UPDATE label_groups SET name = ? WHERE name = ?", (new, old))
+    else:
+        conn.execute("DELETE FROM label_groups WHERE name = ?", (old,))
+    conn.commit()
+    return target or new
+
+
+def set_group_members(conn: sqlite3.Connection, group: str, members: list[str]) -> None:
+    """Makes exactly `members` the group's labels (2026-09-25): each named
+    label gets label_group = group (moving it out of any other group -- a
+    label is in at most one), and a current member not in the list leaves
+    the group. Names without a label_config row get one, the same way
+    archiving a usage-only label does. An empty list empties the group;
+    since 2026-09-26 a group is its own row and survives that."""
+    group = (group or "").strip()
+    wanted = [m.strip() for m in members if m and m.strip()]
+    ensure_group(conn, group)
+    for name in group_member_names(conn, group):
+        if name not in wanted:
+            conn.execute("UPDATE label_config SET label_group = NULL WHERE name = ?", (name,))
+    for name in wanted:
+        if not get_label_config(conn, name):
+            upsert_label_config(conn, {"name": name, "created_at": datetime.now(timezone.utc).isoformat()})
+        conn.execute("UPDATE label_config SET label_group = ? WHERE name = ?", (group, name))
+    conn.commit()
 
 
 def list_project_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:

@@ -1,35 +1,59 @@
 {# Shared "Unscheduled work" panel item -- the planning grids
-   (project_calendar.html, calendar_week.html -- week_planning.html and
-   calendar_timetable.html were both retired/merged into it, 1.9 side work)
-   all render the same per-task row, so the card shape lives here instead of
-   being triplicated. One line: the project pill (the project's icon + name,
-   `item.project` is the label's effective config -- backend-provided name
-   AND icon) on the left if present, the task title next (truncating, given
-   the most room), then a gap, then the session count pinned to the end.
-   Each row is:
-     - the drag source for dropping the task onto a grid (project_calendar.js
-       interaction 1 -- POINTER-based drag, so the item deliberately carries
-       no native `draggable` attribute)
-     - ALSO a click target that opens the task's view modal (audit-
-       fixes-2.1.md, 2026-09-10 direct request: "for any pill inside it, the
-       user could click it and open the task view modal window"). Earlier
-       the same day/session, a plain click here briefly added one more
-       undated session instead (replacing this row's old +/- stepper,
-       two `<form>`s posting to /tasks/{uid}/work-allocations and
-       .../work-allocations/remove-latest) -- that conflicted with this
-       later, more specific request for the same click gesture, so per
-       direct decision opening the modal won and click-to-add is gone.
-       project_calendar.js's own pointerdown/pointerup handling on this row
-       (already there for drag) now treats a plain release with no drag
-       (its own DRAG_THRESHOLD_PX not crossed) as "open the task modal,"
-       same `taskUrlBase`/CCModal convention its interaction 4 already uses
-       for a placed `.work-allocation` block. Adding one more undated
-       session now happens from that modal's own Work sessions card ("+"
-       button, `_task_work_allocations.html`) instead of from this row.
-       There is still no in-panel way to remove an undated session --
-       deleting one is also the modal's Work sessions card's job; dragging
-       a *placed* session back onto this panel (project_calendar.js
-       interaction 3) still un-schedules it, unaffected by this change.
+   (project_calendar.html, calendar_week.html) render the same per-task
+   row, so the card shape lives here instead of being triplicated.
+
+   2026-09-26 (Peter's queued item 11, "redesign Unscheduled Work along
+   this mockup"): rebuilt from the old single-line chip (title + a bare
+   session-count pill, no hours/tag/actions -- see the git history on this
+   file for that shape) into a two-line row matching the mockup's
+   "[::] Title  [+] [...]" + "Estimated ... | Tag ..." shape:
+     - a visual drag-handle glyph (`.unscheduled-drag-handle`, the `move`
+       icon) at the start -- purely visual, the whole row is still the one
+       pointer-drag source it always was (project_calendar.js interaction
+       1); the icon doesn't carry its own listener.
+     - the title.
+     - a muted meta line underneath: for a plain task, "Estimated Xh" (item.
+       sessions.total_hours -- db.work_allocation_panel_info's scheduled
+       hours plus one default hour per still-undated session, same number
+       the old count implied but never showed) and, if the task carries a
+       label/project, that as a small pill (moved down from its old spot
+       ahead of the title -- the mockup's rows don't have a leading pill,
+       just plain title + a "Tag: x" meta fact). A habit-tracked task has no
+       such hours figure (db.habit_work_sessions_status doesn't compute
+       one) -- its meta line reads "Needs N more this period" instead,
+       the same `needed` number the old bare count pill showed.
+     - two row-level actions, both NEW (previously removed 2026-09-10 in
+       favor of "plain click opens the task modal" -- see
+       TestClickOpensTaskModal in test_calendar_week_scheduling.py; the
+       click-opens-modal behavior is UNCHANGED, these are additional
+       explicit controls, not a reversion of that decision):
+         "+" -- add one more undated session (POST .../work-allocations,
+         same route the task modal's own Work sessions "+" already uses).
+         "..." (_action_menu.html) -- Edit (opens /tasks/{uid}/edit),
+         Remove latest session (POST .../work-allocations/remove-latest,
+         the old panel "−"'s route, now reachable from the overflow menu
+         instead of a dedicated stepper button), and Delete task (the
+         app-wide data-delete-undo optimistic hide + undo toast).
+       Both the "+" form and the kebab's "Remove latest session" form live
+       inside `.unscheduled-row-actions` -- project_calendar.js's drag
+       `begin()` explicitly ignores pointerdown events inside that wrapper
+       (`e.target.closest(".unscheduled-row-actions")`) so clicking them
+       neither starts a drag nor falls through to the row's own
+       click-opens-modal handling. Both POST through ccApi (data-cc-change,
+       async-crud) rather than a plain form submit, exactly like the
+       existing `.work-allocation-delete` forms on a placed block --
+       project_calendar.js's `init()` binds the interception, keeping the
+       week grid's own no-full-reload contract; `add_work_allocation`/
+       `remove_latest_work_allocation` (routers/tasks.py) are dual-mode
+       (`deps.respond`) for exactly this reason.
+       Delete goes through the OTHER, simpler mechanism instead --
+       static/app.js's generic `data-delete-undo` handler already does its
+       own fetch + `cc-entity-changed` dispatch, so it needs no
+       project_calendar.js involvement at all; `data-undo-row` on the outer
+       `.unscheduled-task-item` is the explicit hide target (this element
+       isn't a `tr`/`.card`/etc., so it wouldn't match app.js's generic
+       fallback selector list on its own).
+
    `item.sessions.undated_count` (or, for a habit, `item.habit_sessions.
    needed`) is sessions STILL NEEDING PLACEMENT/still needed this period,
    not the task's total session count (`item.sessions.count`, unused by this
@@ -38,22 +62,36 @@
    `unscheduled_tasks` before this macro ever sees it, so this count is
    never 0 in practice.
    Import with `with context` -- the macro body calls the `icon` global. #}
+{% from "_action_menu.html" import action_menu with context %}
 {% macro unscheduled_task_item(item, next_url) %}
-<div class="unscheduled-task-item" data-task-uid="{{ item.task.uid }}" data-task-title="{{ item.task.title }}">
-    {% if item.project %}
-    <span class="unscheduled-project-pill" title="{{ item.project.name }}">{% if item.project.icon %}{{ icon(item.project.icon, 'icon-sm') }}{% endif %}{{ item.project.name }}</span>
-    {% endif %}
-    <span class="unscheduled-task-title" title="{{ item.task.title }}">{{ item.task.title }}</span>
-    {% if item.is_habit %}
-    {# A habit's number here is "sessions still needed this period"
-       (db.habit_work_sessions_status's `needed`), not "sessions still
-       needing placement" -- a daily habit reads e.g. "5" (2 of 7 days
-       already scheduled) and counts down as sessions get dated, staying
-       on the panel until it hits 0 for the currently displayed week/
-       month. #}
-    <span class="unscheduled-count" title="Sessions still needed this period">{{ item.habit_sessions.needed }}</span>
-    {% else %}
-    <span class="unscheduled-count" title="Sessions still needing placement">{{ item.sessions.undated_count }}</span>
-    {% endif %}
+<div class="unscheduled-task-item" data-task-uid="{{ item.task.uid }}" data-task-title="{{ item.task.title }}" data-undo-row>
+    <span class="unscheduled-drag-handle" aria-hidden="true">{{ icon('move', 'icon-sm') }}</span>
+    <div class="unscheduled-task-main">
+        <span class="unscheduled-task-title" title="{{ item.task.title }}">{{ item.task.title }}</span>
+        <div class="unscheduled-task-meta">
+            {% if item.is_habit %}
+            {# See this file's own header comment -- a habit has no hours
+               figure, only "sessions still needed this period" (`needed`,
+               db.habit_work_sessions_status). #}
+            <span title="Sessions still needed this period">Needs {{ item.habit_sessions.needed }} more this period</span>
+            {% else %}
+            <span title="Sessions still needing placement">Estimated {{ "%.1f"|format(item.sessions.total_hours) }}h</span>
+            {% endif %}
+            {% if item.project %}
+            <span class="unscheduled-project-pill" title="{{ item.project.name }}">{% if item.project.icon %}{{ icon(item.project.icon, 'icon-sm') }}{% endif %}{{ item.project.name }}</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="unscheduled-row-actions">
+        <form class="form-inline unscheduled-add-session-form" method="post" action="/tasks/{{ item.task.uid }}/work-allocations">
+            <input type="hidden" name="next" value="{{ next_url }}">
+            <button type="submit" class="icon-btn" title="Add another session" aria-label="Add another session">{{ icon('plus', 'icon-sm') }}</button>
+        </form>
+        {{ action_menu([
+            {'label': 'Edit task', 'icon': 'edit', 'href': '/tasks/' ~ item.task.uid ~ '/edit', 'modal': true},
+            {'label': 'Remove latest session', 'icon': 'minus', 'form_action': '/tasks/' ~ item.task.uid ~ '/work-allocations/remove-latest', 'fields': {'next': next_url}, 'form_class': 'unscheduled-remove-latest-form'},
+            {'label': 'Delete task', 'icon': 'trash', 'danger': true, 'form_action': '/tasks/' ~ item.task.uid ~ '/delete', 'undo': item.task.title, 'change': 'task'},
+        ], aria_label='More actions for ' ~ item.task.title) }}
+    </div>
 </div>
 {% endmacro %}

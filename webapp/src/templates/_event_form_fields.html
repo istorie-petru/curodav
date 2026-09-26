@@ -19,28 +19,21 @@
         <!-- Phase 1 (label-space rework, 2026-08-06) removed the Calendar
              picker here -- calendars is gone, every event lives in one
              universal pool now (see db.py's Phase 1 comments). -->
-        <!-- Start/End (2026-08-17) -- one shared range picker
-             (_datetime_picker.html, static/datetime_picker.js) replaces the
-             two native date+time inputs: a month calendar for the date
-             + a clickable 24-row hour grid for start/end, keyboard+mouse
-             friendly. The picker's hidden inputs keep the exact
-             start_at/end_at name/value contract the native inputs had, so
-             create_event/update_event are untouched. Wraps in
-             .event-start-end-field so the All-day checkbox can hide it as a
-             unit (style.css's #event-form:has(#all_day:checked) rule). -->
+        {# Date & time (2026-09-26, Peter's mockup): the All day switch
+           sits in the block's header and only shows/hides the time boxes;
+           Start and End are each a date + a time you can type or pick
+           (_date_time_fields.html). Posts the same start_at / end_at /
+           all_day fields as before. #}
         <div class="field field-wide event-start-end-field">
-            <label>Start &amp; end</label>
-            {% from "_datetime_picker.html" import datetime_picker with context %}
-            {{ datetime_picker('start_at', 'end_at', event.start_at if event else (prefill_start or ''), event.end_at if event else (prefill_end or '')) }}
-        </div>
-        <div class="field field-toggle field-wide">
-            <input type="checkbox" id="all_day" name="all_day" value="1" {% if (event and event.all_day) or (not event and prefill_all_day) %}checked{% endif %}>
-            <label for="all_day">All day</label>
+            {% from "_date_time_fields.html" import datetime_range with context %}
+            {{ datetime_range('start_at', 'end_at', event.start_at if event else (prefill_start or ''), event.end_at if event else (prefill_end or ''),
+                              all_day_name='all_day', all_day=(event and event.all_day) or (not event and prefill_all_day), required=true) }}
         </div>
         <!-- Labels -- chip multiselect (2026-08-07, modal-input-design
              Phase B), same pattern as task_form.html -- see that
              template's own comment. -->
-        {% set pf_tags = event.tags if event else [] %}
+        {# 2026-09-25 (UI audit L1): prefill_tags = the label page quick-add was opened from. #}
+        {% set pf_tags = event.tags if event else (prefill_tags or []) %}
         {% set pf_form_id = 'event-form' %}
         {% include "_project_field.html" %}
         <div class="field">
@@ -49,7 +42,7 @@
             {% set ms_label = 'Labels' %}
             {# Projects have their own dropdown above (_project_field.html). #}
             {% set ms_items = tag_name_items | rejectattr('uid', 'in', project_names | default([])) | list %}
-            {% set ms_selected = event.tags if event else [] %}
+            {% set ms_selected = event.tags if event else (prefill_tags or []) %}
             {% set ms_mode = 'select' %}
             {% set ms_allow_new = true %}
             {% set ms_pill = true %}
@@ -178,29 +171,37 @@
              calendar. Purely a reorder: the `_has_location`/`_has_meeting`
              sets and the field's own show/hide CSS don't care about
              position in the DOM, only that they exist somewhere inside
-             #event-form. -->
+             #event-form.
+
+             2026-09-26 (Peter): rebuilt again, this time on the app's
+             shared single-select dropdown (_widget_list_multiselect.html,
+             ms_mode="single") instead of the tile/card picker -- same
+             pattern the habit form's Kind/How often/Daily goal fields
+             use. The three ids (`event_format_in_person`/`_online`/
+             `_none`) are passed through via the macro's `it.id` (added
+             for this) so the pre-existing `:has(#event_format_*:checked)`
+             CSS and event_format_toggle.js (which finds its radios by
+             `.event-format-segmented input[type="radio"]`, not by id)
+             keep working unchanged. New this pass: Format itself shrinks
+             to half width whenever In person/Online reveals its Location/
+             Meeting URL follow-up, so the two sit side by side -- the
+             same half-width follow-up rule the habit form's How often/
+             Daily goal fields use (style.css). -->
         {% set _has_location = event and event.location and event.location not in (None, 'None', 'Nothing') %}
         {% set _has_meeting = event and event.meeting_url and event.meeting_url not in (None, 'None', 'Nothing') %}
-        <div class="field field-wide">
-            <label>Format</label>
-            <div class="tile-select event-format-segmented" role="radiogroup" aria-label="Event format">
-                <label class="tile-option">
-                    <input type="radio" name="event_format" id="event_format_in_person" class="tile-radio" value="in_person" {% if _has_location %}checked{% endif %}>
-                    <span class="tile-icon">{{ icon('map-pin', 'icon-sm') }}</span>
-                    <span class="tile-option-label">In person</span>
-                </label>
-                <label class="tile-option">
-                    <input type="radio" name="event_format" id="event_format_online" class="tile-radio" value="online" {% if _has_meeting and not _has_location %}checked{% endif %}>
-                    <span class="tile-icon">{{ icon('video', 'icon-sm') }}</span>
-                    <span class="tile-option-label">Online</span>
-                </label>
-                <label class="tile-option">
-                    <input type="radio" name="event_format" id="event_format_none" class="tile-radio" value="none" {% if not _has_location and not _has_meeting %}checked{% endif %}>
-                    <span class="tile-icon">{{ icon('x', 'icon-sm') }}</span>
-                    <span class="tile-option-label">None</span>
-                </label>
-            </div>
-        </div>
+        {% set ms_name = 'event_format' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Format' %}
+        {% set ms_items = [
+            {'uid': 'in_person', 'id': 'event_format_in_person', 'name': 'In person'},
+            {'uid': 'online', 'id': 'event_format_online', 'name': 'Online'},
+            {'uid': 'none', 'id': 'event_format_none', 'name': 'None'},
+        ] %}
+        {% set ms_selected = 'in_person' if _has_location else ('online' if _has_meeting else 'none') %}
+        {% set ms_wide = true %}
+        {% set ms_extra_class = 'event-format-segmented event-format-field' %}
+        {% include "_widget_list_multiselect.html" %}
+        {% set ms_extra_class = '' %}
         <div class="field field-format-location">
             <label>Location</label>
             <!-- `or ''` + the empty-check below: the DB has legacy literal

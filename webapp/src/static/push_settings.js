@@ -10,11 +10,56 @@
   const testBtn = document.getElementById("push-test");
   const disableBtn = document.getElementById("push-disable");
 
+  const card = document.getElementById("push-settings");
+  const prefsForm = document.getElementById("push-prefs-form");
+  const inactiveHint = card && card.querySelector(".push-inactive-hint");
+
   function show(text, state) {
     status.textContent = text;
     enableBtn.hidden = state !== "off";
     testBtn.hidden = state !== "on";
     disableBtn.hidden = state !== "on";
+    // 2026-09-25 (UI audit H-20): while this device gets nothing (off,
+    // blocked, unsupported) the reminder rows dim and say where reminders
+    // go -- they stay editable, since they're app-wide and another device
+    // may have notifications on.
+    if (card) card.classList.toggle("is-push-inactive", state !== "on");
+    if (inactiveHint) inactiveHint.hidden = state === "on";
+  }
+
+  // UI audit H-20: a browser's own error text ("Registration failed -
+  // push service error", "DOMException: ...") means nothing to a person;
+  // say what to try instead.
+  function plainError(err) {
+    const name = (err && err.name) || "";
+    if (name === "NotAllowedError") return "Notifications are blocked for this site. Allow them in the browser's site settings, then try again.";
+    if (name === "AbortError" || name === "InvalidStateError")
+      return "The browser's push service didn't answer. Check your connection and try again.";
+    return "Something went wrong on this device. Try again in a moment.";
+  }
+
+  // UI audit H-19: one Save for types, time and contact email, saved in
+  // place with a confirmation (no reload that jumped to the page top).
+  if (prefsForm) {
+    prefsForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = prefsForm.querySelector("button[type='submit']");
+      if (btn) btn.disabled = true;
+      try {
+        const resp = await fetch(prefsForm.action, {
+          method: "POST",
+          headers: { "X-Requested-With": "fetch" },
+          body: new FormData(prefsForm),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || "Couldn't save the notification settings. Try again.");
+        window.ccToast && window.ccToast({ title: "Notification settings saved" });
+      } catch (err) {
+        window.ccToast && window.ccToast({ message: err.message, variant: "error" });
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
   }
 
   function keyBytes(b64url) {
@@ -49,7 +94,7 @@
       return;
     }
     if (Notification.permission === "denied") {
-      show("Blocked in this browser's site settings -- allow notifications there, then reload.", "none");
+      show("Blocked for this site. Allow notifications in the browser's site settings, then reload.", "none");
       return;
     }
     const reg = await registration();
@@ -72,7 +117,7 @@
       await postJson("/push/subscribe", sub.toJSON());
       window.ccToast && window.ccToast({ title: "Notifications on", message: "Try “Send test”." });
     } catch (err) {
-      window.ccToast && window.ccToast({ message: "Couldn't turn notifications on: " + err.message, variant: "error" });
+      window.ccToast && window.ccToast({ title: "Couldn't turn notifications on", message: plainError(err), variant: "error" });
     } finally {
       enableBtn.disabled = false;
       refresh();
@@ -83,7 +128,7 @@
     testBtn.disabled = true;
     try {
       const r = await postJson("/push/test");
-      window.ccToast && window.ccToast({ message: r.sent ? "Test sent -- it should appear in a moment." : "No device accepted the test." });
+      window.ccToast && window.ccToast({ message: r.sent ? "Test sent. It should appear in a moment." : "No device accepted the test." });
     } catch (err) {
       window.ccToast && window.ccToast({ message: err.message, variant: "error" });
     } finally {
@@ -101,7 +146,7 @@
         await sub.unsubscribe();
       }
     } catch (err) {
-      window.ccToast && window.ccToast({ message: "Couldn't turn notifications off: " + err.message, variant: "error" });
+      window.ccToast && window.ccToast({ title: "Couldn't turn notifications off", message: plainError(err), variant: "error" });
     } finally {
       disableBtn.disabled = false;
       refresh();

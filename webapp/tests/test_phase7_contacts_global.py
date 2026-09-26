@@ -78,13 +78,20 @@ class TestContactTagNames:
 class TestContactsTagFilter:
     """2026-09-21 rework (direct request): the single-select `?tag=`
     radio filter became a multi-select checkbox filter
-    (_filter_dropdown.html's existing "multi" mode), and gained a
-    built-in default -- every label checked except Archived -- see
-    TestArchivedDefaultExclusion below for that half. `contacts_filtered`
+    (_filter_dropdown.html's existing "multi" mode). `contacts_filtered`
     must be present in the query string for an explicit `tag=` selection
     to actually take effect (it's what tells routers/contacts.py this is
     a real, deliberate pick and not just an untouched page load) -- see
-    _contacts_list_context's own docstring/comment."""
+    _contacts_list_context's own docstring/comment.
+
+    2026-09-26 (item 19): this filter used to have a second job -- "every
+    label checked except Archived" -- back when Archived was itself a
+    label (see TestArchivedDefaultExclusion below, now covering the real
+    `contacts.archived_at` column's own separate `?archived=` toggle
+    instead). A label literally named "Archived" is just an ordinary
+    label now, with no special filter behavior of its own -- nothing left
+    to test for that here beyond the plain OR-filter every other label
+    already gets."""
 
     def test_tag_param_filters_case_insensitively(self, conn):
         _seed_contact(conn, "c1", "Alice", tags=["University"])
@@ -95,7 +102,7 @@ class TestContactsTagFilter:
         assert [c["uid"] for c in resp.context["contacts"]] == ["c1", "c3"]
         assert resp.context["active_tags"] == {"university"}
 
-    def test_no_tag_returns_everything_except_archived_by_default(self, conn):
+    def test_no_tag_returns_everything_by_default(self, conn):
         _seed_contact(conn, "c1", "Alice", tags=["University"])
         _seed_contact(conn, "c2", "Bob", tags=["Faculty"])
         resp = contacts_router.list_contacts(_request(), conn=conn)
@@ -108,25 +115,6 @@ class TestContactsTagFilter:
         resp = contacts_router.list_contacts(_request(), conn=conn)
         assert resp.context["contact_tags"] == ["Faculty", "University"]
 
-    def test_checking_only_university_still_hides_an_also_archived_contact(self, conn):
-        # 2026-09-21 rework: Archived is no longer "just a normal label"
-        # (see TestArchivedDefaultExclusion) -- checking University alone
-        # leaves Archived unchecked, and an unchecked label hides any
-        # contact carrying it, even one that also carries a checked
-        # label. Checking Archived too (below) is what surfaces Bob.
-        _seed_contact(conn, "c1", "Alice", tags=["University"])
-        _seed_contact(conn, "c2", "Bob", tags=["University", "Archived"])
-        req = _request(query_string=b"tag=University&contacts_filtered=1")
-        resp = contacts_router.list_contacts(req, tag=["University"], conn=conn)
-        assert {c["uid"] for c in resp.context["contacts"]} == {"c1"}
-
-    def test_checking_university_and_archived_shows_both(self, conn):
-        _seed_contact(conn, "c1", "Alice", tags=["University"])
-        _seed_contact(conn, "c2", "Bob", tags=["University", "Archived"])
-        req = _request(query_string=b"tag=University&tag=Archived&contacts_filtered=1")
-        resp = contacts_router.list_contacts(req, tag=["University", "Archived"], conn=conn)
-        assert {c["uid"] for c in resp.context["contacts"]} == {"c1", "c2"}
-
     def test_tag_links_appear_in_the_rendered_body(self, conn):
         _seed_contact(conn, "c1", "Alice", tags=["University"])
         req = _request(query_string=b"tag=University&contacts_filtered=1")
@@ -137,36 +125,43 @@ class TestContactsTagFilter:
 
 
 class TestArchivedDefaultExclusion:
-    """Direct request: "archived labels should not be visible normally...
-    the label filter... normally is filtered to show all labels and only
-    the `archived` one is not checked." """
+    """Item 19 (2026-09-26): "archived" is a real `contacts.archived_at`
+    column now (db.archive_contact/unarchive_contact), not a label --
+    replaces the 2026-09-21 fake-"Archived"-label mechanism this class
+    used to test (see git history for that version). Same default-hidden
+    behavior, `?archived=1` instead of a checkbox in the Label filter
+    dropdown (which only ever lists real labels now -- routers/
+    contacts.py's own comment on why the old suppression logic is gone)."""
 
     def test_untouched_page_load_hides_archived_contacts(self, conn):
         _seed_contact(conn, "c1", "Alice", tags=["University"])
-        _seed_contact(conn, "c2", "Old Contact", tags=["Archived"])
+        _seed_contact(conn, "c2", "Old Contact")
+        db.archive_contact(conn, "c2")
         resp = contacts_router.list_contacts(_request(), conn=conn)
         assert {c["uid"] for c in resp.context["contacts"]} == {"c1"}
-        assert "archived" not in resp.context["active_tags"]
+        assert resp.context["show_archived"] is False
 
     def test_unlabeled_contacts_are_never_hidden_by_the_default(self, conn):
-        # The default exclusion is "hide contacts carrying Archived," not
-        # "show only contacts carrying a checked label" -- an unlabeled
-        # contact must still appear even though it matches none of the
-        # implicitly-checked labels.
+        # The archived exclusion is orthogonal to the label filter -- an
+        # unlabeled, non-archived contact must still appear even though it
+        # matches none of the implicitly-checked labels.
         _seed_contact(conn, "c1", "No Labels", tags=[])
-        _seed_contact(conn, "c2", "Old Contact", tags=["Archived"])
+        _seed_contact(conn, "c2", "Old Contact")
+        db.archive_contact(conn, "c2")
         resp = contacts_router.list_contacts(_request(), conn=conn)
         assert {c["uid"] for c in resp.context["contacts"]} == {"c1"}
 
-    def test_explicitly_checking_archived_shows_it(self, conn):
-        _seed_contact(conn, "c1", "Old Contact", tags=["Archived"])
-        req = _request(query_string=b"tag=Archived&contacts_filtered=1")
-        resp = contacts_router.list_contacts(req, tag=["Archived"], conn=conn)
+    def test_explicitly_requesting_archived_shows_it(self, conn):
+        _seed_contact(conn, "c1", "Old Contact")
+        db.archive_contact(conn, "c1")
+        resp = contacts_router.list_contacts(_request(), archived="1", conn=conn)
         assert {c["uid"] for c in resp.context["contacts"]} == {"c1"}
+        assert resp.context["show_archived"] is True
 
-    def test_explicitly_unchecking_everything_shows_nothing(self, conn):
-        # A deliberate, fully-empty selection is respected literally, not
-        # silently treated as "no filter active."
+    def test_explicitly_unchecking_every_label_still_shows_nothing(self, conn):
+        # A deliberate, fully-empty label selection is respected
+        # literally, not silently treated as "no filter active" -- separate
+        # from (and unaffected by) the archived toggle.
         _seed_contact(conn, "c1", "Alice", tags=["University"])
         req = _request(query_string=b"contacts_filtered=1")
         resp = contacts_router.list_contacts(req, tag=[], conn=conn)
@@ -174,17 +169,22 @@ class TestArchivedDefaultExclusion:
 
     def test_regions_fragment_applies_the_same_default(self, conn):
         _seed_contact(conn, "c1", "Alice", tags=["University"])
-        _seed_contact(conn, "c2", "Old Contact", tags=["Archived"])
+        _seed_contact(conn, "c2", "Old Contact")
+        db.archive_contact(conn, "c2")
         resp = contacts_router.contacts_regions(_request("/contacts/regions"), conn=conn)
         body = resp.body.decode()
         assert "Alice" in body
+        assert "Old Contact" not in body
 
-    def test_rendered_checkbox_dropdown_leaves_only_archived_unchecked(self, conn):
+    def test_rendered_show_archived_checkbox_reflects_state(self, conn):
         _seed_contact(conn, "c1", "Alice", tags=["University"])
-        _seed_contact(conn, "c2", "Old Contact", tags=["Archived"])
+        _seed_contact(conn, "c2", "Old Contact")
+        db.archive_contact(conn, "c2")
         resp = contacts_router.list_contacts(_request(), conn=conn)
         body = resp.body.decode()
-        checked = dict(re.findall(r'<input type="checkbox" name="tag" value="([^"]*)"[^>]*?(checked)?>', body))
-        assert checked.get("university") == "checked"
-        assert checked.get("archived") == ""
+        assert 'name="archived" value="1"' in body
         assert "Old Contact" not in body
+        resp2 = contacts_router.list_contacts(_request(), archived="1", conn=conn)
+        body2 = resp2.body.decode()
+        assert 'name="archived" value="1" form="contacts-filters-form" data-change-submit checked' in body2
+        assert "Old Contact" in body2

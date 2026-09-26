@@ -1,7 +1,8 @@
 {% extends "base.html" %}
-{% from "_task_work_allocations.html" import task_work_allocations_section with context %}
 {% block title %}{% if task %}Edit habit{% else %}New habit{% endif %}{% endblock %}
 {% block content %}
+{% from "_look_picker.html" import look_picker %}
+{% from "_task_work_allocations.html" import task_work_allocations_section with context %}
 <!-- Tasks > Habits' own create form (2026-08-08 direct feedback) -- a
      stripped-down, dedicated form, not task_form.html with fields
      pre-filled. A habit-labeled task doesn't have a due date, a start
@@ -46,87 +47,181 @@
 </div>
 <div class="modal-body">
 <div class="card">
-<form method="post" id="habit-task-form" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}" data-cc-change="task" data-cc-action="{% if task %}edit{% else %}create{% endif %}">
+{# 2026-09-25 (UI audit H-14): `.is-avoid` hides the build-only fields
+   (Unit, Recurrence, Only on, Times per period, Daily target) -- none
+   of them apply to an avoid habit. static/habit_day.js flips the class
+   when Kind changes; the fields still submit, so switching back keeps
+   their values. #}
+{% set _rep0 = habit_repeat_choice(task, week_start(request)) %}
+<form method="post" id="habit-task-form" data-repeat="{{ _rep0.mode }}" data-goal="{{ 'amount' if task and (task.target_per_day or 1) > 1 else 'once' }}" class="habit-task-form{% if task and task.habit_kind == 'avoid' %} is-avoid{% endif %}" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}" data-cc-change="task" data-cc-action="{% if task %}edit{% else %}create{% endif %}">
     <input type="hidden" name="tags_labels" value="{{ habit_label }}">
     <div class="field-grid">
         <div class="field field-wide">
             <label>Title</label>
             <input type="text" name="title" required autofocus value="{{ task.title if task else '' }}">
         </div>
+        {# 2026-09-26 (Peter): the habit's own colour and icon -- the
+           shared Look dropdown (_look_picker.html). The icon draws the
+           check button, the colour paints the heatmap, the strip and the
+           view modal's cover. #}
+        {% set _look = habit_look(task) %}
+        {{ look_picker('look-habit-task-form', 'habit-task-form', _look.color, _look.icon, habit_colors, {'': habit_icons()},
+                       color_field='habit_color', icon_field='habit_icon', allow_no_color=true,
+                       no_color_label='Default colour', no_icon_label='Default icon', default_icon='check-circle') }}
+        {# Habits H5 (2026-09-24): "avoid" habits log relapses instead of
+           check-ins. 2026-09-26 (Peter, second pass): the app's own
+           dropdown, not pills in the body. #}
+        {% set _avoid = task and task.habit_kind == 'avoid' %}
+        {% set ms_name = 'habit_kind' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Kind' %}
+        {% set ms_items = [{'uid': 'build', 'name': 'Do it'}, {'uid': 'avoid', 'name': 'Avoid it'}] %}
+        {% set ms_selected = 'avoid' if _avoid else 'build' %}
+        {% set ms_wide = true %}
+        {% set ms_bare = false %}
+        {% set ms_extra_class = 'habit-kind-field' %}
+        {% set ms_form_id = 'habit-task-form' %}
+        {% include "_widget_list_multiselect.html" %}
+        {# 2026-09-26 (Peter's approved mockup, plans/habit-edit-mockup-
+           2026-09-26.md): every control is the app's dropdown and full
+           width; a choice that needs a follow-up (certain days, times a
+           week/month, an amount) shrinks to half width and its follow-up
+           takes the other half. The form's data-repeat / data-goal pick
+           which follow-up shows (style.css; habit_day.js keeps them in
+           sync). routers/tasks.py _apply_habit_repeat / _apply_habit_goal
+           turn the choices back into the stored rule and target; "keep"
+           (a rule these can't express, like every 2 weeks) sends the
+           current rule back untouched. #}
+        {% set _rep = habit_repeat_choice(task, week_start(request)) %}
+        {% set ms_name = 'habit_repeat' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'How often' %}
+        {% set ms_items = [{'uid': 'daily', 'name': 'Every day'}, {'uid': 'days', 'name': 'On certain days'}, {'uid': 'week', 'name': 'Times a week'}, {'uid': 'month', 'name': 'Times a month'}] %}
+        {% if _rep.mode == 'keep' %}{% set _ = ms_items.append({'uid': 'keep', 'name': _rep.label ~ ' (current)'}) %}{% endif %}
+        {% set ms_selected = _rep.mode %}
+        {% set ms_extra_class = 'habit-build-only habit-repeat-field' %}
+        {% include "_widget_list_multiselect.html" %}
+        {% if _rep.mode == 'keep' %}<input type="hidden" name="recurrence" value="{{ task.recurrence }}">{% endif %}
+        <div class="field habit-build-only habit-sub habit-sub-days">
+            <label id="habit-days-label">Days</label>
+            <div class="multiselect widget-list-multiselect habit-days-select" data-ms data-ms-mode="habit-days" data-ms-label="days">
+                <button type="button" class="multiselect-trigger ms-trigger" aria-haspopup="true" aria-expanded="false" aria-labelledby="habit-days-label">
+                    <span class="ms-summary">{{ _rep.days_label }}</span>
+                    <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
+                </button>
+                <div class="multiselect-panel ms-panel">
+                    {% for d in _rep.day_options %}
+                    <label class="multiselect-option">
+                        <input type="checkbox" name="habit_days" value="{{ d.code }}" form="habit-task-form" data-short="{{ d.short }}"{% if d.code in _rep.days %} checked{% endif %}>
+                        <span>{{ d.name }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% set ms_wide = false %}
+        {% for unit, top in (('week', 6), ('month', 20)) %}
+        {% set ms_name = 'habit_times_' ~ unit %}
+        {% set ms_label = 'Times a ' ~ unit %}
+        {% set ms_items = [] %}
+        {% for n in range(1, top + 1) %}{% set _ = ms_items.append({'uid': n|string, 'name': (n|string) ~ (' time' if n == 1 else ' times') ~ ' a ' ~ unit}) %}{% endfor %}
+        {% set ms_selected = (_rep.times if _rep.mode == unit and _rep.times <= top else 1)|string %}
+        {% set ms_extra_class = 'habit-build-only habit-sub habit-sub-' ~ unit %}
+        {% include "_widget_list_multiselect.html" %}
+        {% endfor %}
+        {% set ms_wide = true %}
+        {% set _target = (task.target_per_day or 1)|int if task else 1 %}
+        {% set ms_name = 'habit_goal' %}
+        {% set ms_label = 'Daily goal' %}
+        {% set ms_items = [{'uid': 'once', 'name': 'Check it off once'}, {'uid': 'amount', 'name': 'An amount'}] %}
+        {% set ms_selected = 'amount' if _target > 1 else 'once' %}
+        {% set ms_extra_class = 'habit-build-only habit-goal-field' %}
+        {% include "_widget_list_multiselect.html" %}
+        <div class="field habit-build-only habit-sub habit-sub-amount">
+            <div class="habit-amount-pair">
+                <div class="habit-amount-cell">
+                    <label for="habit-target">Amount</label>
+                    <input type="number" name="target_per_day" id="habit-target" min="2" max="999999" step="1" inputmode="numeric" value="{{ _target if _target > 1 else '' }}" placeholder="8">
+                </div>
+                <div class="habit-amount-cell">
+                    <label for="habit-unit">Unit</label>
+                    <input type="text" name="habit_unit" id="habit-unit" maxlength="24" placeholder="glasses" value="{{ task.habit_unit if task and task.habit_unit else '' }}">
+                </div>
+            </div>
+        </div>
+        {# Per-habit reminder time (2026-09-25): the half-hour list plus
+           "No reminder" (= only the morning digest). Build habits only. #}
+        {% set _current = task.reminder_time if task and task.reminder_time else '' %}
+        {% set _slots = [] %}
+        {% for h in range(24) %}{% for m in (0, 30) %}{% set _ = _slots.append('%02d:%02d'|format(h, m)) %}{% endfor %}{% endfor %}
+        {% if _current and _current not in _slots %}{% set _ = _slots.append(_current) %}{% endif %}
+        {% set ms_name = 'reminder_time' %}
+        {% set ms_label = 'Reminder' %}
+        {% set ms_items = [{'uid': '', 'name': 'No reminder'}] %}
+        {% for t in _slots|sort %}{% set _ = ms_items.append({'uid': t, 'name': t|fmt_time}) %}{% endfor %}
+        {% set ms_selected = _current %}
+        {% set ms_extra_class = 'habit-build-only' %}
+        {% include "_widget_list_multiselect.html" %}
         <div class="field field-wide">
             <label>Description</label>
             <textarea name="description" rows="2">{{ task.description if task else '' }}</textarea>
         </div>
-        <div class="field">
-            {# Habits H5 (2026-09-24): "avoid" habits log relapses instead
-               of check-ins; their streak is clean days, and schedule /
-               target don't apply. #}
-            <label for="habit-kind">Kind</label>
-            <select name="habit_kind" id="habit-kind">
-                <option value="build"{% if not task or task.habit_kind != 'avoid' %} selected{% endif %}>Build -- do it</option>
-                <option value="avoid"{% if task and task.habit_kind == 'avoid' %} selected{% endif %}>Avoid -- log relapses</option>
-            </select>
-        </div>
-        <div class="field">
-            <label for="habit-unit">Unit</label>
-            <input type="text" name="habit_unit" id="habit-unit" maxlength="24" placeholder="e.g. glasses, min"
-                   value="{{ task.habit_unit if task and task.habit_unit else '' }}"
-                   title="For an amount habit (Daily target above 1): what you're counting.">
-        </div>
-        <div class="field field-wide">
-            <!-- static/recurrence_picker.js turns this into the same
-                 preset dropdown task_form.html/event_form.html use --
-                 required and pre-set to "Daily" for a new habit
-                 (task_form.html's equivalent field defaults to blank/
-                 "Does not repeat") since a habit that doesn't recur isn't
-                 a habit; an existing habit task keeps whatever it was
-                 already set to. -->
-            <label class="field-required">Recurrence</label>
-            <input type="text" name="recurrence" class="recurrence-input" value="{{ task.recurrence if task and task.recurrence else 'FREQ=DAILY' }}" required>
-        </div>
-        <div class="field field-wide">
-            {# Habits H2 (2026-09-24): fixed-days habits. Any day checked
-               makes it FREQ=WEEKLY;BYDAY=... server-side (routers/tasks.py
-               _apply_habit_days), overriding the Recurrence preset above,
-               which can't express weekdays. #}
-            {% set _rr = (task.recurrence or '')|upper if task else '' %}
-            {% set _byday = _rr.split('BYDAY=')[1].split(';')[0].split(',') if 'BYDAY=' in _rr else [] %}
-            <label id="habit-days-label">Only on</label>
-            <input type="hidden" name="habit_days_present" value="1">
-            <div class="habit-days-picker" role="group" aria-labelledby="habit-days-label">
-                {% for code, name in [('MO','Mon'),('TU','Tue'),('WE','Wed'),('TH','Thu'),('FR','Fri'),('SA','Sat'),('SU','Sun')] %}
-                <label class="habit-day-chip"><input type="checkbox" name="habit_days" value="{{ code }}"{% if code in _byday %} checked{% endif %}><span>{{ name }}</span></label>
-                {% endfor %}
-            </div>
-            <p class="habit-days-hint">Pick days for a fixed-days habit (overrides Recurrence). Leave empty for daily, weekly or "times per period".</p>
-        </div>
-        <div class="field">
-            <!-- Habits H1 (2026-09-24): "X times per week/month" -- only
-                 used when Recurrence is a plain Weekly/Monthly (see
-                 habit_schedule.py); blank = once per period. -->
-            <label>Times per period</label>
-            <input type="number" name="habits_per_period" min="2" max="31" step="1" placeholder="Once"
-                   value="{{ task.habits_per_period if task and task.habits_per_period else '' }}"
-                   title="For a weekly or monthly habit: how many days per week/month count as done. Leave empty for once.">
-        </div>
-        <div class="field">
-            <label>Daily target</label>
-            <div class="stepper">
-                <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease daily target">&minus;</button>
-                <input type="number" name="target_per_day" class="stepper-input" min="1" step="1" value="{{ task.target_per_day if task else 1 }}">
-                <button type="button" class="stepper-btn stepper-inc" aria-label="Increase daily target">+</button>
-            </div>
-        </div>
     </div>
-    {% if task %}
-    <div class="detail-section-gap">
-        {{ task_work_allocations_section(task, work_allocations, work_hours) }}
-    </div>
-    {% endif %}
+    {# 2026-09-26 (Peter, same day, reversed: "should be able to be work
+       scheduled -- return it to the edit modal") -- Work sessions was
+       removed from both habit modals earlier this same day, then asked
+       back for the edit modal specifically (not the view modal --
+       habit_task_detail.html's own "gone from a habit's view and edit
+       modals entirely" note is now half-stale; left as historical
+       context there rather than rewritten, since the view modal really
+       is still unchanged). Same task_work_allocations_section macro/
+       _work_allocation_context (routers/tasks.py) every other task's
+       edit form already uses -- a habit is still just a task underneath,
+       nothing here is habit-specific. #}
 </form>
+{% if task %}
+<div class="relations-section">
+    {{ task_work_allocations_section(task, work_allocations, work_hours) }}
+</div>
+{# Item 19 (2026-09-26, "Habits must be archivable") -- a DEDICATED
+   button, not a Status field (this form deliberately has none, see this
+   file's own top comment): posts straight to /tasks/{uid}/archive or
+   /unarchive (routers/tasks.py, both new this item), never through this
+   form's own `update_task` POST -- update_task's `status` default now
+   preserves whatever's already on the row when omitted (see that
+   route's own comment), so a plain Save afterward can't silently undo
+   this either way. `data-cc-change="task"` (no data-modal-keep-open)
+   closes the modal and lets habit_actions.js's existing cc-entity-
+   changed listener refresh #habits-body -- the archived habit
+   disappears from the list it was just edited from (habit_view.
+   habit_items' `_INACTIVE_STATUSES` filter), same as any other habit
+   edit's region refresh. Restoring one back is only reachable from
+   routers/habits.py's Archived modal (see that route's own docstring),
+   since an archived habit is gone from the page this edit form itself
+   would normally be opened from. #}
+<div class="relations-section habit-archive-section">
+    {% if task.status == 'archived' %}
+    <p class="text-muted">This habit is archived -- it no longer appears on the Habits page.</p>
+    <form method="post" action="/tasks/{{ task.uid }}/unarchive" data-cc-change="task">
+        <button type="submit" class="btn ghost">{{ icon('archive', 'icon-sm') }} Restore habit</button>
+    </form>
+    {% else %}
+    <form method="post" action="/tasks/{{ task.uid }}/archive" data-cc-change="task">
+        <button type="submit" class="btn ghost">{{ icon('archive', 'icon-sm') }} Archive habit</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
 </div>
 </div>
+{# 2026-09-26 (Peter): Cancel on an existing habit goes back to its view
+   modal (same as task/event/contact forms), not out of the modal. #}
+{% if task %}
+{% set footer_back_url = '/tasks/' ~ task.uid %}
+{% set footer_back_mode = 'modal' %}
+{% else %}
 {% set footer_back_url = '/habits' %}
+{% endif %}
 {% set footer_back_label = 'Cancel' %}
 {% if task %}
 {% set footer_delete_url = '/tasks/' ~ task.uid ~ '/delete' %}

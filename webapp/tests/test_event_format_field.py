@@ -19,6 +19,16 @@ rather than just both other radios sitting unchecked. The original two
 ids/wrapper class are unchanged so the pre-existing tests below (written
 against `.segmented`/`.seg-btn`-era markup, but only ever asserting id
 strings and `checked`/not-`checked`, never the class names) still hold.
+
+2026-09-26 (Peter): rebuilt again on the app's shared single-select
+dropdown (_widget_list_multiselect.html, ms_mode="single") instead of the
+tile/card picker -- same pattern the habit form's Kind/How often fields
+use. The three ids are passed through via the macro's new `it.id` support
+(added for this), so every pre-existing test below still holds unchanged.
+Format also gains a half-width state (grid-column:span 1) once In
+person/Online reveals its Location/Meeting URL follow-up, same rule the
+habit form's How often/Daily goal fields use -- new coverage in
+TestFormatFieldIsNowADropdown/TestFormatFieldCss below.
 """
 
 from __future__ import annotations
@@ -221,6 +231,32 @@ class TestFormatFieldCss:
         assert ".field.field-format-location,\n.field.field-format-meeting{display:none;}" in css
         assert "#event-form:has(#event_format_in_person:checked) .field-format-location{display:flex;}" in css
         assert "#event-form:has(#event_format_online:checked) .field-format-meeting{display:flex;}" in css
+
+    def test_format_field_shrinks_to_half_width_when_a_follow_up_shows(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        assert "#event-form:has(#event_format_in_person:checked) .field-grid .event-format-field,\n" \
+               "#event-form:has(#event_format_online:checked) .field-grid .event-format-field{grid-column:span 1;}" in css
+
+
+class TestFormatFieldIsNowADropdown:
+    """2026-09-26: Format is the shared single-select dropdown, not the
+    tile/card picker -- same trigger+panel markup every other app-wide
+    single-select (habit form's Kind/How often, widget builder's View/
+    Range) uses."""
+
+    def test_new_event_form_renders_the_shared_dropdown_not_tiles(self, conn):
+        resp = calendar_router.new_event_form(_request("/events/new"), conn=conn)
+        body = resp.body.decode()
+        assert 'class="field field-wide event-format-segmented event-format-field"' in body
+        assert 'data-ms-mode="single" data-ms-label="format"' in body
+        assert "tile-select event-format-segmented" not in body
+
+    def test_selected_option_reads_its_name_in_the_trigger_summary(self, conn):
+        _seed_event(conn, "e1", location="Room 204")
+        resp = calendar_router.edit_event_form("e1", _request("/events/e1/edit"), conn=conn)
+        body = resp.body.decode()
+        field = body[body.index('data-ms-mode="single" data-ms-label="format"'):]
+        assert '<span class="ms-summary">In person</span>' in field[:400]
 
 
 class TestAllDayKeepsDatePickerVisible:

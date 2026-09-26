@@ -38,7 +38,7 @@ pointing at it; that's harmless and expected, not cleaned up here.
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-from urllib.parse import quote
+from urllib.parse import quote, unquote, urlparse
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -80,6 +80,15 @@ def _clean_group(label_group) -> str | None:
     if not isinstance(label_group, str):
         return None
     return " ".join(label_group.split())[:60] or None
+
+
+def _clean_description(description) -> str | None:
+    """The label form's Description (2026-09-25, UI audit L17): trimmed,
+    capped at 500 characters, blank = none. Same isinstance guard as
+    _clean_group for direct calls from tests."""
+    if not isinstance(description, str):
+        return None
+    return description.strip()[:500] or None
 
 
 def _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks_widget, contacts_widget,
@@ -144,11 +153,13 @@ COLORS = [
 # in sync with style.css's :root --cal-bg-* variables. The foregrounds
 # are text colors and never painted onto a bar here, so only the
 # backgrounds live in this map.
+# 2026-09-25 (UI audit C-12): 8 values darkened in style.css for >=4.5:1
+# white text; synced here to keep the mirror exact.
 CAL_COLOR_HEX = {
-    "red": "#c6594f", "orange": "#bf7a33", "yellow": "#b59b33", "lime": "#96a93e",
-    "green": "#3f8f60", "mint": "#2f9c8a", "teal": "#2f8fa3", "cyan": "#2f86ab",
+    "red": "#c35045", "orange": "#a1672b", "yellow": "#b59b33", "lime": "#96a93e",
+    "green": "#398156", "mint": "#278172", "teal": "#2a7f91", "cyan": "#2c7d9f",
     "blue": "#3778bd", "indigo": "#575dcf", "purple": "#8a56c1", "magenta": "#ac4e93",
-    "pink": "#c1577e", "brown": "#967a44", "gray": "#70767d", "slate": "#5b6b7d",
+    "pink": "#be4e77", "brown": "#8b713f", "gray": "#70767d", "slate": "#5b6b7d",
 }
 
 # The contrast-picked foreground of each medium swatch above -- white on
@@ -267,6 +278,34 @@ ICON_GROUPS: dict[str, list[str]] = {
 
 LABEL_ICONS = [name for group in ICON_GROUPS.values() for name in group]
 
+# 2026-09-25 (UI audit L3): the icons the nav rail itself uses (base.html:
+# Home, Calendar, Planner, Tasks, Habits, Contacts, Search, Settings, the
+# sidebar toggle). A label or group pinned in the rail with one of these
+# looked like a second Home/Calendar entry, so the label and group icon
+# pickers don't offer them. ICON_GROUPS itself is unchanged (habits use it
+# and never appear in the rail). A label that already has one keeps it:
+# icon_groups_for() adds it back as a "Current" option.
+NAV_RESERVED_ICONS = frozenset({
+    "home", "calendar", "clock", "check-square", "repeat", "address-book",
+    "command", "settings", "sidebar",
+})
+
+LABEL_ICON_GROUPS: dict[str, list[str]] = {
+    group: [n for n in names if n not in NAV_RESERVED_ICONS]
+    for group, names in ICON_GROUPS.items()
+}
+
+
+def icon_groups_for(current: str | None) -> dict[str, list[str]]:
+    """The label/group icon picker's groups. When `current` isn't offered
+    (a reserved nav icon, or one since dropped from the list), it's added
+    back first under "Current": the picker's radios are the form's only
+    `icon` field, so with no radio for it, saving would silently clear it."""
+    offered = {n for names in LABEL_ICON_GROUPS.values() for n in names}
+    if current and current not in offered:
+        return {"Current": [current], **LABEL_ICON_GROUPS}
+    return LABEL_ICON_GROUPS
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -288,34 +327,68 @@ def manage_labels(request: Request, conn=Depends(get_db)):
     indented directly under it, not a second, disconnected divider row
     naming the same string. A Space that itself has another Space as its
     Group nests as a (still visually `.is-space`) child row rather than
-    also getting its own top-level section, so it's never rendered twice."""
+    also getting its own top-level section, so it's never rendered twice.
+
+    2026-09-26 (Peter): plain labels only -- projects have their own
+    Settings > Projects page (projects_settings_router below)."""
     return templates.TemplateResponse("labels_manage.html", _labels_context(conn, request))
 
 
 @router.get("/regions")
-def labels_regions(region: str, request: Request, conn=Depends(get_db)):
+def labels_regions(region: str, request: Request, kind: str = "labels", conn=Depends(get_db)):
     """async-CRUD region fragment (features/async-crud.md): re-renders the
-    labels list body after a label edit/merge instead of a full reload."""
+    labels list body after a label edit/merge instead of a full reload.
+    `kind=projects` renders the Projects page's list (2026-09-26)."""
     if region == "list":
-        return templates.TemplateResponse("_labels_table_body.html", _labels_context(conn, request))
+        return templates.TemplateResponse(
+            "_labels_table_body.html", _labels_context(conn, request, "projects" if kind == "projects" else "labels")
+        )
     return JSONResponse({"error": f"unknown labels region: {region}"}, status_code=400)
 
 
-def _labels_context(conn, request: Request) -> dict:
-    labels = db.list_labels(conn)
+def _labels_context(conn, request: Request, kind: str = "labels") -> dict:
+    """Settings > Labels (kind "labels": plain labels) or Settings >
+    Projects (kind "projects": is_project labels) -- 2026-09-26, Peter:
+    labels and projects are different things in the UI, even though a
+    project is still a label underneath.
+
+    2026-09-26 (Peter, second pass): Settings > Labels dropped its group
+    section rows entirely (they broke row-hover, see
+    `_labels_table_body.html`'s own docstring) -- a label now carries its
+    group as a `group_style` pill in its own row instead, and `labels` is
+    sorted flat (grouped rows together, ungrouped last, alphabetical
+    within each). Settings > Projects is unchanged here (still grouped
+    section rows); it gained a Due column instead of the inline deadline
+    badge next to the name."""
+    from .label_pages import deadline_info
+
+    want_projects = kind == "projects"
+    labels = [lbl for lbl in db.list_labels(conn) if bool(lbl.get("is_project")) == want_projects]
     for lbl in labels:
         # Status is only needed for is_project rows (the badge shows it) --
         # skipped for everything else rather than calling db.project_status
         # on every label.
         if lbl.get("is_project") or lbl.get("has_deadline"):
             lbl["project_status"] = db.project_status(conn, lbl)
+        # 2026-09-25 (UI audit L7): the row's deadline badge, same states
+        # as the label's page (overdue / due soon / later / archived).
+        lbl["deadline"] = deadline_info(lbl)
+        if not want_projects and lbl.get("label_group"):
+            lbl["group_style"] = db.get_group_style(conn, lbl["label_group"])
 
-    # Sorted by group, then type (project before plain), then name
-    # (2026-09-13 request, "sorted by Groups first, then by type"). Since
-    # slice c (2026-09-25) the group is the text label_group; there are no
-    # Space rows heading a table any more, each group's table is headed by
-    # the group's own name and links to its page.
-    labels.sort(key=lambda l: ((l.get("label_group") or "").lower(), _ROLE_SORT_RANK[_label_role(l)], l["name"].lower()))
+    # Sorted by group (ungrouped last), then type (project before plain),
+    # then name (2026-09-13 request, "sorted by Groups first, then by
+    # type"; 2026-09-26: ungrouped pushed last instead of sorting "" first
+    # -- Settings > Labels reads this list flat now, and ungrouped-first
+    # read oddly). Since slice c (2026-09-25) the group is the text
+    # label_group; there are no Space rows heading a table any more, each
+    # group's table is headed by the group's own name and links to its page.
+    labels.sort(key=lambda l: (
+        0 if l.get("label_group") else 1,
+        (l.get("label_group") or "").lower(),
+        _ROLE_SORT_RANK[_label_role(l)],
+        l["name"].lower(),
+    ))
     by_group: dict[str, list[dict]] = {}
     ungrouped: list[dict] = []
     for lbl in labels:
@@ -324,13 +397,22 @@ def _labels_context(conn, request: Request) -> dict:
             by_group.setdefault(group, []).append(lbl)
         else:
             ungrouped.append(lbl)
-    label_groups = [{"name": g, "labels": by_group[g]} for g in sorted(by_group, key=str.lower)]
+    # 2026-09-25 (UI audit L3): each group row shows the group's own icon.
+    # Only Settings > Projects still renders these (kind == "projects").
+    label_groups = [
+        {"name": g, "labels": by_group[g], **db.get_group_style(conn, g)} for g in sorted(by_group, key=str.lower)
+    ]
 
     return {
         "request": request,
         "active_tab": "labels",
         "crumbs": [{"url": "/settings", "name": "Settings"}],
-        "title": "Labels",
+        "kind": "projects" if want_projects else "labels",
+        "noun": "project" if want_projects else "label",
+        "new_url": "/settings/projects/new" if want_projects else "/settings/labels/new",
+        "page_icon": "folder" if want_projects else "tag",
+        "group_default_icon": db.GROUP_DEFAULT_ICON,
+        "title": "Projects" if want_projects else "Labels",
         "labels": labels,
         "has_labels": bool(labels),
         "label_groups": label_groups,
@@ -365,8 +447,12 @@ def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
             "request": request,
             "l": cfg,
             "colors": COLORS,
-            "icon_groups": ICON_GROUPS,
+            "icon_groups": icon_groups_for(cfg.get("icon")),
             "role": _label_role(cfg),
+            # 2026-09-26: a project is edited as a project (deadline,
+            # "project" wording); a label can only become one through the
+            # one-way Convert action, never a Role field.
+            "is_project_form": bool(cfg.get("is_project")),
             "group_options": [g["name"] for g in db.list_groups(conn)],
             # 2026-08-30 (direct request): a label's banner used to be
             # reachable only through a dashboard page's own edit-mode "Add/
@@ -403,7 +489,7 @@ def update_label(
     icon: str = Form(""),
     label_group: str = Form(""),
     description: str = Form(""),
-    role: str = Form("none"),
+    role: str | None = Form(None),
     page_fields: str = Form(""),
     deadline_date: str = Form(""),
     has_dashboard: str = Form(""),
@@ -412,6 +498,7 @@ def update_label(
     contacts_widget: str = Form(""),
     sidebar_pin: str = Form(""),
     widget_pin: str = Form(""),
+    request: Request = None,
     conn=Depends(get_db),
 ):
     """The label edit modal's single Save button -- handles the unified
@@ -439,12 +526,16 @@ def update_label(
     icon = (icon or "").strip() or None
     page = _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks_widget, contacts_widget,
                         sidebar_pin, widget_pin)
-    is_project = 1 if role == "project" else 0
+    # 2026-09-26: the edit form no longer sends a Role -- a label stays a
+    # label and a project a project (Convert to project is its own
+    # action). A caller that still posts `role` keeps working.
+    explicit_role = role if isinstance(role, str) and role in ("none", "project") else None
 
+    renamed_from = None
     if new_name != name:
         _reject_reserved_label_name(new_name)
         db.rename_label(conn, name, new_name)
-        name = new_name
+        renamed_from, name = name, new_name
 
     existing = db.get_label_config(conn, name) or {}
     row = {
@@ -452,8 +543,8 @@ def update_label(
         "color": color if color in COLORS else "blue",
         "icon": icon,
         "label_group": _clean_group(label_group),
-        "description": description,
-        "is_project": is_project,
+        "description": _clean_description(description),
+        "is_project": (1 if explicit_role == "project" else 0) if explicit_role else (existing.get("is_project") or 0),
         "created_at": existing.get("created_at") or _now(),
         **page,
     }
@@ -461,7 +552,24 @@ def update_label(
     # the label's page (routers/label_pages.py), not a side effect of
     # changing the role.
     db.upsert_label_config(conn, row)
-    return RedirectResponse(url="/settings/labels", status_code=303)
+    # 2026-09-25: renamed from the label's own page -> go to the renamed
+    # label's page (the form is data-follow-redirect, see modal.js); the old
+    # URL no longer exists. From anywhere else, the labels list as before.
+    if renamed_from and request is not None:
+        ref = urlparse(request.headers.get("referer") or "")
+        if unquote(ref.path) == f"/labels/{renamed_from}":
+            return RedirectResponse(url=f"/labels/{quote(name, safe='')}", status_code=303)
+    return RedirectResponse(url="/settings/projects" if row["is_project"] else "/settings/labels", status_code=303)
+
+
+@router.post("/{name}/convert-to-project")
+def convert_to_project(name: str, conn=Depends(get_db)):
+    """2026-09-26 (Peter): the one, deliberately buried way a label becomes
+    a project -- one way only (there is no Convert back)."""
+    if not db.get_label_config(conn, name):
+        db.upsert_label_config(conn, {"name": name, "created_at": _now()})
+    db.upsert_label_config(conn, {"name": name, "is_project": 1})
+    return RedirectResponse(url="/settings/projects", status_code=303)
 
 
 @router.post("/{name}/rename")
@@ -490,17 +598,20 @@ def clear_label(name: str, conn=Depends(get_db)):
 
 
 @router.get("/new")
-def new_label_modal(request: Request, conn=Depends(get_db)):
+def new_label_modal(request: Request, project: bool = False, conn=Depends(get_db)):
     """The "+ New Label" entry point -- opens the same label_form_modal.html
-    the Edit buttons open, empty. Opens via data-modal, posts to create_label below."""
+    the Edit buttons open, empty. Opens via data-modal, posts to create_label below.
+    `project` (2026-09-26): Settings > Projects' "Add project" -- the same
+    form in project mode, creating an is_project label."""
     return templates.TemplateResponse(
         "label_form_modal.html",
         {
             "request": request,
             "l": None,
             "colors": COLORS,
-            "icon_groups": ICON_GROUPS,
-            "role": "none",
+            "icon_groups": LABEL_ICON_GROUPS,
+            "role": "project" if project else "none",
+            "is_project_form": bool(project),
             "group_options": [g["name"] for g in db.list_groups(conn)],
         },
     )
@@ -512,6 +623,7 @@ def create_label(
     color: str = Form("blue"),
     icon: str = Form(""),
     label_group: str = Form(""),
+    description: str = Form(""),
     role: str = Form("none"),
     page_fields: str = Form(""),
     deadline_date: str = Form(""),
@@ -546,12 +658,14 @@ def create_label(
         "color": color if color in COLORS else "blue",
         "icon": icon,
         "label_group": _clean_group(label_group),
+        # 2026-09-25 (UI audit L17): the form has a Description field now.
+        "description": _clean_description(description),
         "is_project": 1 if role == "project" else 0,
         "created_at": _now(),
         **page,
     }
     db.upsert_label_config(conn, row)
-    return RedirectResponse(url="/settings/labels", status_code=303)
+    return RedirectResponse(url="/settings/projects" if row["is_project"] else "/settings/labels", status_code=303)
 
 
 @router.post("/{name}/delete")
@@ -670,3 +784,23 @@ def set_label(
 @router.get("/{name}")
 def label_detail_redirect(name: str):
     return RedirectResponse(url=f"/labels/{quote(name)}", status_code=301)
+
+
+# --------------------------------------------------------------------- #
+# Settings > Projects (2026-09-26, Peter: separate settings pages for
+# labels, groups and projects). A project is still a label_config row with
+# is_project=1; this is its own list and its own "Add project" entry point.
+# Editing/deleting reuse the label routes above.
+# --------------------------------------------------------------------- #
+
+projects_settings_router = APIRouter(prefix="/settings/projects", tags=["projects-settings"])
+
+
+@projects_settings_router.get("")
+def manage_projects(request: Request, conn=Depends(get_db)):
+    return templates.TemplateResponse("labels_manage.html", _labels_context(conn, request, "projects"))
+
+
+@projects_settings_router.get("/new")
+def new_project_modal(request: Request, conn=Depends(get_db)):
+    return new_label_modal(request, project=True, conn=conn)

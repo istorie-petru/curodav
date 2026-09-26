@@ -182,9 +182,19 @@
       return radio;
     }
 
-    const untilInput = document.createElement("input");
-    untilInput.type = "date";
-    untilInput.className = "multiselect-new-input recurrence-ends-until";
+    // 2026-09-26: "On date" is the app's date field (_date_time_fields.html
+    // markup, run by date_time_fields.js) -- typed or picked -- instead of
+    // a native date input. `untilInput` is its hidden value.
+    const untilField = document.createElement("div");
+    untilField.className = "dtf dtf-date dtf--compact recurrence-ends-until";
+    untilField.dataset.dtf = "date";
+    untilField.dataset.dtfWeekStart = document.body.dataset.weekStart || "monday";
+    untilField.innerHTML =
+      '<input type="text" class="dtf-input" placeholder="dd/mm/yyyy" autocomplete="off" spellcheck="false" aria-label="Ends on">' +
+      '<button type="button" class="dtf-btn" tabindex="-1" aria-label="Choose end date"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-chevron-down"></use></svg></button>' +
+      '<input type="hidden" class="dtf-value" value="">';
+    const untilInput = untilField.querySelector(".dtf-value");
+    const untilText = untilField.querySelector(".dtf-input");
 
     const countInput = document.createElement("input");
     countInput.type = "number";
@@ -194,7 +204,7 @@
     countInput.placeholder = "10";
 
     const neverRadio = endsOption("never", "Never");
-    const untilRadio = endsOption("until", "On date", untilInput);
+    const untilRadio = endsOption("until", "On date", untilField);
     const countRadio = endsOption("count", "After", countInput);
     const occLabel = document.createElement("span");
     occLabel.textContent = "occurrences";
@@ -204,6 +214,7 @@
       if (parsedCurrent.until) {
         untilRadio.checked = true;
         untilInput.value = parsedCurrent.until;
+        if (window.CCDateField) untilText.value = window.CCDateField.fmtDate(parsedCurrent.until);
       } else if (parsedCurrent.count) {
         countRadio.checked = true;
         countInput.value = parsedCurrent.count;
@@ -214,16 +225,23 @@
       neverRadio.checked = true;
     }
 
-    // Both dropdowns are siblings of the same original parent -- insert
-    // `endsWrap` before `input` (still a plain child of that parent at
-    // this point) so it lands right after `wrap`, *then* move `input`
-    // inside `wrap` last (see the header comment: `input` stays the
-    // permanent, hidden source of truth either dropdown writes into).
+    // 2026-09-26 (Peter: "the two new dropdowns side by side, not one
+    // overflowing and the other in its own section") -- both dropdowns go
+    // in one flex row (`.recurrence-preset-row`, style.css) instead of
+    // stacking as plain block siblings; `endsWrap` starting `hidden`
+    // collapses the row to just the preset dropdown until a preset is
+    // actually picked. Insert the row before `input` (still a plain child
+    // of `originalParent` at this point), then move `input` inside `wrap`
+    // last (see the header comment: `input` stays the permanent, hidden
+    // source of truth either dropdown writes into).
     const originalParent = input.parentNode;
     input.setAttribute("autocomplete", "off");
     input.style.display = "none";
-    originalParent.insertBefore(wrap, input);
-    originalParent.insertBefore(endsWrap, input);
+    const row = document.createElement("div");
+    row.className = "recurrence-preset-row";
+    row.appendChild(wrap);
+    row.appendChild(endsWrap);
+    originalParent.insertBefore(row, input);
     wrap.appendChild(input);
 
     // Holiday calendar / exclude Saturday / exclude Sunday (event forms
@@ -252,7 +270,7 @@
 
     function updateEndsSummary() {
       if (untilRadio.checked && untilInput.value) {
-        endsSummary.textContent = "Ends " + untilInput.value;
+        endsSummary.textContent = "Ends " + (window.CCDateField ? window.CCDateField.fmtDate(untilInput.value) : untilInput.value);
       } else if (countRadio.checked && countInput.value) {
         endsSummary.textContent = "Ends after " + countInput.value + (countInput.value === "1" ? " occurrence" : " occurrences");
       } else {
@@ -288,11 +306,11 @@
 
     radios.forEach((r) => r.addEventListener("change", sync));
     [neverRadio, untilRadio, countRadio].forEach((r) => r.addEventListener("change", sync));
-    untilInput.addEventListener("focus", () => {
+    untilText.addEventListener("focus", () => {
       untilRadio.checked = true;
       sync();
     });
-    untilInput.addEventListener("input", () => {
+    untilInput.addEventListener("change", () => {
       untilRadio.checked = true;
       sync();
     });

@@ -8,15 +8,17 @@
 {% block main_class %}main-shell{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
-{{ page_header_narrow("Notes", "file-text") }}
-<div class="toolbar top-app-bar">
-    <h1 class="sr-only">Notes</h1>
+{# 2026-09-25 (UI audit F4): the search box and "New" button used to sit in
+   a separate shadowed `.toolbar.top-app-bar` strip under the header (a
+   leftover of the card era). They're the header's own actions now, the
+   same slot Tasks/Contacts use for their filters; the h1 stays sr-only. #}
+<h1 class="sr-only">Notes</h1>
+{% call page_header_narrow("Notes", "file-text") %}
     <form method="get" action="/notes" class="filter-bar">
         <input type="search" name="q" placeholder="Search notes..." value="{{ q }}">
     </form>
-    <div class="spacer"></div>
     <a class="btn primary" href="/notes/new" data-modal data-fab title="New note">{{ icon('plus') }} New</a>
-</div>
+{% endcall %}
 
 {% include "_notes_body.html" %}
 {% endblock %}

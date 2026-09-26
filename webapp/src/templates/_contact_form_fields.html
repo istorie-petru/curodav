@@ -157,10 +157,15 @@
             </div>
         </template>
     </div>
-    <!-- Address book selector removed -- contacts now always live in
-         Active or Archived, toggled via the Archive/Unarchive button on
-         the contact detail page, not a dropdown on the edit form.
-         Category field removed (Phase 5, label-space rework) --
+    <!-- Address book selector removed -- there's no addressbook_path
+         concept left to pick between (Phase 1, label-space rework).
+         Archived/not-archived (item 19, 2026-09-26: a real
+         `contacts.archived_at` column) is toggled from the contact row's
+         own "..." menu on the list (_contacts_body.html), not a field on
+         this form -- same "not every lifecycle flag belongs on the edit
+         form" reasoning `label_config.archived_at`'s own explicit
+         Archive/Restore button already established, kept off this form
+         too. Category field removed (Phase 5, label-space rework) --
          grouping is now purely via the Tags field below. -->
     <div class="field">
         <label>Title</label>
@@ -268,16 +273,39 @@
         <input type="text" name="birthday" value="{{ contact.birthday or '' }}" placeholder="YYYY-MM-DD or --MM-DD" pattern="\d{4}-\d{2}-\d{2}|--\d{2}-\d{2}">
         <span class="field-hint">Full date, or --MM-DD if you don't know the year.</span>
     </div>
-    <!-- Labels -- chip multiselect (2026-08-07, modal-input-design
-         Phase B), same pattern as task_form.html -- see that
-         template's own comment. -->
+    <!-- Label -- 2026-09-26 (Peter: "Contacts should only allow one
+         label"): a single-select dropdown (ms_mode="single") instead of
+         the checkbox multiselect every other Labels field uses -- a
+         contact has at most one label now, enforced again server-side
+         (routers/contacts.py's own _resolve_contact_label truncates to
+         the first regardless of what a form posts). Singular "Label"
+         throughout to match. Leads with the `__no_label__` sentinel
+         (same one Labels *filter* pickers already use, see
+         _widget_list_multiselect.html's own `ms_pill` docstring -- it
+         renders as plain muted text, not a fake colored pill, and is
+         never itself label_pill()'d) instead of a real label name, same
+         "explicit empty state" pattern the label form's own Group field
+         / the event form's Format "None" option use -- without it,
+         single mode's own "nothing selected -> default to the first
+         real item" fallback (_widget_list_multiselect.html's own
+         `_sel_item`/checked-radio logic) would silently pre-check
+         whichever label happens to sort first for a genuinely label-less
+         contact, which Save would then quietly apply.
+         `ms_allow_new`'s single-mode text input posts its own
+         `tags_labels_new` field (see _widget_list_multiselect.html's own
+         docstring on why single mode can't share ms_name with its
+         radios) -- routers/contacts.py's `_resolve_contact_label` folds
+         it in the same "typed name wins" way settings.py's
+         `_resolve_calendar_name` already does for Holidays' own
+         pick-or-create field. #}
     <div class="field field-wide">
         {% set ms_name = 'tags_labels' %}
         {% set ms_icon = 'tag' %}
-        {% set ms_label = 'Labels' %}
-        {% set ms_items = tag_name_items %}
-        {% set ms_selected = contact.tags if contact else [] %}
-        {% set ms_mode = 'select' %}
+        {% set ms_label = 'Label' %}
+        {% set ms_items = [{'uid': '__no_label__', 'name': 'No label'}] + tag_name_items %}
+        {# 2026-09-25 (UI audit L1): prefill_tags = the label page quick-add was opened from. #}
+        {% set ms_selected = (contact.tags[0] if contact.tags else '__no_label__') if contact else ((prefill_tags or []) | first | default('__no_label__')) %}
+        {% set ms_mode = 'single' %}
         {% set ms_allow_new = true %}
         {% set ms_pill = true %}
         {% include "_widget_list_multiselect.html" %}

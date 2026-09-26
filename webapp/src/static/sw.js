@@ -568,7 +568,19 @@
 // v124 (2026-09-25, same session): audit decisions -- dashboard columns
 // stack independently (app.js), pills never wrap, phone month view hides
 // times, Week all-day spanning bars (style.css + calendar_week_allday_drag.js).
-const CACHE_NAME = "cc-shell-v124";
+// v125 (2026-09-25, same session): UI audit fixes merged from four areas --
+// habits (habit_actions.js/habit_day.js, partial/off-day styles), calendar
+// (popover, now-line via page-specific calendar_now.js, colour tokens),
+// labels/sidebar (rail titles, group monograms, banner chip) and the flat
+// sweep (--page-inset, dividers, dead CSS removed). style.css throughout.
+// v126 (2026-09-25, same session): phone Week/Day auto-scroll + sticky
+// header (style.css, calendar_now.js), stack bar label (style.css),
+// date picker week start (datetime_picker.js).
+// v127 (2026-09-25, same session): group rename + members -- modal.js
+// gained data-follow-redirect, style.css the member checklist rules.
+// v128 (2026-09-25, same session): style.css font sizes -> tokens
+// (--text-xs/--text-2xs added at their old raw values; no visual change).
+const CACHE_NAME = "cc-shell-v137";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",
@@ -581,6 +593,7 @@ const SHELL_ASSETS = [
   "/static/dynamic_styles.js",
   "/static/modal.js",
   "/static/habit_day.js",
+  "/static/look_picker.js",
   "/static/tag_input.js",
   "/static/recurrence_picker.js",
   "/static/reminders_picker.js",

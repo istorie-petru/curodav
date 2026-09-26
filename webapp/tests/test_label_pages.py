@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
+import re
+
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
@@ -125,9 +127,19 @@ class TestGroupPage:
         assert [l["name"] for l in resp.context["group_labels"]] == ["Art", "Maths"]
         assert resp.context["page_label_scope"] == "group:Uni"
         body = resp.body.decode()
-        assert 'href="/labels/Maths"' in body and 'class="toolbar group-labels"' in body
-        # Seeded with the default layout under the group key.
-        assert db.list_dashboard_widgets(conn, label_name="group:Uni")
+        # 2026-09-26 (item 20): the old always-visible plain toolbar
+        # (`class="toolbar group-labels"`) is gone -- replaced by an
+        # always-seeded `group_members` widget (see TestGroupMembersWidget
+        # below for that widget's own coverage); `href="/labels/Maths"`
+        # still holds, just from the widget's own row link now.
+        assert 'href="/labels/Maths"' in body
+        assert 'class="toolbar group-labels"' not in body
+        assert 'class="group-member-list"' in body
+        # Seeded with the default layout under the group key, plus the
+        # group_members widget.
+        widgets = db.list_dashboard_widgets(conn, label_name="group:Uni")
+        assert widgets
+        assert any(w["type"] == "group_members" for w in widgets)
 
     def test_widgets_are_scoped_to_the_members(self, conn):
         from src.routers import dashboard as dashboard_router
@@ -138,7 +150,8 @@ class TestGroupPage:
 
     def test_unknown_group_redirects_to_the_labels_list(self, conn):
         resp = label_pages.group_page("Nope", _request("/groups/Nope"), conn=conn)
-        assert resp.status_code == 303 and resp.headers["location"] == "/settings/labels"
+        # 2026-09-26: groups have their own settings page.
+        assert resp.status_code == 303 and resp.headers["location"] == "/settings/groups"
 
     def test_group_prefix_is_reserved_for_label_names(self, conn):
         with pytest.raises(HTTPException):
@@ -255,9 +268,9 @@ class TestFormFields:
         body = labels_router.edit_label_modal("Gym", _request("/settings/labels/Gym/edit"), conn=conn).body.decode()
         assert 'name="page_fields" value="1"' in body
         assert 'name="deadline_date"' in body and "2026-12-01" in body
-        assert 'name="has_dashboard" value="1" checked' in body
-        # Sections only matter without a dashboard.
-        assert 'class="field field-wide label-sections-field" hidden' in body
+        # 2026-09-26: Page is a dropdown; Sections hide (CSS) with a dashboard.
+        assert _checked(body, "has_dashboard", "1")
+        assert 'data-page="dashboard"' in body
         assert 'name="start_date"' not in body and 'name="end_date"' not in body
 
     def test_update_writes_group_and_pins(self, conn):
@@ -270,43 +283,71 @@ class TestFormFields:
     def test_new_label_modal_defaults_all_sections_on(self, conn):
         body = labels_router.new_label_modal(_request("/settings/labels/new"), conn=conn).body.decode()
         for name in ("agenda_widget", "tasks_widget", "contacts_widget"):
-            assert f'name="{name}" value="1" checked' in body
-        assert 'name="has_dashboard" value="1" >' in body
+            assert _checked(body, name, "1")
+        assert not _checked(body, "has_dashboard", "1") and _checked(body, "has_dashboard", "")
+        assert '<span class="ms-summary">Agenda, Tasks, Contacts</span>' in body
 
 
 class TestSettingsLabelsTable:
-    """Settings > Labels groups its rows by the text label_group since slice
-    c (2026-09-25): one header row per group (links to the group's page, no
-    checkbox or edit/delete, since a group isn't a label), then its labels;
-    ungrouped labels after. Within a group, projects sort before plain
-    labels, then by name."""
+    """Settings > Labels (2026-09-26, second pass -- row-hover on this page
+    was broken by the group section rows/hidden columns): flat, no section
+    rows -- `labels` sorts by group name (ungrouped last), then by name;
+    each carries `group_style` for its row's Group pill. Settings >
+    Projects is unchanged -- still one header row per group (links to the
+    group's page, no checkbox or edit/delete, since a group isn't a
+    label), then its labels; ungrouped after. Within a group, by name."""
 
-    def test_context_groups_and_sorts(self, conn):
+    def test_context_sorts_flat_grouped_then_ungrouped(self, conn):
         db.upsert_label_config(conn, {"name": "Zeta", "label_group": "Uni"})
         db.upsert_label_config(conn, {"name": "Alpha", "label_group": "Uni"})
         db.upsert_label_config(conn, {"name": "Thesis", "label_group": "Uni", "is_project": 1})
         db.upsert_label_config(conn, {"name": "Run", "label_group": "Health"})
         db.upsert_label_config(conn, {"name": "Loose"})
         ctx = labels_router._labels_context(conn, _request("/settings/labels"))
-        assert [(g["name"], [l["name"] for l in g["labels"]]) for g in ctx["label_groups"]] == [
-            ("Health", ["Run"]), ("Uni", ["Thesis", "Alpha", "Zeta"]),
-        ]
-        assert [l["name"] for l in ctx["ungrouped_labels"]] == ["Loose"]
+        # 2026-09-26: projects are listed on Settings > Projects, not here.
+        assert [l["name"] for l in ctx["labels"]] == ["Run", "Alpha", "Zeta", "Loose"]
+        assert ctx["labels"][0]["group_style"]["color"] == "gray"  # Run: Health, default style
+        assert "group_style" not in ctx["labels"][-1]  # Loose: no group
+        # Settings > Projects keeps its grouped-section shape.
+        pctx = labels_router._labels_context(conn, _request("/settings/projects"), "projects")
+        assert [(g["name"], [l["name"] for l in g["labels"]]) for g in pctx["label_groups"]] == [("Uni", ["Thesis"])]
 
-    def test_rendered_group_row_links_to_the_group_page(self, conn):
+    def test_rendered_labels_table_has_no_group_section_rows(self, conn):
         db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni"})
+        db.upsert_label_config(conn, {"name": "Loose"})
         body = labels_router.manage_labels(_request("/settings/labels"), conn=conn).body.decode()
-        assert 'class="labels-space-row" data-label-group="Uni"' in body
+        assert "entity-section-row" not in body
+        assert 'data-label-name="Maths" data-label-group="Uni"' in body
+        assert 'href="/groups/Uni/view"' in body and "Uni</a>" in body  # the row's Group pill
+        assert ">No group<" in body  # Loose's Group cell
+
+    def test_rendered_projects_group_row_links_to_the_group_page(self, conn):
+        db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni", "is_project": 1})
+        body = labels_router.manage_projects(_request("/settings/projects"), conn=conn).body.decode()
+        assert 'class="entity-section-row" data-label-group="Uni"' in body
         assert 'href="/groups/Uni" class="icon-btn" title="Open group page"' in body
         assert 'data-uid="Uni"' not in body  # no bulk-select checkbox for a group
         assert 'data-label-name="Maths" data-label-group="Uni"' in body
 
-    def test_edit_modal_has_a_free_text_group_field(self, conn):
+    def test_rendered_projects_due_is_its_own_column(self, conn):
+        db.upsert_label_config(conn, {"name": "Thesis", "is_project": 1, "has_deadline": 1,
+                                      "deadline_date": (date.today() + timedelta(days=3)).isoformat()})
+        body = labels_router.manage_projects(_request("/settings/projects"), conn=conn).body.decode()
+        row = body[body.index('data-label-name="Thesis"'):]
+        name_cell = row[:row.index("</td>")]
+        assert "label-deadline" not in name_cell  # no longer inline next to the name
+        assert "label-deadline" in row[row.index("</td>"):]  # it's the Due column instead
+
+
+    def test_edit_modal_has_a_group_dropdown(self, conn):
+        # 2026-09-26: groups are standalone; the label picks one from a
+        # dropdown (or No group) instead of typing free text.
         db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni"})
         db.upsert_label_config(conn, {"name": "Run", "label_group": "Health"})
         body = labels_router.edit_label_modal("Maths", _request("/settings/labels/Maths/edit"), conn=conn).body.decode()
-        assert 'name="label_group" value="Uni"' in body
-        assert '<option value="Health">' in body and '<option value="Uni">' in body
+        assert _checked(body, "label_group", "Uni")
+        assert 'name="label_group" value="Health"' in body and 'name="label_group" value=""' in body
+        assert 'name="role"' not in body  # 2026-09-26: no Role field
         assert 'name="parent_name"' not in body
         assert 'value="space"' not in body  # no Space role any more
         assert 'name="sidebar_pin"' in body and 'name="widget_pin"' in body
@@ -340,7 +381,9 @@ class TestLabelPillLinks:
         db.upsert_task(conn, {"uid": "t1", "title": "Draft", "description": "", "status": "active",
                               "tags": ["Road trip"], "created_at": _now()})
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
-        assert 'href="/labels/Road%20trip/preview" data-modal' in body
+        # 2026-09-25 (UI audit L11): the task modal's own URL rides along
+        # as `from`, so the preview can offer "Back" to it.
+        assert 'href="/labels/Road%20trip/preview?from=/tasks/t1" data-modal' in body
 
     def test_kanban_card_pills_open_the_preview(self, conn):
         db.upsert_label_config(conn, {"name": "Gym"})
@@ -356,3 +399,8 @@ class TestLabelPillLinks:
                               "tags": ["Gym"], "created_at": _now()})
         body = tasks_router.list_tasks(_request("/tasks"), conn=conn).body.decode()
         assert "/labels/Gym/preview" not in body
+
+
+def _checked(body: str, name: str, value: str) -> bool:
+    """A multiselect-partial input (attributes split over lines) is checked."""
+    return bool(re.search(r'name="%s" value="%s"[^>]*\bchecked\b' % (re.escape(name), re.escape(value)), body))

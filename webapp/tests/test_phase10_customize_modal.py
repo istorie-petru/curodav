@@ -162,25 +162,45 @@ class TestBuilderFieldsRework:
     add/edit behavior is covered separately in test_dashboard_router.py."""
 
     def test_source_is_a_tile_radio_group_with_every_source_value(self, conn):
+        # "group_members" (item 20, 2026-09-26) is excluded from Home's own
+        # scope (see test_dashboard_router.py::TestGroupMembersWidgetScope)
+        # -- Home's own builder legitimately doesn't offer it, so it's
+        # skipped here rather than asserted present; covered on a real
+        # group page's own builder instead, in
+        # test_group_members_source_offered_on_a_group_pages_own_builder
+        # below.
+        sources = {k: v for k, v in dashboard_router.WIDGET_SOURCES.items() if k != "group_members"}
         body = dashboard_router.dashboard_customize(_request(), conn=conn).body.decode()
         assert 'class="tile-select widget-source-select"' in body
-        for key in dashboard_router.WIDGET_SOURCES:
+        for key in sources:
             assert f'<input type="radio" name="source" value="{key}"' in body
+        assert '<input type="radio" name="source" value="group_members"' not in body
         # Exactly one tile-radio is checked by default (the first source).
-        assert body.count('name="source"') == len(dashboard_router.WIDGET_SOURCES)
+        assert body.count('name="source"') == len(sources)
         assert body.count('name="source" value="calendar_tasks" class="tile-radio" checked') == 1
+
+    def test_group_members_source_offered_on_a_group_pages_own_builder(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1})
+        db.set_group_members(conn, "Uni", ["Uni"])
+        body = dashboard_router.dashboard_customize(
+            _request(), project_uid=db.group_page_key("Uni"), conn=conn
+        ).body.decode()
+        assert '<input type="radio" name="source" value="group_members"' in body
 
     def test_view_and_range_are_single_select_multiselects(self, conn):
         # 2026-08-08 follow-up: View/Range are the single-choice variant of
         # the app's checkbox-dropdown (_widget_list_multiselect.html,
         # ms_mode="single") -- real radio inputs inside a .multiselect, not
         # native <select>s (whose open-list chrome is unstyleable).
+        # "group_members_view" skipped here for the same Home-exclusion
+        # reason as the source test above.
+        views = {k: v for k, v in dashboard_router.WIDGET_VIEWS.items() if k != "group_members_view"}
         body = dashboard_router.dashboard_customize(_request(), conn=conn).body.decode()
         assert '<div class="multiselect widget-list-multiselect widget-view-select"' in body
         assert '<div class="multiselect widget-list-multiselect widget-range-select"' in body
         assert '<select name="view"' not in body
         assert '<select name="range"' not in body
-        for key, spec in dashboard_router.WIDGET_VIEWS.items():
+        for key, spec in views.items():
             has_range = "1" if spec["has_range"] else ""
             assert (
                 f'<input type="radio" name="view" value="{key}"\n'

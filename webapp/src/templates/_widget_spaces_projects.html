@@ -27,11 +27,13 @@
 {% if data.cards %}
 <div class="filled-cards-grid">
     {% for card in data.cards %}
-    {{ filled_card(card.name, card.href, card.color, icon_name=card.icon, description=card.description, meta=card.meta) }}
+    {# 2026-09-25: a label card's caption carries its deadline state
+       ("Project · Overdue · 10 Sep") when it has one. #}
+    {{ filled_card(card.name, card.href, card.color, icon_name=card.icon, description=card.description, meta=(card.meta ~ ' · ' ~ card.deadline.text) if card.deadline else card.meta) }}
     {% endfor %}
 </div>
 {% else %}
-{{ widget_empty('No groups or pinned labels yet -- give labels a group, or tick "Groups & Labels widget" on a label.') }}
+{{ widget_empty('No groups or pinned labels yet. Give labels a group, or tick "Groups & Labels widget" on a label.') }}
 {% endif %}
 {% else %}
 {% if data.previews %}
@@ -42,6 +44,9 @@
        own `labels` sourcing); every row links to /labels/<name>. #}
     <a class="project-preview-row" href="/labels/{{ pv.project.name }}">
         <span class="cell-tag cal-{{ pv.project.color }}">{{ icon(pv.project.icon or 'folder') }} {{ pv.project.name }}</span>
+        {# 2026-09-25 (audit flesh-out item 5): deadline state from Home --
+           same pill the label's own status row shows. #}
+        {% if pv.deadline %}<span class="cell-tag tag-{{ pv.deadline.color }} label-deadline is-{{ pv.deadline.state }}">{{ icon('flag', 'icon-sm') }} {{ pv.deadline.text }}</span>{% endif %}
         {% if pv.progress is not none %}
         <div class="project-progress-bar"><div class="project-progress-fill" data-style="width:{{ pv.progress }}%"></div></div>
         <span class="tag-usage-count">{{ pv.tasks_done }}/{{ pv.tasks_total }}</span>
@@ -53,6 +58,6 @@
     {% endfor %}
 </div>
 {% else %}
-{{ widget_empty('No pinned labels yet -- tick "Groups & Labels widget" on a label.') }}
+{{ widget_empty('No pinned labels yet. Tick "Groups & Labels widget" on a label.') }}
 {% endif %}
 {% endif %}

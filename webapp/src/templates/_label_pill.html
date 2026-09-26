@@ -19,7 +19,11 @@
    option (clicking must toggle its checkbox), the Tasks table's Labels
    dropdown trigger (a <button>), a Contacts row (the whole row is a link)
    -- a link can't nest inside those. #}
-{% macro label_pill(tag, link=none) %}{% set _cls = "cell-tag cal-" ~ label_color(request, tag) %}{% set _li = label_icon(request, tag) %}{% if link == 'modal' %}<a class="{{ _cls }} label-pill-link" href="/labels/{{ tag|urlencode }}/preview" data-modal draggable="false" title="{{ tag }}">{% elif link == 'page' %}<a class="{{ _cls }} label-pill-link" href="/labels/{{ tag|urlencode }}" draggable="false" title="{{ tag }}">{% else %}<span class="{{ _cls }}">{% endif %}{% if _li %}{{ icon(_li, 'icon-sm') }} {% endif %}{{ tag }}{% if link %}</a>{% else %}</span>{% endif %}{% endmacro %}
+{# 2026-09-25 (UI audit L11): inside a task/event/contact detail modal the
+   preview replaces that modal, so its URL rides along as `from` and the
+   preview's footer offers "Back" to it. Only for those detail paths: a
+   pill on a page's card (Kanban, a widget) has no modal to go back to. #}
+{% macro label_pill(tag, link=none) %}{% set _cls = "cell-tag cal-" ~ label_color(request, tag) %}{% set _li = label_icon(request, tag) %}{% set _p = request.url.path if request is defined and request else '' %}{% set _from = _p if (_p.startswith('/tasks/') or _p.startswith('/events/') or _p.startswith('/contacts/')) else '' %}{% if link == 'modal' %}<a class="{{ _cls }} label-pill-link" href="/labels/{{ tag|urlencode }}/preview{% if _from %}?from={{ _from|urlencode }}{% endif %}" data-modal draggable="false" title="{{ tag }}">{% elif link == 'page' %}<a class="{{ _cls }} label-pill-link" href="/labels/{{ tag|urlencode }}" draggable="false" title="{{ tag }}">{% else %}<span class="{{ _cls }}">{% endif %}{% if _li %}{{ icon(_li, 'icon-sm') }} {% endif %}{{ tag }}{% if link %}</a>{% else %}</span>{% endif %}{% endmacro %}
 
 {# `label_pill_quiet` (a small color-dot + plain muted text, no fill) lived
    here briefly on 2026-09-03 for the Tasks table's closed-state Labels

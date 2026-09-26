@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Groups{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{# Settings > Groups (2026-09-26, Peter: separate settings pages for
+   labels, groups and projects; routers/label_pages.py manage_groups).
+   Groups are standalone rows (db label_groups) and may be empty. A row's
+   name opens the group's view modal; the actions open its page, edit it,
+   or delete it (its labels stay, ungrouped). Same page shell as
+   labels_manage.html. #}
+{% call page_header_narrow("Groups", "layers") %}{% endcall %}
+<div id="modal-target">
+<div class="card table-scroll table-responsive">
+    <div id="groups-table">
+        {% include "_groups_table_body.html" %}
+    </div>
+</div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script nonce="{{ csp_nonce() }}">
+// async-CRUD: a group or label change re-renders this list (same
+// contract as labels_manage.js).
+document.addEventListener("cc-entity-changed", async (e) => {
+    const type = e.detail && e.detail.type;
+    if (type !== "group" && type !== "label") return;
+    const box = document.getElementById("groups-table");
+    if (!box) return;
+    e.detail.claimed = true;
+    try {
+        const resp = await fetch("/settings/groups/regions?region=list", { headers: { "X-Requested-With": "fetch" } });
+        if (resp.ok) box.innerHTML = await resp.text();
+    } catch (err) {
+        console.error("Failed to refresh groups:", err);
+    }
+});
+</script>
+{% endblock %}

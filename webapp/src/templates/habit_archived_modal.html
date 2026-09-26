@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Archived habits{% endblock %}
+{% block content %}
+{# Archived habits modal -- item 19 (2026-09-26, "Habits must be
+   archivable"), same "behind a header button on the Habits page, not a
+   page section" shape habit_pauses.html already established for a
+   similarly rare action. An archived habit-labeled task is invisible on
+   the main Habits page (habit_view.habit_items' own `_INACTIVE_STATUSES`
+   filter, same rule "done" already followed) -- this is the one place to
+   see it again and Restore it (habit_task_form.html's own Archive button
+   is the only way IN; there's no page list to click Restore from
+   otherwise). `data-cc-change="task"` (no data-modal-keep-open) closes
+   this modal on Restore and refreshes the Habits page underneath via the
+   existing cc-entity-changed listener (habit_actions.js) -- the restored
+   habit reappears on /habits, same region-refresh contract every other
+   habit mutation already uses. #}
+<div id="modal-target" class="modal-height-md">
+<div class="modal-header">
+<h1>Archived habits</h1>
+</div>
+<div class="modal-body">
+{% if archived %}
+<ul class="habit-pauses-list">
+    {% for h in archived %}
+    <li class="habit-pause-row">
+        <span><strong>{{ h.title }}</strong></span>
+        <form method="post" action="/tasks/{{ h.uid }}/unarchive" class="form-inline" data-cc-change="task">
+            <button type="submit" class="btn ghost btn-sm" aria-label="Restore habit: {{ h.title }}">{{ icon('archive', 'icon-sm') }} Restore</button>
+        </form>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="text-muted habit-pauses-empty">No archived habits.</p>
+{% endif %}
+</div>
+{% set footer_back_url = '/habits' %}
+{% set footer_back_label = 'Done' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

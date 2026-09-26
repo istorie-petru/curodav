@@ -329,5 +329,18 @@ class TestShellCacheVersion:
         # v122 (2026-09-25): month all-day bar spacing (style.css).
         # v123 (2026-09-25): audit regressions (field-grid, button resets).
         # v124 (2026-09-25): audit decisions (dashboard columns, pills, week bars).
+        # v125 (2026-09-25): UI audit fixes, four areas merged.
+        # v126 (2026-09-25): phone auto-scroll, stack bar, picker week start.
+        # v127 (2026-09-25): group rename/members, modal data-follow-redirect.
+        # v128 (2026-09-25): font-size tokens --text-xs/--text-2xs.
+        # v129 (2026-09-26): compact habit rows, Pauses modal, habit form.
+        # v130 (2026-09-26): habit rows v2, history panel, icon + colour.
+        # v131 (2026-09-26): habit edit form per the approved mockup.
+        # v132 (2026-09-26): shared Look dropdown (look_picker.js), old pickers gone.
+        # v133 (2026-09-26): label banner button at the end of the Look row.
+        # v134 (2026-09-26): flat icon grid, full icon library for habits.
+        # v135 (2026-09-26): groups/labels/projects split, module dropdowns.
+        # v136 (2026-09-26): entity tables rebuilt, convert row action, panel heatmap clickable.
+        # v137 (2026-09-26): typed date/time fields replace the range picker.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v124"' in script
+        assert 'CACHE_NAME = "cc-shell-v137"' in script

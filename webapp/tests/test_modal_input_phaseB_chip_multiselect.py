@@ -114,6 +114,10 @@ class TestFormsRenderChipMultiselectNotTextInput:
 
 
 class TestCreateWithTwoLabelsStoresBoth:
+    """Task/event keep every posted label; Contacts is the one exception
+    (2026-09-26, "Contacts should only allow one label") -- see its own
+    test below, renamed to say so."""
+
     def test_create_task_with_two_labels(self, conn):
         tasks_router.create_task(
             title="Water plants", description="", due_at="", status="active",
@@ -131,14 +135,19 @@ class TestCreateWithTwoLabelsStoresBoth:
         events = [e for e in db.list_events(conn, start="2026-01-01", end="2026-12-31") if e["title"] == "Standup"]
         assert sorted(events[0]["tags"]) == ["Daily", "Work"]
 
-    def test_create_contact_with_two_labels(self, conn):
+    def test_create_contact_with_two_labels_keeps_only_the_first(self, conn):
+        # 2026-09-26 (Peter: "Contacts should only allow one label") --
+        # unlike task/event above, a contact truncates to its first
+        # picked label now (routers/contacts.py's _resolve_contact_label);
+        # the Label field is a single-select dropdown, so a well-behaved
+        # client can't post two anyway -- this is the defensive backstop.
         asyncio.run(contacts_router.create_contact(
             full_name="Grace Hopper", title="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[], birthday="",
             tags="", tags_labels=["Professor", "CS"], notes="", photo=None, conn=conn,
         ))
         row = db.list_contacts(conn)[0]
-        assert sorted(row["tags"]) == ["CS", "Professor"]
+        assert row["tags"] == ["Professor"]
 
 
 class TestEditAddOrRemoveLabel:

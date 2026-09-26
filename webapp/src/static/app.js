@@ -503,6 +503,20 @@ document.addEventListener("submit", (event) => {
       return;
     }
     const boxes = panel ? panel.querySelectorAll('input[type="checkbox"]') : [];
+    // "names" (2026-09-26, the label form's Sections / Show in): the ticked
+    // options' own names, or the dropdown's empty text.
+    if (mode === "names") {
+      const names = Array.from(boxes)
+        .filter((b) => b.checked)
+        .map((b) => {
+          const row = b.closest(".multiselect-option");
+          const span = row ? row.querySelector("span:last-child") : null;
+          return span ? span.textContent.trim() : "";
+        })
+        .filter(Boolean);
+      summary.textContent = names.length ? names.join(", ") : ms.dataset.msEmpty || "None";
+      return;
+    }
     const checked = Array.from(boxes).filter((b) => b.checked).length;
     if (mode === "select") {
       summary.textContent = checked === 0 ? "No " + (ms.dataset.msLabel || "selection") : checked + " selected";

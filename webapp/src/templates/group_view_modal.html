@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "_detail_cover.html" import detail_cover with context %}
+{% from "_label_pill.html" import label_pill with context %}
+{% block title %}{{ group.name }}{% endblock %}
+{% block content %}
+{# A group's view modal (2026-09-26, Peter: groups get view + edit modals
+   like labels; routers/label_pages.py group_view_modal). Cover = the
+   group's banner, or its colour; the icon is its own (or the default
+   group glyph). Footer: Done, Delete (its labels stay, ungrouped), Edit. #}
+<div id="modal-target" class="modal-stable-height">
+<div class="modal-header">
+    <div class="detail-header-inner">
+        {{ detail_cover('var(--cal-accent-' ~ (group.color or 'gray') ~ ')', banner, icon(group.icon or group_default_icon)) }}
+        <div class="detail-heading-row">
+            <div class="detail-heading-text">
+                <h1 class="detail-title">{{ group.name }}</h1>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal-body">
+<div class="detail-meta-panel">
+    <div class="detail-meta-grid">
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Labels</span>
+            <span class="detail-meta-value">{{ labels|length }}</span>
+        </div>
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Used in</span>
+            <span class="detail-meta-value">{{ usage }} item{{ 's' if usage != 1 }}</span>
+        </div>
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Page</span>
+            <span class="detail-meta-value"><a href="/groups/{{ group.name|urlencode }}">{{ icon('external-link', 'icon-sm') }} Open</a></span>
+        </div>
+        {% if labels %}
+        <div class="detail-meta-item detail-meta-wide">
+            <span class="detail-meta-label">In this group</span>
+            <span class="detail-meta-value">{% for l in labels %}{{ label_pill(l.name, 'modal') }} {% endfor %}</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+</div>
+{% set footer_back_label = 'Done' %}
+{% set footer_back_url = '/settings/groups' %}
+{% set footer_delete_url = '/groups/' ~ (group.name|urlencode) ~ '/delete' %}
+{% set footer_delete_mode = 'confirm' %}
+{% set footer_delete_label = 'Delete the group "' ~ group.name ~ '"? Its labels stay, ungrouped.' %}
+{% set footer_primary_href = '/groups/' ~ (group.name|urlencode) ~ '/edit' %}
+{% set footer_primary_label = 'Edit' %}
+{% set footer_primary_icon = 'edit' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

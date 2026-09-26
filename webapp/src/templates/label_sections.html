@@ -16,8 +16,15 @@
     {% if edit_mode %}
     <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
     {% endif %}
+    {% include "_label_page_actions.html" %}
 {% endcall %}
 {% include "_label_status.html" %}
+{% if label.description %}<p class="label-description">{{ label.description }}</p>{% endif %}
+{% include "_label_empty_state.html" %}
+{# 2026-09-25 (flesh-out item 6): a label nothing carries yet gets the one
+   empty state above instead of an empty Agenda, an empty Contacts list
+   and four empty Kanban columns. #}
+{% if label_usage_count != 0 %}
 
 <!-- Agenda: future events tagged with this label, its own deadline, and
      open due-dated tasks, in one chronological list. -->
@@ -31,7 +38,8 @@
         {% if item.kind == 'task' %}
         {{ widget_link_row('/tasks/' ~ item.uid, item.title, leading=widget_complete_button(item.uid), leading_class='widget-row-icon', right=widget_pill((item.start_at | relative_date), 'gray')) }}
         {% elif item.is_deadline %}
-        {{ widget_link_row(none, item.title, leading=icon('flag', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill('Deadline · ' ~ (item.start_at | relative_date), 'red')) }}
+        {# 2026-09-25 (UI audit L6): colored by how close it is, not always red. #}
+        {{ widget_link_row(none, item.title, leading=icon('flag', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill(label_deadline.text if label_deadline else ('Deadline · ' ~ (item.start_at | relative_date)), label_deadline.color if label_deadline else 'gray')) }}
         {% else %}
         {{ widget_link_row('/events/' ~ item.uid, item.title, leading=widget_event_dot(item.calendar_color), leading_class='widget-row-icon', right=widget_pill(((item.start_at | relative_date) ~ (' ' ~ (item.start_at | fmt_time) if not item.all_day else '')), 'blue')) }}
         {% endif %}
@@ -52,6 +60,7 @@
     <div class="widget-header"><h2>{{ icon('user', 'icon-sm') }} Contacts</h2></div>
     <div class="widget-content">
     {% set data = {'contacts': contacts} %}
+    {% set contacts_empty_text = 'No contacts tagged ' ~ label.name ~ ' yet.' %}
     {% include "_widget_contact_list.html" %}
     </div>
 </div>
@@ -61,6 +70,9 @@
 <!-- Tasks: every non-archived task carrying this label on a Kanban board
      grouped by status (drag and drop via static/tasks_board.js). -->
 {% if label.tasks_widget %}
+{# 2026-09-25 (UI audit L12): the board had no heading, unlike the Agenda
+   and Contacts sections above it. #}
+<div class="widget-header label-section-heading"><h2>{{ icon('check-square', 'icon-sm') }} Tasks</h2></div>
 <div class="kanban-board-wrap">
 <div class="kanban-board" id="kanban-board">
     {% for status in board_statuses %}
@@ -96,6 +108,7 @@
 {% endif %}
 {% if not (label.agenda_widget or label.contacts_widget or label.tasks_widget) %}
 <p class="text-muted">Nothing is switched on for this page. Turn on Agenda, Contacts or Tasks in this label's settings.</p>
+{% endif %}
 {% endif %}
 {% endblock %}
 {% block extra_scripts %}{% if label.tasks_widget %}<script defer src="{{ static_url('tasks_board.js') }}"></script>{% endif %}{% endblock %}

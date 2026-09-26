@@ -146,6 +146,7 @@ def habit_stats(
     created: date | None = None,
     kind: str | None = None,
     paused_dates: set[str] | None = None,
+    target_per_day: float | None = None,
 ) -> dict:
     """Streaks and progress for one habit.
 
@@ -153,6 +154,13 @@ def habit_stats(
     (kept / counted windows, None before any window counts), whether the
     habit is `due_today` (its open window isn't kept yet), and the open
     window's `period_done`/`period_target` (e.g. 2 of 3 this week).
+
+    `target_per_day` (2026-09-25, UI audit H-01): an amount habit ("8
+    glasses a day") only keeps a day once that day's value reaches the
+    target -- one +1 on 1/8 used to count as a fully kept day (streak,
+    strength, "On track", the widget's "All done"). A logged day below
+    target is a display-only "partial" (habit_view.day_state), never kept.
+    None/<=1 keeps the old any-value-counts rule.
     """
     today = today or date.today()
     if kind == "avoid":
@@ -163,7 +171,10 @@ def habit_stats(
     paused = paused_dates or set()
     excluded = (excluded_dates or set()) | paused
     schedule = parse_schedule(rrule, per_period, created)
-    done = {d for d, v in entries_by_date.items() if v and v > 0 and d <= today.isoformat()}
+    need = target_per_day if target_per_day and target_per_day > 1 else None
+    done = {
+        d for d, v in entries_by_date.items() if v and v > 0 and (need is None or v >= need) and d <= today.isoformat()
+    }
     dates = [date.fromisoformat(d) for d in done]
     if created and created <= today:
         dates.append(created)

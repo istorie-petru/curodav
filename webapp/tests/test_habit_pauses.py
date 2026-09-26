@@ -111,16 +111,19 @@ class TestRendering:
         assert [h["uid"] for h in resp.context["todo"]] == ["h2"]
         body = resp.body.decode()
         assert "Paused until" in body
-        assert 'action="/habits/pauses" class="habit-action habit-pause-form"' in body
+        # 2026-09-26: the add-pause form moved to the Pauses modal.
+        assert 'href="/habits/pauses" data-modal' in body
 
     def test_global_pause_listed_and_detail_form(self, conn):
         _habit(conn, "h1")
         db.add_habit_pause(conn, "g1", None, TODAY.isoformat(), TODAY.isoformat(), _now())
-        body = habits_router.habits_page(_req(), conn=conn).body.decode()
-        assert "All habits paused" in body and 'action="/habits/pauses/g1/delete"' in body
+        # 2026-09-26: listed in the Pauses modal, no longer on the page or
+        # in the habit's view modal (single-habit pauses are added there).
+        body = habits_router.pauses_modal(_req("/habits/pauses"), conn=conn).body.decode()
+        assert "<strong>All habits</strong>" in body and 'action="/habits/pauses/g1/delete"' in body
+        assert '<option value="h1">' in body
         detail = tasks_router.task_detail("h1", _req("/tasks/h1"), conn=conn).body.decode()
-        assert 'name="task_uid" value="h1"' in detail
-        assert "Pause this habit" in detail
+        assert "Pause this habit" not in detail
 
 
 class TestBackup:

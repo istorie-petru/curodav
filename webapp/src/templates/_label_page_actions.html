@@ -1,0 +1,22 @@
+{# A label page's own header actions (2026-09-25, UI audit flesh-out item
+   6): "Edit label" opens the same edit modal Settings > Labels uses, and
+   Archive / Unarchive is the label's lifecycle action. Both used to be
+   reachable only from Settings (edit) or, for a label with a deadline,
+   from the status row under the banner (archive). Rendered inside
+   page_header_narrow's actions slot by label_sections.html and
+   label_detail.html (not on a group page, which has no label to edit).
+
+   Archive asks first unless the label is "Pending Archiving" (every task
+   done and the deadline passed), same rule the status row used. A plain
+   label without a lifecycle can be archived too: it drops out of the
+   sidebar's Pinned list and its page says when it was archived. #}
+<a href="/settings/labels/{{ label.name|urlencode }}/edit" data-modal class="btn ghost label-page-edit">{{ icon('edit', 'icon-sm') }} Edit label</a>
+{% if label.archived_at %}
+<form method="post" action="/labels/{{ label.name|urlencode }}/unarchive" class="form-inline">
+    <button type="submit" class="btn ghost">{{ icon('archive', 'icon-sm') }} Unarchive</button>
+</form>
+{% else %}
+<form method="post" action="/labels/{{ label.name|urlencode }}/archive" class="form-inline"{% if label_status != 'Pending Archiving' %} data-confirm-sheet="Archive {{ label.name }}?{% if label_status %} It still has open tasks or its deadline hasn't passed yet.{% else %} Everything tagged with it keeps the label.{% endif %}"{% endif %}>
+    <button type="submit" class="btn {{ 'primary' if label_status == 'Pending Archiving' else 'ghost' }}">{{ icon('archive', 'icon-sm') }} Archive</button>
+</form>
+{% endif %}

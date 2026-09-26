@@ -226,6 +226,79 @@ class TestWeekViewRoute:
         assert "/calendar/timetable" not in body
 
 
+class TestPlannerHeaderButtons:
+    """Item 11's mockup header row: "+ New Task" and a ">>" collapse button
+    next to the existing prev/next/label-filter controls
+    (calendar_week.html)."""
+
+    def test_new_task_button_opens_the_shared_quick_add_modal(self, conn):
+        body = calendar_router.week_view(_request(), conn=conn).body.decode()
+        assert 'href="/quick/add?default_tab=task"' in body
+        assert "New Task" in body
+
+    def test_new_task_button_carries_the_active_label_filter(self, conn):
+        body = calendar_router.week_view(
+            _request(query_string=b"label=work"), label="work", conn=conn
+        ).body.decode()
+        # Jinja auto-escapes the `&` in an attribute value.
+        assert 'href="/quick/add?default_tab=task&amp;label=work"' in body
+
+    def test_header_gets_a_second_panel_toggle_sharing_the_same_class(self, conn):
+        """`unscheduled_panel_toggle.js` drives both buttons off one shared
+        class + localStorage state -- see that file's own header comment.
+        Counts the real `class="..."` attribute, not the bare class name --
+        _calendar_week_grid.html's own explanatory HTML comment also
+        mentions it by name, and an HTML comment still renders into the
+        output (unlike a Jinja `{# #}` comment)."""
+        body = calendar_router.week_view(_request(), conn=conn).body.decode()
+        assert 'id="unscheduled-panel-toggle-header"' in body
+        assert body.count('class="icon-btn unscheduled-panel-toggle-btn"') == 2  # header + panel's own
+
+
+class TestUnscheduledPanelHeaderCountAndSearch:
+    """Item 11 redesign: an item-count badge and a client-side search box
+    join the panel's existing collapse toggle in its header."""
+
+    def test_count_badge_reflects_the_list_length(self, conn):
+        _task(conn, "t1", title="Research")
+        _task(conn, "t2", title="Plan")
+        db.create_work_allocation(conn, "t1")
+        db.create_work_allocation(conn, "t2")
+        body = calendar_router.week_view(_request(), conn=conn).body.decode()
+        assert '<span class="unscheduled-panel-count">(2)</span>' in body
+
+    def test_count_badge_is_zero_when_empty(self, conn):
+        body = calendar_router.week_view(_request(), conn=conn).body.decode()
+        assert '<span class="unscheduled-panel-count">(0)</span>' in body
+
+    def test_search_box_present_and_wired_to_its_own_script(self, conn):
+        body = calendar_router.week_view(_request(), conn=conn).body.decode()
+        assert 'id="unscheduled-search"' in body
+        assert "unscheduled_panel_search.js" in body
+
+
+class TestUnscheduledPanelJSStructure:
+    """Structural source checks (no browser harness in this suite, same
+    convention as TestGridDragConflictFix/TestClickOpensTaskModal above):
+    the row's new "+"/"..." controls must (a) never start a drag, and (b)
+    still get async-crud (no full reload) treatment on submit."""
+
+    def test_drag_begin_ignores_pointerdown_inside_row_actions(self):
+        script = (_STATIC_DIR / "project_calendar.js").read_text()
+        assert 'e.target.closest(".unscheduled-row-actions")' in script
+
+    def test_add_session_and_remove_latest_forms_are_intercepted(self):
+        script = (_STATIC_DIR / "project_calendar.js").read_text()
+        assert ".unscheduled-add-session-form" in script
+        assert ".unscheduled-remove-latest-form" in script
+
+    def test_action_menu_rebound_after_region_swap(self):
+        script = (_STATIC_DIR / "project_calendar.js").read_text()
+        assert "window.CCActionMenu" in script
+        async_script = (_STATIC_DIR / "async_calendar.js").read_text()
+        assert "window.CCUnscheduledSearch" in async_script
+
+
 class TestTimetableRedirect:
     def test_old_timetable_link_redirects_to_week(self, conn):
         resp = calendar_router.timetable_view_redirect()
@@ -341,39 +414,44 @@ class TestDeleteWeekAllocation:
         assert by_uid[event_uids[2]]["start_at"] is not None
 
 
-class TestUnscheduledPanelStepper:
-    """"Unscheduled work" panel: per-item pill shows sessions still needing
-    placement (`undated_count`), not the task's total session count.
-    2026-09-10 (audit-fixes-2.1.md, direct request): the item's own +/-
-    stepper buttons are gone -- a plain click on the item itself now opens
-    the task view modal (project_calendar.js's pointer-drag `end()`, a
-    release with no drag; see TestClickOpensTaskModal below), and there is
-    no in-panel way to add or remove a session anymore -- both now live on
-    the task modal's own Work sessions card."""
+class TestUnscheduledPanelRowActions:
+    """"Unscheduled work" panel row (item 11, 2026-09-26 redesign): each row
+    now shows an "Estimated Xh" meta line and carries its own "+" (add
+    another session) and "..." (Edit/Remove latest session/Delete task)
+    row actions -- see _unscheduled_task_item.html's own header comment.
+    This supersedes the 2026-09-10 "no in-panel way to add or remove a
+    session, both live only on the task modal's Work sessions card"
+    decision for these two specific actions (Edit still opens the same
+    modal; the plain click-opens-modal behavior on the rest of the row is
+    UNCHANGED, see TestClickOpensTaskModal below) -- the bare per-row
+    "unscheduled-count" pill this class used to test for is gone, folded
+    into that same meta line instead."""
 
-    def test_item_has_no_plus_or_minus_buttons(self, conn):
+    def test_row_has_add_session_and_kebab_menu(self, conn):
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1")  # one undated session
         body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert 'data-task-uid="t1"' in body
-        assert "unscheduled-count" in body
+        row = body.split('data-task-uid="t1"')[1].split("</div>\n    </div>\n</div>")[0]
+        assert 'action="/tasks/t1/work-allocations"' in row
+        assert 'action="/tasks/t1/work-allocations/remove-latest"' in row
+        assert 'href="/tasks/t1/edit"' in row
+        assert 'action="/tasks/t1/delete"' in row
         assert "unscheduled-stepper" not in body
         assert "unscheduled-step-btn" not in body
-        assert "/tasks/t1/work-allocations/remove-latest" not in body
-        # No <form> at all -- adding a session is a plain JS click now, not
-        # a submitted form (see project_calendar.js's end()).
-        assert "<form" not in body.split('id="unscheduled-panel"')[1].split("</aside>")[0]
 
-    def test_count_reflects_sessions_still_needing_placement(self, conn):
+    def test_estimated_hours_reflect_undated_plus_scheduled(self, conn):
         _task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1")
         db.create_work_allocation(conn, "t1")
         body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
-        assert '<span class="unscheduled-count" title="Sessions still needing placement">2</span>' in body
+        # work_allocation_panel_info's total_hours: 0 scheduled + 2 undated
+        # sessions (1 default hour each) = 2.0.
+        assert "Estimated 2.0h" in body
 
         calendar_router.create_week_allocation(
             task_uid="t1", start_at=f"{_MONDAY}T16:00:00", end_at=f"{_MONDAY}T17:00:00", date_=_MONDAY, conn=conn
@@ -381,28 +459,10 @@ class TestUnscheduledPanelStepper:
         body = calendar_router.week_view(
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
-        assert '<span class="unscheduled-count" title="Sessions still needing placement">1</span>' in body
-
-    def test_count_still_shown_with_more_than_one_undated_session(self, conn):
-        _task(conn, "t1", title="Research")
-        db.create_work_allocation(conn, "t1")
-        db.create_work_allocation(conn, "t1")
-        body = calendar_router.week_view(
-            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
-        ).body.decode()
-        assert "/tasks/t1/work-allocations/remove-latest" not in body
-        assert '<span class="unscheduled-count" title="Sessions still needing placement">2</span>' in body
-
-    def test_card_is_one_line_without_hours(self, conn):
-        _task(conn, "t1", title="Research")
-        db.create_work_allocation(conn, "t1")
-        body = calendar_router.week_view(
-            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
-        ).body.decode()
-        assert "unscheduled-count" in body
-        assert "unscheduled-hours" not in body
-        assert "unscheduled-grip" not in body
-        assert "unscheduled-task-body" not in body
+        # One session placed (1.0h scheduled) + the one still-undated
+        # session's own default hour = 2.0 either way (total_hours doesn't
+        # change on placement, only undated_count does).
+        assert "Estimated 2.0h" in body
 
     def test_item_has_no_native_draggable_attribute(self, conn):
         _task(conn, "t1", title="Research")
@@ -411,6 +471,22 @@ class TestUnscheduledPanelStepper:
             _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert 'draggable="true"' not in body
+
+    def test_row_actions_live_inside_the_guarded_wrapper(self, conn):
+        """project_calendar.js's drag `begin()` only lets a pointerdown
+        through untouched inside `.unscheduled-row-actions` -- both new
+        forms and the kebab trigger must actually live there, or a click on
+        them would be swallowed into a drag-start instead of submitting/
+        opening the menu."""
+        _task(conn, "t1", title="Research")
+        db.create_work_allocation(conn, "t1")
+        body = calendar_router.week_view(
+            _request(query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
+        ).body.decode()
+        row = body.split('data-task-uid="t1"')[1].split("</div>\n    </div>\n</div>")[0]
+        actions = row.split('class="unscheduled-row-actions"')[1]
+        assert "unscheduled-add-session-form" in actions
+        assert "action-menu-trigger" in actions
 
 
 class TestClickOpensTaskModal:
@@ -459,57 +535,30 @@ class TestClickOpensTaskModal:
         assert "window.location.href = url" in click_branch
 
 
-class TestUnscheduledPanelFixedHeight:
-    """Direct bug report (2026-09-08), same session as the class above:
-    "dragging and dropping from unscheduled work to the planner, and vice
-    versa, should not move the scrollbar page." Root cause: #unscheduled-
-    panel-body's outer height used to be purely a function of its item
-    count (`.project-calendar-unscheduled` is `flex:none`) -- scheduling or
-    unscheduling one task changes that count by exactly one, reflowing the
-    grid card below it in the same flex column even though the grid's own
-    `.time-grid-wrap` scrollTop (already preserved, async_calendar.js
-    `refreshWeek`) never moved. A plain block move/resize never touches this
-    panel's item count, which is why the report was scoped to exactly the
-    two unscheduled<->planner drag directions. Fix: a fixed (not max-)
-    height + its own overflow-y:auto on style.css's `#unscheduled-panel-body`
-    so the aside's own footprint can no longer change with item count. A
-    first pass fixed it at ~3 rows (84px) -- a direct follow-up report
-    ("the Unscheduled work div got bigger") caught that this read as a
-    size regression for the common one-or-two-item case, so it's now
-    sized to exactly one row (26px) instead, still fixed either way. A
-    second follow-up ("it shouldn't have a sidebar") caught that a one-row
-    box hits its own scrollbar far more often than the 3-row one did, so
-    the track is now hidden (scrollbar-width:none + the -webkit- override,
-    same pattern .tabbar already uses) -- still scrollable, just no
-    visible track. A third follow-up ("I would like to have it have the min
-    height a bit bigger") caught that 26px (the exact content height of one
-    row, no slack) read as cramped -- bumped to 36px, still a fixed height
-    either way."""
+class TestUnscheduledPanelNoLongerReflowsTheGrid:
+    """2026-09-26 (item 11 redesign): the panel moved from ABOVE the grid to
+    BELOW it in `_calendar_week_grid.html` -- `.project-calendar-layout` is
+    still a plain flex column, but the grid is now the FIRST child, so a
+    later sibling's height changing (scheduling/unscheduling a task changes
+    the panel's own row count) can no longer reflow the grid card above it.
+    This retires the old 2026-09-08 "fixed 36px/24px height + hidden
+    scrollbar track on #unscheduled-panel-body" hack entirely (see git
+    history on this file/style.css for that fix's own long paper trail) --
+    the panel is free to size to its content now."""
 
-    def test_panel_body_has_a_fixed_height_with_its_own_scroll(self):
+    def test_panel_body_has_no_fixed_height_hack_left(self):
         css = (_STATIC_DIR / "style.css").read_text()
-        assert "#unscheduled-panel-body{height:36px; overflow-y:auto; scrollbar-width:none;}" in css
-        assert "#unscheduled-panel-body::-webkit-scrollbar{display:none;}" in css
-        # A max-height (not a fixed height) would still shrink/grow with
-        # content and reintroduce the exact reflow this fix removes.
-        assert "#unscheduled-panel-body{max-height:" not in css
+        assert "#unscheduled-panel-body{height:" not in css
+        assert "#unscheduled-panel-body::-webkit-scrollbar{display:none;}" not in css
 
-
-class TestUnscheduledPanelToggleStaysOnTheRight:
-    """Direct follow-up report (2026-09-08), same session as the two classes
-    above: collapsing the "Unscheduled work" panel moved its toggle button
-    from the right edge of the header to the left. Root cause:
-    `.unscheduled-panel-head` is `justify-content:space-between` with two
-    children (the h2 title + the toggle button) -- collapsing hides the h2
-    (`display:none`), leaving the toggle as the row's ONLY flex item, and
-    `space-between` puts a lone flex item at flex-start (left), not
-    flex-end. Fix: `#unscheduled-panel-toggle{margin-left:auto;}` pins it to
-    the row's own right edge regardless of whether its sibling is present in
-    layout."""
-
-    def test_toggle_has_margin_left_auto(self):
+    def test_toggle_still_pins_to_the_row_end(self):
+        """Both toggle buttons (the panel's own + the page header's new
+        second one, per the mockup's own "[>>]" control) share one class,
+        `.unscheduled-panel-toggle-btn` -- style.css pins it to the row's
+        right edge the same way the old id-scoped rule pinned the single
+        button that used to be the only one."""
         css = (_STATIC_DIR / "style.css").read_text()
-        assert "#unscheduled-panel-toggle{margin-left:auto;}" in css
+        assert ".unscheduled-panel-toggle-btn{margin-left:auto;}" in css
 
 
 class TestGridDragConflictFix:

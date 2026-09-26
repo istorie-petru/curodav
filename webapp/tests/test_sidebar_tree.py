@@ -164,11 +164,9 @@ class TestSidebarQuickAdd:
         db.upsert_label_config(conn, {"name": "Solo", "created_at": _now()})
         resp = label_pages.label_page("Solo", _request("/labels/Solo", conn), conn=conn)
         body = resp.body.decode()
-        # label_detail's own active_tab is "label" (a single label's page,
-        # distinct from the "labels" manage table) -- 2026-09-14: this
-        # still defaults quick-add to the Label tab, same as the manage
-        # page, not the generic "task" fallback other pages get.
-        assert 'href="/quick/add?default_tab=label" data-modal class="tab-btn sidebar-quick-add"' in body
+        # 2026-09-25 (UI audit L1): a label's page opens the Task tab with
+        # the label prefilled (it used to open New label).
+        assert 'href="/quick/add?default_tab=task&amp;label=Solo" data-modal class="tab-btn sidebar-quick-add"' in body
 
     def test_contacts_page_points_quick_add_at_contact_tab(self, conn):
         # 2026-09-14 (direct request, "the quick add should support both

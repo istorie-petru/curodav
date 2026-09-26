@@ -38,6 +38,17 @@
 <span class="cal-nav-label" id="cal-nav-label" aria-live="polite">{{ label_text }}</span>
 <a class="icon-btn cal-nav-next" href="/calendar/week?date_={{ next_week }}{{ _lq }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>
 {{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
+{# 2026-09-26 (item 11 redesign mockup): "+ New Task" -- the SAME merged
+   quick-add modal the sidebar's own global "+ New" already opens
+   (base.html), just defaulted to the task tab and pre-scoped to whatever
+   label this Planner is currently filtered to -- not a second, separate
+   task-creation path. The ">>" collapse button is the header's OWN trigger
+   for the Unscheduled work panel below (unscheduled_panel_toggle.js's
+   shared `.unscheduled-panel-toggle-btn` state -- see that file's own
+   header comment); it lives outside `#week-grid` so a region swap never
+   detaches its click binding. #}
+<a class="btn btn-sm" href="/quick/add?default_tab=task{{ _lq }}" data-modal>{{ icon('plus', 'icon-sm') }} New Task</a>
+<button type="button" class="icon-btn unscheduled-panel-toggle-btn" id="unscheduled-panel-toggle-header" title="Collapse Unscheduled work" aria-label="Collapse Unscheduled work" aria-expanded="true" aria-controls="unscheduled-panel-body">{{ icon('sidebar', 'icon-sm') }}</button>
 {% endcall %}
 <!-- 1.9 side work: Week merged with the former "Timetable" sub-view (see
      _calendar_week_grid.html's own top comment -- the whole grid lives in
@@ -82,5 +93,9 @@
 <script defer src="{{ static_url('project_calendar.js') }}"></script>
 <script defer src="{{ static_url('calendar_week_allday_drag.js') }}"></script>
 <script defer src="{{ static_url('unscheduled_panel_toggle.js') }}"></script>
+<script defer src="{{ static_url('unscheduled_panel_search.js') }}"></script>
+<!-- 2026-09-25 (UI audit C-7): auto-scroll to the first event/now and the
+     today now-line, see calendar_now.js's own header. -->
+<script defer src="{{ static_url('calendar_now.js') }}"></script>
 <script defer src="{{ static_url('async_calendar.js') }}"></script>
 {% endblock %}

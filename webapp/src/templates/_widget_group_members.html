@@ -1,0 +1,41 @@
+<!-- Data: {rows} -- routers/dashboard.py::_render_group_members. Item 20
+     (2026-09-26, "redesign the toolbar's group-labels as a custom
+     dashboard widget: show every label/project under a group with its
+     related data, in the same spirit as the Unscheduled Work mockup").
+     Each member is a row: the label's own identity pill (`.cell-tag.cal-*`,
+     same swatch _widget_spaces_projects.html's "list" style already uses,
+     not widget_pill -- a genuinely different kind of colored chip) plus a
+     muted meta line (open task count, upcoming event count if any, next
+     due date if any), and a "..." kebab (_action_menu.html -- the same
+     shared macro item 11's redesigned Unscheduled Work row uses, per the
+     direct instruction to build these two together since they share
+     components).
+
+     The row is a wrapper `<div>`, not one whole-row `<a>` (same "can't
+     nest a kebab's own <form> inside an anchor" reasoning
+     _unscheduled_task_item.html/_contacts_body.html's row-wrap already
+     follow) -- `.group-member-link` is the inner clickable name+meta,
+     the kebab sits beside it. -->
+{% from "_widget_items.html" import widget_empty %}
+{% from "_action_menu.html" import action_menu with context %}
+{% if data.rows %}
+<div class="group-member-list">
+    {% for row in data.rows %}
+    <div class="group-member-row">
+        <a class="group-member-link" href="/labels/{{ row.label.name|urlencode }}">
+            <span class="cell-tag cal-{{ row.label.color }}">{{ icon(row.label.icon or 'tag', 'icon-sm') }} {{ row.label.name }}</span>
+            <span class="group-member-meta">
+                <span>{{ row.open_task_count }} open task{{ 's' if row.open_task_count != 1 }}</span>
+                {% if row.upcoming_event_count %}<span>{{ row.upcoming_event_count }} upcoming event{{ 's' if row.upcoming_event_count != 1 }}</span>{% endif %}
+                {% if row.next_due %}<span>Next due {{ row.next_due | relative_date }}</span>{% endif %}
+            </span>
+        </a>
+        {{ action_menu([
+            {'label': 'Edit label', 'icon': 'edit', 'href': '/settings/labels/' ~ (row.label.name|urlencode) ~ '/edit', 'modal': true},
+        ], aria_label='More actions for ' ~ row.label.name) }}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+{{ widget_empty('No labels in this group yet.') }}
+{% endif %}

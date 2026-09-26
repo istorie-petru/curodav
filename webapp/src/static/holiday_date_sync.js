@@ -4,16 +4,12 @@
 // initial set both can be changed without any sync between them. This is
 // only to make one day hollyday easier to add.").
 //
-// Each date is its own `.dtp[data-dtp-mode="date"]` instance
-// (_datetime_picker.html), so picking one fires a plain `change` event on
-// its own hidden input (datetime_picker.js's commitChange()) with no
-// awareness of the other field. This script listens for that change and,
-// only when the *other* field is still empty, fills it with the same date
-// via the small `dtpSetDate` hook datetime_picker.js's enhance() exposes on
-// each `.dtp` container -- that hook updates the other picker's own hidden
-// input + visible trigger label the same way a real pick would, without
-// dispatching another change event (so there's no risk of this listener
-// re-triggering itself back and forth).
+// Each date is its own date field (_date_time_fields.html, 2026-09-26),
+// so a pick or typed date fires a plain `change` on its own hidden input
+// with no awareness of the other field. This script listens for that
+// change and, only when the *other* field is still empty, fills it with
+// the same date through window.CCDateField.set (date_time_fields.js). The
+// second change that fires can't loop: by then both fields have a value.
 //
 // "the other one should be automatically set the same... after the
 // initial set both can be changed without any sync" -- both fields being
@@ -29,21 +25,15 @@
 
     const fromInput = form.querySelector('input[name="date_from"]');
     const toInput = form.querySelector('input[name="date_to"]');
-    if (!fromInput || !toInput) return;
+    if (!fromInput || !toInput || !window.CCDateField) return;
 
-    const fromContainer = fromInput.closest(".dtp");
-    const toContainer = toInput.closest(".dtp");
-    if (!fromContainer || !toContainer) return;
-
+    // 2026-09-26: the fields are _date_time_fields.html date fields now;
+    // CCDateField.set updates the other one's box and hidden value.
     fromInput.addEventListener("change", () => {
-      if (fromInput.value && !toInput.value && toContainer.dtpSetDate) {
-        toContainer.dtpSetDate(fromInput.value);
-      }
+      if (fromInput.value && !toInput.value) window.CCDateField.set(toInput, fromInput.value);
     });
     toInput.addEventListener("change", () => {
-      if (toInput.value && !fromInput.value && fromContainer.dtpSetDate) {
-        fromContainer.dtpSetDate(toInput.value);
-      }
+      if (toInput.value && !fromInput.value) window.CCDateField.set(fromInput, toInput.value);
     });
   }
 

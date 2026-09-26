@@ -51,5 +51,7 @@
     {% endfor %}
 </div>
 {% else %}
-{{ widget_empty('No contacts match this filter.') }}
+{# 2026-09-25 (UI audit L12): a label page's Contacts section has no
+   filter to "match", so it passes its own `contacts_empty_text`. #}
+{{ widget_empty(contacts_empty_text if contacts_empty_text is defined and contacts_empty_text else 'No contacts match this filter.') }}
 {% endif %}

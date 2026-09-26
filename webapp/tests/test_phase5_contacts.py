@@ -88,6 +88,10 @@ class TestNoCategoryColumn:
 
 class TestCreateEditFlowHasNoCategory:
     def test_create_contact_flow_never_touches_category(self, conn):
+        # 2026-09-26 (Peter: "Contacts should only allow one label") --
+        # the legacy comma-separated `tags` fallback field truncates to
+        # its first entry now, same as the real single-select Label field
+        # does; "Professor, CS" used to keep both.
         asyncio.run(contacts_router.create_contact(
             full_name="Grace Hopper", title="", org="Navy",
             phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
@@ -95,7 +99,7 @@ class TestCreateEditFlowHasNoCategory:
         ))
         row = db.list_contacts(conn)[0]
         assert "category" not in row
-        assert sorted(row["tags"]) == ["CS", "Professor"]
+        assert row["tags"] == ["Professor"]
 
     def test_update_contact_flow_never_touches_category(self, conn):
         uid = _make_contact(conn, tags=["Old"])
@@ -141,24 +145,46 @@ class TestFilterByLabelReplacesCategory:
 
 
 class TestNoSpecialArchivedState:
-    """2026-08-07: Active/Archived removed entirely -- Contacts has no
+    """History of this class's own name, now stale twice over -- kept as a
+    literal paper trail rather than renamed, since the "view" param checks
+    below are still genuinely true today:
+
+    2026-08-07: Active/Archived removed entirely -- Contacts had no
     dedicated *state*/endpoints for it, only a label, same as every other
-    object type. `archive_contact`/`unarchive_contact`/the `view` query
-    param still don't exist -- there is no second CRUD path.
+    object type.
 
-    2026-09-21 direct request reverses the *visibility* half of this
-    decision specifically for Contacts: "archived labels should not be
-    visible normally." Tagging a contact "Archived" is still just a
-    label (no new column, no new endpoint) -- but routers/contacts.py's
-    own list/filter logic now gives that one label name a real, built-in
-    default-hidden behavior. See test_phase7_contacts_global.py's
-    TestArchivedDefaultExclusion for that behavior's own tests -- this
-    class only covers the "no second CRUD path exists" half, which is
-    still true."""
+    2026-09-21 direct request reversed the *visibility* half of that:
+    "archived labels should not be visible normally" -- tagging a contact
+    "Archived" became a label with real, built-in default-hidden behavior
+    (still just a label, no new column/endpoint, at that point).
 
-    def test_no_archive_endpoints_exist(self):
-        assert not hasattr(contacts_router, "archive_contact")
-        assert not hasattr(contacts_router, "unarchive_contact")
+    Item 19 (2026-09-26, same day as this test update) reverses the rest:
+    "an archive flag is never counted as a label -- separate data model
+    entirely." `archive_contact`/`unarchive_contact` (routers/contacts.py)
+    are real routes now, backed by the real `contacts.archived_at` column
+    (db.py) -- see `migrate_archived_contact_label`'s own docstring for
+    why the label-based predecessor was actively wrong once item 16
+    restricted a contact to one label total (archiving one ate the
+    contact's real category label). See test_phase7_contacts_global.py's
+    TestArchivedDefaultExclusion for the default-hidden behavior's own
+    tests, and test_contacts_archive_column.py for the new column/routes
+    themselves -- this class only still covers the "no `view` query param"
+    checks, unrelated to any of the above and still true today."""
+
+    def test_archive_endpoints_exist_and_are_column_backed(self, conn):
+        # The inverse of this class's old-named check -- see the class
+        # docstring above for why "no archive endpoints" stopped being
+        # true. Full behavioral coverage lives in
+        # test_contacts_archive_column.py; this is just the "yes, this
+        # reversed" regression marker in the same place the old negative
+        # assertion used to live.
+        assert hasattr(contacts_router, "archive_contact")
+        assert hasattr(contacts_router, "unarchive_contact")
+        uid = _make_contact(conn, uid="c1")
+        contacts_router.archive_contact(uid, conn=conn)
+        assert db.get_contact(conn, uid)["archived_at"]
+        contacts_router.unarchive_contact(uid, conn=conn)
+        assert db.get_contact(conn, uid)["archived_at"] is None
 
     def test_list_contacts_has_no_view_param(self):
         import inspect

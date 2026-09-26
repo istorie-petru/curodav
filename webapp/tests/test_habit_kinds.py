@@ -91,19 +91,20 @@ class TestRendering:
         _habit(conn, "w1", "Water", target_per_day=8, habit_unit="glasses")
         body = habits_router.habits_page(_req(), conn=conn).body.decode()
         assert "8 glasses a day" in body
-        detail = tasks_router.task_detail("w1", _req("/tasks/w1"), conn=conn).body.decode()
-        assert "Amount (glasses)" in detail
+        form = tasks_router.edit_task_form("w1", _req("/tasks/w1/edit"), conn=conn).body.decode()
+        assert 'name="habit_unit" id="habit-unit" maxlength="24" placeholder="glasses" value="glasses"' in form
+        assert 'data-goal="amount"' in form
 
     def test_avoid_detail(self, conn):
         _habit(conn, "a1", "No smoking", habit_kind="avoid")
         body = tasks_router.task_detail("a1", _req("/tasks/a1"), conn=conn).body.decode()
-        assert "Log a relapse" in body
+        assert "Log a relapse" not in body  # 2026-09-26: removed from the view modal
         assert "heatmap-avoid" in body
-        assert "habit-month detail-plain-section is-avoid" in body
         assert habit_view.cadence_label({"habit_kind": "avoid", "recurrence": "FREQ=DAILY"}) == "Avoid"
 
     def test_form_preselects(self, conn):
         _habit(conn, "a1", "No smoking", habit_kind="avoid", habit_unit="cigs")
         body = tasks_router.edit_task_form("a1", _req("/tasks/a1/edit"), conn=conn).body.decode()
-        assert '<option value="avoid" selected>' in body
+        assert 'name="habit_kind" value="avoid"' in body and 'Avoid it' in body
+        assert 'data-ms-label="kind"' in body  # the app's dropdown, not pills
         assert 'value="cigs"' in body

@@ -582,10 +582,16 @@ def _render_mini_month_calendar(conn, config: dict, nav: dict | None = None) -> 
     prev/next convention routers/calendar.py's month_view already uses --
     plain full-page links, no JS required. Defaults to the real today's
     month when nav is absent (first load, or any other widget type)."""
+    # 2026-09-25 (UI audit C-15): honour Settings > General "Week starts
+    # on" like the real Month/4-Week views do -- this was hardcoded Monday.
+    # Imported here (not at module top) to keep this fix to this widget.
+    from ..deps import WEEK_START_KEY
+
+    week_start = db.get_app_meta(conn, WEEK_START_KEY) or "monday"
     today = date.today()
     year = (nav or {}).get("year") or today.year
     month = (nav or {}).get("month") or today.month
-    cal = py_calendar.Calendar(firstweekday=0)
+    cal = py_calendar.Calendar(firstweekday=6 if week_start == "sunday" else 0)
     weeks_raw = cal.monthdatescalendar(year, month)
     month_start = weeks_raw[0][0].isoformat()
     month_end = weeks_raw[-1][-1].isoformat()
@@ -610,8 +616,12 @@ def _render_mini_month_calendar(conn, config: dict, nav: dict | None = None) -> 
     ]
     prev_month, prev_year = (12, year - 1) if month == 1 else (month - 1, year)
     next_month, next_year = (1, year + 1) if month == 12 else (month + 1, year)
+    weekday_initials = ["M", "T", "W", "T", "F", "S", "S"]
+    if week_start == "sunday":
+        weekday_initials = weekday_initials[6:] + weekday_initials[:6]
     return {
         "weeks": weeks,
+        "weekday_initials": weekday_initials,
         "month_label": date(year, month, 1).strftime("%B %Y"),
         "prev_year": prev_year,
         "prev_month": prev_month,
@@ -661,6 +671,13 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
     # page it shows that group's pinned labels; on a label's page, nothing
     # (a label has no sub-labels); on Home, every pinned label (List) or
     # every group plus every pinned label with no group (Cards).
+    # 2026-09-25 (audit flesh-out item 5): each label also carries its
+    # deadline state (label_pages.deadline_info -- overdue red, within 7
+    # days orange, later neutral), so "due soon / overdue" is visible from
+    # Home, not only on the label's own page. Imported here: label_pages
+    # imports this module at load time.
+    from .label_pages import deadline_info
+
     style = config.get("style") or "list"
     label_name = config.get("label_name") if config.get("scope") != "everything" else None
     pinned = [lbl for lbl in db.list_labels(conn) if lbl.get("widget_pin") and not lbl.get("archived_at")]
@@ -675,12 +692,14 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
         if not label_name:
             for g in db.list_groups(conn):
                 n = len(g["labels"])
+                # 2026-09-25: the group's own look (UI audit L3) -- this
+                # widget still hard-coded `layers`/gray for every group.
                 cards.append({
                     "uid": db.group_page_key(g["name"]),
                     "name": g["name"],
                     "href": f"/groups/{g['name']}",
-                    "icon": "layers",
-                    "color": "gray",
+                    "icon": g.get("icon") or "layers",
+                    "color": g.get("color") or "gray",
                     "description": "",
                     "meta": f"{n} label{'' if n == 1 else 's'}",
                 })
@@ -695,6 +714,7 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
                 "color": lbl.get("color") or "blue",
                 "description": lbl.get("description") or "",
                 "meta": "Project" if lbl.get("is_project") else "Label",
+                "deadline": deadline_info(lbl),
             })
         return {"style": "cards", "cards": cards}
 
@@ -704,8 +724,63 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
         total = len(tasks)
         done = len([t for t in tasks if t["status"] in ("done", "archived")])
         progress = round(100 * done / total) if total else None
-        previews.append({"project": lbl, "progress": progress, "tasks_done": done, "tasks_total": total})
+        previews.append({"project": lbl, "progress": progress, "tasks_done": done, "tasks_total": total,
+                         "deadline": deadline_info(lbl)})
     return {"style": "list", "previews": previews}
+
+
+def _render_group_members(conn, config: dict, nav: dict | None = None) -> dict:
+    """Item 20 (2026-09-26, Peter's queued list, direct instruction "start
+    work on item 11 and 20 because they have shared components" -- see
+    _action_menu.html, reused by this widget's own row below): redesigns
+    the group page's old always-visible "group-labels" toolbar
+    (label_detail.html used to render a plain row of pill links
+    unconditionally -- "the collapsed sidebar can't expand a group, so
+    this is the always-available way in") as a real dashboard widget. Each
+    member label/project is now a row card, not a bare pill, showing its
+    own related data -- open task count, upcoming event count, and the
+    nearest upcoming due date/event start across both -- "in the same
+    spirit as the Unscheduled Work mockup" per the item's own wording.
+
+    Auto-scoped to the group page it's seeded on via `config["label_name"]`
+    (the normal per-page auto-scope every widget type gets -- see
+    `add_widget`/`widget_page_context`); `db.group_from_page_key` recovers
+    the group name from that key. Deliberately renders an empty row list
+    rather than raising if it's ever placed somewhere that isn't a group
+    page (label_name unset, or a plain label's key, which has no group) --
+    `_SCOPE_EXCLUDED_TYPES` already keeps the picker from offering it
+    there, this is just defense in depth for a manually-forged config.
+
+    Deliberately independent of `_render_spaces_projects`'s own
+    `widget_pin` filtering just above -- item 20 wants EVERY member
+    visible, the same guarantee the toolbar it replaces gave, not just the
+    ones a user has separately opted into showing on Home."""
+    group = db.group_from_page_key(config.get("label_name"))
+    if not group:
+        return {"rows": []}
+    now = datetime.now(timezone.utc).isoformat()
+    all_tasks = db.list_tasks(conn)
+    all_events = db.list_events(conn)
+    rows = []
+    for name in db.group_member_names(conn, group):
+        lbl = db.effective_label_config(conn, name)
+        open_tasks = [
+            t for t in all_tasks
+            if name in (t.get("tags") or []) and t.get("status") not in ("done", "archived")
+        ]
+        upcoming_events = [
+            e for e in all_events
+            if name in (e.get("tags") or []) and e.get("start_at") and e["start_at"] >= now
+        ]
+        due_candidates = [t["due_at"] for t in open_tasks if t.get("due_at")]
+        due_candidates += [e["start_at"] for e in upcoming_events]
+        rows.append({
+            "label": lbl,
+            "open_task_count": len(open_tasks),
+            "upcoming_event_count": len(upcoming_events),
+            "next_due": min(due_candidates) if due_candidates else None,
+        })
+    return {"rows": rows}
 
 
 # _render_streak/_render_next_deadline/_render_organize_today (2026-08-15
@@ -943,11 +1018,19 @@ def _render_habit_checkin(conn, config: dict, nav: dict | None = None) -> dict:
     # "n of N done" summary and an all-done state.
     todo = [h for h in rows if h["due_today"]]
     rest = [h for h in rows if not h["due_today"]]
+    # 2026-09-25 (UI audit H-08): the "n of N done" summary and the all-done
+    # state count only habits that can be done today -- an avoid habit has
+    # nothing to check off and a paused one is on hold, so neither counts
+    # as "done" (they used to). Counted here, once, instead of in the
+    # template, so every consumer of this dict agrees.
+    countable = [h for h in rows if not h.get("is_avoid") and not h.get("paused_today")]
+    open_count = sum(1 for h in countable if h["due_today"])
     return {
         "rows": todo + rest,
-        "todo_count": len(todo),
-        "total": len(rows),
-        "all_done": bool(rows) and not todo,
+        "todo_count": open_count,
+        "total": len(countable),
+        "done_count": len(countable) - open_count,
+        "all_done": bool(countable) and not open_count,
     }
 
 
@@ -1171,6 +1254,17 @@ WIDGET_TYPES: dict[str, dict] = {
         "uses": {"events"},
         "default_width": "half",
     },
+    # "group_members" (item 20, 2026-09-26) -- see _render_group_members'
+    # own docstring. "full" width: a row per member label/project (item
+    # 11's redesigned Unscheduled Work row is the same "full-width row
+    # list, not a narrow stat block" shape).
+    "group_members": {
+        "label": "Group labels",
+        "template": "_widget_group_members.html",
+        "render": _render_group_members,
+        "uses": {"tasks", "events"},
+        "default_width": "full",
+    },
 }
 
 # --------------------------------------------------------------------- #
@@ -1213,6 +1307,12 @@ WIDGET_SOURCES: dict[str, dict] = {
     # WIDGET_VIEWS' spaces_projects_view/has_style below) rather than
     # staying a second, harder-to-explain source next to this one.
     "spaces_projects": {"label": "Groups & Labels", "icon": "layers"},
+    # "group_members" (item 20, 2026-09-26) -- a distinct source from
+    # spaces_projects above: that one reads the `widget_pin` subset
+    # app-wide/per-group, this one always reads EVERY member of the one
+    # group it's scoped to (see _render_group_members' own docstring for
+    # why those can't share a style toggle on the same source).
+    "group_members": {"label": "Group labels", "icon": "layers"},
 }
 
 # Which views exist per source, and which of those views take a Range.
@@ -1245,6 +1345,7 @@ WIDGET_VIEWS: dict[str, dict] = {
     # with their widget types -- see WIDGET_TYPES' own comment.
     "spaces_projects_view": {"label": "Groups & Labels", "source": "spaces_projects", "has_range": False, "has_style": True},
     "weekly_schedule_view": {"label": "Weekly schedule", "source": "calendar_tasks", "has_range": False},
+    "group_members_view": {"label": "Group labels", "source": "group_members", "has_range": False},
 }
 
 WIDGET_RANGES: dict[str, dict] = {
@@ -1283,6 +1384,7 @@ _SELECTION_TO_TYPE: dict[tuple[str, str | None], tuple[str, dict]] = {
     ("scheduled_work_view", None): ("scheduled_work_today", {}),
     ("spaces_projects_view", None): ("spaces_projects", {}),
     ("weekly_schedule_view", None): ("weekly_schedule", {}),
+    ("group_members_view", None): ("group_members", {}),
 }
 
 # Reverse of the above, for pre-filling the edit form from an existing
@@ -1300,6 +1402,7 @@ _TYPE_TO_SELECTION: dict[tuple[str, str | None], tuple[str, str, str | None]] = 
     ("contact_list", None): ("contacts", "contact_list_view", None),
     ("scheduled_work_today", None): ("calendar_tasks", "scheduled_work_view", None),
     ("weekly_schedule", None): ("calendar_tasks", "weekly_schedule_view", None),
+    ("group_members", None): ("group_members", "group_members_view", None),
 }
 
 
@@ -1362,12 +1465,16 @@ def _selection_from_widget(widget: dict) -> tuple[str, str, str | None]:
 # --------------------------------------------------------------------- #
 
 # "quick_links" dropped from both sets 2026-08-30 -- retired outright
-# (merged into "spaces_projects"), nothing left to exclude it as. Space
-# pages have no exclusions left at all now (no "space" key -- same
-# `.get(scope) or set()` fallback _excluded_widget_types already uses for
-# Home's "" scope handles the now-absent key identically).
+# (merged into "spaces_projects"), nothing left to exclude it as.
+#
+# "group_members" (item 20, 2026-09-26) -- meaningless anywhere but a
+# group's own "space"-scoped page (its render function resolves a group
+# from `config["label_name"]`; a plain label/Project page or Home has none
+# to resolve), so it's excluded from BOTH the other scopes rather than
+# just "project" the way spaces_projects only needed one exclusion.
 _SCOPE_EXCLUDED_TYPES: dict[str, set[str]] = {
-    "project": {"spaces_projects"},
+    "project": {"spaces_projects", "group_members"},
+    "": {"group_members"},
 }
 
 
@@ -1659,6 +1766,38 @@ def _ensure_default_label_widgets(conn, label_name: str) -> None:
         db.set_app_meta(conn, seeded_key, "1")
         return
     _seed_agenda_stack_layout(conn, label_name, _now())
+    db.set_app_meta(conn, seeded_key, "1")
+
+
+def _ensure_group_members_widget(conn, label_name: str) -> None:
+    """Item 20 (2026-09-26): a group's page always gets one `group_members`
+    widget -- it replaces the "group-labels" toolbar `label_detail.html`
+    used to render unconditionally ("the collapsed sidebar can't expand a
+    group, so this is the always-available way in"), so the same
+    guarantee has to hold even though it's now an ordinary widget
+    instance a user COULD delete. Seeded independently of
+    `_ensure_default_label_widgets`'s own one-time flag (a group page
+    still gets the normal Agenda/stack layout too -- this is an
+    ADDITIONAL widget on top of that, not a replacement for it), tracked
+    by its own app_meta key so a later full delete of every widget on this
+    page (this one included) doesn't bring it back uninvited on the next
+    visit -- same "seed once, respect a later full delete" contract every
+    other one-time seed in this module follows. `position=-1.0` renders it
+    first (before Today's Agenda at 0.0), matching the toolbar's own old
+    always-at-the-top placement."""
+    seeded_key = f"dashboard_group_members_{label_name}_seeded_v1"
+    if db.get_app_meta(conn, seeded_key):
+        return
+    if any(w["type"] == "group_members" for w in db.list_dashboard_widgets(conn, label_name=label_name)):
+        db.set_app_meta(conn, seeded_key, "1")
+        return
+    db.upsert_dashboard_widget(
+        conn,
+        {
+            "uid": str(uuid.uuid4()), "type": "group_members", "title": "Labels in this group",
+            "config": {"label_name": label_name}, "position": -1.0, "created_at": _now(), "label_name": label_name,
+        },
+    )
     db.set_app_meta(conn, seeded_key, "1")
 
 
@@ -2085,7 +2224,9 @@ def today_redirect():
 
 
 @router.get("/quick/add")
-def quick_add_form(request: Request, default_tab: str = "task", scope: str = "", conn=Depends(get_db)):
+def quick_add_form(
+    request: Request, default_tab: str = "task", scope: str = "", label: str = "", conn=Depends(get_db)
+):
     # Merged task/event/contact/label quick-add (2026-08-10, grew Contact/
     # Label tabs 2026-09-14) -- the sidebar's single global "+" button
     # opens this instead of four separate New task / New event / New
@@ -2098,7 +2239,7 @@ def quick_add_form(request: Request, default_tab: str = "task", scope: str = "",
     # vocab lists are imported lazily from .tasks/.labels so this module
     # (which both of those import at load time) doesn't create a circular
     # import.
-    from .labels import COLORS, ICON_GROUPS
+    from .labels import COLORS, LABEL_ICON_GROUPS
     from .tasks import STATUS_ITEMS, STATUSES
 
     if default_tab not in ("task", "event", "contact", "label"):
@@ -2119,6 +2260,13 @@ def quick_add_form(request: Request, default_tab: str = "task", scope: str = "",
         allowed = db.label_selector_scope(conn, scope)
         if allowed is not None:
             tag_names = allowed
+    # 2026-09-25 (UI audit L1 + label page empty state): `label` is the
+    # label page the modal was opened from. It's prefilled on the Task,
+    # Event and Contact tabs (still removable); a project label lands in
+    # the Project dropdown, since _project_field.html reads the same list.
+    label = (label or "").strip()
+    if label and label not in tag_names:
+        tag_names = sorted(tag_names + [label], key=str.lower)
     return templates.TemplateResponse(
         "quick_add.html",
         {
@@ -2135,6 +2283,7 @@ def quick_add_form(request: Request, default_tab: str = "task", scope: str = "",
             "status_items": STATUS_ITEMS,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            "prefill_tags": [label] if label else [],
             **db.project_picker_context(conn),
             "today": date.today().isoformat(),
             "habit_label": db.get_task_habit_settings(conn)["habit_label"],
@@ -2161,7 +2310,7 @@ def quick_add_form(request: Request, default_tab: str = "task", scope: str = "",
             # changed client-side).
             "l": None,
             "colors": COLORS,
-            "icon_groups": ICON_GROUPS,
+            "icon_groups": LABEL_ICON_GROUPS,  # nav icons reserved (UI audit L3)
             "role": "none",
             "group_options": [g["name"] for g in db.list_groups(conn)],
         },

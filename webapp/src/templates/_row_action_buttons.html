@@ -38,6 +38,9 @@
                          (no data-modal), not a modal trigger. #}
 {% macro row_action_buttons(edit_url, delete_url, noun, confirm_message, view_url=none) %}
 <div class="action-buttons">
+    {# 2026-09-26: `{% call row_action_buttons(...) %}` puts extra buttons
+       first (Settings > Labels' Convert to project). #}
+    {% if caller is defined %}{{ caller() }}{% endif %}
     {% if view_url %}<a href="{{ view_url }}" class="icon-btn" title="Open {{ noun }} page">{{ icon('external-link', 'icon-sm') }}</a>{% endif %}
     <a href="{{ edit_url }}" class="icon-btn" data-modal title="Edit {{ noun }}">{{ icon('edit', 'icon-sm') }}</a>
     <form method="post" action="{{ delete_url }}" data-confirm-sheet="{{ confirm_message }}">

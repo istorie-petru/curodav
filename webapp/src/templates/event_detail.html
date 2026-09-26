@@ -51,8 +51,15 @@
      for "Save"), and #modal-target carries the modal-stable-height marker
      so modal.js keeps the dialog one fixed size in both states while the
      header/body/footer cross-fade when the Edit link swaps them in
-     place -- one continuous modal instead of a hard page swap. -->
-<div id="modal-target" class="modal-stable-height">
+     place -- one continuous modal instead of a hard page swap.
+
+     2026-09-25 (UI audit C-21): the view state no longer carries that
+     marker -- a typical event's details are a few rows, and the locked
+     78vh height left ~430px of blank dialog under them. The view now sizes
+     to its content; the edit form (event_form.html) keeps the fixed
+     height, so Edit grows the dialog once instead of every view being
+     mostly empty. -->
+<div id="modal-target">
 {% if event %}
 <div class="modal-header">
     <div class="detail-header-inner">
@@ -102,10 +109,22 @@
             <span class="detail-meta-value">{% for m in event.reminders %}{{ m }} min{% if not loop.last %}, {% endif %}{% endfor %} before</span>
         </div>
         {% endif %}
-        {% if event.tags %}
+        {# 2026-09-25 (UI audit L18): the project gets its own row, like
+           the form's separate Project dropdown, instead of reading as one
+           more label. #}
+        {% set _projects = project_label_names(request) %}
+        {% set _proj = (event.tags or []) | select('in', _projects) | list %}
+        {% set _plain = (event.tags or []) | reject('in', _projects) | list %}
+        {% if _proj %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Project</span>
+            <span class="detail-meta-value">{% for tag in _proj %}{{ label_pill(tag, 'modal') }} {% endfor %}</span>
+        </div>
+        {% endif %}
+        {% if _plain %}
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">Labels</span>
-            <span class="detail-meta-value">{% for tag in event.tags %}{{ label_pill(tag, 'modal') }} {% endfor %}</span>
+            <span class="detail-meta-value">{% for tag in _plain %}{{ label_pill(tag, 'modal') }} {% endfor %}</span>
         </div>
         {% endif %}
     </div>
@@ -156,10 +175,9 @@
             <summary class="btn ghost btn-sm occurrence-move-summary">{{ icon('move', 'icon-sm') }} Move this occurrence</summary>
             <form method="post" action="/events/{{ event.uid }}/occurrences/move" class="field-grid occurrence-move-form" data-cc-change="event" data-cc-action="move">
                 <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
-                {% from "_datetime_picker.html" import datetime_picker with context %}
+                {% from "_date_time_fields.html" import datetime_range with context %}
                 <div class="field field-wide">
-                    <label>New start & end</label>
-                    {{ datetime_picker('start_at', 'end_at', occurrence_date[:16], '', 'range', true, required=true) }}
+                    {{ datetime_range('start_at', 'end_at', occurrence_date[:16], '', title='New start & end', required=true) }}
                 </div>
                 <button type="submit" class="btn primary btn-sm">Move</button>
             </form>

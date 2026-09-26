@@ -12,18 +12,27 @@ from .. import db
 from ..deps import get_db, respond, templates
 from ..image_convert import to_webp, write_cached_webp
 from ..image_sniff import sniff_image_type
-from . import dashboard as dashboard_router
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 
 # Phase 1 (label-space rework, 2026-08-06) dropped the two-addressbook
 # model (Active/Archived as real CardDAV collections) along with
 # `addressbooks`/`addressbook_path` entirely, replacing "archived" with a
-# plain `Archived` tag. 2026-08-07: that tag-based Active/Archived split
-# is gone too, per explicit instruction -- Contacts has no special
-# "archived" state at all now, only labels, same as every other object
-# type. If you want to mark a contact as archived, put a label on it;
-# nothing in this router treats any particular label name specially.
+# plain `Archived` tag. 2026-08-07: that tag-based split was removed too
+# (Contacts had no special "archived" state at all, only labels). A LATER
+# direct request ("archived labels should not be visible normally")
+# reintroduced archiving anyway, but still as a fake top-level LABEL
+# (`ARCHIVED_LABEL` below, now gone) -- which conflated archiving with
+# categorization once item 16 (2026-09-26) restricted a contact to ONE
+# label total: marking a contact archived silently ate its one real
+# category label. Item 19 (2026-09-26, same day) is the real fix: a
+# genuine `contacts.archived_at` column (db.py's `archive_contact`/
+# `unarchive_contact`), same shape `label_config.archived_at` already
+# established for projects -- separate from the label/tag system
+# entirely, `db.list_contacts`'s own `include_archived` param (default
+# False) is the one place both this page and Published Lists'
+# materialization get the "hidden/excluded unless explicitly shown"
+# behavior from, for free.
 
 # Photo upload -- see db.py's contacts.photo_b64/photo_type columns and
 # vcard_rows.py for how this round-trips through the vCard PHOTO property.
@@ -83,7 +92,48 @@ def _attach_photo_url(contact: dict) -> dict:
 
 
 def _tags_list(tags: str) -> list[str]:
-    return [t.strip() for t in tags.split(",") if t.strip()]
+    """Parses the legacy comma-separated `tags` fallback field (no
+    template posts it any more, but every sibling router keeps this
+    escape hatch). 2026-09-26 (Peter: "Contacts should only allow one
+    label") -- at most the first non-blank entry survives; see
+    `_resolve_contact_label` for the real single-select-field resolver
+    this now only backstops."""
+    parts = [t.strip() for t in tags.split(",") if t.strip()]
+    return parts[:1]
+
+
+def _resolve_contact_label(tags: str, tags_labels: list[str], tags_labels_new: str) -> list[str]:
+    """The edit form's Label field (_contact_form_fields.html,
+    ms_mode="single" + ms_allow_new) resolves to at most one tag --
+    same "typed name always wins over the picked radio" pattern
+    settings.py's `_resolve_calendar_name` already uses for its own
+    single-select "pick or create" field (see that function's own
+    comment for why the typed-new and picked-existing values need
+    distinct form field names rather than sharing one). `__no_label__`
+    (the form's explicit "No label" sentinel, same one Labels *filter*
+    pickers already use) is never a real label name. Falls back to the
+    legacy `tags` fallback field (`_tags_list`) if neither of those
+    supplied anything, same defensive layering create_contact/
+    update_contact had before this single-select rework.
+
+    `tags_labels`/`tags_labels_new` are defensively coerced -- same
+    reasoning `dashboard._combine_tags`'s own docstring gives: plenty of
+    pre-existing tests call create_contact/update_contact as plain Python
+    functions, bypassing FastAPI's request parsing, without passing
+    these two newer parameters at all, so their `Form(...)` defaults (a
+    FastAPI marker object, not a real empty list/string, outside of real
+    request handling) would otherwise blow up every one of those calls."""
+    if not isinstance(tags_labels, list):
+        tags_labels = []
+    if not isinstance(tags_labels_new, str):
+        tags_labels_new = ""
+    new = tags_labels_new.strip()
+    if new:
+        return [new]
+    for t in tags_labels:
+        if t and t.strip() and t.strip() != "__no_label__":
+            return [t.strip()]
+    return _tags_list(tags)
 
 
 def _parse_birthday_field(birthday: str) -> str | None:
@@ -165,29 +215,25 @@ def _social_profile_list(types: list[str], values: list[str]) -> list[dict]:
     ]
 
 
-#: The one top-level label with real, built-in behavior on Contacts --
-#: direct request: "Add functionality to the archived label as a top
-#: level label. This one is especially important to contacts -- archived
-#: labels should not be visible normally." Matched case-insensitively,
-#: same convention every other tag comparison on this page already uses.
-ARCHIVED_LABEL = "archived"
-
-
-def _contacts_list_context(conn, request: Request, q: str | None, tags: list[str], filtered: bool) -> dict:
-    contacts = [_attach_photo_url(c) for c in db.list_contacts(conn, q=q)]
+def _contacts_list_context(
+    conn, request: Request, q: str | None, tags: list[str], filtered: bool, show_archived: bool = False
+) -> dict:
+    contacts = [_attach_photo_url(c) for c in db.list_contacts(conn, q=q, include_archived=show_archived)]
     total_before_filtering = len(contacts)
     # Multi-select Label filter (2026-09-21, direct request: "the label
     # filter in the narrow header should be refactored as a checkbox drop
-    # down, that normally is filtered to show all labels and only the
-    # `archived` one is not checked") -- replaces the old single-select
-    # `?tag=` radio filter. `all_tags` is every label actually in use on
-    # a contact; `filtered` is true once the user has touched the filter
-    # form at all (contacts_list.html's hidden `contacts_filtered` field,
-    # submitted alongside every checkbox change) -- distinguishes "no
-    # `tag=` params because nothing was ever picked" (apply the Archived-
-    # excluded default) from "no `tag=` params because the user
-    # deliberately unchecked everything" (respect that literally, an
-    # empty visible set).
+    # down") -- replaces the old single-select `?tag=` radio filter.
+    # `all_tags` is every real label actually in use on a contact --
+    # "archived" is no longer one of them (item 19, 2026-09-26: it's a
+    # real `contacts.archived_at` column now, see `db.list_contacts`'s own
+    # `include_archived` param above, not a label at all anymore, so there
+    # is nothing left for this filter to suppress by name). `filtered` is
+    # true once the user has touched the filter form at all
+    # (contacts_list.html's hidden `contacts_filtered` field, submitted
+    # alongside every checkbox change) -- distinguishes "no `tag=` params
+    # because nothing was ever picked" (every label implicitly checked)
+    # from "no `tag=` params because the user deliberately unchecked
+    # everything" (respect that literally, an empty visible set).
     all_tags = db.list_contact_tag_names(conn)
     if filtered:
         selected = {t.lower() for t in tags}
@@ -202,36 +248,50 @@ def _contacts_list_context(conn, request: Request, q: str | None, tags: list[str
         ]
     else:
         # Untouched page load -- every real label counts as implicitly
-        # checked except Archived, but unlike an explicit pick this is
-        # NOT a narrowing OR-filter (an unlabeled contact, the common
-        # case, isn't hidden just for matching none of them) -- the
-        # Archived suppression pass below is the only thing that actually
-        # removes anything here.
-        selected = {t.lower() for t in all_tags if t.lower() != ARCHIVED_LABEL}
-    # Archived suppression -- applies on top of whichever branch ran
-    # above, in every filter state, not just the untouched default: "not
-    # visible normally" means checking some other label doesn't
-    # incidentally surface an Archived contact caught by that same
-    # OR-match. Only skipped once Archived itself is in the checked set.
-    if ARCHIVED_LABEL not in selected:
-        contacts = [
-            c for c in contacts
-            if ARCHIVED_LABEL not in {t.lower() for t in (c.get("tags") or [])}
-        ]
+        # checked (no more Archived-name suppression needed here, see
+        # above), same as every other page's own label-filter default.
+        selected = {t.lower() for t in all_tags}
     return {
         "request": request,
         "active_tab": "contacts",
         "contacts": contacts,
+        "contact_groups": _group_contacts_by_label(contacts),
         "q": q or "",
         "contact_tags": all_tags,
         "active_tags": selected,
+        "show_archived": show_archived,
         # Whether the list actually got narrowed down right now -- true
-        # for an explicit pick, a search, or the default Archived
-        # exclusion actually removing someone -- so _contacts_body.html's
+        # for an explicit pick or a search -- so _contacts_body.html's
         # empty state reads "No contacts match" (not "No contacts yet")
         # whenever that's the real reason the list is empty.
         "contacts_filter_active": bool(q) or filtered or len(contacts) != total_before_filtering,
     }
+
+
+def _group_contacts_by_label(contacts: list[dict]) -> list[dict]:
+    """2026-09-26 (Peter, confirmed via AskUserQuestion: "section headers
+    per label... same pattern Settings > Projects already uses for its
+    label groups") -- one `{"name": label, "contacts": [...]}` per label
+    actually in use, sorted alphabetically (ungrouped last, same
+    "ungrouped last" convention `routers/labels.py::_labels_context`
+    established), each a real Jinja bucket for _contacts_body.html's
+    section headings. A contact carries at most one label (item 16 --
+    "Contacts should only allow one label"), so this is a clean partition,
+    not a fan-out; within a group/the ungrouped bucket, contacts keep
+    whatever order `db.list_contacts` already returned them in (no new
+    sort -- out of this slice's scope)."""
+    by_label: dict[str, list[dict]] = {}
+    unlabeled: list[dict] = []
+    for c in contacts:
+        tag = next(iter(c.get("tags") or []), None)
+        if tag:
+            by_label.setdefault(tag, []).append(c)
+        else:
+            unlabeled.append(c)
+    groups = [{"name": name, "contacts": by_label[name]} for name in sorted(by_label, key=str.lower)]
+    if unlabeled:
+        groups.append({"name": None, "contacts": unlabeled})
+    return groups
 
 
 @router.get("")
@@ -239,12 +299,13 @@ def list_contacts(
     request: Request,
     q: str | None = None,
     tag: list[str] = Query([]),
+    archived: str = "",
     conn=Depends(get_db),
 ):
     filtered = "contacts_filtered" in request.query_params
     return templates.TemplateResponse(
         "contacts_list.html",
-        _contacts_list_context(conn, request, q, tag, filtered),
+        _contacts_list_context(conn, request, q, tag, filtered, show_archived=archived == "1"),
     )
 
 
@@ -278,6 +339,7 @@ def contacts_regions(
     region: str = "list",
     q: str | None = None,
     tag: list[str] = Query([]),
+    archived: str = "",
     conn=Depends(get_db),
 ):
     """Async-CRUD region fragment (features/async-crud.md): renders the
@@ -288,9 +350,26 @@ def contacts_regions(
     if region != "list":
         return JSONResponse({"error": f"unknown region '{region}'"}, status_code=400)
     filtered = "contacts_filtered" in request.query_params
-    ctx = _contacts_list_context(conn, request, q, tag, filtered)
+    ctx = _contacts_list_context(conn, request, q, tag, filtered, show_archived=archived == "1")
     html = templates.env.get_template("_contacts_body.html").render(ctx)
     return HTMLResponse(html)
+
+
+@router.post("/{uid}/archive")
+def archive_contact(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    """Item 19 (2026-09-26): archiving is fully reversible (a real
+    `unarchive_contact` below), so this submits for real right away --
+    static/app.js's `data-archive-undo` handler (the row's own kebab item,
+    _contacts_body.html) offers a true Undo that calls `unarchive_contact`
+    below, not a delayed/cancelable send like `data-delete-undo`'s."""
+    db.archive_contact(conn, uid)
+    return respond(x_requested_with, "/contacts")
+
+
+@router.post("/{uid}/unarchive")
+def unarchive_contact(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    db.unarchive_contact(conn, uid)
+    return respond(x_requested_with, "/contacts")
 
 
 @router.get("/new")
@@ -337,12 +416,13 @@ async def create_contact(
     birthday: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
+    tags_labels_new: str = Form(""),
     notes: str = Form(""),
     photo: UploadFile | None = File(None),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
-    tags = dashboard_router._combine_tags(tags, tags_labels)
+    resolved_tags = _resolve_contact_label(tags, tags_labels, tags_labels_new)
     birthday_value = _parse_birthday_field(birthday)
     photo_result = await _read_photo(photo)
     photo_b64, photo_type = photo_result if photo_result else (None, None)
@@ -386,7 +466,7 @@ async def create_contact(
         # at most one). `_parse_birthday_field` already validated/
         # normalized it (or raised a 400) before this dict is built.
         "birthday": birthday_value,
-        "tags": _tags_list(tags),
+        "tags": resolved_tags,
         "notes": notes if notes and notes.strip().lower() not in ("none", "nothing") else None,
         "photo_b64": photo_b64,
         "photo_type": photo_type,
@@ -534,13 +614,14 @@ async def update_contact(
     birthday: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
+    tags_labels_new: str = Form(""),
     notes: str = Form(""),
     photo: UploadFile | None = File(None),
     remove_photo: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
-    tags = dashboard_router._combine_tags(tags, tags_labels)
+    resolved_tags = _resolve_contact_label(tags, tags_labels, tags_labels_new)
     birthday_value = _parse_birthday_field(birthday)
     existing = db.get_contact(conn, uid) or {}
     row = dict(existing)
@@ -564,7 +645,7 @@ async def update_contact(
             ),
             "social_profiles": _social_profile_list(social_type, social_value),
             "birthday": birthday_value,
-            "tags": _tags_list(tags),
+            "tags": resolved_tags,
             "notes": notes if notes and notes.strip().lower() not in ("none", "nothing") else None,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }

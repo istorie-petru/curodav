@@ -105,6 +105,20 @@ def evaluate_label_filter(
             exclude_ids |= set(db.list_object_ids_for_label(conn, entity_type, name))
         result -= exclude_ids
 
+    if entity_type == "contact":
+        # Item 19 (2026-09-26): "archived contacts don't sync." The
+        # `all_names`/`any_names` branch above reads candidate uids
+        # straight from `object_labels` (`db.list_object_ids_for_label`),
+        # which has no concept of archived at all -- so without this, an
+        # archived contact that still carries a matching label would
+        # reach a Published List's membership regardless of the
+        # unfiltered "everything" branch's own `_ALL_OBJECT_IDS["contact"]`
+        # (`db.list_contacts`' `include_archived=False` default) already
+        # excluding it in THAT branch only. Applied unconditionally, after
+        # both branches, so every path is covered the same way.
+        archived_uids = {c["uid"] for c in db.list_contacts(conn, include_archived=True) if c.get("archived_at")}
+        result -= archived_uids
+
     return sorted(result)
 
 

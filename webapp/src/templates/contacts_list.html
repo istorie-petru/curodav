@@ -63,6 +63,18 @@
 {% set fd_form_id = 'contacts-filters-form' %}
 {% include '_filter_dropdown.html' %}
 {% endif %}
+{# Item 19 (2026-09-26): archived is a real `contacts.archived_at` column
+   now, not a label -- so it gets its own toggle, separate from the Label
+   filter dropdown above (which only ever lists real labels again, see
+   routers/contacts.py's own comment on why the old "Archived" fake-label
+   suppression logic is gone). `data-change-submit` (app.js's generic
+   delegated listener, CSP-safe replacement for an inline onchange)
+   re-submits the same GET filter form the Label dropdown's own checkboxes
+   already post through. #}
+<label class="filter-toggle">
+    <input type="checkbox" name="archived" value="1" form="contacts-filters-form" data-change-submit {% if show_archived %}checked{% endif %}>
+    Show archived
+</label>
 {% endcall %}
 
 {% include "_contacts_body.html" %}

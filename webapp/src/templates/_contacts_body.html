@@ -7,6 +7,7 @@
      .contact-list, not a descendant, so it no longer inherits a card
      background it was never meant to have. -->
 {% from "_label_pill.html" import label_pill with context %}
+{% from "_action_menu.html" import action_menu with context %}
 <div id="contacts-body" class="main-shell-body">
 {% if contacts %}
 <!-- 2026-09-14 (direct request: "add bulk select for contacts too"): each
@@ -21,15 +22,45 @@
      list"` on the outer list (not the individual rows) is static/
      bulk_select.js's `tableId` -- see that module's own `rowSelector` doc
      for why `.contact-row-wrap`, not the default `tr`, is passed for this
-     instance. -->
+     instance.
+
+     2026-09-26 (Peter, confirmed via AskUserQuestion -- item 17: "group
+     contacts visually the same way the Habits page groups habits, by
+     label"; item 18: "actions at the right of the row"): rows are
+     grouped into `contact_groups` (routers/contacts.py's
+     `_group_contacts_by_label` -- a contact carries at most one label
+     since item 16, so this is a clean partition), each a
+     `.contact-section-row` heading (its label as a pill + a count) plus
+     its rows, same "group heading, members indented after" shape
+     Settings > Projects' `_group_row` already established for label
+     groups. The Unlabeled bucket's own heading is skipped when it's the
+     only group (nothing to distinguish it from -- same "no heading
+     needed for a flat list" rule the Labels table's own "No group"
+     divider follows). Each row also gained an `.action-buttons` pair
+     (Edit opens the modal, Delete is the same optimistic hide + undo
+     toast static/app.js's generic `data-delete-undo` already gives Tasks'
+     own rows -- `.contact-row` was already in that handler's row-lookup
+     selector list before this, apparently prepared for exactly this) --
+     `data-undo-row` on the wrapper is the explicit target so the whole
+     row (checkbox + actions included) hides, not just the inner `<a>`.
+     The per-row label pill that used to sit at the end of `.contact-row`
+     is gone -- redundant now that the row's own section heading already
+     names its one label. -->
 <div class="card contact-list" id="contacts-list">
-    {% for c in contacts %}
-    <div class="contact-row-wrap" data-uid="{{ c.uid }}">
+    {% for group in contact_groups %}
+    {% if group.name or contact_groups|length > 1 %}
+    <div class="contact-section-row{% if not group.name %} is-nogroup{% endif %}">
+        {% if group.name %}{{ label_pill(group.name) }}{% else %}<span>Unlabeled</span>{% endif %}
+        <span class="text-muted">{{ group.contacts|length }} contact{{ 's' if group.contacts|length != 1 }}</span>
+    </div>
+    {% endif %}
+    {% for c in group.contacts %}
+    <div class="contact-row-wrap" data-uid="{{ c.uid }}" data-undo-row>
         <input type="checkbox" class="row-select" data-uid="{{ c.uid }}" aria-label="Select {{ c.full_name }}" autocomplete="off">
         <a class="contact-row" href="/contacts/{{ c.uid }}" data-modal>
             {{ avatar(c, lazy=True) }}
             <span class="contact-row-main">
-                <span class="contact-row-name">{{ c.full_name }}</span>
+                <span class="contact-row-name">{{ c.full_name }}{% if c.archived_at %} <span class="tag-usage-count">Archived</span>{% endif %}</span>
                 <!-- Contacts field parity slice 2 of 6: c.phone/c.email are
                      dead (see db.py's contacts CREATE TABLE comment) -- this row
                      stays concise by showing just the first (lowest-position)
@@ -45,9 +76,15 @@
                     {% if not c.title and not c.org and not c.phones and c.emails %}{{ c.emails[0].value }}{% endif %}
                 </span>
             </span>
-            {% if c.tags %}{% for tag in c.tags %}{{ label_pill(tag) }}{% endfor %}{% endif %}
         </a>
+        {{ action_menu([
+            {'label': 'Edit contact', 'icon': 'edit', 'href': '/contacts/' ~ c.uid ~ '/edit', 'modal': true},
+            {'label': 'Unarchive contact', 'icon': 'archive', 'form_action': '/contacts/' ~ c.uid ~ '/unarchive', 'change': 'contact'} if c.archived_at else
+            {'label': 'Archive contact', 'icon': 'archive', 'form_action': '/contacts/' ~ c.uid ~ '/archive', 'archive_undo': c.full_name, 'unarchive_url': '/contacts/' ~ c.uid ~ '/unarchive'},
+            {'label': 'Delete contact', 'icon': 'trash', 'danger': true, 'form_action': '/contacts/' ~ c.uid ~ '/delete', 'undo': c.full_name, 'change': 'contact'},
+        ], aria_label='More actions for ' ~ c.full_name) }}
     </div>
+    {% endfor %}
     {% endfor %}
 </div>
 {% else %}

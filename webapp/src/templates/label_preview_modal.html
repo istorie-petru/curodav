@@ -31,10 +31,19 @@
             <span class="detail-meta-value"><a href="/groups/{{ label.label_group|urlencode }}">{{ icon('layers', 'icon-sm') }} {{ label.label_group }}</a></span>
         </div>
         {% endif %}
+        {# 2026-09-25 (UI audit L6): "Open · due 10 Sep" read the same for
+           a deadline 15 days past as for one 20 days out. The deadline
+           phrase is label_pages.deadline_info's now ("overdue since 10
+           Sep", "due in 5 days", "due 15 Oct"), in its state's color. #}
         {% if label_status %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Status</span>
-            <span class="detail-meta-value">{{ label_status }}{% if label.has_deadline and label.deadline_date %} &middot; due {{ label.deadline_date | relative_date }}{% endif %}</span>
+            <span class="detail-meta-value">{{ label_status }}{% if label_deadline %} &middot; <span class="label-deadline-text is-{{ label_deadline.state }}">{{ label_deadline.short }}</span>{% endif %}</span>
+        </div>
+        {% elif label_deadline %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Deadline</span>
+            <span class="detail-meta-value"><span class="label-deadline-text is-{{ label_deadline.state }}">{{ label_deadline.text }}</span></span>
         </div>
         {% endif %}
         <div class="detail-meta-item">
@@ -60,7 +69,7 @@
     {% if item.kind == 'task' %}
     {{ widget_link_row('/tasks/' ~ item.uid, item.title, leading=icon('check-square', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill((item.start_at | relative_date), 'gray')) }}
     {% elif item.is_deadline %}
-    {{ widget_link_row(none, item.title, leading=icon('flag', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill('Deadline · ' ~ (item.start_at | relative_date), 'red')) }}
+    {{ widget_link_row(none, item.title, leading=icon('flag', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill(label_deadline.text if label_deadline else ('Deadline · ' ~ (item.start_at | relative_date)), label_deadline.color if label_deadline else 'gray')) }}
     {% else %}
     {{ widget_link_row('/events/' ~ item.uid, item.title, leading=widget_event_dot(item.calendar_color), leading_class='widget-row-icon', right=widget_pill(((item.start_at | relative_date) ~ (' ' ~ (item.start_at | fmt_time) if not item.all_day else '')), 'blue')) }}
     {% endif %}
@@ -71,8 +80,17 @@
 {% endif %}
 </div>
 
+{# 2026-09-25 (UI audit L11): opened from a pill inside a task/event
+   modal, this preview replaced that modal with no way back. `back_to`
+   (routers/label_pages.py::label_preview's `from`) is that modal's URL. #}
+{% if back_to %}
+{% set footer_back_url = back_to %}
+{% set footer_back_label = 'Back' %}
+{% set footer_back_mode = 'modal' %}
+{% else %}
 {% set footer_back_url = '/labels/' ~ label.name %}
 {% set footer_back_label = 'Done' %}
+{% endif %}
 {% set footer_extra_html %}<a class="btn ghost" href="/labels/{{ label.name|urlencode }}">{{ icon('external-link', 'icon-sm') }} Open page</a>{% endset %}
 {% set footer_primary_href = '/settings/labels/' ~ label.name ~ '/edit' %}
 {% set footer_primary_label = 'Edit' %}

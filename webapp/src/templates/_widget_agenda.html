@@ -37,11 +37,13 @@
         <form method="post" action="{{ h.plus_url }}" class="form-inline habit-action">
             <input type="hidden" name="completion_date" value="{{ h.today }}">
             <input type="hidden" name="value" value="{{ h.next_value|int }}">
-            <button type="submit" class="agenda-habit-check is-qty" title="Log one more ({{ h.today_value|int }} of {{ h.target|int }})">{{ h.today_value|int }}/{{ h.target|int }}</button>
+            {# 2026-09-25 (UI audit H-09): the qty button's visible text is
+               just "0/8" -- aria-label names the habit and the action. #}
+            <button type="submit" class="agenda-habit-check is-qty" title="Log one more ({{ h.today_value|int }} of {{ h.target|int }})" aria-label="Log one more: {{ h.title }}, {{ h.today_value|int }} of {{ h.target|int }}">{{ h.today_value|int }}/{{ h.target|int }}</button>
         </form>
         {% else %}
         <form method="post" action="{{ h.toggle_url }}" class="form-inline habit-action">
-            <button type="submit" class="agenda-habit-check" title="Mark done today" aria-label="Mark done today: {{ h.title }}">{{ icon('square', 'icon-sm') }}</button>
+            <button type="submit" class="agenda-habit-check" title="Mark done today" aria-label="Mark done today: {{ h.title }}">{{ icon('square') }}</button>
         </form>
         {% endif %}
         <a href="{{ h.detail_url }}" data-modal class="agenda-habit-title">{{ h.title }}</a>
@@ -66,11 +68,14 @@
 <div class="week-overview-day {% if day.is_today %}is-today{% endif %}">
     <div class="week-overview-day-label">{{ day.label }}</div>
     {% if day.tasks or day.events %}
-    {% for t in day.tasks %}
-    <a class="week-overview-item" href="/tasks/{{ t.uid }}" data-modal>{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }} {{ t.title }}</a>
-    {% endfor %}
+    {# 2026-09-25 (UI audit C-16): events first (already in start order),
+       each with its colour dot + start time, then tasks; titles in a span
+       so they ellipsize inside the minmax(0,1fr) column. #}
     {% for e in day.events %}
-    <a class="week-overview-item" href="/events/{{ e.uid }}" data-modal>{{ icon('calendar', 'icon-sm') }} {{ e.title }}</a>
+    <a class="week-overview-item" href="/events/{{ e.uid }}{% if e.recurrence and e.occurrence_date %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ e.title }}">{{ widget_event_dot(e.calendar_color or 'blue') }}{% if e.start_at and not e.all_day %}<span class="wo-time">{{ e.start_at | fmt_time }}</span>{% endif %}<span class="wo-title">{{ e.title }}</span></a>
+    {% endfor %}
+    {% for t in day.tasks %}
+    <a class="week-overview-item" href="/tasks/{{ t.uid }}" data-modal title="{{ t.title }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }}<span class="wo-title">{{ t.title }}</span></a>
     {% endfor %}
     {% else %}
     <div class="week-overview-empty">&mdash;</div>

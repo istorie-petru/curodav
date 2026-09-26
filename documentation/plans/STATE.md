@@ -17,6 +17,872 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-26 (interactive session) -- items 4 and 5 of Peter's
+  queued list below (dashboard habit widget). Item 4:
+  `_widget_habit_checkin.html` no longer prints the "Habits" link/
+  `.habit-widget-link` in any of its three states (the CSS rule went too);
+  the no-total/has-rows state now renders no summary line at all (nothing
+  meaningful to say once the link is gone, so the branch was dropped
+  instead of left empty). Item 5: the whole undo-toast mechanism is gone,
+  not just the widget -- `habit_actions.js`'s `offerUndo` (and its
+  `cc-region-swapped`-adjacent call in the submit handler) deleted; the
+  `data-undo-url/-date/-value/-message` attributes it read were also
+  removed at every producer (`_habit_page_row.html`'s three toggle forms
+  and its `heatmap()` call, `_habit_heatmap.html`'s `undo_url`/`undo_title`
+  macro params, `_calendar_day_grid.html`'s all-day habit toggle form) since
+  nothing consumes them anymore. The plain error toast on a failed POST is
+  untouched -- only the success/undo toast was in scope. Tests updated:
+  `test_habit_audit_fixes.py` (widget link assertion inverted; habit_actions
+  no longer asserts `offerUndo`/`label: "Undo"` exist, asserts they don't),
+  `test_habits_page.py` (panel heatmap no longer asserts `data-undo-url`).
+  Full suite green (2661 passed) before and after.
+
+- **Shipped:** 2026-09-26 (interactive session, second slice) -- item 7 of
+  Peter's queued list (Calendar & Planner "selected/today too strong").
+  Every remaining `background:var(--accent)` + `color:var(--fg-on-accent)`
+  today/selected pill in style.css swapped to `background:var(--accent-
+  neutral-subtle)` + `color:var(--fg-primary)` (bold kept where it was
+  already bold): the week/day header's today number (`.time-grid-head .thd.
+  is-today .thd-num`), the month view's today circle (`.month-day-cell.
+  is-today .month-day-num span`), the dashboard mini calendar's today circle
+  (`.mini-cal-day.is-today .mini-cal-day-num` -- its `.has-activity` dot no
+  longer needs a white-on-today override now the fill is subtle, so those
+  two override rules were deleted, falling back to the same `--fg-tertiary`
+  dot every other day uses), and the typed date/time field's day-picker/
+  time-list selection (`.dtf-day.is-selected`, `.dtf-opt.is-selected` --
+  both gained `font-weight:bold` to keep "selected" legible against the
+  faint wash). `.dtf-day.is-today`'s thin accent ring (a 1.5px inset
+  border, not a filled block) and `tr.is-selected`/`.contact-row-wrap.
+  is-selected` (already on `--accent-neutral-subtle`) were left alone --
+  out of scope/already correct. Tests updated: `test_calendar_ui_audit_
+  fixes.py`'s three CSS-string assertions (`TestWeekHeader::
+  test_today_header_is_marked`, `TestMiniCalendar::
+  test_today_and_dots_use_visible_tokens`, the month-view assertion in the
+  same class) now expect `--accent-neutral-subtle`. Full suite green (2661
+  passed) before and after.
+
+- **Shipped:** 2026-09-26 (interactive session, third slice) -- items 1 and
+  2 of Peter's queued list (Settings > Labels/Projects tables). Both share
+  `routers/labels.py::_labels_context`/`_labels_table_body.html`, so done
+  together. Item 1 (Labels page): `.entity-section-row`/"No group" divider
+  rows are gone from Settings > Labels (`kind != "projects"`) -- `labels`
+  renders flat, one `_label_row` each, sorted group name (ungrouped last),
+  then label name (`_labels_context`'s sort key gained an ungrouped-last
+  leading term). Each row's group is a `col-meta col-opt-2` pill instead
+  (icon+colour via a new `l["group_style"]` = `db.get_group_style`, "No
+  group" muted text when it has none) -- Usage moved to `col-opt-1` to
+  make room. `.entity-row.is-member`'s 24px indent is now `kind ==
+  "projects"`-gated (it stopped meaning anything once there's no heading
+  above a labels-page row to indent under). Item 2 (Projects page,
+  `kind == "projects"`, unchanged grouped-section layout otherwise): the
+  same new column shows Due (`l.deadline`) instead of Group, and the
+  inline deadline badge next to the name is now projects-only-suppressed
+  (`{% if kind != 'projects' and l.deadline %}`) -- a plain label's own
+  deadline badge next to its name is unaffected. Root cause noted but NOT
+  independently fixed: the `:first-child`/`:last-child` hover box-shadow
+  (`.card tbody tr:hover > td:...`) still targets DOM position, not the
+  last *visible* cell, so a table with a `col-opt-*` hidden by container
+  width can still show a gap -- removing the section rows was the
+  requested fix for Labels specifically, not a rewrite of that generic
+  mechanism (revisit if the same hover gap is reported again on a
+  narrower table). Tests updated: `test_label_pages.py`'s
+  `TestSettingsLabelsTable` (rewritten -- flat-sort assertions instead of
+  grouped, a rendered-body test with no section rows, the Projects
+  grouped-shape test kept separately, a new Due-is-a-column test),
+  `test_responsive_tables.py::test_labels_table` (header/row col-opt
+  positions updated). Full suite green (2663 passed, +2 new tests) before
+  and after.
+
+- **Shipped:** 2026-09-26 (interactive session, fourth slice) -- item 6 of
+  Peter's queued list (Calendar & Planner "grey-out must cover all-day
+  events too"). Root cause: `.allday-col.is-past > :not(.is-overdue)`
+  (Day view) and `.month-day-bottom > :not(.is-overdue)` (Month view)
+  already dimmed single-day tasks/events fine -- the gap was specifically
+  the spanning all-day EVENT bars (`.month-bar`, Month/4-Week/Week's
+  `_week_bars` lane-packer), which had no past treatment at all. `_week_
+  bars` (`routers/calendar.py`) now stamps each bar segment with `is_past`
+  (its own clipped last-occupied day < today -- a bar still touching
+  today or later, e.g. an ongoing multi-day trip, stays full-opacity, same
+  "fully past, not just started" rule every other .is-past already uses);
+  `_calendar_month_grid.html`/`_calendar_fourweek_grid.html`/
+  `_calendar_week_grid.html` add `is-past` to the bar's class when set;
+  new CSS `.month-bar.is-past{opacity:.5;}`. Tasks/timed events/habits in
+  the all-day strip were already covered and are untouched. Tests added:
+  `test_calendar_month_bars.py::TestBarIsPast` (unit tests on `_week_bars`
+  directly, real `date.today()`-relative dates since the file's existing
+  fixture dates are fixed-past by now -- past/today/ongoing-spanning/
+  future cases, plus the rendered-class and CSS checks);
+  `test_calendar_allday_strip.py`'s spanning-bar class regex now tolerates
+  an optional trailing `is-past` (the test's "this Monday" fixture can
+  itself land in the past depending which day the suite runs). Full suite
+  green (2669 passed, +6 new tests) before and after.
+
+- **Shipped:** 2026-09-26 (interactive session, fifth slice) -- items 8
+  and 9 of Peter's queued list (event Format field + recurrence dropdown
+  layout), both in `_event_form_fields.html`/style.css/recurrence_picker.js
+  territory so done together.
+
+  Item 8: the Format field (`_event_form_fields.html`) is rebuilt again,
+  this time on the app's shared single-select dropdown
+  (`_widget_list_multiselect.html`, `ms_mode="single"`) instead of the
+  tile/card picker it was on before -- same pattern the habit form's Kind
+  field uses. `_widget_list_multiselect.html` gained optional per-item
+  `it.id` support (new, backward compatible -- only Format's three items
+  set it) so the pre-existing `event_format_in_person`/`_online`/`_none`
+  ids survive the swap, which means the existing `:has(#event_format_
+  *:checked)` show/hide CSS and `event_format_toggle.js` (which finds its
+  radios by `.event-format-segmented input[type="radio"]`, not by id)
+  needed zero changes -- every one of the 19 pre-existing format-field
+  tests still passes unmodified. New: Format itself shrinks to half width
+  (new `.event-format-field` class, `:has()`-driven `grid-column:span 1`)
+  once In person/Online reveals its Location/Meeting URL follow-up, same
+  half-width-follow-up rule the habit form uses.
+
+  Item 9: `recurrence_picker.js`'s preset dropdown and its "Ends" dropdown
+  (both progressively-enhanced from the same hidden `recurrence` input,
+  shared by event/task/habit forms) now insert into one new
+  `.recurrence-preset-row` flex container instead of appending as plain
+  stacked block siblings of the original `.field` -- `endsWrap`'s
+  `[hidden]` before a preset is picked collapses the row to just the
+  preset dropdown. New CSS: the row's `.multiselect` children are equal
+  flex items (`flex:1; min-width:0`) and `.ms-summary` ellipsis-truncates
+  within it, so a long preset label ("Every 2 weeks") can't force the row
+  to overflow. Applies everywhere this picker runs (event/task/habit
+  forms), not just events -- it's one shared component.
+
+  A one-line whitespace regression from the `it.id` change broke
+  `test_phase10_customize_modal.py`'s exact-string check on View/Range's
+  rendered `<input>` tag (an extra blank line where `it.id` is unset) --
+  fixed by folding the `id`/`form` attributes onto the same template line
+  instead of separate ones, restoring the original output byte-for-byte
+  when `it.id` isn't set. Tests added: `test_event_format_field.py`'s
+  `TestFormatFieldIsNowADropdown` + a new `TestFormatFieldCss` case (half-
+  width rule); `test_modal_footer_and_inputs.py`'s two new recurrence-row
+  tests (JS wiring + CSS). Full suite green (2674 passed, +5 new tests)
+  before and after.
+
+- **Shipped:** 2026-09-26 (interactive session, sixth slice) -- item 13 of
+  Peter's queued list (Tasks table: "Labels should not be inline
+  editable"). Fully reverted the 2026-08-29 Labels checkbox-dropdown cell
+  (`_task_row.html`) back to plain read-only `.cell-tag` pills (`.cell-
+  tags` wrapper, same class the Habits table's own read-only Labels cell
+  already used, so the two match) -- editing a task's labels is the task
+  detail modal's job again. Removed end-to-end, not just the markup:
+  `tasks_table.js`'s `task-label-checkbox` change-handler branch and its
+  now-dead `escapeHtml` helper; `routers/tasks.py`'s `_UPDATABLE_FIELDS`
+  dropped `"tags"` and `update_field`'s `elif field == "tags"` branch
+  (posting `field=tags` now gets the same generic "not inline-editable"
+  400 any other unknown field would); style.css's `.task-labels-select
+  .multiselect-trigger.cell-tags-trigger` rules (the `.cell-tags`/`.cell-
+  tags .cell-tag` rules stay -- still used by the plain read-only markup).
+  `tag_names` in the tasks-list context is untouched -- the bulk-actions
+  Labels picker still needs it. Tests: rewrote
+  `test_tasks_table_labels_status_title.py`'s `TestUpdateFieldTags` ->
+  `TestUpdateFieldTagsIsNoLongerInlineEditable`, `test_labels_cell_is_an_
+  editable_checkbox_dropdown` -> `test_labels_cell_is_plain_read_only_
+  pills`, dropped the now-moot `TestInlineLabelEditKeepsRealPillColorAndIcon`
+  class and the Labels half of `TestStatusLabelChangeListenerNotAncestor
+  Scoped` (renamed, Status-only). Full suite green (2668 passed) before
+  and after.
+
+- **Shipped:** 2026-09-26 (interactive session, seventh slice) -- item 12
+  of Peter's queued list (every table's row-select checkbox restyled).
+  New `.row-select` CSS in style.css: `appearance:none` + a hand-drawn
+  checkmark (rotated border corner, no icon-sprite dependency) instead of
+  the raw native checkbox, using the same `--control-bg`/`--control-
+  border` tokens the app's other custom form controls already use.
+  Scoped to the `.row-select` class specifically (the one class every
+  table's row checkbox already shares -- Tasks, Labels/Projects,
+  Contacts, Holidays, Time blocks) rather than a blanket reset of every
+  checkbox in the app -- `.multiselect-option`'s own checkboxes (a
+  different control, dropdown options) are deliberately untouched, same
+  "narrow the override, don't reset globally" reasoning the pre-existing
+  comment above the base `input[type="checkbox"]` rule already
+  documented for why that blanket reset was never done. No template/JS
+  changes needed -- `.row-select` was already the shared class everywhere
+  it's used. Tests added: `test_bulk_actions_tables.py`'s
+  `TestRowSelectCheckboxIsRestyled`. Full suite green (2670 passed, +2 new
+  tests) before and after.
+
+- **Decision (no code):** 2026-09-26 -- item 15 (habit's own banner)
+  dropped, superseded by item 10's flairs system. See the queued list
+  below for the full note; item 10 gets the "banner_for_object only ever
+  inherits, never an object's own uid" context this investigation
+  surfaced.
+
+- **Shipped:** 2026-09-26 (interactive session, eighth slice) -- item 14
+  of Peter's queued list (habit edit modal: "should be able to be work
+  scheduled -- return it to the edit modal"). Reverses, for the edit
+  modal only, the Work sessions removal from earlier the same day
+  (`_task_row.html`/habit-widget slice's session -- see the "Shipped"
+  entries above). `routers/tasks.py::edit_task_form`'s habit branch now
+  spreads `**_work_allocation_context(conn, task)` into the context, same
+  helper every other task's edit form already uses (a habit is still
+  just a task underneath, nothing habit-specific needed there).
+  `habit_task_form.html` imports and renders
+  `task_work_allocations_section` in a `.relations-section` div right
+  after `</form>` (`{% if task %}`-gated, matching `task_form.html`'s own
+  placement exactly). The VIEW modal (`habit_task_detail.html`) is
+  deliberately unchanged -- Peter's ask named the edit modal specifically
+  -- its stale "gone from view and edit both" comments were corrected to
+  say so. Tests: `test_habit_ui_rework.py`'s `test_has_no_work_sessions_
+  card` -> `test_has_a_work_sessions_card` (now asserts present);
+  `test_habit_detail.py`'s `test_no_work_sessions_in_view_or_edit` ->
+  `test_no_work_sessions_in_view` (dropped the edit-modal half, kept the
+  view-modal one). Full suite green (2670 passed) before and after.
+
+- **Shipped:** 2026-09-26 (interactive session, ninth slice) -- item 16 of
+  Peter's queued list (Contacts: "should only allow one label"). The edit
+  form's Label field (`_contact_form_fields.html`) is a single-select
+  dropdown now (`ms_mode="single"`, was `"select"`/checkboxes), singular
+  "Label"; leads with the `__no_label__` sentinel (same one Labels
+  *filter* pickers already use, renders as plain muted text not a fake
+  colored pill) so a genuinely label-less contact doesn't get single
+  mode's own "default to the first real item" fallback silently
+  pre-checking (and Save then applying) whichever label sorts first --
+  same reasoning the label form's Group field / event form's Format
+  "None" option already establish this pattern for. `ms_allow_new`'s
+  typed-new-label text input needed its own `tags_labels_new` field
+  (single mode can't share a name with its radios, same as Holidays'
+  own pick-or-create field) -- new `routers/contacts.py::
+  _resolve_contact_label` resolves it the same "typed name wins" way
+  `settings.py::_resolve_calendar_name` already does, defensively
+  coercing both params the same way `dashboard._combine_tags` documents
+  (plenty of tests call create_contact/update_contact directly,
+  bypassing FastAPI's Form(...) parsing). `create_contact`/
+  `update_contact` no longer call `dashboard_router._combine_tags` at
+  all (that whole import is gone from this router) -- `_tags_list` (the
+  legacy comma-string fallback parser) now also truncates to one entry,
+  as a second backstop. Existing contacts with >1 legacy tag are left
+  alone; only new saves are constrained. Tests: `test_phase5_contacts.py`
+  (two multi-tag-expecting tests updated to one),
+  `test_modal_input_phaseB_chip_multiselect.py` (`test_create_contact_
+  with_two_labels` -> `..._keeps_only_the_first`, asserts truncation;
+  its class gained a docstring flagging Contacts as the one exception to
+  "task/event keep every posted label"). Full suite green (2670 passed)
+  before and after.
+
+- **Clarified via AskUserQuestion:** item 17's "grouped visually similar
+  to the Habits page, by label" was ambiguous -- the current Habits page
+  (post-rework) is a flat list, no section grouping at all. Peter picked
+  "section headers per label, same pattern Settings > Projects already
+  uses for its label groups" over "just match the row style" (no
+  sections). Shipped as such, see below.
+
+- **Shipped:** 2026-09-26 (interactive session, tenth slice) -- items 17
+  and 18 of Peter's queued list (Contacts: grouped by label + row
+  actions), done together since both touch `_contacts_body.html`.
+
+  Item 17: new `routers/contacts.py::_group_contacts_by_label` partitions
+  the (already-filtered) contact list into `contact_groups` -- one
+  `{"name": label, "contacts": [...]}` per label in use, sorted
+  alphabetically, an ungrouped bucket (`name: None`) last, same
+  "ungrouped last" convention `_labels_context` established earlier this
+  session. A contact carries at most one label (item 16), so this is a
+  clean partition. `_contacts_body.html` renders a `.contact-section-row`
+  heading (the label as a pill + a count) before each group's rows, same
+  "heading, then members" shape Settings > Projects' `_group_row` already
+  uses for label groups -- a labeled group's heading always shows (real
+  user structure); the Unlabeled bucket's heading is skipped when it's
+  the only group (nothing to distinguish it from, same rule the Labels
+  table's own "No group" divider follows). The per-row label pill that
+  used to sit at the end of `.contact-row` is gone -- redundant now that
+  the section heading already names the row's one label.
+
+  Item 18: each `.contact-row-wrap` gained an `.action-buttons` pair
+  (Edit opens the modal; Delete is the same optimistic-hide + undo-toast
+  contract static/app.js's generic `data-delete-undo` already gives
+  Tasks' own rows -- `.contact-row` was already in that handler's
+  row-lookup selector list before this, apparently prepared for exactly
+  this). `data-undo-row` on the wrapper is the explicit hide target so
+  the whole row, not just the inner `<a>`, disappears on delete.
+
+  New CSS: `.contact-section-row`/`.is-nogroup` (heading), `.contact-
+  row-wrap .action-buttons{flex:none;}` (right-aligned by the row's own
+  flex layout -- `.contact-row` is already `flex:1`, no new alignment
+  rule needed). New tests: `test_contacts_grouped_rows.py` (grouping
+  logic + rendered headings + row actions, 10 tests). Full suite green
+  (2680 passed, +10 new tests) before and after.
+
+- **Shipped:** 2026-09-26 (interactive session, eleventh slice) -- item 11
+  of Peter's queued list (Unscheduled Work redesign), first half: the
+  panel + row shape (not yet the widget-sharing follow-up, item 20, which
+  is the next slice). Direct instruction: "Start work on item 11 and 20
+  because they have shared components" -- the shared piece built this
+  slice is `_action_menu.html` (new, see below), meant for both.
+
+  Clarified via AskUserQuestion before starting (three genuinely ambiguous
+  points the mockup didn't spell out): the row's "..." kebab menu holds
+  Remove latest session + Edit + Delete; the header's ">>" button
+  collapses/expands the Unscheduled Work panel (a second trigger for the
+  panel's own existing toggle, not a new behavior); item 20's widget rows
+  (next slice) will show open task/event counts + next due date, not just
+  a name or a progress bar.
+
+  Panel layout: moved from ABOVE the week grid to BELOW it
+  (`_calendar_week_grid.html` -- `.project-calendar-layout` is still a
+  plain flex column, just reordered) -- this incidentally retires the old
+  "fixed 36px/24px height + hidden scrollbar" hack style.css carried since
+  2026-09-08 (a schedule/unschedule drag used to reflow the grid below the
+  panel; with the grid now FIRST, a later sibling's height changing can't
+  move it, so the panel is free to size to its own content). Panel header
+  gained an item-count badge (`.unscheduled-panel-count`) and a client-side
+  search box (`unscheduled_panel_search.js`, plain substring filter over
+  the already-rendered rows, no server round-trip); the existing collapse
+  toggle is now reachable a SECOND way too, from a new button in the
+  page's own narrow header next to a new "+ New Task" button (the same
+  shared quick-add modal the sidebar's own "+ New" opens, defaulted to the
+  task tab) -- both toggle buttons share one `.unscheduled-panel-toggle-btn`
+  class and one localStorage state (`unscheduled_panel_toggle.js` updated
+  to bind N triggers, not just one).
+
+  Row shape (`_unscheduled_task_item.html`, rewritten): a visual drag-handle
+  glyph + title on the first line, a muted meta line under it (a plain
+  task shows "Estimated Xh" -- `db.work_allocation_panel_info`'s
+  `total_hours`, always computable now that the value is actually
+  displayed instead of implied by a bare count pill; a habit-tracked task
+  shows "Needs N more this period" instead, since `habit_work_sessions_
+  status` has no hours figure) plus, if the task carries a label/project,
+  that pill (moved down from its old spot ahead of the title). New row
+  actions, both restoring capability the panel's own routes already
+  supported server-side but had no dedicated button for since the
+  2026-09-10 "click opens the task modal" decision: "+" (add another
+  undated session, POST `/tasks/{uid}/work-allocations`, the exact route
+  the task modal's own Work sessions "+" already uses) and "..." (the new
+  `_action_menu.html` macro -- Edit task, Remove latest session POST
+  `/tasks/{uid}/work-allocations/remove-latest`, Delete task via the
+  app-wide `data-delete-undo` optimistic-hide contract). Both mutation
+  routes (`routers/tasks.py::add_work_allocation`/
+  `remove_latest_work_allocation`) gained dual-mode JSON responses
+  (`deps.respond`, matching every other async-crud mutation) since the row
+  now posts through `ccApi.post`, not a plain form submit.
+
+  `_action_menu.html` (new): the "..." kebab-menu convention (icon-btn
+  trigger + floating `.action-menu-panel`, static/app.js's existing
+  `initActionMenus()`) had been hand-rolled at every call site so far
+  (base.html's command-palette menu, settings_data_maintenance.html's
+  two) -- this is the first extraction into a shared macro, built for this
+  row and for item 20's group-widget row (next slice) to both use.
+
+  JS: `project_calendar.js`'s drag `begin()` now ignores any pointerdown
+  inside `.unscheduled-row-actions` (same "let this one child's own click
+  through" carve-out `.work-allocation-delete` already had) so the new
+  buttons neither start a drag nor fall through to the row's own
+  click-opens-modal handling; its `init()` binds the two new forms'
+  submit-interception (same async-crud pattern as the existing
+  `.work-allocation-delete` binding) and re-invokes
+  `window.CCActionMenu.init()` after a region swap; `async_calendar.js`'s
+  post-swap re-bind list gained the same `CCActionMenu.init()` call plus
+  `window.CCUnscheduledSearch.init()`.
+
+  Tests: `test_calendar_week_scheduling.py` -- `TestUnscheduledPanelStepper`
+  replaced by `TestUnscheduledPanelRowActions` (new row shape/actions),
+  `TestUnscheduledPanelFixedHeight`/`TestUnscheduledPanelToggleStaysOnThe
+  Right` replaced by `TestUnscheduledPanelNoLongerReflowsTheGrid` (the old
+  fix's own CSS is asserted GONE now, not present), new
+  `TestPlannerHeaderButtons`/`TestUnscheduledPanelHeaderCountAndSearch`/
+  `TestUnscheduledPanelJSStructure` classes. `test_calendar_ui_audit_
+  fixes.py::TestPlannerPanel` updated the same way (asserts the old fixed/
+  capped heights are gone). `test_work_allocations.py` gained two dual-mode
+  route tests. Full suite green (2690 passed, net +11 tests) before and
+  after.
+
+- **Shipped:** 2026-09-26 (interactive session, twelfth slice) -- item 20
+  of Peter's queued list (Spaces group-labels toolbar -> dashboard
+  widget), the second half of "start work on item 11 and 20 because they
+  have shared components." A group's page (`label_pages.py::group_page`)
+  used to render an always-visible, unconditional `.toolbar.group-labels`
+  block (`label_detail.html`) -- plain pill links to each member label,
+  "the collapsed sidebar can't expand a group, so this is the
+  always-available way in." That block is gone; a new `group_members`
+  widget type (routers/dashboard.py) takes its place, auto-seeded on
+  every group page (`_ensure_group_members_widget`, its own one-time
+  app_meta flag, independent of the shared `_ensure_default_label_widgets`
+  seeding every page type gets) so the "always there, no setup needed"
+  guarantee still holds -- with the one real tradeoff a genuine widget
+  instance brings that a hardcoded block never had: a user CAN delete it
+  (same as any widget), and it won't reappear once its own seed flag is
+  set.
+
+  `_render_group_members` (routers/dashboard.py): every member of the
+  group (`db.group_member_names`, NOT filtered by `widget_pin` -- item 20
+  wants every member visible, same guarantee the toolbar gave, deliberately
+  independent of `_render_spaces_projects`'s own pinned-subset logic just
+  above it in the file) gets a row: open task count (status not done/
+  archived), upcoming event count (start_at in the future), and the
+  nearest upcoming due date/event start across both (`next_due`) --
+  answers the "related data" AskUserQuestion from the previous slice
+  ("open task/event counts + next due date"). Registered as a full new
+  WIDGET_TYPES entry (not a third `_render_spaces_projects` style, to
+  avoid conflating its "every member" semantics with that function's
+  pinned-subset one) with its own WIDGET_SOURCES/WIDGET_VIEWS/
+  _SELECTION_TO_TYPE/_TYPE_TO_SELECTION entries (so it's still manually
+  re-addable via "New widget" if a user deletes it) and excluded from both
+  Home's and a plain label's own scope (`_SCOPE_EXCLUDED_TYPES["" ]`/
+  `["project"]`) -- its render function has nothing to resolve without a
+  group's own `label_name`, same "excluded where it can't mean anything"
+  precedent `spaces_projects` already set for project pages.
+
+  `_widget_group_members.html` (new template): one row per member -- the
+  label's own `.cell-tag.cal-*` identity pill + a muted meta line (open/
+  upcoming counts, next due via the existing `relative_date` filter),
+  reusing `_action_menu.html` (the kebab macro item 11's slice built,
+  now proven as a genuinely shared component across both items) for a
+  single "Edit label" action. Row is a wrapper `<div>` + inner
+  `.group-member-link` `<a>`, not one whole-row anchor -- same "a kebab's
+  own `<form>` can't nest inside `<a>`" shape the Unscheduled Work row and
+  the Contacts row-wrap both already established this session. New CSS:
+  `.group-member-list`/`-row`/`-link`/`-meta` (mirrors `.project-preview-
+  row`'s existing "identity pill + muted meta" shape from the same file).
+
+  Tests: new `test_group_members_widget.py` (14 tests -- render-function
+  aggregation, scope exclusion, seeding, rendered template shape). Five
+  pre-existing tests updated for the toolbar's removal/the new Home-scope
+  exclusion (`test_dashboard_router.py`'s CRUD-combo test now uses a real
+  group page for the one view that needs one, `test_label_pages.py`/
+  `test_label_ui_audit.py` updated for the toolbar markup being gone,
+  `test_phase10_customize_modal.py`'s two builder-shape tests skip
+  `group_members`/`group_members_view` in their Home-wide iteration with a
+  new dedicated group-page test alongside). Full suite green (2707
+  passed, net +17 tests) before and after.
+
+  Both items 11 and 20 are now fully shipped -- the queued list's
+  remaining items (3, 10, 19) are unrelated to each other and to these
+  two, no more "shared components" pairing left to exploit.
+
+- **Shipped:** 2026-09-26 (interactive session, thirteenth slice) -- item
+  19 of Peter's queued list (Archive as a top-level data-model column),
+  Contacts half -- the item's own "primary use is Contacts" wording.
+  Habits ("must be archivable") and Events ("must not be archivable") are
+  the item's other two halves, not yet done (see the queue below).
+
+  Root cause this replaces: "Archived" had already been a top-level
+  CONCEPT on Contacts since 2026-09-21 ("archived labels should not be
+  visible normally"), but implemented as a fake LABEL
+  (`routers/contacts.py`'s `ARCHIVED_LABEL`) -- which became actively
+  wrong the moment item 16 (this same day, earlier slice) restricted a
+  contact to ONE label total: archiving a contact silently ate its real
+  category label (Family/Work/whatever), since "Archived" and the
+  category now competed for the same one slot.
+
+  Fix: a real `contacts.archived_at TEXT` column (`_ensure_column`, same
+  shape `label_config.archived_at` already established for projects),
+  `db.archive_contact`/`unarchive_contact` (explicit action, matching
+  `archive_project`'s own "never automatic" precedent), and a one-time
+  `migrate_archived_contact_label` (called at the end of `init_schema`)
+  that finds every contact still carrying the old fake label
+  (case-insensitive match) and moves it onto the real column without
+  touching any OTHER label the contact carries -- the exact bug being
+  fixed. `db.list_contacts` gained `include_archived` (default False,
+  same "excluded unless a caller opts in" shape `list_tasks`'s own
+  `include_habit_tasks` already established) -- the ONE fetcher both the
+  Contacts page and Published Lists' unfiltered "everything" branch
+  share, so both get "hidden by default"/"doesn't sync" from one change.
+  A LABEL-filtered Published List needed a second, separate fix though:
+  `evaluate_label_filter`'s `all`/`any`/`none` branches read straight from
+  `object_labels` (no archived concept there at all), so an archived
+  contact still carrying a matching label would have leaked through
+  regardless -- a new unconditional `entity_type == "contact"` subtraction
+  at the end of that function (published_lists.py) closes that second
+  path. `_search_contacts` (command palette) got the same `archived_at IS
+  NULL` default. `upsert_contact` needed a defensive fix of its own: unlike
+  `upsert_label_config`'s partial-merge shape, it's a full-field write, so
+  adding `archived_at` to its column list would have made every unrelated
+  "edit the name" save silently null out (un-archive) the contact -- fixed
+  by falling back to whatever's already in the database when the caller's
+  row dict doesn't mention the column at all (only `archive_contact`/
+  `unarchive_contact`'s own direct UPDATEs, and a backup restore, ever
+  need to actually change it). `routers/export.py`'s four full-backup/
+  export call sites (`contact_count`, `.vcf`, `.csv`, the JSON
+  `full_backup`) all flip to `include_archived=True` explicitly -- a
+  backup must never silently drop an archived contact.
+
+  UI: the plain Edit/Delete `.action-buttons` icon-button pair on each
+  Contacts row (`_contacts_body.html`) became a 3-item `.action-menu`
+  kebab (Edit/Archive-or-Unarchive/Delete) -- the THIRD real caller of
+  `_action_menu.html` (after item 11's Unscheduled Work row and item 20's
+  group-members widget row), and the first to use its new `archive_undo`/
+  `unarchive_url` support (added this slice) for the pre-existing but
+  previously-unused `data-archive-undo`/`data-unarchive-url` generic
+  handler in static/app.js (submit for real right away, since archiving
+  is fully reversible server-side, with a true Undo -- distinct from
+  `data-delete-undo`'s delayed/cancelable send). An archived contact's row
+  gets an inline "Archived" badge next to its name. contacts_list.html
+  gained a separate "Show archived" plain checkbox (`.filter-toggle`, new
+  CSS) next to the Label filter dropdown -- archived is no longer a label
+  at all, so it can't share that dropdown's checkboxes anymore; wired via
+  `data-change-submit` (app.js's existing generic delegated listener) to
+  auto-resubmit the same GET filter form.
+
+  Tests: new `test_contacts_archive_column.py` (26 tests -- column/routes,
+  the migration, `upsert_contact`'s preserved-on-edit fix, both Published
+  Lists exclusion paths, rendered kebab markup). Updated:
+  `test_phase5_contacts.py`'s `TestNoSpecialArchivedState` (inverted --
+  archive endpoints now DO exist), `test_phase7_contacts_global.py`'s
+  `TestContactsTagFilter`/`TestArchivedDefaultExclusion` (rewritten off
+  the fake "Archived" tag onto the real column/`?archived=` param),
+  `test_contacts_grouped_rows.py` (kebab markup, not `.action-buttons`).
+  Full suite green (2731 passed, net +26 tests) before and after.
+
+- **Shipped:** 2026-09-26 (interactive session, fourteenth slice) -- item
+  19's remaining two halves: Habits ("must be archivable") and Events
+  ("must not be archivable"). A habit is a habit-labeled task
+  (habit_view.py), so this reuses the exact `status='archived'` value
+  tasks already have -- no new column, unlike Contacts' half (previous
+  slice) -- but two real gaps meant it wasn't actually usable before this:
+
+  1. `habit_task_form.html` has no Status field at all (direct feedback,
+     "habits should not have... a status dropdown") -- there was no
+     user-facing way to ever reach `status='archived'` on a habit. Fixed
+     with a dedicated Archive/Restore button (bypasses the missing Status
+     field entirely) posting to two new generic routes, `routers/
+     tasks.py`'s `archive_task`/`unarchive_task` (same `dict(existing) +
+     one field + upsert_task` shape `complete_task` already uses; also
+     usable on a plain non-habit task, redundant with its own Status
+     dropdown but harmless).
+  2. `update_task`'s own `status` Form default used to hardcode "active"
+     -- since habit_task_form.html never sends a status field, a plain
+     Save on an already-archived habit would have silently un-archived it
+     the moment the user next edited anything else. Fixed: `status:
+     str | None = Form(None)`, falling back to the row's OWN existing
+     status (not a hardcoded value) only when the field is genuinely
+     absent from the request (an `isinstance` guard, not `is None` --
+     direct router calls get FastAPI's raw `Form(None)` marker object
+     when the kwarg is omitted, same shape `_safe_next`'s own docstring
+     already documents for `next`). Zero behavior change for every other
+     caller (the generic task_form.html always sends a real status
+     value); confirmed via the full suite, unchanged pass count.
+
+  `habit_view.habit_items` already excluded an archived (or done) habit
+  from the main Habits page entirely (`_INACTIVE_STATUSES`, pre-existing)
+  -- which meant there was previously no way back once archived, since
+  nothing could reach that state to begin with. New "Archived" modal
+  (`routers/habits.py`'s `archived_modal`, `habit_archived_modal.html`)
+  is that way back -- same "behind a header button, not a page section"
+  shape the existing Pauses modal already established, each row a plain
+  Restore button (`data-cc-change="task"`, no keep-open -- closes the
+  modal and lets the existing `habit_actions.js` cc-entity-changed
+  listener refresh `#habits-body`, same contract every other habit
+  mutation already uses).
+
+  Events: confirmed the absence stays true rather than building anything
+  -- no `archived_at` column, no archive/unarchive route, no UI; a
+  dedicated test class asserts this explicitly (`events` table's own SQL,
+  `calendar_router` has no `archive_event`/`unarchive_event`).
+
+  Tests: new `test_habit_archive.py` (22 tests -- the two new routes,
+  update_task's preserved-status fix including a check that the generic
+  form's own explicit status still works unaffected, the habit form's
+  conditional Archive/Restore button + confirmation it adds no visible
+  Status field, the Archived modal, and the Events negative-confirmation
+  class). Full suite green (2753 passed, net +22 tests) before and after.
+
+  **Item 19 is now fully shipped, all three halves** (Contacts/Habits/
+  Events). Remaining unstarted from the original queue: items 3
+  (Lucide icon migration) and 10 (google-calendar-flairs, explicitly
+  "build this last").
+
+- **NEXT -- Peter's queued requests (2026-09-26, received at the end of a
+  cloud session; items 1-2, 4-9, 11-14 and 16-20 shipped above, item 19
+  fully shipped above (all three halves) -- only items 3 and 10 remain,
+  continue here).** Verbatim intent:
+
+  General
+  1. ~~Tables still have broken hover selection (padding, hidden/empty
+     columns), at least on Settings > Labels ... For the Labels page:
+     remove the grouping entirely; add a Group column that shows the
+     group as a pill; sort rows by group name alphabetically.~~ -- done
+     (see Shipped above; the generic hidden-column hover-shadow mechanism
+     itself is NOT fixed, only worked around by removing the section rows
+     it broke on this page).
+  2. ~~Settings > Projects: the project's due (deadline) becomes its own
+     column instead of the badge next to the name.~~ -- done.
+  3. Switch the whole icon library to Lucide (https://lucide.dev/icons/),
+     AGAIN, fully (templates/_icons_sprite.html + every icon name used;
+     check routers/labels.py ICON_GROUPS / habit_view.HABIT_ICONS names).
+     Add a rule: a minimum icon size, and an icon is the same size as the
+     text next to it. Icons are never transparent; the icon/avatar style in
+     the narrow header must be visually consistent across pages, spaces,
+     projects, labels, etc.
+
+  Calendar & Planner
+  6. ~~The grey-out (past/dimmed) effect must apply to all-day events and
+     every other kind of item shown there, not only timed events.~~ --
+     done (all-day event bars were the actual gap; tasks/habits already
+     dimmed).
+  7. ~~Selected / today highlight: `background: var(--accent-neutral-subtle);`
+     instead of `--accent` (too strong).~~ -- done.
+  8. ~~Event edit: "Format" becomes a dropdown with its three options;
+     picking In person or Online shows a half-width text input next to
+     it (same half-width follow-up rule as the habit form).~~ -- done.
+  9. ~~Event recurrence: the two new dropdowns (preset + Ends) sit side by
+     side, not one overflowing and the other in its own section.~~ --
+     done (recurrence_picker.js, so it applies to task/habit forms too).
+  10. `google-calendar-flairs/` (local worktree folder, not to be integrated
+      directly) is the reference for a new feature: dynamically attach a
+      photo to an event/task/habit/label/group/project based on a keyword
+      list matched against its name (a big-but-reasonable keyword list per
+      photo). Labels/groups/projects always get this treatment (their
+      default banner before the user picks their own -- this default
+      behavior can't be removed). Events/tasks/habits only get it when they
+      (a) carry no label/project, or (b) their label/project's banner is
+      empty/was cleared. The banner upload modal needs a new "clear banner"
+      option. Build this last, after everything else below.
+  11. ~~Redesign Unscheduled Work along this mockup (principle, not
+      pixels)~~ -- done (see Shipped above): panel moved below the grid,
+      header gained a count badge + search + a second collapse toggle, "+
+      New Task" added, rows rebuilt with a drag-handle/title/meta-line/
+      "+"/"..." shape. Percentages of the mockup NOT pixel-matched: the
+      week-day grid itself is untouched (out of scope -- the mockup's grid
+      is illustrative, this item was about the panel underneath it), and
+      "Estimated" reads "Xh" (e.g. "1.5h") rather than "1h 30m" -- the
+      app's one existing hours-formatting convention
+      (`_task_work_allocations.html`) already reads that way, matched
+      instead of inventing a new format for this one row.
+
+      ```
+      +-----------------------------------------------------------------------------------+
+      |  [Planner] <  Sep 21 - Sep 27, 2026  >  [All labels v]         [ + New Task ] [>>]|
+      +-----------------------------------------------------------------------------------+
+      |  MON 21    |  TUE 22    |  WED 23    |  THU 24    |  FRI 25    |  SAT 26    |  SUN 27|
+      +------------+------------+------------+------------+------------+------------+------+
+      |            |            |            |            |            |            |      |
+      |            |  [test]    |            |  [Gaming]  |            |            |      |
+      |            |  09:00-    |            |  09:30-    |            |            |      |
+      |            |  13:15     |            |  10:30     |            |            |      |
+      |            |            |            |            |            |            |      |
+      |            |            |            |            |            |  (red line) |      |
+      |            |            |            |            |            |            |      |
+      |            |            |            |            |            |            |      |
+      |            |            |            |            |            |            |      |
+      +-----------------------------------------------------------------------------------+
+      | UNSCHEDULED WORK (3)                                            [Search...] [ < ] |
+      +-----------------------------------------------------------------------------------+
+      |  [::] Write Project Proposal                                      [ + ] [ ... ]  |
+      |       Estimated: 1h 30m  |  Tag: #Work                                            |
+      +-----------------------------------------------------------------------------------+
+      |  [::] Review PRs                                                  [ + ] [ ... ]  |
+      |       Estimated: 45m     |  Tag: #Dev                                             |
+      +-----------------------------------------------------------------------------------+
+      |  [::] Buy Groceries                                               [ + ] [ ... ]  |
+      |       Estimated: 1h      |  Tag: #Personal                                        |
+      +-----------------------------------------------------------------------------------+
+      ```
+
+  Dashboard (shipped: see above)
+  4. ~~Remove `.habit-widget-link` ("Habits" link) from the Habit Check-in
+     widget~~ -- done.
+  5. ~~Remove the toast shown when changing habit data (check-in, relapse,
+     etc.)~~ -- done.
+
+  Tasks
+  12. ~~Every table's checkbox should be restyled (visually replace the raw
+      HTML checkbox with something better), everywhere tables appear.~~ --
+      done.
+  13. ~~Labels stop being inline-editable.~~ -- done (fully reverted to
+      read-only pills, not just visually).
+
+  Habits
+  14. ~~Bring back "work scheduled" in the edit modal.~~ -- done.
+  15. ~~Banner upload in the edit modal, same as labels have.~~ -- DROPPED
+      (2026-09-26, Peter: "wrong design decision. Flairs should fix their
+      problem"). A habit doesn't get its own uploadable banner; item 10's
+      flairs system (default keyword-matched photos for anything with an
+      empty/inherited-empty banner) is the intended fix for a habit
+      lacking a good banner, not a new per-habit upload capability. Do
+      NOT add a `banner_for_object`/`get_page_banner` own-uid tier or a
+      `.look-side-btn` banner button to `habit_task_form.html` -- that
+      was this item's implementation and it's explicitly the wrong shape;
+      the investigation that surfaced this (banner_for_object only ever
+      inherits from label/project/group, never an object's own uid) is
+      still useful context for building item 10 correctly, just not as
+      "give habits their own banner."
+
+  Contacts
+  16. ~~Only one label per contact, not many.~~ -- done.
+  17. ~~Group contacts visually the same way the Habits page groups habits
+      (by label).~~ -- done (clarified via AskUserQuestion: section
+      headers per label, matching Settings > Projects).
+  18. ~~Row actions on the right of the row.~~ -- done.
+  19. ~~Turn "Archive" into a top-level data-model column (real SQL, not
+      a label) -- primary use is Contacts, toggle between not-archived/
+      archived, archived contacts don't sync. An archive flag is never
+      counted as a label -- separate data model entirely. This is the same
+      Archive concept tasks already have (share it, don't duplicate).
+      Events must not be archivable. Habits must be archivable.~~ -- done,
+      see Shipped above (both slices). Contacts: real `archived_at`
+      column, migrated off the old fake label, kebab Archive/Unarchive +
+      "Show archived" toggle, excluded from exports'/Published Lists'
+      "don't sync" requirement. Habits: reuses task `status='archived'`
+      (no new column) via a dedicated Archive/Restore button (the habit
+      form has no Status field to piggyback on) + a new "Archived habits"
+      modal (the only way back, since an archived habit drops off the
+      main Habits page entirely) -- also fixed a real bug where a plain
+      Save on an already-archived habit silently un-archived it. Events:
+      confirmed to still have no archive concept at all, as required.
+
+  Spaces
+  20. ~~Redesign the toolbar's "group-labels" as a custom dashboard
+      widget: show every label/project under a group with its related
+      data, in the same spirit as the Unscheduled Work mockup above.~~ --
+      done (see Shipped above): new `group_members` widget type, every
+      member shown (open task/event counts + next due date), auto-seeded
+      on every group page, reuses item 11's `_action_menu.html` kebab.
+
+  (End of Peter's list as given 2026-09-26 in this session -- no longer
+  cut off.)
+
+- **Shipped:** 2026-09-26 (second pass) -- Peter's "definitive list" for
+  habits. Supersedes parts of the first-pass entry below (month calendar
+  and insights moved again; row sizes changed).
+  - Strip = the current calendar week from Settings' first day of week
+    (`habit_view.week_strip(week_start=...)`, read via
+    `habit_view.WEEK_START_KEY`); days after today are inert spans. The
+    year heatmap snaps to the same week start.
+  - Widget row (`habit_page_row(h, compact=true)`): one line -- check,
+    title, days. No meta, never stacks.
+  - Habits page row: contact-row size (51px: 34px check, title over
+    "schedule . streak", 30px days) plus a chevron that opens a history
+    panel under the row -- year heatmap, or for period habits a 52-week /
+    12-month grid (`habit_view.period_grid`), and the insights (moved here
+    from the view modal). Open panels survive `#habits-body` refreshes
+    (habit_day.js). Phone: days shrink to 22px, still one row.
+  - View modal: month calendar removed everywhere (`month_calendar` and its
+    CSS deleted); period habits show the week/month grid instead of the
+    heatmap; no insights; no "Log a relapse" (build habits keep "Log a
+    day"); Work sessions not rendered while empty.
+  - Habit icon + colour: `tasks.habit_icon` / `tasks.habit_color`
+    (dedicated setter `db.set_task_habit_look`, validated against
+    `habit_view.HABIT_ICONS` / `HABIT_COLORS`). The icon draws the check
+    button; the colour (`habit-c-*` -> `--habit-accent`) paints the check,
+    strip, heatmap, period grid, insight bars, and a solid view-modal
+    cover (it replaces an inherited label banner). Picked in the edit form
+    through one "Look" dropdown (the app's `.multiselect` trigger/panel with
+    a swatch row and an icon grid). The backup restore now keeps
+    icon/colour and `reminder_time` (the latter was silently dropped
+    before).
+  - Edit form: Kind is the app's single-select dropdown; every hint line
+    removed (also the Pauses modal's intro).
+  - Then (same day) Peter approved the edit-modal mockup
+    (`plans/habit-edit-mockup-2026-09-26.md`, answers recorded there) and
+    it shipped: order Title, Look, Kind, How often, Daily goal, Reminder,
+    Description; every choice is the app's dropdown; a follow-up (Days
+    checkbox dropdown in week order / "N times a week" 1-6 / "N times a
+    month" 1-20 / Amount + Unit inputs) sits half width next to its parent
+    (form `data-repeat` / `data-goal`, style.css `.habit-sub`). New form
+    fields `habit_times_week`, `habit_times_month`, `habit_goal`
+    (`_apply_habit_repeat` / `_apply_habit_goal`); `habit_view.days_label`
+    is mirrored in habit_day.js. The view modal lost "Log a day" too
+    (Peter: phones don't log past days); logged notes still list.
+  - Then (same day): the Look dropdown became shared
+    (`templates/_look_picker.html` macro + `static/look_picker.js`) and
+    replaced every colour/icon picker -- habit form, label edit modal
+    (colour/icon left the header; the banner button stays), quick-add
+    Label panel, group form. Panel shows colours and icons side by side
+    once it's >=480px wide (container query), stacked on phones. The old
+    `_color_swatch_picker.html` / `_icon_swatch_picker.html`, modal.js's
+    swatch-popover code and base.html's #color-popover/#icon-popover are
+    deleted (the `.color-swatch*` CSS stays: Settings > Appearance's accent
+    picker uses it). Also: no spinner arrows on the Amount box; Cancel on
+    a habit's edit modal returns to its view modal; Work sessions removed
+    from both habit modals entirely (Peter's call -- supersedes "next:
+    work sessions").
+  - Then: the label modal's banner button left the header -- it's a
+    square upload button at the end of the Look row
+    (`look_picker` called with `{% call %}`; `.look-row` /
+    `.look-side-btn`), edit only. The `.modal-header-actions` header row,
+    `appearance_in_header` and the inline Banner field are gone.
+  - Then: the Look panel's icons are one flat grid (no section headings),
+    the colour column lost its fixed 4x36px columns (Peter: even spacing),
+    and habits offer the whole icon library (`habit_view.habit_icon_choices`:
+    the habit-flavoured list first, then routers/labels.py ICON_GROUPS).
+  - Then Peter's "focus on labels, groups and projects" batch (his
+    answers: groups standalone; projects = separate UI + a buried one-way
+    Convert; no-icon groups show a default glyph):
+    - `label_groups` table (name PK NOCASE, icon, color): every group a
+      label names gets a row (`db.backfill_group_rows` on connect carries
+      the old app_meta look; `upsert_label_config` calls `ensure_group`).
+      Groups may be empty; `db.create_group` / `delete_group` (labels stay,
+      ungrouped); `rename_group` moves the row. Membership is still
+      `label_config.label_group` (by name).
+    - Settings hub: separate Labels (plain labels), Groups
+      (`groups_manage.html`, `label_pages.groups_settings_router`) and
+      Projects (`labels.projects_settings_router`, same table partial with
+      `kind=projects`).
+    - Group view modal (`/groups/<name>/view`) + create/edit modal (Name,
+      Look with the banner upload button, Labels checkbox dropdown; Cancel
+      back to view). No first-letter badge anywhere: `db.GROUP_DEFAULT_ICON`
+      (`layers`) in the group's colour.
+    - Label form: no Role; Group is a dropdown of existing groups; Page
+      (Sections / Widget dashboard) with a half-width Sections checkbox
+      dropdown; Show in as a checkbox dropdown (new multiselect mode
+      `names`, per-item `field`/`checked`); Description last. Deadline only
+      on a project (or a label that already has one). A project opens as
+      "Edit project"; a label has a quiet "Convert to project" (one way,
+      confirm) under its form. `update_label` keeps is_project when no
+      `role` is posted.
+  - Bug-fix round: Convert to project is a row action on Settings >
+    Labels (folder-plus button; the row hides, an Undo toast runs 4.5s,
+    then it POSTs -- labels_manage.js `data-convert-undo`; gone from the
+    edit modal). The Labels/Groups/Projects tables were rebuilt on one
+    `.entity-table` layout (auto layout, name column takes the rest with
+    ellipsis, fixed 150px meta / 152px actions columns, right-aligned
+    actions, section rows instead of tinted group "cards", names in
+    default text) -- the old `.labels-space-row`/`#labels-table-wrapper`
+    CSS is deleted. The Habits page panel's heatmap is clickable
+    (heatmap macro `form_class="habit-action"` + `undo_url`; amount habits
+    open the popup; view-only on touch like the modal's).
+  - Date/time redesign (Peter's mockup): `_date_time_fields.html`
+    (`date_field`, `time_field`, `datetime_range`) + `static/
+    date_time_fields.js` replace `_datetime_picker.html` /
+    `datetime_picker.js` everywhere (event form, task start/due + the
+    Tasks table's inline due, label/project deadline, holidays, time
+    blocks, habit pauses, work sessions, "Move this occurrence", the
+    recurrence "Ends on" box). Each field is a typed text box (dates day
+    first: 29/09/2023, 2023-09-29, 29.09, today; times 15:30, 1530, 3pm)
+    with a small button that opens a calendar or a 15-minute time list
+    (end times show the duration). The event form's "Date & time" block
+    has All day in its header, which only hides the time boxes; the range
+    keeps the duration when the start moves and posts the same
+    start_at/end_at (all-day T00:00..T23:59) as before. Hidden-input
+    contracts unchanged, no route changed. `dtf_date` Jinja filter for the
+    display text. Tasks stay date-only (no time on a task yet).
+  SW cache v137.
+
+- **Shipped:** 2026-09-26 -- habits decluttering, per Peter ("rows too
+  tall, 28-32px is enough"; "I don't believe in habit vacation"; month
+  calendar/insights "not needed for all habits"; friendlier edit form, no
+  raw `FREQ=WEEKLY;BYDAY=...`; Work sessions out of the view modal when
+  empty). What changed:
+  - Habit row (Habits page + dashboard widget, same `_habit_page_row.html`):
+    one 32px row -- 28px check, title + "schedule . streak" on one line,
+    24px day strip. Narrow lists (phone, 25% widget, container query
+    <=520px) put the text line above a check + strip row. Reminder time,
+    amount left, best/kept/strength moved into the meta tooltip; reminder
+    keeps a small bell; a "3x a week" habit shows "2/3 this week" instead
+    of its cadence.
+  - Vacation: the page section and the per-habit Pause section in the
+    view modal are gone; one `GET /habits/pauses` modal (header "Pauses"
+    button) lists every current/upcoming pause and adds one for all
+    habits or a single (non-avoid) habit.
+  - View modal: "Recurrence" -> "How often"; month calendar is a collapsed
+    `<details>`, open only for period habits (no heatmap) or while paging
+    months (`?month=`); Insights hidden under 14 logged days
+    (`habit_view.INSIGHTS_MIN_DAYS`) and collapsed; Work sessions not
+    rendered at all while empty.
+  - Edit form: Kind is two pills (Do it / Avoid it); one "How often"
+    select (every day / certain days / N times a week / N times a month,
+    plus "<current> (current)" for rules those can't express, e.g. every
+    2 weeks or an UNTIL) replaces Recurrence picker + Only on + Times per
+    period; target + unit on one "Each day, do" line.
+    `routers/tasks.py _apply_habit_repeat` maps it back to the stored
+    rule; `habit_view.repeat_choice` maps a stored rule to the form.
+  SW cache v129. Suite: 2,605 passed. Verified live in Chromium (rows measure 33px incl. the
+  1px separator; phone 56px as two lines; Save as "3 a week" and adding a
+  single-habit pause both round-trip).
+  **Open**: the header has no pause-count indicator (it lives outside
+  `#habits-body`, so it would go stale after the modal closes).
+
 - **Shipped:** 2026-09-25 (later session) -- UI/UX audit of the newest
   features + the card-model removal, per Peter's request (four parallel
   auditor agents, real headless Chromium, 1440/900/390, light+dark,
@@ -53,8 +919,45 @@ session start.
   dashboards only have 2-3 widgets, so a many-row dashboard hasn't been
   eyeballed yet.
 
-  **Next slice suggestion**: H-01/H-02/C-5 (amount habits done only at
-  target, partial state shown) -- a real correctness bug, S-M.
+  Same session, fix round: Peter asked to "fix the issues found in the
+  audit". Four agents (habits / calendar / labels / flat), one worktree +
+  dev server + DB copy each, merged sequentially (no conflicts), SW cache
+  v125. Nearly every finding fixed incl. H-01 -- see the "Fix round"
+  section at the end of `plans/ui-audit-2026-09-25.md` for behaviour
+  changes and the short still-open list. Suite on the merged tree: 2,554
+  passed. Lessons: (1) agent worktrees start from `main`, not the session
+  branch -- each agent had to hard-reset onto it; tell them up front next
+  time; (2) never run the suite while merging into the same tree (34 bogus
+  failures); (3) restart the dev server by exact PID -- `grep src.main`
+  also matches `uvicorn src.main:app` agent servers, and Jinja re-reads
+  templates from disk while Python routes stay stale, which looks like a
+  half-applied merge.
+
+  Same session, last batch (all in the audit doc's "Closed later the same
+  session" list): phone auto-scroll for Week/Day (Peter's call), H-18, the
+  H-08 remainder, date picker week start, group rename + member checklist
+  (with modal.js `data-follow-redirect` so renaming the open page's group/
+  label lands on the renamed page), and `webapp/scripts/seed_preview.py` --
+  run it for realistic preview data instead of hand-seeding. SW cache v127.
+  Suite: 2,571 passed. Restarting the dev server: find it with
+  `ps -eo pid,args | awk '$2 ~ /python$/ && $3=="-m" && $4=="src.main"'` --
+  any grep for "src.main" also matches the shell running it and kills it.
+
+  Then the Groups & Labels widget got deadline pills + group looks.
+
+  Then per-habit reminder times (tasks.reminder_time, habit form dropdown,
+  own push at that time while still due, out of the morning digest).
+  Not yet tested on a real phone -- Web Push itself still awaits its first
+  real-device test (see item 7 in ui-cleanup-2026-09.md).
+
+  Then F12 per Peter's call ("add one or two more standard sizes so
+  nothing visibly changes"): --text-xs 12px / --text-2xs 11px, all raw
+  11/12/13/18px sizes tokenized, zero computed-size change verified on
+  27,844 elements. SW cache v128. Suite: 2,580 passed.
+
+  **Next slice suggestion**: the audit list is closed. Next: a real-device
+  Web Push test (incl. per-habit reminder times), then whatever Peter
+  brings next.
 
 - **Shipped:** 2026-09-24 -- Peter sent one message bundling ~17 distinct
   UI/UX change requests (labels-as-modules rework, narrow banners

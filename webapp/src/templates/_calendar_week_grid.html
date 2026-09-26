@@ -4,11 +4,11 @@
      (static/calendar.js -- drag-to-move/resize, click to open, drag empty
      space to create), and every work-allocation event renders prominently
      as a draggable `.work-allocation` block (static/project_calendar.js)
-     alongside the "Unscheduled work" sidebar that drags a task onto the
-     grid to schedule it. Grid columns carry BOTH `.calendar-create-col`
+     alongside the "Unscheduled work" panel that drags a task onto the grid
+     to schedule it. Grid columns carry BOTH `.calendar-create-col`
      (calendar.js) and `.project-calendar-col` (project_calendar.js) --
      see style.css's own comment on why the old "planning surface -> cursor:
-     default" override no longer applies here. The sidebar is collapsible
+     default" override no longer applies here. The panel is collapsible
      (static/unscheduled_panel_toggle.js, per-device localStorage).
 
      id="week-grid": the week view's async-CRUD region
@@ -22,33 +22,38 @@
      text/data-prev/data-next added alongside the existing data-date/
      data-label -- calendar_nav.js reads these off the freshly-swapped
      element after a prev/next AJAX nav to update the visible label and
-     the two <a> hrefs for the *next* click, without a second round-trip. -->
+     the two <a> hrefs for the *next* click, without a second round-trip.
+
+     2026-09-26 (item 11, "redesign Unscheduled Work along this mockup"):
+     the panel moved from ABOVE the grid to BELOW it (`.project-calendar-
+     layout` is still a plain flex column -- only the two children's order
+     changed), matching the mockup's week-grid-on-top/panel-underneath
+     layout. This incidentally retires the old "fixed small height so a
+     schedule/unschedule drag doesn't reflow the grid" hack (see git
+     history on this file's previous `#unscheduled-panel-body` CSS) -- the
+     grid is now the FIRST child, so a later sibling's height changing
+     never moves it; the panel is free to size to its (now much taller,
+     two-line-per-row) content. The header also gained an item-count badge
+     and a search box (`unscheduled_panel_search.js`, client-side
+     title/tag substring filter, no server round-trip) alongside the
+     existing collapse toggle -- and that same toggle is now reachable a
+     second way, from the page's own narrow-header actions row
+     (calendar_week.html's `#unscheduled-panel-toggle-header`), per the
+     mockup's own header "[>>]" button; both buttons share one
+     `.unscheduled-panel-toggle-btn` class and one localStorage-backed
+     state (unscheduled_panel_toggle.js). -->
 {% from "_unscheduled_task_item.html" import unscheduled_task_item with context %}
 <div class="project-calendar-layout" id="week-grid" data-date="{{ monday.isoformat() }}" data-label="{{ active_label | default('') }}" data-label-text="{{ label_text }}" data-prev="{{ prev_week }}" data-next="{{ next_week }}">
-    <aside class="card project-calendar-unscheduled" id="unscheduled-panel">
-        <div class="unscheduled-panel-head">
-            <h2>Unscheduled work</h2>
-            <button type="button" class="icon-btn" id="unscheduled-panel-toggle" title="Collapse Unscheduled work" aria-label="Collapse Unscheduled work" aria-expanded="true" aria-controls="unscheduled-panel-body">{{ icon('sidebar', 'icon-sm') }}</button>
-        </div>
-        <div id="unscheduled-panel-body">
-        {% if unscheduled_tasks %}
-        <div class="unscheduled-task-list">
-            {% for item in unscheduled_tasks %}
-            {{ unscheduled_task_item(item, unscheduled_next) }}
-            {% endfor %}
-        </div>
-        {% else %}
-        <div class="empty-state empty-state-compact">No unscheduled work -- every open task already has scheduled work.</div>
-        {% endif %}
-        </div>
-    </aside>
-
     <div class="card calendar-viewport project-calendar-grid">
     <div class="time-grid-wrap">
     <div class="time-grid-top">
     <div class="time-grid-head week">
+        {# 2026-09-25 (UI audit C-6/C-23): the day number is a plain
+           `day.date.day` ("Thu 1", not strftime's zero-padded "Thu 01"),
+           today's number gets the accent pill, and each header links to
+           that day's Day view (same label filter carried over). #}
         {% for day in days %}
-        <div class="thd {% if day.is_today %}is-today{% endif %} {% if day.is_past %}is-past{% endif %}">{{ day.date.strftime('%a %d') }}</div>
+        <div class="thd {% if day.is_today %}is-today{% endif %} {% if day.is_past %}is-past{% endif %}"><a class="thd-link" href="/calendar/day/{{ day.iso }}{% if active_label %}?label={{ active_label | urlencode }}{% endif %}" title="Open {{ day.date.strftime('%A') }} in Day view"{% if day.is_today %} aria-current="date"{% endif %}><span class="thd-dow">{{ day.date.strftime('%a') }}</span> <span class="thd-num">{{ day.date.day }}</span></a></div>
         {% endfor %}
     </div>
     <div class="time-grid-allday week">
@@ -65,7 +70,7 @@
             {% if week_bars %}
             <div class="week-allday-bars">
                 {% for bar in week_bars %}
-                <a class="month-bar allday-bar cal-{{ bar.event.calendar_color }} month-bar-lane-{{ bar.lane }} month-bar-col-{{ bar.col_start }} month-bar-span-{{ bar.col_span }}"
+                <a class="month-bar allday-bar cal-{{ bar.event.calendar_color }} month-bar-lane-{{ bar.lane }} month-bar-col-{{ bar.col_start }} month-bar-span-{{ bar.col_span }}{% if bar.is_past %} is-past{% endif %}"
                    href="/events/{{ bar.event.uid }}{% if bar.event.recurrence %}?occurrence_date={{ bar.event.occurrence_date | urlencode }}{% endif %}"
                    data-modal title="{{ bar.event.title }}"
                    {% if not bar.event.recurrence %}data-uid="{{ bar.event.uid }}" data-start="{{ bar.event.start_at }}" data-end="{{ bar.event.end_at or '' }}"{% endif %}>
@@ -78,7 +83,7 @@
             <div class="allday-col{% if day.is_past %} is-past{% endif %}" data-date="{{ day.iso }}">
                 {% if week_lane_count %}<div class="week-bars-spacer month-bars-offset-{{ week_lane_count }}" aria-hidden="true"></div>{% endif %}
                 {% for t in day.tasks %}
-                <a class="allday-task" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}" data-uid="{{ t.uid }}" data-due="{{ t.due_at }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }} {{ t.title }}</a>
+                <a class="allday-task{% if day.is_past and t.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}" data-uid="{{ t.uid }}" data-due="{{ t.due_at }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }}<span class="allday-title">{{ t.title }}</span></a>
                 {% endfor %}
             </div>
             {% endfor %}
@@ -108,7 +113,7 @@
                 {% endfor %}
                 {% for e in day.timed %}
                 {% if e.is_allocation %}
-                <div class="time-event work-allocation cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-task-uid="{{ e.task_uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
+                <div class="time-event work-allocation cal-{{ e.calendar_color }}{% if e.is_short %} is-short{% endif %}{% if e.is_cascaded %} is-cascaded{% endif %}" data-uid="{{ e.uid }}" data-task-uid="{{ e.task_uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
                      data-style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%; --wa-border:var(--cal-bg-{{ e.calendar_color }});">
                     {# Plain span, not a link -- direct feedback: "why can't
                        it function like any other event so that the whole
@@ -141,7 +146,7 @@
                     <span class="te-resize-handle" data-uid="{{ e.uid }}"></span>
                 </div>
                 {% else %}
-                <a class="time-event cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
+                <a class="time-event cal-{{ e.calendar_color }}{% if e.is_short %} is-short{% endif %}{% if e.is_cascaded %} is-cascaded{% endif %}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
                    href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal
                    data-style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%;">
                     <span class="te-name">{{ e.title }}</span>
@@ -156,4 +161,23 @@
     </div>
     </div>
     </div>
+
+    <aside class="card project-calendar-unscheduled" id="unscheduled-panel">
+        <div class="unscheduled-panel-head">
+            <h2>Unscheduled work <span class="unscheduled-panel-count">({{ unscheduled_tasks|length }})</span></h2>
+            <input type="search" id="unscheduled-search" class="unscheduled-search" placeholder="Search..." aria-label="Search unscheduled work" autocomplete="off">
+            <button type="button" class="icon-btn unscheduled-panel-toggle-btn" id="unscheduled-panel-toggle" title="Collapse Unscheduled work" aria-label="Collapse Unscheduled work" aria-expanded="true" aria-controls="unscheduled-panel-body">{{ icon('sidebar', 'icon-sm') }}</button>
+        </div>
+        <div id="unscheduled-panel-body">
+        {% if unscheduled_tasks %}
+        <div class="unscheduled-task-list">
+            {% for item in unscheduled_tasks %}
+            {{ unscheduled_task_item(item, unscheduled_next) }}
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state empty-state-compact">No unscheduled work -- every open task already has scheduled work.</div>
+        {% endif %}
+        </div>
+    </aside>
 </div>

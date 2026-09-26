@@ -1,0 +1,52 @@
+{# Shared "..." kebab menu -- the icon-btn trigger + floating panel
+   convention static/app.js's `initActionMenus()` already drives (portal-
+   detached to <body> on open, viewport-clamped, Esc/arrow-key nav) was
+   hand-rolled at every call site so far (base.html's command-palette menu,
+   settings_data_maintenance.html's two menus) -- this is the first
+   extraction into a shared macro, added for item 11's redesigned
+   "Unscheduled work" row and item 20's group-members widget row (both
+   want a row-level "..." for actions that don't fit a single icon button,
+   same "extract on the second/third real duplicate" precedent
+   _row_action_buttons.html itself followed).
+
+   `items` is a list of dicts, each either:
+     - a real link:   {label, icon, href, modal=False, danger=False}
+     - a one-button
+       <form> POST:    {label, icon, form_action, fields={}, change=None,
+                        confirm=None, undo=None, archive_undo=None,
+                        unarchive_url=None, danger=False}
+   `fields` becomes hidden inputs; `change` sets data-cc-change (async-crud
+   region refresh on success); `confirm` sets data-confirm-sheet (the
+   generic confirm-before-submit sheet); `undo` sets data-delete-undo (the
+   optimistic hide + undo-toast contract -- only meaningful combined with a
+   `/delete` action and an ancestor `[data-undo-row]`, see static/app.js's
+   own doc comment); `archive_undo` (+ `unarchive_url`) sets data-archive-
+   undo/data-unarchive-url (the same row-hide + real Undo contract, for an
+   action that's reversible server-side via a real unarchive endpoint
+   instead of a delayed/cancelable delete -- see item 19, 2026-09-26, the
+   first real caller of this pair). At most one of confirm/undo/archive_undo
+   makes sense per item; a caller passes whichever its action actually
+   needs, never more than one.
+   Import with `with context` -- the macro body calls the `icon` global. #}
+{% macro action_menu(items, aria_label='More actions') %}
+{% if items %}
+<div class="action-menu" aria-label="{{ aria_label }}">
+    <button type="button" class="action-menu-trigger icon-btn" aria-label="{{ aria_label }}" aria-haspopup="true" aria-expanded="false">{{ icon('more', 'icon-sm') }}</button>
+    <div class="action-menu-panel" role="menu">
+        <div class="action-menu-section">
+            {% for it in items %}
+            {% if it.form_action %}
+            <form class="form-inline{% if it.form_class %} {{ it.form_class }}{% endif %}" method="post" action="{{ it.form_action }}"
+                  {% if it.change %}data-cc-change="{{ it.change }}" {% endif %}{% if it.confirm %}data-confirm-sheet="{{ it.confirm }}" {% endif %}{% if it.undo %}data-delete-undo="{{ it.undo }}" {% endif %}{% if it.archive_undo %}data-archive-undo="{{ it.archive_undo }}" {% endif %}{% if it.unarchive_url %}data-unarchive-url="{{ it.unarchive_url }}" {% endif %}>
+                {% for k, v in (it.fields or {}).items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+                <button type="submit" class="action-menu-item{% if it.danger %} danger{% endif %}" role="menuitem">{{ icon(it.icon, 'icon-sm') }} {{ it.label }}</button>
+            </form>
+            {% else %}
+            <a class="action-menu-item{% if it.danger %} danger{% endif %}" role="menuitem" href="{{ it.href }}"{% if it.modal %} data-modal{% endif %}>{{ icon(it.icon, 'icon-sm') }} {{ it.label }}</a>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endmacro %}

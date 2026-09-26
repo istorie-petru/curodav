@@ -446,6 +446,44 @@ def _apply_habit_days(recurrence: str | None, habit_days, present) -> str | None
     return recurrence
 
 
+def _apply_habit_repeat(repeat, recurrence, habit_days, habits_per_period, times_week=None, times_month=None):
+    """habit_task_form.html's "How often" choice (2026-09-26): daily /
+    days (the Days dropdown) / week / month (the "N times a week/month"
+    dropdown next to it) / keep (the stored rule, sent back as the hidden
+    `recurrence`). Returns (recurrence, habits_per_period); forms without
+    the field get their own values back unchanged, and _apply_habit_days
+    still runs after."""
+    if not isinstance(repeat, str) or not repeat:
+        return recurrence, habits_per_period
+    if repeat == "daily":
+        return "FREQ=DAILY", ""
+    if repeat == "days":
+        days = [d for d in _WEEKDAY_ORDER if isinstance(habit_days, list) and d in habit_days]
+        return ("FREQ=WEEKLY;BYDAY=" + ",".join(days)) if days else "FREQ=DAILY", ""
+    if repeat == "week":
+        return "FREQ=WEEKLY", times_week if isinstance(times_week, str) else habits_per_period
+    if repeat == "month":
+        return "FREQ=MONTHLY", times_month if isinstance(times_month, str) else habits_per_period
+    return recurrence, habits_per_period
+
+
+def _apply_habit_goal(goal, target_per_day):
+    """The form's "Daily goal" (2026-09-26): "once" is a plain check-off
+    (target 1) whatever the hidden Amount box holds; "amount" keeps the
+    typed number (1 or blank falls back to 1 downstream)."""
+    if isinstance(goal, str) and goal == "once":
+        return "1"
+    return target_per_day
+
+
+def _save_habit_look(conn, uid: str, icon, color) -> None:
+    """2026-09-26: the habit form's icon + colour; anything outside
+    habit_view's lists (or blank) stores the default."""
+    icon = icon if isinstance(icon, str) and icon in habit_view.habit_icon_choices() else None
+    color = color if isinstance(color, str) and color in habit_view.HABIT_COLORS else None
+    db.set_task_habit_look(conn, uid, icon, color)
+
+
 def _habit_kind_value(raw) -> str | None:
     """Habits H5: "avoid" or None (a normal, build-it habit)."""
     return "avoid" if isinstance(raw, str) and raw.strip().lower() == "avoid" else None
@@ -487,8 +525,15 @@ def create_task(
     habits_per_period: str | None = Form(None),
     habit_days: list[str] = Form([]),
     habit_days_present: str = Form(""),
+    habit_repeat: str | None = Form(None),
+    habit_times_week: str | None = Form(None),
+    habit_times_month: str | None = Form(None),
+    habit_goal: str | None = Form(None),
     habit_kind: str | None = Form(None),
     habit_unit: str | None = Form(None),
+    reminder_time: str | None = Form(None),
+    habit_icon: str | None = Form(None),
+    habit_color: str | None = Form(None),
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
@@ -497,6 +542,10 @@ def create_task(
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
     tags = dashboard_router._with_project(conn, tags, project, project_field)
+    recurrence, habits_per_period = _apply_habit_repeat(
+        habit_repeat, recurrence, habit_days, habits_per_period, habit_times_week, habit_times_month
+    )
+    target_per_day = _apply_habit_goal(habit_goal, target_per_day)
     # Same defensive-coercion pattern as start_at below -- target_per_day
     # is a new Form field too, so any pre-existing direct caller of
     # create_task() that doesn't pass it gets the literal Form(...) marker
@@ -572,6 +621,12 @@ def create_task(
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
+    # Per-habit reminder time (2026-09-25): only habit_task_form.html sends
+    # it; stored through its own setter, never through upsert_task.
+    if isinstance(reminder_time, str):
+        db.set_task_reminder_time(conn, row["uid"], reminder_time)
+    if isinstance(habit_icon, str) or isinstance(habit_color, str):
+        _save_habit_look(conn, row["uid"], habit_icon, habit_color)
     return respond(x_requested_with, "/tasks", status_code=201, uid=row["uid"])
 
 
@@ -732,8 +787,11 @@ def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
                 "active_tab": "tasks",
                 "task": task,
                 "habit_label": db.get_task_habit_settings(conn)["habit_label"],
-                # Work sessions card (2026-08-29 addition to this form) --
-                # see _work_allocation_context above.
+                # 2026-09-26 (Peter, same day, reversed: "should be able to
+                # be work scheduled -- return it to the edit modal") -- see
+                # _work_allocation_context's own docstring; a habit is
+                # still just a task, so the exact same helper every other
+                # task's edit form uses applies here unchanged.
                 **_work_allocation_context(conn, task),
             },
         )
@@ -787,12 +845,17 @@ def task_detail(uid: str, request: Request, month: str | None = None, conn=Depen
     # context keys are still present (empty) so task_detail.html renders
     # unchanged either way and never has to branch on "is this recurring?".
     if task and task.get("recurrence"):
-        completions = {c["due_date"]: "x" for c in db.list_task_completions(conn, uid)}
+        completion_rows = db.list_task_completions(conn, uid)
+        completions = {c["due_date"]: "x" for c in completion_rows}
         excluded = _excluded_dates_for_row(conn, task, completions, date.today())
         # Habits H1 (2026-09-24): schedule-aware -- a weekly or Mon/Wed/Fri
         # task no longer "breaks" on the days it isn't due.
         pinfo = habit_view.pause_info(db.list_habit_pauses(conn), uid, date.today())
-        stats = habit_view.stats_for_task(task, {d: 1 for d in completions}, excluded, paused=pinfo["dates"])
+        # 2026-09-25 (UI audit H-01): real logged values, not 1 per row --
+        # an amount habit's day only counts once it reaches the target.
+        stats = habit_view.stats_for_task(
+            task, {c["due_date"]: c.get("value") or 1 for c in completion_rows}, excluded, paused=pinfo["dates"]
+        )
         ctx.update(
             {
                 "completions": completions,
@@ -818,24 +881,26 @@ def task_detail(uid: str, request: Request, month: str | None = None, conn=Depen
         # (task, completion_weeks, current_streak, work_allocations,
         # work_hours, habit_label) is already on `ctx`/available here.
         ctx["habit_label"] = db.get_task_habit_settings(conn)["habit_label"]
-        # Habits H3 (2026-09-24): month calendar + day notes + "Log a day".
+        # Habits H3 (2026-09-24): day notes + "Log a day".
         rows = db.list_task_completions(conn, uid)
         # 2026-09-25 (Peter: clickable heatmap, "smarter" for amount
         # habits): the habit heatmap paints real values against the daily
         # target (partial days lighter) and each cell carries its value
         # for the amount popup (static/habit_day.js).
+        # 2026-09-26 (Peter): the history is the year heatmap, or the
+        # week / month grid for a period habit (habit_view.history); the
+        # month calendar and the insights left this modal (insights live
+        # on the Habits page's expandable row now).
+        week_start = db.get_app_meta(conn, habit_view.WEEK_START_KEY) or "monday"
         ctx["completion_weeks"] = habit_heatmap.heatmap_weeks(
             {r["due_date"]: r.get("value") or 0 for r in rows},
             task.get("target_per_day") or 1,
             habit_heatmap.DETAIL_WEEKS,
+            week_start=week_start,
         )
-        ctx["habit_month"] = habit_view.month_calendar(uid, rows, month if isinstance(month, str) else None)
+        ctx["habit_periods"] = habit_view.history(conn, task, week_start=week_start)["periods"]
+        ctx["habit_look"] = habit_view.habit_look(task)
         ctx["habit_notes"] = habit_view.recent_notes(rows)
-        # Habits H8: strength (on habit_stats), per-month counts, usual hour.
-        ctx["habit_insights"] = habit_view.insights(rows)
-        # Habits H6: this habit's current/upcoming pauses (own + all-habit).
-        ctx["habit_pauses"] = habit_view.pause_info(db.list_habit_pauses(conn), uid, date.today())["upcoming"]
-        ctx["today_iso"] = date.today().isoformat()
         return templates.TemplateResponse("habit_task_detail.html", ctx)
     return templates.TemplateResponse("task_detail.html", ctx)
 
@@ -847,7 +912,18 @@ def update_task(
     description: str = Form(""),
     due_at: str = Form(""),
     start_at: str = Form(""),
-    status: str = Form("active"),
+    # Item 19 (2026-09-26): None (not "active") is the real default now --
+    # habit_task_form.html is the one caller that sends no status field at
+    # all ("habits should not have... a status dropdown"), and a habit's
+    # Archive button (this same item) posts to a dedicated /archive route,
+    # not through this field -- so a plain Save on an already-archived
+    # habit must NOT silently flip it back to "active" just because this
+    # form never mentions status. See below: an explicit None falls back
+    # to whatever the task's own row already has, only "active" for a
+    # genuinely brand-new row (which never reaches this route anyway --
+    # create_task's own `status: str = Form("active")` is separate and
+    # unaffected).
+    status: str | None = Form(None),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     project: str = Form(""),
@@ -857,8 +933,15 @@ def update_task(
     habits_per_period: str | None = Form(None),
     habit_days: list[str] = Form([]),
     habit_days_present: str = Form(""),
+    habit_repeat: str | None = Form(None),
+    habit_times_week: str | None = Form(None),
+    habit_times_month: str | None = Form(None),
+    habit_goal: str | None = Form(None),
     habit_kind: str | None = Form(None),
     habit_unit: str | None = Form(None),
+    reminder_time: str | None = Form(None),
+    habit_icon: str | None = Form(None),
+    habit_color: str | None = Form(None),
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
@@ -867,6 +950,10 @@ def update_task(
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
     tags = dashboard_router._with_project(conn, tags, project, project_field)
+    recurrence, habits_per_period = _apply_habit_repeat(
+        habit_repeat, recurrence, habit_days, habits_per_period, habit_times_week, habit_times_month
+    )
+    target_per_day = _apply_habit_goal(habit_goal, target_per_day)
     if not isinstance(target_per_day, str):
         target_per_day = "1"
     try:
@@ -885,6 +972,12 @@ def update_task(
     if not isinstance(exclude_sunday, str):
         exclude_sunday = ""
     existing = db.get_task(conn, uid) or {}
+    # `isinstance`, not `is None` -- a direct (non-HTTP) router call in a
+    # test that omits `status` entirely gets FastAPI's raw `Form(None)`
+    # marker object here, not a literal `None` (same guard shape
+    # `_safe_next`'s own docstring documents for an omitted `next`).
+    if not isinstance(status, str):
+        status = existing.get("status") or "active"
     row = dict(existing)
     row.update(
         {
@@ -927,30 +1020,30 @@ def update_task(
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
+    # Per-habit reminder time -- same "only the habit form sends it" rule.
+    if isinstance(reminder_time, str):
+        db.set_task_reminder_time(conn, row["uid"], reminder_time)
+    if isinstance(habit_icon, str) or isinstance(habit_color, str):
+        _save_habit_look(conn, row["uid"], habit_icon, habit_color)
     return respond(x_requested_with, "/tasks")
 
 
-_UPDATABLE_FIELDS = {"status", "due_at", "title", "tags"}
+_UPDATABLE_FIELDS = {"status", "due_at", "title"}
 
 
 @router.post("/{uid}/update-field")
 async def update_field(uid: str, request: Request, conn=Depends(get_db)):
     """Single-field inline edit, used by the Table view's click-to-edit
-    pills/date/labels cells. Deliberately a JSON body, not a Form -- this is
+    pills/date cells. Deliberately a JSON body, not a Form -- this is
     only ever called from tasks_table.js via fetch(), never from a plain
     HTML form/no-JS fallback, unlike every other route in this router. (The
     Projects page's Kanban board used to call this too for its own per-card
     status dropdown -- removed 2026-09-02, "no inline editing"; a status
     change there now happens by opening the task's own edit form instead,
-    which POSTs through the normal `/tasks/{uid}` route, not this one.)
-
-    `tags` (2026-08-29, STATE.md backlog item 9, "Labels ... become
-    always-clickable checkbox dropdown menus") -- the Table view's Labels
-    cell is now an editable checkbox dropdown (static/tasks_table.js), same
-    "no separate Save step" convention as status/due_at above: every
-    checkbox toggle re-posts the row's *complete* new tag list (a replace,
-    not an add/remove delta -- simpler than diffing, and the client already
-    has the full checked set at hand from the panel's own checkboxes)."""
+    which POSTs through the normal `/tasks/{uid}` route, not this one.
+    `tags` was here too, 2026-08-29 - 2026-09-26 -- the Table view's Labels
+    cell was briefly an editable checkbox dropdown, static/tasks_table.js;
+    reverted, "labels should not be inline editable.")"""
     payload = await request.json()
     field = payload.get("field")
     value = payload.get("value")
@@ -965,19 +1058,11 @@ async def update_field(uid: str, request: Request, conn=Depends(get_db)):
     elif field == "status":
         row["status"] = value
         row["progress"] = _progress_for_status(value)
-    elif field == "tags":
-        if not isinstance(value, list):
-            return JSONResponse({"error": "tags value must be a list"}, status_code=400)
-        row["tags"] = sorted({t.strip() for t in value if isinstance(t, str) and t.strip()})
     else:  # title
         if not isinstance(value, str) or not value.strip():
             return JSONResponse({"error": "title cannot be blank"}, status_code=400)
         row["title"] = value.strip()
     row["updated_at"] = datetime.now(timezone.utc).isoformat()
-    # 1.5 (single-project-per-task): the tags path can put a second project
-    # label on a task same as the create/edit forms/bulk "Add label" can --
-    # surfaced the same way, a plain 400 rather than a silent 500/partial
-    # write (db.upsert_task raises before writing anything).
     try:
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
@@ -998,6 +1083,43 @@ def complete_task(uid: str, x_requested_with: str | None = Header(default=None),
         # again tomorrow. Plain tasks just flip to done, no history row.
         if row.get("recurrence"):
             db.upsert_task_completion(conn, uid, date.today().isoformat(), datetime.now(timezone.utc).isoformat())
+    return respond(x_requested_with, "/tasks")
+
+
+@router.post("/{uid}/archive")
+def archive_task(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    """Item 19 (2026-09-26, "Habits must be archivable"): a plain task can
+    already reach "archived" through its own Status dropdown
+    (STATUSES/status_labels above already list it) -- this is a dedicated
+    action for the one caller that has NO status dropdown at all,
+    habit_task_form.html's Archive button ("habits should not have in
+    their edit modal... a status dropdown" -- see that template's own
+    header comment on why this exists as a separate button instead). Same
+    `dict(existing) + one field + upsert_task` shape complete_task above
+    already uses. update_task's own `status` default now falls back to
+    whatever's already on the row (see that route's own comment) instead
+    of hardcoding "active", so a later plain Save on this same habit
+    doesn't silently undo this."""
+    row = db.get_task(conn, uid)
+    if row:
+        row["status"] = "archived"
+        row["progress"] = _progress_for_status("archived")
+        db.upsert_task(conn, row)
+    return respond(x_requested_with, "/tasks")
+
+
+@router.post("/{uid}/unarchive")
+def unarchive_task(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    """The Restore counterpart -- routers/habits.py's Archived habits
+    modal is the one place this is reachable from today (an archived
+    habit drops off the main Habits list entirely, habit_view.habit_
+    items' own `_INACTIVE_STATUSES` filter, so there's nothing on the
+    normal page to click Restore from)."""
+    row = db.get_task(conn, uid)
+    if row:
+        row["status"] = "active"
+        row["progress"] = _progress_for_status("active")
+        db.upsert_task(conn, row)
     return respond(x_requested_with, "/tasks")
 
 
@@ -1129,9 +1251,21 @@ def set_task_completion(
     elif note is not None:
         note = note.strip()[:500]
     try:
-        parsed_value = float(value) if value else 1.0
+        parsed_value = float(value) if value else None
     except ValueError:
         parsed_value = 1.0
+    if parsed_value is None:
+        # 2026-09-25 (UI audit H-13): an empty amount (the detail modal's
+        # "Log a day" box now starts empty, target as its placeholder)
+        # keeps what the day already has -- a note-only save no longer
+        # overwrites 1 with 8 -- and on an unlogged day logs the daily
+        # target (1 for a plain habit, same as the old default).
+        existing = db.get_task_completion(conn, uid, completion_date)
+        if existing and (existing.get("value") or 0) > 0:
+            parsed_value = float(existing["value"])
+        else:
+            task_row = db.get_task(conn, uid) or {}
+            parsed_value = float(task_row.get("target_per_day") or 1)
     # 2026-08-28 follow-up (direct number input replacing the "+1"/reset
     # buttons): the input's own `max="999999"` is advisory only -- an HTML
     # `max` doesn't stop a hand-crafted request, so clamp here too. Keeps
@@ -1208,6 +1342,7 @@ def add_work_allocation(
     start_at: str = Form(""),
     end_at: str = Form(""),
     next: str = Form(""),
+    x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     """The Work sessions card's "+" button and the planning panels' "+" --
@@ -1220,27 +1355,42 @@ def add_work_allocation(
     them: a valid pair schedules the session directly, a malformed pair is
     rejected the same as before (no-op). The panel posts a same-origin
     `next` path to reload on the grid it was used from; the modal leaves it
-    empty and returns to the task."""
+    empty and returns to the task.
+
+    2026-09-26 (item 11, redesigned Unscheduled Work row's own "+" button):
+    dual-mode like every other async-CRUD mutation (`deps.respond`) -- the
+    row now POSTs through `ccApi.post` (project_calendar.js) so the week
+    grid's own region refresh handles it instead of a full page reload; a
+    plain non-JS form (the modal's Work sessions card) still gets its
+    redirect."""
     task = db.get_task(conn, uid)
     if task is not None:
         if start_at and end_at and end_at > start_at:
             db.create_work_allocation(conn, uid, start_at, end_at)
         elif not (start_at or end_at):
             db.create_work_allocation(conn, uid)  # undated session placeholder
-    return RedirectResponse(url=_safe_next(next) or f"/tasks/{uid}", status_code=303)
+    return respond(x_requested_with, _safe_next(next) or f"/tasks/{uid}")
 
 
 @router.post("/{uid}/work-allocations/remove-latest")
-def remove_latest_work_allocation(uid: str, next: str = Form(""), conn=Depends(get_db)):
+def remove_latest_work_allocation(
+    uid: str,
+    next: str = Form(""),
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
     """The planning grids' "Unscheduled work" panel "−" button -- remove the
     task's most recently added UNDATED work session, so it undoes the
     panel's own "+" without ever touching an already-scheduled block (see
     `db.remove_latest_work_allocation`'s own docstring). No-ops if the task
     has no undated sessions left to remove, even if it has dated ones; never
     touches the task. `next`, when present, is the planning page to return
-    to (same-origin path only, see `_safe_next`)."""
+    to (same-origin path only, see `_safe_next`).
+
+    2026-09-26: dual-mode (see add_work_allocation above) -- the redesigned
+    row's "Remove latest session" kebab item posts through ccApi.post too."""
     db.remove_latest_work_allocation(conn, uid)
-    return RedirectResponse(url=_safe_next(next) or f"/tasks/{uid}", status_code=303)
+    return respond(x_requested_with, _safe_next(next) or f"/tasks/{uid}")
 
 
 @router.post("/{uid}/work-allocations/remove")

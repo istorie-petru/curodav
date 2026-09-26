@@ -22,7 +22,7 @@
             <label>Title</label>
             <input type="text" name="title" required value="{{ task.title if task else (prefill_title or '') }}">
         </div>
-        {% from "_datetime_picker.html" import datetime_picker with context %}
+        {% from "_date_time_fields.html" import date_field with context %}
         <!-- Start + Due merged into one field (2026-09-21 direct request:
              "always have a merged due and start date", "prioritise
              information better") -- same single-labeled-field treatment
@@ -40,11 +40,11 @@
             <div class="task-start-due-row">
                 <div class="task-start-due-item">
                     <span class="field-hint">Start</span>
-                    {{ datetime_picker('start_at', '', task.start_at[:10] if task and task.start_at else today, '', 'date') }}
+                    {{ date_field('start_at', task.start_at[:10] if task and task.start_at else today, label='Start date') }}
                 </div>
                 <div class="task-start-due-item">
                     <span class="field-hint">Due</span>
-                    {{ datetime_picker('due_at', '', task.due_at[:10] if task and task.due_at else '', '', 'date') }}
+                    {{ date_field('due_at', task.due_at[:10] if task and task.due_at else '', label='Due date') }}
                 </div>
             </div>
         </div>

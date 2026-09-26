@@ -21,7 +21,9 @@
 <div class="time-grid-wrap">
 <div class="time-grid-top">
 <div class="time-grid-head day">
-    <div class="thd {% if day == today_iso %}is-today{% endif %} {% if day < today_iso %}is-past{% endif %}">{{ day }}</div>
+    {# 2026-09-25 (UI audit C-6/C-17): weekday + day number (accent pill on
+       today), same markup as Week's headers, instead of the raw ISO date. #}
+    <div class="thd {% if day == today_iso %}is-today{% endif %} {% if day < today_iso %}is-past{% endif %}"><span class="thd-link"{% if day == today_iso %} aria-current="date"{% endif %}><span class="thd-dow">{{ day_date.strftime('%A') }}</span> <span class="thd-num">{{ day_date.day }}</span></span></div>
 </div>
 <div class="time-grid-allday day">
     <div class="allday-gutter">All day</div>
@@ -30,21 +32,35 @@
             {% for e in all_day %}
             <a class="allday-task" href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ e.title }}">
                 <span class="color-dot cal-{{ e.calendar_color }}"></span>
-                {{ e.title }}
+                {# 2026-09-25 (UI audit C-3): title in its own span so
+                   `.allday-task > *`'s ellipsis reaches it (a bare text node
+                   was hard-clipped mid-letter). #}
+                <span class="allday-title">{{ e.title }}</span>
             </a>
             {% endfor %}
             {% for t in tasks %}
-            <a class="allday-task" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }} {{ t.title }}</a>
+            <a class="allday-task{% if day < today_iso and t.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }}<span class="allday-title">{{ t.title }}</span></a>
             {% endfor %}
             {# Habits H7: habits scheduled today, one-tap checkable
                (static/habit_actions.js re-renders #day-grid). #}
             {% for h in habits | default([]) %}
             {% if h.is_future %}
             <span class="allday-task allday-habit" title="{{ h.title }} (habit)">{{ icon('repeat', 'icon-sm') }} {{ h.title }}</span>
+            {% elif h.is_quantity %}
+            {# 2026-09-25 (UI audit C-5): an amount habit shows n/target and
+               logs one more per tap (same +1 as the Agenda widget); it only
+               reads done at its target, lighter while partial. #}
+            <form method="post" action="{{ h.plus_url }}" class="form-inline habit-action allday-habit-form">
+                <input type="hidden" name="completion_date" value="{{ h.date }}">
+                <input type="hidden" name="value" value="{{ h.next_value|int }}">
+                <button type="submit" class="allday-task allday-habit is-qty{% if h.done %} is-done{% elif h.partial %} is-partial{% endif %}"
+                        title="{{ h.title }}: {{ h.value|int }} of {{ h.target|int }}. Click to log one more">
+                    <span class="allday-habit-count">{{ h.value|int }}/{{ h.target|int }}</span> {{ h.title }}</button>
+            </form>
             {% else %}
             <form method="post" action="{{ h.toggle_url }}" class="form-inline habit-action allday-habit-form">
                 <button type="submit" class="allday-task allday-habit{% if h.done %} is-done{% endif %}" aria-pressed="{{ 'true' if h.done else 'false' }}"
-                        title="{{ h.title }} -- {% if h.done %}done, click to undo{% else %}click to mark done{% endif %}">{{ icon('check-circle' if h.done else 'square', 'icon-sm') }} {{ h.title }}</button>
+                        title="{{ h.title }}: {% if h.done %}done. Click to undo{% else %}click to mark done{% endif %}">{{ icon('check-circle' if h.done else 'square', 'icon-sm') }} {{ h.title }}</button>
             </form>
             {% endif %}
             {% endfor %}
@@ -64,7 +80,7 @@
             <div class="time-block-overlay time-block-{{ ov.kind }}" data-style="top:{{ ov.top_px }}px; height:{{ ov.height_px }}px;"></div>
             {% endfor %}
             {% for e in timed %}
-            <a class="time-event cal-{{ e.calendar_color }}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
+            <a class="time-event cal-{{ e.calendar_color }}{% if e.is_short %} is-short{% endif %}{% if e.is_cascaded %} is-cascaded{% endif %}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
                href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal
                data-style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%;">
                 <span class="te-name">{{ e.title }}</span>

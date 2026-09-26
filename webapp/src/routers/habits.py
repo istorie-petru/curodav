@@ -36,7 +36,12 @@ router = APIRouter(prefix="/habits", tags=["habits"])
 
 def _habits_context(conn, request: Request) -> dict:
     items = habit_view.habit_items(conn)
-    today = date.today()
+    # 2026-09-26: each row's expandable history (heatmap or week/month
+    # grid + insights), same week start as the strip.
+    week_start = db.get_app_meta(conn, habit_view.WEEK_START_KEY) or "monday"
+    for h in items:
+        task = db.get_task(conn, h["uid"])
+        h["history"] = habit_view.history(conn, task, week_start=week_start) if task else None
     return {
         "request": request,
         "active_tab": "habits",
@@ -44,9 +49,6 @@ def _habits_context(conn, request: Request) -> dict:
         "on_track": [h for h in items if not h["due_today"] and not h["paused_today"]],
         # Habits H6: habits on a pause today get their own section.
         "paused": [h for h in items if h["paused_today"] and not h["due_today"]],
-        "global_pauses": [
-            p for p in db.list_habit_pauses(conn) if p["task_uid"] is None and p["end_date"] >= today.isoformat()
-        ],
         "has_habits": bool(items),
         "habit_label": db.get_task_habit_settings(conn)["habit_label"],
         "today_iso": date.today().isoformat(),
@@ -64,6 +66,56 @@ def habits_regions(request: Request, conn=Depends(get_db)):
     check-in or a habit edit (features/async-crud.md)."""
     html = templates.env.get_template("_habits_body.html").render(_habits_context(conn, request))
     return HTMLResponse(html)
+
+
+@router.get("/archived")
+def archived_modal(request: Request, conn=Depends(get_db)):
+    """Item 19 (2026-09-26, "Habits must be archivable") -- habit_view.
+    habit_items already excludes an archived (or done) habit-labeled task
+    from the main page entirely (`_INACTIVE_STATUSES`), same as it always
+    has for "done" -- so once a habit's own Archive button (habit_task_
+    form.html, this same item) is used, this modal is the only place left
+    to see it again or Restore it. Same "behind a header button, not a
+    page section" shape Pauses already established for a similarly rare
+    action -- see that route's own docstring."""
+    archived = sorted(
+        (t for t in db.list_habit_tasks(conn) if t.get("status") == "archived"),
+        key=lambda t: t["title"].lower(),
+    )
+    return templates.TemplateResponse(
+        "habit_archived_modal.html",
+        {"request": request, "archived": archived},
+    )
+
+
+@router.get("/pauses")
+def pauses_modal(request: Request, conn=Depends(get_db)):
+    """2026-09-26 (Peter): every pause -- all-habit and single-habit -- in
+    one modal behind the Habits page header's Pauses button, instead of a
+    Vacation section on the page and a Pause section in each habit."""
+    today = date.today().isoformat()
+    habits = [
+        {"uid": h["uid"], "title": h["title"]}
+        for h in habit_view.habit_items(conn)
+        if not h["is_avoid"]  # an avoid habit's clean streak ignores pauses (UI audit H-12)
+    ]
+    titles = {h["uid"]: h["title"] for h in habits}
+    pauses = []
+    for p in db.list_habit_pauses(conn):
+        if p["end_date"] < today:
+            continue
+        if p["task_uid"] is None:
+            title = "All habits"
+        else:
+            task = db.get_task(conn, p["task_uid"])
+            if task is None:
+                continue
+            title = titles.get(p["task_uid"]) or task.get("title") or "Habit"
+        pauses.append({**p, "habit_title": title})
+    return templates.TemplateResponse(
+        "habit_pauses.html",
+        {"request": request, "active_tab": "habits", "pauses": pauses, "habits": habits, "today_iso": today},
+    )
 
 
 @router.post("/pauses")

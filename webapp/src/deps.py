@@ -182,9 +182,37 @@ def _icon(name: str, cls: str = "") -> Markup:
     template's own top-level scope doesn't automatically inherit a parent
     template's macro imports, but Jinja globals are visible everywhere).
     See _icons_sprite.html's own header comment for why this is a local,
-    inline sprite instead of an external icons.svg + cross-file <use>."""
+    inline sprite instead of an external icons.svg + cross-file <use>.
+
+    2026-09-25 (UI audit L14/F18): a name the sprite doesn't define (an old
+    stored label/habit icon, a typo) used to render a blank 16px gap. It
+    falls back to `tag` now, the neutral "some label" glyph. The known
+    names are read once from the sprite file itself, so a new symbol is
+    picked up with no second list to keep in sync. This also means only
+    known names are ever interpolated into the markup."""
     extra = f" {cls}" if cls else ""
+    if name not in _sprite_icon_names():
+        name = "tag"
     return Markup(f'<svg class="icon{extra}" aria-hidden="true"><use href="#icon-{name}"></use></svg>')
+
+
+_SPRITE_NAMES: frozenset[str] | None = None
+
+
+def _sprite_icon_names() -> frozenset[str]:
+    """Every `icon-<name>` symbol id in templates/_icons_sprite.html,
+    parsed on first use and cached for the process (the sprite only
+    changes with a deploy, which restarts the server)."""
+    global _SPRITE_NAMES
+    if _SPRITE_NAMES is None:
+        import re
+
+        text = (_BASE_DIR / "templates" / "_icons_sprite.html").read_text(encoding="utf-8")
+        _SPRITE_NAMES = frozenset(re.findall(r'<symbol id="icon-([a-z0-9-]+)"', text))
+    return _SPRITE_NAMES
+
+
+templates.env.globals["icon_exists"] = lambda name: bool(name) and name in _sprite_icon_names()
 
 
 templates.env.globals["icon"] = _icon
@@ -587,6 +615,10 @@ def _habit_cadence_label(task) -> str:
 
 
 templates.env.globals["habit_cadence_label"] = _habit_cadence_label
+templates.env.globals["habit_repeat_choice"] = habit_view.repeat_choice
+templates.env.globals["habit_look"] = habit_view.habit_look
+templates.env.globals["habit_icons"] = habit_view.habit_icon_choices
+templates.env.globals["habit_colors"] = habit_view.HABIT_COLORS
 
 
 def _label_icon(request: Request, label: str) -> str:
@@ -659,6 +691,29 @@ def _label_color(request: Request, label: str) -> str:
 templates.env.globals["label_color"] = _label_color
 
 
+def _project_label_names(request: Request) -> frozenset[str]:
+    """Every project label's name (2026-09-25, UI audit L18): the task and
+    event detail modals show an item's project on its own "Project" row,
+    matching the forms' separate Project dropdown, instead of as one more
+    pill under Labels. A Jinja global so those templates don't need every
+    detail route to pass db.project_picker_context. Memoized per request;
+    empty on any DB error (a bare test Request has no `.app`), which just
+    means everything shows under Labels as before."""
+    cached = getattr(request.state, "_cc_project_names", None)
+    if cached is not None:
+        return cached
+    try:
+        with db.connect(request.app.state.settings.db_path) as conn:
+            names = frozenset(p["name"] for p in db.list_project_labels(conn))
+    except Exception:
+        names = frozenset()
+    request.state._cc_project_names = names
+    return names
+
+
+templates.env.globals["project_label_names"] = _project_label_names
+
+
 def _format_time_value(value: str, fmt: str) -> str:
     """Shared formatting core for the two filters below -- accepts either
     a full ISO datetime ("2026-08-08T14:30:00") or a bare "HH:MM" string
@@ -701,6 +756,25 @@ def _fmt_time(ctx, value: str) -> str:
 
 
 templates.env.filters["fmt_time"] = _fmt_time
+
+
+_DTF_DOW = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_DTF_MON = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def _dtf_date(value) -> str:
+    """Jinja filter for the date field (_date_time_fields.html, 2026-09-26):
+    "2026-09-26" (or a "...T15:30" datetime) -> "Sat, Sep 26, 2026", the
+    same text static/date_time_fields.js writes after a pick; "" for a
+    blank or unparseable value. English on purpose, matching the JS."""
+    try:
+        d = date.fromisoformat(str(value or "")[:10])
+    except ValueError:
+        return ""
+    return f"{_DTF_DOW[d.weekday()]}, {_DTF_MON[d.month - 1]} {d.day}, {d.year}"
+
+
+templates.env.filters["dtf_date"] = _dtf_date
 
 
 @pass_context

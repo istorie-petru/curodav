@@ -112,15 +112,19 @@ class TestHabitTaskEditModal:
         assert 'data-ms-label="labels"' not in body
         assert 'data-ms-label="status"' not in body
         # still has the habit-relevant fields
-        assert 'name="recurrence"' in body
+        assert 'name="habit_repeat"' in body  # 2026-09-26: "How often" replaces the raw recurrence picker
         assert 'name="target_per_day"' in body
 
-    def test_has_work_sessions_card(self, conn):
+    def test_has_a_work_sessions_card(self, conn):
+        # 2026-09-26 (Peter, same day, reversed): Work sessions was removed
+        # from habit modals, then asked back for the edit modal
+        # specifically ("should be able to be work scheduled -- return it
+        # to the edit modal") -- the view modal is unchanged, still none.
         _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
         resp = tasks_router.edit_task_form("h1", _request("/tasks/h1/edit"), conn=conn)
         body = resp.body.decode()
-        assert "Work sessions" in body
         assert "/tasks/h1/work-allocations" in body
+        assert "Work sessions" in body
 
     def test_plain_task_still_uses_generic_form(self, conn):
         _seed_task(conn, "p1", title="Plain task")

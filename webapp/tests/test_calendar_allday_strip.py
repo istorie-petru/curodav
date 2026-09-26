@@ -132,7 +132,10 @@ class TestWeekViewStrip:
         resp = calendar_router.week_view(_request("/calendar/week"), conn=conn)
         body = resp.body.decode()
         assert "allday-chip" not in body
-        assert re.search(r'class="month-bar allday-bar cal-blue month-bar-lane-0 month-bar-col-1 month-bar-span-1"', body)
+        # Monday of "this week" may itself be today or in the past depending
+        # on which day the suite runs -- is-past (2026-09-26) is allowed
+        # either way, not asserted on here.
+        assert re.search(r'class="month-bar allday-bar cal-blue month-bar-lane-0 month-bar-col-1 month-bar-span-1( is-past)?"', body)
         assert 'data-uid="allday1"' in body
         # all-day events live in the strip, not the timed hour grid
         assert {e["uid"] for e in resp.context["days"][0]["all_day"]} == {"allday1"}

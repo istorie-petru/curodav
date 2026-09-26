@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 import subprocess
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from src.routers import calendar as calendar_router
@@ -135,6 +135,61 @@ class TestBars:
         bar2 = week2["bars"][0]
         assert bar2["col_start"] == 1  # Monday
         assert bar2["col_span"] == 2  # Mon, Tue
+
+
+class TestBarIsPast:
+    """2026-09-26 (Peter: past-dimming must cover all-day events too, not
+    just timed ones) -- `bar["is_past"]` is true only once the bar
+    SEGMENT's own last occupied day is before today, same "fully in the
+    past" rule every other .is-past dims by; a bar still touching today or
+    later (an ongoing multi-day event) stays full-opacity. Real
+    `date.today()`-relative dates, not the fixture's fixed 2026-08 dates
+    (those are always in the past by the time this suite runs)."""
+
+    def test_bar_fully_in_the_past(self):
+        today = date.today()
+        past = today - timedelta(days=14)
+        week_dates = [past - timedelta(days=past.weekday()) + timedelta(days=i) for i in range(7)]
+        events = [_event("e1", f"{past.isoformat()}T00:00:00", f"{past.isoformat()}T23:59:00", all_day=True)]
+        bars, _ = calendar_router._week_bars(week_dates, events)
+        assert bars[0]["is_past"] is True
+
+    def test_bar_on_today_is_not_past(self):
+        today = date.today()
+        week_dates = [today - timedelta(days=today.weekday()) + timedelta(days=i) for i in range(7)]
+        events = [_event("e1", f"{today.isoformat()}T00:00:00", f"{today.isoformat()}T23:59:00", all_day=True)]
+        bars, _ = calendar_router._week_bars(week_dates, events)
+        assert bars[0]["is_past"] is False
+
+    def test_ongoing_multiday_bar_spanning_today_is_not_past(self):
+        today = date.today()
+        start, end = today - timedelta(days=2), today + timedelta(days=2)
+        week_dates = [today - timedelta(days=3) + timedelta(days=i) for i in range(7)]
+        events = [_event("e1", f"{start.isoformat()}T00:00:00", f"{end.isoformat()}T23:59:00", all_day=True)]
+        bars, _ = calendar_router._week_bars(week_dates, events)
+        assert bars[0]["is_past"] is False
+
+    def test_bar_fully_in_the_future_is_not_past(self):
+        today = date.today()
+        future = today + timedelta(days=14)
+        week_dates = [future - timedelta(days=future.weekday()) + timedelta(days=i) for i in range(7)]
+        events = [_event("e1", f"{future.isoformat()}T00:00:00", f"{future.isoformat()}T23:59:00", all_day=True)]
+        bars, _ = calendar_router._week_bars(week_dates, events)
+        assert bars[0]["is_past"] is False
+
+    def test_rendered_bar_carries_is_past_class(self):
+        past = date.today() - timedelta(days=14)
+        events = [_event("e1", f"{past.isoformat()}T00:00:00", f"{past.isoformat()}T23:59:00", all_day=True)]
+        weeks = calendar_router._month_grid(past.year, past.month, events, [])
+        week = _week_of(weeks, past.isoformat())
+        assert week["bars"][0]["is_past"] is True
+        for name in ("_calendar_month_grid.html", "_calendar_fourweek_grid.html", "_calendar_week_grid.html"):
+            text = (_TEMPLATES_DIR / name).read_text()
+            assert "{% if bar.is_past %} is-past{% endif %}" in text
+
+    def test_css_dims_past_bars(self):
+        css = (_STATIC_DIR / "style.css").read_text()
+        assert ".month-bar.is-past{opacity:.5;}" in css
 
     def test_non_overlapping_bars_share_lane_zero(self):
         events = [
@@ -584,7 +639,7 @@ class TestAuditRegressions20260925:
         css = (_STATIC_DIR / "style.css").read_text()
         block = css[css.index("button.allday-habit{"):]
         block = block[:block.index("}")]
-        assert "background:none" in block and "font-size:12px" in block
+        assert "background:none" in block and "font-size:var(--text-xs)" in block
 
 
 class TestAuditDecisions20260925:

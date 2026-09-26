@@ -13,6 +13,9 @@ from typing import Any
 PX_PER_HOUR = 48
 GRID_HOURS = 24
 MIN_BLOCK_HEIGHT_PX = 18
+# Below this a block can't fit its name AND time lines (3px padding + two
+# ~15px lines) -- see position_event's `is_short`.
+SHORT_BLOCK_PX = 36
 
 # Planner (Week view) "Hide sleep hours" setting (2026-09-09, Settings >
 # General, off by default) -- a `(skip_start_min, skip_end_min)` pair, or
@@ -117,7 +120,7 @@ def pack_overlaps(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         clusters.append(current)
 
     result: list[dict[str, Any]] = []
-    for cluster in clusters:
+    for cluster_idx, cluster in enumerate(clusters):
         lane_ends: list[int] = []
         for e in cluster:
             s, en = _span(e)
@@ -129,6 +132,7 @@ def pack_overlaps(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 lane_ends[lane_idx] = en
             enriched = dict(e)
             enriched["_lane"] = lane_idx
+            enriched["_cluster"] = cluster_idx
             result.append(enriched)
         lane_count = len(lane_ends)
         for e in result[-len(cluster):]:
@@ -157,6 +161,10 @@ def position_event(event: dict[str, Any], collapse: CollapseWindow = None) -> di
     )
     positioned["left_pct"] = round(lane * width_pct, 2)
     positioned["width_pct"] = round(width_pct, 2)
+    # 2026-09-25 (UI audit C-18): a block shorter than two text lines (a
+    # 30-minute event is 24px) cut its time line in half -- the templates
+    # add `.is-short`, which puts name and time on one line.
+    positioned["is_short"] = positioned["height_px"] < SHORT_BLOCK_PX
     return positioned
 
 
@@ -168,4 +176,57 @@ def layout_day(events: list[dict[str, Any]], collapse: CollapseWindow = None) ->
     lane-packing itself is unaffected -- overlap is about real start/end
     order, which collapsing a window out of the middle never reorders."""
     timed = [e for e in events if e.get("start_at") and not e.get("all_day")]
-    return [position_event(e, collapse) for e in pack_overlaps(timed)]
+    positioned = [position_event(e, collapse) for e in pack_overlaps(timed)]
+    _cascade_clusters(positioned)
+    return positioned
+
+
+# 2026-09-25 (UI audit C-19): three or more mutually overlapping events
+# split a Week column (~180px) into ~60px lanes that only ever showed
+# "Overl...". When every overlapping pair in a cluster starts at least
+# CASCADE_MIN_START_GAP_MIN apart, the cluster cascades instead (Google
+# Calendar style): each event is indented by its nesting depth and runs to
+# the column's right edge, later-starting events painting on top (DOM order
+# is start order), so every title has the full remaining width and the
+# start-gap guarantees it isn't covered by the next event's block. Clusters
+# with near-simultaneous starts keep the side-by-side lanes (a cascade
+# would hide the earlier event's title under the later one), and 2-lane
+# clusters are unchanged (50% is still readable). Only left_pct/width_pct
+# change -- calendar.js's drag math never reads either (it re-renders the
+# region from the server after a move), so this stays inside the layout.
+CASCADE_MIN_LANES = 3
+CASCADE_MIN_START_GAP_MIN = 30
+CASCADE_MAX_STEP_PCT = 25.0
+CASCADE_MIN_WIDTH_PCT = 40.0
+
+
+def _cascade_clusters(positioned: list[dict[str, Any]]) -> None:
+    by_cluster: dict[int, list[dict[str, Any]]] = {}
+    for e in positioned:
+        by_cluster.setdefault(e.get("_cluster", -1), []).append(e)
+    for cluster in by_cluster.values():
+        if cluster[0].get("_lane_count", 1) < CASCADE_MIN_LANES:
+            continue
+        spans = [_span(e) for e in cluster]  # cluster is already in start order
+        depths: list[int] = []
+        ok = True
+        for i, (s, en) in enumerate(spans):
+            depth = 0
+            for j in range(i):
+                ps, pe = spans[j]
+                if ps < en and s < pe:  # overlaps an earlier-starting event
+                    if s - ps < CASCADE_MIN_START_GAP_MIN:
+                        ok = False
+                        break
+                    depth = max(depth, depths[j] + 1)
+            if not ok:
+                break
+            depths.append(depth)
+        if not ok:
+            continue
+        levels = max(depths) + 1
+        step = min(CASCADE_MAX_STEP_PCT, (100 - CASCADE_MIN_WIDTH_PCT) / max(1, levels - 1))
+        for e, depth in zip(cluster, depths):
+            e["left_pct"] = round(depth * step, 2)
+            e["width_pct"] = round(100 - depth * step, 2)
+            e["is_cascaded"] = True

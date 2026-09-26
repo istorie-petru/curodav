@@ -452,19 +452,54 @@ class TestWidgetCRUD:
         # forward-lookup data but are no longer in WIDGET_VIEWS/
         # WIDGET_SOURCES -- add_widget correctly rejects them as an unknown
         # source now (see test_add_widget_rejects_removed_projects_source).
+        #
+        # "group_members_view" (item 20, 2026-09-26) is the first entry
+        # EXCLUDED from Home's own scope (its render function has nothing
+        # to resolve without a group page's label_name) -- tested on a real
+        # group's page_uid instead of Home, same as every other combo,
+        # just with project_uid set; see
+        # TestGroupMembersWidgetScope::test_excluded_from_home below for
+        # the Home-rejection half of this behavior.
+        db.upsert_label_config(conn, {"name": "Uni", "generate_space": 1})
+        db.set_group_members(conn, "Uni", ["Uni"])
+        group_key = db.group_page_key("Uni")
         for (view, range_), (expected_type, expected_extra) in dashboard_router._SELECTION_TO_TYPE.items():
             if view not in dashboard_router.WIDGET_VIEWS:
                 continue
             source = dashboard_router.WIDGET_VIEWS[view]["source"]
+            project_uid = group_key if view == "group_members_view" else ""
             dashboard_router.add_widget(
-                source=source, view=view, range=range_ or "", title="", project_uid="", tags="",
+                source=source, view=view, range=range_ or "", title="", project_uid=project_uid, tags="",
                 task_list_uids=[], calendar_uids=[], limit="", style="", scope="", show=[],
                 space_uid="", conn=conn,
             )
-            w = db.list_dashboard_widgets(conn)[-1]
+            w = db.list_dashboard_widgets(conn, label_name=project_uid or None)[-1]
             assert w["type"] == expected_type
             for key, value in expected_extra.items():
                 assert w["config"].get(key) == value
+
+
+class TestGroupMembersWidgetScope:
+    """item 20 (2026-09-26): `group_members` is meaningless outside a
+    group's own page (its render function resolves a group from
+    `config["label_name"]`, which Home/a plain label page never carry) --
+    excluded from those two scopes the same way `spaces_projects` is
+    excluded from a plain project page."""
+
+    def test_excluded_from_home(self, conn):
+        dashboard_router.add_widget(
+            source="group_members", view="group_members_view", range="", title="", project_uid="", tags="",
+            task_list_uids=[], calendar_uids=[], limit="", style="", scope="", show=[], space_uid="", conn=conn,
+        )
+        assert db.list_dashboard_widgets(conn) == []
+
+    def test_excluded_from_a_plain_label_page(self, conn):
+        db.upsert_label_config(conn, {"name": "Solo"})
+        dashboard_router.add_widget(
+            source="group_members", view="group_members_view", range="", title="", project_uid="Solo", tags="",
+            task_list_uids=[], calendar_uids=[], limit="", style="", scope="", show=[], space_uid="", conn=conn,
+        )
+        assert db.list_dashboard_widgets(conn, label_name="Solo") == []
 
     def test_edit_widget_updates_config(self, conn):
         dashboard_router.add_widget(source="calendar_tasks", view="upcoming_list", range="all_upcoming", title="", project_uid="", tags="", task_list_uids=[], calendar_uids=[], limit="", space_uid="", conn=conn)
