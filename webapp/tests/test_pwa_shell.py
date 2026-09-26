@@ -341,5 +341,6 @@ class TestShellCacheVersion:
         # v134 (2026-09-26): flat icon grid, full icon library for habits.
         # v135 (2026-09-26): groups/labels/projects split, module dropdowns.
         # v136 (2026-09-26): entity tables rebuilt, convert row action, panel heatmap clickable.
+        # v137 (2026-09-26): typed date/time fields replace the range picker.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v136"' in script
+        assert 'CACHE_NAME = "cc-shell-v137"' in script

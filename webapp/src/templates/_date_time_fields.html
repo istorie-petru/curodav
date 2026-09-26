@@ -1,0 +1,74 @@
+{# Date and time fields (2026-09-26, Peter's mockup; replaces the old
+   _datetime_picker.html popover). Each field is a real text box you can
+   type into -- a date as 29/09/2023 (day first), 2023-09-29, 29.09 or
+   "today"/"tomorrow"; a time as 15:30, 1530, 3pm -- with a small button
+   inside it that opens a dropdown: a month calendar for a date, a list of
+   times (every 15 minutes) for a time. A date field holds only a date, a
+   time field only a time. static/date_time_fields.js parses, formats and
+   runs the dropdowns; the server only ever sees the hidden input, in the
+   same format the old picker posted ("YYYY-MM-DD", "HH:MM", or
+   "YYYY-MM-DDTHH:MM" from a range), so no route changed.
+
+   date_field(name, value, ...)  -- one date. `value` "YYYY-MM-DD" (a
+       longer datetime is cut to its date). min/max "YYYY-MM-DD" grey out
+       days in the calendar and reject typed dates outside them.
+   time_field(name, value, ...)  -- one "HH:MM" time.
+   datetime_range(start_name, end_name, start_value, end_value, ...)
+       -- the mockup's "Date & time" block: an optional All day switch in
+       its header (it only shows/hides the time fields), then Start and
+       End, each a date field + a time field. Two hidden inputs carry
+       "YYYY-MM-DDTHH:MM"; an all-day range posts T00:00 .. T23:59 (the
+       app's inclusive all-day convention). Moving the start moves the end
+       with it (same duration); an end before the start snaps after it.
+
+   `role` (internal) ties a date/time field to its range; `input_class`
+   and `attrs` go on the hidden input (the Tasks table's inline due date
+   keeps its class="inline-date" data-uid data-field contract). #}
+
+{% macro _week_start() %}{{ week_start(request) if request is defined else 'monday' }}{% endmacro %}
+
+{% macro date_field(name, value='', required=false, min='', max='', compact=false, label='Date', input_class='', attrs='', role='') %}
+<div class="dtf dtf-date{% if compact %} dtf--compact{% endif %}" data-dtf="date" data-dtf-week-start="{{ _week_start() }}"{% if min %} data-dtf-min="{{ min }}"{% endif %}{% if max %} data-dtf-max="{{ max }}"{% endif %}{% if required %} data-dtf-required{% endif %}{% if role %} data-dtr-role="{{ role }}"{% endif %}>
+    <input type="text" class="dtf-input" value="{{ value|dtf_date }}" placeholder="{{ 'Set date' if compact else 'dd/mm/yyyy' }}" autocomplete="off" spellcheck="false" aria-label="{{ label }}">
+    <button type="button" class="dtf-btn" tabindex="-1" aria-label="Choose {{ label|lower }}" aria-haspopup="dialog">{{ icon('chevron-down', 'icon-sm') }}</button>
+    <input type="hidden" class="dtf-value{% if input_class %} {{ input_class }}{% endif %}"{% if name %} name="{{ name }}"{% endif %} value="{{ (value or '')[:10] }}" {{ attrs|safe }}>
+</div>
+{% endmacro %}
+
+{% macro time_field(name, value='', required=false, compact=false, label='Time', input_class='', attrs='', role='') %}
+{% set _v = ((value[11:16] if 'T' in value else value[:5]) if value and ':' in value else '') %}
+<div class="dtf dtf-time{% if compact %} dtf--compact{% endif %}" data-dtf="time" data-dtf-12h="{{ '1' if (request is defined and time_format(request) == '12h') else '' }}"{% if required %} data-dtf-required{% endif %}{% if role %} data-dtr-role="{{ role }}"{% endif %}>
+    <input type="text" class="dtf-input" value="{{ _v|fmt_time if _v else '' }}" placeholder="{{ 'h:mm am' if (request is defined and time_format(request) == '12h') else 'hh:mm' }}" autocomplete="off" spellcheck="false" aria-label="{{ label }}">
+    <button type="button" class="dtf-btn" tabindex="-1" aria-label="Choose {{ label|lower }}" aria-haspopup="listbox">{{ icon('chevron-down', 'icon-sm') }}</button>
+    <input type="hidden" class="dtf-value{% if input_class %} {{ input_class }}{% endif %}"{% if name %} name="{{ name }}"{% endif %} value="{{ _v }}" {{ attrs|safe }}>
+</div>
+{% endmacro %}
+
+{% macro datetime_range(start_name, end_name, start_value='', end_value='', all_day_name='', all_day=false, title='Date & time', start_label='Start', end_label='End', required=false, compact=false) %}
+<div class="dtr{% if compact %} dtr--compact{% endif %}" data-dtr{% if all_day %} data-all-day{% endif %}>
+    {% if title or all_day_name %}
+    <div class="dtr-head">
+        {% if title %}<span class="dtr-title">{{ title }}</span>{% endif %}
+        {% if all_day_name %}
+        <label class="dtr-allday"><span>All day</span><input type="checkbox" id="all_day" name="{{ all_day_name }}" value="1" class="dtr-allday-box"{% if all_day %} checked{% endif %}></label>
+        {% endif %}
+    </div>
+    {% endif %}
+    <input type="hidden" class="dtr-start" name="{{ start_name }}" value="{{ start_value or '' }}"{% if required %} required{% endif %}>
+    <input type="hidden" class="dtr-end" name="{{ end_name }}" value="{{ end_value or '' }}">
+    <div class="dtr-row">
+        <span class="dtr-label">{{ start_label }}</span>
+        <div class="dtr-fields">
+            {{ date_field('', start_value, required=required, compact=compact, label=start_label ~ ' date', role='start-date') }}
+            {{ time_field('', start_value[11:16] if start_value and start_value|length > 11 else '', compact=compact, label=start_label ~ ' time', role='start-time') }}
+        </div>
+    </div>
+    <div class="dtr-row">
+        <span class="dtr-label">{{ end_label }}</span>
+        <div class="dtr-fields">
+            {{ date_field('', end_value, compact=compact, label=end_label ~ ' date', role='end-date') }}
+            {{ time_field('', end_value[11:16] if end_value and end_value|length > 11 else '', compact=compact, label=end_label ~ ' time', role='end-time') }}
+        </div>
+    </div>
+</div>
+{% endmacro %}

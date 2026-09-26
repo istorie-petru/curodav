@@ -57,7 +57,7 @@ class TestHolidayModalDateFieldMarkup:
         assert 'id="holiday-form"' in body
         assert 'name="date_from"' in body
         assert 'name="date_to"' in body
-        assert 'data-dtp-mode="date"' in body
+        assert 'data-dtf="date"' in body  # 2026-09-26: the date field
 
     def test_edit_holiday_modal_has_both_date_pickers(self, conn):
         db.upsert_holiday(conn, {
@@ -78,7 +78,7 @@ class TestHolidayDateSyncScript:
         assert "holiday-form" in script
         assert 'name="date_from"' in script
         assert 'name="date_to"' in script
-        assert "dtpSetDate" in script
+        assert "CCDateField.set" in script  # 2026-09-26
 
     def test_only_fills_the_other_field_when_it_is_empty(self):
         # Structural guard against regressing the "after the initial set
@@ -98,8 +98,8 @@ class TestHolidayDateSyncScript:
         assert "CCHolidayDateSync" in script
 
 
-class TestDatetimePickerDateModeSetHook:
-    def test_datetime_picker_js_exposes_a_set_date_hook_for_date_mode(self):
-        script = (_STATIC_DIR / "datetime_picker.js").read_text()
-        assert "dtpSetDate" in script
-        assert 'mode === "date"' in script
+class TestDateFieldSetHook:
+    def test_date_field_js_exposes_a_set_hook(self):
+        # 2026-09-26: date_time_fields.js replaced datetime_picker.js.
+        script = (_STATIC_DIR / "date_time_fields.js").read_text()
+        assert "window.CCDateField = {" in script and "set(hiddenInput, value)" in script

@@ -170,7 +170,7 @@ class TestHolidayEditModal:
         db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "Default", "label": "Break", "date_from": "2026-09-14", "date_to": "2026-09-16"})
         resp = settings_router.edit_holiday_modal("h1", _request("/settings/holidays/h1/edit"), conn=conn)
         body = resp.body.decode()
-        assert 'data-dtp-mode="date"' in body
+        assert 'data-dtf="date"' in body  # 2026-09-26: the date field
         assert 'name="date_from"' in body
         assert 'name="date_to"' in body
         assert 'value="2026-09-14"' in body

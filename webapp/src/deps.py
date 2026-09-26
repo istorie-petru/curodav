@@ -758,6 +758,25 @@ def _fmt_time(ctx, value: str) -> str:
 templates.env.filters["fmt_time"] = _fmt_time
 
 
+_DTF_DOW = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_DTF_MON = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def _dtf_date(value) -> str:
+    """Jinja filter for the date field (_date_time_fields.html, 2026-09-26):
+    "2026-09-26" (or a "...T15:30" datetime) -> "Sat, Sep 26, 2026", the
+    same text static/date_time_fields.js writes after a pick; "" for a
+    blank or unparseable value. English on purpose, matching the JS."""
+    try:
+        d = date.fromisoformat(str(value or "")[:10])
+    except ValueError:
+        return ""
+    return f"{_DTF_DOW[d.weekday()]}, {_DTF_MON[d.month - 1]} {d.day}, {d.year}"
+
+
+templates.env.filters["dtf_date"] = _dtf_date
+
+
 @pass_context
 def _fmt_hour(ctx, hour: int) -> str:
     """Jinja filter for the time-grid gutter labels (Calendar Week/Day,

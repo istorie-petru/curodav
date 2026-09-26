@@ -117,7 +117,22 @@ session start.
     CSS is deleted. The Habits page panel's heatmap is clickable
     (heatmap macro `form_class="habit-action"` + `undo_url`; amount habits
     open the popup; view-only on touch like the modal's).
-  SW cache v136.
+  - Date/time redesign (Peter's mockup): `_date_time_fields.html`
+    (`date_field`, `time_field`, `datetime_range`) + `static/
+    date_time_fields.js` replace `_datetime_picker.html` /
+    `datetime_picker.js` everywhere (event form, task start/due + the
+    Tasks table's inline due, label/project deadline, holidays, time
+    blocks, habit pauses, work sessions, "Move this occurrence", the
+    recurrence "Ends on" box). Each field is a typed text box (dates day
+    first: 29/09/2023, 2023-09-29, 29.09, today; times 15:30, 1530, 3pm)
+    with a small button that opens a calendar or a 15-minute time list
+    (end times show the duration). The event form's "Date & time" block
+    has All day in its header, which only hides the time boxes; the range
+    keeps the duration when the start moves and posts the same
+    start_at/end_at (all-day T00:00..T23:59) as before. Hidden-input
+    contracts unchanged, no route changed. `dtf_date` Jinja filter for the
+    display text. Tasks stay date-only (no time on a task yet).
+  SW cache v137.
 
 - **Shipped:** 2026-09-26 -- habits decluttering, per Peter ("rows too
   tall, 28-32px is enough"; "I don't believe in habit vacation"; month

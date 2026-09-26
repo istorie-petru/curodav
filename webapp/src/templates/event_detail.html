@@ -175,10 +175,9 @@
             <summary class="btn ghost btn-sm occurrence-move-summary">{{ icon('move', 'icon-sm') }} Move this occurrence</summary>
             <form method="post" action="/events/{{ event.uid }}/occurrences/move" class="field-grid occurrence-move-form" data-cc-change="event" data-cc-action="move">
                 <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
-                {% from "_datetime_picker.html" import datetime_picker with context %}
+                {% from "_date_time_fields.html" import datetime_range with context %}
                 <div class="field field-wide">
-                    <label>New start & end</label>
-                    {{ datetime_picker('start_at', 'end_at', occurrence_date[:16], '', 'range', true, required=true) }}
+                    {{ datetime_range('start_at', 'end_at', occurrence_date[:16], '', title='New start & end', required=true) }}
                 </div>
                 <button type="submit" class="btn primary btn-sm">Move</button>
             </form>

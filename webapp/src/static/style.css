@@ -2348,24 +2348,10 @@ tr.is-selected{background:var(--accent-neutral-subtle);}
    of always reserving space nothing's using. */
 .task-title-cell{min-width:64px;}
 .task-title-cell:has([data-editing]){min-width:280px;}
-/* Date -- still legible, but a rung below the title now (was full
-   `--fg-primary` via the shared `.dtp-trigger` rule, unset by
-   `.dtp--compact`'s own override, which only ever touched padding/border/
-   background). */
-.dtp--compact .dtp-trigger{color:var(--fg-secondary);}
-/* 2026-09-03 further follow-up ("the font in the tasks table is much too
-   small, compare the two tables -- I want a much more standardized
-   font"): the compact date trigger's own site-wide rule (`.dtp--compact
-   .dtp-trigger`, further down this file) hardcodes `font-size:var(--text-
-   caption)` (13px) for every one of its callers, including the Work-
-   sessions card's inline date -- inside this table specifically that sat
-   next to Habits' plain-text Cadence cell (`.text-muted`, no size
-   override, inheriting whatever the table's base size was), which read as
-   two different sizes on what's visually the same "small metadata text"
-   role. Overridden back to this table's own unified size (right below,
-   `.task-table tbody td`) rather than any fixed number, so Date always
-   tracks whatever that one baseline is. */
-.task-table .dtp--compact .dtp-trigger{font-size:inherit;}
+/* Date -- the inline due date (a compact date field, 2026-09-26): the
+   table's own text size, a rung below the title in colour. */
+.task-table .dtf--compact .dtf-input{font-size:inherit; color:var(--fg-secondary);}
+.task-table .dtf--compact{width:13em; max-width:100%;}
 /* 4. Status: compact colored chip instead of a full-width pill block --
    shrunk further than the existing `.pill-select-trigger` padding/font
    (already fairly small, from the 2026-08-29 native-<select> replacement),
@@ -7437,128 +7423,6 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 }
 .auth-submit{width:100%; margin-top:var(--space-2);}
 
-/* --------------------------------------------------------------------- */
-/* Date+time range picker (static/datetime_picker.js, templates/
-   _datetime_picker.html, 2026-08-17) -- the shared "add dates and hours
-   easily" control. A trigger button styled like the other field dropdowns
-   (.widget-list-multiselect .multiselect-trigger's field look) and a
-   portal panel (same fixed/portal/z-index contract as .multiselect-panel:
-   portaled to #multiselect-portal so a modal never clips it, 150 sits
-   above .modal-overlay's 100) holding a month calendar next to a 24-row
-   hour grid. "range" mode lays the two columns side by side; "time" mode
-   (a weekly block has no date) is the hour grid alone. */
-.dtp{display:block;}
-.dtp-trigger{
-  display:flex; align-items:center; justify-content:flex-start; gap:8px;
-  width:100%; background:var(--control-bg);
-  border:1.5px solid var(--control-border); border-radius:var(--radius-control);
-  padding:10px 14px; font-size:var(--text-base); font-weight:var(--font-weight-regular); color:var(--fg-primary);
-  font-family:inherit; cursor:pointer;
-}
-.dtp-trigger:hover{background:var(--bg-secondary); border-color:var(--border-strong);}
-.dtp-trigger:focus-visible{outline:none; border-color:var(--accent-neutral); box-shadow:0 0 0 3px var(--accent-neutral-subtle);}
-/* 2026-09-08 direct report: a required date/range/time picker's `required`
-   attribute lives on a `type="hidden"` input, which HTML explicitly bars
-   from constraint validation -- the browser never actually blocked an empty
-   submit the way this component's own comment assumed. datetime_picker.js's
-   document-level submit guard adds this class to flag the offending
-   trigger instead, so there's still a visible "fix this" signal once the
-   submit is caught in JS. */
-.dtp-trigger.dtp-trigger-invalid{border-color:var(--danger); box-shadow:0 0 0 3px var(--tag-red-bg);}
-.dtp-trigger .dtp-value{flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:left;}
-.dtp-trigger .filter-caret{display:inline-flex; transition:transform var(--dur-fast) var(--ease-standard); color:var(--fg-tertiary);}
-.dtp.is-open > .dtp-trigger .filter-caret{transform:rotate(180deg);}
-/* Compact inline variant (the Work-sessions card's per-session trigger
-   sitting mid-row, and the Tasks table's Date cell -- _task_row.html)
-   -- shrinks to its content instead of filling the row, and drops the
-   full field's border/background entirely (2026-08-29, STATE.md backlog
-   item 9 follow-up, "Date as well should not have a border") -- a boxed
-   field border read as out of place sitting inline in a table cell/row
-   next to plain text, the same reasoning the Status/Labels pill triggers
-   just above went borderless for. */
-.dtp--compact{display:inline-flex;}
-.dtp--compact .dtp-trigger{
-  width:auto; background:none; border:none; padding:3px 8px; font-size:var(--text-sm); border-radius:var(--radius-sm);
-}
-.dtp--compact .dtp-trigger:hover{background:var(--bg-secondary); border-color:transparent;}
-.dtp--compact .dtp-trigger:focus-visible{border-color:transparent; box-shadow:0 0 0 2px var(--accent-neutral-subtle);}
-.dtp-panel{
-  display:none; position:fixed; z-index:var(--z-overlay-panel);
-  background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
-  box-shadow:var(--elevation-3); padding:var(--space-3);
-}
-.dtp-panel.is-open{display:block;}
-/* 2026-09-03 rework (direct feedback after a round of mockups -- see
-   datetime_picker.js's header comment for the full history): range mode
-   used to lay a month calendar and a scrolling 24-row hour list side by
-   side in a two-column grid, which read as "too bulky." It's a single
-   column now, the same width as date mode's own panel -- the calendar,
-   then the hour:minute chip row underneath (.dtp-hour-row further down). */
-.dtp-panel--range{display:none; flex-direction:column; gap:var(--space-2);}
-.dtp-panel--range.is-open{display:flex;}
-.dtp-panel-head{display:flex; align-items:center; justify-content:space-between; gap:6px;}
-.dtp-panel--date{display:none; aspect-ratio:1/1;}
-.dtp-panel--date.is-open{display:flex; flex-direction:column;}
-.dtp-panel--date .dtp-panel-head{margin-bottom:var(--space-2);}
-.dtp-panel--date .dtp-cal-grid{flex:1; grid-template-rows:repeat(6,1fr);}
-.dtp-panel-title{font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary); flex:1; text-align:center; white-space:nowrap;}
-.dtp-month-nav{width:24px; height:24px;}
-/* Date and range modes' Clear (2026-08-29, STATE.md backlog item 9:
-   "remove the Apply button entirely; Clear button loses its text label,
-   becomes icon-only" -- extended to range mode 2026-09-03 when Apply was
-   dropped there too, see datetime_picker.js's header comment) -- sits in
-   the calendar header next to the Next-month arrow instead of alone in a
-   footer (range/time no longer render one at all; see
-   datetime_picker.js's renderCalendar/renderTimeHeader). Same exact box as
-   `.dtp-month-nav` (24x24, no padding) so its round `:hover` background
-   stays a perfect circle like every other icon-btn in this header -- an
-   earlier pass added a left border + padding-left here for "visible
-   separation," but padding eating into a fixed-width/height box turns the
-   hover circle into an off-center blob, and a divider line reads as
-   busier than this small a control needs. margin-left alone (space-
-   between/the title's own flex:1 don't reach this far right) is enough
-   separation from the Next-month arrow without either problem. */
-.dtp-clear-nav{width:24px; height:24px; margin-left:var(--space-2);}
-.dtp-cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
-.dtp-day{
-  display:flex; align-items:center; justify-content:center;
-  width:100%; padding:3px 0; font-size:var(--text-sm); color:var(--fg-primary);
-  background:none; border:none; border-radius:var(--radius-pill); font-family:inherit; cursor:pointer;
-}
-.dtp-day:hover{background:var(--row-alt);}
-.dtp-day:focus-visible{outline:none; box-shadow:0 0 0 2px var(--accent-neutral);}
-.dtp-day.is-blank{visibility:hidden;}
-.dtp-day.is-today{font-weight:var(--font-weight-bold); background:var(--accent-neutral); color:var(--fg-on-accent-neutral);}
-.dtp-day.is-selected{background:var(--accent); color:var(--fg-on-accent);}
-.dtp-day.is-disabled{color:var(--fg-tertiary); opacity:.5; cursor:not-allowed;}
-.dtp-day.is-disabled:hover{background:none;}
-[data-theme="dark"] .dtp-day.is-today{background:#494949;}
-/* Hour:minute chips (2026-09-03, replaces the old scrolling/click-drag
-   24-row `.dtp-hour` list -- see datetime_picker.js's header comment for
-   why). One chip per Start/End, each holding 2-3 small "segment" spans
-   (hour, minute, and -- 12h setting only -- AM/PM); exactly one segment
-   is highlighted at a time via `.is-active`, painted only while its chip
-   has real focus (`.is-focused`) so the highlight can't go stale once
-   focus moves elsewhere. Arrow keys/typed digits mutate a segment in
-   place (datetime_picker.js's paintChips) rather than rebuilding the
-   chip, so repeated key presses keep working without losing focus. */
-.dtp-hour-row{
-  display:flex; align-items:center; justify-content:center; gap:6px;
-  margin-top:var(--space-1); padding-top:var(--space-2); border-top:1px solid var(--separator);
-}
-.dtp-hour-chip{
-  display:inline-flex; align-items:center; padding:6px 10px; font-size:var(--text-sm); font-weight:var(--font-weight-bold);
-  color:var(--fg-primary); background:var(--bg-secondary); border-radius:var(--radius-control);
-  border:1.5px solid transparent; font-variant-numeric:tabular-nums; font-family:inherit; cursor:text;
-}
-.dtp-hour-chip.is-focused{border-color:var(--accent); background:var(--bg-elevated);}
-.dtp-hour-chip:focus-visible{outline:none;}
-.dtp-hour-colon{color:var(--fg-tertiary); padding:0 1px;}
-.dtp-hour-seg{border-radius:4px; padding:1px 3px;}
-.dtp-hour-seg.is-active{background:var(--accent); color:var(--fg-on-accent);}
-.dtp-hour-seg-ampm{margin-left:4px; font-size:var(--text-2xs); color:var(--fg-tertiary);}
-.dtp-hour-seg-ampm.is-active{color:var(--fg-on-accent);}
-.dtp-hour-sep{color:var(--fg-tertiary); font-size:var(--text-sm);}
 
 /* --------------------------------------------------------------------- */
 /* Data & Maintenance page (2026-08-26 redesign, third pass same day)     */
@@ -8066,3 +7930,79 @@ button.allday-habit{
 .habit-amount-actions{display:flex; justify-content:flex-end; gap:var(--space-2);}
 .habit-amount-trigger{cursor:pointer;}
 button.heatmap-cell{border:none; padding:0;}
+
+/* Date and time fields (_date_time_fields.html + date_time_fields.js,
+   2026-09-26, Peter's mockup; replaced the .dtp popover picker). A normal
+   app text box you can type into, with a small chevron button inside its
+   right edge that opens the dropdown (a month calendar, or a time list).
+   A range is the mockup's "Date & time" block: title + All day on one
+   line, then Start / End rows of date (wider) + time. All day hides the
+   time boxes; the date then fills the row. */
+.dtf{position:relative; display:block; min-width:0;}
+.dtf .dtf-input{width:100%; padding-right:40px; font-variant-numeric:tabular-nums;}
+.dtf-btn{position:absolute; top:50%; right:5px; transform:translateY(-50%); display:inline-flex; align-items:center; justify-content:center;
+  width:30px; height:30px; border:none; border-radius:var(--radius-sm); background:transparent; color:var(--fg-tertiary); cursor:pointer; padding:0;}
+.dtf-btn:hover, .dtf.is-open .dtf-btn{background:var(--bg-secondary); color:var(--fg-primary);}
+.dtf.is-open .dtf-btn .icon{transform:rotate(180deg);}
+.dtf.is-invalid .dtf-input{border-color:var(--danger); box-shadow:0 0 0 3px color-mix(in srgb, var(--danger) 18%, transparent);}
+.dtf--compact .dtf-input{padding-top:5px; padding-bottom:5px; padding-left:10px; font-size:var(--text-sm);}
+.dtf--compact .dtf-btn{width:24px; height:24px; right:3px;}
+/* In a table row (the Tasks table's inline due date) a compact field is
+   borderless until hovered or focused, like the old inline date. */
+td .dtf--compact .dtf-input{border-color:transparent; background:transparent;}
+td .dtf--compact:hover .dtf-input, td .dtf--compact .dtf-input:focus, td .dtf--compact.is-open .dtf-input{border-color:var(--control-border); background:var(--control-bg);}
+
+.dtr{display:flex; flex-direction:column; gap:var(--space-2);}
+.dtr-head{display:flex; align-items:center; justify-content:space-between; gap:var(--space-2);}
+.dtr-title{font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary); text-transform:uppercase; letter-spacing:.02em;}
+.dtr-allday{display:inline-flex; align-items:center; gap:var(--space-2); font-size:var(--text-sm); color:var(--fg-primary); cursor:pointer;
+  text-transform:none; letter-spacing:0; font-weight:var(--font-weight-regular);}
+.field label.dtr-allday{text-transform:none; letter-spacing:0; font-weight:var(--font-weight-regular); color:var(--fg-primary);}
+.dtr-row{display:flex; flex-direction:column; gap:var(--space-1);}
+.dtr-label{font-size:var(--text-sm); color:var(--fg-secondary);}
+.dtr-fields{display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr); gap:var(--space-2);}
+.dtr[data-all-day] .dtf-time{display:none;}
+.dtr[data-all-day] .dtr-fields{grid-template-columns:minmax(0,1fr);}
+.dtr--compact{gap:var(--space-1);}
+
+.dtf-panel{position:fixed; z-index:var(--z-overlay-panel); background:var(--bg-elevated); border:1px solid var(--border);
+  border-radius:var(--radius-md); box-shadow:var(--elevation-3); padding:var(--space-2);}
+.dtf-panel[hidden]{display:none;}
+.dtf-panel-date{width:280px;}
+.dtf-cal-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:var(--space-1);}
+.dtf-cal-title{font-weight:var(--font-weight-bold); font-size:var(--text-sm);}
+.dtf-nav{width:30px; height:30px; border:none; background:transparent; border-radius:var(--radius-sm); font-size:var(--text-xl); line-height:1; color:var(--fg-secondary); cursor:pointer;}
+.dtf-nav:hover{background:var(--bg-secondary); color:var(--fg-primary);}
+.dtf-cal-grid{display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:2px;}
+.dtf-dow{font-size:var(--text-2xs); color:var(--fg-tertiary); text-align:center; padding:4px 0;}
+.dtf-day{height:34px; border:none; background:transparent; border-radius:var(--radius-sm); font-size:var(--text-sm); color:var(--fg-primary);
+  cursor:pointer; padding:0; font-variant-numeric:tabular-nums;}
+.dtf-day:hover{background:var(--bg-secondary);}
+.dtf-day:focus-visible{outline:2px solid var(--accent); outline-offset:-2px;}
+.dtf-day.is-outside{color:var(--fg-tertiary);}
+.dtf-day.is-today{box-shadow:0 0 0 1.5px var(--accent) inset;}
+.dtf-day.is-selected{background:var(--accent); color:var(--fg-on-accent); box-shadow:none;}
+.dtf-day:disabled{opacity:.35; cursor:not-allowed; background:transparent;}
+.dtf-cal-foot{display:flex; justify-content:space-between; margin-top:var(--space-1); padding-top:var(--space-1); border-top:1px solid var(--separator);}
+.dtf-link{border:none; background:transparent; color:var(--accent); font-size:var(--text-sm); padding:6px 8px; border-radius:var(--radius-sm); cursor:pointer;}
+.dtf-link:hover{background:var(--bg-secondary);}
+.dtf-panel-time{padding:var(--space-1);}
+.dtf-times{display:flex; flex-direction:column; max-height:264px; overflow-y:auto;}
+.dtf-opt{display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); min-height:34px; padding:0 var(--space-3);
+  border:none; background:transparent; border-radius:var(--radius-sm); font-size:var(--text-sm); color:var(--fg-primary); cursor:pointer;
+  text-align:left; font-variant-numeric:tabular-nums; white-space:nowrap;}
+.dtf-opt:hover, .dtf-opt:focus-visible{background:var(--bg-secondary); outline:none;}
+.dtf-opt.is-selected{background:var(--accent); color:var(--fg-on-accent);}
+.dtf-dur{font-size:var(--text-2xs); color:var(--fg-tertiary);}
+.dtf-opt.is-selected .dtf-dur{color:inherit; opacity:.8;}
+/* The recurrence "Ends > On date" box (recurrence_picker.js) is a compact
+   date field inside a dropdown option row. */
+.dtf.recurrence-ends-until{display:inline-block; width:170px; margin-left:var(--space-2);}
+/* Habit Pauses modal: the two date fields sit in one row with the
+   Habit dropdown and the Pause button. */
+.habit-pause-form .dtf{width:190px;}
+/* Work sessions (_task_work_allocations.html, 2026-09-26): the session's
+   Start/End date+time fields fill the row, the save button sits beside. */
+.session-when-form{display:flex; align-items:center; gap:var(--space-2); flex:1; min-width:0;}
+.session-when-form .dtr{flex:1; min-width:0;}
+.session-save-btn{flex:none; color:var(--accent);}

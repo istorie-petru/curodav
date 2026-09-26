@@ -601,13 +601,10 @@
 <script defer src="{{ static_url('inline_edit.js') }}"></script><script defer src="{{ static_url('tag_input.js') }}"></script>
 <script defer src="{{ static_url('recurrence_picker.js') }}"></script>
 <script defer src="{{ static_url('reminders_picker.js') }}"></script>
-<!-- Shared date+time range picker (2026-08-17, _datetime_picker.html,
-     static/datetime_picker.js) -- the event form, the time-block modal and
-     the Work sessions card are all injected into modals via innerHTML,
-     which never runs <script> tags, so this loads globally like the other
-     "picker" scripts and modal.js's wireContent() calls window.CCDateTimePicker
-     against freshly-injected content. -->
-<script defer src="{{ static_url('datetime_picker.js') }}"></script>
+<!-- Date and time fields (2026-09-26, _date_time_fields.html) -- typed
+     or picked; delegated on the document, so modal-injected fields need
+     no init call. Loads globally like the other picker scripts. -->
+<script defer src="{{ static_url('date_time_fields.js') }}"></script>
 <script defer src="{{ static_url('stepper.js') }}"></script>
 {#
     Widget scripts (2026-08-03) -- loaded globally (not just the Customize

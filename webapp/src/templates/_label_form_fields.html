@@ -65,10 +65,10 @@
      fields, so a caller that doesn't send them can't blank them. #}
     <input type="hidden" name="page_fields" value="1">
     {% if is_project_form or (l and l.has_deadline) %}
-    {% from "_datetime_picker.html" import datetime_picker with context %}
+    {% from "_date_time_fields.html" import date_field with context %}
     <div class="field field-wide">
         <label>Deadline</label>
-        {{ datetime_picker('deadline_date', '', l.deadline_date if (l and l.has_deadline) else '', '', 'date') }}
+        {{ date_field('deadline_date', l.deadline_date if (l and l.has_deadline) else '', label='Deadline') }}
     </div>
     {% endif %}
     {% set ms_name = 'has_dashboard' %}

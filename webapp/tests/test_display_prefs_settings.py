@@ -269,7 +269,9 @@ class TestFmtTimeFilterInWorkSessionsCard:
             db.create_work_allocation(c, "t1", "2026-08-17T14:00:00", "2026-08-17T16:00:00")
             resp = tasks_router.task_detail("t1", _request_with_app("/tasks/t1", db_path), conn=c)
         body = resp.body.decode()
-        assert 'data-dtp-12h=""' in body  # 24h is the default, no 12h flag
+        # 2026-09-26: the date/time fields render the time as text.
+        assert 'data-dtf-12h=""' in body  # 24h is the default, no 12h flag
+        assert 'value="14:00"' in body
         assert 'value="2026-08-17T14:00:00"' in body
         assert 'value="2026-08-17T16:00:00"' in body
 
@@ -281,7 +283,8 @@ class TestFmtTimeFilterInWorkSessionsCard:
             db.create_work_allocation(c, "t1", "2026-08-17T14:00:00", "2026-08-17T16:00:00")
             resp = tasks_router.task_detail("t1", _request_with_app("/tasks/t1", db_path), conn=c)
         body = resp.body.decode()
-        assert 'data-dtp-12h="1"' in body
+        assert 'data-dtf-12h="1"' in body
+        assert 'value="2:00 PM"' in body
         assert 'value="2026-08-17T14:00:00"' in body
 
     def test_task_edit_form_also_respects_12h(self, tmp_path):
@@ -292,7 +295,7 @@ class TestFmtTimeFilterInWorkSessionsCard:
             db.create_work_allocation(c, "t1", "2026-08-17T14:00:00", "2026-08-17T16:00:00")
             resp = tasks_router.edit_task_form("t1", _request_with_app("/tasks/t1/edit", db_path), conn=c)
         body = resp.body.decode()
-        assert 'data-dtp-12h="1"' in body
+        assert 'data-dtf-12h="1"' in body
 
 
 # --------------------------------------------------------------------- #

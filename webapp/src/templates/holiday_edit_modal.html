@@ -60,12 +60,12 @@
         </div>
         <div class="field">
             <label>Start date</label>
-            {% from "_datetime_picker.html" import datetime_picker with context %}
-            {{ datetime_picker('date_from', '', date_from_value, '', 'date', required=true) }}
+            {% from "_date_time_fields.html" import date_field with context %}
+            {{ date_field('date_from', date_from_value, required=true, label='Start date') }}
         </div>
         <div class="field">
             <label>End date</label>
-            {{ datetime_picker('date_to', '', date_to_value, '', 'date', required=true) }}
+            {{ date_field('date_to', date_to_value, required=true, label='End date') }}
         </div>
         <div class="field field-toggle field-wide">
             <input type="checkbox" id="year_agnostic" name="year_agnostic" value="1" {% if year_agnostic %}checked{% endif %}>

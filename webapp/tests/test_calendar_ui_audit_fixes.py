@@ -224,10 +224,14 @@ class TestAgendaWidget:
 class TestEventFormAllDay:
     """C-22."""
 
-    def test_picker_summary_knows_all_day(self):
-        js = (STATIC / "datetime_picker.js").read_text(encoding="utf-8")
-        assert '" · All day"' in js
-        assert 'input[name="all_day"][type="checkbox"]' in js
+    def test_all_day_only_hides_the_time_fields(self):
+        # 2026-09-26 (Peter's mockup): All day sits in the Date & time
+        # header and only shows/hides the time boxes.
+        js = (STATIC / "date_time_fields.js").read_text(encoding="utf-8")
+        assert 'range.toggleAttribute("data-all-day", box.checked);' in js
+        assert 'const endValue = !ed ? "" : allDay ? ed + "T23:59" : stamp(ed, et);' in js
+        css = (STATIC / "style.css").read_text(encoding="utf-8")
+        assert ".dtr[data-all-day] .dtf-time{display:none;}" in css
 
 
 class TestPhoneAutoScroll:
@@ -249,11 +253,13 @@ class TestPhoneAutoScroll:
         ) in css
 
 
-def test_datetime_picker_follows_week_start_setting():
-    # 2026-09-25: the picker's own month grid was hardcoded Monday-first.
-    script = (STATIC / "datetime_picker.js").read_text()
-    assert 'document.body.dataset.weekStart === "sunday"' in script
-    assert "return SUNDAY_FIRST ? dow : (dow + 6) % 7;" in script
+def test_date_field_follows_week_start_setting():
+    # 2026-09-26: the date field's calendar reads the week start the
+    # template puts on it (_date_time_fields.html).
+    script = (STATIC / "date_time_fields.js").read_text()
+    assert 'const sundayFirst = f.dataset.dtfWeekStart === "sunday";' in script
+    tpl = (STATIC.parent / "templates" / "_date_time_fields.html").read_text()
+    assert 'data-dtf-week-start="{{ _week_start() }}"' in tpl
     base = (STATIC.parent / "templates" / "base.html").read_text()
     assert 'data-week-start="{{ week_start(request) }}"' in base
-    subprocess.run(["node", "--check", str(STATIC / "datetime_picker.js")], check=True)
+    subprocess.run(["node", "--check", str(STATIC / "date_time_fields.js")], check=True)

@@ -37,8 +37,10 @@
     </label>
     {# UI audit H-15: Until starts empty (both dates defaulting to today
        set a one-day pause by accident). #}
-    <label class="habit-log-field"><span>From</span><input type="date" name="start_date" value="{{ today_iso }}" required data-no-autofocus></label>
-    <label class="habit-log-field"><span>Until</span><input type="date" name="end_date" min="{{ today_iso }}" required data-no-autofocus></label>
+    {# 2026-09-26: the shared date fields instead of native date inputs. #}
+    {% from "_date_time_fields.html" import date_field with context %}
+    <div class="habit-log-field"><span>From</span>{{ date_field('start_date', today_iso, required=true, label='From') }}</div>
+    <div class="habit-log-field"><span>Until</span>{{ date_field('end_date', '', required=true, min=today_iso, label='Until') }}</div>
     <button type="submit" class="btn tonal">{{ icon('pause', 'icon-sm') }} Pause</button>
 </form>
 </div>

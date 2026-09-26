@@ -1,3 +1,4 @@
+{% from "_date_time_fields.html" import date_field with context %}
 {# Shared task-table row (extracted 2026-08-14, 1.4 Project pages & views'
    Tasks view) -- originally a local macro inside tasks_list.html; the
    project detail page's own Tasks view needed the exact same row (status
@@ -102,14 +103,14 @@
     <td>
         {# Due date -- 2026-08-17: was a native <input type="date"> whose
            popup is unstylable browser chrome; now the shared themed picker
-           (datetime_picker.js). The start hidden input keeps the exact
+           (2026-09-26: _date_time_fields.html). The hidden input keeps the exact
            class/data-* contract tasks_table.js's delegated
            `#task-table input.inline-date` change listener reads, and the
            picker fires `change` on Apply/Clear, so the single-field
            update-field POST is unchanged. #}
-        <div class="dtp dtp--compact" data-dtp data-dtp-mode="date">
-            <input type="hidden" name="due_at" class="inline-date" data-uid="{{ t.uid }}" data-field="due_at" value="{{ t.due_at[:10] if t.due_at else '' }}">
-        </div>
+        {# 2026-09-26: the shared date field (typed or picked), compact. #}
+        {{ date_field('due_at', t.due_at[:10] if t.due_at else '', compact=true, label='Due date', input_class='inline-date',
+                      attrs='data-uid="' ~ t.uid ~ '" data-field="due_at"') }}
     </td>
     {# "Scheduled" (work-allocation hours) column removed 2026-08-29 --
        narrowed table space under the sidebar redesign's wider expanded rail
