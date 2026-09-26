@@ -17,6 +17,44 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-26 (second pass) -- Peter's "definitive list" for
+  habits. Supersedes parts of the first-pass entry below (month calendar
+  and insights moved again; row sizes changed).
+  - Strip = the current calendar week from Settings' first day of week
+    (`habit_view.week_strip(week_start=...)`, read via
+    `habit_view.WEEK_START_KEY`); days after today are inert spans. The
+    year heatmap snaps to the same week start.
+  - Widget row (`habit_page_row(h, compact=true)`): one line -- check,
+    title, days. No meta, never stacks.
+  - Habits page row: contact-row size (51px: 34px check, title over
+    "schedule . streak", 30px days) plus a chevron that opens a history
+    panel under the row -- year heatmap, or for period habits a 52-week /
+    12-month grid (`habit_view.period_grid`), and the insights (moved here
+    from the view modal). Open panels survive `#habits-body` refreshes
+    (habit_day.js). Phone: days shrink to 22px, still one row.
+  - View modal: month calendar removed everywhere (`month_calendar` and its
+    CSS deleted); period habits show the week/month grid instead of the
+    heatmap; no insights; no "Log a relapse" (build habits keep "Log a
+    day"); Work sessions not rendered while empty.
+  - Habit icon + colour: `tasks.habit_icon` / `tasks.habit_color`
+    (dedicated setter `db.set_task_habit_look`, validated against
+    `habit_view.HABIT_ICONS` / `HABIT_COLORS`). The icon draws the check
+    button; the colour (`habit-c-*` -> `--habit-accent`) paints the check,
+    strip, heatmap, period grid, insight bars, and a solid view-modal
+    cover (it replaces an inherited label banner). Picked in the edit form
+    through one "Look" dropdown (the app's `.multiselect` trigger/panel with
+    a swatch row and an icon grid). The backup restore now keeps
+    icon/colour and `reminder_time` (the latter was silently dropped
+    before).
+  - Edit form: Kind is the app's single-select dropdown; every hint line
+    removed (also the Pauses modal's intro).
+  - **Next slice**: `plans/habit-edit-mockup-2026-09-26.md` -- the text
+    mockup of the "Do it" edit modal (full-width custom dropdowns, days as
+    a checkbox dropdown, amount as a sub-row). Waiting for Peter's
+    verdict and his answers to its three questions; don't build it before
+    that.
+  SW cache v130.
+
 - **Shipped:** 2026-09-26 -- habits decluttering, per Peter ("rows too
   tall, 28-32px is enough"; "I don't believe in habit vacation"; month
   calendar/insights "not needed for all habits"; friendlier edit form, no

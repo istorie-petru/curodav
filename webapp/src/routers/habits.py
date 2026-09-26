@@ -36,6 +36,12 @@ router = APIRouter(prefix="/habits", tags=["habits"])
 
 def _habits_context(conn, request: Request) -> dict:
     items = habit_view.habit_items(conn)
+    # 2026-09-26: each row's expandable history (heatmap or week/month
+    # grid + insights), same week start as the strip.
+    week_start = db.get_app_meta(conn, habit_view.WEEK_START_KEY) or "monday"
+    for h in items:
+        task = db.get_task(conn, h["uid"])
+        h["history"] = habit_view.history(conn, task, week_start=week_start) if task else None
     return {
         "request": request,
         "active_tab": "habits",

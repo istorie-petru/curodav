@@ -21,7 +21,7 @@
     {% else %}
     <p class="habit-widget-summary"><a href="/habits" class="habit-widget-link">Habits</a></p>
     {% endif %}
-    <ul class="habit-list habit-list--widget">{% for h in data.rows %}{{ habit_page_row(h) }}{% endfor %}</ul>
+    <ul class="habit-list habit-list--widget">{% for h in data.rows %}{{ habit_page_row(h, compact=true) }}{% endfor %}</ul>
 </div>
 {% else %}
 {# UI audit H-22: the empty state links somewhere to act on it. #}

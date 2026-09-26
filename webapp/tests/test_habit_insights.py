@@ -10,6 +10,7 @@ import pytest
 from starlette.requests import Request
 
 from src import db, habit_schedule, habit_view
+from src.routers import habits as habits_router
 from src.routers import tasks as tasks_router
 
 T = date(2026, 9, 24)
@@ -62,7 +63,9 @@ class TestInsights:
         assert habit_view.insights(rows, today=T)["hours"] is None
 
 
-class TestModal:
+class TestHabitsPagePanel:
+    """2026-09-26 (Peter): insights moved from the view modal to the Habits
+    page row's expandable panel; strength stays a modal stat."""
     def test_renders_strength_and_bars(self, tmp_path):
         with db.connect(tmp_path / "cache.sqlite") as conn:
             db.save_task_habit_settings(conn, "Habit")
@@ -76,8 +79,10 @@ class TestModal:
                 db.upsert_task_completion(conn, "h1", d.isoformat(),
                                           datetime(d.year, d.month, d.day, 8).astimezone().isoformat())
             req = Request({"type": "http", "method": "GET", "path": "/tasks/h1", "headers": [], "query_string": b""})
-            body = tasks_router.task_detail("h1", req, conn=conn).body.decode()
-        assert ">Strength<" in body
+            detail = tasks_router.task_detail("h1", req, conn=conn).body.decode()
+            body = habits_router.habits_page(req, conn=conn).body.decode()
+        assert ">Strength<" in detail and "habit-bars" not in detail
+        assert 'class="habit-panel" id="habit-panel-h1" hidden' in body
         assert 'class="habit-bars habit-bars-months"' in body
         assert "usually around 08:00" in body
         assert 'data-style="height:' in body and 'style="height' not in body.replace('data-style="height', "")

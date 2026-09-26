@@ -121,14 +121,66 @@
   document.addEventListener("change", (e) => {
     const el = e.target;
     if (!el || !el.closest) return;
-    const form = el.closest(".habit-task-form");
-    if (!form) return;
+    // Dropdown radios are portaled out of the form while open (app.js),
+    // so find it through their form="" attribute, not the DOM.
+    const form = el.form || el.closest(".habit-task-form");
+    if (!form || !form.classList.contains("habit-task-form")) return;
     if (el.name === "habit_kind") form.classList.toggle("is-avoid", el.value === "avoid");
     if (el.id === "habit-repeat") {
       const box = el.closest(".habit-repeat");
       if (box) box.dataset.repeat = el.value;
     }
+    if (el.name === "habit_color" || el.name === "habit_icon") updateLook(form);
   });
+
+  // 2026-09-26: the Habits page row's chevron opens its history panel
+  // (heatmap or week/month grid + insights) under the row. Open rows are
+  // remembered by uid so they stay open when #habits-body re-renders
+  // after a check-in.
+  const openRows = new Set();
+  function setRow(btn, open) {
+    const panel = document.getElementById(btn.getAttribute("aria-controls"));
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (panel) panel.hidden = !open;
+  }
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest && e.target.closest(".habit-expand");
+    if (!btn) return;
+    const uid = btn.closest(".habit-card").dataset.uid;
+    const open = btn.getAttribute("aria-expanded") !== "true";
+    if (open) openRows.add(uid);
+    else openRows.delete(uid);
+    setRow(btn, open);
+  });
+  new MutationObserver(() => {
+    if (!openRows.size) return;
+    document.querySelectorAll('.habit-expand[aria-expanded="false"]').forEach((btn) => {
+      if (openRows.has(btn.closest(".habit-card").dataset.uid)) setRow(btn, true);
+    });
+  }).observe(document.documentElement, { childList: true, subtree: true });
+
+  // 2026-09-26: the habit form's Look dropdown -- keep the trigger's
+  // preview (icon in the picked colour) and name in sync.
+  function checkedIn(form, name) {
+    const r = document.querySelector('input[name="' + name + '"][form="' + form.id + '"]:checked');
+    return r ? r.value : "";
+  }
+  function updateLook(form) {
+    const trigger = form.querySelector(".habit-look-trigger");
+    if (!trigger) return;
+    const color = checkedIn(form, "habit_color");
+    const iconName = checkedIn(form, "habit_icon");
+    const preview = trigger.querySelector(".habit-look-preview");
+    preview.className = "habit-look-preview" + (color ? " habit-c-" + color : "");
+    const use = preview.querySelector("use");
+    if (use) {
+      const href = (use.getAttribute("href") || "").replace(/#icon-[\w-]+$/, "#icon-" + (iconName || "check-circle"));
+      use.setAttribute("href", href);
+    }
+    const nice = (v) => v.charAt(0).toUpperCase() + v.slice(1).replace(/-/g, " ");
+    trigger.querySelector(".habit-look-name").textContent =
+      (color ? nice(color) : "Default colour") + " \u00b7 " + (iconName ? nice(iconName) : "Default icon");
+  }
 
   // Work sessions in the habit view modal are collapsed by default; once
   // opened for a habit, keep them open across that modal's in-place

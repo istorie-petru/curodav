@@ -466,6 +466,14 @@ def _apply_habit_repeat(repeat, recurrence, habit_days, habits_per_period):
     return recurrence, habits_per_period
 
 
+def _save_habit_look(conn, uid: str, icon, color) -> None:
+    """2026-09-26: the habit form's icon + colour; anything outside
+    habit_view's lists (or blank) stores the default."""
+    icon = icon if isinstance(icon, str) and icon in habit_view.HABIT_ICONS else None
+    color = color if isinstance(color, str) and color in habit_view.HABIT_COLORS else None
+    db.set_task_habit_look(conn, uid, icon, color)
+
+
 def _habit_kind_value(raw) -> str | None:
     """Habits H5: "avoid" or None (a normal, build-it habit)."""
     return "avoid" if isinstance(raw, str) and raw.strip().lower() == "avoid" else None
@@ -511,6 +519,8 @@ def create_task(
     habit_kind: str | None = Form(None),
     habit_unit: str | None = Form(None),
     reminder_time: str | None = Form(None),
+    habit_icon: str | None = Form(None),
+    habit_color: str | None = Form(None),
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
@@ -599,6 +609,8 @@ def create_task(
     # it; stored through its own setter, never through upsert_task.
     if isinstance(reminder_time, str):
         db.set_task_reminder_time(conn, row["uid"], reminder_time)
+    if isinstance(habit_icon, str) or isinstance(habit_color, str):
+        _save_habit_look(conn, row["uid"], habit_icon, habit_color)
     return respond(x_requested_with, "/tasks", status_code=201, uid=row["uid"])
 
 
@@ -850,24 +862,26 @@ def task_detail(uid: str, request: Request, month: str | None = None, conn=Depen
         # (task, completion_weeks, current_streak, work_allocations,
         # work_hours, habit_label) is already on `ctx`/available here.
         ctx["habit_label"] = db.get_task_habit_settings(conn)["habit_label"]
-        # Habits H3 (2026-09-24): month calendar + day notes + "Log a day".
+        # Habits H3 (2026-09-24): day notes + "Log a day".
         rows = db.list_task_completions(conn, uid)
         # 2026-09-25 (Peter: clickable heatmap, "smarter" for amount
         # habits): the habit heatmap paints real values against the daily
         # target (partial days lighter) and each cell carries its value
         # for the amount popup (static/habit_day.js).
+        # 2026-09-26 (Peter): the history is the year heatmap, or the
+        # week / month grid for a period habit (habit_view.history); the
+        # month calendar and the insights left this modal (insights live
+        # on the Habits page's expandable row now).
+        week_start = db.get_app_meta(conn, habit_view.WEEK_START_KEY) or "monday"
         ctx["completion_weeks"] = habit_heatmap.heatmap_weeks(
             {r["due_date"]: r.get("value") or 0 for r in rows},
             task.get("target_per_day") or 1,
             habit_heatmap.DETAIL_WEEKS,
+            week_start=week_start,
         )
-        ctx["habit_month"] = habit_view.month_calendar(
-            uid, rows, month if isinstance(month, str) else None, target=habit_view.quantity_target(task)
-        )
-        ctx["habit_month_nav"] = isinstance(month, str) and bool(month)
+        ctx["habit_periods"] = habit_view.history(conn, task, week_start=week_start)["periods"]
+        ctx["habit_look"] = habit_view.habit_look(task)
         ctx["habit_notes"] = habit_view.recent_notes(rows)
-        # Habits H8: strength (on habit_stats), per-month counts, usual hour.
-        ctx["habit_insights"] = habit_view.insights(rows)
         # Habits H6: this habit's current/upcoming pauses (own + all-habit).
         ctx["habit_pauses"] = habit_view.pause_info(db.list_habit_pauses(conn), uid, date.today())["upcoming"]
         ctx["today_iso"] = date.today().isoformat()
@@ -896,6 +910,8 @@ def update_task(
     habit_kind: str | None = Form(None),
     habit_unit: str | None = Form(None),
     reminder_time: str | None = Form(None),
+    habit_icon: str | None = Form(None),
+    habit_color: str | None = Form(None),
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
@@ -968,6 +984,8 @@ def update_task(
     # Per-habit reminder time -- same "only the habit form sends it" rule.
     if isinstance(reminder_time, str):
         db.set_task_reminder_time(conn, row["uid"], reminder_time)
+    if isinstance(habit_icon, str) or isinstance(habit_color, str):
+        _save_habit_look(conn, row["uid"], habit_icon, habit_color)
     return respond(x_requested_with, "/tasks")
 
 

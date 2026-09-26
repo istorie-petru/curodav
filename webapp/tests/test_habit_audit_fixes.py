@@ -86,14 +86,12 @@ class TestAmountHabitDoneAtTarget:
         y = (TODAY - timedelta(days=1)).isoformat()
         db.upsert_task_completion(conn, "h1", y, _now(), value=4)
         db.upsert_task_completion(conn, "h1", TODAY.isoformat(), _now(), value=8)
-        week = habit_view.habit_items(conn)[0]["week"]
-        assert (week[-2]["done"], week[-2]["partial"]) == (False, True)
-        assert (week[-1]["done"], week[-1]["partial"]) == (True, False)
-        month = habit_view.month_calendar("h1", db.list_task_completions(conn, "h1"), None, target=8)
-        days = {d["iso"]: d for w in month["weeks"] for d in w}
-        assert days[TODAY.isoformat()]["done"] is True
-        if y in days:
-            assert (days[y]["done"], days[y]["partial"]) == (False, True)
+        # 2026-09-26: the strip is the calendar week, so yesterday is only
+        # in it after the week's first day.
+        week = {d["iso"]: d for d in habit_view.habit_items(conn)[0]["week"]}
+        if y in week:
+            assert (week[y]["done"], week[y]["partial"]) == (False, True)
+        assert (week[TODAY.isoformat()]["done"], week[TODAY.isoformat()]["partial"]) == (True, False)
 
     def test_plain_habit_any_value_is_done(self, conn):
         _habit(conn, "h1")
@@ -211,7 +209,7 @@ class TestStylingHooks:
     css = (SRC / "static" / "style.css").read_text()
 
     def test_partial_and_off_day_rules(self):
-        for sel in (".habit-day.is-partial", ".habit-month-day.is-partial", ".habit-check-btn.is-partial",
+        for sel in (".habit-day.is-partial", ".habit-check-btn.is-partial",
                     ".habit-day.is-off", ".allday-habit.is-partial"):
             assert sel in self.css, sel
 

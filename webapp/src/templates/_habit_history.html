@@ -1,0 +1,47 @@
+{# Habit history pieces (2026-09-26, Peter) -- habit_view.history():
+   the week / month grid a period habit shows instead of the day heatmap,
+   and the insights bars (moved from the view modal to the Habits page's
+   expandable row). Bar heights go through data-style (CSP: no inline
+   style). #}
+{% macro period_grid(periods) %}
+<div class="habit-periods habit-periods-{{ periods.unit }}" role="img"
+     aria-label="{{ 'Last 52 weeks' if periods.unit == 'week' else 'Last 12 months' }}: {{ periods.cells|selectattr('done')|list|length }} kept">
+    {% for c in periods.cells %}
+    <span class="habit-period{% if c.done %} is-done{% elif c.partial %} is-partial{% endif %}{% if c.is_current %} is-current{% endif %}" title="{{ c.title }}">
+        {% if periods.unit == 'month' %}<span class="habit-period-label">{{ c.label }}</span><span class="habit-period-count">{{ c.count }}/{{ c.target }}</span>{% endif %}
+    </span>
+    {% endfor %}
+</div>
+{% if periods.unit == 'week' %}
+<div class="habit-periods-months" aria-hidden="true">{% for c in periods.cells %}<span>{{ c.label }}</span>{% endfor %}</div>
+{% endif %}
+{% endmacro %}
+
+{% macro insights_block(ins, is_avoid) %}
+{% if ins and ins.enough %}
+<div class="habit-insights">
+    <div class="habit-bars-label">{{ 'Relapses' if is_avoid else 'Days logged' }} per month</div>
+    <div class="habit-bars habit-bars-months{% if is_avoid %} is-avoid{% endif %}" role="img"
+         aria-label="{% for m in ins.months %}{{ m.label }} {{ m.count }}{{ ', ' if not loop.last }}{% endfor %}">
+        {% for m in ins.months %}
+        <div class="habit-bar" title="{{ m.key }}: {{ m.count }}">
+            <span class="habit-bar-count">{{ m.count if m.count else '' }}</span>
+            <span class="habit-bar-track"><span class="habit-bar-fill" data-style="height:{{ (m.height * 100)|round(1) }}%"></span></span>
+            <span class="habit-bar-label">{{ m.label[:1] }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% if ins.hours %}
+    <div class="habit-bars-label">When you check in <span class="text-muted">&middot; usually around {{ '%02d:00'|format(ins.top_hour) }}</span></div>
+    <div class="habit-bars habit-bars-hours" role="img" aria-label="Check-ins by hour; most often around {{ ins.top_hour }}:00">
+        {% for hr in ins.hours %}
+        <div class="habit-bar" title="{{ '%02d:00'|format(hr.hour) }}: {{ hr.count }}">
+            <span class="habit-bar-track"><span class="habit-bar-fill" data-style="height:{{ (hr.height * 100)|round(1) }}%"></span></span>
+            <span class="habit-bar-label">{{ hr.hour if hr.hour % 6 == 0 else '' }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+{% endmacro %}

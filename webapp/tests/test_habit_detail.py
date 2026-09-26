@@ -73,28 +73,6 @@ class TestNotes:
         assert [n["note"] for n in habit_view.recent_notes(rows)] == ["c", "a"]
 
 
-class TestMonthCalendar:
-    def test_shape(self):
-        rows = [{"due_date": "2026-09-10", "value": 1, "note": "x"}]
-        cal = habit_view.month_calendar("h1", rows, "2026-09", today=date(2026, 9, 24))
-        days = [d for w in cal["weeks"] for d in w]
-        assert all(len(w) == 7 for w in cal["weeks"])
-        assert days[0]["iso"] == "2026-08-31"  # Monday before Sep 1
-        sep10 = next(d for d in days if d["iso"] == "2026-09-10")
-        assert sep10["done"] and sep10["note"] == "x"
-        assert next(d for d in days if d["iso"] == "2026-09-25")["is_future"]
-        assert cal["label"] == "September 2026"
-        assert cal["prev_url"] == "/tasks/h1?month=2026-08"
-        assert cal["next_url"] is None  # never past this month
-        assert cal["done_count"] == 1
-
-    def test_bad_or_future_month_clamps(self):
-        t = date(2026, 9, 24)
-        assert habit_view.month_calendar("h1", [], "garbage", today=t)["label"] == "September 2026"
-        assert habit_view.month_calendar("h1", [], "2027-01", today=t)["label"] == "September 2026"
-        assert habit_view.month_calendar("h1", [], "2026-07", today=t)["next_url"] == "/tasks/h1?month=2026-08"
-
-
 class TestDetailModal:
     def test_renders_interactive_grid_month_and_log_form(self, conn):
         _habit(conn)
@@ -102,8 +80,7 @@ class TestDetailModal:
         req = Request({"type": "http", "method": "GET", "path": "/tasks/h1", "headers": [], "query_string": b""})
         body = tasks_router.task_detail("h1", req, conn=conn).body.decode()
         assert 'class="heatmap-cell-form" data-modal-keep-open data-cc-change="task"' in body  # clickable (2026-09-25)
-        assert 'class="form-inline" data-modal-keep-open data-cc-change="task"' in body  # month days
-        assert 'class="habit-month-grid"' in body
+        assert "habit-month" not in body  # 2026-09-26: no month calendar
         assert 'action="/tasks/h1/completions" class="habit-log-form" data-modal-keep-open' in body
         assert "morning run" in body
         assert f'max="{TODAY.isoformat()}"' in body
@@ -142,8 +119,6 @@ class TestSmarterHeatmap:
         assert 'habit-amount-trigger"' in body and 'data-url="/tasks/w1/completions"' in body
         assert f'data-date="{TODAY.isoformat()}" data-value="3"' in body
         assert 'data-target="8" data-unit="glasses"' in body
-        # month calendar days too
-        assert 'class="habit-month-day habit-amount-trigger' in body
 
     def test_amount_level_reflects_partial_days(self, conn):
         _habit(conn, "w1", target=8)
@@ -158,7 +133,8 @@ class TestSmarterHeatmap:
         db.upsert_task(conn, {**db.get_task(conn, "p1"), "recurrence": rrule, "habits_per_period": per})
         body = self._detail(conn, "p1")
         assert 'class="heatmap' not in body
-        assert 'class="habit-month-grid"' in body  # the month calendar stays
+        # 2026-09-26: the week / month grid instead
+        assert f'class="habit-periods habit-periods-{"week" if rrule == "FREQ=WEEKLY" else "month"}"' in body
 
     def test_work_sessions_hidden_in_view_when_empty_and_present_in_edit(self, conn):
         """2026-09-26 (Peter): no Work sessions section in the view modal
@@ -179,45 +155,38 @@ class TestPageStripAmount:
         _habit(conn, "d1")
         req = Request({"type": "http", "method": "GET", "path": "/habits", "headers": [], "query_string": b""})
         body = habits_router.habits_page(req, conn=conn).body.decode()
-        assert body.count('class="habit-day habit-amount-trigger') == 7  # w1's strip
-        assert body.count('class="form-inline habit-action habit-day-form"') == 7  # d1's strip
+        assert body.count('class="habit-day habit-amount-trigger') == date.today().weekday() + 1  # w1's strip
+        assert body.count('class="form-inline habit-action habit-day-form"') == date.today().weekday() + 1  # d1's strip
 
 
-class TestCompactViewModal:
-    """2026-09-26 (Peter): the month calendar and insights aren't needed
-    for every habit; the per-habit Pause section moved to the Habits
-    page's Pauses modal."""
+class TestViewModal20260926:
+    """2026-09-26 (Peter, second pass): no month calendar, no insights, no
+    "Log a relapse", no Work sessions while empty; the habit's colour and
+    icon on the cover; a period habit's history is a week / month grid."""
 
-    def _detail(self, conn, uid, month=None):
+    def _detail(self, conn, uid):
         req = Request({"type": "http", "method": "GET", "path": f"/tasks/{uid}", "headers": [], "query_string": b""})
-        return tasks_router.task_detail(uid, req, month=month, conn=conn).body.decode()
+        return tasks_router.task_detail(uid, req, conn=conn).body.decode()
 
-    def test_month_calendar_collapsed_for_daily_habit(self, conn):
+    def test_no_month_calendar_or_insights(self, conn):
         _habit(conn, "h1")
-        body = self._detail(conn, "h1")
-        assert '<details class="habit-month-details detail-plain-section">' in body
-
-    def test_month_calendar_open_when_paging_months(self, conn):
-        _habit(conn, "h1")
-        month = (TODAY.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
-        body = self._detail(conn, "h1", month=month)
-        assert '<details class="habit-month-details detail-plain-section" open>' in body
-
-    def test_month_calendar_open_for_period_habit(self, conn):
-        _habit(conn, "p1")
-        db.upsert_task(conn, {**db.get_task(conn, "p1"), "recurrence": "FREQ=WEEKLY", "habits_per_period": 3})
-        body = self._detail(conn, "p1")
-        assert '<details class="habit-month-details detail-plain-section" open>' in body
-
-    def test_insights_only_with_enough_history(self, conn):
-        _habit(conn, "h1")
-        for i in range(habit_view.INSIGHTS_MIN_DAYS - 1):
+        for i in range(30):
             db.upsert_task_completion(conn, "h1", (TODAY - timedelta(days=i)).isoformat(), _now(), 1)
-        assert "habit-insights" not in self._detail(conn, "h1")
-        db.upsert_task_completion(
-            conn, "h1", (TODAY - timedelta(days=habit_view.INSIGHTS_MIN_DAYS)).isoformat(), _now(), 1
-        )
-        assert '<details class="detail-plain-section habit-insights">' in self._detail(conn, "h1")
+        body = self._detail(conn, "h1")
+        assert "habit-month" not in body and "habit-insights" not in body and "habit-bars" not in body
+
+    def test_avoid_has_no_log_form(self, conn):
+        _habit(conn, "a1")
+        db.upsert_task(conn, {**db.get_task(conn, "a1"), "habit_kind": "avoid"})
+        body = self._detail(conn, "a1")
+        assert "Log a relapse" not in body and "habit-log-form" not in body
+
+    def test_colour_and_icon(self, conn):
+        _habit(conn, "h1")
+        db.set_task_habit_look(conn, "h1", "moon", "purple")
+        body = self._detail(conn, "h1")
+        assert "var(--cal-accent-purple)" in body and 'href="#icon-moon"' in body
+        assert "habit-year-heatmap habit-c-purple" in body
 
     def test_no_pause_section_and_readable_schedule(self, conn):
         _habit(conn, "h1")
@@ -226,3 +195,26 @@ class TestCompactViewModal:
         assert "habit-pause-form" not in body
         assert "FREQ=" not in body
         assert "Mon, Tue, Wed, Thu, Fri" in body
+
+
+class TestPeriodGrid:
+    def test_weeks(self):
+        from src import habit_schedule
+
+        today = date(2026, 9, 26)  # a Saturday
+        sched = habit_schedule.parse_schedule("FREQ=WEEKLY", 3)
+        entries = {"2026-09-21": 1, "2026-09-22": 1, "2026-09-23": 1, "2026-09-15": 1}
+        grid = habit_view.period_grid(entries, sched, today)
+        assert grid["unit"] == "week" and len(grid["cells"]) == 52
+        assert (grid["cells"][-1]["count"], grid["cells"][-1]["done"], grid["cells"][-1]["is_current"]) == (3, True, True)
+        assert (grid["cells"][-2]["count"], grid["cells"][-2]["partial"]) == (1, True)
+        # Sunday-first weeks: Sep 20 (Sun) .. Sep 26
+        grid = habit_view.period_grid({"2026-09-20": 1}, sched, today, week_start="sunday")
+        assert grid["cells"][-1]["count"] == 1
+
+    def test_months(self):
+        from src import habit_schedule
+
+        grid = habit_view.period_grid({"2026-09-02": 1}, habit_schedule.parse_schedule("FREQ=MONTHLY", None), date(2026, 9, 26))
+        assert grid["unit"] == "month" and len(grid["cells"]) == 12
+        assert grid["cells"][-1]["label"] == "Sep" and grid["cells"][-1]["done"]

@@ -62,19 +62,49 @@
             <label>Description</label>
             <textarea name="description" rows="2">{{ task.description if task else '' }}</textarea>
         </div>
+        {# Habits H5 (2026-09-24): "avoid" habits log relapses instead of
+           check-ins. 2026-09-26 (Peter, second pass): the app's own
+           dropdown, not pills in the body. #}
+        {% set _avoid = task and task.habit_kind == 'avoid' %}
+        {% set ms_name = 'habit_kind' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Kind' %}
+        {% set ms_items = [{'uid': 'build', 'name': 'Do it'}, {'uid': 'avoid', 'name': 'Avoid it'}] %}
+        {% set ms_selected = 'avoid' if _avoid else 'build' %}
+        {% set ms_wide = true %}
+        {% set ms_bare = false %}
+        {% set ms_extra_class = 'habit-kind-field' %}
+        {% set ms_form_id = 'habit-task-form' %}
+        {% include "_widget_list_multiselect.html" %}
+        {# 2026-09-26 (Peter): the habit's own colour and icon -- one
+           dropdown: a preview + name on the trigger, swatches and icons
+           in the panel. The icon draws the check button, the colour
+           paints the heatmap, the strip and the view modal's cover. #}
+        {% set _look = habit_look(task) %}
         <div class="field field-wide">
-            {# Habits H5 (2026-09-24): "avoid" habits log relapses instead
-               of check-ins; their streak is clean days, and schedule /
-               target don't apply. 2026-09-26: two radio pills instead of
-               a select, so both choices are visible at once. #}
-            {% set _avoid = task and task.habit_kind == 'avoid' %}
-            <label id="habit-kind-label">Kind</label>
-            <div class="habit-choice-row" role="radiogroup" aria-labelledby="habit-kind-label">
-                <label class="habit-day-chip"><input type="radio" name="habit_kind" value="build"{% if not _avoid %} checked{% endif %}><span>{{ icon('check-circle', 'icon-sm') }} Do it</span></label>
-                <label class="habit-day-chip"><input type="radio" name="habit_kind" value="avoid"{% if _avoid %} checked{% endif %}><span>{{ icon('shield', 'icon-sm') }} Avoid it</span></label>
+            <label id="habit-look-label">Look</label>
+            <div class="multiselect widget-list-multiselect habit-look-select" data-habit-look>
+                <button type="button" class="multiselect-trigger ms-trigger habit-look-trigger" aria-haspopup="true" aria-expanded="false" aria-labelledby="habit-look-label">
+                    <span class="habit-look-preview{% if _look.color %} habit-c-{{ _look.color }}{% endif %}">{{ icon(_look.icon or 'check-circle', 'icon-sm') }}</span>
+                    <span class="habit-look-name">{{ (_look.color or 'Default colour')|capitalize }} &middot; {{ (_look.icon or 'default icon')|replace('-', ' ')|capitalize }}</span>
+                    <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
+                </button>
+                <div class="multiselect-panel habit-look-panel">
+                    <div class="habit-look-group" role="radiogroup" aria-label="Colour">
+                        <label class="habit-look-swatch" title="Default"><input type="radio" name="habit_color" value="" form="habit-task-form"{% if not _look.color %} checked{% endif %}><span class="habit-look-dot is-default"></span></label>
+                        {% for c in habit_colors %}
+                        <label class="habit-look-swatch" title="{{ c|capitalize }}"><input type="radio" name="habit_color" value="{{ c }}" form="habit-task-form"{% if _look.color == c %} checked{% endif %}><span class="habit-look-dot habit-c-{{ c }}"></span></label>
+                        {% endfor %}
+                    </div>
+                    <div class="multiselect-option-divider"></div>
+                    <div class="habit-look-group habit-look-icons" role="radiogroup" aria-label="Icon">
+                        <label class="habit-look-icon" title="Default"><input type="radio" name="habit_icon" value="" form="habit-task-form"{% if not _look.icon %} checked{% endif %}><span>{{ icon('square') }}</span></label>
+                        {% for ic in habit_icons %}
+                        <label class="habit-look-icon" title="{{ ic|replace('-', ' ')|capitalize }}"><input type="radio" name="habit_icon" value="{{ ic }}" form="habit-task-form"{% if _look.icon == ic %} checked{% endif %}><span>{{ icon(ic) }}</span></label>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
-            <p class="habit-days-hint habit-build-only">Check it off when you've done it.</p>
-            <p class="habit-days-hint habit-avoid-only">Log a slip when it happens; the streak counts clean days.</p>
         </div>
         {# 2026-09-26 (Peter: no raw "FREQ=WEEKLY;BYDAY=..." in this
            form): one plain "How often" choice replaces the generic
@@ -120,7 +150,6 @@
                 <input type="text" name="habit_unit" id="habit-unit" maxlength="24" placeholder="unit, e.g. glasses"
                        value="{{ task.habit_unit if task and task.habit_unit else '' }}" aria-label="Unit">
             </div>
-            <span class="field-hint">Leave at 1 for a simple check-off; more makes it count up to that amount.</span>
         </div>
         {# Per-habit reminder time (2026-09-25): the same half-hour
            single-choice dropdown as Settings > General's "Morning reminder
@@ -142,7 +171,6 @@
             {% set ms_bare = true %}
             {% set ms_form_id = 'habit-task-form' %}
             {% include "_widget_list_multiselect.html" %}
-            <span class="field-hint">Only if the habit isn't done yet. Without one, it's in the morning reminder.</span>
         </div>
     </div>
     {% if task %}

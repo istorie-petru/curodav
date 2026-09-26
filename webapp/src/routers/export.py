@@ -685,6 +685,12 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
         if row.get("completed_at") is not None:
             conn.execute("UPDATE tasks SET completed_at = ? WHERE uid = ?", (row["completed_at"], row["uid"]))
             conn.commit()
+        # Habit-only columns upsert_task never writes (dedicated setters,
+        # see db.set_task_reminder_time / set_task_habit_look).
+        if row.get("reminder_time"):
+            db.set_task_reminder_time(conn, row["uid"], row["reminder_time"])
+        if row.get("habit_icon") or row.get("habit_color"):
+            db.set_task_habit_look(conn, row["uid"], row.get("habit_icon"), row.get("habit_color"))
         count += 1
     for row in payload.get("contacts", []):
         db.upsert_contact(conn, row)

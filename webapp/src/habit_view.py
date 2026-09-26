@@ -38,6 +38,30 @@ def excluded_dates_for_row(conn, row: dict, entries_by_date: dict, today: date) 
 
 
 _DAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+# 2026-09-26 (Peter): per-habit icon + colour. Icons a habit can pick
+# (all in _icons_sprite.html); colours are the label palette
+# (routers/labels.py COLORS, duplicated here to avoid a router import).
+HABIT_ICONS = (
+    "check-circle", "activity", "heart", "droplet", "coffee", "book-open", "notebook", "pencil",
+    "graduation-cap", "code", "music", "headphones", "camera", "moon", "sun", "sunrise",
+    "wind", "feather", "smile", "users", "phone", "mail", "dollar-sign", "shopping-cart",
+    "home", "map-pin", "navigation", "clock", "target", "zap", "trophy", "medal",
+    "award", "shield", "x-circle",
+)
+HABIT_COLORS = (
+    "red", "orange", "yellow", "lime", "green", "mint", "teal", "cyan",
+    "blue", "indigo", "purple", "magenta", "pink", "brown", "gray", "slate",
+)
+
+
+def habit_look(task: dict | None) -> dict:
+    """{"icon", "color"} for a habit -- its own picks, or None (templates
+    fall back to the kind's default glyph and the accent colour)."""
+    icon = (task or {}).get("habit_icon")
+    color = (task or {}).get("habit_color")
+    return {"icon": icon if icon in HABIT_ICONS else None, "color": color if color in HABIT_COLORS else None}
+
+
 _WEEKDAY_CODES = ("MO", "TU", "WE", "TH", "FR", "SA", "SU")
 
 
@@ -167,11 +191,17 @@ def week_strip(
     excluded: set[str] | None = None,
     target: float | None = None,
     schedule: habit_schedule.Schedule | None = None,
+    week_start: str = "monday",
 ) -> list[dict]:
+    """The calendar week containing `today`, starting on the configured
+    first day of the week (2026-09-26, Peter: the strip didn't respect
+    it -- it used to be the rolling last seven days). Days after today
+    are `is_future`: shown, never clickable."""
     excluded = excluded or set()
     days = []
-    for back in range(6, -1, -1):
-        d = today - timedelta(days=back)
+    first = today - timedelta(days=(today.weekday() + (1 if week_start == "sunday" else 0)) % 7)
+    for offset in range(7):
+        d = first + timedelta(days=offset)
         iso = d.isoformat()
         value = entries_by_date.get(iso, 0) or 0
         state = day_state(value, target)
@@ -187,7 +217,8 @@ def week_strip(
                 "done": state == "done",
                 # UI audit H-02: an amount habit's day below target.
                 "partial": state == "partial",
-                "is_today": back == 0,
+                "is_today": d == today,
+                "is_future": d > today,
                 "excluded": iso in excluded,
                 # UI audit H-16 / flesh-out 9: a day this habit isn't
                 # scheduled on (Tue for a Mon/Wed/Fri habit) -- styled as
@@ -204,59 +235,6 @@ def _shift_month(first: date, delta: int) -> date:
     return date(idx // 12, idx % 12 + 1, 1)
 
 
-def month_calendar(
-    uid: str, completions: list[dict], month: str | None, today: date | None = None, target: float | None = None
-) -> dict:
-    """Habits H3: one month (Mon-first weeks) for the habit detail modal --
-    each day carries its logged value and note, and a toggle URL unless
-    it's in the future. `month` is "YYYY-MM" (default: this month; never
-    past this month). Prev/next point at the detail URL with ?month=."""
-    today = today or date.today()
-    this_month = today.replace(day=1)
-    try:
-        first = date.fromisoformat(f"{month}-01") if month else this_month
-    except ValueError:
-        first = this_month
-    first = min(first, this_month)
-    by_date = {c["due_date"]: c for c in completions}
-    start = first - timedelta(days=first.weekday())
-    nxt = _shift_month(first, 1)
-    weeks = []
-    d = start
-    while d < nxt or d.weekday() != 0:
-        if d.weekday() == 0:
-            weeks.append([])
-        iso = d.isoformat()
-        row = by_date.get(iso) or {}
-        value = row.get("value") or 0
-        state = day_state(value, target)
-        weeks[-1].append(
-            {
-                "iso": iso,
-                "day": d.day,
-                "in_month": d.month == first.month,
-                "value": value,
-                # UI audit H-02: full days only; partial is its own state.
-                "done": state == "done",
-                "partial": state == "partial",
-                "note": (row.get("note") or "").strip(),
-                "is_today": d == today,
-                "is_future": d > today,
-                "toggle_url": f"/tasks/{uid}/completion/{iso}/toggle",
-            }
-        )
-        d += timedelta(days=1)
-    prev_first = _shift_month(first, -1)
-    return {
-        "label": first.strftime("%B %Y"),
-        "weeks": weeks,
-        "day_names": _DAY_NAMES,
-        "prev_url": f"/tasks/{uid}?month={prev_first.strftime('%Y-%m')}",
-        "next_url": f"/tasks/{uid}?month={nxt.strftime('%Y-%m')}" if nxt <= this_month else None,
-        "done_count": sum(1 for w in weeks for x in w if x["in_month"] and x["done"]),
-    }
-
-
 def recent_notes(completions: list[dict], limit: int = 10) -> list[dict]:
     """Habits H3: newest-first logged days that carry a note."""
     rows = [c for c in completions if (c.get("note") or "").strip()]
@@ -264,7 +242,7 @@ def recent_notes(completions: list[dict], limit: int = 10) -> list[dict]:
     return [{"iso": c["due_date"], "note": c["note"].strip(), "value": c.get("value") or 0} for c in rows[:limit]]
 
 
-def habit_item(conn, task: dict, today: date, pauses: list[dict] | None = None) -> dict:
+def habit_item(conn, task: dict, today: date, pauses: list[dict] | None = None, week_start: str = "monday") -> dict:
     today_iso = today.isoformat()
     entries_by_date = {c["due_date"]: c["value"] for c in db.list_task_completions(conn, task["uid"])}
     target = task.get("target_per_day") or 1
@@ -322,10 +300,12 @@ def habit_item(conn, task: dict, today: date, pauses: list[dict] | None = None) 
             today,
             excluded | pinfo["dates"],
             target=qty_target,
+            week_start=week_start,
             schedule=None
             if task.get("habit_kind") == "avoid"
             else habit_schedule.parse_schedule(task.get("recurrence"), task.get("habits_per_period"), _created_date(task)),
         ),
+        **habit_look(task),
         "detail_url": f"/tasks/{task['uid']}",
         "edit_url": f"/tasks/{task['uid']}/edit",
         "toggle_url": f"/tasks/{task['uid']}/completion/{today_iso}/toggle",
@@ -334,12 +314,16 @@ def habit_item(conn, task: dict, today: date, pauses: list[dict] | None = None) 
     }
 
 
+WEEK_START_KEY = "calendar_week_start"  # deps.WEEK_START_KEY (no import cycle)
+
+
 def habit_items(conn, today: date | None = None) -> list[dict]:
     """Every active habit, alphabetical (list_habit_tasks' own order)."""
     today = today or date.today()
     pauses = db.list_habit_pauses(conn)
+    week_start = db.get_app_meta(conn, WEEK_START_KEY) or "monday"
     return [
-        habit_item(conn, t, today, pauses)
+        habit_item(conn, t, today, pauses, week_start=week_start)
         for t in db.list_habit_tasks(conn)
         if t["status"] not in _INACTIVE_STATUSES
     ]
@@ -390,6 +374,61 @@ def habits_for_day(conn, d: date, today: date | None = None) -> list[dict]:
                 "toggle_url": f"/tasks/{t['uid']}/completion/{iso}/toggle",
                 "detail_url": f"/tasks/{t['uid']}",
             }
+        )
+    return out
+
+
+def period_grid(
+    entries_by_date: dict, schedule: habit_schedule.Schedule, today: date, week_start: str = "monday",
+    target: float | None = None,
+) -> dict:
+    """2026-09-26 (Peter): a "3x a week" / "once a month" habit's history
+    as periods, not days -- the last 52 weeks (weeks starting on the
+    configured first day) or the last 12 months. Each cell: logged days
+    in that period against the per-period target; `done` at the target,
+    `partial` below it. A day counts once it's done (at the daily target
+    for an amount habit)."""
+    per = max(1, schedule.per_period)
+    done_days = {iso for iso, v in entries_by_date.items() if day_state(v or 0, target) == "done"}
+    cells = []
+    if schedule.unit == "week":
+        this_week = today - timedelta(days=(today.weekday() + (1 if week_start == "sunday" else 0)) % 7)
+        for i in range(51, -1, -1):
+            start = this_week - timedelta(weeks=i)
+            n = sum(1 for k in range(7) if (start + timedelta(days=k)).isoformat() in done_days)
+            cells.append({
+                "label": start.strftime("%b") if start.day <= 7 else "",
+                "title": f"Week of {start.day} {start.strftime('%b')}: {n}/{per}",
+                "count": n, "target": per, "done": n >= per, "partial": 0 < n < per, "is_current": i == 0,
+            })
+        return {"unit": "week", "cells": cells}
+    first = today.replace(day=1)
+    for i in range(11, -1, -1):
+        m = _shift_month(first, -i)
+        key = m.strftime("%Y-%m")
+        n = sum(1 for iso in done_days if iso.startswith(key))
+        cells.append({
+            "label": m.strftime("%b"), "title": f"{m.strftime('%B %Y')}: {n}/{per}",
+            "count": n, "target": per, "done": n >= per, "partial": 0 < n < per, "is_current": i == 0,
+        })
+    return {"unit": "month", "cells": cells}
+
+
+def history(conn, task: dict, today: date | None = None, week_start: str = "monday") -> dict:
+    """What a habit's history view shows (the Habits page's expandable
+    row, the view modal): the year heatmap for a daily / fixed-days /
+    avoid habit, or the week / month grid for a period habit, plus
+    insights (2026-09-26: moved here from the view modal)."""
+    today = today or date.today()
+    rows = db.list_task_completions(conn, task["uid"])
+    entries = {r["due_date"]: r.get("value") or 0 for r in rows}
+    out = {"heatmap": None, "periods": None, "insights": insights(rows, today)}
+    sched = habit_schedule.parse_schedule(task.get("recurrence"), task.get("habits_per_period"), _created_date(task))
+    if task.get("habit_kind") != "avoid" and sched.kind == "period":
+        out["periods"] = period_grid(entries, sched, today, week_start, target=quantity_target(task))
+    else:
+        out["heatmap"] = habit_heatmap.heatmap_weeks(
+            entries, task.get("target_per_day") or 1, habit_heatmap.DETAIL_WEEKS, today, week_start=week_start
         )
     return out
 

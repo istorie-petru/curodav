@@ -1368,6 +1368,12 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # set_task_reminder_time only, never by upsert_task (sync/import paths
     # rebuild rows without it and would wipe it).
     _ensure_column(conn, "tasks", "reminder_time", "TEXT")
+    # 2026-09-26 (Peter): a habit's own icon (sprite name, drawn in its
+    # check button) and colour (label palette name: heatmap + banner).
+    # NULL = the defaults. Set by set_task_habit_look only, same reason as
+    # reminder_time just above.
+    _ensure_column(conn, "tasks", "habit_icon", "TEXT")
+    _ensure_column(conn, "tasks", "habit_color", "TEXT")
     _ensure_column(conn, "task_completions", "value", "REAL NOT NULL DEFAULT 1")
     # 2026-08-29 (STATE.md backlog item 3, direct request): extends the 1.6
     # non-working-day policy (see the `events` CREATE TABLE comment) to
@@ -1550,6 +1556,15 @@ def _attach_tags_bulk(
     for d in dicts:
         d["tags"] = by_id.get(d["uid"], [])
     return dicts
+
+
+def set_task_habit_look(conn: sqlite3.Connection, uid: str, icon: str | None, color: str | None) -> None:
+    """A habit's icon and colour (2026-09-26) -- see the tasks.habit_icon
+    column comment. Callers validate the names; blank = default."""
+    conn.execute(
+        "UPDATE tasks SET habit_icon = ?, habit_color = ? WHERE uid = ?", (icon or None, color or None, uid)
+    )
+    conn.commit()
 
 
 # --------------------------------------------------------------------- #

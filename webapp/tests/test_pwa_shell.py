@@ -334,5 +334,6 @@ class TestShellCacheVersion:
         # v127 (2026-09-25): group rename/members, modal data-follow-redirect.
         # v128 (2026-09-25): font-size tokens --text-xs/--text-2xs.
         # v129 (2026-09-26): compact habit rows, Pauses modal, habit form.
+        # v130 (2026-09-26): habit rows v2, history panel, icon + colour.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v129"' in script
+        assert 'CACHE_NAME = "cc-shell-v130"' in script

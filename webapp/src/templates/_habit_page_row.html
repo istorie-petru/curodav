@@ -9,8 +9,22 @@
    fill, and so do its strip days (H-02). Toggle forms carry
    data-undo-* (the day's value before this tap) so habit_actions.js can
    offer Undo in a toast. No "--" in any copy (H-21). #}
-{% macro habit_page_row(h) %}
-<li class="habit-card{% if h.done_today and not h.is_avoid %} is-done-today{% endif %}{% if h.is_avoid %} is-avoid{% endif %}" data-uid="{{ h.uid }}">
+{# 2026-09-26 (Peter): two shapes.
+   - Habits page: a contact-row-sized row (34px check, title over
+     "schedule . streak", 30px days, a chevron). The chevron opens the
+     habit's history below the row -- year heatmap, or the week/month
+     grid for a period habit, plus insights (`h.history`, set by
+     routers/habits.py; habit_day.js keeps it open across refreshes).
+   - compact (dashboard widget): one row -- check, title, days. Nothing
+     else, at any width.
+   The strip is the current calendar week from the configured first day
+   (habit_view.week_strip); days after today are shown, not clickable.
+   The habit's own icon replaces the check glyph and its colour
+   (`habit-c-<name>`, style.css --habit-accent) paints the done states. #}
+{% from "_habit_heatmap.html" import heatmap %}
+{% from "_habit_history.html" import period_grid, insights_block %}
+{% macro habit_page_row(h, compact=false) %}
+<li class="habit-card{% if compact %} is-compact{% endif %}{% if h.color %} habit-c-{{ h.color }}{% endif %}{% if h.done_today and not h.is_avoid %} is-done-today{% endif %}{% if h.is_avoid %} is-avoid{% endif %}" data-uid="{{ h.uid }}">
     <div class="habit-card-check">
         {% if h.is_avoid %}
         {# Habits H5: an avoid habit logs relapses -- same toggle endpoint. #}
@@ -21,7 +35,7 @@
                     aria-pressed="{{ 'true' if h.relapsed_today else 'false' }}"
                     title="{% if h.relapsed_today %}Relapsed today. Click to undo{% else %}Log a relapse today{% endif %}"
                     aria-label="{% if h.relapsed_today %}Undo today's relapse for{% else %}Log a relapse today:{% endif %} {{ h.title }}">
-                {{ icon('x-circle') if h.relapsed_today else icon('shield') }}
+                {{ icon(h.icon or ('x-circle' if h.relapsed_today else 'shield')) }}
             </button>
         </form>
         {% elif h.is_quantity %}
@@ -41,17 +55,14 @@
                     aria-pressed="{{ 'true' if h.done_today else 'false' }}"
                     title="{% if h.done_today %}Done today. Click to undo{% else %}Mark done today{% endif %}"
                     aria-label="{% if h.done_today %}Undo today for{% else %}Mark done today:{% endif %} {{ h.title }}">
-                {{ icon('check-circle') if h.done_today else icon('square') }}
+                {{ icon(h.icon or ('check-circle' if h.done_today else 'square')) }}
             </button>
         </form>
         {% endif %}
     </div>
     <div class="habit-card-main">
         <a href="{{ h.detail_url }}" data-modal class="habit-card-title">{{ h.title }}</a>
-        {# 2026-09-26 (Peter: compact rows): one line -- schedule (or the
-           week's progress for a "3x a week" habit, or the pause) and the
-           streak. The amount left and the reminder time moved into the
-           tooltip; the reminder keeps a small bell. #}
+        {% if not compact %}
         {% set _tip %}{{ h.recurrence_label }}{% if h.is_quantity %}, {{ h.target|int }}{% if h.unit %} {{ h.unit }}{% endif %} a day{% if h.remaining_today and h.today_value %} ({{ h.remaining_today|int }} left today){% endif %}{% endif %}{% if h.reminder_time and not h.is_avoid %}, reminder at {{ h.reminder_time|fmt_time }}{% endif %}. Best: {{ h.longest_streak }} {{ h.streak_unit }}{{ 's' if h.longest_streak != 1 }}{% if h.completion_rate is not none %}, {{ (h.completion_rate * 100)|round|int }}% {{ 'clean' if h.is_avoid else 'kept' }}{% endif %}{% if h.strength is not none %}, strength {{ h.strength }}%{% endif %}{% endset %}
         <span class="habit-card-meta" title="{{ _tip|trim }}">
             {% if h.paused_today %}<span class="habit-paused-badge">{{ icon('pause', 'icon-sm') }} Paused until {{ h.paused_until|relative_date }}</span>
@@ -60,12 +71,15 @@
             <span class="habit-card-streak">{% if h.is_avoid %}{% if h.relapsed_today %}Relapsed today{% else %}{{ h.current_streak }} day{{ 's' if h.current_streak != 1 }} clean{% endif %}{% else %}{{ habit_streak_text(request, h.current_streak, h.streak_unit) }}{% endif %}</span>
             {% if h.reminder_time and not h.is_avoid %}<span class="habit-reminder" aria-label="Reminder at {{ h.reminder_time|fmt_time }}">{{ icon('bell', 'icon-sm') }}</span>{% endif %}
         </span>
+        {% endif %}
     </div>
-    <ol class="habit-week" aria-label="Last seven days">
+    <ol class="habit-week" aria-label="This week">
         {% for d in h.week %}
         {% set _cls = (' is-done' if d.done else '') ~ (' is-partial' if d.partial else '') ~ (' is-today' if d.is_today else '') ~ (' is-excluded' if d.excluded else '') ~ (' is-off' if d.off_day and not d.done and not d.partial else '') %}
         <li>
-            {% if h.is_quantity %}
+            {% if d.is_future %}
+            <span class="habit-day is-future" title="{{ d.day_name }} {{ d.iso }}"><span class="habit-day-initial" aria-hidden="true">{{ d.initial }}</span><span class="sr-only">{{ d.day_name }} {{ d.iso }}, later this week</span></span>
+            {% elif h.is_quantity %}
             {# 2026-09-25: an amount habit's day opens the small amount
                popup (static/habit_day.js), target as the placeholder. #}
             <button type="button" class="habit-day habit-amount-trigger{{ _cls }}"
@@ -90,5 +104,16 @@
         </li>
         {% endfor %}
     </ol>
+    {% if not compact %}
+    <button type="button" class="icon-btn habit-expand" aria-expanded="false" aria-controls="habit-panel-{{ h.uid }}"
+            title="History" aria-label="Show history: {{ h.title }}">{{ icon('chevron-down', 'icon-sm') }}</button>
+    {% if h.history %}
+    <div class="habit-panel" id="habit-panel-{{ h.uid }}" hidden>
+        {% if h.history.periods %}{{ period_grid(h.history.periods) }}
+        {% elif h.history.heatmap %}{{ heatmap(h.uid, h.history.heatmap, extra_class='heatmap-wide' ~ (' heatmap-avoid' if h.is_avoid else ''), interactive=false) }}{% endif %}
+        {{ insights_block(h.history.insights, h.is_avoid) }}
+    </div>
+    {% endif %}
+    {% endif %}
 </li>
 {% endmacro %}

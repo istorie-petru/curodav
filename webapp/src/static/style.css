@@ -5990,10 +5990,10 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    user's accent now; empty days a neutral tint that reads on both page
    and card backgrounds, in both themes. */
 .heatmap-cell.level-0{background:var(--accent-neutral-subtle-strong);}
-.heatmap-cell.level-1{background:var(--accent); opacity:.3;}
-.heatmap-cell.level-2{background:var(--accent); opacity:.55;}
-.heatmap-cell.level-3{background:var(--accent); opacity:.78;}
-.heatmap-cell.level-4{background:var(--accent); opacity:1;}
+.heatmap-cell.level-1{background:var(--habit-accent, var(--accent)); opacity:.3;}
+.heatmap-cell.level-2{background:var(--habit-accent, var(--accent)); opacity:.55;}
+.heatmap-cell.level-3{background:var(--habit-accent, var(--accent)); opacity:.78;}
+.heatmap-cell.level-4{background:var(--habit-accent, var(--accent)); opacity:1;}
 .heatmap-cell.level-future{background:transparent; cursor:default; visibility:hidden;}
 .heatmap-cell:hover:not(.level-future){box-shadow:0 0 0 1px var(--fg-primary) inset;}
 
@@ -7996,58 +7996,135 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .habits-section-title{font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary); text-transform:uppercase; letter-spacing:.04em; margin:0 0 var(--space-2); display:flex; align-items:center; gap:var(--space-2);}
 .habits-section-count{font-weight:var(--font-weight-regular); color:var(--fg-tertiary);}
 .habit-list{list-style:none; margin:0; padding:0; container-type:inline-size; container-name:habitlist;}
-/* 2026-09-26 (Peter: rows too tall, "28-32px should be enough"): one
-   32px row -- check, then title and "schedule · streak" on one line,
-   then the 7-day strip. A narrow list (phone, 25% widget) puts that
-   text line above a check + strip row (container query below). */
-.habit-card{margin:0; display:grid; grid-template-columns:auto minmax(0,1fr) auto; grid-template-areas:"check main week"; align-items:center; column-gap:var(--space-2); row-gap:2px; min-height:32px; padding:2px 0; border-bottom:1px solid var(--separator);}
+/* 2026-09-26 (Peter, second pass): the page row is a contact row --
+   same height (34px check like the avatar, title over a smaller
+   "schedule . streak" line, 8px padding), 30px day cells and a chevron
+   that opens the history panel under the row. The widget row
+   (.is-compact) is one short line: check, title, days -- never stacked.
+   --habit-accent is the habit's own colour (habit-c-*), default accent. */
+.habit-card{--habit-accent:var(--accent); margin:0; display:grid; grid-template-columns:auto minmax(0,1fr) auto auto; grid-template-areas:"check main week expand" "panel panel panel panel"; align-items:center; column-gap:var(--space-3); padding:var(--space-2) 0; border-bottom:1px solid var(--separator);}
+.habit-card.is-compact{grid-template-columns:auto minmax(0,1fr) auto; grid-template-areas:"check main week"; column-gap:var(--space-2); padding:var(--space-1) 0;}
 .habit-card-check{grid-area:check;}
-.habit-card-main{grid-area:main; min-width:0; display:flex; align-items:baseline; gap:var(--space-2); white-space:nowrap; overflow:hidden;}
+.habit-card-main{grid-area:main; min-width:0; display:flex; flex-direction:column; overflow:hidden;}
 .habit-week{grid-area:week;}
-.habit-card-title{flex:0 1 auto; min-width:0; color:var(--fg-primary); font-weight:var(--font-weight-bold); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.habit-expand{grid-area:expand;}
+.habit-expand .icon{transition:transform .15s ease;}
+.habit-expand[aria-expanded="true"] .icon{transform:rotate(180deg);}
+.habit-panel{grid-area:panel; padding:var(--space-3) 0 var(--space-2); min-width:0;}
+.habit-panel[hidden]{display:none;}
+/* Wide list: history left, insights right; narrow: stacked. The day
+   heatmap keeps readable ~16px cells instead of stretching. */
+.habit-panel{display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:var(--space-6); align-items:start;}
+.habit-panel > :only-child{grid-column:1 / -1; max-width:760px;}
+.habit-panel .habit-insights{margin-top:0;}
+.habit-panel .habit-bars-months{height:64px;}
+.habit-card-title{min-width:0; color:var(--fg-primary); font-weight:var(--font-weight-bold); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .habit-card-title:hover{text-decoration:underline;}
-.habit-card-meta{flex:0 100 auto; min-width:0; display:flex; flex-wrap:nowrap; gap:0 var(--space-2); overflow:hidden; font-size:var(--text-sm); color:var(--fg-secondary);}
+.habit-card-meta{min-width:0; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:var(--text-sm); color:var(--fg-tertiary);}
+.habit-card-meta > span + span{margin-left:var(--space-2);}
 .habit-card-meta > span + span::before{content:"\00b7"; margin-right:var(--space-2); color:var(--fg-tertiary);}
 /* 2026-09-25 (UI audit H-07): each meta item stays on one line, so a
    wrap moves a whole item (with its "·") instead of orphaning the dot. */
 .habit-card-meta > span{white-space:nowrap;}
-.habit-check-btn{display:inline-flex; align-items:center; justify-content:center; min-width:28px; height:28px; padding:0 var(--space-1); border-radius:var(--radius-pill); border:2px solid var(--border-strong); background:transparent; color:var(--fg-tertiary); cursor:pointer;}
-.habit-check-btn .icon{width:16px; height:16px;}
+.habit-check-btn{display:inline-flex; align-items:center; justify-content:center; min-width:34px; height:34px; padding:0 var(--space-1); border-radius:var(--radius-pill); border:2px solid var(--border-strong); background:transparent; color:var(--fg-tertiary); cursor:pointer;}
+.habit-check-btn .icon{width:18px; height:18px;}
 /* A plain check is a circle; the n/target amount check keeps its pill. */
-.habit-check-btn:not(.habit-check-qty){width:28px; padding:0;}
-.habit-check-btn:hover{border-color:var(--accent); color:var(--accent);}
-.habit-check-btn.is-done{background:var(--accent); border-color:var(--accent); color:var(--fg-on-accent);}
+.habit-check-btn:not(.habit-check-qty){width:34px; padding:0;}
+.is-compact .habit-check-btn{min-width:28px; height:28px;}
+.is-compact .habit-check-btn:not(.habit-check-qty){width:28px;}
+.is-compact .habit-check-btn .icon{width:16px; height:16px;}
+.habit-check-btn:hover{border-color:var(--habit-accent); color:var(--habit-accent);}
+.habit-check-btn.is-done{background:var(--habit-accent); border-color:var(--habit-accent); color:var(--fg-on-accent);}
 .habit-check-qty{font-size:var(--text-sm); font-variant-numeric:tabular-nums; color:var(--fg-primary);}
 .habit-qty-target{color:inherit; opacity:.7;}
 /* 2026-09-25 (UI audit H-01/H-02): an amount habit below its target is
    "partial" -- the same lighter accent the year heatmap uses for a
    part-filled day (level 1-3), on the check, the strip and the month
    calendar alike. Only the target fills it solid. */
-.habit-check-btn.is-partial{border-color:var(--accent); background:color-mix(in srgb, var(--accent) 22%, transparent);}
+.habit-check-btn.is-partial{border-color:var(--habit-accent); background:color-mix(in srgb, var(--habit-accent) 22%, transparent);}
 .habit-card.is-done-today .habit-card-title{color:var(--fg-secondary);}
 /* UI audit H-05: the row a check-in just re-rendered (it may have moved
    between To do and On track) flashes once so it's easy to find. */
 .habit-card.is-just-updated{animation:habit-row-flash 1.2s ease-out;}
 @keyframes habit-row-flash{0%{background:var(--accent-subtle);} 100%{background:transparent;}}
 @media (prefers-reduced-motion: reduce){ .habit-card.is-just-updated{animation:none;} }
-.habit-week{display:flex; gap:3px; list-style:none; margin:0; padding:0;}
-.habit-day{width:24px; height:24px; border-radius:var(--radius-sm); border:none; padding:0; background:var(--accent-neutral-subtle-strong); color:var(--fg-tertiary); font-size:var(--text-2xs); cursor:pointer; display:flex; align-items:center; justify-content:center;}
+.habit-week{display:flex; gap:4px; list-style:none; margin:0; padding:0;}
+.habit-day{width:30px; height:30px; border-radius:var(--radius-sm); border:none; padding:0; background:var(--accent-neutral-subtle-strong); color:var(--fg-tertiary); font-size:var(--text-2xs); cursor:pointer; display:flex; align-items:center; justify-content:center;}
+.is-compact .habit-week{gap:3px;}
+.is-compact .habit-day{width:24px; height:24px;}
 .habit-day:hover{box-shadow:0 0 0 1px var(--fg-primary) inset;}
-.habit-day.is-done{background:var(--accent); color:var(--fg-on-accent);}
-.habit-day.is-today{box-shadow:0 0 0 2px var(--accent) inset;}
+/* A day later this week: shown for the week's shape, not clickable. */
+.habit-day.is-future{background:transparent; box-shadow:0 0 0 1px var(--separator) inset; opacity:.55; cursor:default;}
+.habit-day.is-done{background:var(--habit-accent); color:var(--fg-on-accent);}
+.habit-day.is-today{box-shadow:0 0 0 2px var(--habit-accent) inset;}
 .habit-day.is-today.is-done{box-shadow:none;}
 .habit-day.is-excluded:not(.is-done){opacity:.45;}
 /* UI audit H-02: partial amount day (see .habit-check-btn.is-partial). */
-.habit-day.is-partial{background:color-mix(in srgb, var(--accent) 35%, transparent); color:var(--fg-primary);}
+.habit-day.is-partial{background:color-mix(in srgb, var(--habit-accent) 35%, transparent); color:var(--fg-primary);}
 /* UI audit H-16 / flesh-out 9: a day the habit isn't scheduled on (Tue
    for a Mon/Wed/Fri habit) -- an outlined, empty cell, so it no longer
    reads as a missed (grey-filled) day. Still clickable: doing it anyway
    counts toward that week's window. */
 .habit-day.is-off:not(.is-done):not(.is-partial):not(.is-relapse){background:transparent; box-shadow:0 0 0 1px var(--separator) inset; color:var(--fg-tertiary);}
-.habit-day.is-off.is-today:not(.is-done){box-shadow:0 0 0 2px var(--accent) inset;}
+.habit-day.is-off.is-today:not(.is-done){box-shadow:0 0 0 2px var(--habit-accent) inset;}
+@container habitlist (max-width: 720px){
+  .habit-panel{grid-template-columns:minmax(0,1fr); gap:var(--space-4);}
+}
 @container habitlist (max-width: 520px){
-  .habit-card{grid-template-columns:auto minmax(0,1fr); grid-template-areas:"main main" "check week"; padding:var(--space-1) 0;}
-  .habit-week{justify-self:end;}
+  .habit-card{column-gap:6px;}
+  .habit-card:not(.is-compact) .habit-day{width:22px; height:22px;}
+  .habit-week, .is-compact .habit-week{gap:2px;}
+  .habit-card:not(.is-compact) .habit-expand{width:28px; min-width:28px;}
+}
+/* 2026-09-26: a "3x a week" / "once a month" habit's history as periods
+   (_habit_history.html period_grid) -- 52 week squares or 12 month
+   tiles. Done = the period's target reached; partial = some days. */
+.habit-periods{display:grid; gap:3px;}
+.habit-periods-week{grid-template-columns:repeat(52, minmax(0,1fr));}
+.habit-periods-month{grid-template-columns:repeat(12, minmax(0,1fr)); gap:var(--space-1);}
+.habit-period{aspect-ratio:1; border-radius:2px; background:var(--accent-neutral-subtle-strong);}
+.habit-periods-month .habit-period{aspect-ratio:auto; min-height:44px; border-radius:var(--radius-sm); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:var(--text-2xs); color:var(--fg-secondary);}
+.habit-period.is-partial{background:color-mix(in srgb, var(--habit-accent, var(--accent)) 35%, transparent);}
+.habit-period.is-done{background:var(--habit-accent, var(--accent)); color:var(--fg-on-accent);}
+.habit-period.is-current{box-shadow:0 0 0 2px var(--habit-accent, var(--accent)) inset;}
+.habit-period.is-current.is-done{box-shadow:none;}
+.habit-period-label{font-weight:var(--font-weight-bold);}
+.habit-periods-months{display:grid; grid-template-columns:repeat(52, minmax(0,1fr)); gap:3px; margin-top:2px; font-size:var(--text-2xs); color:var(--fg-tertiary); white-space:nowrap;}
+/* Habit form's Look dropdown (habit_task_form.html, 2026-09-26): the
+   app's .multiselect trigger/panel, with a swatch row and an icon grid
+   inside instead of option rows. */
+.habit-look-trigger{display:flex; align-items:center; gap:var(--space-2); width:100%;}
+.habit-look-name{flex:1; text-align:left; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.habit-look-preview{--habit-accent:var(--accent); display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; background:var(--habit-accent); color:var(--fg-on-accent); flex:none;}
+.habit-look-panel{padding:var(--space-2);}
+.habit-look-group{display:grid; grid-template-columns:repeat(auto-fill, minmax(36px, 1fr)); gap:var(--space-1);}
+.habit-look-icon .icon{width:18px; height:18px;}
+.habit-look-swatch, .habit-look-icon{position:relative; display:flex; align-items:center; justify-content:center; height:36px; border-radius:var(--radius-sm); cursor:pointer;}
+.habit-look-swatch input, .habit-look-icon input{position:absolute; opacity:0; width:1px; height:1px;}
+.habit-look-dot{--habit-accent:var(--accent); width:20px; height:20px; border-radius:50%; background:var(--habit-accent);}
+.habit-look-dot.is-default{background:transparent; box-shadow:0 0 0 1.5px var(--border-strong) inset;}
+.habit-look-icon span{display:flex; align-items:center; justify-content:center; width:100%; height:100%; border-radius:var(--radius-sm); color:var(--fg-secondary);}
+.habit-look-swatch:hover, .habit-look-icon:hover span{background:var(--row-hover);}
+.habit-look-swatch input:checked + .habit-look-dot{box-shadow:0 0 0 2px var(--bg-elevated), 0 0 0 4px var(--fg-primary);}
+.habit-look-icon input:checked + span{background:var(--accent); color:var(--fg-on-accent);}
+.habit-look-swatch input:focus-visible + span, .habit-look-icon input:focus-visible + span{outline:2px solid var(--accent); outline-offset:2px;}
+/* 2026-09-26: a habit's own colour (tasks.habit_color). */
+.habit-c-red{--habit-accent:var(--cal-accent-red);}
+.habit-c-orange{--habit-accent:var(--cal-accent-orange);}
+.habit-c-yellow{--habit-accent:var(--cal-accent-yellow);}
+.habit-c-lime{--habit-accent:var(--cal-accent-lime);}
+.habit-c-green{--habit-accent:var(--cal-accent-green);}
+.habit-c-mint{--habit-accent:var(--cal-accent-mint);}
+.habit-c-teal{--habit-accent:var(--cal-accent-teal);}
+.habit-c-cyan{--habit-accent:var(--cal-accent-cyan);}
+.habit-c-blue{--habit-accent:var(--cal-accent-blue);}
+.habit-c-indigo{--habit-accent:var(--cal-accent-indigo);}
+.habit-c-purple{--habit-accent:var(--cal-accent-purple);}
+.habit-c-magenta{--habit-accent:var(--cal-accent-magenta);}
+.habit-c-pink{--habit-accent:var(--cal-accent-pink);}
+.habit-c-brown{--habit-accent:var(--cal-accent-brown);}
+.habit-c-gray{--habit-accent:var(--cal-accent-gray);}
+.habit-c-slate{--habit-accent:var(--cal-accent-slate);}
 }
 /* Habit form's "Only on" day chips (habit_task_form.html, habits H2). */
 .habit-days-picker{display:flex; flex-wrap:wrap; gap:var(--space-1);}
@@ -8076,36 +8153,20 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .habit-repeat:not([data-repeat="month"]) .habit-repeat-month{display:none;}
 .habit-amount-row{display:flex; flex-wrap:wrap; align-items:stretch; gap:var(--space-2);}
 .field .habit-amount-row input[type="text"]{flex:0 1 240px; width:auto; min-width:0;}
-/* Habit detail modal (habit_task_detail.html, habits H3): month calendar,
+/* Habit detail modal (habit_task_detail.html, habits H3; month calendar
+   removed 2026-09-26):
    "Log a day" form, recent day notes. Same accent-filled "done" language
    as the Habits page strip and the year grid. */
 /* 2026-09-25 (UI audit H-11): the habit's six short stats stay three to
    a row on phones instead of the generic one-column stack. */
 .detail-meta-grid.habit-stats-grid{grid-template-columns:repeat(3, minmax(0,1fr));}
 /* UI audit H-03: on touch screens the year grid is view-only -- its
-   ~7px cells can't be hit reliably; the month calendar edits. */
-.habit-heatmap-touch-hint{display:none; margin:var(--space-1) 0 0; font-size:var(--text-sm); color:var(--fg-tertiary);}
+   ~7px cells can't be hit reliably (the page's strip and "Log a day"
+   edit instead; the month calendar went 2026-09-26). */
 @media (pointer: coarse){
   .habit-year-heatmap .heatmap-cell-form,
   .habit-year-heatmap .heatmap-cell{pointer-events:none;}
-  .habit-year-heatmap .habit-heatmap-touch-hint{display:block;}
 }
-.habit-month-head{display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); margin-bottom:var(--space-2);}
-.habit-month-title{font-size:var(--text-base); font-weight:var(--font-weight-bold); margin:0;}
-.icon-btn-placeholder{display:inline-block; width:32px;}
-.habit-month-grid{display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:4px;}
-.habit-month-grid form{display:block;}
-.habit-month-dow{font-size:var(--text-2xs); color:var(--fg-tertiary); text-align:center; padding-bottom:2px;}
-.habit-month-day{position:relative; display:flex; align-items:center; justify-content:center; width:100%; aspect-ratio:1; max-height:44px; border:none; border-radius:var(--radius-sm); background:var(--accent-neutral-subtle); color:var(--fg-primary); font-size:var(--text-sm); font-variant-numeric:tabular-nums; cursor:pointer; padding:0;}
-button.habit-month-day:hover{box-shadow:0 0 0 1px var(--fg-primary) inset;}
-.habit-month-day.is-done{background:var(--accent); color:var(--fg-on-accent);}
-.habit-month-day.is-today{box-shadow:0 0 0 2px var(--accent) inset;}
-.habit-month-day.is-today.is-done{box-shadow:none;}
-/* UI audit H-02: partial amount day, same lighter fill as the strip. */
-.habit-month-day.is-partial{background:color-mix(in srgb, var(--accent) 35%, transparent);}
-.habit-month-day.is-outside{background:transparent; color:var(--fg-tertiary); cursor:default;}
-.habit-month-day.is-future{background:transparent; color:var(--fg-tertiary); cursor:default;}
-.habit-month-day.has-note::after{content:""; position:absolute; bottom:4px; left:50%; width:4px; height:4px; margin-left:-2px; border-radius:50%; background:currentColor;}
 .habit-section-h{font-size:var(--text-base); font-weight:var(--font-weight-bold); margin:0 0 var(--space-2);}
 .habit-log-form{display:flex; flex-wrap:wrap; align-items:flex-end; gap:var(--space-2);}
 .habit-log-field{display:flex; flex-direction:column; gap:2px; font-size:var(--text-sm); color:var(--fg-secondary);}
@@ -8119,7 +8180,6 @@ button.habit-month-day:hover{box-shadow:0 0 0 1px var(--fg-primary) inset;}
 .habit-check-btn.habit-check-avoid.is-relapse{background:var(--danger); border-color:var(--danger); color:var(--fg-on-accent);}
 .habit-day.is-relapse{background:var(--danger); color:var(--fg-on-accent);}
 .habit-day.is-today.is-relapse{box-shadow:none;}
-.habit-month.is-avoid .habit-month-day.is-done{background:var(--danger);}
 .heatmap-avoid .heatmap-cell.level-1,
 .heatmap-avoid .heatmap-cell.level-2,
 .heatmap-avoid .heatmap-cell.level-3,
@@ -8174,7 +8234,7 @@ button.allday-habit{
    against the track alone, so labels can't squash tall bars together. */
 .habit-bar{display:flex; flex-direction:column; align-items:center; height:100%; min-width:0;}
 .habit-bar-track{position:relative; flex:1 1 auto; width:100%; min-height:0;}
-.habit-bar-fill{position:absolute; left:0; right:0; bottom:0; min-height:2px; border-radius:3px 3px 0 0; background:var(--accent);}
+.habit-bar-fill{position:absolute; left:0; right:0; bottom:0; min-height:2px; border-radius:3px 3px 0 0; background:var(--habit-accent, var(--accent));}
 .habit-bars.is-avoid .habit-bar-fill{background:var(--danger);}
 .habit-bar-count{font-size:10px; color:var(--fg-tertiary); line-height:1.2; height:12px;}
 .habit-bar-label{font-size:10px; color:var(--fg-tertiary); line-height:1.4; height:14px;}
@@ -8215,7 +8275,5 @@ button.allday-habit{
 .habit-amount-trigger{cursor:pointer;}
 button.heatmap-cell{border:none; padding:0;}
 /* Work sessions in the habit view modal: collapsed by default. */
-.habit-disclosure-summary{cursor:pointer; font-weight:var(--font-weight-bold); padding:var(--space-1) 0; list-style-position:inside;}
-details[open] > .habit-disclosure-summary{margin-bottom:var(--space-2);}
 .habit-work-sessions-summary{cursor:pointer; font-weight:var(--font-weight-bold); padding:var(--space-1) 0; list-style-position:inside;}
 .habit-work-sessions[open] .habit-work-sessions-summary{margin-bottom:var(--space-2);}

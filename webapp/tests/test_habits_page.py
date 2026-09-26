@@ -81,11 +81,13 @@ class TestPage:
         _habit(conn, "h1", "Read")
         _, body = _page(conn)
         assert f'action="/tasks/h1/completion/{TODAY}/toggle" class="form-inline habit-action habit-toggle"' in body
-        # 7-day strip, oldest first, ending today
-        first = (date.today() - timedelta(days=6)).isoformat()
-        assert body.count('class="form-inline habit-action habit-day-form"') == 7
+        # 2026-09-26: this calendar week from Monday (the default first
+        # day); days after today are inert spans.
+        first = (date.today() - timedelta(days=date.today().weekday())).isoformat()
+        assert body.count('class="form-inline habit-action habit-day-form"') == date.today().weekday() + 1
         strip = body[body.index('class="habit-week"'):]
-        assert strip.index(f"/tasks/h1/completion/{first}/toggle") < strip.index(f"/tasks/h1/completion/{TODAY}/toggle")
+        assert strip.index(f"/tasks/h1/completion/{first}") <= strip.index(f"/tasks/h1/completion/{TODAY}/toggle")
+        assert body.count('class="habit-day is-future"') == 6 - date.today().weekday()
         assert 'href="/tasks/h1" data-modal class="habit-card-title"' in body
 
     def test_quantity_habit(self, conn):
@@ -258,3 +260,79 @@ class TestCompactRow:
         assert '<span class="habit-card-meta" title="' in body
         assert "reminder at" in body  # in the tooltip
         assert "habit-card-main" in body
+
+
+class TestSecondPass20260926:
+    """2026-09-26 (Peter, second pass): week start, compact widget row,
+    expandable history, habit colour + icon, edit form without pills."""
+
+    def test_strip_follows_sunday_week_start(self, conn):
+        from src import habit_view
+
+        _habit(conn, "h1", "Read")
+        db.set_app_meta(conn, habit_view.WEEK_START_KEY, "sunday")
+        today = date(2026, 9, 23)  # a Wednesday
+        week = habit_view.habit_items(conn, today)[0]["week"]
+        assert [d["iso"] for d in week][0] == "2026-09-20"  # the Sunday before
+        assert [d["initial"] for d in week] == ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
+        assert [d["is_future"] for d in week] == [False] * 4 + [True] * 3
+
+    def test_page_row_has_chevron_and_history_panel(self, conn):
+        _habit(conn, "h1", "Read")
+        _habit(conn, "h2", "Gym", recurrence="FREQ=WEEKLY", habits_per_period=3)
+        _, body = _page(conn)
+        assert 'class="icon-btn habit-expand" aria-expanded="false" aria-controls="habit-panel-h1"' in body
+        panel_h1 = body[body.index('id="habit-panel-h1"'):]
+        assert 'class="heatmap heatmap-wide' in panel_h1[:600]
+        panel_h2 = body[body.index('id="habit-panel-h2"'):]
+        assert 'habit-periods habit-periods-week' in panel_h2[:600]
+
+    def test_widget_row_is_compact(self, conn):
+        from src.deps import templates
+
+        _habit(conn, "h1", "Read")
+        from src import habit_view
+
+        tpl = templates.env.from_string(
+            '{% from "_habit_page_row.html" import habit_page_row with context %}{{ habit_page_row(h, compact=true) }}'
+        )
+        html = tpl.render(h=habit_view.habit_items(conn)[0], request=_request())
+        assert "is-compact" in html
+        assert "habit-card-meta" not in html and "habit-expand" not in html and "habit-panel" not in html
+
+    def test_colour_and_icon_round_trip(self, conn):
+        _habit(conn, "h1", "Read")
+        tasks_router.update_task("h1", title="Read", description="", due_at="", start_at="", status="active", tags="",
+                                 tags_labels=["Habit"], project="", project_field="", recurrence="",
+                                 target_per_day="1", habit_days_present="", habit_kind="build", habit_unit="",
+                                 reminder_time="", holiday_calendar="", exclude_saturday="", exclude_sunday="",
+                                 x_requested_with=None, habits_per_period="", habit_days=[], habit_repeat="daily",
+                                 habit_icon="moon", habit_color="purple", conn=conn)
+        task = db.get_task(conn, "h1")
+        assert (task["habit_icon"], task["habit_color"]) == ("moon", "purple")
+        _, body = _page(conn)
+        assert "habit-card habit-c-purple" in body and 'href="#icon-moon"' in body
+        # unknown names store the default
+        tasks_router._save_habit_look(conn, "h1", "rocket-ship", "neon")
+        task = db.get_task(conn, "h1")
+        assert (task["habit_icon"], task["habit_color"]) == (None, None)
+
+    def test_edit_form_has_dropdowns_and_no_hint_text(self, conn):
+        _habit(conn, "h1", "Read")
+        form = tasks_router.edit_task_form("h1", _request("/tasks/h1/edit"), conn=conn).body.decode()
+        assert "habit-choice-row" not in form and "habit-days-hint" not in form and "field-hint" not in form
+        assert 'data-ms-label="kind"' in form and "habit-look-select" in form
+        assert 'name="habit_color" value="purple"' in form and 'name="habit_icon" value="moon"' in form
+
+    def test_backup_restore_keeps_look_and_reminder(self, conn):
+        from src.routers import export as export_router
+
+        _habit(conn, "h1", "Read")
+        db.set_task_habit_look(conn, "h1", "moon", "purple")
+        db.set_task_reminder_time(conn, "h1", "07:30")
+        payload = {"tasks": [db.get_task(conn, "h1")]}
+        db.set_task_habit_look(conn, "h1", None, None)
+        db.set_task_reminder_time(conn, "h1", "")
+        export_router.restore_backup_payload(conn, payload)
+        task = db.get_task(conn, "h1")
+        assert (task["habit_icon"], task["habit_color"], task["reminder_time"]) == ("moon", "purple", "07:30")
