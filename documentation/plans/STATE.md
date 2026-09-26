@@ -77,9 +77,10 @@ session start.
   `ps -eo pid,args | awk '$2 ~ /python$/ && $3=="-m" && $4=="src.main"'` --
   any grep for "src.main" also matches the shell running it and kills it.
 
-  **Next slice suggestion**: deadlines in the Groups & Labels widget (S-M),
-  then per-habit reminder times (M-L); F12 font-size pass needs a
-  deliberate call on which sizes may visibly change.
+  Then the Groups & Labels widget got deadline pills + group looks.
+
+  **Next slice suggestion**: per-habit reminder times (M-L); the F12
+  font-size pass needs a deliberate call on which sizes may visibly change.
 
 - **Shipped:** 2026-09-24 -- Peter sent one message bundling ~17 distinct
   UI/UX change requests (labels-as-modules rework, narrow banners

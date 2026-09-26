@@ -400,3 +400,27 @@ class TestLabelRenameFromItsOwnPage:
     def test_modal_js_follows_a_redirect_to_a_different_page_when_asked(self):
         script = (Path(__file__).resolve().parent.parent / "src" / "static" / "modal.js").read_text()
         assert 'form.hasAttribute("data-follow-redirect") && resp.redirected' in script
+
+
+class TestGroupsAndLabelsWidget:
+    """2026-09-25 (audit flesh-out item 5): the Groups & Labels widget shows
+    each pinned label's deadline state; group cards use the group's look."""
+
+    def test_list_rows_carry_deadline_state(self, conn):
+        soon = (date.today().toordinal() + 3)
+        db.upsert_label_config(conn, {"name": "Health", "widget_pin": 1, "has_deadline": 1,
+                                      "deadline_date": date.fromordinal(soon).isoformat(), "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Work", "widget_pin": 1, "created_at": _now()})
+        data = dashboard_router._render_spaces_projects(conn, {"style": "list"})
+        by_name = {p["project"]["name"]: p["deadline"] for p in data["previews"]}
+        assert by_name["Health"]["state"] == "soon" and by_name["Health"]["color"] == "orange"
+        assert by_name["Work"] is None
+
+    def test_group_cards_use_the_group_style_and_label_cards_the_deadline(self, conn):
+        _grouped(conn, "Family", "People")
+        db.set_group_style(conn, "People", "users", "orange")
+        db.upsert_label_config(conn, {"name": "Launch", "widget_pin": 1, "is_project": 1, "has_deadline": 1,
+                                      "deadline_date": "2020-01-01", "created_at": _now()})
+        cards = {c["name"]: c for c in dashboard_router._render_spaces_projects(conn, {"style": "cards"})["cards"]}
+        assert (cards["People"]["icon"], cards["People"]["color"]) == ("users", "orange")
+        assert cards["Launch"]["deadline"]["state"] == "overdue"

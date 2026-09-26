@@ -671,6 +671,13 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
     # page it shows that group's pinned labels; on a label's page, nothing
     # (a label has no sub-labels); on Home, every pinned label (List) or
     # every group plus every pinned label with no group (Cards).
+    # 2026-09-25 (audit flesh-out item 5): each label also carries its
+    # deadline state (label_pages.deadline_info -- overdue red, within 7
+    # days orange, later neutral), so "due soon / overdue" is visible from
+    # Home, not only on the label's own page. Imported here: label_pages
+    # imports this module at load time.
+    from .label_pages import deadline_info
+
     style = config.get("style") or "list"
     label_name = config.get("label_name") if config.get("scope") != "everything" else None
     pinned = [lbl for lbl in db.list_labels(conn) if lbl.get("widget_pin") and not lbl.get("archived_at")]
@@ -685,12 +692,14 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
         if not label_name:
             for g in db.list_groups(conn):
                 n = len(g["labels"])
+                # 2026-09-25: the group's own look (UI audit L3) -- this
+                # widget still hard-coded `layers`/gray for every group.
                 cards.append({
                     "uid": db.group_page_key(g["name"]),
                     "name": g["name"],
                     "href": f"/groups/{g['name']}",
-                    "icon": "layers",
-                    "color": "gray",
+                    "icon": g.get("icon") or "layers",
+                    "color": g.get("color") or "gray",
                     "description": "",
                     "meta": f"{n} label{'' if n == 1 else 's'}",
                 })
@@ -705,6 +714,7 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
                 "color": lbl.get("color") or "blue",
                 "description": lbl.get("description") or "",
                 "meta": "Project" if lbl.get("is_project") else "Label",
+                "deadline": deadline_info(lbl),
             })
         return {"style": "cards", "cards": cards}
 
@@ -714,7 +724,8 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
         total = len(tasks)
         done = len([t for t in tasks if t["status"] in ("done", "archived")])
         progress = round(100 * done / total) if total else None
-        previews.append({"project": lbl, "progress": progress, "tasks_done": done, "tasks_total": total})
+        previews.append({"project": lbl, "progress": progress, "tasks_done": done, "tasks_total": total,
+                         "deadline": deadline_info(lbl)})
     return {"style": "list", "previews": previews}
 
 
