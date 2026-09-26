@@ -1,0 +1,35 @@
+services:
+  radicale:
+    image: tomsquest/docker-radicale
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5232:5232"
+    volumes:
+      - radicale-data:/data
+      - ./docker/radicale/config:/config/config:ro
+      - ./docker/radicale/htpasswd:/config/htpasswd:ro
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+
+  curodav:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:8000:8000"
+    environment:
+      CC_RADICALE_URL: "http://radicale:5232/curodav/"
+      CC_RADICALE_USER: curodav
+      CC_RADICALE_PASSWORD: changeme
+      CC_DEPLOY_MODE: production
+      CC_DB_PATH: /app/data/cache.sqlite
+    volumes:
+      - curodav-data:/app/data
+    depends_on:
+      - radicale
+
+volumes:
+  radicale-data:
+  curodav-data:

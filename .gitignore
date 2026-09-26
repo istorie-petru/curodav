@@ -41,6 +41,8 @@ shared/.env
 # release, cutting a GitHub release via `gh` if it's available.
 /git-commit.sh
 /git-push.sh
+# Docker -- Radicale htpasswd (contains credentials)
+docker/radicale/htpasswd
 
 # Editor / OS state that sometimes leaks in despite the patterns above.
 .idea/

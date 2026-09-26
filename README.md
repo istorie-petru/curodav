@@ -210,6 +210,47 @@ Stops and disables the service, deletes the unit file, removes the
 `curodav` system user, and wipes `/srv/curodav` (all releases and data) —
 after a `type 'yes'` confirmation prompt.
 
+### Docker (Windows / any platform)
+
+If you're not on Debian or just prefer Docker, the app ships with a
+`docker-compose.yml` that runs both the web app and Radicale in containers.
+
+**Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+installed and running.
+
+**Step-by-step (PowerShell):**
+
+```powershell
+# 1. Clone your fork
+git clone https://github.com/<your-username>/curodav.git
+cd curodav
+
+# 2. Generate the Radicale auth file (one-time setup)
+#    You'll be prompted to type a password — remember it.
+docker run --rm -it -v "C:/Users/<your-user>/path/to/curodav/docker/radicale:/work" httpd:2 htpasswd -c /work/htpasswd curodav
+
+# 3. Edit docker-compose.yml
+#    Set CC_RADICALE_PASSWORD to the same password you just typed.
+
+# 4. Start both containers
+docker compose up -d
+
+# 5. Open http://localhost:8000 in your browser.
+#    You'll be guided through a first-run setup to create your login.
+```
+
+**Useful commands:**
+
+```powershell
+docker compose logs -f          # watch live logs
+docker compose down             # stop both containers
+docker compose up -d            # start again
+docker compose down -v          # stop AND delete all data (careful!)
+```
+
+Data persists in Docker named volumes (`radicale-data`, `curodav-data`)
+between restarts. To back up your data, see `docker volume inspect`.
+
 ### Security note (read this before exposing the app to a network)
 
 The login screen (from the one-time setup page above) only stops someone
