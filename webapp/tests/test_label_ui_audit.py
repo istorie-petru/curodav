@@ -11,6 +11,8 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
+import re
+
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
@@ -225,9 +227,10 @@ class TestGroupIdentity:
         body = label_pages.edit_group_modal("Uni", _request("/groups/Uni/edit"), conn=conn).body.decode()
         assert 'action="/groups/Uni/update"' in body
 
-    def test_rail_uses_monogram_or_group_icon(self):
+    def test_rail_uses_group_icon_or_default_glyph(self):
+        # 2026-09-26 (Peter): no first-letter chip -- the default glyph.
         base = (Path(__file__).resolve().parents[1] / "src" / "templates" / "base.html").read_text()
-        assert "sidebar-group-monogram" in base and "icon(g.icon)" in base
+        assert "sidebar-group-monogram" not in base and "icon(g.icon or 'layers')" in base
         assert "{{ icon('layers') }}<span>{{ g.name }}" not in base
 
     def test_nav_icons_reserved_in_the_label_picker(self):
@@ -350,8 +353,9 @@ class TestGroupRenameAndMembers:
         assert db.group_member_names(conn, "People") == ["Reading", "Work"]
         assert db.group_member_names(conn, "Hobbies") == []
         assert (db.get_label_config(conn, "Family") or {}).get("label_group") is None
-        with pytest.raises(ValueError):
-            db.set_group_members(conn, "People", [])
+        # 2026-09-26: groups are standalone -- emptying one keeps it.
+        db.set_group_members(conn, "People", [])
+        assert db.group_member_names(conn, "People") == [] and db.get_group(conn, "People")
 
     def test_update_route_renames_sets_members_and_redirects_to_new_page(self, conn):
         _grouped(conn, "Family", "People")
@@ -362,23 +366,24 @@ class TestGroupRenameAndMembers:
         assert db.group_member_names(conn, "Crew") == ["Family", "Work"]
         assert db.get_group_style(conn, "Crew")["color"] == "green"
 
-    def test_update_route_rejects_emptying_but_ignores_posts_without_the_checklist(self, conn):
+    def test_update_route_ignores_posts_without_the_checklist_and_may_empty(self, conn):
         _grouped(conn, "Family", "People")
-        with pytest.raises(HTTPException) as exc:
-            label_pages.update_group("People", color="gray", icon="", new_name="", members=[],
-                                     members_submitted="1", conn=conn)
-        assert exc.value.status_code == 400
         label_pages.update_group("People", color="gray", icon="", new_name="", members=[],
                                  members_submitted="", conn=conn)
         assert db.group_member_names(conn, "People") == ["Family"]
+        # 2026-09-26: an empty member list empties the group; it stays.
+        label_pages.update_group("People", color="gray", icon="", new_name="", members=[],
+                                 members_submitted="1", conn=conn)
+        assert db.group_member_names(conn, "People") == [] and db.get_group(conn, "People")
 
     def test_edit_modal_lists_candidates_with_their_current_group(self, conn):
         _grouped(conn, "Family", "People")
         _grouped(conn, "Reading", "Hobbies")
         body = label_pages.edit_group_modal("People", _request("/groups/People/edit"), conn=conn).body.decode()
         assert 'name="new_name" value="People"' in body
-        assert 'name="members" value="Family" checked' in body
-        assert "moves from Hobbies" in body
+        # 2026-09-26: the Labels checkbox dropdown.
+        assert re.search(r'name="members" value="Family"[^>]*\bchecked', body)
+        assert "Reading (in Hobbies)" in body
         assert "data-follow-redirect" in body
 
 

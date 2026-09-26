@@ -988,17 +988,11 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
 .sidebar-tree-toggle .icon{width:14px; height:14px; transition:transform var(--dur-fast) var(--ease-standard);}
 .sidebar-tree-toggle[aria-expanded="true"] .icon{transform:rotate(90deg);}
 .sidebar-tree-children{display:none; width:100%; flex-direction:column;}
-/* 2026-09-25 (UI audit L3): a group's rail entry shows its own icon, or
-   (no icon picked) its first letter on a small chip in its color --
-   base.html. Both are <span>s inside .tab-btn, so these selectors carry
-   three classes to beat `html[data-sidebar-expanded] .tab-btn span` and
+/* 2026-09-25 (UI audit L3): a group's rail entry shows its own icon (the
+   default `layers` in its colour when none is picked -- 2026-09-26, the
+   first-letter chip is gone). It's a <span> inside .tab-btn, so this
+   selector carries three classes to beat `html[data-sidebar-expanded] .tab-btn span` and
    the mobile drawer's `.tab-btn span` (which make any span a text block). */
-.tab-btn.tab-btn-space .sidebar-group-monogram{
-  display:inline-flex; align-items:center; justify-content:center; flex:none;
-  width:20px; height:20px; margin:0; border-radius:6px;
-  background:var(--monogram-bg, var(--cal-bg-gray)); color:var(--monogram-fg, #fff);
-  font-size:var(--text-xs); font-weight:var(--font-weight-bold); line-height:1; overflow:visible;
-}
 .tab-btn.tab-btn-space .sidebar-group-glyph{display:inline-flex; flex:none; margin:0; overflow:visible;}
 /* 2026-09-25 (UI audit L10): the group whose pinned member's page is open
    (that member's own row carries .active). */
@@ -1753,13 +1747,6 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 #labels-table-wrapper .label-cell{flex-wrap:wrap; row-gap:4px;}
 .label-row-badge{font-size:var(--text-2xs);}
 .label-row-badge .icon{width:12px; height:12px;}
-/* A group without an icon: its first letter on a chip (UI audit L3),
-   same look as the rail's .sidebar-group-monogram. */
-.label-cell-icon.labels-group-monogram{
-  align-items:center; justify-content:center; width:16px; height:16px; border-radius:4px;
-  background:var(--monogram-bg, var(--cal-bg-gray)); color:var(--monogram-fg, #fff);
-  font-size:10px; font-weight:var(--font-weight-bold); line-height:1;
-}
 
 .group-badge {
     display: inline-block; padding: 2px 8px; border-radius: var(--radius-pill);
@@ -7942,6 +7929,14 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    grid, side by side once the panel is wide enough (container query on
    the portaled panel), stacked on a phone. The icons scroll; the colours
    stay put. */
+/* Label form (_label_form_fields.html, 2026-09-26): Page = Sections puts
+   the Sections checkbox dropdown half width next to Page; Page = Widget
+   dashboard hides it and Page takes the full row. */
+.label-form-grid[data-page="dashboard"] .label-sections-field{display:none;}
+.label-form-grid[data-page="dashboard"] .label-page-field{grid-column:1 / -1;}
+.label-form-grid[data-page="sections"] .label-page-field{grid-column:span 1;}
+/* The buried one-way "Convert to project" (label_form_modal.html). */
+.label-convert-form{margin-top:var(--space-2); display:flex; justify-content:flex-end;}
 /* The dropdown's row: the dropdown fills it; an optional square button
    (the label modal's banner upload) sits at its end, as tall as the
    trigger. */

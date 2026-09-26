@@ -1,6 +1,7 @@
 {% extends "base.html" %}
-{% block title %}{{ 'Edit label' if l else 'New Label' }}{% endblock %}
+{% block title %}{{ ('Edit ' if l else 'New ') ~ ('project' if is_project_form else 'label') }}{% endblock %}
 {% block content %}
+{% set _noun = 'project' if is_project_form else 'label' %}
 <!-- Everything fits in one modal: Name, Group, Role (Plain / Project),
      Deadline, Page (Dashboard or Sections), Pins; colour + icon are the
      Look dropdown with the banner button at the end of its row. See routers/labels.py's edit_label_modal /
@@ -26,11 +27,11 @@
         </div>
     </div>
     <div class="detail-heading-row">
-        <h1>{{ 'Edit label' if l else 'New Label' }}</h1>
+        <h1>{{ ('Edit ' if l else 'New ') ~ _noun }}</h1>
     </div>
 </div>
 {% else %}
-<h1>{{ 'Edit label' if l else 'New Label' }}</h1>
+<h1>{{ ('Edit ' if l else 'New ') ~ _noun }}</h1>
 {% endif %}
 </div>
 <div class="modal-body">
@@ -44,14 +45,23 @@
     {% include "_label_form_fields.html" %}
 </form>
 </div>
+{# 2026-09-26 (Peter: labels and projects are different things; a label
+   shouldn't easily become a project). The one, deliberately quiet way:
+   one way only, behind a confirm. Its own form -- forms can't nest. #}
+{% if l and not is_project_form %}
+<form method="post" action="/settings/labels/{{ l.name|urlencode }}/convert-to-project" class="label-convert-form" data-follow-redirect
+      data-confirm-sheet="Turn &quot;{{ l.name }}&quot; into a project? It moves to Settings &gt; Projects and gets a deadline. This can't be undone from here.">
+    <button type="submit" class="btn ghost btn-sm">{{ icon('folder', 'icon-sm') }} Convert to project</button>
+</form>
+{% endif %}
 </div>
-{% set footer_back_url = '/settings/labels' %}
+{% set footer_back_url = '/settings/projects' if is_project_form else '/settings/labels' %}
 {% set footer_back_label = 'Cancel' %}
 {% set footer_delete_url = '/settings/labels/' ~ l.name ~ '/delete' if l else '' %}
 {% set footer_delete_mode = 'confirm' %}
 {% set footer_delete_label = 'Remove "' ~ l.name ~ '" from every object that carries it? This doesn\'t delete anything else.' if l else '' %}
 {% set footer_primary_form = 'label-form' %}
-{% set footer_primary_label = 'Save' if l else 'Create Label' %}
+{% set footer_primary_label = 'Save' if l else 'Create ' ~ _noun %}
 {% set footer_primary_icon = 'check-square' %}
 {% include "_modal_footer.html" %}
 </div>

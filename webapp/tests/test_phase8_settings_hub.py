@@ -132,6 +132,8 @@ class TestSettingsHub:
             "/settings/your-profile",
             "/settings/appearance",
             "/settings/labels",
+            "/settings/groups",  # 2026-09-26
+            "/settings/projects",  # 2026-09-26
             "/settings/holidays",
             "/settings/time-blocks",
             "/settings/data-maintenance",

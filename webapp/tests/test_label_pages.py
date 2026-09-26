@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
+import re
+
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
@@ -138,7 +140,8 @@ class TestGroupPage:
 
     def test_unknown_group_redirects_to_the_labels_list(self, conn):
         resp = label_pages.group_page("Nope", _request("/groups/Nope"), conn=conn)
-        assert resp.status_code == 303 and resp.headers["location"] == "/settings/labels"
+        # 2026-09-26: groups have their own settings page.
+        assert resp.status_code == 303 and resp.headers["location"] == "/settings/groups"
 
     def test_group_prefix_is_reserved_for_label_names(self, conn):
         with pytest.raises(HTTPException):
@@ -255,9 +258,9 @@ class TestFormFields:
         body = labels_router.edit_label_modal("Gym", _request("/settings/labels/Gym/edit"), conn=conn).body.decode()
         assert 'name="page_fields" value="1"' in body
         assert 'name="deadline_date"' in body and "2026-12-01" in body
-        assert 'name="has_dashboard" value="1" checked' in body
-        # Sections only matter without a dashboard.
-        assert 'class="field field-wide label-sections-field" hidden' in body
+        # 2026-09-26: Page is a dropdown; Sections hide (CSS) with a dashboard.
+        assert _checked(body, "has_dashboard", "1")
+        assert 'data-page="dashboard"' in body
         assert 'name="start_date"' not in body and 'name="end_date"' not in body
 
     def test_update_writes_group_and_pins(self, conn):
@@ -270,8 +273,9 @@ class TestFormFields:
     def test_new_label_modal_defaults_all_sections_on(self, conn):
         body = labels_router.new_label_modal(_request("/settings/labels/new"), conn=conn).body.decode()
         for name in ("agenda_widget", "tasks_widget", "contacts_widget"):
-            assert f'name="{name}" value="1" checked' in body
-        assert 'name="has_dashboard" value="1" >' in body
+            assert _checked(body, name, "1")
+        assert not _checked(body, "has_dashboard", "1") and _checked(body, "has_dashboard", "")
+        assert '<span class="ms-summary">Agenda, Tasks, Contacts</span>' in body
 
 
 class TestSettingsLabelsTable:
@@ -288,10 +292,13 @@ class TestSettingsLabelsTable:
         db.upsert_label_config(conn, {"name": "Run", "label_group": "Health"})
         db.upsert_label_config(conn, {"name": "Loose"})
         ctx = labels_router._labels_context(conn, _request("/settings/labels"))
+        # 2026-09-26: projects are listed on Settings > Projects, not here.
         assert [(g["name"], [l["name"] for l in g["labels"]]) for g in ctx["label_groups"]] == [
-            ("Health", ["Run"]), ("Uni", ["Thesis", "Alpha", "Zeta"]),
+            ("Health", ["Run"]), ("Uni", ["Alpha", "Zeta"]),
         ]
         assert [l["name"] for l in ctx["ungrouped_labels"]] == ["Loose"]
+        pctx = labels_router._labels_context(conn, _request("/settings/projects"), "projects")
+        assert [(g["name"], [l["name"] for l in g["labels"]]) for g in pctx["label_groups"]] == [("Uni", ["Thesis"])]
 
     def test_rendered_group_row_links_to_the_group_page(self, conn):
         db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni"})
@@ -301,12 +308,15 @@ class TestSettingsLabelsTable:
         assert 'data-uid="Uni"' not in body  # no bulk-select checkbox for a group
         assert 'data-label-name="Maths" data-label-group="Uni"' in body
 
-    def test_edit_modal_has_a_free_text_group_field(self, conn):
+    def test_edit_modal_has_a_group_dropdown(self, conn):
+        # 2026-09-26: groups are standalone; the label picks one from a
+        # dropdown (or No group) instead of typing free text.
         db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni"})
         db.upsert_label_config(conn, {"name": "Run", "label_group": "Health"})
         body = labels_router.edit_label_modal("Maths", _request("/settings/labels/Maths/edit"), conn=conn).body.decode()
-        assert 'name="label_group" value="Uni"' in body
-        assert '<option value="Health">' in body and '<option value="Uni">' in body
+        assert _checked(body, "label_group", "Uni")
+        assert 'name="label_group" value="Health"' in body and 'name="label_group" value=""' in body
+        assert 'name="role"' not in body  # 2026-09-26: no Role field
         assert 'name="parent_name"' not in body
         assert 'value="space"' not in body  # no Space role any more
         assert 'name="sidebar_pin"' in body and 'name="widget_pin"' in body
@@ -358,3 +368,8 @@ class TestLabelPillLinks:
                               "tags": ["Gym"], "created_at": _now()})
         body = tasks_router.list_tasks(_request("/tasks"), conn=conn).body.decode()
         assert "/labels/Gym/preview" not in body
+
+
+def _checked(body: str, name: str, value: str) -> bool:
+    """A multiselect-partial input (attributes split over lines) is checked."""
+    return bool(re.search(r'name="%s" value="%s"[^>]*\bchecked\b' % (re.escape(name), re.escape(value)), body))

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Labels{% endblock %}
+{% block title %}{{ title }}{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_bulk_actions_bar.html" import bulk_actions_bar, bulk_count %}
@@ -22,7 +22,9 @@
    bulk_merge_labels), a destination picker like the single-row Merge
    modal but for every selected row at once, then loops the existing
    db.merge_labels. #}
-{% call page_header_narrow("Labels", "tag", title_extra=bulk_count("labels")) %}
+{# 2026-09-26: shared by Settings > Labels and Settings > Projects
+   (routers/labels.py _labels_context `kind`). #}
+{% call page_header_narrow(title, page_icon, title_extra=bulk_count("labels")) %}
 {{ bulk_actions_bar("labels", delete_label="Remove from everything", merge_label="Merge") }}
 {% endcall %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
@@ -54,7 +56,7 @@
    bulk_select.js's `tableId: "labels-table"` config below -- it already
    treats it as "any container," not literally a table element. #}
 <div class="card table-scroll table-responsive" id="labels-table-wrapper">
-    <div id="labels-table">
+    <div id="labels-table" data-kind="{{ kind }}">
         {% include "_labels_table_body.html" %}
     </div>
 </div>
@@ -74,9 +76,9 @@ document.addEventListener("DOMContentLoaded", function () {
         deleteUrl: "/settings/labels/bulk-delete",
         mergeButtonId: "labels-bulk-merge",
         mergeModalUrl: "/settings/labels/bulk-merge-modal",
-        itemLabel: "label",
+        itemLabel: "{{ noun }}",
         confirmMessage: function (count) {
-            return "Remove " + count + " selected label" + (count === 1 ? "" : "s") + " from every object that carries " + (count === 1 ? "it" : "them") + "? This doesn't delete the label config, just clears its usage.";
+            return "Remove " + count + " selected {{ noun }}" + (count === 1 ? "" : "s") + " from every object that carries " + (count === 1 ? "it" : "them") + "? This doesn't delete the label config, just clears its usage.";
         },
     });
 });

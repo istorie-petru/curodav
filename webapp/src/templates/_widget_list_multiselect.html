@@ -207,6 +207,12 @@ ms_hidden    -- when true, the outer `.field` starts with the
                       real label, coloring it would just paint it the
                       default blue like an actual unconfigured label and
                       imply it's one). #}
+{#   ms_mode="names" (2026-09-26) -- checkboxes whose trigger lists the
+     ticked options' names ("Agenda, Tasks"), or ms_placeholder when none
+     is ticked. Items may carry `field` (their own form field name instead
+     of ms_name) and `checked` (explicit state instead of ms_selected), so
+     one dropdown can hold several independent boolean fields (the label
+     form's Sections / Show in). #}
 {% set _mode = ms_mode | default('filter') %}
 {% set _single = _mode == 'single' %}
 {% set _sel = ([ms_selected] if ms_selected else []) if _single else (ms_selected | default([])) %}
@@ -223,18 +229,18 @@ ms_hidden    -- when true, the outer `.field` starts with the
 <div class="field {{ 'field-wide' if _wide else '' }} {{ ms_extra_class | default('') }}" {% if ms_hidden | default(false) %}hidden{% endif %}>
     <label class="{{ ms_label_class | default('') }}">{{ ms_label }}</label>
 {% endif %}
-    <div class="multiselect widget-list-multiselect {{ ms_root_class | default('') }}" data-ms data-ms-mode="{{ _mode }}" data-ms-label="{{ ms_label|lower }}">
+    <div class="multiselect widget-list-multiselect {{ ms_root_class | default('') }}" data-ms data-ms-mode="{{ _mode }}" data-ms-label="{{ ms_label|lower }}"{% if _mode == 'names' %} data-ms-empty="{{ ms_placeholder | default('None') }}"{% endif %}>
         <button type="button" class="multiselect-trigger ms-trigger" aria-haspopup="true" aria-expanded="false" aria-label="{{ ms_label }}">
-            <span class="ms-summary">{% if _single %}{{ _sel_item.name if _sel_item else (ms_placeholder | default('Select')) }}{% elif _mode == 'select' %}{% if _n == 0 %}No {{ ms_label|lower }}{% else %}{{ _n }} selected{% endif %}{% else %}{% if _n == 0 or _n >= _total %}All{% else %}{{ _n }} selected{% endif %}{% endif %}</span>
+            <span class="ms-summary">{% if _mode == 'names' %}{% set _on = ms_items | selectattr('checked') | map(attribute='name') | list %}{{ _on | join(', ') if _on else (ms_placeholder | default('None')) }}{% elif _single %}{{ _sel_item.name if _sel_item else (ms_placeholder | default('Select')) }}{% elif _mode == 'select' %}{% if _n == 0 %}No {{ ms_label|lower }}{% else %}{{ _n }} selected{% endif %}{% else %}{% if _n == 0 or _n >= _total %}All{% else %}{{ _n }} selected{% endif %}{% endif %}</span>
             <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
         </button>
         <div class="multiselect-panel ms-panel">
             {% for it in ms_items %}
             <label class="multiselect-option">
-                <input type="{{ 'radio' if _single else 'checkbox' }}" name="{{ ms_name }}" value="{{ it.uid }}"
+                <input type="{{ 'radio' if _single else 'checkbox' }}" name="{{ it.field or ms_name }}" value="{{ it.uid }}"
                        {% if ms_form_id %}form="{{ ms_form_id }}"{% endif %}
                        {% if it.data %}{% for _k, _v in it.data.items() %}data-{{ _k }}="{{ _v }}" {% endfor %}{% endif %}
-                       {% if it.uid in _sel or (_single and not _sel and loop.first) %}checked{% endif %}
+                       {% if (it.checked if it.checked is defined else (it.uid in _sel or (_single and not _sel and loop.first))) %}checked{% endif %}
                        {% if _autosubmit %}data-change-submit{% endif %}>
                 {% if _pill and it.uid != '__no_label__' %}{{ label_pill(it.name) }}{% else %}<span>{{ it.name }}</span>{% endif %}
             </label>

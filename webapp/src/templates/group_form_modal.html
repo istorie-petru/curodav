@@ -1,49 +1,51 @@
 {% extends "base.html" %}
-{% block title %}Edit group{% endblock %}
+{% block title %}{% if group %}Edit group{% else %}New group{% endif %}{% endblock %}
 {% block content %}
-{# A group's own look (2026-09-25, UI audit L3; routers/label_pages.py::
-   edit_group_modal / update_group). Groups used to share one hard-coded
-   `layers` icon, so every group looked the same in the collapsed rail.
-   Name and members live here too (same day, flesh-out item 7): a rename
-   moves the group's dashboard/banner/look with it, and the checklist sets
-   exactly which labels are in the group (a label is in at most one). Same
-   color/icon picker partials as the label form (inline fields, like
-   quick_add.html's Label tab). "No icon" shows the group's first letter
-   in the rail, which is why its swatch is the `type` (letter) glyph. #}
+{% from "_look_picker.html" import look_picker %}
+{# A group's create/edit modal (routers/label_pages.py new_group_modal /
+   edit_group_modal; 2026-09-25 UI audit L3 + flesh-out item 7, reworked
+   2026-09-26 for standalone groups). Name; Look (colour + icon, with the
+   banner's square upload button at the end of its row once the group
+   exists); Labels as a checkbox dropdown (a label is in at most one
+   group, so ticking one moves it here). Renaming onto another group's
+   name merges the two (db.rename_group). Cancel on an existing group
+   goes back to its view modal. #}
 <div id="modal-target">
 <div class="modal-header">
-<h1>Edit group</h1>
+<h1>{% if group %}Edit group{% else %}New group{% endif %}</h1>
 </div>
 <div class="modal-body">
-<form method="post" id="group-form" action="/groups/{{ group.name|urlencode }}/update" data-follow-redirect>
+<form method="post" id="group-form" action="{% if group %}/groups/{{ group.name|urlencode }}/update{% else %}/groups/create{% endif %}" data-follow-redirect data-cc-change="group" data-cc-action="{{ 'edit' if group else 'create' }}">
     <div class="field-grid">
         <div class="field field-wide">
             <label for="group-new-name">Name</label>
-            <input type="text" id="group-new-name" name="new_name" value="{{ group.name }}" required maxlength="80" autocomplete="off">
-            <span class="field-hint">Renaming onto another group's name merges the two.</span>
+            <input type="text" id="group-new-name" name="new_name" value="{{ group.name if group else '' }}" required maxlength="60" autocomplete="off"{% if not group %} autofocus{% endif %}>
         </div>
-        <fieldset class="field field-wide group-members">
-            <legend>Labels in this group</legend>
-            <input type="hidden" name="members_submitted" value="1">
-            <div class="group-member-list">
-            {% for c in candidates %}
-                <label class="group-member-option">
-                    <input type="checkbox" name="members" value="{{ c.name }}"{% if c.member %} checked{% endif %}>
-                    <span class="group-member-name">{{ c.name }}</span>
-                    {% if c.other_group %}<span class="group-member-hint">moves from {{ c.other_group }}</span>{% endif %}
-                </label>
-            {% endfor %}
-            </div>
-            <span class="field-hint">A group needs at least one label.</span>
-        </fieldset>
-        {# 2026-09-26 (Peter): colour + icon as the shared Look dropdown. #}
-        {% from "_look_picker.html" import look_picker %}
-        {{ look_picker('look-group-form', 'group-form', group.color or 'gray', group.icon, colors, icon_groups,
-                       no_icon_label='First letter', default_icon='type') }}
+        {% call look_picker('look-group-form', 'group-form', group.color if group else 'gray', group.icon if group else none, colors, icon_groups,
+                            no_icon_label='Default icon', default_icon=group_default_icon) %}
+        {% if group %}{% set _scope = 'group:' ~ group.name %}<a href="/banners/editor?scope={{ _scope|urlencode }}&amp;page_url={{ ('/groups/' ~ group.name ~ '/edit')|urlencode }}&amp;from_modal=1" data-modal class="look-side-btn" title="{{ 'Change banner' if banner else 'Add banner' }}" aria-label="{{ 'Change banner' if banner else 'Add banner' }}">{{ icon('upload') }}</a>{% endif %}
+        {% endcall %}
+        <input type="hidden" name="members_submitted" value="1">
+        {% set ms_name = 'members' %}
+        {% set ms_mode = 'select' %}
+        {% set ms_label = 'Labels' %}
+        {% set ms_items = [] %}
+        {% for c in candidates %}{% set _ = ms_items.append({'uid': c.name, 'name': c.name ~ ((' (in ' ~ c.other_group ~ ')') if c.other_group else '')}) %}{% endfor %}
+        {% set ms_selected = candidates|selectattr('member')|map(attribute='name')|list %}
+        {% set ms_form_id = 'group-form' %}
+        {% include "_widget_list_multiselect.html" %}
     </div>
 </form>
 </div>
-{% set footer_back_url = '/groups/' ~ group.name %}
+{% if group %}
+{% set footer_back_url = '/groups/' ~ (group.name|urlencode) ~ '/view' %}
+{% set footer_back_mode = 'modal' %}
+{% set footer_delete_url = '/groups/' ~ (group.name|urlencode) ~ '/delete' %}
+{% set footer_delete_mode = 'confirm' %}
+{% set footer_delete_label = 'Delete the group "' ~ group.name ~ '"? Its labels stay, ungrouped.' %}
+{% else %}
+{% set footer_back_url = '/settings/groups' %}
+{% endif %}
 {% set footer_back_label = 'Cancel' %}
 {% set footer_primary_form = 'group-form' %}
 {% set footer_primary_label = 'Save' %}

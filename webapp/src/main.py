@@ -351,6 +351,9 @@ def create_app() -> FastAPI:
     # and this is a distinct concern (parsing + create, not query).
     app.include_router(quick_capture.router)
     app.include_router(labels.router)
+    # 2026-09-26: Settings > Projects and Settings > Groups, their own pages.
+    app.include_router(labels.projects_settings_router)
+    app.include_router(label_pages.groups_settings_router)
     app.include_router(label_pages.router)
     app.include_router(label_pages.group_router)
     app.include_router(spaces.router)

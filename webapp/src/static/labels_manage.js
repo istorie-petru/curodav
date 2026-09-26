@@ -42,7 +42,9 @@
 
     async function refreshLabelsTable() {
         try {
-            const resp = await fetch("/settings/labels/regions?region=list", {
+            // 2026-09-26: the same list serves Settings > Projects.
+            const kind = tableWrapper.dataset.kind || "labels";
+            const resp = await fetch("/settings/labels/regions?region=list&kind=" + encodeURIComponent(kind), {
                 headers: { "X-Requested-With": "fetch" },
             });
             if (resp.ok) {

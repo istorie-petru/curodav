@@ -350,10 +350,9 @@
         <div class="sidebar-tree-item {% if has_children %}has-children{% endif %}" data-space-name="{{ g.name }}">
           <div class="sidebar-tree-row">
             {# 2026-09-25 (UI audit L3): each group's own icon + color
-               (Edit group on its page, db.get_group_style) instead of one
-               shared `layers` glyph; with no icon picked, its first
-               letter on a chip in its color. #}
-            <a href="{{ group_href }}" class="tab-btn tab-btn-space {% if _g_active %}active{% elif ns.child_active %}has-active-child{% endif %}" title="{{ g.name }}" aria-label="{{ g.name }}">{% if g.icon %}<span class="sidebar-group-glyph" data-style="color: var(--cal-text-{{ g.color or 'gray' }})">{{ icon(g.icon) }}</span>{% else %}<span class="sidebar-group-monogram" data-style="--monogram-bg: var(--cal-bg-{{ g.color or 'gray' }}); --monogram-fg: var(--cal-fg-{{ g.color or 'gray' }})" aria-hidden="true">{{ g.name[:1] | upper }}</span>{% endif %}<span>{{ g.name }}</span></a>
+               (db.get_group_style). 2026-09-26 (Peter): no first-letter
+               chip -- no icon picked shows `layers` in the group's color. #}
+            <a href="{{ group_href }}" class="tab-btn tab-btn-space {% if _g_active %}active{% elif ns.child_active %}has-active-child{% endif %}" title="{{ g.name }}" aria-label="{{ g.name }}"><span class="sidebar-group-glyph" data-style="color: var(--cal-text-{{ g.color or 'gray' }})">{{ icon(g.icon or 'layers') }}</span><span>{{ g.name }}</span></a>
             {% if has_children %}
             <button type="button" class="sidebar-tree-toggle" aria-expanded="{{ 'true' if ns.child_active else 'false' }}" aria-label="Toggle {{ g.name }} labels">{{ icon('chevron-right', 'sidebar-tree-chevron') }}</button>
             {% endif %}

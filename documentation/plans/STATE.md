@@ -81,7 +81,32 @@ session start.
     the colour column lost its fixed 4x36px columns (Peter: even spacing),
     and habits offer the whole icon library (`habit_view.habit_icon_choices`:
     the habit-flavoured list first, then routers/labels.py ICON_GROUPS).
-  SW cache v134.
+  - Then Peter's "focus on labels, groups and projects" batch (his
+    answers: groups standalone; projects = separate UI + a buried one-way
+    Convert; no-icon groups show a default glyph):
+    - `label_groups` table (name PK NOCASE, icon, color): every group a
+      label names gets a row (`db.backfill_group_rows` on connect carries
+      the old app_meta look; `upsert_label_config` calls `ensure_group`).
+      Groups may be empty; `db.create_group` / `delete_group` (labels stay,
+      ungrouped); `rename_group` moves the row. Membership is still
+      `label_config.label_group` (by name).
+    - Settings hub: separate Labels (plain labels), Groups
+      (`groups_manage.html`, `label_pages.groups_settings_router`) and
+      Projects (`labels.projects_settings_router`, same table partial with
+      `kind=projects`).
+    - Group view modal (`/groups/<name>/view`) + create/edit modal (Name,
+      Look with the banner upload button, Labels checkbox dropdown; Cancel
+      back to view). No first-letter badge anywhere: `db.GROUP_DEFAULT_ICON`
+      (`layers`) in the group's colour.
+    - Label form: no Role; Group is a dropdown of existing groups; Page
+      (Sections / Widget dashboard) with a half-width Sections checkbox
+      dropdown; Show in as a checkbox dropdown (new multiselect mode
+      `names`, per-item `field`/`checked`); Description last. Deadline only
+      on a project (or a label that already has one). A project opens as
+      "Edit project"; a label has a quiet "Convert to project" (one way,
+      confirm) under its form. `update_label` keeps is_project when no
+      `role` is posted.
+  SW cache v135.
 
 - **Shipped:** 2026-09-26 -- habits decluttering, per Peter ("rows too
   tall, 28-32px is enough"; "I don't believe in habit vacation"; month

@@ -25,7 +25,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import db
 from ..deps import EDIT_MODE_KEY, get_db, templates
@@ -298,13 +298,118 @@ def group_url(name: str) -> str:
     return f"/groups/{name}"
 
 
+def _usage_by_label(conn) -> dict[str, int]:
+    return {lbl["name"]: lbl.get("usage_count") or 0 for lbl in db.list_labels(conn)}
+
+
+def _group_or_404(conn, name: str) -> dict:
+    g = db.get_group(conn, name)
+    if not g:
+        raise HTTPException(404, "No such group")
+    return g
+
+
+def _group_form_context(conn, request: Request, group: dict | None) -> dict:
+    """Context for group_form_modal.html -- create (group None) or edit."""
+    from .labels import COLORS, icon_groups_for
+
+    name = group["name"] if group else ""
+    members = set(db.group_member_names(conn, name)) if group else set()
+    # Every label with its current group, so the Labels dropdown can say
+    # "(in People)" for a label that's in another group already.
+    group_of = {
+        r["name"]: (r["label_group"] or "").strip()
+        for r in conn.execute("SELECT name, label_group FROM label_config").fetchall()
+    }
+    candidates = [
+        {"name": n, "member": n in members, "other_group": (group_of.get(n) or "") if n not in members else ""}
+        for n in db.list_all_known_label_names(conn)
+        if not db.effective_label_config(conn, n).get("is_archived")
+    ]
+    style = db.get_group_style(conn, name) if group else {"icon": None, "color": "gray"}
+    return {
+        "request": request,
+        "group": {"name": name, **style} if group else None,
+        "candidates": candidates,
+        "colors": COLORS,
+        "icon_groups": icon_groups_for(style["icon"]),
+        "group_default_icon": db.GROUP_DEFAULT_ICON,
+        "banner": db.get_page_banner(conn, db.group_page_key(name)) if group else None,
+    }
+
+
+# 2026-09-26 (Peter): groups are standalone -- created empty from Settings
+# > Groups, with a view modal (like a label's preview) and an edit modal
+# (rename, look, banner, labels). Declared before GET /{name} so "new"
+# isn't read as a group name.
+
+
+@group_router.get("/new")
+def new_group_modal(request: Request, conn=Depends(get_db)):
+    return templates.TemplateResponse("group_form_modal.html", _group_form_context(conn, request, None))
+
+
+@group_router.post("/create")
+def create_group(
+    new_name: str = Form(""),
+    color: str = Form("gray"),
+    icon: str = Form(""),
+    members: list[str] = Form([]),
+    conn=Depends(get_db),
+):
+    from .labels import COLORS
+
+    new_name = new_name.strip() if isinstance(new_name, str) else ""
+    if new_name.startswith(db.GROUP_KEY_PREFIX):
+        raise HTTPException(400, "A group name can't start with \"group:\".")
+    color = color if isinstance(color, str) and color in COLORS else "gray"
+    icon = icon.strip() if isinstance(icon, str) else ""
+    try:
+        name = db.create_group(conn, new_name, icon or None, color)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    members = members if isinstance(members, list) else []
+    if members:
+        db.set_group_members(conn, name, members)
+    return RedirectResponse(url="/settings/groups", status_code=303)
+
+
+@group_router.get("/{name}/view")
+def group_view_modal(name: str, request: Request, conn=Depends(get_db)):
+    """A group's view modal: its cover (banner, or its colour), icon,
+    labels and usage; Edit swaps in the edit form, Open page leaves."""
+    g = _group_or_404(conn, name)
+    style = db.get_group_style(conn, g["name"])
+    labels = [db.effective_label_config(conn, n) for n in db.group_member_names(conn, g["name"])]
+    return templates.TemplateResponse(
+        "group_view_modal.html",
+        {
+            "request": request,
+            "group": {"name": g["name"], **style},
+            "labels": labels,
+            "usage": sum(_usage_by_label(conn).get(lbl["name"], 0) for lbl in labels),
+            "banner": db.get_page_banner(conn, db.group_page_key(g["name"])),
+            "group_default_icon": db.GROUP_DEFAULT_ICON,
+        },
+    )
+
+
+@group_router.post("/{name}/delete")
+def delete_group(name: str, conn=Depends(get_db)):
+    """Deletes the group; its labels stay, ungrouped."""
+    g = _group_or_404(conn, name)
+    db.delete_group(conn, g["name"])
+    return RedirectResponse(url="/settings/groups", status_code=303)
+
+
 @group_router.get("/{name}")
 def group_page(name: str, request: Request, conn=Depends(get_db)):
+    if not db.get_group(conn, name):
+        # An old link to a deleted group lands on the groups list rather
+        # than a blank page.
+        return RedirectResponse(url="/settings/groups", status_code=303)
+    name = db.get_group(conn, name)["name"]
     members = db.group_member_names(conn, name)
-    if not members:
-        # A group only exists while a label names it; an old link to an
-        # emptied group lands on the labels list rather than a blank page.
-        return RedirectResponse(url="/settings/labels", status_code=303)
     key = db.group_page_key(name)
     style = db.get_group_style(conn, name)
     dashboard_router._ensure_default_label_widgets(conn, key)
@@ -317,7 +422,7 @@ def group_page(name: str, request: Request, conn=Depends(get_db)):
             # shape: title, icon tile, and `uid` as the page key its
             # New widget / Reset layout controls post back.
             # 2026-09-25 (UI audit L3): the group's own icon/color when set.
-            "label": {"name": name, "uid": key, "icon": style["icon"] or "layers", "color": style["color"],
+            "label": {"name": name, "uid": key, "icon": style["icon"] or db.GROUP_DEFAULT_ICON, "color": style["color"],
                       "description": None},
             "group_style": style,
             "group_labels": [db.effective_label_config(conn, n) for n in members],
@@ -344,33 +449,8 @@ def group_page(name: str, request: Request, conn=Depends(get_db)):
 
 @group_router.get("/{name}/edit")
 def edit_group_modal(name: str, request: Request, conn=Depends(get_db)):
-    from .labels import COLORS, icon_groups_for
-
-    if not db.group_member_names(conn, name):
-        raise HTTPException(404, "No such group")
-    style = db.get_group_style(conn, name)
-    members = set(db.group_member_names(conn, name))
-    # Every label with its current group, so the member list can say
-    # "moves from People" for a label that's in another group already.
-    group_of = {
-        r["name"]: (r["label_group"] or "").strip()
-        for r in conn.execute("SELECT name, label_group FROM label_config").fetchall()
-    }
-    candidates = [
-        {"name": n, "member": n in members, "other_group": (group_of.get(n) or "") if n not in members else ""}
-        for n in db.list_all_known_label_names(conn)
-        if not db.effective_label_config(conn, n).get("is_archived")
-    ]
-    return templates.TemplateResponse(
-        "group_form_modal.html",
-        {
-            "request": request,
-            "group": {"name": name, **style},
-            "candidates": candidates,
-            "colors": COLORS,
-            "icon_groups": icon_groups_for(style["icon"]),
-        },
-    )
+    g = _group_or_404(conn, name)
+    return templates.TemplateResponse("group_form_modal.html", _group_form_context(conn, request, g))
 
 
 @group_router.post("/{name}/update")
@@ -381,12 +461,14 @@ def update_group(
     new_name: str = Form(""),
     members: list[str] = Form([]),
     members_submitted: str = Form(""),
+    request: Request = None,
     conn=Depends(get_db),
 ):
+    from urllib.parse import urlparse
+
     from .labels import COLORS
 
-    if not db.group_member_names(conn, name):
-        raise HTTPException(404, "No such group")
+    name = _group_or_404(conn, name)["name"]
     color = color if isinstance(color, str) and color in COLORS else "gray"
     icon = icon.strip() if isinstance(icon, str) else ""
     new_name = new_name.strip() if isinstance(new_name, str) else ""
@@ -394,14 +476,51 @@ def update_group(
     members_submitted = members_submitted if isinstance(members_submitted, str) else ""
     if new_name.startswith(db.GROUP_KEY_PREFIX):
         raise HTTPException(400, "A group name can't start with \"group:\".")
-    # `members_submitted` marks a form that rendered the member checklist,
+    # `members_submitted` marks a form that rendered the Labels dropdown,
     # so an older/partial post without it never empties the group by
-    # accident; with it, an empty list is a real (rejected) choice.
+    # accident. Since 2026-09-26 an empty list is allowed: the group stays.
     if members_submitted:
-        try:
-            db.set_group_members(conn, name, members)
-        except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
+        db.set_group_members(conn, name, members)
     db.set_group_style(conn, name, icon or None, color)
     final = db.rename_group(conn, name, new_name) if new_name else name
+    # 2026-09-26: saved from Settings > Groups -> stay there (the list
+    # refreshes in place); from the group's own page -> its (maybe
+    # renamed) page, as before.
+    ref = urlparse((request.headers.get("referer") if request is not None else "") or "")
+    if ref.path.startswith("/settings/groups"):
+        return RedirectResponse(url="/settings/groups", status_code=303)
     return RedirectResponse(url=group_url(final), status_code=303)
+
+
+# --------------------------------------------------------------------- #
+# Settings > Groups (2026-09-26, Peter: separate settings pages for
+# labels, groups and projects).
+# --------------------------------------------------------------------- #
+
+groups_settings_router = APIRouter(prefix="/settings/groups", tags=["groups-settings"])
+
+
+def _groups_context(conn, request: Request) -> dict:
+    groups = db.list_groups(conn)
+    usage = _usage_by_label(conn)
+    for g in groups:
+        g["usage"] = sum(usage.get(lbl["name"], 0) for lbl in g["labels"])
+    return {
+        "request": request,
+        "active_tab": "labels",
+        "crumbs": [{"url": "/settings", "name": "Settings"}],
+        "groups": groups,
+        "group_default_icon": db.GROUP_DEFAULT_ICON,
+    }
+
+
+@groups_settings_router.get("")
+def manage_groups(request: Request, conn=Depends(get_db)):
+    return templates.TemplateResponse("groups_manage.html", _groups_context(conn, request))
+
+
+@groups_settings_router.get("/regions")
+def groups_regions(region: str, request: Request, conn=Depends(get_db)):
+    if region == "list":
+        return templates.TemplateResponse("_groups_table_body.html", _groups_context(conn, request))
+    return JSONResponse({"error": f"unknown groups region: {region}"}, status_code=400)

@@ -75,13 +75,12 @@
     <td></td>
     <td>
         <div class="label-cell">
-            {# 2026-09-25 (UI audit L3): the group's own icon (Edit group), or its first letter. #}
-            {% if group.icon %}
-            <span class="label-cell-icon" data-style="color: var(--cal-text-{{ group.color or 'gray' }})">{{ icon(group.icon, 'icon-sm') }}</span>
-            {% else %}
-            <span class="label-cell-icon labels-group-monogram" data-style="--monogram-bg: var(--cal-bg-{{ group.color or 'gray' }}); --monogram-fg: var(--cal-fg-{{ group.color or 'gray' }})" aria-hidden="true">{{ group.name[:1] | upper }}</span>
-            {% endif %}
-            <span class="label-name">{{ group.name }}</span>
+            {# 2026-09-25 (UI audit L3): the group's own icon. 2026-09-26
+               (Peter): no first-letter badge -- the default group glyph in
+               the group's colour when none is picked. Clicking the name
+               opens the group's view modal. #}
+            <span class="label-cell-icon" data-style="color: var(--cal-text-{{ group.color or 'gray' }})">{{ icon(group.icon or group_default_icon, 'icon-sm') }}</span>
+            <a href="/groups/{{ group.name|urlencode }}/view" data-modal class="label-name">{{ group.name }}</a>
         </div>
     </td>
     <td class="col-opt-2">
@@ -128,7 +127,7 @@
             <span class="label-name" data-style="color: var(--cal-text-{{ l.color or 'blue' }})">{{ l.name }}</span>
             {# 2026-09-25 (UI audit L7): what used to be invisible here --
                project, archived, and the deadline with its state. #}
-            {% if l.is_project %}<span class="cell-tag tag-gray label-row-badge">{{ icon('folder', 'icon-sm') }} Project</span>{% endif %}
+            {% if l.is_project and kind != 'projects' %}<span class="cell-tag tag-gray label-row-badge">{{ icon('folder', 'icon-sm') }} Project</span>{% endif %}
             {% if l.archived_at %}<span class="cell-tag tag-gray label-row-badge">{{ icon('archive', 'icon-sm') }} Archived</span>{% endif %}
             {% if l.deadline %}<span class="cell-tag tag-{{ l.deadline.color }} label-row-badge label-deadline is-{{ l.deadline.state }}">{{ icon('flag', 'icon-sm') }} {{ l.deadline.text }}</span>{% endif %}
         </div>
@@ -156,7 +155,7 @@
     <thead>
         <tr>
             <th class="col-checkbox"></th>
-            <th>Label</th>
+            <th>{{ noun|default('label')|capitalize }}</th>
             <th class="col-opt-2">Usage</th>
             <th class="col-actions-narrow">Actions</th>
         </tr>
@@ -174,7 +173,7 @@
         {% endif %}
         {% for l in ungrouped_labels %}{{ _label_row(l) }}{% endfor %}
         {% if not labels %}
-        {{ empty_state_row(4, "No labels yet. Click &lsquo;+ New Label&rsquo; to create your first one.", css_class='empty-state') }}
+        {{ empty_state_row(4, "No " ~ noun|default('label') ~ "s yet.", css_class='empty-state') }}
         {% endif %}
         <!-- 2026-08-29 (STATE.md backlog item 7): same full-row "+ Add X"
              convention as _tasks_body.html's .task-add-row -- always the
@@ -182,7 +181,7 @@
              but this table has no separate Ungrouped section to anchor
              it to anymore, so it just lives at the end). -->
         <tr class="task-add-row">
-            <td colspan="4"><a href="/settings/labels/new" data-modal data-modal-size="wide">{{ icon('plus', 'icon-sm') }} Add label</a></td>
+            <td colspan="4"><a href="{{ new_url|default('/settings/labels/new') }}" data-modal data-modal-size="wide">{{ icon('plus', 'icon-sm') }} Add {{ noun|default('label') }}</a></td>
         </tr>
     </tbody>
 </table>

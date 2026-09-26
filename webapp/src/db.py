@@ -675,6 +675,19 @@ CREATE TABLE IF NOT EXISTS habit_pauses (
 );
 CREATE INDEX IF NOT EXISTS idx_habit_pauses_task ON habit_pauses(task_uid);
 
+-- 2026-09-26 (Peter: groups are standalone): a group is a row of its own,
+-- not just text on its labels. Labels still point at it by name
+-- (label_config.label_group); a group may have no labels at all. Its
+-- look (icon, color) lives here -- it used to be app_meta
+-- "group_style:<name>" -- and its page/banner stay keyed by
+-- group_page_key(name).
+CREATE TABLE IF NOT EXISTS label_groups (
+    name TEXT PRIMARY KEY COLLATE NOCASE,
+    icon TEXT,
+    color TEXT NOT NULL DEFAULT 'gray',
+    created_at TEXT
+);
+
 -- 2026-08-08 ("add habits page as a view on tasks") -- app-wide setting
 -- for which label name marks a task as habit-tracked (hidden from every
 -- normal task view/widget, shown instead on Tasks > Habits with a
@@ -1469,6 +1482,8 @@ def init_schema(conn: sqlite3.Connection) -> None:
     backfill_label_modules(conn)
     # 2026-09-25 -- one-time: Spaces become text groups (see the function).
     migrate_spaces_to_groups(conn)
+    # 2026-09-26 -- every group named by a label has a label_groups row.
+    backfill_group_rows(conn)
     conn.commit()
 
 
@@ -4226,7 +4241,7 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     for key, default in _LABEL_CONFIG_DEFAULTS.items():
         data.setdefault(key, existing.get(key, default))
     _mirror_legacy_module_fields(row, existing, data)
-    data["label_group"] = (data.get("label_group") or "").strip() or None
+    data["label_group"] = ensure_group(conn, data.get("label_group"))
     conn.execute(
         f"INSERT INTO label_config ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)}) "
         f"ON CONFLICT(name) DO UPDATE SET " + ", ".join(f"{c}=excluded.{c}" for c in cols if c != "name"),
@@ -4444,53 +4459,115 @@ def group_from_page_key(key: str | None) -> str | None:
 
 
 def list_groups(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """Every group: the distinct non-empty label_group values, each with its
-    member labels' effective configs, sorted by name. A group exists exactly
-    as long as at least one label names it. 2026-09-25 (UI audit L3): each
-    also carries its own `icon`/`color` (get_group_style)."""
+    """Every group (label_groups, 2026-09-26: standalone, may be empty),
+    sorted by name, each with its `icon`/`color` and its member labels'
+    effective configs."""
+    groups: dict[str, dict[str, Any]] = {}
+    for r in conn.execute("SELECT * FROM label_groups ORDER BY name COLLATE NOCASE").fetchall():
+        groups[r["name"].lower()] = {"name": r["name"], "labels": [], "icon": r["icon"] or None,
+                                     "color": r["color"] or "gray", "created_at": r["created_at"]}
     rows = conn.execute(
         "SELECT name, label_group FROM label_config WHERE TRIM(COALESCE(label_group, '')) != '' "
-        "ORDER BY label_group COLLATE NOCASE, name COLLATE NOCASE"
+        "ORDER BY name COLLATE NOCASE"
     ).fetchall()
-    groups: dict[str, dict[str, Any]] = {}
     for r in rows:
-        g = r["label_group"].strip()
-        if g not in groups:
-            groups[g] = {"name": g, "labels": [], **get_group_style(conn, g)}
-        groups[g]["labels"].append(effective_label_config(conn, r["name"]))
+        g = groups.get(r["label_group"].strip().lower())
+        if g is not None:
+            g["labels"].append(effective_label_config(conn, r["name"]))
     return list(groups.values())
+
+
+def get_group(conn: sqlite3.Connection, name: str) -> dict[str, Any] | None:
+    """One group's row (case-insensitive name), or None."""
+    r = conn.execute("SELECT * FROM label_groups WHERE name = ?", ((name or "").strip(),)).fetchone()
+    return dict(r) if r else None
+
+
+def ensure_group(conn: sqlite3.Connection, name: str | None) -> str | None:
+    """Creates the group if it doesn't exist yet and returns its stored
+    spelling (typing a new group name on a label creates it, as before).
+    The caller commits."""
+    name = (name or "").strip()
+    if not name:
+        return None
+    existing = get_group(conn, name)
+    if existing:
+        return existing["name"]
+    legacy = _legacy_group_style(conn, name)
+    conn.execute(
+        "INSERT INTO label_groups (name, icon, color, created_at) VALUES (?, ?, ?, ?)",
+        (name, legacy.get("icon"), legacy.get("color") or "gray", datetime.now(timezone.utc).isoformat()),
+    )
+    return name
+
+
+def backfill_group_rows(conn: sqlite3.Connection) -> None:
+    """Every group a label names gets a label_groups row, carrying its old
+    app_meta look. Cheap and idempotent (runs on every connect; a restored
+    backup's labels get their groups back the same way)."""
+    for r in conn.execute(
+        "SELECT DISTINCT TRIM(label_group) AS g FROM label_config WHERE TRIM(COALESCE(label_group, '')) != ''"
+    ).fetchall():
+        ensure_group(conn, r["g"])
 
 
 def _group_style_key(group: str) -> str:
     return f"group_style:{(group or '').strip()}"
 
 
-def get_group_style(conn: sqlite3.Connection, group: str) -> dict[str, Any]:
-    """A group's own icon + color (2026-09-25, UI audit L3). Every group
-    used to share one hard-coded `layers` icon, so the collapsed rail
-    showed identical glyphs. A group has no row of its own (it's the text
-    in label_config.label_group), so its look lives in app_meta under
-    "group_style:<name>" as JSON, like the rest of a group's per-page
-    state (group_page_key) -- no schema change. `icon` None means "show
-    the group's first letter" (base.html's monogram); `color` defaults to
-    gray."""
+def _legacy_group_style(conn: sqlite3.Connection, group: str) -> dict[str, Any]:
+    """A group's look from before 2026-09-26 (app_meta "group_style:<name>")."""
     raw = get_app_meta(conn, _group_style_key(group))
-    style: dict[str, Any] = {}
-    if raw:
-        try:
-            style = json.loads(raw) or {}
-        except ValueError:
-            style = {}
-    return {"icon": style.get("icon") or None, "color": style.get("color") or "gray"}
+    try:
+        return (json.loads(raw) or {}) if raw else {}
+    except ValueError:
+        return {}
+
+
+def get_group_style(conn: sqlite3.Connection, group: str) -> dict[str, Any]:
+    """A group's own icon + color. `icon` None = the default group glyph
+    (GROUP_DEFAULT_ICON, drawn in the group's colour -- 2026-09-26, Peter:
+    no more first-letter badge); `color` defaults to gray."""
+    row = get_group(conn, group) or {}
+    return {"icon": row.get("icon") or None, "color": row.get("color") or "gray"}
+
+
+GROUP_DEFAULT_ICON = "layers"
 
 
 def set_group_style(conn: sqlite3.Connection, group: str, icon: str | None, color: str | None) -> None:
-    set_app_meta(conn, _group_style_key(group), json.dumps({"icon": icon or None, "color": color or "gray"}))
+    ensure_group(conn, group)
+    conn.execute("UPDATE label_groups SET icon = ?, color = ? WHERE name = ?", (icon or None, color or "gray", group.strip()))
+    conn.commit()
+
+
+def create_group(conn: sqlite3.Connection, name: str, icon: str | None = None, color: str | None = None) -> str:
+    """A new, empty group (Settings > Groups). Raises ValueError if the
+    name is blank or taken (case-insensitively)."""
+    name = " ".join((name or "").split())[:60]
+    if not name:
+        raise ValueError("A group needs a name.")
+    if get_group(conn, name):
+        raise ValueError(f"A group named {name} already exists.")
+    ensure_group(conn, name)
+    conn.execute("UPDATE label_groups SET icon = ?, color = ? WHERE name = ?", (icon or None, color or "gray", name))
+    conn.commit()
+    return name
+
+
+def delete_group(conn: sqlite3.Connection, name: str) -> None:
+    """Deletes a group: its labels become ungrouped (they are kept), its
+    row goes. Its page storage (dashboard, banner) is left, the same
+    "harmless leftover" rule rename_group's merge follows."""
+    name = (name or "").strip()
+    conn.execute("UPDATE label_config SET label_group = NULL WHERE TRIM(COALESCE(label_group, '')) = ? COLLATE NOCASE", (name,))
+    conn.execute("DELETE FROM label_groups WHERE name = ?", (name,))
+    conn.commit()
 
 
 def group_member_names(conn: sqlite3.Connection, group: str) -> list[str]:
     rows = conn.execute(
-        "SELECT name FROM label_config WHERE TRIM(COALESCE(label_group, '')) = ? ORDER BY name COLLATE NOCASE",
+        "SELECT name FROM label_config WHERE TRIM(COALESCE(label_group, '')) = ? COLLATE NOCASE ORDER BY name COLLATE NOCASE",
         ((group or "").strip(),),
     ).fetchall()
     return [r["name"] for r in rows]
@@ -4545,14 +4622,15 @@ def rename_group(conn: sqlite3.Connection, old: str, new: str) -> str:
     existing = {g["name"].lower(): g["name"] for g in list_groups(conn) if g["name"] != old}
     target = existing.get(new.lower())
     conn.execute(
-        "UPDATE label_config SET label_group = ? WHERE TRIM(COALESCE(label_group, '')) = ?",
+        "UPDATE label_config SET label_group = ? WHERE TRIM(COALESCE(label_group, '')) = ? COLLATE NOCASE",
         (target or new, old),
     )
     if target is None:
         _move_page_storage(conn, group_page_key(old), group_page_key(new))
-        style = get_app_meta(conn, _group_style_key(old))
-        if style and not get_app_meta(conn, _group_style_key(new)):
-            set_app_meta(conn, _group_style_key(new), style)
+        # 2026-09-26: the group's own row moves with it (look included).
+        conn.execute("UPDATE label_groups SET name = ? WHERE name = ?", (new, old))
+    else:
+        conn.execute("DELETE FROM label_groups WHERE name = ?", (old,))
     conn.commit()
     return target or new
 
@@ -4562,13 +4640,11 @@ def set_group_members(conn: sqlite3.Connection, group: str, members: list[str]) 
     label gets label_group = group (moving it out of any other group -- a
     label is in at most one), and a current member not in the list leaves
     the group. Names without a label_config row get one, the same way
-    archiving a usage-only label does. Raises ValueError for an empty list:
-    a group exists only while a label names it, so emptying it here would
-    delete it from an edit form, which is not what that form is for."""
+    archiving a usage-only label does. An empty list empties the group;
+    since 2026-09-26 a group is its own row and survives that."""
     group = (group or "").strip()
     wanted = [m.strip() for m in members if m and m.strip()]
-    if not wanted:
-        raise ValueError("A group needs at least one label.")
+    ensure_group(conn, group)
     for name in group_member_names(conn, group):
         if name not in wanted:
             conn.execute("UPDATE label_config SET label_group = NULL WHERE name = ?", (name,))

@@ -158,6 +158,9 @@ HUB_CATEGORIES = [
     {"url": "/settings/your-profile", "icon": "user-check", "name": "Your Profile", "desc": "Profile picture, nickname, login & security"},
     {"url": "/settings/appearance", "icon": "sun", "name": "Appearance", "desc": "Theme"},
     {"url": "/settings/labels", "icon": "tag", "name": "Labels", "desc": "Rename, recolor, organize"},
+    # 2026-09-26 (Peter): groups and projects get their own pages.
+    {"url": "/settings/groups", "icon": "layers", "name": "Groups", "desc": "Collections of labels, with their own page"},
+    {"url": "/settings/projects", "icon": "folder", "name": "Projects", "desc": "Deadlines, dashboards, archiving"},
     {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Named holiday calendars non-working recurrence respects"},
     {"url": "/settings/time-blocks", "icon": "moon", "name": "Sleep & Leisure Time", "desc": "Weekly hours the Week/Day grid highlights and warns about"},
     {"url": "/settings/data-maintenance", "icon": "database", "name": "Data & Maintenance", "desc": "Backups, integrity, sync conflicts, export, purge"},
