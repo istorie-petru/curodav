@@ -787,9 +787,7 @@ def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
                 "active_tab": "tasks",
                 "task": task,
                 "habit_label": db.get_task_habit_settings(conn)["habit_label"],
-                # Work sessions card (2026-08-29 addition to this form) --
-                # see _work_allocation_context above.
-                **_work_allocation_context(conn, task),
+                # 2026-09-26 (Peter): no Work sessions card on a habit.
             },
         )
     tag_names = db.list_tag_names_in_use(conn)

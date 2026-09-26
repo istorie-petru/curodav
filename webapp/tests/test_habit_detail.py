@@ -135,15 +135,16 @@ class TestSmarterHeatmap:
         # 2026-09-26: the week / month grid instead
         assert f'class="habit-periods habit-periods-{"week" if rrule == "FREQ=WEEKLY" else "month"}"' in body
 
-    def test_work_sessions_hidden_in_view_when_empty_and_present_in_edit(self, conn):
-        """2026-09-26 (Peter): no Work sessions section in the view modal
-        while there are none -- the edit modal is where they're added."""
+    def test_no_work_sessions_in_view_or_edit(self, conn):
+        """2026-09-26 (Peter): Work sessions are gone from a habit's view
+        and edit modals entirely -- even when the habit has some."""
         _habit(conn, "h1")
+        db.create_work_allocation(conn, "h1")
         body = self._detail(conn, "h1")
-        assert "habit-work-sessions" not in body
+        assert "habit-work-sessions" not in body and "/tasks/h1/work-allocations" not in body
         req = Request({"type": "http", "method": "GET", "path": "/tasks/h1/edit", "headers": [], "query_string": b""})
         form = tasks_router.edit_task_form("h1", req, conn=conn).body.decode()
-        assert 'action="/tasks/h1/work-allocations"' in form
+        assert "/tasks/h1/work-allocations" not in form and "work-alloc" not in form.split('id="modal-target"')[1]
 
 
 class TestPageStripAmount:

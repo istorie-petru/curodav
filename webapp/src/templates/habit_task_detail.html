@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "_task_work_allocations.html" import task_work_allocations_section with context %}
 {% from "_habit_heatmap.html" import heatmap %}
 {% from "_habit_history.html" import period_grid %}
 {% from "_label_pill.html" import label_pill with context %}
@@ -147,24 +146,8 @@
 </section>
 {% endif %}
 
-<!-- 2026-09-03 direct follow-up ("could we also rework the work sessions
-     ... without having the background color card div") -- was
-     `.detail-card detail-section-gap`; now `.detail-plain-section`
-     (style.css), same as task_detail.html's own Work sessions card the
-     same day. The heatmap card right above stays a real .detail-card,
-     unaffected -- the feedback was about Work sessions specifically. -->
-{# 2026-09-25 (Peter): Work sessions live in the edit modal
-   (habit_task_form.html); here they stay available but collapsed by
-   default. static/habit_day.js keeps it open across this modal's own
-   in-place refreshes once opened. #}
-{# 2026-09-26 (Peter): hidden entirely while there are none -- adding
-   the first one is an edit-modal job. #}
-{% if work_allocations %}
-<details class="detail-plain-section habit-work-sessions" data-uid="{{ task.uid }}">
-    <summary class="habit-work-sessions-summary">Work sessions <span class="checklist-progress">{{ work_allocations|length }}</span></summary>
-    {{ task_work_allocations_section(task, work_allocations, work_hours) }}
-</details>
-{% endif %}
+{# 2026-09-26 (Peter): Work sessions are gone from a habit's view and
+   edit modals entirely. #}
 
 </div>
 

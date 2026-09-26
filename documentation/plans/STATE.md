@@ -59,9 +59,20 @@ session start.
     (`_apply_habit_repeat` / `_apply_habit_goal`); `habit_view.days_label`
     is mirrored in habit_day.js. The view modal lost "Log a day" too
     (Peter: phones don't log past days); logged notes still list.
-  - **Next**: Work sessions in the habit edit modal (Peter: "after we fix
-    the rest").
-  SW cache v131.
+  - Then (same day): the Look dropdown became shared
+    (`templates/_look_picker.html` macro + `static/look_picker.js`) and
+    replaced every colour/icon picker -- habit form, label edit modal
+    (colour/icon left the header; the banner button stays), quick-add
+    Label panel, group form. Panel shows colours and icons side by side
+    once it's >=480px wide (container query), stacked on phones. The old
+    `_color_swatch_picker.html` / `_icon_swatch_picker.html`, modal.js's
+    swatch-popover code and base.html's #color-popover/#icon-popover are
+    deleted (the `.color-swatch*` CSS stays: Settings > Appearance's accent
+    picker uses it). Also: no spinner arrows on the Amount box; Cancel on
+    a habit's edit modal returns to its view modal; Work sessions removed
+    from both habit modals entirely (Peter's call -- supersedes "next:
+    work sessions").
+  SW cache v132.
 
 - **Shipped:** 2026-09-26 -- habits decluttering, per Peter ("rows too
   tall, 28-32px is enough"; "I don't believe in habit vacation"; month

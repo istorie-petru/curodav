@@ -327,7 +327,7 @@ class TestSecondPass20260926:
         _habit(conn, "h1", "Read")
         form = tasks_router.edit_task_form("h1", _request("/tasks/h1/edit"), conn=conn).body.decode()
         assert "habit-choice-row" not in form and "habit-days-hint" not in form and "field-hint" not in form
-        assert 'data-ms-label="kind"' in form and "habit-look-select" in form
+        assert 'data-ms-label="kind"' in form and 'id="look-habit-task-form"' in form
         assert 'name="habit_color" value="purple"' in form and 'name="habit_icon" value="moon"' in form
 
     def test_backup_restore_keeps_look_and_reminder(self, conn):
@@ -395,7 +395,7 @@ class TestEditFormMockup20260926:
     def test_form_order_and_half_width_hooks(self, conn):
         _habit(conn, "h1", "Read")
         form = tasks_router.edit_task_form("h1", _request("/tasks/h1/edit"), conn=conn).body.decode()
-        order = [form.index(x) for x in ('name="title"', "habit-look-select", 'data-ms-label="kind"',
+        order = [form.index(x) for x in ('name="title"', 'id="look-habit-task-form"', 'data-ms-label="kind"',
                                          'data-ms-label="how often"', 'data-ms-label="daily goal"',
                                          'data-ms-label="reminder"', 'name="description"')]
         assert order == sorted(order)
@@ -406,3 +406,38 @@ class TestEditFormMockup20260926:
         _habit(conn, "h1", "Read")
         body = tasks_router.task_detail("h1", _request("/tasks/h1"), conn=conn).body.decode()
         assert "habit-log-form" not in body and "Log a day" not in body
+
+
+class TestLookEverywhereAndCancel20260926:
+    """2026-09-26 (Peter): the Look dropdown wherever colour + icon are set;
+    Cancel on the habit edit form returns to its view modal."""
+
+    def test_cancel_goes_back_to_view_modal(self, conn):
+        _habit(conn, "h1", "Read")
+        form = tasks_router.edit_task_form("h1", _request("/tasks/h1/edit"), conn=conn).body.decode()
+        assert '<a href="/tasks/h1" class="btn ghost" data-modal>' in form
+
+    def test_new_habit_cancel_still_closes(self, conn):
+        db.save_task_habit_settings(conn, "Habit")
+        form = tasks_router.new_task_form(_request("/tasks/new"), habit=True, conn=conn).body.decode()
+        assert 'href="/habits" class="btn ghost" data-modal-cancel' in form
+
+    def test_group_form_uses_look_dropdown(self, conn):
+        from src.routers import label_pages
+
+        db.upsert_label_config(conn, {"name": "Uni", "color": "blue", "created_at": _now(), "label_group": "School"})
+        body = label_pages.edit_group_modal("School", _request("/groups/School/edit"), conn=conn).body.decode()
+        assert 'id="look-group-form"' in body and 'name="color"' in body and 'name="icon"' in body
+
+    def test_old_pickers_are_gone(self):
+        from pathlib import Path
+
+        tpl = Path(__file__).resolve().parents[1] / "src" / "templates"
+        assert not (tpl / "_color_swatch_picker.html").exists()
+        assert not (tpl / "_icon_swatch_picker.html").exists()
+
+    def test_amount_box_has_no_spinner(self):
+        from pathlib import Path
+
+        css = (Path(__file__).resolve().parents[1] / "src" / "static" / "style.css").read_text()
+        assert "#habit-target::-webkit-outer-spin-button, #habit-target::-webkit-inner-spin-button{-webkit-appearance:none" in css

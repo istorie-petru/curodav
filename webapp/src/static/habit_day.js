@@ -130,7 +130,6 @@
     if (el.name === "habit_repeat") form.dataset.repeat = el.value;
     if (el.name === "habit_goal") form.dataset.goal = el.value;
     if (el.name === "habit_days") daysSummary(form);
-    if (el.name === "habit_color" || el.name === "habit_icon") updateLook(form);
   });
 
   // 2026-09-26: the Habits page row's chevron opens its history panel
@@ -187,53 +186,4 @@
   document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".habit-task-form").forEach(daysSummary);
   });
-
-  // 2026-09-26: the habit form's Look dropdown -- keep the trigger's
-  // preview (icon in the picked colour) and name in sync.
-  function checkedIn(form, name) {
-    const r = document.querySelector('input[name="' + name + '"][form="' + form.id + '"]:checked');
-    return r ? r.value : "";
-  }
-  function updateLook(form) {
-    const trigger = form.querySelector(".habit-look-trigger");
-    if (!trigger) return;
-    const color = checkedIn(form, "habit_color");
-    const iconName = checkedIn(form, "habit_icon");
-    const preview = trigger.querySelector(".habit-look-preview");
-    preview.className = "habit-look-preview" + (color ? " habit-c-" + color : "");
-    const use = preview.querySelector("use");
-    if (use) {
-      const href = (use.getAttribute("href") || "").replace(/#icon-[\w-]+$/, "#icon-" + (iconName || "check-circle"));
-      use.setAttribute("href", href);
-    }
-    const nice = (v) => v.charAt(0).toUpperCase() + v.slice(1).replace(/-/g, " ");
-    trigger.querySelector(".habit-look-name").textContent =
-      (color ? nice(color) : "Default colour") + " \u00b7 " + (iconName ? nice(iconName) : "Default icon");
-  }
-
-  // Work sessions in the habit view modal are collapsed by default; once
-  // opened for a habit, keep them open across that modal's in-place
-  // refreshes (a keep-open form re-renders the whole modal body).
-  const openSessions = new Set();
-  document.addEventListener(
-    "toggle",
-    (e) => {
-      const el = e.target;
-      if (!el.matches || !el.matches("details.habit-work-sessions")) return;
-      if (el.open) openSessions.add(el.dataset.uid);
-      else openSessions.delete(el.dataset.uid);
-    },
-    true
-  );
-  new MutationObserver(() => {
-    if (!openSessions.size) return;
-    const overlay = document.getElementById("modal-overlay");
-    if (!overlay || !overlay.classList.contains("is-open")) {
-      openSessions.clear(); // modal closed: collapsed again next time
-      return;
-    }
-    document.querySelectorAll("details.habit-work-sessions:not([open])").forEach((el) => {
-      if (openSessions.has(el.dataset.uid)) el.open = true;
-    });
-  }).observe(document.documentElement, { childList: true, subtree: true });
 })();

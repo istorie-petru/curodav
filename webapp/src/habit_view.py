@@ -39,10 +39,11 @@ def excluded_dates_for_row(conn, row: dict, entries_by_date: dict, today: date) 
 
 _DAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 # 2026-09-26 (Peter): per-habit icon + colour. Icons a habit can pick
-# (all in _icons_sprite.html); colours are the label palette
+# (all in _icons_sprite.html; "no icon" draws the default check glyph, so
+# check-circle itself isn't listed); colours are the label palette
 # (routers/labels.py COLORS, duplicated here to avoid a router import).
 HABIT_ICONS = (
-    "check-circle", "activity", "heart", "droplet", "coffee", "book-open", "notebook", "pencil",
+    "activity", "heart", "droplet", "coffee", "book-open", "notebook", "pencil",
     "graduation-cap", "code", "music", "headphones", "camera", "moon", "sun", "sunrise",
     "wind", "feather", "smile", "users", "phone", "mail", "dollar-sign", "shopping-cart",
     "home", "map-pin", "navigation", "clock", "target", "zap", "trophy", "medal",

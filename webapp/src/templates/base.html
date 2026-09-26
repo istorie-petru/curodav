@@ -466,25 +466,6 @@
     </div>
 </div>
 
-<!-- Color picker popover (static/modal.js): a single shared floating menu,
-     a sibling of #modal-overlay rather than a descendant of it. .modal has
-     overflow:hidden and .modal-body has overflow-y:auto, both of which
-     clip *any* descendant that visually extends past their box regardless
-     of its own position value -- the only way for a popover to render
-     outside the modal's bounds is to not be a DOM descendant of it at
-     all. modal.js moves each color swatch grid in here on open (it stays
-     associated with its original <form> via the `form="..."` attribute on
-     each radio, since reparenting outside a <form> element would
-     otherwise silently drop it from that form's submission) and moves it
-     back on close. -->
-<div class="color-popover" id="color-popover"></div>
-
-<!-- Icon (emoji) picker popover (2026-08-02, Projects manage page) --
-     same portal trick as #color-popover above, same reason (a floating
-     panel has to live outside anything with overflow:hidden/auto to
-     avoid being clipped), just a grid of emoji radios instead of color
-     swatches. See static/modal.js's wireSwatchPicker. -->
-<div class="icon-popover" id="icon-popover"></div>
 
 <!-- Multiselect/single-select dropdown portal (_widget_list_multiselect.html,
      static/app.js), 2026-08-08 -- same reasoning and technique as
@@ -604,6 +585,7 @@
 <script defer src="{{ static_url('modal.js') }}"></script>
 {# Habit day amount popup + work-sessions disclosure (2026-09-25). #}
 <script defer src="{{ static_url('habit_day.js') }}"></script>
+<script defer src="{{ static_url('look_picker.js') }}"></script>
 <!-- async-CRUD (features/async-crud.md) -- ccApi.post/refreshRegion + the
      cc-entity-changed event bus + the generic data-cc-complete handler.
      Loaded before every page/extra script so modal.js, app.js and each

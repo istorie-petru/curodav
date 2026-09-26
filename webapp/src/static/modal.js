@@ -110,8 +110,6 @@
     const body = document.getElementById("modal-body");
     const footer = document.getElementById("modal-footer");
     const closeBtn = document.getElementById("modal-close");
-    const colorPopover = document.getElementById("color-popover");
-    const iconPopover = document.getElementById("icon-popover");
     if (!overlay || !body) return;
 
   let currentUrl = null;
@@ -123,141 +121,7 @@
   let pendingChange = null;
   let pendingForceReload = false;
 
-  // --- Generic swatch/emoji picker popover -----------------------------
-  // .color-picker (calendars_list.html, schedule_export.html, projects_
-  // manage.html) and .icon-picker (projects_manage.html, 2026-08-02) are
-  // both a trigger button + a grid of radios in a "dropdown" <div> that
-  // starts out hidden right next to it. Opening either *moves* that grid
-  // into a single shared floating popover element (#color-popover /
-  // #icon-popover, both siblings of #modal-overlay in base.html, not
-  // descendants) and positions it with `position: fixed` next to the
-  // trigger -- the only way for it to render outside a modal's own box,
-  // since .modal/.modal-body both clip any descendant that visually
-  // overflows them no matter what position value it has (and it's needed
-  // even outside a modal, e.g. on the plain Projects settings page,
-  // wherever the trigger sits near a scrolling/clipping ancestor). Each
-  // radio inside carries a `form="..."` attribute pointing back at its
-  // real <form> by id, because moving a form control outside its <form>
-  // ancestor in the DOM otherwise silently resets its form owner and
-  // drops it from that form's submission.
-  //
-  // `openPicker` tracks whichever one (color or icon) is currently open,
-  // remembering which popover element and trigger class it belongs to so
-  // close/outside-click logic doesn't need to know which kind it is.
-  let openPicker = null; // {picker, popover, triggerClass}
-
-  function closeOpenPopover() {
-    if (!openPicker) return;
-    const { picker, popover, triggerClass } = openPicker;
-    const dropdown = popover.firstElementChild;
-    if (dropdown) picker.appendChild(dropdown); // move back home
-    popover.classList.remove("is-open");
-    const trigger = picker.querySelector("." + triggerClass);
-    if (trigger) trigger.classList.remove("is-active");
-    openPicker = null;
-  }
-
-  function openPopover(picker, popover, triggerClass, dropdownClass) {
-    if (openPicker && openPicker.picker === picker) return;
-    closeOpenPopover();
-    const trigger = picker.querySelector("." + triggerClass);
-    const dropdown = picker.querySelector("." + dropdownClass);
-    if (!trigger || !dropdown) return;
-    popover.appendChild(dropdown);
-    popover.classList.add("is-open");
-    const rect = trigger.getBoundingClientRect();
-    const popRect = popover.getBoundingClientRect();
-    let top = rect.bottom + 6;
-    let left = rect.left;
-    if (left + popRect.width > window.innerWidth - 8) {
-      left = Math.max(8, window.innerWidth - popRect.width - 8);
-    }
-    if (top + popRect.height > window.innerHeight - 8) {
-      top = rect.top - popRect.height - 6; // flip above the trigger instead
-    }
-    popover.style.top = top + "px";
-    popover.style.left = left + "px";
-    trigger.classList.add("is-active");
-    openPicker = { picker, popover, triggerClass };
-  }
-
-  // Binds every `.pickerClass` found under `root` -- called once for the
-  // whole `document` at boot (so pickers on a plain full page, e.g.
-  // projects_manage.html, work with no modal involved at all) and again
-  // for just the modal's own `#modal-body` inside wireContent() below
-  // whenever modal content is (re)rendered. These two call sites never
-  // overlap (modal-body starts empty and is only ever populated by JS,
-  // never present in the document at boot), so there's no risk of
-  // double-binding the same element twice.
-  function wireSwatchPickers(root, { pickerClass, triggerClass, dropdownClass, popover, onPick }) {
-    root.querySelectorAll("." + pickerClass).forEach((picker) => {
-      const trigger = picker.querySelector("." + triggerClass);
-      const dropdown = picker.querySelector("." + dropdownClass);
-      if (!trigger || !dropdown) return;
-      const autosubmit = picker.hasAttribute("data-autosubmit");
-
-      trigger.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (openPicker && openPicker.picker === picker) {
-          closeOpenPopover();
-        } else {
-          openPopover(picker, popover, triggerClass, dropdownClass);
-        }
-      });
-
-      dropdown.querySelectorAll('input[type="radio"]').forEach((radio) => {
-        radio.addEventListener("change", () => {
-          if (onPick) onPick(trigger, radio);
-          closeOpenPopover();
-          if (autosubmit && radio.form) radio.form.requestSubmit();
-        });
-      });
-    });
-  }
-
-  function wireColorPickers(root) {
-    if (!colorPopover) return;
-    wireSwatchPickers(root, {
-      pickerClass: "color-picker",
-      triggerClass: "color-swatch-current",
-      dropdownClass: "color-dropdown",
-      popover: colorPopover,
-      onPick: (trigger, radio) => {
-        trigger.className = "color-swatch-current cal-" + radio.value;
-      },
-    });
-  }
-
-  // Icon picker (2026-08-02, Projects manage page; revised same day to
-  // draw from the app's own icon library instead of a one-off emoji set
-  // -- "the same logic as the color picker one"). Each radio's value is
-  // a key into templates/_icons_sprite.html (e.g. "folder", "activity"),
-  // same sprite deps.py's `icon()` Jinja helper already draws from
-  // server-side -- picking one rebuilds the trigger's content as the
-  // exact same `<svg class="icon ..."><use href="#icon-NAME"></use></svg>`
-  // markup that helper renders, referencing the one inline sprite
-  // already present in the page (base.html includes it once), not a
-  // duplicated copy. Empty selection (the "no icon" option) falls back
-  // to the same "folder" icon every unset-icon project already shows
-  // elsewhere in the app (projects_manage.html, project_merge.html,
-  // _widget_project_preview.html).
-  function wireIconPickers(root) {
-    if (!iconPopover) return;
-    wireSwatchPickers(root, {
-      pickerClass: "icon-picker",
-      triggerClass: "icon-picker-current",
-      dropdownClass: "icon-dropdown",
-      popover: iconPopover,
-      onPick: (trigger, radio) => {
-        const name = radio.value || "folder";
-        trigger.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#icon-' + name + '"></use></svg>';
-      },
-    });
-  }
-
    function closeModal() {
-     closeOpenPopover();
      overlay.classList.remove("is-open");
      // 2026-09-08 bugfix (direct report, confirmed live: the persistent
      // mobile bottom bar -- Menu/Home/Search, base.html's .mobile-tabbar
@@ -326,7 +190,6 @@
 
    async function refreshModalContent() {
      if (!currentUrl) return;
-     closeOpenPopover(); // its "home" element is about to be replaced
      const resp = await fetch(currentUrl);
      const html = await resp.text();
      const fragment = injectModalContent(html);
@@ -396,29 +259,6 @@
     // tab switch between the two create-forms + retargeting the footer
     // Save button's `form` attribute. Same re-init reasoning.
     if (window.CCQuickAdd) window.CCQuickAdd.init(body);
-
-    // Single-circle color picker / emoji icon picker: click the trigger to
-    // open the floating palette (see wireSwatchPickers/openPopover above).
-    // Picking a value updates the visible trigger immediately, closes the
-    // popover, and -- only for pickers marked `data-autosubmit`
-    // (calendars_list.html's/projects_manage.html's per-row edit forms) --
-    // submits the form right away, the same as changing the name field
-    // does. The "new calendar"/"new project" forms deliberately don't
-    // autosubmit: color/icon is just one field alongside a name that
-    // still needs typing.
-    wireColorPickers(body);
-    wireIconPickers(body);
-    // Also on `header` (2026-09-21, same reasoning as the 2026-09-12
-    // CCAvatarCropper footer fix right above): label_form_modal.html
-    // moved its Color/Icon triggers into #modal-header (small circular
-    // buttons next to the close X, direct request) -- without this, a
-    // click there would silently do nothing, same "wired at boot on
-    // document, but never re-wired on the fragment that actually
-    // contains it" gap the footer fix already found and fixed once.
-    if (header) {
-      wireColorPickers(header);
-      wireIconPickers(header);
-    }
 
     // Widget Builder (dashboard_customize.html): add-widget form + live
     // preview live inside the modal, injected via innerHTML like Schedule's
@@ -708,48 +548,6 @@
     openModal(form.action + (query ? "?" + query : ""), form);
   });
 
-  // Click-outside-to-close for the color/icon popover -- a real
-  // dropdown/menu convention, and needed here since it's no longer a
-  // native <details> (which only toggles via its own trigger). Runs on
-  // `mousedown` rather than `click` so it fires before a subsequent
-  // click-based handler elsewhere (e.g. re-opening a different picker)
-  // sees a stale state.
-  document.addEventListener("mousedown", (e) => {
-    if (!openPicker) return;
-    if (openPicker.popover.contains(e.target)) return;
-    const trigger = openPicker.picker.querySelector("." + openPicker.triggerClass);
-    if (trigger && trigger.contains(e.target)) return;
-    closeOpenPopover();
-  });
-  window.addEventListener("resize", closeOpenPopover);
-  // Closes the popover when the page (or any scrollable ancestor of the
-  // trigger) scrolls out from under it -- `position:fixed` means it would
-  // otherwise stay pinned to the old viewport coordinates while the
-  // trigger it's supposed to be anchored to visibly moves away.
-  //
-  // 2026-08-08 bug fix: `scroll` doesn't bubble, so `true` (capture) is
-  // the only way for a single `window` listener to hear scroll events
-  // from ANY scrollable descendant at all -- but that includes the
-  // popover's own internal icon grid (.icon-popover has `overflow-y:auto`
-  // + a fixed max-height, since the full icon set is ~70 options, far
-  // more than fit without scrolling). Every scroll event was closing the
-  // very popover the user was in the middle of scrolling through --
-  // reported as "scrolling breaks it," and it did: literally un-openable
-  // for long enough to actually browse the icon list, since any scroll
-  // attempt closed it before a second one could register. Mirrors the
-  // mousedown handler's own click-outside check just above: a scroll
-  // whose target is the open popover itself (or something inside it)
-  // isn't "the page scrolled out from under the trigger," so it's not a
-  // close signal.
-  window.addEventListener(
-    "scroll",
-    (e) => {
-      if (openPicker && openPicker.popover.contains(e.target)) return;
-      closeOpenPopover();
-    },
-    true
-  );
-
   if (closeBtn) closeBtn.addEventListener("click", closeModal);
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) closeModal();
@@ -808,20 +606,9 @@
   }
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && openPicker) {
-      closeOpenPopover();
-      return;
-    }
     if (e.key === "Escape" && overlay.classList.contains("is-open")) closeModal();
     if (e.key === "Tab" && overlay.classList.contains("is-open")) trapTabKey(e);
   });
-
-  // Wire up any color/icon pickers already present on a plain full page
-  // (2026-08-02, projects_manage.html -- not every page with a picker is
-  // opened as a modal). Modal-injected content is wired separately, every
-  // time it's (re)rendered, via wireContent() above.
-  wireColorPickers(document);
-  wireIconPickers(document);
 
   // Drag-down-to-dismiss for the mobile bottom-sheet form of .modal (see
   // style.css's max-width:720px block) -- Pointer Events rather than

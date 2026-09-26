@@ -76,8 +76,9 @@ class TestLabelsManageRowRendersSwatchGridNotSelect:
         resp = labels_router.edit_label_modal("Uni", _request("/labels/Uni/edit"), conn=conn)
         body = resp.body.decode()
         assert '<select name="color" class="filter-select"' not in body
-        assert 'class="color-picker"' in body
-        assert 'color-swatch-current cal-blue' in body
+        # 2026-09-26: the shared Look dropdown (_look_picker.html).
+        assert 'id="look-label-form"' in body
+        assert '<span class="look-preview habit-c-blue">' in body
 
     def test_edit_modal_color_radio_form_attr_matches_the_one_edit_form(self, conn):
         db.upsert_label_config(conn, {"name": "Uni", "color": "green", "created_at": _now()})
@@ -148,9 +149,10 @@ class TestExpandedPaletteAndGroupedIcons:
         db.upsert_label_config(conn, {"name": "Uni", "color": "teal", "created_at": _now()})
         resp = labels_router.edit_label_modal("Uni", _request("/labels/Uni/edit"), conn=conn)
         body = resp.body.decode()
-        assert body.count('class="color-swatch-label"') == 16
+        # 2026-09-26: Look dropdown swatches, named by their title.
+        assert body.count('class="look-swatch"') == 16
         for name in ("Red", "Lime", "Mint", "Teal", "Cyan", "Indigo", "Magenta", "Brown", "Slate"):
-            assert f">{name}<" in body
+            assert f'class="look-swatch" title="{name}"' in body
 
     def test_label_edit_modal_groups_icons_with_headers(self, conn):
         db.upsert_label_config(conn, {"name": "Uni", "color": "blue", "created_at": _now()})
@@ -158,5 +160,5 @@ class TestExpandedPaletteAndGroupedIcons:
         body = resp.body.decode()
         for group_name in labels_router.ICON_GROUPS:
             escaped = group_name.replace("&", "&amp;")
-            assert f'<div class="icon-group-label">{escaped}</div>' in body
+            assert f'<div class="look-group-label">{escaped}</div>' in body
 

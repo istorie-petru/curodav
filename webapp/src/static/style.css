@@ -5213,36 +5213,20 @@ main.main-shell > .toolbar.top-app-bar{
  .modal-header:has(> .modal-header-actions){padding-right:156px;}
  .detail-header-inner:has(~ .modal-header-actions){margin-right:-156px;}
  .detail-header-inner:has(~ .modal-header-actions) .detail-heading-row{padding-right:156px;}
- /* Color/Icon triggers, plain-title case: normal-sized .color-swatch-
-    current/.icon-picker-current (labels_manage.html's table rows,
-    _label_form_fields.html's own body fields elsewhere) are smaller and
-    differently shaped than .modal-close -- this scope-only override
-    matches its exact 28px circle instead of changing either trigger's
-    shape everywhere else they're used. */
- .modal-header-actions .color-swatch-current{width:28px; height:28px;}
- .modal-header-actions .icon-picker-current,
+ /* Header buttons (label modal's banner button): a 28px circle like
+    .modal-close. */
  .modal-header-actions .icon-btn{
    width:28px; height:28px; border-radius:50%; border:1px solid transparent; background:transparent;
  }
- .modal-header-actions .icon-picker-current:hover,
  .modal-header-actions .icon-btn:hover{background:var(--bg-secondary);}
- .modal-header-swatch{
-   display:block; width:28px; height:28px; border-radius:50%; box-shadow:0 0 0 1px var(--border) inset; flex:none;
- }
  /* Cover-image case: same frosted-chip treatment .modal-close gets over a
     photo, applied to these three triggers too so they read the same way
     against arbitrary banner imagery. */
- #modal-dialog:has(#modal-header .detail-cover-wrap) .modal-header-actions .icon-picker-current,
  #modal-dialog:has(#modal-header .detail-cover-wrap) .modal-header-actions .icon-btn{
    background:rgba(0,0,0,.4); color:#fff; border-color:rgba(255,255,255,.35);
    backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
  }
- #modal-dialog:has(#modal-header .detail-cover-wrap) .modal-header-actions .icon-picker-current:hover,
  #modal-dialog:has(#modal-header .detail-cover-wrap) .modal-header-actions .icon-btn:hover{background:rgba(0,0,0,.55); color:#fff;}
- #modal-dialog:has(#modal-header .detail-cover-wrap) .modal-header-swatch,
- #modal-dialog:has(#modal-header .detail-cover-wrap) .modal-header-actions .color-swatch-current{
-   box-shadow:0 0 0 1px rgba(255,255,255,.35) inset, 0 0 0 3px rgba(0,0,0,.4);
- }
  .modal-handle{display:none;}
  /* Modal body -- scrollable content area inside the dialog. */
  .modal-body{padding:var(--space-4) var(--space-5); overflow-y:auto; flex:1;}
@@ -5645,53 +5629,10 @@ body.command-palette-open{overflow:hidden;}
 .calendar-row-edit-form{display:flex; align-items:center; gap:8px; flex:1; min-width:0;}
 .calendar-row-delete-form{flex:none;}
 .calendar-row input[type="text"]{flex:1; min-width:0; padding:5px 7px;}
-/* An earlier version made the swatch grid expand in normal document flow
-   right under the circle (a plain <details>/<summary>) to dodge clipping
-   -- but a picker that pushes the rest of the row/form down every time
-   it opens doesn't read as a dropdown or menu, it reads as the layout
-   rearranging itself. A real dropdown/context-menu floats *above*
-   everything else without disturbing it. Since .modal-body
-   (overflow-y:auto) and .modal (overflow:hidden) both clip any
-   descendant that visually extends past their box regardless of its own
-   position value, floating it *inside* the modal was never going to
-   work either way -- the swatch grid now portals out to #color-popover
-   (base.html), a fixed-position element that is a *sibling* of
-   #modal-overlay rather than a descendant of it, so it isn't clipped by
-   anything the modal has. See modal.js's wireSwatchPickers/openPopover/
-   closeOpenPopover for the move-on-open/move-back-on-close logic, and
-   the `form="..."` attribute on each radio in calendars_list.html /
-   schedule_export.html (moving a form control out of its <form>
-   ancestor in the DOM otherwise silently drops it from that form). */
-.color-picker{flex:none;}
-.color-swatch-current{
-  display:block; width:20px; height:20px; border-radius:50%; box-shadow:0 0 0 1px var(--border) inset;
-  border:none; padding:0; cursor:pointer; -webkit-appearance:none; appearance:none;
-}
-.color-swatch-current.is-active{box-shadow:0 0 0 2px var(--accent-neutral);}
-/* Coarse-pointer touch-target bump (audit-fixes-2.0.md slice 6) -- same
-   `(pointer:coarse)` pattern as `.icon-btn` above: 20px is fine for a
-   mouse but under the ~24px WCAG 2.5.8 floor for a finger. */
-@media (pointer:coarse){
-  .color-swatch-current{width:32px; height:32px;}
-}
-/* Only visible while actually inside the floating popover -- at its
-   "home" location (right next to the trigger, in the un-opened markup)
-   it stays display:none so it never occupies layout space there. */
-.color-picker .color-dropdown{display:none;}
-.color-popover{
-  position:fixed; display:none; z-index:var(--z-overlay-panel); width:236px; max-height:280px; overflow-y:auto;
-  background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
-  padding:10px; box-shadow:var(--elevation-3);
-}
-.color-popover.is-open{display:block;}
-/* 2026-08-08 -- grew from 8 colors to 16 (routers/labels.py's COLORS) and
-   from bare circles to circle-plus-name (direct feedback: "small label
-   under each color"), so the old `display:flex; flex-wrap` row of plain
-   swatches became a real grid instead -- 4 columns keeps 16 colors to a
-   tidy 4x4 without the popover growing too tall, and every swatch lines
-   up with its neighbors instead of wrapping at whatever width its own
-   (now taller, label-bearing) box happens to need. */
-.color-popover .color-dropdown{display:grid; grid-template-columns:repeat(4, 1fr); gap:10px 6px;}
+/* (.color-picker/.color-popover -- the old colour dot picker -- went
+   2026-09-26 with _color_swatch_picker.html; the shared Look dropdown
+   replaced it. The swatch rules below stay: Settings > Appearance's
+   accent picker uses them.) */
 .color-swatch-label{
   display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer;
   padding:4px 2px; border-radius:var(--radius-sm);
@@ -5718,61 +5659,6 @@ body.command-palette-open{overflow:hidden;}
 .accent-swatch-orange{background:var(--accent-preset-orange);}
 .accent-swatch-pink{background:var(--accent-preset-pink);}
 .accent-swatch-indigo{background:var(--accent-preset-indigo);}
-
-/* Icon picker -- same shared-popover mechanism as .color-picker above
-   (2026-08-02, Projects manage page; revised same day to draw from the
-   app's own icon library -- templates/_icons_sprite.html, same set
-   {{ icon(name) }} renders everywhere else -- instead of a one-off emoji
-   set, "the same logic as the color picker one"). The trigger shows the
-   actual chosen icon (a real `<svg><use></svg>` referencing the shared
-   sprite, rebuilt by modal.js's wireIconPickers on pick), a plain folder
-   icon when none is set -- consistent with how an unset project icon
-   already renders elsewhere (project_merge.html, _widget_project_
-   preview.html). */
-.icon-picker{flex:none;}
-.icon-picker-current{
-  display:flex; align-items:center; justify-content:center; width:26px; height:26px;
-  border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--bg-elevated);
-  cursor:pointer; padding:0; color:var(--fg-primary);
-}
-.icon-picker-current.is-active{box-shadow:0 0 0 2px var(--accent-neutral); border-color:transparent;}
-.icon-picker .icon-dropdown{display:none;}
-.icon-popover{
-  position:fixed; display:none; z-index:var(--z-overlay-panel); width:260px; max-height:320px; overflow-y:auto;
-  background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md);
-  padding:8px; box-shadow:var(--elevation-3);
-}
-.icon-popover.is-open{display:block;}
-.icon-popover .icon-dropdown{display:flex; flex-direction:column; gap:2px;}
-/* 2026-08-08 -- icons grouped into named categories (routers/labels.py's
-   ICON_GROUPS) instead of one long undifferentiated grid, once the set
-   grew from ~100 to nearly the sprite's full ~140 usable icons -- a flat
-   wall that size stopped being scannable. Each group is its own small
-   flex-wrap row of swatches under a label, same visual weight
-   `.group-sublabel`/`.section-label` already use elsewhere in the app for
-   "here's a named subsection of a list," not a bespoke heading style. */
-.icon-group{display:flex; flex-direction:column; gap:4px; padding:4px 0;}
-.icon-group:first-child{padding-top:0;}
-.icon-group-label{
-  font-size:10px; font-weight:var(--font-weight-bold); text-transform:uppercase; letter-spacing:.04em;
-  color:var(--fg-tertiary); padding:2px 2px 0;
-}
-.icon-group-swatches{display:flex; gap:4px; flex-wrap:wrap;}
-/* Each option is a <label><input type="radio" class="icon-swatch"><span>
-   {{ icon(name) }}</span></label> -- the radio itself is invisible (an
-   arbitrary SVG icon can't be drawn as a styled appearance:none input
-   the way a plain color circle can), the visible glyph is the real
-   `{{ icon() }}`-rendered <svg> inside the <span> next to it, and
-   :has() picks up the checked state on the label that wraps both for
-   the selected/hover styling. */
-.icon-swatch-label{
-  display:flex; align-items:center; justify-content:center; width:28px; height:28px;
-  border-radius:var(--radius-sm); cursor:pointer; border:2px solid transparent; color:var(--fg-primary);
-}
-.icon-swatch-label:hover{background:var(--row-alt);}
-.icon-swatch-label:has(.icon-swatch:checked){border-color:var(--accent-neutral); background:var(--tag-blue-bg);}
-.icon-swatch{position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;}
-.icon-swatch-label.icon-swatch-none-label{color:var(--fg-tertiary);}
 
 /* Merge picker modal (project_merge.html, 2026-08-02) -- a selectable
    list of candidate destination projects, each showing its own badge +
@@ -6768,7 +6654,6 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .export-form:has(#mode-new:checked) .mode-new-fields{display:flex; align-items:flex-start; gap:10px;}
 .export-form select{min-width:200px;}
 .export-form .mode-new-fields input[type="text"]{min-width:160px; margin-top:2px;}
-.export-form .mode-new-fields .color-picker{margin-top:2px;}
 
 /* Schedule class form (schedule_class_form.html): Professor field --
    same :has() show-a-field-only-when-relevant trick as .export-form
@@ -8090,24 +7975,36 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .habit-period.is-current.is-done{box-shadow:none;}
 .habit-period-label{font-weight:var(--font-weight-bold);}
 .habit-periods-months{display:grid; grid-template-columns:repeat(52, minmax(0,1fr)); gap:3px; margin-top:2px; font-size:var(--text-2xs); color:var(--fg-tertiary); white-space:nowrap;}
-/* Habit form's Look dropdown (habit_task_form.html, 2026-09-26): the
-   app's .multiselect trigger/panel, with a swatch row and an icon grid
-   inside instead of option rows. */
-.habit-look-trigger{display:flex; align-items:center; gap:var(--space-2); width:100%;}
-.habit-look-name{flex:1; text-align:left; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.habit-look-preview{--habit-accent:var(--accent); display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; background:var(--habit-accent); color:var(--fg-on-accent); flex:none;}
-.habit-look-panel{padding:var(--space-2);}
-.habit-look-group{display:grid; grid-template-columns:repeat(auto-fill, minmax(36px, 1fr)); gap:var(--space-1);}
-.habit-look-icon .icon{width:18px; height:18px;}
-.habit-look-swatch, .habit-look-icon{position:relative; display:flex; align-items:center; justify-content:center; height:36px; border-radius:var(--radius-sm); cursor:pointer;}
-.habit-look-swatch input, .habit-look-icon input{position:absolute; opacity:0; width:1px; height:1px;}
-.habit-look-dot{--habit-accent:var(--accent); width:20px; height:20px; border-radius:50%; background:var(--habit-accent);}
-.habit-look-dot.is-default{background:transparent; box-shadow:0 0 0 1.5px var(--border-strong) inset;}
-.habit-look-icon span{display:flex; align-items:center; justify-content:center; width:100%; height:100%; border-radius:var(--radius-sm); color:var(--fg-secondary);}
-.habit-look-swatch:hover, .habit-look-icon:hover span{background:var(--row-hover);}
-.habit-look-swatch input:checked + .habit-look-dot{box-shadow:0 0 0 2px var(--bg-elevated), 0 0 0 4px var(--fg-primary);}
-.habit-look-icon input:checked + span{background:var(--accent); color:var(--fg-on-accent);}
-.habit-look-swatch input:focus-visible + span, .habit-look-icon input:focus-visible + span{outline:2px solid var(--accent); outline-offset:2px;}
+/* The "Look" dropdown (_look_picker.html, 2026-09-26): colour + icon in
+   one app dropdown -- habits, labels, groups. The trigger shows the icon
+   on a circle of the colour; the panel holds a swatch grid and an icon
+   grid, side by side once the panel is wide enough (container query on
+   the portaled panel), stacked on a phone. The icons scroll; the colours
+   stay put. */
+.look-trigger{display:flex; align-items:center; gap:var(--space-2); width:100%;}
+.look-name{flex:1; text-align:left; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.look-preview{--habit-accent:var(--accent); display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; background:var(--habit-accent); color:var(--fg-on-accent); flex:none;}
+.multiselect-panel.look-panel{padding:var(--space-2); container-type:inline-size; overflow:hidden; max-height:none;}
+.look-panel-inner{display:flex; flex-direction:column; gap:var(--space-2); max-height:min(60vh, 420px);}
+.look-colors{padding-bottom:var(--space-2); border-bottom:1px solid var(--separator); flex:none;}
+.look-icons{overflow-y:auto; min-height:0;}
+.look-group{display:grid; grid-template-columns:repeat(auto-fill, minmax(36px, 1fr)); gap:var(--space-1);}
+.look-group-label{font-size:var(--text-2xs); font-weight:var(--font-weight-bold); text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary); padding:var(--space-2) 2px var(--space-1);}
+@container (min-width: 480px){
+  .look-panel-inner{display:grid; grid-template-columns:calc(4 * 36px + 3 * var(--space-1)) minmax(0,1fr); align-items:start; gap:var(--space-3);}
+  .look-colors{grid-template-columns:repeat(4, 36px); padding:0 var(--space-3) 0 0; border-bottom:none; border-right:1px solid var(--separator); align-self:stretch; align-content:start;}
+  .look-icons{max-height:min(60vh, 420px);}
+}
+.look-swatch, .look-icon{position:relative; display:flex; align-items:center; justify-content:center; height:36px; border-radius:var(--radius-sm); cursor:pointer;}
+.look-icon .icon{width:18px; height:18px;}
+.look-swatch input, .look-icon input{position:absolute; opacity:0; width:1px; height:1px;}
+.look-dot{--habit-accent:var(--accent); width:22px; height:22px; border-radius:50%; background:var(--habit-accent);}
+.look-dot.is-default{background:transparent; box-shadow:0 0 0 1.5px var(--border-strong) inset;}
+.look-icon span{display:flex; align-items:center; justify-content:center; width:100%; height:100%; border-radius:var(--radius-sm); color:var(--fg-secondary);}
+.look-swatch:hover, .look-icon:hover span{background:var(--row-hover);}
+.look-swatch input:checked + .look-dot{box-shadow:0 0 0 2px var(--bg-elevated), 0 0 0 4px var(--fg-primary);}
+.look-icon input:checked + span{background:var(--accent); color:var(--fg-on-accent);}
+.look-swatch input:focus-visible + span, .look-icon input:focus-visible + span{outline:2px solid var(--accent); outline-offset:2px;}
 /* 2026-09-26: a habit's own colour (tasks.habit_color). */
 .habit-c-red{--habit-accent:var(--cal-accent-red);}
 .habit-c-orange{--habit-accent:var(--cal-accent-orange);}
@@ -8141,6 +8038,9 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .habit-amount-pair{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:var(--space-3);}
 .habit-amount-cell{display:flex; flex-direction:column; gap:var(--space-1); min-width:0;}
 .habit-amount-cell input{width:100%;}
+/* 2026-09-26 (Peter): no browser spinner arrows on the Amount box. */
+#habit-target{-moz-appearance:textfield; appearance:textfield;}
+#habit-target::-webkit-outer-spin-button, #habit-target::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
 /* 2026-09-25 (UI audit H-14): an avoid habit has no schedule, goal or
    reminder -- hide those fields (habit_day.js toggles .is-avoid on
    Kind). After the follow-up rules above so it wins the tie. */
@@ -8263,6 +8163,3 @@ button.allday-habit{
 .habit-amount-actions{display:flex; justify-content:flex-end; gap:var(--space-2);}
 .habit-amount-trigger{cursor:pointer;}
 button.heatmap-cell{border:none; padding:0;}
-/* Work sessions in the habit view modal: collapsed by default. */
-.habit-work-sessions-summary{cursor:pointer; font-weight:var(--font-weight-bold); padding:var(--space-1) 0; list-style-position:inside;}
-.habit-work-sessions[open] .habit-work-sessions-summary{margin-bottom:var(--space-2);}

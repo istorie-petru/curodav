@@ -36,22 +36,10 @@
             </div>
             <span class="field-hint">A group needs at least one label.</span>
         </fieldset>
-        <div class="field">
-            <label>Color</label>
-            {% set cp_current = group.color or 'gray' %}
-            {% set cp_colors = colors %}
-            {% set cp_form_id = 'group-form' %}
-            {% include "_color_swatch_picker.html" %}
-        </div>
-        <div class="field">
-            <label>Icon</label>
-            {% set ip_current = group.icon %}
-            {% set ip_groups = icon_groups %}
-            {% set ip_form_id = 'group-form' %}
-            {% set ip_default_icon = 'type' %}
-            {% include "_icon_swatch_picker.html" %}
-            <span class="field-hint">No icon: the sidebar shows the group's first letter.</span>
-        </div>
+        {# 2026-09-26 (Peter): colour + icon as the shared Look dropdown. #}
+        {% from "_look_picker.html" import look_picker %}
+        {{ look_picker('look-group-form', 'group-form', group.color or 'gray', group.icon, colors, icon_groups,
+                       no_icon_label='First letter', default_icon='type') }}
     </div>
 </form>
 </div>

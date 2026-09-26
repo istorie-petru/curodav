@@ -33,35 +33,13 @@
 {% else %}
 <h1>{{ 'Edit label' if l else 'New Label' }}</h1>
 {% endif %}
-{# Direct request, 2026-09-21: "I would also prefer to have the color,
-   icon, banner buttons in the header, as small circular buttons, that
-   look like the close 'X' button, that for pressing each opens each
-   menu" -- moves the three appearance controls out of the body's field
-   grid (_label_form_fields.html suppresses them here via
-   appearance_in_header, set above) into small `.icon-btn`-styled
-   triggers up top, next to the close X. Positioned absolutely (same
-   technique the close X itself uses) rather than flowed inline, since
-   the header's own layout differs between the plain-title and
-   cover-image branches above and this row needs to sit in the same
-   spot either way. Color/Icon reuse the exact same popover components
-   (_color_swatch_picker.html/_icon_swatch_picker.html) the body used to
-   include -- only their trigger button is restyled+relocated, the
-   popover panel/radios/form wiring (cp_form_id/ip_form_id="label-form")
-   are unchanged. Since slice c (2026-09-25) every label picks its own
-   color and banner; grouped labels used to follow their Space's. Banner only renders
-   once the label actually exists (`l`) -- a brand-new label has no name
-   yet to key a banner off of, same guard the body's old Banner field
-   had. #}
+{# The header keeps the banner button (2026-09-21 direct request: small
+   circular header buttons like the close X). Colour and icon moved back
+   into the body as the shared Look dropdown on 2026-09-26 (Peter: "this
+   drop down everywhere colors and icons can be set") -- see
+   _label_form_fields.html. Banner only once the label exists (`l`): a
+   new label has no name yet to key a banner off of. #}
 <div class="modal-header-actions">
-    {% set cp_current = l.color if l else 'blue' %}
-    {% set cp_colors = colors %}
-    {% set cp_form_id = 'label-form' %}
-    {% include "_color_swatch_picker.html" %}
-    {% set ip_current = l.icon %}
-    {% set ip_groups = icon_groups %}
-    {% set ip_form_id = 'label-form' %}
-    {% set ip_default_icon = 'tag' %}
-    {% include "_icon_swatch_picker.html" %}
     {% if l %}
     <a href="/banners/editor?scope={{ l.name|urlencode }}&amp;page_url={{ ('/settings/labels/' ~ l.name ~ '/edit')|urlencode }}&amp;from_modal=1" data-modal class="icon-btn" title="{{ 'Change banner' if banner else 'Add banner' }}">{{ icon('image', 'icon-sm') }}</a>
     {% endif %}

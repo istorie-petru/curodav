@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% from "_task_work_allocations.html" import task_work_allocations_section with context %}
 {% block title %}{% if task %}Edit habit{% else %}New habit{% endif %}{% endblock %}
 {% block content %}
+{% from "_look_picker.html" import look_picker %}
 <!-- Tasks > Habits' own create form (2026-08-08 direct feedback) -- a
      stripped-down, dedicated form, not task_form.html with fields
      pre-filled. A habit-labeled task doesn't have a due date, a start
@@ -59,36 +59,14 @@
             <label>Title</label>
             <input type="text" name="title" required autofocus value="{{ task.title if task else '' }}">
         </div>
-        {# 2026-09-26 (Peter): the habit's own colour and icon -- one
-           dropdown: a preview + name on the trigger, swatches and icons
-           in the panel. The icon draws the check button, the colour
-           paints the heatmap, the strip and the view modal's cover. #}
+        {# 2026-09-26 (Peter): the habit's own colour and icon -- the
+           shared Look dropdown (_look_picker.html). The icon draws the
+           check button, the colour paints the heatmap, the strip and the
+           view modal's cover. #}
         {% set _look = habit_look(task) %}
-        <div class="field field-wide">
-            <label id="habit-look-label">Look</label>
-            <div class="multiselect widget-list-multiselect habit-look-select" data-habit-look>
-                <button type="button" class="multiselect-trigger ms-trigger habit-look-trigger" aria-haspopup="true" aria-expanded="false" aria-labelledby="habit-look-label">
-                    <span class="habit-look-preview{% if _look.color %} habit-c-{{ _look.color }}{% endif %}">{{ icon(_look.icon or 'check-circle', 'icon-sm') }}</span>
-                    <span class="habit-look-name">{{ (_look.color or 'Default colour')|capitalize }} &middot; {{ (_look.icon or 'default icon')|replace('-', ' ')|capitalize }}</span>
-                    <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
-                </button>
-                <div class="multiselect-panel habit-look-panel">
-                    <div class="habit-look-group" role="radiogroup" aria-label="Colour">
-                        <label class="habit-look-swatch" title="Default"><input type="radio" name="habit_color" value="" form="habit-task-form"{% if not _look.color %} checked{% endif %}><span class="habit-look-dot is-default"></span></label>
-                        {% for c in habit_colors %}
-                        <label class="habit-look-swatch" title="{{ c|capitalize }}"><input type="radio" name="habit_color" value="{{ c }}" form="habit-task-form"{% if _look.color == c %} checked{% endif %}><span class="habit-look-dot habit-c-{{ c }}"></span></label>
-                        {% endfor %}
-                    </div>
-                    <div class="multiselect-option-divider"></div>
-                    <div class="habit-look-group habit-look-icons" role="radiogroup" aria-label="Icon">
-                        <label class="habit-look-icon" title="Default"><input type="radio" name="habit_icon" value="" form="habit-task-form"{% if not _look.icon %} checked{% endif %}><span>{{ icon('square') }}</span></label>
-                        {% for ic in habit_icons %}
-                        <label class="habit-look-icon" title="{{ ic|replace('-', ' ')|capitalize }}"><input type="radio" name="habit_icon" value="{{ ic }}" form="habit-task-form"{% if _look.icon == ic %} checked{% endif %}><span>{{ icon(ic) }}</span></label>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-        </div>
+        {{ look_picker('look-habit-task-form', 'habit-task-form', _look.color, _look.icon, habit_colors, {'': habit_icons},
+                       color_field='habit_color', icon_field='habit_icon', allow_no_color=true,
+                       no_color_label='Default colour', no_icon_label='Default icon', default_icon='check-circle') }}
         {# Habits H5 (2026-09-24): "avoid" habits log relapses instead of
            check-ins. 2026-09-26 (Peter, second pass): the app's own
            dropdown, not pills in the body. #}
@@ -188,15 +166,18 @@
             <textarea name="description" rows="2">{{ task.description if task else '' }}</textarea>
         </div>
     </div>
-    {% if task %}
-    <div class="detail-section-gap">
-        {{ task_work_allocations_section(task, work_allocations, work_hours) }}
-    </div>
-    {% endif %}
+    {# 2026-09-26 (Peter): no Work sessions on a habit's modals. #}
 </form>
 </div>
 </div>
+{# 2026-09-26 (Peter): Cancel on an existing habit goes back to its view
+   modal (same as task/event/contact forms), not out of the modal. #}
+{% if task %}
+{% set footer_back_url = '/tasks/' ~ task.uid %}
+{% set footer_back_mode = 'modal' %}
+{% else %}
 {% set footer_back_url = '/habits' %}
+{% endif %}
 {% set footer_back_label = 'Cancel' %}
 {% if task %}
 {% set footer_delete_url = '/tasks/' ~ task.uid ~ '/delete' %}

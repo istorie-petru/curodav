@@ -25,32 +25,13 @@
         <label>Name</label>
         <input type="text" name="new_name" value="{{ l.name if l else '' }}" required {% if not l %}autofocus{% endif %}>
     </div>
-    {# `appearance_in_header` (2026-09-21 direct request: "the color,
-       icon, banner buttons in the header... small circular buttons...
-       that look like the close X button") -- label_form_modal.html sets
-       this and renders Color/Icon/Banner as header buttons instead of
-       these inline fields (see that template's own header comment).
-       quick_add.html's Label panel doesn't set it: its header is shared
-       across all four tabs (Task/Event/Contact/Label), with no natural
-       per-tab home for these, so it keeps the original inline fields
-       unchanged. #}
-    {% if not appearance_in_header %}
-    <div class="field">
-        <label>Color</label>
-        {% set cp_current = l.color if l else 'blue' %}
-        {% set cp_colors = colors %}
-        {% set cp_form_id = 'label-form' %}
-        {% include "_color_swatch_picker.html" %}
-    </div>
-    <div class="field">
-        <label>Icon</label>
-        {% set ip_current = l.icon %}
-        {% set ip_groups = icon_groups %}
-        {% set ip_form_id = 'label-form' %}
-        {% set ip_default_icon = 'tag' %}
-        {% include "_icon_swatch_picker.html" %}
-    </div>
-    {% endif %}
+    {# 2026-09-26 (Peter): colour and icon are one "Look" dropdown
+       (_look_picker.html) here, in the edit modal and quick add alike --
+       replacing the 2026-09-21 header dot buttons. The banner button
+       stays in label_form_modal.html's header. #}
+    {% from "_look_picker.html" import look_picker %}
+    {{ look_picker('look-label-form', 'label-form', l.color if l else 'blue', l.icon if l else none, colors, icon_groups,
+                   no_icon_label='No icon', default_icon='tag') }}
     {# Group (labels-as-modules slice c, 2026-09-25): free text shared by
        the labels in a group; replaced the Space dropdown. Typing a new
        name creates the group; the datalist suggests existing ones. Each

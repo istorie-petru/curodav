@@ -1,0 +1,69 @@
+{# The "Look" dropdown -- colour + icon in one control (2026-09-26, Peter:
+   "have this drop down everywhere colors and icons can be set"). Replaces
+   the old header/inline dot pickers (_color_swatch_picker.html /
+   _icon_swatch_picker.html) on habits, labels (edit modal and quick add)
+   and groups.
+
+   The app's own `.multiselect` trigger + portaled panel (static/app.js
+   opens, closes and portals it). The trigger shows the icon on a circle
+   of the colour plus "Colour · Icon"; the panel holds a swatch grid and
+   an icon grid -- side by side when the panel is wide, stacked when not
+   (style.css .look-panel container query). Radios carry form="..."
+   because the panel leaves the <form> while open; static/look_picker.js
+   keeps the trigger in sync.
+
+   look_picker(
+     id            -- unique id for the trigger (e.g. "look-habit-task-form")
+     form_id       -- the <form> the radios submit with
+     color, icon   -- current values (None/"" = none)
+     colors        -- colour names offered (the label palette)
+     icon_groups   -- {group heading: [icon names]}; a "" heading prints none
+     color_field / icon_field -- form field names ("color"/"icon" for
+                      labels and groups, "habit_color"/"habit_icon" for habits)
+     allow_no_color -- offer a "no colour" swatch (value ""); labels and
+                      groups always have a colour, a habit may use the accent
+     no_color_label / no_icon_label -- trigger text for the empty choices
+     default_icon  -- glyph shown when no icon is picked
+     label         -- the field label ("Look")
+   ) #}
+{% macro look_picker(id, form_id, color, icon_name, colors, icon_groups, color_field='color', icon_field='icon', allow_no_color=false, no_color_label='Default colour', no_icon_label='No icon', default_icon='tag', label='Look', wide=true, extra_class='') %}
+<div class="field{% if wide %} field-wide{% endif %}{% if extra_class %} {{ extra_class }}{% endif %}">
+    <label id="{{ id }}-label">{{ label }}</label>
+    <div class="multiselect widget-list-multiselect look-select">
+        <button type="button" id="{{ id }}" class="multiselect-trigger ms-trigger look-trigger" aria-haspopup="true" aria-expanded="false" aria-labelledby="{{ id }}-label"
+                data-no-color="{{ no_color_label }}" data-no-icon="{{ no_icon_label }}" data-default-icon="{{ default_icon }}">
+            <span class="look-preview{% if color %} habit-c-{{ color }}{% endif %}">{{ icon(icon_name or default_icon, 'icon-sm') }}</span>
+            <span class="look-name">{{ color|capitalize if color else no_color_label }} &middot; {{ icon_name|replace('-', ' ')|capitalize if icon_name else no_icon_label }}</span>
+            <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
+        </button>
+        <div class="multiselect-panel look-panel">
+            <div class="look-panel-inner">
+                <div class="look-group look-colors" role="radiogroup" aria-label="Colour">
+                    {% if allow_no_color %}
+                    <label class="look-swatch" title="{{ no_color_label }}"><input type="radio" name="{{ color_field }}" value="" form="{{ form_id }}" data-look-for="{{ id }}" data-look-part="color"{% if not color %} checked{% endif %}><span class="look-dot is-default"></span></label>
+                    {% endif %}
+                    {% for c in colors %}
+                    <label class="look-swatch" title="{{ c|capitalize }}"><input type="radio" name="{{ color_field }}" value="{{ c }}" form="{{ form_id }}" data-look-for="{{ id }}" data-look-part="color"{% if color == c %} checked{% endif %}><span class="look-dot habit-c-{{ c }}"></span></label>
+                    {% endfor %}
+                </div>
+                <div class="look-icons" role="radiogroup" aria-label="Icon">
+                    {% set _none %}<label class="look-icon" title="{{ no_icon_label }}"><input type="radio" name="{{ icon_field }}" value="" form="{{ form_id }}" data-look-for="{{ id }}" data-look-part="icon"{% if not icon_name %} checked{% endif %}><span>{{ icon(default_icon) }}</span></label>{% endset %}
+                    {# The "no icon" choice leads the first row: on its own
+                       row before grouped icons, inline when ungrouped. #}
+                    {% set _first_heading = (icon_groups.keys()|list|first) if icon_groups else '' %}
+                    {% if _first_heading %}<div class="look-group">{{ _none }}</div>{% endif %}
+                    {% for heading, names in icon_groups.items() %}
+                    {% if heading %}<div class="look-group-label">{{ heading }}</div>{% endif %}
+                    <div class="look-group">
+                        {% if loop.first and not heading %}{{ _none }}{% endif %}
+                        {% for ic in names %}
+                        <label class="look-icon" title="{{ ic|replace('-', ' ')|capitalize }}"><input type="radio" name="{{ icon_field }}" value="{{ ic }}" form="{{ form_id }}" data-look-for="{{ id }}" data-look-part="icon"{% if icon_name == ic %} checked{% endif %}><span>{{ icon(ic) }}</span></label>
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endmacro %}

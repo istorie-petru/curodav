@@ -99,9 +99,10 @@ class TestModalHeaderAppearanceButtons:
         db.upsert_label_config(conn, {"name": "Groceries", "color": "yellow", "icon": "shopping-cart", "created_at": _now()})
         resp = labels_router.edit_label_modal("Groceries", _request("/settings/labels/Groceries/edit"), conn=conn)
         body = resp.body.decode()
+        # 2026-09-26: only the banner button stays in the header; colour
+        # and icon are the Look dropdown in the body.
         assert 'class="modal-header-actions"' in body
-        assert 'class="color-swatch-current cal-yellow"' in body
-        assert 'class="icon-picker-current"' in body
+        assert '<span class="look-preview habit-c-yellow">' in body and 'href="#icon-shopping-cart"' in body
         assert '/banners/editor?scope=Groceries' in body
         assert 'from_modal=1' in body
 
@@ -117,14 +118,13 @@ class TestModalHeaderAppearanceButtons:
         resp = labels_router.new_label_modal(_request("/settings/labels/new"), conn=conn)
         body = resp.body.decode()
         assert 'class="modal-header-actions"' in body
-        assert 'class="color-swatch-current cal-blue"' in body  # default, unsaved yet
+        assert '<span class="look-preview habit-c-blue">' in body  # default, unsaved yet
         assert "/banners/editor" not in body  # no name yet to key a banner off of
 
     def test_quick_add_label_tab_keeps_inline_appearance_fields(self, conn):
         resp = dashboard_router.quick_add_form(_request("/quick/add"), default_tab="label", conn=conn)
         body = resp.body.decode()
-        assert "<label>Color</label>" in body
-        assert "<label>Icon</label>" in body
+        assert 'id="look-label-form"' in body  # 2026-09-26: Look dropdown here too
         assert 'class="modal-header-actions"' not in body
 
 
