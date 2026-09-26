@@ -2,11 +2,10 @@
 {% block title %}{{ 'Edit label' if l else 'New Label' }}{% endblock %}
 {% block content %}
 <!-- Everything fits in one modal: Name, Group, Role (Plain / Project),
-     Deadline, Page (Dashboard or Sections), Pins, with Color / Icon /
-     Banner as header buttons. See routers/labels.py's edit_label_modal /
+     Deadline, Page (Dashboard or Sections), Pins; colour + icon are the
+     Look dropdown with the banner button at the end of its row. See routers/labels.py's edit_label_modal /
      create_label for the server side; static/label_role_picker.js keeps
      the Sections toggles in step with the Dashboard checkbox. -->
-{% set appearance_in_header = true %}
 <div id="modal-target" class="modal-height-lg">
 <div class="modal-header">
 {# Direct request, 2026-09-21: "I would also like the banner to continue
@@ -33,17 +32,6 @@
 {% else %}
 <h1>{{ 'Edit label' if l else 'New Label' }}</h1>
 {% endif %}
-{# The header keeps the banner button (2026-09-21 direct request: small
-   circular header buttons like the close X). Colour and icon moved back
-   into the body as the shared Look dropdown on 2026-09-26 (Peter: "this
-   drop down everywhere colors and icons can be set") -- see
-   _label_form_fields.html. Banner only once the label exists (`l`): a
-   new label has no name yet to key a banner off of. #}
-<div class="modal-header-actions">
-    {% if l %}
-    <a href="/banners/editor?scope={{ l.name|urlencode }}&amp;page_url={{ ('/settings/labels/' ~ l.name ~ '/edit')|urlencode }}&amp;from_modal=1" data-modal class="icon-btn" title="{{ 'Change banner' if banner else 'Add banner' }}">{{ icon('image', 'icon-sm') }}</a>
-    {% endif %}
-</div>
 </div>
 <div class="modal-body">
 <div class="card">

@@ -5190,43 +5190,6 @@ main.main-shell > .toolbar.top-app-bar{
    backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
  }
  #modal-dialog:has(#modal-header .detail-cover-wrap) .modal-close:hover{background:rgba(0,0,0,.55); color:#fff;}
- /* Header appearance buttons (label_form_modal.html, direct request
-    2026-09-21: "the color, icon, banner buttons in the header, as small
-    circular buttons, that look like the close 'X' button") -- absolute,
-    same technique .modal-close itself uses, so positioning is identical
-    regardless of which header branch renders (plain title vs. the
-    cover-image .detail-header-inner variant) rather than fighting two
-    different flex layouts. Sits immediately left of the close X (which
-    is 28px wide at right:12px -- 48px clears it plus a gap). */
- .modal-header-actions{position:absolute; top:12px; right:48px; display:flex; align-items:center; gap:6px; z-index:3;}
- /* Reserve room so the title (ellipsized either way) doesn't visually run
-    under these buttons before it truncates -- :has() targets both header
-    branches uniformly since .modal-header-actions is a direct child of
-    .modal-header either way (a sibling of the bare <h1>, or of
-    .detail-header-inner). The cover-image branch also needs its own
-    bleed (.detail-header-inner's negative right margin, which normally
-    cancels exactly .modal-header's own padding to let the photo reach
-    the dialog's true edge behind the close X) pulled in to match, and
-    .detail-heading-row's own inset widened by the same amount, or the
-    cover would bleed under these new buttons and the title would sit
-    flush against them. */
- .modal-header:has(> .modal-header-actions){padding-right:156px;}
- .detail-header-inner:has(~ .modal-header-actions){margin-right:-156px;}
- .detail-header-inner:has(~ .modal-header-actions) .detail-heading-row{padding-right:156px;}
- /* Header buttons (label modal's banner button): a 28px circle like
-    .modal-close. */
- .modal-header-actions .icon-btn{
-   width:28px; height:28px; border-radius:50%; border:1px solid transparent; background:transparent;
- }
- .modal-header-actions .icon-btn:hover{background:var(--bg-secondary);}
- /* Cover-image case: same frosted-chip treatment .modal-close gets over a
-    photo, applied to these three triggers too so they read the same way
-    against arbitrary banner imagery. */
- #modal-dialog:has(#modal-header .detail-cover-wrap) .modal-header-actions .icon-btn{
-   background:rgba(0,0,0,.4); color:#fff; border-color:rgba(255,255,255,.35);
-   backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
- }
- #modal-dialog:has(#modal-header .detail-cover-wrap) .modal-header-actions .icon-btn:hover{background:rgba(0,0,0,.55); color:#fff;}
  .modal-handle{display:none;}
  /* Modal body -- scrollable content area inside the dialog. */
  .modal-body{padding:var(--space-4) var(--space-5); overflow-y:auto; flex:1;}
@@ -7484,8 +7447,6 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    already render full-size; this sits inline inside an ordinary form
    field row instead, so a small thumbnail (not the editor's full 3:1
    hero width) reads as "one field among others," not its own section. */
-.label-banner-preview{display:flex; align-items:center; gap:var(--space-3);}
-.label-banner-preview img{
   width:96px; aspect-ratio:3 / 1; object-fit:cover; flex:none;
   border-radius:var(--radius-sm); border:1px solid var(--border);
 }
@@ -7981,6 +7942,15 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    grid, side by side once the panel is wide enough (container query on
    the portaled panel), stacked on a phone. The icons scroll; the colours
    stay put. */
+/* The dropdown's row: the dropdown fills it; an optional square button
+   (the label modal's banner upload) sits at its end, as tall as the
+   trigger. */
+.look-row{display:flex; align-items:stretch; gap:var(--space-2);}
+.look-row > .look-select{flex:1; min-width:0;}
+.look-side-btn{flex:none; display:inline-flex; align-items:center; justify-content:center; width:46px; height:46px; align-self:center;
+  border:1.5px solid var(--control-border); border-radius:var(--radius-control); background:var(--control-bg); color:var(--fg-secondary); text-decoration:none;}
+.look-side-btn:hover{background:var(--bg-secondary); border-color:var(--border-strong); color:var(--fg-primary); text-decoration:none;}
+.look-side-btn .icon{width:18px; height:18px;}
 .look-trigger{display:flex; align-items:center; gap:var(--space-2); width:100%;}
 .look-name{flex:1; text-align:left; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .look-preview{--habit-accent:var(--accent); display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; background:var(--habit-accent); color:var(--fg-on-accent); flex:none;}

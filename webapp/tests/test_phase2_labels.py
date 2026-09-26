@@ -99,11 +99,14 @@ class TestModalHeaderAppearanceButtons:
         db.upsert_label_config(conn, {"name": "Groceries", "color": "yellow", "icon": "shopping-cart", "created_at": _now()})
         resp = labels_router.edit_label_modal("Groceries", _request("/settings/labels/Groceries/edit"), conn=conn)
         body = resp.body.decode()
-        # 2026-09-26: only the banner button stays in the header; colour
-        # and icon are the Look dropdown in the body.
-        assert 'class="modal-header-actions"' in body
+        # 2026-09-26: colour + icon are the Look dropdown; the banner is a
+        # square upload button at the end of its row, not a header button.
+        assert 'class="modal-header-actions"' not in body
         assert '<span class="look-preview habit-c-yellow">' in body and 'href="#icon-shopping-cart"' in body
-        assert '/banners/editor?scope=Groceries' in body
+        row = body[body.index('class="look-row"'):]
+        row = row[:row.index('class="field', 10)] if 'class="field' in row[10:] else row
+        assert '/banners/editor?scope=Groceries' in row and 'class="look-side-btn"' in row
+        assert 'href="#icon-upload"' in row
         assert 'from_modal=1' in body
 
     def test_edit_modal_body_no_longer_has_inline_color_icon_banner_fields(self, conn):
@@ -117,7 +120,8 @@ class TestModalHeaderAppearanceButtons:
     def test_new_label_modal_also_gets_header_buttons_but_no_banner(self, conn):
         resp = labels_router.new_label_modal(_request("/settings/labels/new"), conn=conn)
         body = resp.body.decode()
-        assert 'class="modal-header-actions"' in body
+        assert 'class="modal-header-actions"' not in body
+        assert "look-side-btn" not in body  # no banner button before the label exists
         assert '<span class="look-preview habit-c-blue">' in body  # default, unsaved yet
         assert "/banners/editor" not in body  # no name yet to key a banner off of
 

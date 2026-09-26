@@ -72,7 +72,12 @@ session start.
     a habit's edit modal returns to its view modal; Work sessions removed
     from both habit modals entirely (Peter's call -- supersedes "next:
     work sessions").
-  SW cache v132.
+  - Then: the label modal's banner button left the header -- it's a
+    square upload button at the end of the Look row
+    (`look_picker` called with `{% call %}`; `.look-row` /
+    `.look-side-btn`), edit only. The `.modal-header-actions` header row,
+    `appearance_in_header` and the inline Banner field are gone.
+  SW cache v133.
 
 - **Shipped:** 2026-09-26 -- habits decluttering, per Peter ("rows too
   tall, 28-32px is enough"; "I don't believe in habit vacation"; month

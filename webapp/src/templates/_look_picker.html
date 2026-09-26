@@ -25,10 +25,14 @@
      no_color_label / no_icon_label -- trigger text for the empty choices
      default_icon  -- glyph shown when no icon is picked
      label         -- the field label ("Look")
-   ) #}
+   )
+   Called with {% call look_picker(...) %}...{% endcall %}, the block's
+   content sits at the end of the dropdown's row (the label modal's
+   square banner button, 2026-09-26). #}
 {% macro look_picker(id, form_id, color, icon_name, colors, icon_groups, color_field='color', icon_field='icon', allow_no_color=false, no_color_label='Default colour', no_icon_label='No icon', default_icon='tag', label='Look', wide=true, extra_class='') %}
 <div class="field{% if wide %} field-wide{% endif %}{% if extra_class %} {{ extra_class }}{% endif %}">
     <label id="{{ id }}-label">{{ label }}</label>
+    <div class="look-row">
     <div class="multiselect widget-list-multiselect look-select">
         <button type="button" id="{{ id }}" class="multiselect-trigger ms-trigger look-trigger" aria-haspopup="true" aria-expanded="false" aria-labelledby="{{ id }}-label"
                 data-no-color="{{ no_color_label }}" data-no-icon="{{ no_icon_label }}" data-default-icon="{{ default_icon }}">
@@ -64,6 +68,8 @@
                 </div>
             </div>
         </div>
+    </div>
+    {% if caller is defined %}{{ caller() }}{% endif %}
     </div>
 </div>
 {% endmacro %}
