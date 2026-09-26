@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Pauses{% endblock %}
+{% block content %}
+{# Habit pauses (vacation) modal -- 2026-09-26, Peter: "I don't believe in
+   habit vacation -- hide it in a button in the headerbar". Every pause
+   lives here now: all-habit ones and single-habit ones (this used to be
+   a section on the Habits page plus one in each habit's view modal).
+   Paused days are neutral for a streak (habits H6). The forms are
+   keep-open modal forms: modal.js re-renders this modal in place, and
+   closing it refreshes the page's #habits-body (data-cc-change). #}
+{% set _keep = 'data-modal-keep-open data-cc-change="task" data-cc-action="edit"' %}
+<div id="modal-target" class="modal-height-md">
+<div class="modal-header">
+<h1>Pauses</h1>
+</div>
+<div class="modal-body">
+<p class="habit-days-hint habit-pauses-intro">Going away? Pause habits for a few days. Paused days don't count for or against a streak.</p>
+{% if pauses %}
+<ul class="habit-pauses-list">
+    {% for p in pauses %}
+    <li class="habit-pause-row">
+        <span><strong>{{ p.habit_title }}</strong> {{ p.start_date|relative_date }} &ndash; {{ p.end_date|relative_date }}</span>
+        <form method="post" action="/habits/pauses/{{ p.uid }}/delete" class="form-inline" {{ _keep|safe }}>
+            <button type="submit" class="btn ghost btn-sm" aria-label="Remove pause: {{ p.habit_title }}">{{ icon('x', 'icon-sm') }} Remove</button>
+        </form>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="text-muted habit-pauses-empty">No pauses planned.</p>
+{% endif %}
+<form method="post" action="/habits/pauses" class="habit-pause-form" {{ _keep|safe }}>
+    <label class="habit-log-field habit-pause-which"><span>Habit</span>
+        <select name="task_uid" data-no-autofocus>
+            <option value="">All habits</option>
+            {% for h in habits %}<option value="{{ h.uid }}">{{ h.title }}</option>{% endfor %}
+        </select>
+    </label>
+    {# UI audit H-15: Until starts empty (both dates defaulting to today
+       set a one-day pause by accident). #}
+    <label class="habit-log-field"><span>From</span><input type="date" name="start_date" value="{{ today_iso }}" required data-no-autofocus></label>
+    <label class="habit-log-field"><span>Until</span><input type="date" name="end_date" min="{{ today_iso }}" required data-no-autofocus></label>
+    <button type="submit" class="btn tonal">{{ icon('pause', 'icon-sm') }} Pause</button>
+</form>
+</div>
+{% set footer_back_url = '/habits' %}
+{% set footer_back_label = 'Done' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

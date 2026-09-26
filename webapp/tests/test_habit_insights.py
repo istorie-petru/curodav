@@ -70,7 +70,8 @@ class TestModal:
                                   "tags": ["Habit"], "recurrence": "FREQ=DAILY",
                                   "created_at": (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()})
             today = date.today()
-            for i in range(10):
+            # 2026-09-26: insights show from 14 logged days (INSIGHTS_MIN_DAYS).
+            for i in range(14):
                 d = today - timedelta(days=i)
                 db.upsert_task_completion(conn, "h1", d.isoformat(),
                                           datetime(d.year, d.month, d.day, 8).astimezone().isoformat())

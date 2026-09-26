@@ -62,65 +62,65 @@
             <label>Description</label>
             <textarea name="description" rows="2">{{ task.description if task else '' }}</textarea>
         </div>
-        <div class="field">
+        <div class="field field-wide">
             {# Habits H5 (2026-09-24): "avoid" habits log relapses instead
                of check-ins; their streak is clean days, and schedule /
-               target don't apply. #}
-            <label for="habit-kind">Kind</label>
-            <select name="habit_kind" id="habit-kind">
-                <option value="build"{% if not task or task.habit_kind != 'avoid' %} selected{% endif %}>Build: do it</option>
-                <option value="avoid"{% if task and task.habit_kind == 'avoid' %} selected{% endif %}>Avoid: log relapses</option>
+               target don't apply. 2026-09-26: two radio pills instead of
+               a select, so both choices are visible at once. #}
+            {% set _avoid = task and task.habit_kind == 'avoid' %}
+            <label id="habit-kind-label">Kind</label>
+            <div class="habit-choice-row" role="radiogroup" aria-labelledby="habit-kind-label">
+                <label class="habit-day-chip"><input type="radio" name="habit_kind" value="build"{% if not _avoid %} checked{% endif %}><span>{{ icon('check-circle', 'icon-sm') }} Do it</span></label>
+                <label class="habit-day-chip"><input type="radio" name="habit_kind" value="avoid"{% if _avoid %} checked{% endif %}><span>{{ icon('shield', 'icon-sm') }} Avoid it</span></label>
+            </div>
+            <p class="habit-days-hint habit-build-only">Check it off when you've done it.</p>
+            <p class="habit-days-hint habit-avoid-only">Log a slip when it happens; the streak counts clean days.</p>
+        </div>
+        {# 2026-09-26 (Peter: no raw "FREQ=WEEKLY;BYDAY=..." in this
+           form): one plain "How often" choice replaces the generic
+           Recurrence picker + "Only on" + "Times per period" trio.
+           routers/tasks.py _apply_habit_repeat turns it back into the
+           stored rule; "keep" (a rule these can't express, like every 2
+           weeks) sends the current rule back untouched. The days / times
+           rows show for their own choice only (style.css data-repeat,
+           habit_day.js keeps it in sync). #}
+        {% set _rep = habit_repeat_choice(task) if task else {'mode': 'daily', 'days': [], 'times': 1, 'label': ''} %}
+        <div class="field field-wide habit-build-only habit-repeat" data-repeat="{{ _rep.mode }}">
+            <label for="habit-repeat">How often</label>
+            <select name="habit_repeat" id="habit-repeat">
+                <option value="daily"{% if _rep.mode == 'daily' %} selected{% endif %}>Every day</option>
+                <option value="days"{% if _rep.mode == 'days' %} selected{% endif %}>On certain days of the week</option>
+                <option value="week"{% if _rep.mode == 'week' %} selected{% endif %}>A number of times a week</option>
+                <option value="month"{% if _rep.mode == 'month' %} selected{% endif %}>A number of times a month</option>
+                {% if _rep.mode == 'keep' %}<option value="keep" selected>{{ _rep.label }} (current)</option>{% endif %}
             </select>
-        </div>
-        <div class="field habit-build-only">
-            <label for="habit-unit">Unit</label>
-            <input type="text" name="habit_unit" id="habit-unit" maxlength="24" placeholder="e.g. glasses, min"
-                   value="{{ task.habit_unit if task and task.habit_unit else '' }}"
-                   title="For an amount habit (Daily target above 1): what you're counting.">
-        </div>
-        <div class="field field-wide habit-build-only">
-            <!-- static/recurrence_picker.js turns this into the same
-                 preset dropdown task_form.html/event_form.html use --
-                 required and pre-set to "Daily" for a new habit
-                 (task_form.html's equivalent field defaults to blank/
-                 "Does not repeat") since a habit that doesn't recur isn't
-                 a habit; an existing habit task keeps whatever it was
-                 already set to. -->
-            <label class="field-required">Recurrence</label>
-            <input type="text" name="recurrence" class="recurrence-input" value="{{ task.recurrence if task and task.recurrence else 'FREQ=DAILY' }}" required>
-        </div>
-        <div class="field field-wide habit-build-only">
-            {# Habits H2 (2026-09-24): fixed-days habits. Any day checked
-               makes it FREQ=WEEKLY;BYDAY=... server-side (routers/tasks.py
-               _apply_habit_days), overriding the Recurrence preset above,
-               which can't express weekdays. #}
-            {% set _rr = (task.recurrence or '')|upper if task else '' %}
-            {% set _byday = _rr.split('BYDAY=')[1].split(';')[0].split(',') if 'BYDAY=' in _rr else [] %}
-            <label id="habit-days-label">Only on</label>
-            <input type="hidden" name="habit_days_present" value="1">
-            <div class="habit-days-picker" role="group" aria-labelledby="habit-days-label">
+            {% if _rep.mode == 'keep' %}<input type="hidden" name="recurrence" value="{{ task.recurrence }}">{% endif %}
+            <div class="habit-days-picker habit-repeat-days" role="group" aria-label="Days of the week">
                 {% for code, name in [('MO','Mon'),('TU','Tue'),('WE','Wed'),('TH','Thu'),('FR','Fri'),('SA','Sat'),('SU','Sun')] %}
-                <label class="habit-day-chip"><input type="checkbox" name="habit_days" value="{{ code }}"{% if code in _byday %} checked{% endif %}><span>{{ name }}</span></label>
+                <label class="habit-day-chip"><input type="checkbox" name="habit_days" value="{{ code }}"{% if code in _rep.days %} checked{% endif %}><span>{{ name }}</span></label>
                 {% endfor %}
             </div>
-            <p class="habit-days-hint">Pick days for a fixed-days habit (overrides Recurrence). Leave empty for daily, weekly or "times per period".</p>
-        </div>
-        <div class="field habit-build-only">
-            <!-- Habits H1 (2026-09-24): "X times per week/month" -- only
-                 used when Recurrence is a plain Weekly/Monthly (see
-                 habit_schedule.py); blank = once per period. -->
-            <label>Times per period</label>
-            <input type="number" name="habits_per_period" min="2" max="31" step="1" placeholder="Once"
-                   value="{{ task.habits_per_period if task and task.habits_per_period else '' }}"
-                   title="For a weekly or monthly habit: how many days per week/month count as done. Leave empty for once.">
-        </div>
-        <div class="field habit-build-only">
-            <label>Daily target</label>
-            <div class="stepper">
-                <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease daily target">&minus;</button>
-                <input type="number" name="target_per_day" class="stepper-input" min="1" step="1" value="{{ (task.target_per_day or 1)|int if task else 1 }}">
-                <button type="button" class="stepper-btn stepper-inc" aria-label="Increase daily target">+</button>
+            <div class="habit-repeat-times">
+                <input type="number" name="habits_per_period" id="habit-times" min="1" max="31" step="1"
+                       value="{{ _rep.times }}" aria-label="Times per period">
+                <span class="habit-repeat-times-unit habit-repeat-week">time(s) a week, any days</span>
+                <span class="habit-repeat-times-unit habit-repeat-month">time(s) a month, any days</span>
             </div>
+        </div>
+        <div class="field field-wide habit-build-only">
+            {# 2026-09-26: Daily target and Unit side by side as one
+               "Each time" amount -- 1 is a plain check-off. #}
+            <label for="habit-target">Each day, do</label>
+            <div class="habit-amount-row">
+                <div class="stepper">
+                    <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease daily target">&minus;</button>
+                    <input type="number" name="target_per_day" id="habit-target" class="stepper-input" min="1" step="1" value="{{ (task.target_per_day or 1)|int if task else 1 }}">
+                    <button type="button" class="stepper-btn stepper-inc" aria-label="Increase daily target">+</button>
+                </div>
+                <input type="text" name="habit_unit" id="habit-unit" maxlength="24" placeholder="unit, e.g. glasses"
+                       value="{{ task.habit_unit if task and task.habit_unit else '' }}" aria-label="Unit">
+            </div>
+            <span class="field-hint">Leave at 1 for a simple check-off; more makes it count up to that amount.</span>
         </div>
         {# Per-habit reminder time (2026-09-25): the same half-hour
            single-choice dropdown as Settings > General's "Morning reminder

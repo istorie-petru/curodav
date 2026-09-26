@@ -446,6 +446,26 @@ def _apply_habit_days(recurrence: str | None, habit_days, present) -> str | None
     return recurrence
 
 
+def _apply_habit_repeat(repeat, recurrence, habit_days, habits_per_period):
+    """habit_task_form.html's "How often" choice (2026-09-26): daily /
+    days (the weekday chips) / week / month (N times per period) / keep
+    (the stored rule, sent back as the hidden `recurrence`). Returns
+    (recurrence, habits_per_period); forms without the field get their
+    own values back unchanged, and _apply_habit_days still runs after."""
+    if not isinstance(repeat, str) or not repeat:
+        return recurrence, habits_per_period
+    if repeat == "daily":
+        return "FREQ=DAILY", ""
+    if repeat == "days":
+        days = [d for d in _WEEKDAY_ORDER if isinstance(habit_days, list) and d in habit_days]
+        return ("FREQ=WEEKLY;BYDAY=" + ",".join(days)) if days else "FREQ=DAILY", ""
+    if repeat == "week":
+        return "FREQ=WEEKLY", habits_per_period
+    if repeat == "month":
+        return "FREQ=MONTHLY", habits_per_period
+    return recurrence, habits_per_period
+
+
 def _habit_kind_value(raw) -> str | None:
     """Habits H5: "avoid" or None (a normal, build-it habit)."""
     return "avoid" if isinstance(raw, str) and raw.strip().lower() == "avoid" else None
@@ -487,6 +507,7 @@ def create_task(
     habits_per_period: str | None = Form(None),
     habit_days: list[str] = Form([]),
     habit_days_present: str = Form(""),
+    habit_repeat: str | None = Form(None),
     habit_kind: str | None = Form(None),
     habit_unit: str | None = Form(None),
     reminder_time: str | None = Form(None),
@@ -498,6 +519,7 @@ def create_task(
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
     tags = dashboard_router._with_project(conn, tags, project, project_field)
+    recurrence, habits_per_period = _apply_habit_repeat(habit_repeat, recurrence, habit_days, habits_per_period)
     # Same defensive-coercion pattern as start_at below -- target_per_day
     # is a new Form field too, so any pre-existing direct caller of
     # create_task() that doesn't pass it gets the literal Form(...) marker
@@ -842,6 +864,7 @@ def task_detail(uid: str, request: Request, month: str | None = None, conn=Depen
         ctx["habit_month"] = habit_view.month_calendar(
             uid, rows, month if isinstance(month, str) else None, target=habit_view.quantity_target(task)
         )
+        ctx["habit_month_nav"] = isinstance(month, str) and bool(month)
         ctx["habit_notes"] = habit_view.recent_notes(rows)
         # Habits H8: strength (on habit_stats), per-month counts, usual hour.
         ctx["habit_insights"] = habit_view.insights(rows)
@@ -869,6 +892,7 @@ def update_task(
     habits_per_period: str | None = Form(None),
     habit_days: list[str] = Form([]),
     habit_days_present: str = Form(""),
+    habit_repeat: str | None = Form(None),
     habit_kind: str | None = Form(None),
     habit_unit: str | None = Form(None),
     reminder_time: str | None = Form(None),
@@ -880,6 +904,7 @@ def update_task(
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
     tags = dashboard_router._with_project(conn, tags, project, project_field)
+    recurrence, habits_per_period = _apply_habit_repeat(habit_repeat, recurrence, habit_days, habits_per_period)
     if not isinstance(target_per_day, str):
         target_per_day = "1"
     try:

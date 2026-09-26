@@ -7,6 +7,8 @@
 <h1 class="sr-only">Habits</h1>
 {% call page_header_narrow("Habits", "repeat") %}
 <span class="spacer"></span>
+{# 2026-09-26 (Peter): vacation/pauses live in a modal, not on the page. #}
+<a href="/habits/pauses" data-modal class="btn ghost btn-sm habit-pauses-btn" title="Pause habits for a vacation">{{ icon('pause', 'icon-sm') }} Pauses</a>
 <a href="/tasks/new?habit=1" data-modal class="btn primary btn-sm">{{ icon('plus', 'icon-sm') }} New habit</a>
 {% endcall %}
 {% include "_habits_body.html" %}

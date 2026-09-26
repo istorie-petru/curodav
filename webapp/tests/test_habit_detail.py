@@ -160,10 +160,12 @@ class TestSmarterHeatmap:
         assert 'class="heatmap' not in body
         assert 'class="habit-month-grid"' in body  # the month calendar stays
 
-    def test_work_sessions_collapsed_in_view_and_present_in_edit(self, conn):
+    def test_work_sessions_hidden_in_view_when_empty_and_present_in_edit(self, conn):
+        """2026-09-26 (Peter): no Work sessions section in the view modal
+        while there are none -- the edit modal is where they're added."""
         _habit(conn, "h1")
         body = self._detail(conn, "h1")
-        assert '<details class="detail-plain-section habit-work-sessions" data-uid="h1">' in body
+        assert "habit-work-sessions" not in body
         req = Request({"type": "http", "method": "GET", "path": "/tasks/h1/edit", "headers": [], "query_string": b""})
         form = tasks_router.edit_task_form("h1", req, conn=conn).body.decode()
         assert 'action="/tasks/h1/work-allocations"' in form
@@ -179,3 +181,48 @@ class TestPageStripAmount:
         body = habits_router.habits_page(req, conn=conn).body.decode()
         assert body.count('class="habit-day habit-amount-trigger') == 7  # w1's strip
         assert body.count('class="form-inline habit-action habit-day-form"') == 7  # d1's strip
+
+
+class TestCompactViewModal:
+    """2026-09-26 (Peter): the month calendar and insights aren't needed
+    for every habit; the per-habit Pause section moved to the Habits
+    page's Pauses modal."""
+
+    def _detail(self, conn, uid, month=None):
+        req = Request({"type": "http", "method": "GET", "path": f"/tasks/{uid}", "headers": [], "query_string": b""})
+        return tasks_router.task_detail(uid, req, month=month, conn=conn).body.decode()
+
+    def test_month_calendar_collapsed_for_daily_habit(self, conn):
+        _habit(conn, "h1")
+        body = self._detail(conn, "h1")
+        assert '<details class="habit-month-details detail-plain-section">' in body
+
+    def test_month_calendar_open_when_paging_months(self, conn):
+        _habit(conn, "h1")
+        month = (TODAY.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+        body = self._detail(conn, "h1", month=month)
+        assert '<details class="habit-month-details detail-plain-section" open>' in body
+
+    def test_month_calendar_open_for_period_habit(self, conn):
+        _habit(conn, "p1")
+        db.upsert_task(conn, {**db.get_task(conn, "p1"), "recurrence": "FREQ=WEEKLY", "habits_per_period": 3})
+        body = self._detail(conn, "p1")
+        assert '<details class="habit-month-details detail-plain-section" open>' in body
+
+    def test_insights_only_with_enough_history(self, conn):
+        _habit(conn, "h1")
+        for i in range(habit_view.INSIGHTS_MIN_DAYS - 1):
+            db.upsert_task_completion(conn, "h1", (TODAY - timedelta(days=i)).isoformat(), _now(), 1)
+        assert "habit-insights" not in self._detail(conn, "h1")
+        db.upsert_task_completion(
+            conn, "h1", (TODAY - timedelta(days=habit_view.INSIGHTS_MIN_DAYS)).isoformat(), _now(), 1
+        )
+        assert '<details class="detail-plain-section habit-insights">' in self._detail(conn, "h1")
+
+    def test_no_pause_section_and_readable_schedule(self, conn):
+        _habit(conn, "h1")
+        db.upsert_task(conn, {**db.get_task(conn, "h1"), "recurrence": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"})
+        body = self._detail(conn, "h1")
+        assert "habit-pause-form" not in body
+        assert "FREQ=" not in body
+        assert "Mon, Tue, Wed, Thu, Fri" in body

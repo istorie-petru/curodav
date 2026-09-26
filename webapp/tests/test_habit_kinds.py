@@ -99,11 +99,11 @@ class TestRendering:
         body = tasks_router.task_detail("a1", _req("/tasks/a1"), conn=conn).body.decode()
         assert "Log a relapse" in body
         assert "heatmap-avoid" in body
-        assert "habit-month detail-plain-section is-avoid" in body
+        assert '<section class="habit-month is-avoid"' in body
         assert habit_view.cadence_label({"habit_kind": "avoid", "recurrence": "FREQ=DAILY"}) == "Avoid"
 
     def test_form_preselects(self, conn):
         _habit(conn, "a1", "No smoking", habit_kind="avoid", habit_unit="cigs")
         body = tasks_router.edit_task_form("a1", _req("/tasks/a1/edit"), conn=conn).body.decode()
-        assert '<option value="avoid" selected>' in body
+        assert '<input type="radio" name="habit_kind" value="avoid" checked>' in body
         assert 'value="cigs"' in body

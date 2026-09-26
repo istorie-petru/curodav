@@ -36,7 +36,6 @@ router = APIRouter(prefix="/habits", tags=["habits"])
 
 def _habits_context(conn, request: Request) -> dict:
     items = habit_view.habit_items(conn)
-    today = date.today()
     return {
         "request": request,
         "active_tab": "habits",
@@ -44,9 +43,6 @@ def _habits_context(conn, request: Request) -> dict:
         "on_track": [h for h in items if not h["due_today"] and not h["paused_today"]],
         # Habits H6: habits on a pause today get their own section.
         "paused": [h for h in items if h["paused_today"] and not h["due_today"]],
-        "global_pauses": [
-            p for p in db.list_habit_pauses(conn) if p["task_uid"] is None and p["end_date"] >= today.isoformat()
-        ],
         "has_habits": bool(items),
         "habit_label": db.get_task_habit_settings(conn)["habit_label"],
         "today_iso": date.today().isoformat(),
@@ -64,6 +60,36 @@ def habits_regions(request: Request, conn=Depends(get_db)):
     check-in or a habit edit (features/async-crud.md)."""
     html = templates.env.get_template("_habits_body.html").render(_habits_context(conn, request))
     return HTMLResponse(html)
+
+
+@router.get("/pauses")
+def pauses_modal(request: Request, conn=Depends(get_db)):
+    """2026-09-26 (Peter): every pause -- all-habit and single-habit -- in
+    one modal behind the Habits page header's Pauses button, instead of a
+    Vacation section on the page and a Pause section in each habit."""
+    today = date.today().isoformat()
+    habits = [
+        {"uid": h["uid"], "title": h["title"]}
+        for h in habit_view.habit_items(conn)
+        if not h["is_avoid"]  # an avoid habit's clean streak ignores pauses (UI audit H-12)
+    ]
+    titles = {h["uid"]: h["title"] for h in habits}
+    pauses = []
+    for p in db.list_habit_pauses(conn):
+        if p["end_date"] < today:
+            continue
+        if p["task_uid"] is None:
+            title = "All habits"
+        else:
+            task = db.get_task(conn, p["task_uid"])
+            if task is None:
+                continue
+            title = titles.get(p["task_uid"]) or task.get("title") or "Habit"
+        pauses.append({**p, "habit_title": title})
+    return templates.TemplateResponse(
+        "habit_pauses.html",
+        {"request": request, "active_tab": "habits", "pauses": pauses, "habits": habits, "today_iso": today},
+    )
 
 
 @router.post("/pauses")

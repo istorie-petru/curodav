@@ -112,7 +112,7 @@ class TestHabitTaskEditModal:
         assert 'data-ms-label="labels"' not in body
         assert 'data-ms-label="status"' not in body
         # still has the habit-relevant fields
-        assert 'name="recurrence"' in body
+        assert 'name="habit_repeat"' in body  # 2026-09-26: "How often" replaces the raw recurrence picker
         assert 'name="target_per_day"' in body
 
     def test_has_work_sessions_card(self, conn):

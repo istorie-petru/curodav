@@ -150,3 +150,111 @@ class TestHabitDays:
         assert 'value="MO" checked' not in form
         page = habits_router.habits_page(_request(), conn=conn).body.decode()
         assert "Tue, Thu" in page
+
+
+class TestHabitRepeat:
+    """2026-09-26 (Peter): the habit form's "How often" choice replaces the
+    raw Recurrence picker ("FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR" on screen)."""
+
+    @pytest.mark.parametrize(
+        "repeat,rec,days,per,expected",
+        [
+            ("daily", "FREQ=WEEKLY", ["MO"], "3", ("FREQ=DAILY", "")),
+            ("days", "FREQ=DAILY", ["FR", "MO"], "3", ("FREQ=WEEKLY;BYDAY=MO,FR", "")),
+            ("days", "FREQ=DAILY", [], "3", ("FREQ=DAILY", "")),
+            ("week", "FREQ=DAILY", ["MO"], "3", ("FREQ=WEEKLY", "3")),
+            ("month", "FREQ=DAILY", [], "2", ("FREQ=MONTHLY", "2")),
+            ("keep", "FREQ=WEEKLY;INTERVAL=2", [], "1", ("FREQ=WEEKLY;INTERVAL=2", "1")),
+            (None, "FREQ=YEARLY", ["MO"], None, ("FREQ=YEARLY", None)),  # plain task form
+        ],
+    )
+    def test_apply(self, repeat, rec, days, per, expected):
+        assert tasks_router._apply_habit_repeat(repeat, rec, days, per) == expected
+
+    @pytest.mark.parametrize(
+        "rec,per,mode,days,times",
+        [
+            ("FREQ=DAILY", None, "daily", [], 1),
+            ("FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", None, "days", ["MO", "TU", "WE", "TH", "FR"], 1),
+            ("FREQ=WEEKLY", 3, "week", [], 3),
+            ("FREQ=MONTHLY", None, "month", [], 1),
+            ("FREQ=WEEKLY;INTERVAL=2", None, "keep", [], 1),
+            ("FREQ=DAILY;INTERVAL=2", None, "keep", [], 1),
+            ("FREQ=DAILY;UNTIL=2027-01-01", None, "keep", [], 1),
+        ],
+    )
+    def test_choice_for_existing_habit(self, rec, per, mode, days, times):
+        from src import habit_view
+
+        choice = habit_view.repeat_choice({"recurrence": rec, "habits_per_period": per})
+        assert (choice["mode"], choice["days"], choice["times"]) == (mode, days, times)
+
+    def test_edit_form_never_shows_the_raw_rule(self, conn):
+        _habit(conn, "h1", "Walk", recurrence="FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR")
+        form = tasks_router.edit_task_form("h1", _request("/tasks/h1/edit"), conn=conn).body.decode()
+        assert "FREQ=" not in form
+        assert 'data-repeat="days"' in form
+        assert '<option value="days" selected>' in form
+        assert 'value="MO" checked' in form and 'value="SA" checked' not in form
+        assert "recurrence-input" not in form
+
+    def test_edit_form_keeps_an_unusual_rule(self, conn):
+        _habit(conn, "h1", "Clean", recurrence="FREQ=WEEKLY;INTERVAL=2")
+        form = tasks_router.edit_task_form("h1", _request("/tasks/h1/edit"), conn=conn).body.decode()
+        assert '<option value="keep" selected>Once every 2 weeks (current)</option>' in form
+        assert '<input type="hidden" name="recurrence" value="FREQ=WEEKLY;INTERVAL=2">' in form
+
+    def test_update_round_trip(self, conn):
+        _habit(conn, "h1", "Gym")
+        tasks_router.update_task("h1", title="Gym", description="", due_at="", start_at="", status="active", tags="",
+                                 tags_labels=["Habit"], project="", project_field="", recurrence="",
+                                 target_per_day="1", habit_days_present="", habit_kind="build", habit_unit="",
+                                 reminder_time="", holiday_calendar="", exclude_saturday="", exclude_sunday="",
+                                 x_requested_with=None,
+                                 habits_per_period="3", habit_days=["MO"], habit_repeat="week", conn=conn)
+        task = db.get_task(conn, "h1")
+        assert (task["recurrence"], task["habits_per_period"]) == ("FREQ=WEEKLY", 3)
+        tasks_router.update_task("h1", title="Gym", description="", due_at="", start_at="", status="active", tags="",
+                                 tags_labels=["Habit"], project="", project_field="", recurrence="",
+                                 target_per_day="1", habit_days_present="", habit_kind="build", habit_unit="",
+                                 reminder_time="", holiday_calendar="", exclude_saturday="", exclude_sunday="",
+                                 x_requested_with=None,
+                                 habits_per_period="3", habit_days=[], habit_repeat="daily", conn=conn)
+        task = db.get_task(conn, "h1")
+        assert (task["recurrence"], task["habits_per_period"]) == ("FREQ=DAILY", None)
+
+
+class TestPausesModal:
+    """2026-09-26 (Peter): vacation lives in a modal behind a header button,
+    not in a section on the page."""
+
+    def test_page_has_button_not_section(self, conn):
+        _habit(conn, "h1", "Read")
+        _, body = _page(conn)
+        assert 'href="/habits/pauses" data-modal' in body
+        assert "habits-vacation" not in body and "Pause all habits" not in body
+
+    def test_modal_lists_all_and_single_habit_pauses(self, conn):
+        _habit(conn, "h1", "Read")
+        _habit(conn, "a1", "No soda", habit_kind="avoid")
+        db.add_habit_pause(conn, "p1", None, TODAY, TODAY, _now())
+        db.add_habit_pause(conn, "p2", "h1", TODAY, TODAY, _now())
+        db.add_habit_pause(conn, "old", "h1", "2020-01-01", "2020-01-02", _now())
+        body = habits_router.pauses_modal(_request("/habits/pauses"), conn=conn).body.decode()
+        assert "<strong>All habits</strong>" in body and "<strong>Read</strong>" in body
+        assert "/habits/pauses/old/delete" not in body  # ended pauses aren't listed
+        assert '<option value="h1">Read</option>' in body
+        assert "No soda" not in body  # avoid habits can't be paused (UI audit H-12)
+
+
+class TestCompactRow:
+    """2026-09-26 (Peter): one short row per habit -- title and
+    "schedule · streak" on one line; reminder time only in the tooltip."""
+
+    def test_row_meta_is_one_line(self, conn):
+        _habit(conn, "h1", "Read")
+        db.set_task_reminder_time(conn, "h1", "07:30")
+        _, body = _page(conn)
+        assert '<span class="habit-card-meta" title="' in body
+        assert "reminder at" in body  # in the tooltip
+        assert "habit-card-main" in body

@@ -38,6 +38,7 @@ def excluded_dates_for_row(conn, row: dict, entries_by_date: dict, today: date) 
 
 
 _DAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_WEEKDAY_CODES = ("MO", "TU", "WE", "TH", "FR", "SA", "SU")
 
 
 def _created_date(task: dict) -> date | None:
@@ -135,6 +136,28 @@ def cadence_label(task: dict) -> str:
     if sched.per_period > 1:
         return f"{sched.per_period}x {base}"
     return habit_heatmap.recurrence_label(task.get("recurrence")) if sched.interval == 1 else f"Once {base}"
+
+
+def repeat_choice(task: dict | None) -> dict:
+    """The habit form's "How often" choice for an existing habit
+    (2026-09-26, Peter: no raw "FREQ=WEEKLY;BYDAY=..." in the edit modal).
+    mode is "daily" / "days" (fixed weekdays) / "week" / "month" (N times
+    per period) or "keep" for anything those four can't express (every 2
+    days, every 2 weeks, yearly, an end date) -- the form then offers the
+    current schedule in words and leaves the stored rule untouched."""
+    rrule = (task or {}).get("recurrence") or "FREQ=DAILY"
+    per = (task or {}).get("habits_per_period")
+    out = {"mode": "keep", "days": [], "times": int(per or 1), "label": cadence_label({**(task or {}), "habit_kind": None})}
+    if any(p.upper().startswith(("UNTIL=", "COUNT=")) for p in rrule.split(";")):
+        return out
+    sched = habit_schedule.parse_schedule(rrule, per)
+    if sched.kind == "weekdays":
+        out.update(mode="days", days=[_WEEKDAY_CODES[d] for d in sorted(sched.weekdays)])
+    elif sched.kind == "every_n_days" and sched.interval == 1:
+        out["mode"] = "daily"
+    elif sched.kind == "period" and sched.interval == 1 and sched.unit in ("week", "month"):
+        out["mode"] = sched.unit
+    return out
 
 
 def week_strip(
@@ -371,6 +394,9 @@ def habits_for_day(conn, d: date, today: date | None = None) -> list[dict]:
     return out
 
 
+INSIGHTS_MIN_DAYS = 14
+
+
 def insights(completions: list[dict], today: date | None = None, months: int = 12) -> dict:
     """Habits H8: logged days per month for the last `months` months
     (oldest first, with a 0-1 bar height), and the hour of day check-ins
@@ -412,4 +438,13 @@ def insights(completions: list[dict], today: date | None = None, months: int = 1
         hmax = max(hours)
         hour_rows = [{"hour": h, "count": n, "height": n / hmax if hmax else 0} for h, n in enumerate(hours)]
         top_hour = max(range(24), key=lambda h: hours[h])
-    return {"months": month_rows, "hours": hour_rows, "top_hour": top_hour, "same_day": same_day}
+    # 2026-09-26: the view modal shows insights only past two weeks of
+    # logged days -- a handful of check-ins makes a meaningless chart.
+    logged = sum(row["count"] for row in month_rows)
+    return {
+        "months": month_rows,
+        "hours": hour_rows,
+        "top_hour": top_hour,
+        "same_day": same_day,
+        "enough": logged >= INSIGHTS_MIN_DAYS,
+    }

@@ -6390,14 +6390,9 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .habit-widget-summary.is-all-done .icon{color:var(--accent); animation:habit-pop .5s ease-out;}
 @keyframes habit-pop{0%{transform:scale(.4) rotate(-20deg); opacity:0;} 70%{transform:scale(1.25) rotate(8deg); opacity:1;} 100%{transform:scale(1) rotate(0);}}
 @media (prefers-reduced-motion: reduce){ .habit-widget-summary.is-all-done .icon{animation:none;} }
-.habit-list--widget .habit-card{padding:var(--space-2) 0;}
 .habit-list--widget .habit-card:last-child{border-bottom:none;}
-/* 2026-09-25 (UI audit H-06): a fixed 34px circle, not a 40x34 oval
-   (the base rule's min-width:40px + padding widened it); the n/target
-   amount check keeps its pill width. */
-.habit-list--widget .habit-check-btn{min-width:34px; width:34px; height:34px; padding:0;}
-.habit-list--widget .habit-check-btn.habit-check-qty{width:auto; padding:0 var(--space-2);}
-.habit-list--widget .habit-day{width:24px; height:24px;}
+/* 2026-09-26: the widget's own check/day sizes went -- the shared row
+   is compact everywhere now (see the Habits page rules). */
 /* Widget header/title + section-label typography (2026-08-30 design pass,
    same slice as the card-chrome comment above) -- .widget-header h2
    previously fell through to the app's generic `h2` rule (17px,
@@ -8001,19 +7996,25 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .habits-section-title{font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary); text-transform:uppercase; letter-spacing:.04em; margin:0 0 var(--space-2); display:flex; align-items:center; gap:var(--space-2);}
 .habits-section-count{font-weight:var(--font-weight-regular); color:var(--fg-tertiary);}
 .habit-list{list-style:none; margin:0; padding:0; container-type:inline-size; container-name:habitlist;}
-.habit-card{margin:0; display:grid; grid-template-columns:auto minmax(0,1fr) auto; grid-template-areas:"check main week"; align-items:center; gap:var(--space-3); padding:var(--space-3) 0; border-bottom:1px solid var(--separator);}
+/* 2026-09-26 (Peter: rows too tall, "28-32px should be enough"): one
+   32px row -- check, then title and "schedule · streak" on one line,
+   then the 7-day strip. A narrow list (phone, 25% widget) puts that
+   text line above a check + strip row (container query below). */
+.habit-card{margin:0; display:grid; grid-template-columns:auto minmax(0,1fr) auto; grid-template-areas:"check main week"; align-items:center; column-gap:var(--space-2); row-gap:2px; min-height:32px; padding:2px 0; border-bottom:1px solid var(--separator);}
 .habit-card-check{grid-area:check;}
-.habit-card-main{grid-area:main; min-width:0;}
+.habit-card-main{grid-area:main; min-width:0; display:flex; align-items:baseline; gap:var(--space-2); white-space:nowrap; overflow:hidden;}
 .habit-week{grid-area:week;}
-.habit-card-title{display:block; color:var(--fg-primary); font-weight:var(--font-weight-bold); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.habit-card-title{flex:0 1 auto; min-width:0; color:var(--fg-primary); font-weight:var(--font-weight-bold); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .habit-card-title:hover{text-decoration:underline;}
-.habit-card-meta{display:flex; flex-wrap:wrap; gap:0 var(--space-2); font-size:var(--text-sm); color:var(--fg-secondary);}
+.habit-card-meta{flex:0 100 auto; min-width:0; display:flex; flex-wrap:nowrap; gap:0 var(--space-2); overflow:hidden; font-size:var(--text-sm); color:var(--fg-secondary);}
 .habit-card-meta > span + span::before{content:"\00b7"; margin-right:var(--space-2); color:var(--fg-tertiary);}
 /* 2026-09-25 (UI audit H-07): each meta item stays on one line, so a
    wrap moves a whole item (with its "·") instead of orphaning the dot. */
 .habit-card-meta > span{white-space:nowrap;}
-.habit-check-btn{display:inline-flex; align-items:center; justify-content:center; min-width:40px; height:40px; padding:0 var(--space-2); border-radius:var(--radius-pill); border:2px solid var(--border-strong); background:transparent; color:var(--fg-tertiary); cursor:pointer;}
-.habit-check-btn .icon{width:20px; height:20px;}
+.habit-check-btn{display:inline-flex; align-items:center; justify-content:center; min-width:28px; height:28px; padding:0 var(--space-1); border-radius:var(--radius-pill); border:2px solid var(--border-strong); background:transparent; color:var(--fg-tertiary); cursor:pointer;}
+.habit-check-btn .icon{width:16px; height:16px;}
+/* A plain check is a circle; the n/target amount check keeps its pill. */
+.habit-check-btn:not(.habit-check-qty){width:28px; padding:0;}
 .habit-check-btn:hover{border-color:var(--accent); color:var(--accent);}
 .habit-check-btn.is-done{background:var(--accent); border-color:var(--accent); color:var(--fg-on-accent);}
 .habit-check-qty{font-size:var(--text-sm); font-variant-numeric:tabular-nums; color:var(--fg-primary);}
@@ -8029,8 +8030,8 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .habit-card.is-just-updated{animation:habit-row-flash 1.2s ease-out;}
 @keyframes habit-row-flash{0%{background:var(--accent-subtle);} 100%{background:transparent;}}
 @media (prefers-reduced-motion: reduce){ .habit-card.is-just-updated{animation:none;} }
-.habit-week{display:flex; gap:4px; list-style:none; margin:0; padding:0;}
-.habit-day{width:28px; height:28px; border-radius:var(--radius-sm); border:none; padding:0; background:var(--accent-neutral-subtle-strong); color:var(--fg-tertiary); font-size:var(--text-2xs); cursor:pointer; display:flex; align-items:center; justify-content:center;}
+.habit-week{display:flex; gap:3px; list-style:none; margin:0; padding:0;}
+.habit-day{width:24px; height:24px; border-radius:var(--radius-sm); border:none; padding:0; background:var(--accent-neutral-subtle-strong); color:var(--fg-tertiary); font-size:var(--text-2xs); cursor:pointer; display:flex; align-items:center; justify-content:center;}
 .habit-day:hover{box-shadow:0 0 0 1px var(--fg-primary) inset;}
 .habit-day.is-done{background:var(--accent); color:var(--fg-on-accent);}
 .habit-day.is-today{box-shadow:0 0 0 2px var(--accent) inset;}
@@ -8045,8 +8046,8 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .habit-day.is-off:not(.is-done):not(.is-partial):not(.is-relapse){background:transparent; box-shadow:0 0 0 1px var(--separator) inset; color:var(--fg-tertiary);}
 .habit-day.is-off.is-today:not(.is-done){box-shadow:0 0 0 2px var(--accent) inset;}
 @container habitlist (max-width: 520px){
-  .habit-card{grid-template-columns:auto minmax(0,1fr); grid-template-areas:"check main" "check week";}
-  .habit-week{justify-content:flex-start;}
+  .habit-card{grid-template-columns:auto minmax(0,1fr); grid-template-areas:"main main" "check week"; padding:var(--space-1) 0;}
+  .habit-week{justify-self:end;}
 }
 /* Habit form's "Only on" day chips (habit_task_form.html, habits H2). */
 .habit-days-picker{display:flex; flex-wrap:wrap; gap:var(--space-1);}
@@ -8059,6 +8060,22 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 /* 2026-09-25 (UI audit H-14): an avoid habit has no unit, schedule or
    target -- hide those fields (habit_day.js toggles .is-avoid on Kind). */
 .habit-task-form.is-avoid .habit-build-only{display:none;}
+/* 2026-09-26: friendlier habit form -- Kind as two pills, "How often"
+   with only its own sub-row visible, target + unit on one line. */
+.habit-task-form:not(.is-avoid) .habit-avoid-only{display:none;}
+.field label.habit-day-chip{text-transform:none; letter-spacing:0; font-weight:var(--font-weight-regular);}
+.habit-choice-row{display:flex; flex-wrap:wrap; gap:var(--space-2);}
+.habit-choice-row .habit-day-chip span{display:inline-flex; align-items:center; gap:var(--space-1); padding:var(--space-1) var(--space-3);}
+.habit-repeat-days, .habit-repeat-times{margin-top:var(--space-2);}
+.habit-repeat-times{display:flex; align-items:center; gap:var(--space-2); font-size:var(--text-sm); color:var(--fg-secondary);}
+.field .habit-repeat-times input{width:72px; flex:0 0 72px;}
+.habit-repeat-times-unit{white-space:nowrap;}
+.habit-repeat:not([data-repeat="days"]) .habit-repeat-days,
+.habit-repeat:not([data-repeat="week"]):not([data-repeat="month"]) .habit-repeat-times,
+.habit-repeat:not([data-repeat="week"]) .habit-repeat-week,
+.habit-repeat:not([data-repeat="month"]) .habit-repeat-month{display:none;}
+.habit-amount-row{display:flex; flex-wrap:wrap; align-items:stretch; gap:var(--space-2);}
+.field .habit-amount-row input[type="text"]{flex:0 1 240px; width:auto; min-width:0;}
 /* Habit detail modal (habit_task_detail.html, habits H3): month calendar,
    "Log a day" form, recent day notes. Same accent-filled "done" language
    as the Habits page strip and the year grid. */
@@ -8198,5 +8215,7 @@ button.allday-habit{
 .habit-amount-trigger{cursor:pointer;}
 button.heatmap-cell{border:none; padding:0;}
 /* Work sessions in the habit view modal: collapsed by default. */
+.habit-disclosure-summary{cursor:pointer; font-weight:var(--font-weight-bold); padding:var(--space-1) 0; list-style-position:inside;}
+details[open] > .habit-disclosure-summary{margin-bottom:var(--space-2);}
 .habit-work-sessions-summary{cursor:pointer; font-weight:var(--font-weight-bold); padding:var(--space-1) 0; list-style-position:inside;}
 .habit-work-sessions[open] .habit-work-sessions-summary{margin-bottom:var(--space-2);}

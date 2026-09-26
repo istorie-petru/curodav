@@ -17,6 +17,40 @@ session start.
 
 ## Right now
 
+- **Shipped:** 2026-09-26 -- habits decluttering, per Peter ("rows too
+  tall, 28-32px is enough"; "I don't believe in habit vacation"; month
+  calendar/insights "not needed for all habits"; friendlier edit form, no
+  raw `FREQ=WEEKLY;BYDAY=...`; Work sessions out of the view modal when
+  empty). What changed:
+  - Habit row (Habits page + dashboard widget, same `_habit_page_row.html`):
+    one 32px row -- 28px check, title + "schedule . streak" on one line,
+    24px day strip. Narrow lists (phone, 25% widget, container query
+    <=520px) put the text line above a check + strip row. Reminder time,
+    amount left, best/kept/strength moved into the meta tooltip; reminder
+    keeps a small bell; a "3x a week" habit shows "2/3 this week" instead
+    of its cadence.
+  - Vacation: the page section and the per-habit Pause section in the
+    view modal are gone; one `GET /habits/pauses` modal (header "Pauses"
+    button) lists every current/upcoming pause and adds one for all
+    habits or a single (non-avoid) habit.
+  - View modal: "Recurrence" -> "How often"; month calendar is a collapsed
+    `<details>`, open only for period habits (no heatmap) or while paging
+    months (`?month=`); Insights hidden under 14 logged days
+    (`habit_view.INSIGHTS_MIN_DAYS`) and collapsed; Work sessions not
+    rendered at all while empty.
+  - Edit form: Kind is two pills (Do it / Avoid it); one "How often"
+    select (every day / certain days / N times a week / N times a month,
+    plus "<current> (current)" for rules those can't express, e.g. every
+    2 weeks or an UNTIL) replaces Recurrence picker + Only on + Times per
+    period; target + unit on one "Each day, do" line.
+    `routers/tasks.py _apply_habit_repeat` maps it back to the stored
+    rule; `habit_view.repeat_choice` maps a stored rule to the form.
+  SW cache v129. Suite: 2,605 passed. Verified live in Chromium (rows measure 33px incl. the
+  1px separator; phone 56px as two lines; Save as "3 a week" and adding a
+  single-habit pause both round-trip).
+  **Open**: the header has no pause-count indicator (it lives outside
+  `#habits-body`, so it would go stale after the modal closes).
+
 - **Shipped:** 2026-09-25 (later session) -- UI/UX audit of the newest
   features + the card-model removal, per Peter's request (four parallel
   auditor agents, real headless Chromium, 1440/900/390, light+dark,

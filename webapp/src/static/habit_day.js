@@ -116,11 +116,18 @@
   // fields (Unit, Recurrence, days, target) while Kind is "Avoid"
   // (style.css .habit-task-form.is-avoid). Delegated: the form arrives
   // in a modal after this script loaded.
+  // 2026-09-26: Kind is two radio pills now, and "How often" shows only
+  // its own sub-row (weekday chips / times count) via data-repeat.
   document.addEventListener("change", (e) => {
-    const sel = e.target;
-    if (!sel || sel.id !== "habit-kind") return;
-    const form = sel.closest(".habit-task-form");
-    if (form) form.classList.toggle("is-avoid", sel.value === "avoid");
+    const el = e.target;
+    if (!el || !el.closest) return;
+    const form = el.closest(".habit-task-form");
+    if (!form) return;
+    if (el.name === "habit_kind") form.classList.toggle("is-avoid", el.value === "avoid");
+    if (el.id === "habit-repeat") {
+      const box = el.closest(".habit-repeat");
+      if (box) box.dataset.repeat = el.value;
+    }
   });
 
   // Work sessions in the habit view modal are collapsed by default; once
