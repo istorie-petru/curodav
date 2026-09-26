@@ -127,3 +127,13 @@ def test_f1_label_page_tasks_board_uses_the_page_inset():
 def test_no_double_hyphen_dash_in_sleep_hours_hint():
     tpl = (_SRC / "templates" / "settings_general.html").read_text()
     assert "Leisure Time</a> -- Day view" not in tpl
+
+
+def test_f12_every_font_size_with_a_token_uses_it():
+    # Peter's call (2026-09-25): two more tokens at exactly the old raw
+    # values, so nothing visibly changed. Outside comments, no raw font-size
+    # may equal a token's value -- use the token instead.
+    assert "--text-xs:12px;--text-2xs:11px;" in _CSS
+    code = re.sub(r"/\*.*?\*/", "", _CSS, flags=re.S)
+    for raw in ("11px", "12px", "13px", "15px", "17px", "18px"):
+        assert not re.search(r"font-size:" + raw + r"(?![\d.])", code), raw

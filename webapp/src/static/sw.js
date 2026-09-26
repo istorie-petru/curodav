@@ -578,7 +578,9 @@
 // date picker week start (datetime_picker.js).
 // v127 (2026-09-25, same session): group rename + members -- modal.js
 // gained data-follow-redirect, style.css the member checklist rules.
-const CACHE_NAME = "cc-shell-v127";
+// v128 (2026-09-25, same session): style.css font sizes -> tokens
+// (--text-xs/--text-2xs added at their old raw values; no visual change).
+const CACHE_NAME = "cc-shell-v128";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

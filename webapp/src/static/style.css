@@ -192,6 +192,14 @@
      the page-banner title, the auth brand) all sit in auto-growing
      containers, so absorbing them into 18px cost no clipping safety. */
   --text-sm:13px;--text-base:15px;--text-lg:17px;--text-xl:18px;
+  /* 2026-09-25 (UI audit F12, Peter's call: "add one or two more standard
+     sizes so nothing visibly changes"): the two raw sizes the 4-step scale
+     never absorbed -- 12px (20 rules: calendar rows, pills, widget meta)
+     and 11px (14 rules: month bars, micro labels, badges) -- become tokens
+     at exactly their current values instead of being snapped to 13px.
+     What's still raw after this (10/9/10.5px micro text, 14/16px, and the
+     20/26/28px display numbers) is listed in ui-audit-2026-09-25.md. */
+  --text-xs:12px;--text-2xs:11px;
 
   /* Font-weight tokenization (2026-09-24, same pass as the type-scale
      consolidation above): four raw weights were in use (400/500/600/700)
@@ -816,7 +824,7 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
      same 8px into the base rule gives both states the identical 16px
      inset instead of only matching within each state. */
   padding:6px 4px 4px 8px;
-  font-size:12px; font-weight:var(--font-weight-bold); line-height:1.1;
+  font-size:var(--text-xs); font-weight:var(--font-weight-bold); line-height:1.1;
   color:var(--fg-secondary); text-decoration:none; white-space:nowrap;
   border-radius:0; position:relative;
   transition:color var(--dur-fast) var(--ease-standard);
@@ -956,7 +964,7 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
 }
 #sidebar-expand-toggle:hover{background:var(--bg-hover, var(--separator));}
 .sidebar-app-name{
-  display:none; font-size:13px; font-weight:var(--font-weight-bold); color:var(--fg-primary);
+  display:none; font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-primary);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 
@@ -989,7 +997,7 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
   display:inline-flex; align-items:center; justify-content:center; flex:none;
   width:20px; height:20px; margin:0; border-radius:6px;
   background:var(--monogram-bg, var(--cal-bg-gray)); color:var(--monogram-fg, #fff);
-  font-size:12px; font-weight:var(--font-weight-bold); line-height:1; overflow:visible;
+  font-size:var(--text-xs); font-weight:var(--font-weight-bold); line-height:1; overflow:visible;
 }
 .tab-btn.tab-btn-space .sidebar-group-glyph{display:inline-flex; flex:none; margin:0; overflow:visible;}
 /* 2026-09-25 (UI audit L10): the group whose pinned member's page is open
@@ -1743,7 +1751,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 #labels-table-wrapper .labels-nogroup-row td{background:none;}
 #labels-table-wrapper .labels-nogroup-row .label-name{color:var(--fg-secondary);}
 #labels-table-wrapper .label-cell{flex-wrap:wrap; row-gap:4px;}
-.label-row-badge{font-size:11px;}
+.label-row-badge{font-size:var(--text-2xs);}
 .label-row-badge .icon{width:12px; height:12px;}
 /* A group without an icon: its first letter on a chip (UI audit L3),
    same look as the rail's .sidebar-group-monogram. */
@@ -3193,7 +3201,7 @@ img.avatar-circle{object-fit:cover;}
    border/background/label-text change on .tile-option itself just above
    -- the icon simply no longer has its own separate recolor rule. */
 .tile-icon{color:var(--fg-secondary);}
-.tile-option-label{font-size:11px; font-weight:var(--font-weight-bold); line-height:1.2; word-break:break-word;}
+.tile-option-label{font-size:var(--text-2xs); font-weight:var(--font-weight-bold); line-height:1.2; word-break:break-word;}
 
 /* Stepper (2026-08-07, modal-input-design pattern 5) -- a bounded numeric
    field flanked by -/+ buttons (static/stepper.js), the real
@@ -3286,14 +3294,14 @@ img.avatar-circle{object-fit:cover;}
 .week-head .wd{text-align:center; font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-tertiary); text-transform:uppercase; letter-spacing:.03em; padding:6px 2px;}
 .week-body{display:grid; grid-template-columns:52px repeat(7,1fr); position:relative;}
 .week-gutter{position:relative;}
-.week-gutter .hr-label{position:absolute; right:8px; transform:translateY(-50%); font-size:11px; color:var(--fg-tertiary);}
+.week-gutter .hr-label{position:absolute; right:8px; transform:translateY(-50%); font-size:var(--text-2xs); color:var(--fg-tertiary);}
 .week-col{
   position:relative; border-left:1px solid var(--separator); min-height:1px;
   background-image:repeating-linear-gradient(to bottom, var(--separator) 0, var(--separator) 1px, transparent 1px, transparent var(--hr-h));
 }
 .week-event{
   position:absolute; left:2px; right:2px; border-radius:6px; padding:4px 6px; overflow:hidden;
-  font-size:12px; line-height:1.3; box-shadow:0 1px 2px rgba(0,0,0,.08); text-decoration:none; display:block; color:inherit;
+  font-size:var(--text-xs); line-height:1.3; box-shadow:0 1px 2px rgba(0,0,0,.08); text-decoration:none; display:block; color:inherit;
 }
 .week-event .we-name{font-weight:var(--font-weight-bold); display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .week-event .we-room{opacity:.8; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
@@ -3468,7 +3476,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    background, look like a timed event in Month -- and tasks keep the
    square+title text. */
 .time-grid-allday{display:grid; grid-template-columns:52px 1fr; background:var(--bg-elevated); border-bottom:1px solid var(--separator);}
-.allday-gutter{font-size:11px; color:var(--fg-tertiary); text-align:right; padding:2px 8px 4px; white-space:nowrap; line-height:15px;}
+.allday-gutter{font-size:var(--text-2xs); color:var(--fg-tertiary); text-align:right; padding:2px 8px 4px; white-space:nowrap; line-height:15px;}
 .allday-cols{display:grid;}
 .allday-cols.week{grid-template-columns:repeat(7,1fr);}
 .allday-cols.day{grid-template-columns:1fr;}
@@ -3490,7 +3498,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .week-bars-spacer{flex:none; height:0;}
 .allday-bar.dragging{opacity:.4;}
 .allday-task{
-  display:flex; align-items:center; gap:4px; font-size:12px; white-space:nowrap;
+  display:flex; align-items:center; gap:4px; font-size:var(--text-xs); white-space:nowrap;
   overflow:hidden; padding:1px 0; color:var(--fg-primary); text-decoration:none;
 }
 .allday-task > *{overflow:hidden; text-overflow:ellipsis;}
@@ -3534,7 +3542,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    same pixel scale as before, just shifted down by half an hour. */
 .time-grid-body{padding-top:calc(var(--hr-h) * 0.5); padding-bottom:calc(var(--hr-h) * 0.5); z-index:1;}
 .time-gutter{position:relative;}
-.time-gutter .hr-label{position:absolute; right:8px; transform:translateY(-50%); font-size:11px; color:var(--fg-tertiary); white-space:nowrap;}
+.time-gutter .hr-label{position:absolute; right:8px; transform:translateY(-50%); font-size:var(--text-2xs); color:var(--fg-tertiary); white-space:nowrap;}
 .time-cols{display:grid;}
 .time-cols.week{grid-template-columns:repeat(7,1fr);}
 .time-cols.day{grid-template-columns:1fr;}
@@ -3566,7 +3574,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 }
 .time-event{
   position:absolute; border-radius:6px; padding:3px 6px; overflow:hidden;
-  font-size:12px; line-height:1.3; box-shadow:0 1px 2px rgba(0,0,0,.1); text-decoration:none; display:block; color:#fff;
+  font-size:var(--text-xs); line-height:1.3; box-shadow:0 1px 2px rgba(0,0,0,.1); text-decoration:none; display:block; color:#fff;
   cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; z-index:3;
 }
 .time-event:hover{text-decoration:none; filter:brightness(1.08);}
@@ -3806,7 +3814,7 @@ main.main-calendar .project-calendar-layout > .project-calendar-grid{padding-top
 .unscheduled-task-item{
   display:flex; align-items:center; gap:5px; padding:3px 6px; border-radius:6px;
   background:var(--bg-elevated); border:1px solid var(--separator); cursor:grab;
-  font-size:11px; touch-action:none; user-select:none; -webkit-user-select:none;
+  font-size:var(--text-2xs); touch-action:none; user-select:none; -webkit-user-select:none;
   flex:0 1 auto; max-width:240px;
 }
 .unscheduled-task-item:active{cursor:grabbing;}
@@ -4080,7 +4088,7 @@ main.main-calendar .project-calendar-layout > .project-calendar-grid{padding-top
    today look like each other, and only the all-day rows below get the
    colored background. */
 .month-task-item{
-  display:flex; align-items:center; gap:4px; font-size:12px; white-space:nowrap;
+  display:flex; align-items:center; gap:4px; font-size:var(--text-xs); white-space:nowrap;
   overflow:hidden; padding:1px 0; color:var(--fg-primary); text-decoration:none;
   min-width:0; max-width:100%;
 }
@@ -4120,7 +4128,7 @@ main.main-calendar .project-calendar-layout > .project-calendar-grid{padding-top
    reachable on hover once it's visually truncated. */
 .month-item-title{flex:1 1 auto; min-width:0;}
 .month-task-item:hover{text-decoration:underline;}
-.month-more-link{font-size:11px; font-weight:var(--font-weight-bold); color:var(--fg-secondary); text-decoration:none; padding-top:1px;}
+.month-more-link{font-size:var(--text-2xs); font-weight:var(--font-weight-bold); color:var(--fg-secondary); text-decoration:none; padding-top:1px;}
 /* 2026-09-25: it's been a <button> since the 2026-09-09 overflow popover,
    but the rule above was never reset for that -- it rendered as the
    browser's default grey outset button (2.4:1 text in dark mode). */
@@ -4139,7 +4147,7 @@ button.month-more-link{
    2026-08-09). A later `color:#fff` would override that and be
    illegible against the light tint. */
 .month-all-day{
-  display:block; border-radius:6px; font-size:12px; font-weight:var(--font-weight-bold);
+  display:block; border-radius:6px; font-size:var(--text-xs); font-weight:var(--font-weight-bold);
   line-height:15px; padding:2px 5px 3px 5px; overflow:hidden; white-space:nowrap;
   text-overflow:ellipsis; text-decoration:none;
 }
@@ -4185,7 +4193,7 @@ button.month-more-link{
 }
 .month-bar{
   position:absolute; top:0; height:var(--month-bar-h); pointer-events:auto;
-  display:block; border-radius:6px; font-size:11px; font-weight:var(--font-weight-bold);
+  display:block; border-radius:6px; font-size:var(--text-2xs); font-weight:var(--font-weight-bold);
   line-height:var(--month-bar-h); padding:0 5px; overflow:hidden;
   white-space:nowrap; text-overflow:ellipsis; text-decoration:none;
 }
@@ -4424,7 +4432,7 @@ button.month-more-link{
      illegible in one of the two themes (e.g. the old #1d1d1f vanished on
      the light theme's now-deep bars, 2026-08-09). */
   position:relative; padding:0 6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  pointer-events:none; font-size:12px;
+  pointer-events:none; font-size:var(--text-xs);
 }
 .timeline-bar-handle{position:absolute; top:0; bottom:0; width:10px; cursor:ew-resize;}
 .timeline-bar-handle-left{left:0;}
@@ -4669,7 +4677,7 @@ button.month-more-link{
     flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:2px; background:none; border:none; cursor:pointer;
     color:var(--fg-secondary); text-decoration:none;
-    font-size:12px; font-weight:var(--font-weight-bold); line-height:1.1;
+    font-size:var(--text-xs); font-weight:var(--font-weight-bold); line-height:1.1;
     padding:8px 4px 6px;
   }
   .mobile-tabbar-btn .icon{width:20px; height:20px;}
@@ -4915,19 +4923,19 @@ main.main-shell > .toolbar.top-app-bar{
 .cal-popover-head{display:flex; align-items:center; gap:8px; padding:2px 2px 6px 8px;}
 .cal-popover-title{margin:0; flex:1 1 auto; min-width:0; font-size:var(--text-base); font-weight:var(--font-weight-bold);}
 .cal-popover-title:focus{outline:none;}
-.cal-popover-close{flex:none; width:28px; height:28px; font-size:18px; line-height:1;}
+.cal-popover-close{flex:none; width:28px; height:28px; font-size:var(--text-xl); line-height:1;}
 .cal-popover-list{overflow-y:auto; display:flex; flex-direction:column; gap:1px;}
 .cal-pop-row{
   display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:var(--radius-sm);
-  color:var(--fg-primary); text-decoration:none; font-size:13px; min-width:0;
+  color:var(--fg-primary); text-decoration:none; font-size:var(--text-sm); min-width:0;
 }
 .cal-pop-row:hover, .cal-pop-row:focus-visible{background:var(--accent-neutral-subtle); text-decoration:none;}
 .cal-pop-row .color-dot, .cal-pop-row .icon{flex:none;}
 .cal-pop-row .color-dot{margin:0 1.5px;} /* 9px dot centred in the 12px icon column */
-.cal-pop-time{flex:none; width:44px; font-size:12px; color:var(--fg-secondary); font-variant-numeric:tabular-nums;}
+.cal-pop-time{flex:none; width:44px; font-size:var(--text-xs); color:var(--fg-secondary); font-variant-numeric:tabular-nums;}
 .cal-pop-title{flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .cal-popover-foot{border-top:1px solid var(--separator); margin-top:6px; padding:6px 8px 0;}
-.cal-popover-day-link{font-size:13px; font-weight:var(--font-weight-bold); color:var(--fg-primary); text-decoration:underline; text-underline-offset:2px;}
+.cal-popover-day-link{font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-primary); text-decoration:underline; text-underline-offset:2px;}
 .cal-popover-backdrop{position:fixed; inset:0; z-index:var(--z-modal-stacked); background:var(--overlay-scrim);}
 .cal-popover.is-sheet{
   z-index:var(--z-modal-stacked); left:0; right:0; bottom:0; top:auto; width:auto; max-width:none;
@@ -5787,11 +5795,11 @@ body.command-palette-open{overflow:hidden;}
    Groups/Tags split, the row growing a third form (merge, between edit and
    delete) instead of just two, and a usage-count badge. */
 .section-label{
-  font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
+  font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
   margin:0 0 6px;
 }
 .group-sublabel{
-  font-size:12px; font-weight:var(--font-weight-bold); color:var(--fg-tertiary); margin:10px 0 4px; padding-left:2px;
+  font-size:var(--text-xs); font-weight:var(--font-weight-bold); color:var(--fg-tertiary); margin:10px 0 4px; padding-left:2px;
 }
 .tag-manage-row .calendar-row-edit-form select{padding:5px 7px; min-width:0;}
 .tag-manage-row .calendar-row-edit-form input[type="text"]{max-width:140px;}
@@ -5811,7 +5819,7 @@ body.command-palette-open{overflow:hidden;}
 .project-manage-row .calendar-row-edit-form{flex-wrap:wrap; row-gap:6px;}
 .project-manage-row .calendar-row-edit-form input[name="name"]{max-width:none; flex:1 1 220px;}
 .tag-usage-count{
-  flex:none; font-size:12px; color:var(--fg-tertiary); padding:0 4px; white-space:nowrap;
+  flex:none; font-size:var(--text-xs); color:var(--fg-tertiary); padding:0 4px; white-space:nowrap;
 }
 /* 2026-09-15 bugfix (direct report on the Tasks header bar: "that button
    still has less height compared to the others" -- traced to this rule).
@@ -6010,7 +6018,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    .habit-card-expand-btn and its keyframes), .habit-card-header and the
    old .habit-card{margin-bottom} (overridden by the Habits page rule
    further down anyway). Zero references in templates, JS or Python. */
-.habit-streaks{display:flex; gap:14px; font-size:13px; color:var(--fg-tertiary); margin-top:6px;}
+.habit-streaks{display:flex; gap:14px; font-size:var(--text-sm); color:var(--fg-tertiary); margin-top:6px;}
 .habit-streaks strong{color:var(--fg-primary);}
 /* Habit detail modal (_habit_detail_body.html), 2026-09-07 (audit-fixes-
    2.0.md item 11, CSP `'unsafe-inline'` elimination) -- these used to be
@@ -6030,7 +6038,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .db-formula-input{min-width:170px;}
 .db-column-edit-form select{padding:5px 7px;}
 #database-table tfoot td{border-top:2px solid var(--border); padding-top:8px;}
-#database-table code{font-size:12px; background:var(--bg-secondary); padding:1px 4px; border-radius:3px;}
+#database-table code{font-size:var(--text-xs); background:var(--bg-secondary); padding:1px 4px; border-radius:3px;}
 
 /* dashboard.html: widget cards, per-widget filter panel, the weekly
    overview's 7-column day grid. */
@@ -6224,7 +6232,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .mini-cal-nav{width:24px; height:24px;}
 .mini-cal-weekdays, .mini-cal-grid{display:grid; grid-template-columns:repeat(7,1fr);}
 .mini-cal-weekdays span{
-  text-align:center; font-size:11px; font-weight:var(--font-weight-bold); color:var(--fg-tertiary);
+  text-align:center; font-size:var(--text-2xs); font-weight:var(--font-weight-bold); color:var(--fg-tertiary);
   text-transform:uppercase; padding-bottom:3px;
 }
 .mini-cal-day{
@@ -6410,7 +6418,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 }
 .widget-header h2{margin:0; font-size:var(--text-base); font-weight:var(--font-weight-bold); letter-spacing:-.1px; color:var(--fg-primary);}
 .widget-section-label{
-  font-size:12px; font-weight:var(--font-weight-bold); text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
+  font-size:var(--text-xs); font-weight:var(--font-weight-bold); text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
   margin:10px 0 4px;
 }
 .widget-section-label:first-child{margin-top:0;}
@@ -6658,7 +6666,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 /* Section label -- used as a heading for widget groups.
     MD3 uses a smaller, muted type style for section headers. */
 .section-label{
-   font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
+   font-size:var(--text-xs); text-transform:uppercase; letter-spacing:.04em; color:var(--fg-tertiary);
    margin:0 0 6px;
 }
 
@@ -6691,13 +6699,13 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
   border:1px solid var(--separator); border-radius:var(--radius-md); padding:6px; min-height:70px;
 }
 .week-overview-day.is-today{border-color:var(--accent-neutral);}
-.week-overview-day-label{font-size:12px; font-weight:var(--font-weight-bold); color:var(--fg-tertiary); margin-bottom:4px;}
+.week-overview-day-label{font-size:var(--text-xs); font-weight:var(--font-weight-bold); color:var(--fg-tertiary); margin-bottom:4px;}
 .week-overview-day.is-today .week-overview-day-label{color:var(--fg-primary); font-weight:var(--font-weight-bold);}
 .week-overview-item{
   display:flex; align-items:center; gap:4px; font-size:var(--text-sm); padding:2px 0;
   text-decoration:none; color:var(--fg-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
-.week-overview-empty{font-size:12px; color:var(--fg-tertiary);}
+.week-overview-empty{font-size:var(--text-xs); color:var(--fg-tertiary);}
 /* 2026-09-25 (UI audit C-16): plain 1fr columns grew to fit their longest
    nowrap title and pushed the grid past the card -- minmax(0,1fr) keeps
    seven equal columns and lets titles ellipsize (.wo-title). Events lead,
@@ -6705,7 +6713,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .week-overview-grid{grid-template-columns:repeat(7,minmax(0,1fr));}
 .week-overview-day{min-width:0;}
 .week-overview-item > .widget-event-dot, .week-overview-item > .icon{flex:none;}
-.wo-time{flex:none; font-size:12px; color:var(--fg-secondary); font-variant-numeric:tabular-nums;}
+.wo-time{flex:none; font-size:var(--text-xs); color:var(--fg-secondary); font-variant-numeric:tabular-nums;}
 .wo-title{min-width:0; overflow:hidden; text-overflow:ellipsis;}
 .week-overview-day.is-today{border-color:var(--accent);}
 @media (max-width:720px){
@@ -6749,7 +6757,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
   background:var(--accent-neutral-subtle); border-left:3px solid var(--accent-neutral);
   border-radius:var(--radius-sm); padding:10px 12px; text-decoration:none; color:var(--fg-primary);
 }
-.weekly-schedule-block-time{font-size:11px; font-weight:var(--font-weight-bold); color:var(--fg-tertiary);}
+.weekly-schedule-block-time{font-size:var(--text-2xs); font-weight:var(--font-weight-bold); color:var(--fg-tertiary);}
 .weekly-schedule-block-title{font-size:var(--text-sm); font-weight:var(--font-weight-bold); line-height:1.3; word-break:break-word;}
 .weekly-schedule-agenda{width:100%;}
 
@@ -7781,7 +7789,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .dtp-hour-colon{color:var(--fg-tertiary); padding:0 1px;}
 .dtp-hour-seg{border-radius:4px; padding:1px 3px;}
 .dtp-hour-seg.is-active{background:var(--accent); color:var(--fg-on-accent);}
-.dtp-hour-seg-ampm{margin-left:4px; font-size:11px; color:var(--fg-tertiary);}
+.dtp-hour-seg-ampm{margin-left:4px; font-size:var(--text-2xs); color:var(--fg-tertiary);}
 .dtp-hour-seg-ampm.is-active{color:var(--fg-on-accent);}
 .dtp-hour-sep{color:var(--fg-tertiary); font-size:var(--text-sm);}
 
@@ -8022,7 +8030,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 @keyframes habit-row-flash{0%{background:var(--accent-subtle);} 100%{background:transparent;}}
 @media (prefers-reduced-motion: reduce){ .habit-card.is-just-updated{animation:none;} }
 .habit-week{display:flex; gap:4px; list-style:none; margin:0; padding:0;}
-.habit-day{width:28px; height:28px; border-radius:var(--radius-sm); border:none; padding:0; background:var(--accent-neutral-subtle-strong); color:var(--fg-tertiary); font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center;}
+.habit-day{width:28px; height:28px; border-radius:var(--radius-sm); border:none; padding:0; background:var(--accent-neutral-subtle-strong); color:var(--fg-tertiary); font-size:var(--text-2xs); cursor:pointer; display:flex; align-items:center; justify-content:center;}
 .habit-day:hover{box-shadow:0 0 0 1px var(--fg-primary) inset;}
 .habit-day.is-done{background:var(--accent); color:var(--fg-on-accent);}
 .habit-day.is-today{box-shadow:0 0 0 2px var(--accent) inset;}
@@ -8070,7 +8078,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .icon-btn-placeholder{display:inline-block; width:32px;}
 .habit-month-grid{display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:4px;}
 .habit-month-grid form{display:block;}
-.habit-month-dow{font-size:11px; color:var(--fg-tertiary); text-align:center; padding-bottom:2px;}
+.habit-month-dow{font-size:var(--text-2xs); color:var(--fg-tertiary); text-align:center; padding-bottom:2px;}
 .habit-month-day{position:relative; display:flex; align-items:center; justify-content:center; width:100%; aspect-ratio:1; max-height:44px; border:none; border-radius:var(--radius-sm); background:var(--accent-neutral-subtle); color:var(--fg-primary); font-size:var(--text-sm); font-variant-numeric:tabular-nums; cursor:pointer; padding:0;}
 button.habit-month-day:hover{box-shadow:0 0 0 1px var(--fg-primary) inset;}
 .habit-month-day.is-done{background:var(--accent); color:var(--fg-on-accent);}
@@ -8125,7 +8133,7 @@ button.habit-month-day:hover{box-shadow:0 0 0 1px var(--fg-primary) inset;}
 .agenda-habits .agenda-habit{gap:4px; padding:3px 0;}
 .agenda-habit > .form-inline{flex:none; width:36px; display:flex; justify-content:center;}
 .agenda-habit-check.is-qty{min-width:32px; padding:0 3px;}
-.agenda-habits .agenda-habit-title{font-size:13px;}
+.agenda-habits .agenda-habit-title{font-size:var(--text-sm);}
 .allday-habit-form{display:block;}
 /* appearance/background/padding reset + font-size (2026-09-25): `font:inherit`
    here (0,1,1) out-ranked `.allday-task`'s own 12px (0,1,0), and the
@@ -8133,7 +8141,7 @@ button.habit-month-day:hover{box-shadow:0 0 0 1px var(--fg-primary) inset;}
    rendered as 15px grey buttons next to 12px task/event rows. */
 button.allday-habit{
   appearance:none; background:none; padding:1px 0; color:inherit;
-  width:100%; text-align:left; border:none; cursor:pointer; font:inherit; font-size:12px;
+  width:100%; text-align:left; border:none; cursor:pointer; font:inherit; font-size:var(--text-xs);
 }
 .allday-habit.is-done{opacity:.6; text-decoration:line-through;}
 /* UI audit C-5: an amount habit's n/target count in the Day view. */

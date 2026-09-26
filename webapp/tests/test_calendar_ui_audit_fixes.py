@@ -217,7 +217,7 @@ class TestAgendaWidget:
     def test_habit_rows_match_task_rows(self):
         tpl = (TEMPLATES / "_widget_agenda.html").read_text(encoding="utf-8")
         assert 'aria-label="Log one more: {{ h.title }}' in tpl
-        assert ".agenda-habits .agenda-habit-title{font-size:13px;}" in CSS
+        assert ".agenda-habits .agenda-habit-title{font-size:var(--text-sm);}" in CSS
         assert ".agenda-habit > .form-inline{flex:none; width:36px;" in CSS
 
 

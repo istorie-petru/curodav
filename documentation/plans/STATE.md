@@ -84,9 +84,14 @@ session start.
   Not yet tested on a real phone -- Web Push itself still awaits its first
   real-device test (see item 7 in ui-cleanup-2026-09.md).
 
-  **Next slice suggestion**: the audit list is done apart from the F12
-  font-size pass, which needs Peter's call on which sizes may visibly
-  change; after that, a real-device Web Push test.
+  Then F12 per Peter's call ("add one or two more standard sizes so
+  nothing visibly changes"): --text-xs 12px / --text-2xs 11px, all raw
+  11/12/13/18px sizes tokenized, zero computed-size change verified on
+  27,844 elements. SW cache v128. Suite: 2,580 passed.
+
+  **Next slice suggestion**: the audit list is closed. Next: a real-device
+  Web Push test (incl. per-habit reminder times), then whatever Peter
+  brings next.
 
 - **Shipped:** 2026-09-24 -- Peter sent one message bundling ~17 distinct
   UI/UX change requests (labels-as-modules rework, narrow banners

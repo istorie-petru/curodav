@@ -584,7 +584,7 @@ class TestAuditRegressions20260925:
         css = (_STATIC_DIR / "style.css").read_text()
         block = css[css.index("button.allday-habit{"):]
         block = block[:block.index("}")]
-        assert "background:none" in block and "font-size:12px" in block
+        assert "background:none" in block and "font-size:var(--text-xs)" in block
 
 
 class TestAuditDecisions20260925:
