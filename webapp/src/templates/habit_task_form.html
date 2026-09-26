@@ -51,31 +51,14 @@
    of them apply to an avoid habit. static/habit_day.js flips the class
    when Kind changes; the fields still submit, so switching back keeps
    their values. #}
-<form method="post" id="habit-task-form" class="habit-task-form{% if task and task.habit_kind == 'avoid' %} is-avoid{% endif %}" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}" data-cc-change="task" data-cc-action="{% if task %}edit{% else %}create{% endif %}">
+{% set _rep0 = habit_repeat_choice(task, week_start(request)) %}
+<form method="post" id="habit-task-form" data-repeat="{{ _rep0.mode }}" data-goal="{{ 'amount' if task and (task.target_per_day or 1) > 1 else 'once' }}" class="habit-task-form{% if task and task.habit_kind == 'avoid' %} is-avoid{% endif %}" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}" data-cc-change="task" data-cc-action="{% if task %}edit{% else %}create{% endif %}">
     <input type="hidden" name="tags_labels" value="{{ habit_label }}">
     <div class="field-grid">
         <div class="field field-wide">
             <label>Title</label>
             <input type="text" name="title" required autofocus value="{{ task.title if task else '' }}">
         </div>
-        <div class="field field-wide">
-            <label>Description</label>
-            <textarea name="description" rows="2">{{ task.description if task else '' }}</textarea>
-        </div>
-        {# Habits H5 (2026-09-24): "avoid" habits log relapses instead of
-           check-ins. 2026-09-26 (Peter, second pass): the app's own
-           dropdown, not pills in the body. #}
-        {% set _avoid = task and task.habit_kind == 'avoid' %}
-        {% set ms_name = 'habit_kind' %}
-        {% set ms_mode = 'single' %}
-        {% set ms_label = 'Kind' %}
-        {% set ms_items = [{'uid': 'build', 'name': 'Do it'}, {'uid': 'avoid', 'name': 'Avoid it'}] %}
-        {% set ms_selected = 'avoid' if _avoid else 'build' %}
-        {% set ms_wide = true %}
-        {% set ms_bare = false %}
-        {% set ms_extra_class = 'habit-kind-field' %}
-        {% set ms_form_id = 'habit-task-form' %}
-        {% include "_widget_list_multiselect.html" %}
         {# 2026-09-26 (Peter): the habit's own colour and icon -- one
            dropdown: a preview + name on the trigger, swatches and icons
            in the panel. The icon draws the check button, the colour
@@ -106,71 +89,103 @@
                 </div>
             </div>
         </div>
-        {# 2026-09-26 (Peter: no raw "FREQ=WEEKLY;BYDAY=..." in this
-           form): one plain "How often" choice replaces the generic
-           Recurrence picker + "Only on" + "Times per period" trio.
-           routers/tasks.py _apply_habit_repeat turns it back into the
-           stored rule; "keep" (a rule these can't express, like every 2
-           weeks) sends the current rule back untouched. The days / times
-           rows show for their own choice only (style.css data-repeat,
-           habit_day.js keeps it in sync). #}
-        {% set _rep = habit_repeat_choice(task) if task else {'mode': 'daily', 'days': [], 'times': 1, 'label': ''} %}
-        <div class="field field-wide habit-build-only habit-repeat" data-repeat="{{ _rep.mode }}">
-            <label for="habit-repeat">How often</label>
-            <select name="habit_repeat" id="habit-repeat">
-                <option value="daily"{% if _rep.mode == 'daily' %} selected{% endif %}>Every day</option>
-                <option value="days"{% if _rep.mode == 'days' %} selected{% endif %}>On certain days of the week</option>
-                <option value="week"{% if _rep.mode == 'week' %} selected{% endif %}>A number of times a week</option>
-                <option value="month"{% if _rep.mode == 'month' %} selected{% endif %}>A number of times a month</option>
-                {% if _rep.mode == 'keep' %}<option value="keep" selected>{{ _rep.label }} (current)</option>{% endif %}
-            </select>
-            {% if _rep.mode == 'keep' %}<input type="hidden" name="recurrence" value="{{ task.recurrence }}">{% endif %}
-            <div class="habit-days-picker habit-repeat-days" role="group" aria-label="Days of the week">
-                {% for code, name in [('MO','Mon'),('TU','Tue'),('WE','Wed'),('TH','Thu'),('FR','Fri'),('SA','Sat'),('SU','Sun')] %}
-                <label class="habit-day-chip"><input type="checkbox" name="habit_days" value="{{ code }}"{% if code in _rep.days %} checked{% endif %}><span>{{ name }}</span></label>
-                {% endfor %}
-            </div>
-            <div class="habit-repeat-times">
-                <input type="number" name="habits_per_period" id="habit-times" min="1" max="31" step="1"
-                       value="{{ _rep.times }}" aria-label="Times per period">
-                <span class="habit-repeat-times-unit habit-repeat-week">time(s) a week, any days</span>
-                <span class="habit-repeat-times-unit habit-repeat-month">time(s) a month, any days</span>
-            </div>
-        </div>
-        <div class="field field-wide habit-build-only">
-            {# 2026-09-26: Daily target and Unit side by side as one
-               "Each time" amount -- 1 is a plain check-off. #}
-            <label for="habit-target">Each day, do</label>
-            <div class="habit-amount-row">
-                <div class="stepper">
-                    <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease daily target">&minus;</button>
-                    <input type="number" name="target_per_day" id="habit-target" class="stepper-input" min="1" step="1" value="{{ (task.target_per_day or 1)|int if task else 1 }}">
-                    <button type="button" class="stepper-btn stepper-inc" aria-label="Increase daily target">+</button>
+        {# Habits H5 (2026-09-24): "avoid" habits log relapses instead of
+           check-ins. 2026-09-26 (Peter, second pass): the app's own
+           dropdown, not pills in the body. #}
+        {% set _avoid = task and task.habit_kind == 'avoid' %}
+        {% set ms_name = 'habit_kind' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Kind' %}
+        {% set ms_items = [{'uid': 'build', 'name': 'Do it'}, {'uid': 'avoid', 'name': 'Avoid it'}] %}
+        {% set ms_selected = 'avoid' if _avoid else 'build' %}
+        {% set ms_wide = true %}
+        {% set ms_bare = false %}
+        {% set ms_extra_class = 'habit-kind-field' %}
+        {% set ms_form_id = 'habit-task-form' %}
+        {% include "_widget_list_multiselect.html" %}
+        {# 2026-09-26 (Peter's approved mockup, plans/habit-edit-mockup-
+           2026-09-26.md): every control is the app's dropdown and full
+           width; a choice that needs a follow-up (certain days, times a
+           week/month, an amount) shrinks to half width and its follow-up
+           takes the other half. The form's data-repeat / data-goal pick
+           which follow-up shows (style.css; habit_day.js keeps them in
+           sync). routers/tasks.py _apply_habit_repeat / _apply_habit_goal
+           turn the choices back into the stored rule and target; "keep"
+           (a rule these can't express, like every 2 weeks) sends the
+           current rule back untouched. #}
+        {% set _rep = habit_repeat_choice(task, week_start(request)) %}
+        {% set ms_name = 'habit_repeat' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'How often' %}
+        {% set ms_items = [{'uid': 'daily', 'name': 'Every day'}, {'uid': 'days', 'name': 'On certain days'}, {'uid': 'week', 'name': 'Times a week'}, {'uid': 'month', 'name': 'Times a month'}] %}
+        {% if _rep.mode == 'keep' %}{% set _ = ms_items.append({'uid': 'keep', 'name': _rep.label ~ ' (current)'}) %}{% endif %}
+        {% set ms_selected = _rep.mode %}
+        {% set ms_extra_class = 'habit-build-only habit-repeat-field' %}
+        {% include "_widget_list_multiselect.html" %}
+        {% if _rep.mode == 'keep' %}<input type="hidden" name="recurrence" value="{{ task.recurrence }}">{% endif %}
+        <div class="field habit-build-only habit-sub habit-sub-days">
+            <label id="habit-days-label">Days</label>
+            <div class="multiselect widget-list-multiselect habit-days-select" data-ms data-ms-mode="habit-days" data-ms-label="days">
+                <button type="button" class="multiselect-trigger ms-trigger" aria-haspopup="true" aria-expanded="false" aria-labelledby="habit-days-label">
+                    <span class="ms-summary">{{ _rep.days_label }}</span>
+                    <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
+                </button>
+                <div class="multiselect-panel ms-panel">
+                    {% for d in _rep.day_options %}
+                    <label class="multiselect-option">
+                        <input type="checkbox" name="habit_days" value="{{ d.code }}" form="habit-task-form" data-short="{{ d.short }}"{% if d.code in _rep.days %} checked{% endif %}>
+                        <span>{{ d.name }}</span>
+                    </label>
+                    {% endfor %}
                 </div>
-                <input type="text" name="habit_unit" id="habit-unit" maxlength="24" placeholder="unit, e.g. glasses"
-                       value="{{ task.habit_unit if task and task.habit_unit else '' }}" aria-label="Unit">
             </div>
         </div>
-        {# Per-habit reminder time (2026-09-25): the same half-hour
-           single-choice dropdown as Settings > General's "Morning reminder
-           at", plus "No reminder" (= only the morning digest). Build
-           habits only -- an avoid habit has nothing to check off. #}
-        <div class="field habit-build-only">
-            <label id="habit-reminder-label">Reminder</label>
-            {% set _current = task.reminder_time if task and task.reminder_time else '' %}
-            {% set _slots = [] %}
-            {% for h in range(24) %}{% for m in (0, 30) %}{% set _ = _slots.append('%02d:%02d'|format(h, m)) %}{% endfor %}{% endfor %}
-            {% if _current and _current not in _slots %}{% set _ = _slots.append(_current) %}{% endif %}
-            {% set ms_name = 'reminder_time' %}
-            {% set ms_mode = 'single' %}
-            {% set ms_label = 'Reminder' %}
-            {% set ms_items = [{'uid': '', 'name': 'No reminder'}] %}
-            {% for t in _slots|sort %}{% set _ = ms_items.append({'uid': t, 'name': t|fmt_time}) %}{% endfor %}
-            {% set ms_selected = _current %}
-            {% set ms_autosubmit = false %}
-            {% set ms_bare = true %}
-            {% set ms_form_id = 'habit-task-form' %}
-            {% include "_widget_list_multiselect.html" %}
+        {% set ms_wide = false %}
+        {% for unit, top in (('week', 6), ('month', 20)) %}
+        {% set ms_name = 'habit_times_' ~ unit %}
+        {% set ms_label = 'Times a ' ~ unit %}
+        {% set ms_items = [] %}
+        {% for n in range(1, top + 1) %}{% set _ = ms_items.append({'uid': n|string, 'name': (n|string) ~ (' time' if n == 1 else ' times') ~ ' a ' ~ unit}) %}{% endfor %}
+        {% set ms_selected = (_rep.times if _rep.mode == unit and _rep.times <= top else 1)|string %}
+        {% set ms_extra_class = 'habit-build-only habit-sub habit-sub-' ~ unit %}
+        {% include "_widget_list_multiselect.html" %}
+        {% endfor %}
+        {% set ms_wide = true %}
+        {% set _target = (task.target_per_day or 1)|int if task else 1 %}
+        {% set ms_name = 'habit_goal' %}
+        {% set ms_label = 'Daily goal' %}
+        {% set ms_items = [{'uid': 'once', 'name': 'Check it off once'}, {'uid': 'amount', 'name': 'An amount'}] %}
+        {% set ms_selected = 'amount' if _target > 1 else 'once' %}
+        {% set ms_extra_class = 'habit-build-only habit-goal-field' %}
+        {% include "_widget_list_multiselect.html" %}
+        <div class="field habit-build-only habit-sub habit-sub-amount">
+            <div class="habit-amount-pair">
+                <div class="habit-amount-cell">
+                    <label for="habit-target">Amount</label>
+                    <input type="number" name="target_per_day" id="habit-target" min="2" max="999999" step="1" inputmode="numeric" value="{{ _target if _target > 1 else '' }}" placeholder="8">
+                </div>
+                <div class="habit-amount-cell">
+                    <label for="habit-unit">Unit</label>
+                    <input type="text" name="habit_unit" id="habit-unit" maxlength="24" placeholder="glasses" value="{{ task.habit_unit if task and task.habit_unit else '' }}">
+                </div>
+            </div>
+        </div>
+        {# Per-habit reminder time (2026-09-25): the half-hour list plus
+           "No reminder" (= only the morning digest). Build habits only. #}
+        {% set _current = task.reminder_time if task and task.reminder_time else '' %}
+        {% set _slots = [] %}
+        {% for h in range(24) %}{% for m in (0, 30) %}{% set _ = _slots.append('%02d:%02d'|format(h, m)) %}{% endfor %}{% endfor %}
+        {% if _current and _current not in _slots %}{% set _ = _slots.append(_current) %}{% endif %}
+        {% set ms_name = 'reminder_time' %}
+        {% set ms_label = 'Reminder' %}
+        {% set ms_items = [{'uid': '', 'name': 'No reminder'}] %}
+        {% for t in _slots|sort %}{% set _ = ms_items.append({'uid': t, 'name': t|fmt_time}) %}{% endfor %}
+        {% set ms_selected = _current %}
+        {% set ms_extra_class = 'habit-build-only' %}
+        {% include "_widget_list_multiselect.html" %}
+        <div class="field field-wide">
+            <label>Description</label>
+            <textarea name="description" rows="2">{{ task.description if task else '' }}</textarea>
         </div>
     </div>
     {% if task %}

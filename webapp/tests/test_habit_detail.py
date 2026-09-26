@@ -81,9 +81,8 @@ class TestDetailModal:
         body = tasks_router.task_detail("h1", req, conn=conn).body.decode()
         assert 'class="heatmap-cell-form" data-modal-keep-open data-cc-change="task"' in body  # clickable (2026-09-25)
         assert "habit-month" not in body  # 2026-09-26: no month calendar
-        assert 'action="/tasks/h1/completions" class="habit-log-form" data-modal-keep-open' in body
-        assert "morning run" in body
-        assert f'max="{TODAY.isoformat()}"' in body
+        assert "habit-log-form" not in body and "Log a day" not in body  # 2026-09-26: removed
+        assert "morning run" in body  # logged notes still list
 
 
 class TestBackupRestoreKeepsValueAndNote:

@@ -48,12 +48,20 @@ session start.
     before).
   - Edit form: Kind is the app's single-select dropdown; every hint line
     removed (also the Pauses modal's intro).
-  - **Next slice**: `plans/habit-edit-mockup-2026-09-26.md` -- the text
-    mockup of the "Do it" edit modal (full-width custom dropdowns, days as
-    a checkbox dropdown, amount as a sub-row). Waiting for Peter's
-    verdict and his answers to its three questions; don't build it before
-    that.
-  SW cache v130.
+  - Then (same day) Peter approved the edit-modal mockup
+    (`plans/habit-edit-mockup-2026-09-26.md`, answers recorded there) and
+    it shipped: order Title, Look, Kind, How often, Daily goal, Reminder,
+    Description; every choice is the app's dropdown; a follow-up (Days
+    checkbox dropdown in week order / "N times a week" 1-6 / "N times a
+    month" 1-20 / Amount + Unit inputs) sits half width next to its parent
+    (form `data-repeat` / `data-goal`, style.css `.habit-sub`). New form
+    fields `habit_times_week`, `habit_times_month`, `habit_goal`
+    (`_apply_habit_repeat` / `_apply_habit_goal`); `habit_view.days_label`
+    is mirrored in habit_day.js. The view modal lost "Log a day" too
+    (Peter: phones don't log past days); logged notes still list.
+  - **Next**: Work sessions in the habit edit modal (Peter: "after we fix
+    the rest").
+  SW cache v131.
 
 - **Shipped:** 2026-09-26 -- habits decluttering, per Peter ("rows too
   tall, 28-32px is enough"; "I don't believe in habit vacation"; month

@@ -126,10 +126,10 @@
     const form = el.form || el.closest(".habit-task-form");
     if (!form || !form.classList.contains("habit-task-form")) return;
     if (el.name === "habit_kind") form.classList.toggle("is-avoid", el.value === "avoid");
-    if (el.id === "habit-repeat") {
-      const box = el.closest(".habit-repeat");
-      if (box) box.dataset.repeat = el.value;
-    }
+    // Which follow-up field shows next to How often / Daily goal.
+    if (el.name === "habit_repeat") form.dataset.repeat = el.value;
+    if (el.name === "habit_goal") form.dataset.goal = el.value;
+    if (el.name === "habit_days") daysSummary(form);
     if (el.name === "habit_color" || el.name === "habit_icon") updateLook(form);
   });
 
@@ -158,6 +158,35 @@
       if (openRows.has(btn.closest(".habit-card").dataset.uid)) setRow(btn, true);
     });
   }).observe(document.documentElement, { childList: true, subtree: true });
+
+  // The Days dropdown's trigger reads like habit_view.days_label: "Every
+  // day" / "Weekdays" / "Weekends" / "Mon, Wed, Fri" / "Pick days". Runs
+  // after app.js's generic "N selected" summary (same change event,
+  // registered later) and once per form that appears.
+  function daysSummary(form) {
+    const summary = form.querySelector(".habit-days-select .ms-summary");
+    if (!summary) return;
+    const boxes = Array.from(document.querySelectorAll('input[name="habit_days"][form="' + form.id + '"]'));
+    const on = boxes.filter((b) => b.checked).map((b) => b.value);
+    const set = new Set(on);
+    const same = (list) => list.length === on.length && list.every((d) => set.has(d));
+    let text;
+    if (!on.length) text = "Pick days";
+    else if (on.length === 7) text = "Every day";
+    else if (same(["MO", "TU", "WE", "TH", "FR"])) text = "Weekdays";
+    else if (same(["SA", "SU"])) text = "Weekends";
+    else text = boxes.filter((b) => b.checked).map((b) => b.dataset.short).join(", ");
+    summary.textContent = text;
+  }
+  new MutationObserver(() => {
+    document.querySelectorAll(".habit-task-form:not([data-days-ready])").forEach((form) => {
+      form.dataset.daysReady = "1";
+      daysSummary(form);
+    });
+  }).observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll(".habit-task-form").forEach(daysSummary);
+  });
 
   // 2026-09-26: the habit form's Look dropdown -- keep the trigger's
   // preview (icon in the picked colour) and name in sync.

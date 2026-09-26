@@ -1,7 +1,12 @@
 # Habit edit modal ("Do it") -- text mockup for Peter's review
 
-Status: **proposal, not built.** Peter asked (2026-09-26) for a text mockup
-of the "Do it" edit modal to judge before it's implemented. Problems it
+Status: **approved and built 2026-09-26** with Peter's changes: a
+follow-up dropdown sits half width next to the field whose value needs it
+(the parent shrinks to half); Description at the bottom; Daily goal as
+"check-off vs amount", the amount a plain number input next to a plain
+unit text input (no stepper); Work sessions left as-is for now. Peter
+asked (2026-09-26) for this text mockup of the "Do it" edit modal to judge
+before it was implemented. Problems it
 answers, in his words: items that don't take 100% width, non-custom
 dropdowns, day chips instead of a dropdown checkbox menu, lots of useless
 text.
@@ -126,12 +131,11 @@ Unchanged: the existing half-hour list plus "No reminder".
 Kind = Avoid it hides How often, Daily goal and Reminder. What's left:
 Title, Look, Kind, Description, Work sessions.
 
-## Questions for Peter
+## Questions for Peter (answered 2026-09-26)
 
-1. Description at the bottom, or cut from the habit form entirely? The
-   view modal shows it, but habits rarely need one.
+1. Description at the bottom, or cut from the habit form entirely?
+   **Bottom.**
 2. Daily goal as "check-off vs amount" plus a stepper, or a single
-   number stepper where 1 means a check-off (fewer rows, less obvious)?
-3. Should Work sessions be a collapsed row ("Work sessions . 2  >")
-   rather than the full section? That would keep the form short when
-   there are many.
+   number stepper? **Check-off vs amount; the amount is a plain number
+   input, the unit a text input, both in the app's input style.**
+3. Should Work sessions be a collapsed row? **Later -- after the rest.**

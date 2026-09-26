@@ -580,7 +580,7 @@
 // gained data-follow-redirect, style.css the member checklist rules.
 // v128 (2026-09-25, same session): style.css font sizes -> tokens
 // (--text-xs/--text-2xs added at their old raw values; no visual change).
-const CACHE_NAME = "cc-shell-v130";
+const CACHE_NAME = "cc-shell-v131";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

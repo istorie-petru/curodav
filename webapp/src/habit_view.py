@@ -162,7 +162,31 @@ def cadence_label(task: dict) -> str:
     return habit_heatmap.recurrence_label(task.get("recurrence")) if sched.interval == 1 else f"Once {base}"
 
 
-def repeat_choice(task: dict | None) -> dict:
+_DAY_FULL = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+
+def days_label(codes: list[str], week_start: str = "monday") -> str:
+    """The habit form's Days dropdown summary (static/habit_day.js mirrors
+    it): "Every day" / "Weekdays" / "Weekends" / "Mon, Wed, Fri" in week
+    order / "Pick days"."""
+    picked = set(codes)
+    if not picked:
+        return "Pick days"
+    if len(picked) == 7:
+        return "Every day"
+    if picked == {"MO", "TU", "WE", "TH", "FR"}:
+        return "Weekdays"
+    if picked == {"SA", "SU"}:
+        return "Weekends"
+    order = _week_order(week_start)
+    return ", ".join(_DAY_NAMES[i] for i in order if _WEEKDAY_CODES[i] in picked)
+
+
+def _week_order(week_start: str) -> list[int]:
+    return [6, 0, 1, 2, 3, 4, 5] if week_start == "sunday" else list(range(7))
+
+
+def repeat_choice(task: dict | None, week_start: str = "monday") -> dict:
     """The habit form's "How often" choice for an existing habit
     (2026-09-26, Peter: no raw "FREQ=WEEKLY;BYDAY=..." in the edit modal).
     mode is "daily" / "days" (fixed weekdays) / "week" / "month" (N times
@@ -171,12 +195,21 @@ def repeat_choice(task: dict | None) -> dict:
     current schedule in words and leaves the stored rule untouched."""
     rrule = (task or {}).get("recurrence") or "FREQ=DAILY"
     per = (task or {}).get("habits_per_period")
-    out = {"mode": "keep", "days": [], "times": int(per or 1), "label": cadence_label({**(task or {}), "habit_kind": None})}
+    out = {
+        "mode": "keep", "days": [], "times": int(per or 1),
+        "label": cadence_label({**(task or {}), "habit_kind": None}),
+        # 2026-09-26: the Days dropdown, in the configured week order.
+        "day_options": [
+            {"code": _WEEKDAY_CODES[i], "name": _DAY_FULL[i], "short": _DAY_NAMES[i]} for i in _week_order(week_start)
+        ],
+        "days_label": "Pick days",
+    }
     if any(p.upper().startswith(("UNTIL=", "COUNT=")) for p in rrule.split(";")):
         return out
     sched = habit_schedule.parse_schedule(rrule, per)
     if sched.kind == "weekdays":
         out.update(mode="days", days=[_WEEKDAY_CODES[d] for d in sorted(sched.weekdays)])
+        out["days_label"] = days_label(out["days"], week_start)
     elif sched.kind == "every_n_days" and sched.interval == 1:
         out["mode"] = "daily"
     elif sched.kind == "period" and sched.interval == 1 and sched.unit in ("week", "month"):

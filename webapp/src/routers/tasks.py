@@ -446,12 +446,13 @@ def _apply_habit_days(recurrence: str | None, habit_days, present) -> str | None
     return recurrence
 
 
-def _apply_habit_repeat(repeat, recurrence, habit_days, habits_per_period):
+def _apply_habit_repeat(repeat, recurrence, habit_days, habits_per_period, times_week=None, times_month=None):
     """habit_task_form.html's "How often" choice (2026-09-26): daily /
-    days (the weekday chips) / week / month (N times per period) / keep
-    (the stored rule, sent back as the hidden `recurrence`). Returns
-    (recurrence, habits_per_period); forms without the field get their
-    own values back unchanged, and _apply_habit_days still runs after."""
+    days (the Days dropdown) / week / month (the "N times a week/month"
+    dropdown next to it) / keep (the stored rule, sent back as the hidden
+    `recurrence`). Returns (recurrence, habits_per_period); forms without
+    the field get their own values back unchanged, and _apply_habit_days
+    still runs after."""
     if not isinstance(repeat, str) or not repeat:
         return recurrence, habits_per_period
     if repeat == "daily":
@@ -460,10 +461,19 @@ def _apply_habit_repeat(repeat, recurrence, habit_days, habits_per_period):
         days = [d for d in _WEEKDAY_ORDER if isinstance(habit_days, list) and d in habit_days]
         return ("FREQ=WEEKLY;BYDAY=" + ",".join(days)) if days else "FREQ=DAILY", ""
     if repeat == "week":
-        return "FREQ=WEEKLY", habits_per_period
+        return "FREQ=WEEKLY", times_week if isinstance(times_week, str) else habits_per_period
     if repeat == "month":
-        return "FREQ=MONTHLY", habits_per_period
+        return "FREQ=MONTHLY", times_month if isinstance(times_month, str) else habits_per_period
     return recurrence, habits_per_period
+
+
+def _apply_habit_goal(goal, target_per_day):
+    """The form's "Daily goal" (2026-09-26): "once" is a plain check-off
+    (target 1) whatever the hidden Amount box holds; "amount" keeps the
+    typed number (1 or blank falls back to 1 downstream)."""
+    if isinstance(goal, str) and goal == "once":
+        return "1"
+    return target_per_day
 
 
 def _save_habit_look(conn, uid: str, icon, color) -> None:
@@ -516,6 +526,9 @@ def create_task(
     habit_days: list[str] = Form([]),
     habit_days_present: str = Form(""),
     habit_repeat: str | None = Form(None),
+    habit_times_week: str | None = Form(None),
+    habit_times_month: str | None = Form(None),
+    habit_goal: str | None = Form(None),
     habit_kind: str | None = Form(None),
     habit_unit: str | None = Form(None),
     reminder_time: str | None = Form(None),
@@ -529,7 +542,10 @@ def create_task(
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
     tags = dashboard_router._with_project(conn, tags, project, project_field)
-    recurrence, habits_per_period = _apply_habit_repeat(habit_repeat, recurrence, habit_days, habits_per_period)
+    recurrence, habits_per_period = _apply_habit_repeat(
+        habit_repeat, recurrence, habit_days, habits_per_period, habit_times_week, habit_times_month
+    )
+    target_per_day = _apply_habit_goal(habit_goal, target_per_day)
     # Same defensive-coercion pattern as start_at below -- target_per_day
     # is a new Form field too, so any pre-existing direct caller of
     # create_task() that doesn't pass it gets the literal Form(...) marker
@@ -882,9 +898,6 @@ def task_detail(uid: str, request: Request, month: str | None = None, conn=Depen
         ctx["habit_periods"] = habit_view.history(conn, task, week_start=week_start)["periods"]
         ctx["habit_look"] = habit_view.habit_look(task)
         ctx["habit_notes"] = habit_view.recent_notes(rows)
-        # Habits H6: this habit's current/upcoming pauses (own + all-habit).
-        ctx["habit_pauses"] = habit_view.pause_info(db.list_habit_pauses(conn), uid, date.today())["upcoming"]
-        ctx["today_iso"] = date.today().isoformat()
         return templates.TemplateResponse("habit_task_detail.html", ctx)
     return templates.TemplateResponse("task_detail.html", ctx)
 
@@ -907,6 +920,9 @@ def update_task(
     habit_days: list[str] = Form([]),
     habit_days_present: str = Form(""),
     habit_repeat: str | None = Form(None),
+    habit_times_week: str | None = Form(None),
+    habit_times_month: str | None = Form(None),
+    habit_goal: str | None = Form(None),
     habit_kind: str | None = Form(None),
     habit_unit: str | None = Form(None),
     reminder_time: str | None = Form(None),
@@ -920,7 +936,10 @@ def update_task(
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
     tags = dashboard_router._with_project(conn, tags, project, project_field)
-    recurrence, habits_per_period = _apply_habit_repeat(habit_repeat, recurrence, habit_days, habits_per_period)
+    recurrence, habits_per_period = _apply_habit_repeat(
+        habit_repeat, recurrence, habit_days, habits_per_period, habit_times_week, habit_times_month
+    )
+    target_per_day = _apply_habit_goal(habit_goal, target_per_day)
     if not isinstance(target_per_day, str):
         target_per_day = "1"
     try:

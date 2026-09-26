@@ -10,6 +10,8 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import re
+
 import pytest
 from starlette.requests import Request
 
@@ -148,8 +150,10 @@ class TestHabitDays:
         task = next(t for t in db.list_habit_tasks(conn) if t["title"] == "Swim")
         assert task["recurrence"] == "FREQ=WEEKLY;BYDAY=TU,TH"
         form = tasks_router.edit_task_form(task["uid"], _request(f"/tasks/{task['uid']}/edit"), conn=conn).body.decode()
-        assert 'value="TU" checked' in form and 'value="TH" checked' in form
-        assert 'value="MO" checked' not in form
+        assert re.search(r'value="TU" form="habit-task-form" data-short="Tue" checked', form)
+        assert re.search(r'value="TH" form="habit-task-form" data-short="Thu" checked', form)
+        assert 'data-short="Mon" checked' not in form
+        assert '<span class="ms-summary">Tue, Thu</span>' in form
         page = habits_router.habits_page(_request(), conn=conn).body.decode()
         assert "Tue, Thu" in page
 
@@ -196,14 +200,16 @@ class TestHabitRepeat:
         form = tasks_router.edit_task_form("h1", _request("/tasks/h1/edit"), conn=conn).body.decode()
         assert "FREQ=" not in form
         assert 'data-repeat="days"' in form
-        assert '<option value="days" selected>' in form
-        assert 'value="MO" checked' in form and 'value="SA" checked' not in form
+        assert re.search(r'name="habit_repeat" value="days"\s+form="habit-task-form"\s+checked', form)
+        assert '<span class="ms-summary">Weekdays</span>' in form
+        assert 'data-short="Sat" checked' not in form
         assert "recurrence-input" not in form
 
     def test_edit_form_keeps_an_unusual_rule(self, conn):
         _habit(conn, "h1", "Clean", recurrence="FREQ=WEEKLY;INTERVAL=2")
         form = tasks_router.edit_task_form("h1", _request("/tasks/h1/edit"), conn=conn).body.decode()
-        assert '<option value="keep" selected>Once every 2 weeks (current)</option>' in form
+        assert re.search(r'name="habit_repeat" value="keep"\s+form="habit-task-form"\s+checked', form)
+        assert "Once every 2 weeks (current)" in form
         assert '<input type="hidden" name="recurrence" value="FREQ=WEEKLY;INTERVAL=2">' in form
 
     def test_update_round_trip(self, conn):
@@ -336,3 +342,67 @@ class TestSecondPass20260926:
         export_router.restore_backup_payload(conn, payload)
         task = db.get_task(conn, "h1")
         assert (task["habit_icon"], task["habit_color"], task["reminder_time"]) == ("moon", "purple", "07:30")
+
+
+class TestEditFormMockup20260926:
+    """2026-09-26: Peter's approved edit-modal mockup -- dropdown follow-ups
+    half width next to their parent; Daily goal as check-off vs amount."""
+
+    def test_times_dropdowns_and_goal(self):
+        f = tasks_router._apply_habit_repeat
+        assert f("week", "", [], "9", "4", "2") == ("FREQ=WEEKLY", "4")
+        assert f("month", "", [], "9", "4", "2") == ("FREQ=MONTHLY", "2")
+        assert tasks_router._apply_habit_goal("once", "8") == "1"
+        assert tasks_router._apply_habit_goal("amount", "8") == "8"
+        assert tasks_router._apply_habit_goal(None, "8") == "8"  # plain task form
+
+    @pytest.mark.parametrize(
+        "codes,week_start,expected",
+        [
+            ([], "monday", "Pick days"),
+            (["MO", "TU", "WE", "TH", "FR", "SA", "SU"], "monday", "Every day"),
+            (["FR", "MO", "TU", "WE", "TH"], "monday", "Weekdays"),
+            (["SU", "SA"], "monday", "Weekends"),
+            (["FR", "MO", "WE"], "monday", "Mon, Wed, Fri"),
+            (["SU", "MO"], "sunday", "Sun, Mon"),
+            (["SU", "MO"], "monday", "Mon, Sun"),
+        ],
+    )
+    def test_days_label(self, codes, week_start, expected):
+        from src import habit_view
+
+        assert habit_view.days_label(codes, week_start) == expected
+
+    def test_day_options_follow_week_start(self):
+        from src import habit_view
+
+        opts = habit_view.repeat_choice({"recurrence": "FREQ=DAILY"}, "sunday")["day_options"]
+        assert [o["code"] for o in opts] == ["SU", "MO", "TU", "WE", "TH", "FR", "SA"]
+
+    def test_amount_habit_round_trip_and_back_to_once(self, conn):
+        _habit(conn, "h1", "Water")
+        base = dict(title="Water", description="", due_at="", start_at="", status="active", tags="",
+                    tags_labels=["Habit"], project="", project_field="", recurrence="",
+                    habit_days_present="", habit_kind="build", reminder_time="", holiday_calendar="",
+                    exclude_saturday="", exclude_sunday="", x_requested_with=None, habits_per_period="",
+                    habit_days=[], habit_repeat="daily", conn=conn)
+        tasks_router.update_task("h1", target_per_day="8", habit_unit="glasses", habit_goal="amount", **base)
+        task = db.get_task(conn, "h1")
+        assert (task["target_per_day"], task["habit_unit"]) == (8, "glasses")
+        tasks_router.update_task("h1", target_per_day="8", habit_unit="glasses", habit_goal="once", **base)
+        assert db.get_task(conn, "h1")["target_per_day"] == 1
+
+    def test_form_order_and_half_width_hooks(self, conn):
+        _habit(conn, "h1", "Read")
+        form = tasks_router.edit_task_form("h1", _request("/tasks/h1/edit"), conn=conn).body.decode()
+        order = [form.index(x) for x in ('name="title"', "habit-look-select", 'data-ms-label="kind"',
+                                         'data-ms-label="how often"', 'data-ms-label="daily goal"',
+                                         'data-ms-label="reminder"', 'name="description"')]
+        assert order == sorted(order)
+        assert "habit-sub habit-sub-days" in form and "habit-sub habit-sub-week" in form
+        assert "habit-sub habit-sub-amount" in form and "stepper-btn" not in form
+
+    def test_view_modal_has_no_log_form(self, conn):
+        _habit(conn, "h1", "Read")
+        body = tasks_router.task_detail("h1", _request("/tasks/h1"), conn=conn).body.decode()
+        assert "habit-log-form" not in body and "Log a day" not in body

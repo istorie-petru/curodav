@@ -151,11 +151,6 @@ class TestLogADayEmptyAmount:
                                          x_requested_with="fetch", conn=conn)
         assert db.get_task_completion(conn, "h1", d)["value"] == 8
 
-    def test_detail_template_amount_is_placeholder(self):
-        text = (SRC / "templates" / "habit_task_detail.html").read_text()
-        assert 'placeholder="{{ task.target_per_day|int }}"' in text
-        assert 'value="{{ task.target_per_day|int }}"' not in text
-
 
 class TestWidget:
     def _render(self, conn):

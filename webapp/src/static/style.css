@@ -8125,34 +8125,26 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .habit-c-brown{--habit-accent:var(--cal-accent-brown);}
 .habit-c-gray{--habit-accent:var(--cal-accent-gray);}
 .habit-c-slate{--habit-accent:var(--cal-accent-slate);}
-}
-/* Habit form's "Only on" day chips (habit_task_form.html, habits H2). */
-.habit-days-picker{display:flex; flex-wrap:wrap; gap:var(--space-1);}
-.habit-day-chip{position:relative; cursor:pointer;}
-.habit-day-chip input{position:absolute; opacity:0; width:1px; height:1px;}
-.habit-day-chip span{display:inline-block; padding:var(--space-1) var(--space-3); border-radius:var(--radius-pill); border:1px solid var(--border); font-size:var(--text-sm); color:var(--fg-secondary);}
-.habit-day-chip input:checked + span{background:var(--accent); border-color:var(--accent); color:var(--fg-on-accent);}
-.habit-day-chip input:focus-visible + span{outline:2px solid var(--accent); outline-offset:2px;}
-.habit-days-hint{font-size:var(--text-sm); color:var(--fg-tertiary); margin:var(--space-1) 0 0;}
-/* 2026-09-25 (UI audit H-14): an avoid habit has no unit, schedule or
-   target -- hide those fields (habit_day.js toggles .is-avoid on Kind). */
+/* Habit form (habit_task_form.html), 2026-09-26 -- Peter's approved
+   mockup: every control full width; a choice that needs a follow-up
+   (certain days, times a week/month, an amount) drops to half width and
+   the follow-up takes the other half. The form's data-repeat/data-goal
+   pick the follow-up (habit_day.js). Phones: .field-grid is one column,
+   so the follow-up simply sits under its parent. */
+.habit-task-form .habit-sub{display:none;}
+.habit-task-form[data-repeat="days"] .habit-sub-days,
+.habit-task-form[data-repeat="week"] .habit-sub-week,
+.habit-task-form[data-repeat="month"] .habit-sub-month,
+.habit-task-form[data-goal="amount"] .habit-sub-amount{display:flex;}
+.habit-task-form:is([data-repeat="days"], [data-repeat="week"], [data-repeat="month"]) .field-grid .habit-repeat-field,
+.habit-task-form[data-goal="amount"] .field-grid .habit-goal-field{grid-column:span 1;}
+.habit-amount-pair{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:var(--space-3);}
+.habit-amount-cell{display:flex; flex-direction:column; gap:var(--space-1); min-width:0;}
+.habit-amount-cell input{width:100%;}
+/* 2026-09-25 (UI audit H-14): an avoid habit has no schedule, goal or
+   reminder -- hide those fields (habit_day.js toggles .is-avoid on
+   Kind). After the follow-up rules above so it wins the tie. */
 .habit-task-form.is-avoid .habit-build-only{display:none;}
-/* 2026-09-26: friendlier habit form -- Kind as two pills, "How often"
-   with only its own sub-row visible, target + unit on one line. */
-.habit-task-form:not(.is-avoid) .habit-avoid-only{display:none;}
-.field label.habit-day-chip{text-transform:none; letter-spacing:0; font-weight:var(--font-weight-regular);}
-.habit-choice-row{display:flex; flex-wrap:wrap; gap:var(--space-2);}
-.habit-choice-row .habit-day-chip span{display:inline-flex; align-items:center; gap:var(--space-1); padding:var(--space-1) var(--space-3);}
-.habit-repeat-days, .habit-repeat-times{margin-top:var(--space-2);}
-.habit-repeat-times{display:flex; align-items:center; gap:var(--space-2); font-size:var(--text-sm); color:var(--fg-secondary);}
-.field .habit-repeat-times input{width:72px; flex:0 0 72px;}
-.habit-repeat-times-unit{white-space:nowrap;}
-.habit-repeat:not([data-repeat="days"]) .habit-repeat-days,
-.habit-repeat:not([data-repeat="week"]):not([data-repeat="month"]) .habit-repeat-times,
-.habit-repeat:not([data-repeat="week"]) .habit-repeat-week,
-.habit-repeat:not([data-repeat="month"]) .habit-repeat-month{display:none;}
-.habit-amount-row{display:flex; flex-wrap:wrap; align-items:stretch; gap:var(--space-2);}
-.field .habit-amount-row input[type="text"]{flex:0 1 240px; width:auto; min-width:0;}
 /* Habit detail modal (habit_task_detail.html, habits H3; month calendar
    removed 2026-09-26):
    "Log a day" form, recent day notes. Same accent-filled "done" language
@@ -8168,10 +8160,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
   .habit-year-heatmap .heatmap-cell{pointer-events:none;}
 }
 .habit-section-h{font-size:var(--text-base); font-weight:var(--font-weight-bold); margin:0 0 var(--space-2);}
-.habit-log-form{display:flex; flex-wrap:wrap; align-items:flex-end; gap:var(--space-2);}
 .habit-log-field{display:flex; flex-direction:column; gap:2px; font-size:var(--text-sm); color:var(--fg-secondary);}
-.habit-log-value input{width:90px;}
-.habit-log-note{flex:1 1 200px;}
 .habit-notes{list-style:none; margin:var(--space-3) 0 0; padding:0; display:flex; flex-direction:column; gap:var(--space-1); font-size:var(--text-sm);}
 .habit-note-date{color:var(--fg-tertiary); min-width:5ch; display:inline-block;}
 /* Avoid habits (habits H5): relapses read as a warning, not progress. */

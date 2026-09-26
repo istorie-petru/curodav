@@ -335,5 +335,6 @@ class TestShellCacheVersion:
         # v128 (2026-09-25): font-size tokens --text-xs/--text-2xs.
         # v129 (2026-09-26): compact habit rows, Pauses modal, habit form.
         # v130 (2026-09-26): habit rows v2, history panel, icon + colour.
+        # v131 (2026-09-26): habit edit form per the approved mockup.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v130"' in script
+        assert 'CACHE_NAME = "cc-shell-v131"' in script
