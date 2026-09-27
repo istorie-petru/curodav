@@ -1,3 +1,5 @@
+<img src="./.github/assets/icon.png" alt="Curodav icon" width="96" height="96">
+
 # Curodav
 
 A self-hosted **personal organizer / PWA dashboard** for one person: a home
@@ -5,6 +7,11 @@ dashboard with widgets, a full calendar, tasks, a class timetable, habit
 tracking, contacts, and one universal label system that organizes all of it. It
 syncs to your phone through open standards (CalDAV/CardDAV) — no cloud account,
 no subscription.
+
+|                                                          |                                                          |
+| -------------------------------------------------------- | -------------------------------------------------------- |
+| ![Dashboard](./.github/assets/screenshots/dashboard.png) | ![Calendar](./.github/assets/screenshots/calendar.png)   |
+| ![Tasks](./.github/assets/screenshots/tasks.png)         | ![Habits](./.github/assets/screenshots/habits.png)       |
 
 ## What it is
 
@@ -48,6 +55,7 @@ webapp/      The app — FastAPI client (sole client)
   tests/     pytest suite (acceptance-oriented, one file per feature)
   run.sh     One-command dev start (uv sync + dev Radicale + the app)
 deploy/      Public deployment tooling (Cloudflare Tunnel + Radicale for phone sync)
+  docker/    Docker Compose alternative to curodav-ctl (app + Radicale)
 scripts/     Deploy tooling (curodav-ctl)
 assets/      Default banner/avatar photos, seeded on first run
 .github/     CI + deploy/rollback workflows
@@ -95,12 +103,17 @@ All tests green or a change isn't done.
 
 ### Installing it for real (a server, always-on)
 
-**What you need first:**
+Two supported paths: **systemd** (below, no Docker involved — it installs
+directly as a system service) or **Docker Compose** (see
+[Installing with Docker Compose](#installing-with-docker-compose) further
+down). Pick whichever fits how you already manage servers; both build and
+run the same app.
+
+**What you need first (systemd path):**
 
 - A **Debian 12** machine you have root/`sudo` access to — a spare PC, a
   Raspberry Pi running Debian, a $5/mo VPS, or a VM/LXC container in
-  something like Proxmox. Not Windows or macOS. No Docker required (and
-  none used) — it installs directly as a system service.
+  something like Proxmox. Not Windows or macOS.
 - That machine reachable over SSH from the computer you're typing commands
   on.
 - A rough idea of how you'll reach it afterward: over your home network,
@@ -219,6 +232,35 @@ sudo curodav-ctl remove
 Stops and disables the service, deletes the unit file, removes the
 `curodav` system user, and wipes `/srv/curodav` (all releases and data) —
 after a `type 'yes'` confirmation prompt.
+
+### Installing with Docker Compose
+
+An alternative to the systemd path above, for anyone who'd rather run this
+under Docker — works the same on a spare PC, a VPS, or a Proxmox VM/LXC,
+on any host with Docker and Docker Compose installed (Linux, or Docker
+Desktop on macOS/Windows for local testing).
+
+```bash
+git clone https://github.com/istorie-petru/curodav.git
+cd curodav/deploy/docker
+cp .env.example .env
+nano .env                    # set RADICALE_PASSWORD and CC_AUTH_SECRET
+./create-radicale-user.sh    # one-time: writes the Radicale auth file
+docker compose up -d --build
+```
+
+Two services: the app itself, and a **Radicale** container for
+CalDAV/CardDAV phone sync (see [Connecting your phone](#connecting-your-phone-caldavcarddav)
+below — it isn't required just to use the app through a browser). Data
+persists in named Docker volumes across restarts and rebuilds. Once it's
+up, open `http://<host>:8000` (the port is `APP_PORT` in `.env`, default
+`8000`) for the same one-time `/setup` page the systemd path uses.
+
+This path has no atomic release/rollback like `curodav-ctl update` --
+`docker compose up -d --build` after a `git pull` rebuilds and restarts in
+place. The same [Security note](#security-note-read-this-before-exposing-the-app-to-a-network)
+below applies: put a VPN (Tailscale) or TLS reverse proxy in front of it
+before exposing it beyond your own network.
 
 ### Security note (read this before exposing the app to a network)
 
