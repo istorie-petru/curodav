@@ -143,7 +143,7 @@ class TestUpcomingEventsDoubleLineFix:
     def test_date_time_column_is_wide_enough_and_nowraps(self):
         # Structural check -- this test used to note "no browser to measure
         # real wrapping" as its own ceiling; 2026-09-13 that ceiling was
-        # actually hit and fixed live (Claude in Chrome, direct report the
+        # actually hit and fixed live (direct report the
         # Upcoming widget's layout looked wrong): `.widget-row-time` had
         # nowrap but no width, which is fine on a 3-column row (Today's
         # Events: time/title/nothing else) but on a 2-column row (Upcoming/

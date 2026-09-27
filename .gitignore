@@ -31,16 +31,20 @@ webapp/.dev/radicale/users
 .env
 shared/.env
 
-# Agent tooling state -- not part of the app, not public-facing.
+# Local tooling state -- not part of the app, not public-facing.
 .opencode
+.claude
 
-# Personal dev tooling -- not part of the app (2026-09-18, mirrors sibling
-# app Pineart's own git-commit.sh/git-push.sh). git-commit.sh: low-ceremony
+# Personal dev tooling -- not part of the app. git-commit.sh: low-ceremony
 # "save my progress" commits. git-push.sh: squashes whatever's unpushed into
 # one commit, optionally bumps VERSION/CHANGELOG.md and tags+pushes a
 # release, cutting a GitHub release via `gh` if it's available.
 /git-commit.sh
 /git-push.sh
+
+# Test-run artifacts that shouldn't have been committed.
+webapp/encrypted.data
+.test_out.log
 
 # Editor / OS state that sometimes leaks in despite the patterns above.
 .idea/

@@ -1,0 +1,11 @@
+# Normalize line endings for text files; let git decide what's text.
+* text=auto eol=lf
+
+# Treat these as binary explicitly (no diff, no EOL conversion).
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.webp binary
+*.ico binary
+*.sqlite binary
+*.data binary

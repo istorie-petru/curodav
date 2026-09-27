@@ -72,8 +72,8 @@ HABIT_STREAK_TERMINOLOGY_KEY = "habit_streak_terminology"
 # per-request-memoized global registered here, unlike the other keys
 # above: nothing outside the three widget-grid pages needs it.
 EDIT_MODE_KEY = "edit_mode_enabled"
-# 2026-09-17 (design-system unification pass, shared spec at
-# /home/peter/Claude/Projects/DESIGN_SYSTEM.md) -- "Accent color" (Settings
+# 2026-09-17 (design-system unification pass, shared spec with the sibling
+# app Pineart) -- "Accent color" (Settings
 # > Appearance): one of 8 fixed presets (a free color picker was
 # deliberately rejected -- Pineart, the sibling app this pass unifies
 # with, offers the same 8 presets in its own Settings so a user picking

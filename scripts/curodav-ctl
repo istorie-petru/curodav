@@ -14,6 +14,10 @@
 #       curodav-ctl status                            # just the reachability/consistency checks below, no deploy
 #   sudo curodav-ctl revert                          # swap current -> previous locally, restart, health-check
 #   sudo curodav-ctl remove                          # tear down (destructive, confirms)
+#   sudo curodav-ctl flairs                          # create the flair-photos folder + CC_FLAIRS_DIR (see
+#                                                     # documentation/flairs.md) -- 'install' already does this for a
+#                                                     # brand new deploy; this is for an EXISTING one upgrading in
+#                                                     # place, safe to re-run any time
 #
 # Layout:
 #   /srv/curodav/releases/release_<timestamp>_<hash>/   one per deploy
@@ -23,6 +27,7 @@
 #   /srv/curodav/shared/repo_url                          persisted origin URL
 #   /srv/curodav/shared/deploy.env                        persisted DAV domain/tunnel name
 #   /srv/curodav/shared/data/                             SQLite cache + backups
+#   /srv/curodav/shared/data/flairs/                      operator-supplied flair photos (documentation/flairs.md)
 set -euo pipefail
 
 APP_NAME="curodav"
@@ -43,6 +48,13 @@ BASE_DIR="/srv/${APP_NAME}"
 RELEASES_DIR="${BASE_DIR}/releases"
 SHARED_DIR="${BASE_DIR}/shared"
 DATA_DIR="${SHARED_DIR}/data"
+# Operator-supplied flair photos (documentation/flairs.md) -- the app's
+# own default (CC_FLAIRS_DIR unset) already resolves to exactly this
+# path (db_path.parent / "flairs", and CC_DB_PATH below is
+# ${DATA_DIR}/cache.sqlite), so this variable exists here purely so
+# ensure_dirs/cmd_flairs/write_env_template all say the same path
+# without repeating the string three times.
+FLAIRS_DIR="${DATA_DIR}/flairs"
 CURRENT_LINK="${BASE_DIR}/current"
 PREVIOUS_LINK="${BASE_DIR}/previous"
 ENV_FILE="${SHARED_DIR}/.env"
@@ -239,7 +251,7 @@ ensure_user() {
 ensure_dirs() {
   log "Creating directory layout under ${BASE_DIR}..."
   install -d -o "$APP_USER" -g "$APP_USER" "$RELEASES_DIR" "$SHARED_DIR" \
-    "$DATA_DIR" "$DATA_DIR/backups"
+    "$DATA_DIR" "$DATA_DIR/backups" "$FLAIRS_DIR"
 }
 
 ensure_uv() {
@@ -271,6 +283,14 @@ write_env_template() {
 
 CC_DB_PATH=${DATA_DIR}/cache.sqlite
 CC_BACKUP_DIR=${DATA_DIR}/backups
+
+# Optional default banner photos, matched by keyword against a label/
+# task/event/habit's own name (documentation/flairs.md) -- none ship
+# with the app (copyright), drop your own image files in here named
+# after a flair id (e.g. basketball.jpg). Already created for you at
+# ${FLAIRS_DIR}; 'curodav-ctl flairs' re-creates it and prints this same
+# path again any time you need a reminder.
+CC_FLAIRS_DIR=${FLAIRS_DIR}
 
 CC_SYNC_INTERVAL=60
 
@@ -757,6 +777,41 @@ cmd_remove() {
   log "Removed ${APP_NAME}. ${INSTALLED_CTL} was left in place -- 'rm ${INSTALLED_CTL}' if you want it gone too."
 }
 
+# Direct request (2026-09-27): "add an option that allows the user to
+# easily set up the flairs folder in an expected place". A fresh
+# 'install' already creates ${FLAIRS_DIR} and writes CC_FLAIRS_DIR into
+# .env (ensure_dirs/write_env_template above) -- this is the same setup,
+# runnable standalone and idempotently on any EXISTING deployment that
+# was installed before this feature existed (write_env_template refuses
+# to touch an .env that already exists, so those installs would
+# otherwise never get the new line at all without this). Safe to re-run
+# any time; it only ever creates what's missing, never overwrites
+# anything already there (a hand-edited CC_FLAIRS_DIR, or photos already
+# dropped in the folder).
+cmd_flairs() {
+  require_root
+  if [ ! -d "$SHARED_DIR" ]; then
+    err "${SHARED_DIR} not found -- has 'install' been run yet?"
+    exit 1
+  fi
+  install -d -o "$APP_USER" -g "$APP_USER" "$FLAIRS_DIR"
+  if [ -f "$ENV_FILE" ] && ! grep -q '^CC_FLAIRS_DIR=' "$ENV_FILE"; then
+    log "Adding CC_FLAIRS_DIR to ${ENV_FILE}..."
+    printf '\n# Optional default banner photos, see documentation/flairs.md\nCC_FLAIRS_DIR=%s\n' "$FLAIRS_DIR" >> "$ENV_FILE"
+    chown root:"$APP_USER" "$ENV_FILE"
+    chmod 0660 "$ENV_FILE"
+  fi
+  echo
+  log "Flair photos folder ready: ${FLAIRS_DIR}"
+  echo "    Drop image files there named after a flair id, e.g.:"
+  echo "      ${FLAIRS_DIR}/basketball.jpg"
+  echo "      ${FLAIRS_DIR}/yoga.png"
+  echo "    Supported extensions: .jpg .jpeg .png .webp"
+  echo "    Full list of supported ids + which words each one matches:"
+  echo "      documentation/flairs.md in the repo"
+  echo "    No restart needed -- read fresh on every page render."
+}
+
 case "${1:-}" in
   install)
     DAV_ONLY=0
@@ -795,8 +850,9 @@ case "${1:-}" in
     radicale_env_consistency_check
     ;;
   remove)  cmd_remove ;;
+  flairs)  cmd_flairs ;;
   *)
-    echo "Usage: curodav-ctl {install [--dav [--proxy=cloudflare|manual] [--reconfigure]]|update|status|revert|remove}" >&2
+    echo "Usage: curodav-ctl {install [--dav [--proxy=cloudflare|manual] [--reconfigure]]|update|status|revert|remove|flairs}" >&2
     exit 2
     ;;
 esac

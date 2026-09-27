@@ -11,11 +11,15 @@ hosts = 127.0.0.1:5232
 
 [auth]
 type = htpasswd
-htpasswd_filename = /home/peter/Claude/Projects/Dashboard/webapp/.dev/radicale/users
+; run.sh always overrides these two paths via --auth-htpasswd_filename /
+; --storage-filesystem_folder (relative to webapp/); the values below are
+; only used if you invoke radicale with this config file directly, and are
+; relative to wherever radicale is run from (normally webapp/).
+htpasswd_filename = .dev/radicale/users
 htpasswd_encryption = plain
 
 [storage]
-filesystem_folder = /home/peter/Claude/Projects/Dashboard/webapp/.dev/radicale/collections
+filesystem_folder = .dev/radicale/collections
 
 [rights]
 type = owner_only

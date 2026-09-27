@@ -580,7 +580,12 @@
 // gained data-follow-redirect, style.css the member checklist rules.
 // v128 (2026-09-25, same session): style.css font sizes -> tokens
 // (--text-xs/--text-2xs added at their old raw values; no visual change).
-const CACHE_NAME = "cc-shell-v137";
+// v138 (2026-09-27): icon set swap BACK to real Lucide stroke icons (item
+// 3, "AGAIN, fully" -- v101 above was the MDI filled-icon swap this
+// reverses) -- _icons_sprite.html's 190 symbols all replaced, style.css's
+// `.icon` flipped fill<->stroke again plus two new sizing rules (a
+// minimum size floor, and an icon matching its adjacent text's size).
+const CACHE_NAME = "cc-shell-v138";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

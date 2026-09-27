@@ -127,8 +127,15 @@
            modals' demoted-Delete treatment -- meant to rank below a
            primary Edit) for a plain .btn ghost, matching Done/Upload and
            every other secondary footer button in the app -- this footer
-           has no Edit-vs-Delete hierarchy to demote against. #}
-        <button type="submit" class="btn ghost">{{ icon('trash', 'icon-sm') }} Remove</button>
+           has no Edit-vs-Delete hierarchy to demote against.
+           2026-09-27 (item 10, flairs): "Remove" -> "Clear" -- the
+           /banners/remove route itself is unchanged (same action, same
+           form), but what it DOES changed (routers/banners.py's
+           remove_banner's own comment): a label/project/task/event whose
+           name matches a flair keyword no longer goes back to blank when
+           this fires, it goes back to ITS flair -- "Clear" is what
+           forces true blank even then. #}
+        <button type="submit" class="btn ghost">{{ icon('trash', 'icon-sm') }} Clear</button>
     </form>
     {% endif %}
     <form method="post" action="/banners/upload" enctype="multipart/form-data" class="form-inline" data-cc-change="banner" data-cc-action="upload">

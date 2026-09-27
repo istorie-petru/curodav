@@ -550,7 +550,7 @@ select{
    already set their own `border` explicitly, so they don't need it from
    here either. */
 input[type="checkbox"], input[type="radio"]{
-  width:16px; height:16px; margin:0; padding:0; accent-color:var(--accent-neutral); cursor:pointer;
+  width:19px; height:19px; margin:0; padding:0; accent-color:var(--accent-neutral); cursor:pointer;
 }
 /* 2026-09-26 (Peter: "the checkbox html thing should be replaced visually
    with a better one" -- every table's row-select checkbox). Scoped to
@@ -771,21 +771,57 @@ button.btn:disabled::after, a.btn[aria-disabled="true"]::after{display:none;}
    always matches the surrounding text (`currentColor`) rather than
    carrying its own fixed color the way an emoji glyph would.
 
-   `fill:currentColor; stroke:none;` (2026-09-24, was `fill:none;
-   stroke:currentColor;`) -- the sprite itself switched from hand-drawn
-   Feather-style stroke/outline icons to real Material Design Icons
-   (_icons_sprite.html's own header comment has the full story), which are
-   solid filled shapes, not outlines. This one rule governs every icon's
-   color uniformly; individual symbols carry no fill/stroke of their own,
-   same "class sets color, symbol only varies geometry" split the old
-   stroke-based icons already used (stroke-width/linecap were per-symbol,
-   color never was). */
+   `fill:none; stroke:currentColor; stroke-width:2;` (2026-09-27, back
+   from `fill:currentColor; stroke:none;` -- the sprite itself switched
+   back to real Lucide stroke/outline icons, _icons_sprite.html's own
+   header comment has the full story). `stroke-width` has to live here,
+   not per-symbol: Lucide's own source files put it on the outer <svg>
+   wrapper (not the inner <path>s this sprite actually keeps), so the
+   class is the only place left to set it -- same "class sets color/
+   weight, symbol only varies geometry" split every icon set this file
+   has held has always used. `stroke-linecap`/`stroke-linejoin:round`
+   match Lucide's own default look (soft joins/caps, not the browser's
+   sharp-miter/butt-cap default), same as their own upstream CSS would
+   set on a plain <img>/inline embed.
+
+   Two new rules, both direct request (2026-09-27, "switch the icon
+   library to Lucide... add a rule: a minimum icon size, and an icon is
+   the same size as the text next to it"):
+     - `width/height:1em` (not a fixed px) -- an icon now sizes itself off
+       whatever font-size context it's actually placed in (a button, a
+       heading, a small badge) automatically, rather than needing a
+       fixed pixel value hand-picked per component (a plain
+       `.icon`/`.icon-sm`/`.icon-lg` still exists for a rough three-step
+       scale, now expressed as `em` multipliers of that same idea instead
+       of unrelated fixed pixel numbers). A stroke icon also genuinely
+       needs a bit more room than the old solid MDI shapes did to read
+       clearly at the same size -- a thin 2-unit stroke on a 24-unit
+       icon gets proportionally thinner as the icon shrinks, unlike a
+       solid fill silhouette, which is part of why the base/lg sizes
+       below are each a little larger than their old MDI-era pixel
+       values, not just a units change.
+     - `min-width/min-height:12px` -- a floor under that em-based sizing,
+       so an icon dropped into an unusually small font-size context (a
+       `.text-2xs` badge, a tightly-packed pill) can never render smaller
+       than `.icon-sm`'s own already-established "small" size; audited
+       against every existing per-component `.icon{width:...}` override
+       in this file -- exactly one (`.status-card-status .icon`, a
+       10px dot next to `--text-base` running text) fell below this
+       floor, and is fixed at its own rule further down to `1em` instead
+       (matching its adjacent text directly, not just the floor).
+   `opacity:1` is new too, stated explicitly rather than left implicit --
+   "icons are never transparent." No active bug produced a transparent
+   icon (audited: the only reduced-opacity icon anywhere is `.icon-btn:
+   disabled`'s deliberate dimmed-disabled look, an intentional UX signal,
+   left alone), this is the standing rule a future change has to keep
+   respecting, not a fix for something broken today. */
 .icon{
-  width:15px; height:15px; flex:none; vertical-align:-2px;
-  fill:currentColor; stroke:none; display:inline-block;
+  width:1em; height:1em; min-width:12px; min-height:12px; flex:none; vertical-align:-2px;
+  fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round;
+  display:inline-block; opacity:1;
 }
-.icon-sm{width:12px; height:12px; vertical-align:-1px;}
-.icon-lg{width:20px; height:20px; vertical-align:-4px;}
+.icon-sm{width:0.85em; height:0.85em; vertical-align:-1px;}
+.icon-lg{width:1.35em; height:1.35em; vertical-align:-4px;}
 button.btn .icon, a.btn .icon{margin-right:2px;}
 .icon-btn .icon{width:16px; height:16px;}
 .checklist-check .icon{width:16px; height:16px;}
@@ -1844,12 +1880,6 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .filter-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
 .filter-bar input[type="search"]{width:180px; font-size:var(--text-sm); padding:6px 10px;}
 .filter-select{max-width:150px; font-size:var(--text-sm); padding:6px 26px 6px 10px;}
-/* "Show archived" toggle (contacts_list.html, item 19, 2026-09-26) -- a
-   plain checkbox + label, not a fancy dropdown: it's a single binary
-   switch, not a multi-select like the Label filter next to it. */
-.filter-toggle{display:inline-flex; align-items:center; gap:6px; font-size:var(--text-sm); color:var(--fg-secondary); white-space:nowrap; cursor:pointer;}
-.filter-toggle input[type="checkbox"]{margin:0;}
-
 /* --------------------------------------------------------------------- */
 /* Two-row toolbar (Phase 9b toolbar rework) -- Tasks (Table/Timeline/    */
 /* Board), Calendar (Month/Week/Day/Agenda), Contacts all share this      */
@@ -2096,7 +2126,11 @@ tbody td{padding:10px 8px; vertical-align:middle;}
   font-size:var(--text-base); font-weight:var(--font-weight-bold); color:var(--fg-primary);
   margin-top:var(--space-1);
 }
-.status-card-status .icon{width:10px; height:10px; flex-shrink:0;}
+/* 2026-09-27 (icon library rule: "an icon is the same size as the text
+   next to it") -- was a fixed 10px next to this row's own --text-base
+   (15px) running text; 1em (this element's own font-size, inherited
+   from .status-card-status) matches it exactly instead. */
+.status-card-status .icon{width:1em; height:1em; flex-shrink:0;}
 .status-card-status.healthy .icon{color:var(--tag-green-fg);}
 .status-card-status.warning .icon{color:var(--tag-yellow-fg);}
 .status-card-status.error .icon{color:var(--tag-red-fg);}
@@ -2471,7 +2505,15 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    above) -- Labels/Holidays/Time blocks still do. */
 .task-add-row td{padding:8px 10px; border-bottom:1px solid var(--separator);}
 .task-add-row a{display:flex; align-items:center; gap:6px; color:var(--fg-secondary); text-decoration:none; font-size:var(--text-sm);}
-.task-add-row:hover td{background:var(--bg-hover, var(--bg-secondary));}
+/* 2026-09-27 (direct feedback: "standardize [row hover] with one official
+   version") -- was `var(--bg-hover, var(--bg-secondary))`, a fallback to a
+   custom property that's never actually defined anywhere in this file (so
+   it always silently fell back to --bg-secondary, a *control* hover
+   token, on a row). Every other list/table row hover in the app already
+   uses --row-hover (the "UI audit F9" token, `tbody tr:hover` and its
+   companions above) -- this is the one straggler still on a different
+   value for the same visual job. */
+.task-add-row:hover td{background:var(--row-hover);}
 /* (The Tasks table's Habits-group check-in rules that sat here --
    .habit-checkin-row-inline/-value/-target -- went with that group in
    habits H2, 2026-09-24; habits have their own page now.) */
@@ -2980,7 +3022,7 @@ img.avatar-circle{object-fit:cover;}
    sitting right next to the checkbox. */
 .field input:not([type="checkbox"], [type="radio"], [type="file"]), .field select, .field textarea{width:100%;}
 /* Inline field-level validation (design-system unification pass,
-   2026-09-17, shared spec at /home/peter/Claude/Projects/DESIGN_SYSTEM.md)
+   2026-09-17, shared spec with the sibling app Pineart)
    -- modal.js's applyFieldErrors marks the field that a 422 response
    actually named, instead of only a global toast with no way to tell
    which input on a long form is wrong. */
@@ -3675,6 +3717,31 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    kept as a defensive pin -- it still holds the toggle at flex-end even
    if the search box is hidden/removed independently later. */
 .unscheduled-panel-toggle-btn{margin-left:auto;}
+/* 2026-09-27 direct bug report ("the search box floats in the middle of
+   the header with a gap on both sides instead of sitting next to the
+   toggle") -- the comment above was wrong about that second margin-left:
+   auto being a no-op. Two flex items in the same row each carrying their
+   own margin-left:auto don't collapse into "the first one wins" -- the
+   browser splits the row's leftover free space EVENLY across every auto
+   margin present, so with both the search box and the toggle claiming
+   one, the free space gets divided in half: one half lands between the
+   title and the search box, the other between the search box and the
+   toggle, instead of all of it landing before the search box the way a
+   single auto margin would. Toggle still technically ends up pinned to
+   the row's right edge either way (satisfying the collapsed-panel case
+   this rule exists for), so the bug was invisible to
+   TestToggleStillPinsToTheRowEnd -- only visible/expanded, side-by-side
+   with the search box, does the split read as a stray floating box.
+   Fix: cancel the toggle's own auto margin specifically when it's right
+   after a VISIBLE search box (the adjacent-sibling selector still matches
+   in the collapsed state, since `display:none` doesn't remove the search
+   element from the DOM -- `:not(.collapsed)` on the ancestor keeps this
+   scoped to the expanded case so the collapsed pin is untouched), so the
+   search box's own auto margin is the only one left to resolve and it
+   absorbs the whole gap, landing the search box flush against the toggle
+   as one right-aligned cluster instead of two independently-centered
+   islands. */
+.project-calendar-unscheduled:not(.collapsed) .unscheduled-search + .unscheduled-panel-toggle-btn{margin-left:0;}
 .unscheduled-task-list{display:flex; flex-direction:column; gap:6px;}
 /* Per-task "Unscheduled work" panel row (shared _unscheduled_task_item.html
    partial). Two lines: drag handle + title on the first, a muted meta
@@ -3688,16 +3755,40 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    its own buttons (see that class's own rule below, and project_
    calendar.js's `begin()` guard). */
 .unscheduled-task-item{
-  display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px;
+  position:relative; display:flex; align-items:center; gap:8px; padding:8px 10px 8px 13px; border-radius:8px;
   background:var(--bg-elevated); border:1px solid var(--separator); cursor:grab;
   touch-action:none; user-select:none; -webkit-user-select:none;
 }
 .unscheduled-task-item:active{cursor:grabbing;}
 .unscheduled-task-item.item-dragging{opacity:.5;}
-.unscheduled-drag-handle{flex:none; color:var(--fg-tertiary); display:flex;}
+/* 2026-09-27 row modernization -- a left accent bar in the row's own
+   project/label color (`--um-accent`, set inline per-row by
+   _unscheduled_task_item.html since it varies per task, same "custom
+   property carries the one-off value, class carries the shared shape"
+   split every per-color override in this file already uses) so a long
+   list visually clusters by project the way the calendar chips and
+   `.cell-tag.cal-*` pills already do, instead of every row reading
+   identically regardless of which project it's under. */
+.unscheduled-task-item::before{
+  content:""; position:absolute; left:3px; top:8px; bottom:8px; width:3px; border-radius:3px;
+  background:var(--um-accent, var(--fg-tertiary));
+}
+.unscheduled-type-glyph{
+  flex:none; width:22px; height:22px; border-radius:7px; display:flex; align-items:center; justify-content:center;
+  background:var(--bg-secondary); color:var(--fg-secondary);
+}
+.unscheduled-drag-handle{flex:none; color:var(--fg-tertiary); display:flex; opacity:.55;}
 .unscheduled-task-main{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px;}
 .unscheduled-task-title{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:var(--font-weight-bold);}
 .unscheduled-task-meta{display:flex; align-items:center; gap:8px; font-size:var(--text-2xs); color:var(--fg-secondary); min-width:0;}
+/* A daily habit's "Needs N more this period" gains a 7-dot week strip
+   (one dot per day `db.habit_work_sessions_status`'s `required` counts
+   toward) -- a weekly/monthly habit's `required` is 1, where a single dot
+   would be decoration rather than information, so the template only
+   renders this for `required > 1`. */
+.unscheduled-dot-progress{display:inline-flex; align-items:center; gap:3px; flex:none;}
+.unscheduled-dot-progress span{width:6px; height:6px; border-radius:50%; background:var(--bg-tertiary);}
+.unscheduled-dot-progress span.is-done{background:var(--fg-tertiary);}
 .unscheduled-project-pill{
   flex:none; display:inline-flex; align-items:center; gap:3px; max-width:120px;
   padding:1px 7px; border-radius:999px; background:var(--accent-neutral-subtle);
@@ -3713,6 +3804,20 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    through untouched. */
 .unscheduled-row-actions{flex:none; display:flex; align-items:center; gap:2px; cursor:default; touch-action:auto; user-select:auto; -webkit-user-select:auto;}
 .unscheduled-row-actions .icon-btn{padding:4px;}
+/* 2026-09-27 row modernization -- the "+"/"..." controls faded to opacity:0
+   at rest, revealed on row hover/focus-within, same convention
+   `.task-row-delete` already established (tasks table's own row-delete
+   button) rather than a new one: `:focus-within` so a keyboard user
+   tabbing in sees the control before needing to activate it blind, and
+   the `(hover:none)` media query below keeps it dimmed-but-present on a
+   touch device instead of invisible (no reliable `:hover` there to ever
+   reveal it otherwise). */
+.unscheduled-row-actions{opacity:0; transition:opacity var(--dur-fast) var(--ease-standard);}
+.unscheduled-task-item:hover .unscheduled-row-actions,
+.unscheduled-task-item:focus-within .unscheduled-row-actions{opacity:1;}
+@media (hover:none){
+  .unscheduled-row-actions{opacity:.55;}
+}
 main.main-calendar .project-calendar-unscheduled{padding-bottom:0;}
 main.main-calendar .project-calendar-layout > .project-calendar-grid{padding-top:0;}
 /* Drag-onto-the-grid ghost (project_calendar.js interaction 1): a fixed,
@@ -4825,7 +4930,11 @@ main.main-shell > .toolbar.top-app-bar{
   display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:var(--radius-sm);
   color:var(--fg-primary); text-decoration:none; font-size:var(--text-sm); min-width:0;
 }
-.cal-pop-row:hover, .cal-pop-row:focus-visible{background:var(--accent-neutral-subtle); text-decoration:none;}
+/* 2026-09-27: was --accent-neutral-subtle, the same token this app's own
+   "selected" rows use (tr.is-selected, .contact-row-wrap.is-selected) --
+   a hovered-but-not-selected row and a selected row looked identical.
+   --row-hover is the one token every other list/table row hover uses. */
+.cal-pop-row:hover, .cal-pop-row:focus-visible{background:var(--row-hover); text-decoration:none;}
 .cal-pop-row .color-dot, .cal-pop-row .icon{flex:none;}
 .cal-pop-row .color-dot{margin:0 1.5px;} /* 9px dot centred in the 12px icon column */
 .cal-pop-time{flex:none; width:44px; font-size:var(--text-xs); color:var(--fg-secondary); font-variant-numeric:tabular-nums;}
@@ -5490,34 +5599,14 @@ body.command-palette-open{overflow:hidden;}
 .calendar-row input[type="text"]{flex:1; min-width:0; padding:5px 7px;}
 /* (.color-picker/.color-popover -- the old colour dot picker -- went
    2026-09-26 with _color_swatch_picker.html; the shared Look dropdown
-   replaced it. The swatch rules below stay: Settings > Appearance's
-   accent picker uses them.) */
-.color-swatch-label{
-  display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer;
-  padding:4px 2px; border-radius:var(--radius-sm);
-}
-.color-swatch-label:hover{background:var(--bg-secondary);}
-.color-swatch-name{font-size:10px; color:var(--fg-tertiary); text-align:center; line-height:1.1;}
-.color-swatch{
-  appearance:none; -webkit-appearance:none; width:22px; height:22px; border-radius:50%; padding:0;
-  cursor:pointer; border:2px solid transparent; box-shadow:0 0 0 1px var(--border) inset;
-}
-.color-swatch:checked{border-color:var(--fg-primary);}
-.color-swatch-label:has(.color-swatch:checked) .color-swatch-name{color:var(--fg-primary); font-weight:var(--font-weight-bold);}
-
-/* Accent color picker (Settings > Appearance) -- an inline swatch grid,
-   not a popover (the settings page already has room), reusing
-   .color-swatch's own appearance:none-circle-radio base + checked-ring
-   styling above rather than a one-off. */
-.accent-swatch-picker{display:flex; flex-wrap:wrap; gap:8px;}
-.accent-swatch-blue{background:var(--accent-preset-blue);}
-.accent-swatch-red{background:var(--accent-preset-red);}
-.accent-swatch-purple{background:var(--accent-preset-purple);}
-.accent-swatch-green{background:var(--accent-preset-green);}
-.accent-swatch-teal{background:var(--accent-preset-teal);}
-.accent-swatch-orange{background:var(--accent-preset-orange);}
-.accent-swatch-pink{background:var(--accent-preset-pink);}
-.accent-swatch-indigo{background:var(--accent-preset-indigo);}
+   replaced it. Settings > Appearance's own accent picker followed
+   2026-09-27, onto that same Look dropdown -- see _look_picker.html's
+   `dot_var_prefix` and settings_appearance.html's own comment -- so the
+   swatch rules that used to live here (.color-swatch/.color-swatch-label/
+   .accent-swatch-picker/.accent-swatch-<key>) are gone with the markup
+   that used them; --accent-preset-* itself (deps.py's ACCENT_PRESETS) is
+   still very much in use, just read via inline `style` now instead of a
+   per-preset class.) */
 
 /* Merge picker modal (project_merge.html, 2026-08-02) -- a selectable
    list of candidate destination projects, each showing its own badge +
@@ -5936,6 +6025,38 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .widget-content tbody td{padding:7px 4px;}
 .widget-content tbody tr:first-child td{padding-top:2px;}
 .widget-content tbody tr:last-child td{padding-bottom:2px;}
+/* 2026-09-27 (direct feedback: "remove the hover for rows of any table
+   unless it's a real table with real table functionality"). widget_link_row
+   rows (_widget_items.html, shared by every Dashboard widget, a label/
+   project page's Agenda card, and label_preview_modal -- all reachable only
+   through this one `.widget-content` wrapper) render <tr>/<td> purely for
+   column alignment: there's no row-level click, select, or sort, only the
+   title cell's own <a> is interactive. The generic `tbody tr:hover` band
+   above (and its `.card` edge-shadow companions, since some of these sit
+   in a `.card`) implied the whole row was one clickable unit when only a
+   slice of it was. Real tables elsewhere (Tasks/Labels/Holidays/Contacts/
+   Time Blocks/Groups -- row-select or row-action tables, none of them
+   wrapped in `.widget-content`) keep their hover untouched. The link gets
+   its own underline-on-hover instead, matching `.entity-table a.label-
+   name:hover`'s existing "only the real target reacts" convention. */
+.widget-content tbody tr:hover{background:none;}
+.widget-content tbody tr:hover > td:first-child,
+.widget-content tbody tr:hover > td:last-child,
+.widget-content tbody tr:hover > td:only-child{box-shadow:none;}
+.widget-content td a:hover{text-decoration:underline;}
+/* 2026-09-27 (direct feedback: "for the projects page, the text inside
+   the agenda ... should not be text-sm, but normal text"). A label/
+   project's own page (label_sections.html, `.widget-card-static` --
+   the only caller of that class) reuses this same widget_link_row/
+   .widget-content markup for its Agenda card purely for convenience
+   (one macro, one row shape), but unlike an actual Dashboard widget it
+   IS the page's main content, not a compact tile competing for space in
+   a grid -- the compact size two comments up was tuned for the latter
+   and reads as undersized body text here. Row padding also opened back
+   up to the generic table's own 10px/8px (was 7px/4px) for the same
+   reason -- the tight rhythm was part of the same "small card" tuning. */
+.widget-card-static .widget-content table{font-size:var(--text-base);}
+.widget-card-static .widget-content tbody td{padding:10px 8px;}
 /* Stacking (2026-08-02) -- dropping one widget onto another's middle
    (not its narrow top/bottom or left/right reorder edges, see
    static/app.js's dashboard drag handler) merges them into one grid
@@ -6020,9 +6141,10 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
   color:var(--fg-primary); text-decoration:none; padding:1px 0;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-.cal-agenda-item:hover{text-decoration:none; color:var(--fg-primary);}
+/* 2026-09-27: removed -- a no-op (identical to the base rule's own
+   text-decoration/color two lines up), so hovering never actually
+   changed anything here to begin with. */
 .cal-agenda-time{color:var(--fg-tertiary); font-variant-numeric:tabular-nums; min-width:30px;}
-
 /* Contact List widget (_widget_contact_list.html) -- compact contact
    rows for the Space widget grid, filtered by tags.
    2026-09-16 (direct request: "should also contain the contact's photo")
@@ -6082,15 +6204,46 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    can't nest inside a whole-row <a>), and the same `.cell-tag.cal-*`
    identity-color swatch + muted meta line `.project-preview-row` above
    already established for a label pill in a widget list. */
-.group-member-list{display:flex; flex-direction:column; gap:var(--space-2);}
-.group-member-row{display:flex; align-items:center; gap:var(--space-2);}
+.group-member-list{display:flex; flex-direction:column; gap:1px;}
+/* 2026-09-27 minimalist redesign (direct request "implement" off the
+   reviewed mockup) -- purely visual, same data/markup contract
+   (test_group_members_widget.py's TestRenderedWidgetTemplate still reads
+   the same "N open task(s)"/href/kebab strings): the three meta facts get
+   a small icon each and move to the row's own right edge as a compact
+   stat cluster instead of trailing the pill inline (a long label name and
+   a 3-fact meta string used to just butt up against each other on the
+   same wrapping line), and the kebab fades in on hover/focus-within
+   instead of sitting at full opacity on every row permanently -- same
+   convention `.task-row-delete` and the Unscheduled Work row actions
+   (above) already use, `(hover:none)` fallback included for touch.
+   Deliberately NOT given a full-row `--row-hover` background: same-day
+   follow-up commit ("Standardize row hover to one token...") explicitly
+   kept `.group-member-link` in the lighter-touch "underline removal only,
+   no full-row background" tier alongside `.project-preview-row`/
+   `widget_link_row`, as the deliberate other tier from real list/table
+   rows -- not a straggler to fold into `--row-hover` later. */
+.group-member-row{
+  display:flex; align-items:center; gap:var(--space-2); border-radius:var(--radius-sm);
+  padding:2px var(--space-1);
+}
 .group-member-link{
   flex:1; min-width:0; display:flex; align-items:center; gap:var(--space-3);
   padding:var(--space-1) 0; text-decoration:none; color:inherit;
 }
 .group-member-link:hover{text-decoration:none;}
 .group-member-link:hover .cell-tag{box-shadow:0 0 0 1px var(--border-strong) inset;}
-.group-member-meta{display:flex; align-items:center; gap:var(--space-3); flex-wrap:wrap; font-size:var(--text-2xs); color:var(--fg-secondary);}
+.group-member-meta{
+  display:flex; align-items:center; gap:var(--space-3); flex-wrap:wrap;
+  font-size:var(--text-2xs); color:var(--fg-secondary); margin-left:auto; padding-right:var(--space-1);
+}
+.group-member-fact{display:inline-flex; align-items:center; gap:4px; white-space:nowrap;}
+.group-member-fact .icon{opacity:.7; flex:none;}
+.group-member-row .action-menu-trigger{opacity:0; transition:opacity var(--dur-fast) var(--ease-standard);}
+.group-member-row:hover .action-menu-trigger,
+.group-member-row:focus-within .action-menu-trigger{opacity:1;}
+@media (hover:none){
+  .group-member-row .action-menu-trigger{opacity:.55;}
+}
 
 /* At a Glance widget (_widget_at_a_glance.html, dashboard usability
    rework 2026-08-07) -- a row of number+label stat blocks, each a link to
@@ -6186,7 +6339,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    attributes each widget used to hand-roll. nowrap is what actually fixes
    a date+time column wrapping to two lines; no fixed widths.
 
-   2026-09-13 direct fix (live-verified, Claude in Chrome): `.widget-row-
+   2026-09-13 direct fix (live-verified in a real browser): `.widget-row-
    time` had no width constraint at all -- fine on a 3-column row (Today's
    Events section: time / title / nothing else), where the OTHER fixed-
    width cell implicitly bounds things, but on a 2-column row (the
@@ -6582,7 +6735,15 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    otherwise stack on top of the card's. */
 .settings-group:has(+ .settings-divider){margin-bottom:0;}
 .settings-row{text-decoration:none; color:var(--fg); gap:var(--space-3);}
-.settings-row:hover{color:var(--fg-primary);}
+/* 2026-09-27: removed -- every real .settings-row is also a .calendar-row
+   (settings_index.html's hub rows; row/breadcrumb language shared with
+   Settings' manage-list pages, this rule's own header comment above),
+   which already gives the row its hover feedback via `--row-hover` on
+   `.calendar-row:hover`. A second rule just recoloring the text on the
+   same hover was one more hover effect stacked on top of that, not a
+   distinct one -- see the sibling `.settings-hub-row:hover .settings-row-
+   chevron` rule below for the one hover detail this row keeps beyond the
+   shared row background. */
 .settings-row-icon{color:var(--fg-tertiary); display:inline-flex;}
 .settings-row-name{font-weight:var(--font-weight-bold); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .settings-row .tag-usage-count{flex:none;}
@@ -6680,7 +6841,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
   display:flex; align-items:center; gap:10px; padding:8px;
   border-radius:var(--radius-md);
 }
-.label-list-row:hover{background:var(--bg-secondary);}
+.label-list-row:hover{background:var(--row-hover);}
 .label-list-row + .label-list-row{border-top:1px solid var(--separator);}
 /* A bit bigger than the default 15px icon -- direct feedback, "the icons
    a bit bigger for them in the list" -- since this row no longer carries
@@ -6691,7 +6852,6 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 /* Every row -- the Space itself included -- indents at the same level
    under its group's plain-text heading. */
 .label-list-row.is-child{padding-left:28px;}
-
 /* label_form_modal.html's Role control -- a radio-backed custom dropdown,
    not a native <select> (2026-09-09 direct request: "should be a radio
    box custom drop down, not html default one" -- a native <select>'s open
@@ -7153,7 +7313,18 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
   color:var(--hdr-icon-fill, var(--accent)); background:#fff; text-shadow:none;
   padding:5px; border-radius:var(--radius-sm); box-shadow:0 1px 3px rgba(0,0,0,.25);
 }
-.page-header-narrow.has-banner .page-header-narrow-icon.has-color .icon{width:18px; height:18px;}
+/* 2026-09-27 (icon library item 3: "the icon/avatar style in the narrow
+   header must be visually consistent across pages, spaces, projects,
+   labels, etc.") -- this was the one narrow-header icon variant (a
+   label/group page, WITH both a banner and its own color) pinned to a
+   fixed 18px while every other variant (plain page, no banner, no
+   color) sizes off `.page-header-narrow-icon .icon`'s own 1.15em rule
+   above -- the fixed value read close enough to 1.15em at this app's
+   default text size to go unnoticed, but drifted from every other
+   header the moment font-size ever varies (a user zoom, a future
+   text-size setting). No override needed at all now -- removing it
+   just lets the shared 1.15em rule apply here too, same as everywhere
+   else. */
 /* Label page pieces under the header (2026-09-25, UI audit L6/L12 +
    flesh-out item 6): the status row's "Archived on ... · Unarchive" line,
    the description, the Tasks heading over the Kanban board, and the one
@@ -7488,6 +7659,23 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
     height: 30px;
     padding: 0 var(--space-4);
 }
+/* 2026-09-27 (direct feedback: "the buttons in the header should all be
+   the same height ... especially for the habits page"). The rule above
+   only ever pinned `.btn.primary` to the header's 30px content budget --
+   a `.btn.ghost.btn-sm` sibling (Habits' Pauses/Archived) was left to its
+   own `.btn-sm` padding (4px 10px, see that class's own comment on the
+   specificity bug it already fixes), which doesn't add up to the same
+   30px box a primary button gets forced into. Height only, not
+   min-width/padding -- unlike the bulk-actions-bar/filter-dropdown-
+   trigger pair above, header actions here are prose-length buttons
+   ("Pauses" vs "New habit"), so forcing equal width would either clip
+   the longer label or pad the shorter one oddly; the ask was same
+   *height*, "most of the time the same width" is a byproduct of already-
+   similar label lengths, not a rule to enforce in CSS. */
+.page-header-narrow-actions .btn,
+.page-header-narrow-actions .icon-btn {
+    height: 30px;
+}
 
 /* 2026-09-08 (direct request: "rework the table in the spirit of any
    other table in the app"): this used to be its own hand-rolled table
@@ -7663,22 +7851,33 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 /* 2026-09-25 (UI audit H-07): each meta item stays on one line, so a
    wrap moves a whole item (with its "·") instead of orphaning the dot. */
 .habit-card-meta > span{white-space:nowrap;}
-.habit-check-btn{display:inline-flex; align-items:center; justify-content:center; min-width:34px; height:34px; padding:0 var(--space-1); border-radius:var(--radius-pill); border:2px solid var(--border-strong); background:transparent; color:var(--fg-tertiary); cursor:pointer;}
+/* 2026-09-27 (direct feedback: "redesign the habit-card-check to be more
+   minimalist, remove the circle") -- was a permanent 2px ring
+   (border-radius:pill, hence "a plain check is a circle" in this rule's
+   own prior comment) around every check regardless of state, whether or
+   not the habit was ever touched today. That's chrome duplicating what
+   the icon glyph already says (a plain check swaps `square` <->
+   `check-circle` on its own, see _habit_page_row.html) -- dropped in
+   favor of a plain icon-btn-shaped control: no border/background at rest,
+   `--radius-sm` (matching `.habit-day`'s own radius, not a fresh shape
+   language) and a soft `--bg-secondary` hover exactly like every other
+   icon-btn in the app, background fill reserved for a state that's
+   actually true (done/partial/relapse) rather than shown at all times. */
+.habit-check-btn{display:inline-flex; align-items:center; justify-content:center; min-width:34px; height:34px; padding:0 var(--space-1); border-radius:var(--radius-sm); border:none; background:transparent; color:var(--fg-tertiary); cursor:pointer;}
 .habit-check-btn .icon{width:18px; height:18px;}
-/* A plain check is a circle; the n/target amount check keeps its pill. */
 .habit-check-btn:not(.habit-check-qty){width:34px; padding:0;}
 .is-compact .habit-check-btn{min-width:28px; height:28px;}
 .is-compact .habit-check-btn:not(.habit-check-qty){width:28px;}
 .is-compact .habit-check-btn .icon{width:16px; height:16px;}
-.habit-check-btn:hover{border-color:var(--habit-accent); color:var(--habit-accent);}
-.habit-check-btn.is-done{background:var(--habit-accent); border-color:var(--habit-accent); color:var(--fg-on-accent);}
+.habit-check-btn:hover{background:var(--bg-secondary); color:var(--habit-accent);}
+.habit-check-btn.is-done{background:var(--habit-accent); color:var(--fg-on-accent);}
 .habit-check-qty{font-size:var(--text-sm); font-variant-numeric:tabular-nums; color:var(--fg-primary);}
 .habit-qty-target{color:inherit; opacity:.7;}
 /* 2026-09-25 (UI audit H-01/H-02): an amount habit below its target is
    "partial" -- the same lighter accent the year heatmap uses for a
    part-filled day (level 1-3), on the check, the strip and the month
    calendar alike. Only the target fills it solid. */
-.habit-check-btn.is-partial{border-color:var(--habit-accent); background:color-mix(in srgb, var(--habit-accent) 22%, transparent);}
+.habit-check-btn.is-partial{background:color-mix(in srgb, var(--habit-accent) 22%, transparent);}
 .habit-card.is-done-today .habit-card-title{color:var(--fg-secondary);}
 /* UI audit H-05: the row a check-in just re-rendered (it may have moved
    between To do and On track) flashes once so it's easy to find. */
@@ -7748,6 +7947,13 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
   border:1.5px solid var(--control-border); border-radius:var(--radius-control); background:var(--control-bg); color:var(--fg-secondary); text-decoration:none;}
 .look-side-btn:hover{background:var(--bg-secondary); border-color:var(--border-strong); color:var(--fg-primary); text-decoration:none;}
 .look-side-btn .icon{width:18px; height:18px;}
+/* Settings > Appearance's Accent color + banner row (2026-09-27) -- the
+   one place this dropdown+side-button combo sits inside a plain
+   .settings-field-row list instead of a .field-grid form, so its own
+   explanatory line underneath (matching every sibling row's
+   .settings-field-hint, which only styles itself inside a .settings-
+   field-row) needs its own small rule instead of inheriting one. */
+.settings-look-hint{margin:2px 0 var(--space-3); font-size:var(--text-sm); color:var(--fg-tertiary);}
 .look-trigger{display:flex; align-items:center; gap:var(--space-2); width:100%;}
 .look-name{flex:1; text-align:left; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .look-preview{--habit-accent:var(--accent); display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; background:var(--habit-accent); color:var(--fg-on-accent); flex:none;}
@@ -7833,8 +8039,8 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .habit-note-date{color:var(--fg-tertiary); min-width:5ch; display:inline-block;}
 /* Avoid habits (habits H5): relapses read as a warning, not progress. */
 .habit-check-avoid{color:var(--fg-secondary);}
-.habit-check-avoid:hover{border-color:var(--danger); color:var(--danger);}
-.habit-check-btn.habit-check-avoid.is-relapse{background:var(--danger); border-color:var(--danger); color:var(--fg-on-accent);}
+.habit-check-avoid:hover{background:var(--tag-red-bg); color:var(--danger);}
+.habit-check-btn.habit-check-avoid.is-relapse{background:var(--danger); color:var(--fg-on-accent);}
 .habit-day.is-relapse{background:var(--danger); color:var(--fg-on-accent);}
 .habit-day.is-today.is-relapse{box-shadow:none;}
 .heatmap-avoid .heatmap-cell.level-1,
@@ -7895,19 +8101,21 @@ button.allday-habit{
 .habit-bars.is-avoid .habit-bar-fill{background:var(--danger);}
 .habit-bar-count{font-size:10px; color:var(--fg-tertiary); line-height:1.2; height:12px;}
 .habit-bar-label{font-size:10px; color:var(--fg-tertiary); line-height:1.4; height:14px;}
-/* Web Push P1: Settings > General's Notifications card -- `button.btn`
+/* Web Push P1: Settings > Notifications' own card -- `button.btn`
    sets display, which would otherwise override the [hidden] attribute
    push_settings.js toggles. */
 #push-settings button[hidden]{display:none;}
 /* Web Push P3: reminder types + digest time + contact email (Settings >
-   General). 2026-09-25 (UI audit H-19): one form of ordinary
-   .settings-field-rows (bold labels, hairlines between rows) with a
-   single Save row; the old .push-types-form/.push-contact-form column
-   layouts are gone. */
+   Notifications, split out of General 2026-09-27). 2026-09-25 (UI audit
+   H-19): one form of ordinary .settings-field-rows (bold labels,
+   hairlines between rows) with a single Save row; the old .push-types-
+   form/.push-contact-form column layouts are gone. 2026-09-27: "Remind me
+   about" itself swapped from a bare `.push-types`/`.push-type` checkbox
+   column to the standard `_widget_list_multiselect.html` dropdown every
+   other row on this card already used -- those two classes (and the
+   `.push-types-row` alignment override they needed) are gone with the
+   markup that used them. */
 .push-prefs-form{margin:0; border-top:1px solid var(--separator);}
-.push-types{display:flex; flex-direction:column; gap:4px; min-width:0;}
-.push-type{display:flex; align-items:center; gap:var(--space-2); font-size:var(--text-sm);}
-.push-types-row{align-items:flex-start;}
 #push-contact-email{width:min(260px, 100%);}
 .push-prefs-actions{padding-top:var(--space-2);}
 /* UI audit H-20: this device's notifications are off/blocked -- the

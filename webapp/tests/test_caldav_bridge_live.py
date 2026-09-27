@@ -82,6 +82,7 @@ def radicale_settings(tmp_path: Path) -> Settings:
             sync_interval_seconds=9999,
             backup_dir=tmp_path / "backups",
             photo_cache_dir=tmp_path / "photo_cache",
+            flairs_dir=tmp_path / "flairs",
         )
     finally:
         proc.terminate()

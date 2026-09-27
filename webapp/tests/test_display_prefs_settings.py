@@ -653,8 +653,8 @@ class TestSettingsAppearanceEditMode:
 
 
 class TestSettingsAppearanceAccentColor:
-    """2026-09-17 (design-system unification pass, shared spec at
-    /home/peter/Claude/Projects/DESIGN_SYSTEM.md) -- "Accent color", a
+    """2026-09-17 (design-system unification pass, shared spec with the
+    sibling app Pineart) -- "Accent color", a
     fixed 8-preset swatch grid (deps.py's ACCENT_PRESETS), not a free
     color picker. Stores one of the 8 preset keys in app_meta, same
     pattern as the toggles above but validated against an allowlist

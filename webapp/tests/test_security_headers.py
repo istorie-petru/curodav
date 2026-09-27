@@ -42,6 +42,7 @@ def _settings(**overrides) -> Settings:
         sync_interval_seconds=60,
         backup_dir=Path("/tmp/cc-secheaders-test-backups"),
         photo_cache_dir=Path("/tmp/cc-secheaders-test-photo-cache"),
+        flairs_dir=Path("/tmp/cc-secheaders-test-flairs"),
         auth_username="alice",
         auth_password="s3cret",
         auth_session_secret="test-signing-secret",

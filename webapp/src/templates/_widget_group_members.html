@@ -15,7 +15,17 @@
      nest a kebab's own <form> inside an anchor" reasoning
      _unscheduled_task_item.html/_contacts_body.html's row-wrap already
      follow) -- `.group-member-link` is the inner clickable name+meta,
-     the kebab sits beside it. -->
+     the kebab sits beside it.
+
+     2026-09-27 minimalist redesign (direct request "implement" off the
+     reviewed mockup, style.css's own comment on `.group-member-row` has
+     the fuller rationale): each meta fact gets a small icon (open tasks =
+     check-square, upcoming events = calendar, next due = clock) and the
+     whole `.group-member-meta` cluster moves to the row's own right edge
+     via `margin-left:auto`, instead of trailing the pill inline. Text
+     stays byte-for-byte the same ("N open task(s)" etc.) --
+     test_group_members_widget.py's TestRenderedWidgetTemplate checks
+     that substring, not the markup around it. -->
 {% from "_widget_items.html" import widget_empty %}
 {% from "_action_menu.html" import action_menu with context %}
 {% if data.rows %}
@@ -25,9 +35,9 @@
         <a class="group-member-link" href="/labels/{{ row.label.name|urlencode }}">
             <span class="cell-tag cal-{{ row.label.color }}">{{ icon(row.label.icon or 'tag', 'icon-sm') }} {{ row.label.name }}</span>
             <span class="group-member-meta">
-                <span>{{ row.open_task_count }} open task{{ 's' if row.open_task_count != 1 }}</span>
-                {% if row.upcoming_event_count %}<span>{{ row.upcoming_event_count }} upcoming event{{ 's' if row.upcoming_event_count != 1 }}</span>{% endif %}
-                {% if row.next_due %}<span>Next due {{ row.next_due | relative_date }}</span>{% endif %}
+                <span class="group-member-fact">{{ icon('check-square', 'icon-sm') }} {{ row.open_task_count }} open task{{ 's' if row.open_task_count != 1 }}</span>
+                {% if row.upcoming_event_count %}<span class="group-member-fact">{{ icon('calendar', 'icon-sm') }} {{ row.upcoming_event_count }} upcoming event{{ 's' if row.upcoming_event_count != 1 }}</span>{% endif %}
+                {% if row.next_due %}<span class="group-member-fact">{{ icon('clock', 'icon-sm') }} Next due {{ row.next_due | relative_date }}</span>{% endif %}
             </span>
         </a>
         {{ action_menu([

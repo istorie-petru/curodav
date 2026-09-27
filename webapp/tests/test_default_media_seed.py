@@ -1,6 +1,6 @@
 """main._seed_default_media (2026-09-07, direct request) -- first-run
 defaults for the global page banner, the four seasonal task/event banners,
-and the app avatar, sourced from repo-root pictures/*.jpg. Covered as a
+and the app avatar, sourced from repo-root assets/*.jpg. Covered as a
 pure (conn, pictures_dir) function rather than by booting the whole app --
 lifespan's own wiring (calling it once at startup, inside a try/except so a
 failure here can't refuse to boot the app) isn't re-tested here since it's

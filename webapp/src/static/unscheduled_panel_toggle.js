@@ -4,15 +4,14 @@
 // per-device display preference, same category as timeline.js's gutter
 // width -- persisted client-side only (localStorage), no server state.
 //
-// 2026-09-26 (item 11 redesign): a SECOND trigger was added to the page's
-// own narrow-header actions row (calendar_week.html's own "[>>]" button,
-// `#unscheduled-panel-toggle-header` -- outside the async-refreshed
-// #week-grid region, so it survives a region swap without needing
-// re-init) alongside the panel's original header button
-// (`#unscheduled-panel-toggle`, inside the region). Both now share the
-// `.unscheduled-panel-toggle-btn` class and drive the exact same
-// panel/localStorage state -- clicking either one collapses/expands the
-// same panel and updates both buttons' title/aria-expanded in lockstep.
+// 2026-09-26 (item 11 redesign): briefly had a second trigger in the
+// page's own narrow-header actions row alongside the panel's own header
+// button, both sharing `.unscheduled-panel-toggle-btn`. Reverted
+// 2026-09-27 (direct feedback) -- back to just the one in-panel button
+// (`#unscheduled-panel-toggle`), though `apply()`/`init()` below still
+// operate on `.unscheduled-panel-toggle-btn` generically rather than that
+// specific id, so a second trigger could come back without touching this
+// file again.
 
 (function () {
   const STORAGE_KEY = "cc-unscheduled-panel-collapsed";

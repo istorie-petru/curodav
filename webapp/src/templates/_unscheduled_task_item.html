@@ -61,10 +61,45 @@
    sessions total, or with every session already dated, is filtered out of
    `unscheduled_tasks` before this macro ever sees it, so this count is
    never 0 in practice.
+
+   2026-09-27 (row modernization, direct request "implement" off the
+   reviewed mockup): three purely-visual additions on top of the shape
+   above, none of it touching data/behavior --
+     - `.unscheduled-type-glyph` (repeat icon for a habit, check-square for
+       a plain task) up front, ahead of the drag handle, so a habit reads
+       as a habit without parsing the meta line's wording. Icon choice
+       matches existing usage (`icon('repeat', ...)` is the Habits tab/
+       all-day habit chip's own glyph -- see base.html/_calendar_day_grid.
+       html; `check-square` is the closest tasks-app default for "a plain
+       task").
+     - a left accent bar (`.unscheduled-task-item::before`, painted via the
+       `--um-accent` custom property set inline) picking up the row's own
+       project/label color the same way `.cell-tag.cal-*` and the calendar
+       chips already do, instead of a project pill that's the same neutral
+       gray regardless of which project it names. Falls back to
+       `--fg-tertiary` (the old neutral look) when the task has no project.
+       `item.project` is already `db.project_label_config_for`'s *effective*
+       config -- `.color` is always present once `.project` is truthy, no
+       extra lookup needed. The pill itself keeps its exact `class=
+       "unscheduled-project-pill"` attribute (test_calendar_week_scheduling.
+       py asserts that literal string) and only gains an inline `style` for
+       the same color, via the shared `--tag-*-bg`/`--tag-*-fg` pair every
+       other pill (`.cell-tag.cal-*`) already draws from.
+     - a 7-dot week-progress strip on a DAILY habit's meta line only
+       (`item.habit_sessions.required > 1` -- a weekly/monthly habit's
+       `required` is 1, where a single dot would be a decoration, not
+       information, so it's left as plain text). `filled` = sessions
+       already accounted for this period (dated + undated-but-added,
+       capped at `required`) -- the exact inputs `needed` itself is derived
+       from (db.habit_work_sessions_status), just given a shape instead of
+       only appearing as the "Needs N more" sentence that stays alongside
+       it unchanged.
    Import with `with context` -- the macro body calls the `icon` global. #}
 {% from "_action_menu.html" import action_menu with context %}
 {% macro unscheduled_task_item(item, next_url) %}
-<div class="unscheduled-task-item" data-task-uid="{{ item.task.uid }}" data-task-title="{{ item.task.title }}" data-undo-row>
+{% set accent = 'var(--tag-' ~ item.project.color ~ '-fg)' if item.project else 'var(--fg-tertiary)' %}
+<div class="unscheduled-task-item" data-task-uid="{{ item.task.uid }}" data-task-title="{{ item.task.title }}" data-undo-row data-style="--um-accent: {{ accent }};">
+    <span class="unscheduled-type-glyph" aria-hidden="true" title="{{ 'Habit' if item.is_habit else 'Task' }}">{{ icon('repeat' if item.is_habit else 'check-square', 'icon-sm') }}</span>
     <span class="unscheduled-drag-handle" aria-hidden="true">{{ icon('move', 'icon-sm') }}</span>
     <div class="unscheduled-task-main">
         <span class="unscheduled-task-title" title="{{ item.task.title }}">{{ item.task.title }}</span>
@@ -73,12 +108,16 @@
             {# See this file's own header comment -- a habit has no hours
                figure, only "sessions still needed this period" (`needed`,
                db.habit_work_sessions_status). #}
+            {% if item.habit_sessions.required > 1 %}
+            {% set filled = [item.habit_sessions.required - item.habit_sessions.needed, 0]|max %}
+            <span class="unscheduled-dot-progress" title="{{ filled }} of {{ item.habit_sessions.required }} this period" aria-hidden="true">{% for n in range(item.habit_sessions.required) %}<span class="{{ 'is-done' if n < filled else '' }}"></span>{% endfor %}</span>
+            {% endif %}
             <span title="Sessions still needed this period">Needs {{ item.habit_sessions.needed }} more this period</span>
             {% else %}
             <span title="Sessions still needing placement">Estimated {{ "%.1f"|format(item.sessions.total_hours) }}h</span>
             {% endif %}
             {% if item.project %}
-            <span class="unscheduled-project-pill" title="{{ item.project.name }}">{% if item.project.icon %}{{ icon(item.project.icon, 'icon-sm') }}{% endif %}{{ item.project.name }}</span>
+            <span class="unscheduled-project-pill" data-style="background:var(--tag-{{ item.project.color }}-bg); color:var(--tag-{{ item.project.color }}-fg);" title="{{ item.project.name }}">{% if item.project.icon %}{{ icon(item.project.icon, 'icon-sm') }}{% endif %}{{ item.project.name }}</span>
             {% endif %}
         </div>
     </div>

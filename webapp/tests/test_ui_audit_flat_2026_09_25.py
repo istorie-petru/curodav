@@ -58,7 +58,11 @@ def test_f4_no_duplicate_top_app_bar_on_search_or_notes():
 
 def test_f5_settings_groups_have_dividers():
     assert ".settings-divider{" in _CSS
-    for name, n in (("settings_general.html", 1), ("settings_your_profile.html", 1), ("settings_data_maintenance.html", 2)):
+    # settings_general.html dropped its own divider 2026-09-27, when the
+    # Notifications card it used to separate moved to its own page
+    # (settings_notifications.html) -- General is back to one card, and
+    # one card needs nothing dividing it.
+    for name, n in (("settings_general.html", 0), ("settings_your_profile.html", 1), ("settings_data_maintenance.html", 2)):
         assert (_TPL / name).read_text().count('<hr class="settings-divider">') == n
 
 

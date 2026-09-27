@@ -194,7 +194,7 @@ class TestNotificationsForm:
         from src.deps import TIME_FORMAT_KEY
 
         db.set_app_meta(conn, TIME_FORMAT_KEY, "24h")
-        body = settings_router.settings_general(_req("/settings/general"), conn=conn).body.decode()
+        body = settings_router.settings_notifications(_req("/settings/notifications"), conn=conn).body.decode()
         card = body.split('id="push-settings"', 1)[1]
         assert 'type="time"' not in card
         assert "PM" not in card

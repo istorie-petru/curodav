@@ -67,27 +67,31 @@
     </div>
     <!-- Accent color (2026-09-17, design-system unification pass) -- 8
          fixed presets, not a free color picker (see deps.py's
-         ACCENT_COLOR_KEY comment and /home/peter/Claude/Projects/
-         DESIGN_SYSTEM.md for why) -- same swatch set Pineart's own
-         Settings > Appearance offers. Plain autosubmit form, same pattern
-         as "Show icons next to labels" below, posting straight to
-         routers/settings.py's set_accent_color. -->
-    <form class="settings-field-row" method="post" action="/settings/appearance/accent">
-        <span class="settings-field-label">Accent color
-            <span class="settings-field-hint">Used for buttons, links, and highlights throughout the app</span>
-        </span>
-        <span class="spacer"></span>
-        <div class="accent-swatch-picker" role="radiogroup" aria-label="Accent color">
-            {% for preset in accent_presets %}
-            <label class="color-swatch-label" title="{{ preset.name }}">
-                <input type="radio" name="color" value="{{ preset.key }}"
-                       class="color-swatch accent-swatch-{{ preset.key }}"
-                       {% if current_accent_color == preset.key %}checked{% endif %}
-                       data-change-submit aria-label="{{ preset.name }}">
-            </label>
-            {% endfor %}
-        </div>
-    </form>
+         ACCENT_COLOR_KEY comment for why) -- same swatch set Pineart's own
+         Settings > Appearance offers. Plain autosubmit form, posting
+         straight to routers/settings.py's set_accent_color.
+
+         2026-09-27 direct feedback ("the app's accent color and page
+         header banner should utilize the look dropdown + banner upload
+         combo from modal windows, but repurposed for this page") --
+         was a bare row of 8 raw radio swatches with the Page header
+         banner button in its own separate row below. Now the same
+         `_look_picker.html` dropdown every colour/icon picker in the app
+         uses (habits, labels, groups), `show_icon=false` (an accent has
+         no icon) and `dot_var_prefix='accent-preset-'` (the accent
+         presets' own curated palette, not the label/calendar one every
+         other look_picker caller reads by default -- see that macro's
+         own comment on both). The banner button moves into the same row
+         via the macro's own call-block slot, exactly the label edit
+         modal's own square `.look-side-btn` upload button next to its
+         Look dropdown. -->
+    {% from "_look_picker.html" import look_picker %}
+    {% call look_picker('look-accent-settings', 'accent-form', current_accent_color, none, accent_presets | map(attribute='key') | list, {},
+                        label='Accent color', show_icon=false, dot_var_prefix='accent-preset-', autosubmit=true) %}
+    <a href="/banners/editor?scope=__page_header__&amp;page_url={{ '/settings/appearance'|urlencode }}" data-modal class="look-side-btn" title="{{ 'Change banner' if current_page_header_banner else 'Add banner' }}" aria-label="{{ 'Change banner' if current_page_header_banner else 'Add banner' }}">{{ icon('image') }}</a>
+    {% endcall %}
+    <form id="accent-form" method="post" action="/settings/appearance/accent" hidden></form>
+    <p class="settings-field-hint settings-look-hint">Accent used for buttons, links, and highlights throughout the app; banner is the background image for every standard page's header strip (Tasks, Calendar, Settings, ...)</p>
     <!-- Show icons next to labels (2026-08-09) -- when on, every label pill
          in the app (task/event label pills, Tasks table/board, calendar
          chips) renders the label's assigned icon before its name. Read
@@ -147,22 +151,14 @@
         {% set ms_form_id = 'edit-mode-form' %}
         {% include "_widget_list_multiselect.html" %}
     </form>
-    <!-- Page header banner (2026-08-29, sidebar redesign item 13e
-         follow-up, direct request) -- one image, reused as the background
-         on every standard page's narrow header (_page_header_narrow.html,
+    <!-- Page header banner (2026-08-29, sidebar redesign item 13e follow-
+         up, direct request) -- one image, reused as the background on
+         every standard page's narrow header (_page_header_narrow.html,
          deps.py's page_header_banner()/PAGE_HEADER_BANNER_SCOPE). Opens
          the exact same banner editor modal Home/label pages use (upload +
-         remove in one dialog), just pointed at this one fixed scope --
-         no new upload/remove routes needed. Same "Add" vs "Change"
-         label-by-presence convention as label_detail.html's own button. -->
-    <div class="settings-field-row">
-        <span class="settings-field-label">Page header banner
-            <span class="settings-field-hint">Background image for every standard page's header strip (Tasks, Calendar, Settings, ...)</span>
-        </span>
-        <span class="spacer"></span>
-        {# 2026-09-08: data-modal-size="wide" dropped, see dashboard.html's
-           own trigger for why. #}
-        <a href="/banners/editor?scope=__page_header__&amp;page_url={{ '/settings/appearance'|urlencode }}" data-modal class="btn ghost">{{ icon('image', 'icon-sm') }}{% if current_page_header_banner %} Change banner{% else %} Add banner{% endif %}</a>
-    </div>
+         remove in one dialog), just pointed at this one fixed scope -- no
+         new upload/remove routes needed. 2026-09-27: moved into the
+         Accent color row above as a `.look-side-btn` (see that row's own
+         comment) -- no longer its own row here. -->
 </div>
 {% endblock %}

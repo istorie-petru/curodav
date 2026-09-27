@@ -1,7 +1,7 @@
 [project]
 name = "command-center-web"
-version = "2.1.2"
-description = "Mobile/remote PWA client -- calendar, tasks, contacts, synced via CalDAV/CardDAV against a self-hosted Radicale server. Update 2026-08: local-only projects/tags (see src/db.py) were folded into the universal label/object_labels model (see features/architecture.md); a generic cross-type link/board graph was never carried over from the now-deleted desktop app (features/architecture.md Phase 8) -- accepted gap, not planned."
+version = "2.8.0"
+description = "Curodav's FastAPI web client -- calendar, tasks, contacts, synced via CalDAV/CardDAV against a self-hosted Radicale server."
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
@@ -41,7 +41,6 @@ dependencies = [
 
 [project.scripts]
 command-center-web = "src.main:main"
-task-state = "src.task_cli:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

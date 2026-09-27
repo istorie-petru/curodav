@@ -36,12 +36,16 @@
      two-line-per-row) content. The header also gained an item-count badge
      and a search box (`unscheduled_panel_search.js`, client-side
      title/tag substring filter, no server round-trip) alongside the
-     existing collapse toggle -- and that same toggle is now reachable a
-     second way, from the page's own narrow-header actions row
-     (calendar_week.html's `#unscheduled-panel-toggle-header`), per the
-     mockup's own header "[>>]" button; both buttons share one
-     `.unscheduled-panel-toggle-btn` class and one localStorage-backed
-     state (unscheduled_panel_toggle.js). -->
+     existing collapse toggle.
+
+     2026-09-27 (direct feedback): the page-header duplicate of this
+     toggle (id ending `-header`) and the header's redundant quick-add-task
+     button are gone again -- back to the single in-panel toggle below,
+     `.unscheduled-panel-toggle-btn` now matches exactly one element. Its
+     icon changed from a generic sidebar glyph to a plain up-chevron
+     (points up = "collapse"; style.css's existing `.collapsed
+     .unscheduled-panel-toggle-btn svg{transform:rotate(180deg)}` flips it
+     to point down once collapsed, no CSS change needed). -->
 {% from "_unscheduled_task_item.html" import unscheduled_task_item with context %}
 <div class="project-calendar-layout" id="week-grid" data-date="{{ monday.isoformat() }}" data-label="{{ active_label | default('') }}" data-label-text="{{ label_text }}" data-prev="{{ prev_week }}" data-next="{{ next_week }}">
     <div class="card calendar-viewport project-calendar-grid">
@@ -166,7 +170,7 @@
         <div class="unscheduled-panel-head">
             <h2>Unscheduled work <span class="unscheduled-panel-count">({{ unscheduled_tasks|length }})</span></h2>
             <input type="search" id="unscheduled-search" class="unscheduled-search" placeholder="Search..." aria-label="Search unscheduled work" autocomplete="off">
-            <button type="button" class="icon-btn unscheduled-panel-toggle-btn" id="unscheduled-panel-toggle" title="Collapse Unscheduled work" aria-label="Collapse Unscheduled work" aria-expanded="true" aria-controls="unscheduled-panel-body">{{ icon('sidebar', 'icon-sm') }}</button>
+            <button type="button" class="icon-btn unscheduled-panel-toggle-btn" id="unscheduled-panel-toggle" title="Collapse Unscheduled work" aria-label="Collapse Unscheduled work" aria-expanded="true" aria-controls="unscheduled-panel-body">{{ icon('chevron-up', 'icon-sm') }}</button>
         </div>
         <div id="unscheduled-panel-body">
         {% if unscheduled_tasks %}

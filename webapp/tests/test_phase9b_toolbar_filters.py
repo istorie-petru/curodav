@@ -213,15 +213,18 @@ class TestCalendarSingleToolbar:
 
 class TestContactsNoArchivedState:
     def test_no_active_archived_segmented_control(self, conn):
-        # 2026-08-07: Active/Archived removed entirely (not just restyled)
-        # -- Contacts has no special "archived" state anymore, only
-        # labels. This supersedes the Phase 9b finding that the old
-        # Active/Archived pair rendered with no matching CSS (segmented-
-        # control/segmented-btn) -- there's nothing to restyle, it's gone.
+        # 2026-08-07: the old Active/Archived *segmented control* pair (a
+        # `.segmented-control`/`.segmented-btn` toggle, unrelated to the
+        # later real `contacts.archived_at` column) is gone. Superseded
+        # since by item 19 (2026-09-26) adding a real Archived filter back
+        # -- as of 2026-09-27 a `_filter_dropdown.html` dropdown, same
+        # component as the Label filter -- so this only asserts the old
+        # chrome/markup is gone, not that "Active"/"Archived" text can
+        # never appear at all (TestArchivedDefaultExclusion, test_
+        # contacts_archive_column.py cover that real feature).
         resp = contacts_router.list_contacts(_request("/contacts"), conn=conn)
         body = resp.body.decode()
         assert ">Active<" not in body
-        assert ">Archived<" not in body
         assert "segmented-control" not in body
         assert "segmented-btn" not in body
 

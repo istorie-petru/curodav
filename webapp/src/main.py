@@ -29,13 +29,13 @@ logger = logging.getLogger(__name__)
 _BASE_DIR = Path(__file__).resolve().parent
 
 # 2026-09-07 (direct request) -- first-run defaults, sourced from image
-# files the user dropped in the repo-root `pictures/` directory (a sibling
+# files the user dropped in the repo-root `assets/` directory (a sibling
 # of `webapp/`, hence the two `.parent`s off this file's own `src/`
 # directory). Seeded ONCE into app_meta (see _seed_default_media below);
 # after that they're indistinguishable from any other user-set banner/
 # avatar -- editable/removable as normal in Settings > Appearance/General,
 # never re-applied over a value the user has since changed.
-_PICTURES_DIR = _BASE_DIR.parent.parent / "pictures"
+_PICTURES_DIR = _BASE_DIR.parent.parent / "assets"
 _DEFAULT_MEDIA_SEEDED_KEY = "default_media_seeded_v1"
 _DEFAULT_PAGE_BANNER_FILE = "banner_51.jpg"
 _DEFAULT_AVATAR_FILE = "avatar.jpg"
@@ -60,7 +60,7 @@ def _seed_default_media(conn: sqlite3.Connection, pictures_dir: Path = _PICTURES
     edited or removed in Settings is never re-applied or overwritten by a
     later startup. Each file is read independently and a missing/unreadable
     one is skipped with a warning rather than failing the others or
-    aborting startup -- a partial `pictures/` directory still boots the app
+    aborting startup -- a partial `assets/` directory still boots the app
     and seeds whatever it can.
 
     Stores images the exact same way an upload through routers/banners.py
@@ -141,13 +141,23 @@ async def lifespan(app: FastAPI):
         settings = apply_persisted_radicale_overrides(settings, _conn)
         # First-run default banners/avatar (2026-09-07, direct request) --
         # see _seed_default_media's own docstring. Must not be allowed to
-        # fail startup over e.g. a missing pictures/ directory on a deploy
+        # fail startup over e.g. a missing assets/ directory on a deploy
         # that never got one; that's just "nothing seeded," not fatal.
         try:
             _seed_default_media(_conn)
         except Exception:
             logger.exception("Default media seed failed; continuing without it")
     app.state.settings = settings
+
+    # Item 10 follow-up (2026-09-27) -- points src/flairs.py at wherever
+    # the operator's own flair photos actually live (see that module's
+    # own docstring for why this can't just be a static bundled
+    # directory). Module-level, not app.state, since db.py's banner-
+    # resolution functions have no Request/Settings to read it from at
+    # all -- see flairs.py's own comment on `_flairs_dir`.
+    from . import flairs
+
+    flairs.configure(settings.flairs_dir)
 
     # The bridge's constructor connects to Radicale (DAVClient -> principal,
     # plus eager default collection lookups). Radicale is OPTIONAL -- the app
@@ -298,7 +308,7 @@ def create_app() -> FastAPI:
     # today_redirect and routers/calendar.py::week_redirect for the
     # bookmark-preserving redirects that replaced them, same precedent as
     # the earlier /calendar/timetable retirement).
-    from .routers import auth, banners, calendar, contacts, dashboard, export, habits, label_pages, labels, notes, projects, public_lists, published_lists, push, pwa, quick_capture, search, settings, spaces, sync_api, tasks, timeline
+    from .routers import auth, banners, calendar, contacts, dashboard, export, flairs as flairs_router, habits, label_pages, labels, notes, projects, public_lists, published_lists, push, pwa, quick_capture, search, settings, spaces, sync_api, tasks, timeline
 
     # Health check (design-system unification pass, 2026-09-17, deploy
     # alignment with sibling app Pineart's own GET /api/health) -- exempted
@@ -361,6 +371,7 @@ def create_app() -> FastAPI:
     app.include_router(habits.router)
     app.include_router(push.router)
     app.include_router(banners.router)
+    app.include_router(flairs_router.router)
     app.include_router(settings.router)
     app.include_router(published_lists.router)
     app.include_router(export.router)

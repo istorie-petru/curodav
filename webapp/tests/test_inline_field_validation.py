@@ -1,5 +1,5 @@
 """Inline field-level validation (design-system unification pass, 2026-09-17,
-shared spec at /home/peter/Claude/Projects/DESIGN_SYSTEM.md): a 422 response
+shared spec with the sibling app Pineart): a 422 response
 from a modal form used to surface only as a global toast, with no way to
 tell which input on a longer form (task/event/contact/...) was actually
 wrong. modal.js's applyFieldErrors now marks the matching `.field` wrapper

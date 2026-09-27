@@ -148,7 +148,7 @@ def _dashboard_page(conn, request: Request, name: str, label: dict):
     )
     ctx.update(_status_context(conn, label))
     ctx.update(_page_common(conn, name))
-    ctx.update(dashboard_router._page_banner_context(conn, name))
+    ctx.update(dashboard_router._page_banner_context(conn, name, name=name))
     return templates.TemplateResponse("label_detail.html", ctx)
 
 
@@ -213,7 +213,7 @@ def _sections_page(conn, request: Request, name: str, label: dict):
     }
     ctx.update(_status_context(conn, label))
     ctx.update(_page_common(conn, name))
-    ctx.update(dashboard_router._page_banner_context(conn, name))
+    ctx.update(dashboard_router._page_banner_context(conn, name, name=name))
     return templates.TemplateResponse("label_sections.html", ctx)
 
 
@@ -440,7 +440,7 @@ def group_page(name: str, request: Request, conn=Depends(get_db)):
             "page_url": group_url(name),
         }
     )
-    ctx.update(dashboard_router._page_banner_context(conn, key))
+    ctx.update(dashboard_router._page_banner_context(conn, key, name=name))
     return templates.TemplateResponse("label_detail.html", ctx)
 
 

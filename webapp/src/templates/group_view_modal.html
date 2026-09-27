@@ -29,10 +29,6 @@
             <span class="detail-meta-label">Used in</span>
             <span class="detail-meta-value">{{ usage }} item{{ 's' if usage != 1 }}</span>
         </div>
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Page</span>
-            <span class="detail-meta-value"><a href="/groups/{{ group.name|urlencode }}">{{ icon('external-link', 'icon-sm') }} Open</a></span>
-        </div>
         {% if labels %}
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">In this group</span>
@@ -47,6 +43,7 @@
 {% set footer_delete_url = '/groups/' ~ (group.name|urlencode) ~ '/delete' %}
 {% set footer_delete_mode = 'confirm' %}
 {% set footer_delete_label = 'Delete the group "' ~ group.name ~ '"? Its labels stay, ungrouped.' %}
+{% set footer_extra_html %}<a class="btn ghost" href="/groups/{{ group.name|urlencode }}">{{ icon('external-link', 'icon-sm') }} Open page</a>{% endset %}
 {% set footer_primary_href = '/groups/' ~ (group.name|urlencode) ~ '/edit' %}
 {% set footer_primary_label = 'Edit' %}
 {% set footer_primary_icon = 'edit' %}

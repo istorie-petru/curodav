@@ -342,5 +342,8 @@ class TestShellCacheVersion:
         # v135 (2026-09-26): groups/labels/projects split, module dropdowns.
         # v136 (2026-09-26): entity tables rebuilt, convert row action, panel heatmap clickable.
         # v137 (2026-09-26): typed date/time fields replace the range picker.
+        # v138 (2026-09-27): icon set swap back to Lucide (item 3) --
+        # _icons_sprite.html's 190 symbols replaced, style.css's `.icon`
+        # flipped fill<->stroke again plus two new sizing rules.
         script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v137"' in script
+        assert 'CACHE_NAME = "cc-shell-v138"' in script

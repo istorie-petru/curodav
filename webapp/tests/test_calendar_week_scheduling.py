@@ -227,32 +227,25 @@ class TestWeekViewRoute:
 
 
 class TestPlannerHeaderButtons:
-    """Item 11's mockup header row: "+ New Task" and a ">>" collapse button
-    next to the existing prev/next/label-filter controls
-    (calendar_week.html)."""
+    """2026-09-27 direct feedback reverted item 11's mockup header row --
+    "+ New Task" was redundant with the sidebar's own global quick-add, and
+    the header's second panel-collapse trigger was redundant with the
+    panel's own toggle button. Planner's narrow header goes back to just
+    prev/next/label-filter (calendar_week.html)."""
 
-    def test_new_task_button_opens_the_shared_quick_add_modal(self, conn):
+    def test_no_new_task_button_in_header(self, conn):
+        """The sidebar's own global "+ New" still opens the same quick-add
+        modal at this href (base.html) -- only the header's OWN redundant
+        copy of that link, labeled "New Task", is what's gone."""
         body = calendar_router.week_view(_request(), conn=conn).body.decode()
-        assert 'href="/quick/add?default_tab=task"' in body
-        assert "New Task" in body
+        assert "New Task" not in body
 
-    def test_new_task_button_carries_the_active_label_filter(self, conn):
-        body = calendar_router.week_view(
-            _request(query_string=b"label=work"), label="work", conn=conn
-        ).body.decode()
-        # Jinja auto-escapes the `&` in an attribute value.
-        assert 'href="/quick/add?default_tab=task&amp;label=work"' in body
-
-    def test_header_gets_a_second_panel_toggle_sharing_the_same_class(self, conn):
-        """`unscheduled_panel_toggle.js` drives both buttons off one shared
-        class + localStorage state -- see that file's own header comment.
-        Counts the real `class="..."` attribute, not the bare class name --
-        _calendar_week_grid.html's own explanatory HTML comment also
-        mentions it by name, and an HTML comment still renders into the
-        output (unlike a Jinja `{# #}` comment)."""
+    def test_no_second_panel_toggle_in_header(self, conn):
+        """Only the panel's own toggle (`#unscheduled-panel-toggle`) remains
+        -- `.unscheduled-panel-toggle-btn` matches exactly one element."""
         body = calendar_router.week_view(_request(), conn=conn).body.decode()
-        assert 'id="unscheduled-panel-toggle-header"' in body
-        assert body.count('class="icon-btn unscheduled-panel-toggle-btn"') == 2  # header + panel's own
+        assert 'id="unscheduled-panel-toggle-header"' not in body
+        assert body.count('class="icon-btn unscheduled-panel-toggle-btn"') == 1
 
 
 class TestUnscheduledPanelHeaderCountAndSearch:
@@ -552,11 +545,10 @@ class TestUnscheduledPanelNoLongerReflowsTheGrid:
         assert "#unscheduled-panel-body::-webkit-scrollbar{display:none;}" not in css
 
     def test_toggle_still_pins_to_the_row_end(self):
-        """Both toggle buttons (the panel's own + the page header's new
-        second one, per the mockup's own "[>>]" control) share one class,
-        `.unscheduled-panel-toggle-btn` -- style.css pins it to the row's
-        right edge the same way the old id-scoped rule pinned the single
-        button that used to be the only one."""
+        """The toggle button still carries the shared `.unscheduled-panel-
+        toggle-btn` class (a second header trigger briefly reused it, see
+        TestPlannerHeaderButtons; reverted 2026-09-27) -- style.css pins it
+        to the row's right edge via that class, not an id-scoped rule."""
         css = (_STATIC_DIR / "style.css").read_text()
         assert ".unscheduled-panel-toggle-btn{margin-left:auto;}" in css
 

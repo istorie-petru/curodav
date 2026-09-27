@@ -163,8 +163,8 @@ class TestSettings:
         from starlette.requests import Request
         from src.routers import settings as settings_router
 
-        req = Request({"type": "http", "method": "GET", "path": "/settings/general", "headers": [], "query_string": b""})
-        body = settings_router.settings_general(req, conn=conn).body.decode()
+        req = Request({"type": "http", "method": "GET", "path": "/settings/notifications", "headers": [], "query_string": b""})
+        body = settings_router.settings_notifications(req, conn=conn).body.decode()
         assert 'action="/settings/notifications"' in body
         assert body.count('name="types"') == 4
         assert 'name="digest_time" value="08:00"' in body

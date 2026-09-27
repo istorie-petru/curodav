@@ -17,7 +17,7 @@
     <form method="get" action="/notes" class="filter-bar">
         <input type="search" name="q" placeholder="Search notes..." value="{{ q }}">
     </form>
-    <a class="btn primary" href="/notes/new" data-modal data-fab title="New note">{{ icon('plus') }} New</a>
+    <a class="btn primary" href="/notes/new" data-modal data-fab title="New note">{{ icon('plus', 'icon-sm') }} New</a>
 {% endcall %}
 
 {% include "_notes_body.html" %}

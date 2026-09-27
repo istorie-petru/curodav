@@ -164,14 +164,15 @@ class TestWiring:
     def test_settings_card_and_script(self, conn):
         from src.routers import settings as settings_router
 
-        req = Request({"type": "http", "method": "GET", "path": "/settings/general", "headers": [], "query_string": b""})
-        body = settings_router.settings_general(req, conn=conn).body.decode()
+        req = Request({"type": "http", "method": "GET", "path": "/settings/notifications", "headers": [], "query_string": b""})
+        body = settings_router.settings_notifications(req, conn=conn).body.decode()
         assert 'id="push-settings"' in body and "push_settings.js" in body
 
 
 class TestContactSetting:
-    """Settings > General > Notifications: the push-service contact email
-    (VAPID `sub` claim), saved in app_meta, wins over CC_PUSH_CONTACT."""
+    """Settings > Notifications (split out of General 2026-09-27): the
+    push-service contact email (VAPID `sub` claim), saved in app_meta,
+    wins over CC_PUSH_CONTACT."""
 
     @pytest.mark.parametrize("raw,expected", [
         ("me@Example.ORG", "me@example.org"),
@@ -215,8 +216,8 @@ class TestContactSetting:
         from src.routers import settings as settings_router
 
         db.set_app_meta(conn, push.CONTACT_KEY, "me@example.org")
-        req = Request({"type": "http", "method": "GET", "path": "/settings/general", "headers": [], "query_string": b""})
-        body = settings_router.settings_general(req, conn=conn).body.decode()
+        req = Request({"type": "http", "method": "GET", "path": "/settings/notifications", "headers": [], "query_string": b""})
+        body = settings_router.settings_notifications(req, conn=conn).body.decode()
         # 2026-09-25 (UI audit H-19): the contact email is part of the
         # Notifications card's single form (/settings/notifications, one
         # Save); /settings/push-contact stays as an endpoint only.

@@ -1,4 +1,4 @@
-# Command Center
+# Curodav
 
 A self-hosted **personal organizer / PWA dashboard** for one person: a home
 dashboard with widgets, a full calendar, tasks, a class timetable, habit
@@ -10,15 +10,14 @@ no subscription.
 
 - **Single-user by design.** Tasks, events, and contacts are the primary
   objects; a *label* is a name they point at, not an entity with a lifecycle.
-  Everything else — Spaces, Projects, Schedule, Published Lists — is a behavior
+  Everything else — Projects, Groups, Published Lists — is a behavior
   over that pool, never a new kind of object.
 - **Runs entirely from one tree** with no external services beyond the optional
   Radicale sync server. Self-host it where you like.
-- **The current version is 2.1.2** — tracked in [`VERSION`](VERSION) at the
+- **The current version is tracked in [`VERSION`](VERSION)** at the
   repository root, the authoritative source (see
-  [Versioning](#versioning) below). The app's earlier phase history
-  (0.1 → 2.0) is in
-  [`plans/abandoned.md`](documentation/plans/abandoned.md).
+  [Versioning](#versioning) below).
+- **Licensed under AGPL-3.0** — see [`LICENSE`](LICENSE).
 
 ## Is this for you?
 
@@ -44,16 +43,21 @@ each one as it comes up — before deciding whether to proceed.
 ## Repository layout
 
 ```
-webapp/      The app — FastAPI client (sole client since 0.7)
+webapp/      The app — FastAPI client (sole client)
   src/       Routers, db layer, pure logic modules, static assets, templates
   tests/     pytest suite (acceptance-oriented, one file per feature)
   run.sh     One-command dev start (uv sync + dev Radicale + the app)
+deploy/      Public deployment tooling (Cloudflare Tunnel + Radicale for phone sync)
 scripts/     Deploy tooling (curodav-ctl)
-documentation/   All project docs — see "Where docs live" below
-  features/  Outcome documentation — what the current app actually does
-  plans/     Planning
+assets/      Default banner/avatar photos, seeded on first run
+.github/     CI + deploy/rollback workflows
+LICENSE, CONTRIBUTING.md, SECURITY.md, CHANGELOG.md, VERSION
 pyproject.toml / uv.lock   uv workspace
 ```
+
+Full documentation — feature guides, architecture, contributor guides — lives
+on the [project Wiki](../../wiki), not in this repository. See
+[Where docs live](#where-docs-live) below.
 
 ## Getting started
 
@@ -121,6 +125,7 @@ back automatically -- the site never goes down mid-upgrade.
 | `revert` | Swaps `current` back to `previous` locally, restarts, health-checks -- a manual escape hatch independent of `update`'s own auto-rollback. |
 | `status` | Reachability/consistency checks only (Radicale loopback, nginx path-route, public hostname, env-var agreement) -- no deploy, no root needed. |
 | `remove` | Tears down the service, system user, and `/srv/curodav` entirely -- destructive, confirms first. |
+| `flairs` | Creates the flair-photos folder (`/srv/curodav/shared/data/flairs`) and adds `CC_FLAIRS_DIR` to `.env` if missing -- `install` already does this for a brand new deploy; use this to add it to an existing one. See [Flairs](../../wiki/Flairs). |
 
 #### First install (fresh host)
 
@@ -148,7 +153,12 @@ downloading just the one script file.)
    Debian's standard "keep this program running, restart it if it crashes
    or the server reboots" mechanism — no separate install step needed, it's
    already on the machine).
-4. Build and start the first release.
+4. Create `/srv/curodav/shared/data/flairs/` — an empty folder for
+   optional default banner photos (see
+   [Flairs](../../wiki/Flairs)) — and set
+   `CC_FLAIRS_DIR` to it in `.env`. Empty is fine; nothing shows up until
+   you drop photos in yourself, same as an uploaded banner.
+5. Build and start the first release.
 
 By the end, the app is running at `http://<the server's IP address>:8000`.
 Open that in a browser (over Tailscale, your LAN, or however you chose to
@@ -270,51 +280,38 @@ Radicale's local address instead and skip the tunnel setup entirely.
   ('auth_username','auth_password_hash');"`, then `sudo systemctl restart
   curodav`), which forces the one-time `/setup` page to run again. This
   does not touch your calendar/task/contact data — only the stored login.
-  See [`documentation/features/auth.md`](documentation/features/auth.md)
+  See the Wiki's [Authentication](../../wiki/Features/Authentication) page
   for the full auth model.
-- **Something else.** Check
-  [`documentation/webapp.md`](documentation/webapp.md)'s "Known gaps"
-  section, or open a GitHub issue.
+- **Something else.** Check the Wiki's
+  [Getting Started](../../wiki/Getting-Started) page, or open a GitHub
+  issue.
 
 ## Where docs live
 
-All project documentation lives under [`documentation/`](documentation/README.md),
-organized by state, not by history:
+Full documentation lives on the **[project Wiki](../../wiki)**, not in this
+repository:
 
-| Doc | What it is |
+| Page | What it is |
 |---|---|
-| [`documentation/plans/STATE.md`](documentation/plans/STATE.md) | **Start here.** Current position on the roadmap, the next slice, and how to run a low-token session. Read only this at session start |
-| [`documentation/features/README.md`](documentation/features/README.md) | Tour of what you can do today; links each area to its technical doc |
-| [`documentation/features/architecture.md`](documentation/features/architecture.md) | The rulebook — data model, layering, design system, how a feature gets in. **Read this before touching code** |
-| [`documentation/CODE_READING_GUIDE.md`](documentation/CODE_READING_GUIDE.md) | Plain-language guide to how files are structured and named, for editing the code yourself |
-| [`documentation/CLEAN_CODE_GUIDE.md`](documentation/CLEAN_CODE_GUIDE.md) | Honest critique of what hurts readability today (giant files, history-as-comments) + rules for writing cleaner code going forward |
-| [`documentation/CODING_STANDARDS.md`](documentation/CODING_STANDARDS.md) | Reference for naming files/functions/variables and where comments belong (file/class/function/inline) and how much |
-| [`documentation/UI_CONSISTENCY_GUIDE.md`](documentation/UI_CONSISTENCY_GUIDE.md) | One canonical pattern per UI piece — cards, buttons, forms, tables, modals, tags, toolbars, empty states — and the "ask before inventing a new one" rule |
-| [`documentation/SETTINGS_UI_GUIDE.md`](documentation/SETTINGS_UI_GUIDE.md) | Settings-specific canon: which layout for preferences vs. managed records vs. logs, and a reorg proposal for Advanced/Data health/Sync conflicts |
-| [`documentation/plans/roadmap.md`](documentation/plans/roadmap.md) | The single build order across all open work, phased by release |
-| [`documentation/plans/open-priority.md`](documentation/plans/open-priority.md) | Open work that reshapes the architecture/presentation (the rework) |
-| [`documentation/plans/open.md`](documentation/plans/open.md) | Open work that is low-priority or app-local |
-| [`documentation/plans/abandoned.md`](documentation/plans/abandoned.md) | What was deliberately cut or superseded, and why — plus the versioning/phase history |
-| [`documentation/webapp.md`](documentation/webapp.md) | The webapp subproject's own README — dev setup, running the pieces separately, env vars |
+| [Features overview](../../wiki/Features/Overview) | Tour of what you can do today; links each area to its detailed page |
+| [Architecture](../../wiki/Architecture) | The rulebook — data model, layering, design system, how a feature gets in. **Read this before touching code** |
+| [Code Style & Structure](../../wiki/Code-Style-and-Structure) | Naming, comments, file organization |
+| [UI Design Guide](../../wiki/UI-Design-Guide) | One canonical pattern per UI piece, and the Settings-specific layout rules |
+| [Flairs](../../wiki/Flairs) | Keyword-matched default banner photos — none ship with the app (copyright), where `install`/`curodav-ctl flairs` sets up the folder, full supported keyword list |
+| [Getting Started](../../wiki/Getting-Started) | Local dev setup and a plain-language deploy overview |
 
-The distinction matters: `documentation/features/` describes shipped behavior,
-`documentation/plans/` tracks what hasn't shipped yet, and
-`documentation/plans/abandoned.md` records why things won't come back without
-being re-litigated.
+The Wiki is the canonical home for anything a user or contributor would want
+to read. This README stays focused on getting the app running.
 
 ## Versioning
 
 **The current version is tracked in [`VERSION`](VERSION) at the repository
-root (currently 2.1.2)** — that file, and the matching `vX.Y.Z` git tag, are
-authoritative; nothing else in this repo's prose should be treated as the
-source of truth if it ever drifts. [`CHANGELOG.md`](CHANGELOG.md) has one
-entry per tagged release going forward. `git-push.sh` (personal tooling, not
-tracked in this repo — see its own header comment) is what bumps `VERSION`,
-promotes `CHANGELOG.md`, and tags a release.
+root** — that file, and the matching `vX.Y.Z` git tag, are authoritative;
+nothing else in this repo's prose should be treated as the source of truth if
+it ever drifts. [`CHANGELOG.md`](CHANGELOG.md) has one entry per tagged
+release.
 
-Historically, before `VERSION` existed, releases tracked development phases
-rather than semantic versioning: a `0.x` version was a development phase,
-`x.0` a full release, and minor releases within a major version were numbered
-`x.1` … `x.9`. The full phase table (0.1 → 2.0) is in
-[`documentation/plans/abandoned.md`](documentation/plans/abandoned.md); the
-release order is in [`documentation/plans/roadmap.md`](documentation/plans/roadmap.md).
+Releases follow semantic versioning in two series: `1.x` covers the app's
+initial build-out through its first stable shape, and `2.x` covers everything
+since — each `x.y` a real, distinct release with its own tag. See the
+repository's tags for the full release history.

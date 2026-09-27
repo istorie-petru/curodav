@@ -38,6 +38,16 @@ class Settings:
     # those, serialized behind N requests. Same "next to the db by default,
     # relocatable via its own env var" convention as backup_dir above.
     photo_cache_dir: Path
+    # Item 10 follow-up (2026-09-27) -- where an operator places their own
+    # flair photos (src/flairs.py's own docstring has the full story: the
+    # reference Google Calendar images this feature was designed against
+    # are copyrighted, so the app ships zero photo bytes and instead reads
+    # them from here at request time). Same "next to the db by default,
+    # relocatable via its own env var" convention as backup_dir/
+    # photo_cache_dir above -- deliberately NOT anywhere under src/static/
+    # (that directory ships with the installed app and gets replaced on
+    # every deploy; this needs to survive one).
+    flairs_dir: Path
     # Single-user authentication (2026-08-16, src/auth.py). Both
     # auth_username AND auth_password must be non-empty for login to be
     # enforced -- an unset pair keeps the app open exactly as it always
@@ -121,6 +131,9 @@ def load_settings() -> Settings:
         ),
         photo_cache_dir=Path(
             os.environ.get("CC_PHOTO_CACHE_DIR", str(db_path.parent / "photo_cache"))
+        ),
+        flairs_dir=Path(
+            os.environ.get("CC_FLAIRS_DIR", str(db_path.parent / "flairs"))
         ),
         auth_username=os.environ.get("CC_AUTH_USERNAME") or None,
         auth_password=os.environ.get("CC_AUTH_PASSWORD") or None,

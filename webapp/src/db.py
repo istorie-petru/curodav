@@ -63,6 +63,12 @@ from typing import Any, Iterator
 # risk a cycle.
 from . import habit_heatmap
 
+# Same "imports nothing from this module" no-cycle reasoning as habit_heatmap
+# above -- flairs.py is pure data (a keyword->photo table) plus two pure
+# functions, no imports of its own at all (deliberately not even deps.py's
+# static_url, which itself imports db -- see that module's own docstring).
+from . import flairs
+
 logger = logging.getLogger(__name__)
 
 SCHEMA_SQL = """
@@ -5414,6 +5420,14 @@ SEASON_BANNER_SCOPES = {
 # unchanged behaviour there, per direct instruction not to touch it.
 _SEASON_DATE_FIELD = {"task": "due_at", "event": "start_at"}
 
+# Item 10 (2026-09-27, flairs): which object types get a flair match
+# against their OWN name at all -- task and event only (a habit IS a
+# task, `object_type == "task"` either way). Contacts are deliberately
+# excluded per the item's own wording ("event/task/habit", not contact) --
+# banner_for_object's own docstring has the reasoning (a person's name
+# coincidentally containing a keyword says nothing real about them).
+_FLAIR_ELIGIBLE_TYPES = {"task", "event"}
+
 
 def season_for_date(value: Any) -> str | None:
     """Meteorological Northern-Hemisphere season for a stored start_at/
@@ -5512,6 +5526,86 @@ def get_page_banner(conn: sqlite3.Connection, page_key: str) -> dict[str, Any] |
     return banner
 
 
+def _page_banner_explicitly_cleared(conn: sqlite3.Connection, page_key: str) -> bool:
+    """Item 10 (2026-09-27, flairs): True only when this page's banner was
+    deliberately cleared via `set_page_banner_cleared` below (banner_
+    editor's "Clear banner" button) -- distinct from simply never having
+    had a banner at all. `get_page_banner` itself can't tell the two apart
+    (both read as None there, on purpose -- every EXISTING caller only
+    ever needed "is there an image", not "was one explicitly refused"),
+    so this reads the raw stored kind directly rather than going through
+    it. The one thing this bool gates: whether `effective_page_banner`
+    below is allowed to fall through to a flair match -- confirmed via
+    AskUserQuestion that a flair default must stay genuinely removable,
+    not a permanent floor under labels/groups/projects the way the
+    original queued wording ("this default behavior can't be removed")
+    literally read."""
+    raw = get_app_meta(conn, _page_banner_key(page_key))
+    if not raw:
+        return False
+    try:
+        banner = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return False
+    return isinstance(banner, dict) and banner.get("kind") == "none"
+
+
+def set_page_banner_cleared(conn: sqlite3.Connection, page_key: str) -> None:
+    """Item 10 (2026-09-27): the banner editor's "Clear banner" button
+    (routers/banners.py's `remove_banner`, renamed from "Remove banner"
+    the same slice) -- stores an explicit "there is deliberately no image
+    here" marker instead of `clear_page_banner`'s plain blank-out, so a
+    label/group/project/task/event whose name happens to match a flair
+    keyword can still end up with a real, sticky blank instead of the
+    flair reappearing the moment the stored override goes away. Every
+    EXISTING caller of get_page_banner keeps reading this exactly like
+    "no banner" (kind="none" isn't in that function's own remote/upload
+    allow-list) -- only `effective_page_banner` below, via
+    `_page_banner_explicitly_cleared`, treats it as meaningfully different
+    from "never set" at all."""
+    set_app_meta(conn, _page_banner_key(page_key), json.dumps({"kind": "none"}))
+
+
+def effective_page_banner(conn: sqlite3.Connection, page_key: str, name: str | None = None) -> dict[str, Any] | None:
+    """`get_page_banner`, extended with the flair default (item 10,
+    2026-09-27, "dynamically attach a photo to an event/task/habit/label/
+    group/project based on a keyword list matched against its name"): an
+    explicit upload/remote banner always wins first; failing that, a page
+    explicitly cleared (`set_page_banner_cleared` above) stays blank on
+    purpose rather than falling through; failing THAT, `name`'s own
+    keyword match (`flairs.match_flair`) is the default, same as this
+    page's Add/Change-banner button would show before the user ever
+    touches it. `name` is optional (default None -- no flair at all) for
+    every page this doesn't apply to: Home, the global page-header
+    default, and the four season scopes (matched by DATE, not name --
+    see banner_for_object's own season tier, which calls this the same
+    way with name=None and its own flair lookup for the season photo
+    itself instead).
+
+    Callers: routers/dashboard.py's `_page_banner_context` (a label/
+    group/project's own page banner) and `banner_for_object` below (an
+    event/task's inherited label/Project/Space banner, and its own
+    season/global fallback) -- both now resolve every tier through this
+    one function instead of the raw `get_page_banner`, so a flair
+    default is available everywhere an explicit banner already was."""
+    banner = get_page_banner(conn, page_key)
+    if banner:
+        return banner
+    if _page_banner_explicitly_cleared(conn, page_key):
+        return None
+    if name:
+        flair_id = flairs.match_flair(name)
+        if flair_id:
+            image_url = flairs.flair_image_url(flair_id)
+            # A matched keyword with no actual file configured yet
+            # (flairs.py's own docstring: an operator-supplied directory,
+            # possibly still empty on a fresh install) is exactly "no
+            # flair available", same as match_flair finding nothing.
+            if image_url:
+                return {"kind": "remote", "image_url": image_url, "scope": page_key}
+    return None
+
+
 def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str, Any]) -> dict[str, Any] | None:
     """2026-08-30 (direct request, tasks/kanban banner strip + task detail
     modal header), generalized 2026-09-03 (direct request: the same cover
@@ -5544,18 +5638,40 @@ def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str,
     here is whichever label/project/Space matched, not the object itself,
     which has no scope of its own). Safe to inject: this dict is a fresh
     json.loads() from get_page_banner, never written back through
-    set_page_banner, so the extra key can't leak into storage."""
+    set_page_banner, so the extra key can't leak into storage.
+
+    2026-09-27 (item 10, flairs): every tier below now resolves through
+    `effective_page_banner` instead of the raw `get_page_banner` -- a
+    label/Project/Space with no upload of its own falls back to its OWN
+    flair match (its name against `flairs.FLAIR_KEYWORDS`) before this
+    function ever needs to try the object's own name, so an event tagged
+    "Basketball" inherits that label's basketball flair the normal way,
+    through the exact same tag/project/group tiers that already existed.
+    A NEW tier is added after all three -- the object's own title/name,
+    tried BEFORE the season/global fallback (a specific keyword match on
+    the object's own name is a stronger signal than a generic month-based
+    guess) -- for task/event only (`_FLAIR_ELIGIBLE_TYPES` below), per the
+    item's own wording ("event/task/habit", never contact: a person's
+    name coincidentally containing a keyword says nothing real about
+    them, unlike a task/event's own title -- and a habit IS a task,
+    `object_type == "task"` either way, nothing habit-specific needed
+    here). The season/global tiers below are UNCHANGED -- wiring the
+    reference folder's own four season photos in as real defaults there
+    too was tried and reverted (see flairs.py's own header comment): it
+    turned out to have a much bigger blast radius than this item asked
+    for, showing a photo on nearly every task/event that previously
+    showed none at all."""
     tags = obj.get("tags") or []
     project = project_label_for(conn, object_type, obj["uid"]) if obj.get("uid") else None
     for tag in tags:
         if tag == project:
             continue
-        banner = get_page_banner(conn, tag)
+        banner = effective_page_banner(conn, tag, name=tag)
         if banner:
             banner["scope"] = tag
             return banner
     if project:
-        banner = get_page_banner(conn, project)
+        banner = effective_page_banner(conn, project, name=project)
         if banner:
             banner["scope"] = project
             return banner
@@ -5563,10 +5679,19 @@ def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str,
         group = ((cfg or {}).get("label_group") or "").strip()
         if group:
             key = group_page_key(group)
-            banner = get_page_banner(conn, key)
+            banner = effective_page_banner(conn, key, name=group)
             if banner:
                 banner["scope"] = key
                 return banner
+    # Item 10 (2026-09-27): the object's OWN name, before season/global --
+    # see this function's own docstring for why contacts are excluded and
+    # why this outranks the generic seasonal guess below.
+    if object_type in _FLAIR_ELIGIBLE_TYPES:
+        flair_id = flairs.match_flair(obj.get("title"))
+        if flair_id:
+            image_url = flairs.flair_image_url(flair_id)
+            if image_url:
+                return {"kind": "remote", "image_url": image_url, "scope": object_type}
     # 2026-09-07 (direct request): a task/event with no matching label/
     # Project/Space banner falls back further instead of stopping at None
     # (a flat color gradient, _detail_cover.html) -- first to the seasonal

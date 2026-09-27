@@ -1,5 +1,6 @@
-// Settings > General's "Notifications on this device" card (Web Push,
-// 2026-09-24, plans/ui-cleanup-2026-09.md item 7, slice P1). Subscribes
+// Settings > Notifications' "Notifications on this device" card (Web Push,
+// 2026-09-24, plans/ui-cleanup-2026-09.md item 7, slice P1; split out of
+// Settings > General into its own page 2026-09-27). Subscribes
 // this browser with the server's VAPID public key (/push/public-key),
 // stores the subscription (/push/subscribe), and can send a test push.
 // Per device: a phone and a laptop each turn it on separately.

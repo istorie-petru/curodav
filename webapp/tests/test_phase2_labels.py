@@ -102,7 +102,10 @@ class TestModalHeaderAppearanceButtons:
         # 2026-09-26: colour + icon are the Look dropdown; the banner is a
         # square upload button at the end of its row, not a header button.
         assert 'class="modal-header-actions"' not in body
-        assert '<span class="look-preview habit-c-yellow">' in body and 'href="#icon-shopping-cart"' in body
+        # 2026-09-27: colour is an inline `--habit-accent` style now (Look
+        # is shared with Settings > Appearance's Accent color, which reads
+        # a different palette -- see _look_picker.html's `dot_var_prefix`).
+        assert '<span class="look-preview" data-style="--habit-accent:var(--cal-accent-yellow);">' in body and 'href="#icon-shopping-cart"' in body
         row = body[body.index('class="look-row"'):]
         row = row[:row.index('class="field', 10)] if 'class="field' in row[10:] else row
         assert '/banners/editor?scope=Groceries' in row and 'class="look-side-btn"' in row
@@ -122,7 +125,7 @@ class TestModalHeaderAppearanceButtons:
         body = resp.body.decode()
         assert 'class="modal-header-actions"' not in body
         assert "look-side-btn" not in body  # no banner button before the label exists
-        assert '<span class="look-preview habit-c-blue">' in body  # default, unsaved yet
+        assert '<span class="look-preview" data-style="--habit-accent:var(--cal-accent-blue);">' in body  # default, unsaved yet
         assert "/banners/editor" not in body  # no name yet to key a banner off of
 
     def test_quick_add_label_tab_keeps_inline_appearance_fields(self, conn):

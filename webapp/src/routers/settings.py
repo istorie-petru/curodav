@@ -55,9 +55,6 @@ of its own, just indirection.
 
 Explicitly NOT created, and why (see the redesign brief's "only create
 categories that are actually useful"):
-  - Notifications -- the only reminder-adjacent setting (Schedule's
-    reminder_minutes) is itself contextual, living on /schedule (see
-    below); there's no cross-app notification system to configure.
   - Integrations -- Radicale is internal plumbing for Published Lists,
     not a user-facing connection to configure; nothing else calls out.
   - Privacy -- no accounts, no telemetry toggle, nothing to show here;
@@ -156,6 +153,15 @@ logger = logging.getLogger(__name__)
 HUB_CATEGORIES = [
     {"url": "/settings/general", "icon": "user", "name": "General", "desc": "Week start, time format, and other display preferences"},
     {"url": "/settings/your-profile", "icon": "user-check", "name": "Your Profile", "desc": "Profile picture, nickname, login & security"},
+    # 2026-09-27 (direct feedback): Notifications split out of General
+    # into its own hub category -- Web Push (2026-09-24) grew it from one
+    # unrelated field into a real settings surface (on-device push status,
+    # which reminder types fire, the morning digest time, the push contact
+    # email), the same "earns its own page once there's enough content"
+    # reasoning Your Profile split out for 2026-09-11. Supersedes this
+    # file's own former "Notifications -- explicitly not created" note
+    # above, written before Web Push existed.
+    {"url": "/settings/notifications", "icon": "bell", "name": "Notifications", "desc": "Push notifications, reminder types, morning digest"},
     {"url": "/settings/appearance", "icon": "sun", "name": "Appearance", "desc": "Theme"},
     {"url": "/settings/labels", "icon": "tag", "name": "Labels", "desc": "Rename, recolor, organize"},
     # 2026-09-26 (Peter): groups and projects get their own pages.
@@ -238,12 +244,6 @@ def settings_general(request: Request, conn=Depends(get_db)):
             # rendered it -- "'str' object is not callable" (found via the
             # test suite, not a hunch).
             "current_week_start": db.get_app_meta(conn, WEEK_START_KEY) or "monday",
-            # Web Push P3 (2026-09-24): which reminders go out, and when
-            # the morning digest does (src/reminders.py).
-            "push_types": [(t, reminders.TYPE_LABELS[t]) for t in reminders.TYPES],
-            "push_types_on": reminders.enabled_types(conn),
-            "push_digest_time": reminders.digest_time_str(conn),
-            "push_contact_email": push.contact_email(conn),
             "current_time_format": db.get_app_meta(conn, TIME_FORMAT_KEY) or "24h",
             # 2026-08-11 -- "4-Week view: current week" (see deps.py's
             # FOUR_WEEK_POSITION_KEY): which of the four rows the Calendar
@@ -269,6 +269,31 @@ def settings_general(request: Request, conn=Depends(get_db)):
             # the configured Sleep-kind time blocks don't agree on one
             # single start/end window.
             "current_hide_sleep_hours": db.get_app_meta(conn, HIDE_SLEEP_HOURS_KEY) == "1",
+        },
+    )
+
+
+@router.get("/settings/notifications")
+def settings_notifications(request: Request, conn=Depends(get_db)):
+    """2026-09-27 direct feedback: split out of General into its own hub
+    category (HUB_CATEGORIES' own comment explains why) -- same "Notifications
+    on this device" + "Remind me about" + "Morning reminder at" + contact
+    email card settings_general used to render, moved here verbatim (same
+    context fields, same POST routes below -- only the page's own title/
+    crumbs and this GET route are new)."""
+    return templates.TemplateResponse(
+        "settings_notifications.html",
+        {
+            "request": request,
+            "active_tab": "settings_notifications",
+            "crumbs": _ROOT_CRUMB,
+            "title": "Notifications",
+            # Web Push P3 (2026-09-24): which reminders go out, and when
+            # the morning digest does (src/reminders.py).
+            "push_types": [(t, reminders.TYPE_LABELS[t]) for t in reminders.TYPES],
+            "push_types_on": reminders.enabled_types(conn),
+            "push_digest_time": reminders.digest_time_str(conn),
+            "push_contact_email": push.contact_email(conn),
         },
     )
 
@@ -759,7 +784,7 @@ def set_notifications(
             message = "That doesn't look like an email address. Nothing was saved."
             if fetch:
                 return JSONResponse({"error": message}, status_code=400)
-            return _redirect_with_error("/settings/general", message)
+            return _redirect_with_error("/settings/notifications", message)
     chosen = [t for t in reminders.TYPES if isinstance(types, list) and t in types]
     db.set_app_meta(conn, reminders.TYPES_KEY, ",".join(chosen))
     try:
@@ -772,7 +797,7 @@ def set_notifications(
         db.set_app_meta(conn, push.CONTACT_KEY, normalized_email or "")
     if fetch:
         return JSONResponse({"ok": True})
-    return RedirectResponse(url="/settings/general#push-settings", status_code=303)
+    return RedirectResponse(url="/settings/notifications#push-settings", status_code=303)
 
 
 @router.post("/settings/push-contact")
@@ -783,14 +808,14 @@ def set_push_contact(email: str = Form(""), conn=Depends(get_db)):
     default); an invalid address keeps the old one and says so."""
     if not (email or "").strip():
         db.set_app_meta(conn, push.CONTACT_KEY, "")
-        return RedirectResponse(url="/settings/general#push-settings", status_code=303)
+        return RedirectResponse(url="/settings/notifications#push-settings", status_code=303)
     normalized = push.normalize_email(email)
     if normalized is None:
         return _redirect_with_error(
-            "/settings/general", "That doesn't look like an email address -- the notification contact wasn't changed."
+            "/settings/notifications", "That doesn't look like an email address -- the notification contact wasn't changed."
         )
     db.set_app_meta(conn, push.CONTACT_KEY, normalized)
-    return RedirectResponse(url="/settings/general#push-settings", status_code=303)
+    return RedirectResponse(url="/settings/notifications#push-settings", status_code=303)
 
 
 @router.post("/settings/hide-sleep-hours")

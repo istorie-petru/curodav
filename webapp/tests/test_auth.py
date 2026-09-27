@@ -89,6 +89,7 @@ def _settings(*, enabled=True, **overrides) -> Settings:
         sync_interval_seconds=60,
         backup_dir=Path(tempfile.gettempdir()) / f"cc-auth-test-backups-{uuid.uuid4().hex}",
         photo_cache_dir=Path(tempfile.gettempdir()) / f"cc-auth-test-photo-cache-{uuid.uuid4().hex}",
+        flairs_dir=Path(tempfile.gettempdir()) / f"cc-auth-test-flairs-{uuid.uuid4().hex}",
     )
     if enabled:
         base = replace(

@@ -32,7 +32,14 @@
                     "single" (radios, exactly one always selected -- every
                     caller's own fd_items already includes an explicit
                     "All" entry as one of the real options, same as the
-                    `<select>`s this replaces already did).
+                    `<select>`s this replaces already did) or "names"
+                    (checkboxes, trigger lists the ticked options' own
+                    names instead of a count -- for a short/mixed item
+                    list where "All"/"(n)" would be meaningless, e.g. a
+                    single yes/no toggle; see _widget_list_multiselect.
+                    html's own identically-named mode, mirrored here).
+     fd_placeholder -- "names" mode only: trigger text when nothing is
+                    checked (default "None").
      fd_form_id  -- id of the shared `method="get"` `<form>` these
                     inputs submit into (every filter on one page shares
                     one form, so picking one filter's value doesn't
@@ -41,6 +48,7 @@
                     labels_manage.html's table already relies on). #}
 {% set _mode = fd_mode | default('multi') %}
 {% set _single = _mode == 'single' %}
+{% set _names = _mode == 'names' %}
 {# Single-select: fd_selected is a scalar, and an empty-string value is a
    legit selection -- it's the caller's explicit "All" option (calendar's
    "All labels", tasks' "All dates/statuses/priorities"). Wrapping it
@@ -50,9 +58,9 @@
 {% set _n = fd_items | selectattr('value', 'in', _sel) | list | length %}
 {% set _total = fd_items | length %}
 {% set _sel_item = (fd_items | selectattr('value', 'equalto', fd_selected) | list | first) if _single else none %}
-<div class="multiselect widget-list-multiselect filter-dropdown" data-ms data-ms-mode="{{ 'filter' if not _single else 'single' }}" data-ms-label="{{ fd_label|lower }}">
+<div class="multiselect widget-list-multiselect filter-dropdown" data-ms data-ms-mode="{{ 'single' if _single else ('names' if _names else 'filter') }}" data-ms-label="{{ fd_label|lower }}"{% if _names %} data-ms-empty="{{ fd_placeholder | default('None') }}"{% endif %}>
     <button type="button" class="multiselect-trigger ms-trigger filter-dropdown-trigger" aria-haspopup="true" aria-expanded="false">
-        <span class="ms-summary">{% if _single %}{{ _sel_item.name if _sel_item else fd_label }}{% else %}{% if _n == 0 %}{{ fd_label }}{% else %}{{ fd_label }} ({{ _n }}){% endif %}{% endif %}</span>
+        <span class="ms-summary">{% if _single %}{{ _sel_item.name if _sel_item else fd_label }}{% elif _names %}{% set _on = fd_items | selectattr('value', 'in', _sel) | map(attribute='name') | list %}{{ _on | join(', ') if _on else (fd_placeholder | default('None')) }}{% else %}{% if _n == 0 %}{{ fd_label }}{% else %}{{ fd_label }} ({{ _n }}){% endif %}{% endif %}</span>
         <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
     </button>
     <div class="multiselect-panel ms-panel">

@@ -77,8 +77,12 @@ class TestLabelsManageRowRendersSwatchGridNotSelect:
         body = resp.body.decode()
         assert '<select name="color" class="filter-select"' not in body
         # 2026-09-26: the shared Look dropdown (_look_picker.html).
+        # 2026-09-27: colour comes from an inline `--habit-accent` style now
+        # (Settings > Appearance's Accent color reuses this same macro with
+        # a different colour palette -- see that macro's own `dot_var_
+        # prefix` comment), not a per-colour class.
         assert 'id="look-label-form"' in body
-        assert '<span class="look-preview habit-c-blue">' in body
+        assert '<span class="look-preview" data-style="--habit-accent:var(--cal-accent-blue);">' in body
 
     def test_edit_modal_color_radio_form_attr_matches_the_one_edit_form(self, conn):
         db.upsert_label_config(conn, {"name": "Uni", "color": "green", "created_at": _now()})

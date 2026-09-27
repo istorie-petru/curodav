@@ -108,8 +108,9 @@ DISPLAY_NAME_KEY = "dashboard_display_name"
 
 def _greeting_for_hour(hour: int, display_name: str | None = None) -> str:
     """Time-of-day greeting (dashboard usability rework, 2026-08-07 --
-    "Make the header more dynamic like Hello x, Evening, like claude web
-    has"). Takes the hour as a plain int rather than reading
+    "Make the header more dynamic: Hello <name>, Evening" style, matching
+    the greeting pattern common to calendar/productivity dashboards).
+    Takes the hour as a plain int rather than reading
     `datetime.now()` itself so it's directly testable with fixed hour
     values, no time-freezing needed -- same "compute from an explicit
     param, not a hidden clock read" shape `_render_mini_month_calendar`'s
@@ -2123,7 +2124,7 @@ def widget_page_context(conn, space_uid: str | None = None, project_uid: str | N
     }
 
 
-def _page_banner_context(conn, scope: str) -> dict:
+def _page_banner_context(conn, scope: str, name: str | None = None) -> dict:
     """Every piece of context _page_banner.html needs to render one page's
     banner -- Home ("" scope) and every Space/Project page
     (routers/labels.py::label_detail, routers/spaces.py::space_detail)
@@ -2144,11 +2145,23 @@ def _page_banner_context(conn, scope: str) -> dict:
     used by the edit button/upload/remove forms regardless of which image
     is currently showing) so _page_banner.html's `/banners/image` URL
     points at the right stored image rather than looking up this page's
-    own (unset) scope with the default banner's version hash."""
+    own (unset) scope with the default banner's version hash.
+
+    `name` (2026-09-27, item 10 flairs) -- the label/group/project's own
+    display name, passed through to `db.effective_page_banner` so a page
+    with no upload of its own can still default to a flair match. Only a
+    label/group/project page passes it (routers/label_pages.py); Home
+    leaves it None (no name to match a flair against at all), same as
+    every OTHER scope this function has never applied a flair default to
+    either. Confirmed via AskUserQuestion: a flair default renders here
+    exactly like a real upload, no visual distinction -- so `has_own_
+    banner` (and the Add/Change button label it drives) now also treats a
+    flair match as "has one," the same "no special-casing" answer applied
+    everywhere else this default shows up."""
     # Since labels-as-modules slice c (2026-09-25) every label and group
     # has its own banner; the 2026-09-21 "a label grouped under a Space
     # shows the Space's banner" rule went with Spaces.
-    own_banner = db.get_page_banner(conn, scope)
+    own_banner = db.effective_page_banner(conn, scope, name=name)
     if own_banner:
         return {
             "banner": own_banner,

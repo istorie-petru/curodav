@@ -56,8 +56,8 @@
       return text.slice(0, 150);
     }
 
-    // 2026-09-17 (design-system unification pass, shared spec at
-    // /home/peter/Claude/Projects/DESIGN_SYSTEM.md) -- friendlyErrorMessage
+    // 2026-09-17 (design-system unification pass, shared spec with the
+    // sibling app Pineart) -- friendlyErrorMessage
     // above turns a 422 into one readable toast line, but a toast still
     // doesn't tell you *which* input on a long form (task/event/contact)
     // is wrong. applyFieldErrors marks each error against its actual

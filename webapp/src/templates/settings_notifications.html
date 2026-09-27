@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Notifications - Settings{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("Notifications", "bell") }}
+
+{% if request.query_params.get('note') %}
+<div class="settings-hint settings-hint-accent">{{ request.query_params.get('note') }}</div>
+{% endif %}
+{% if request.query_params.get('error') %}
+<div class="settings-hint settings-hint-error">{{ request.query_params.get('error') }}</div>
+{% endif %}
+
+<!-- 2026-09-27 direct feedback: split out of Settings > General into its
+     own page (HUB_CATEGORIES' own comment in routers/settings.py explains
+     why) -- same "Notifications on this device" + "Remind me about" +
+     "Morning reminder at" + contact email card, moved here verbatim (same
+     forms, same routes -- only this page's own title/crumbs changed).
+     "Remind me about" also swapped from a bare row of checkboxes to the
+     same checkbox-dropdown (_widget_list_multiselect.html) every other
+     multi-value setting on this page's former home already uses -- see
+     that row's own comment below for why `ms_mode="select"`, not
+     `"filter"`. -->
+{# Web Push (2026-09-24, plans/ui-cleanup-2026-09.md item 7, slice P1) --
+   per-device: each browser/phone subscribes on its own. Everything here
+   is driven by static/push_settings.js; without JS (or without push
+   support) the status line says so and the buttons stay hidden. #}
+<div class="card push-settings" id="push-settings">
+    <div class="settings-field-row">
+        <span class="settings-field-label">Notifications on this device
+            <span class="settings-field-hint" id="push-status">Checking&hellip;</span>
+        </span>
+        <span class="spacer"></span>
+        <button type="button" class="btn primary btn-sm" id="push-enable" hidden>{{ icon('bell', 'icon-sm') }} Turn on</button>
+        <button type="button" class="btn ghost btn-sm" id="push-test" hidden>Send test</button>
+        <button type="button" class="btn ghost btn-sm" id="push-disable" hidden>Turn off</button>
+    </div>
+    {# Web Push P3: which reminders go out (app-wide) and when the morning
+       digest does, plus the VAPID contact (src/push.py) sent to push
+       services with each notification.
+
+       2026-09-25 (UI audit H-19): one form, one Save, in the same
+       settings rows as the rest of this page (bold labels); push_settings
+       .js saves it with fetch and confirms in a toast instead of a reload
+       that jumped to the top. The digest time is a select in the app's
+       own 12h/24h format (a native time input followed the browser
+       locale, so it showed 12h even with 24-hour time on). No-JS: posts
+       and redirects back to #push-settings. UI audit H-20: the rows dim
+       while this device's notifications are off or blocked. #}
+    <form class="push-prefs-form" id="push-prefs-form" method="post" action="/settings/notifications">
+        <div class="settings-field-row">
+            <span class="settings-field-label">Remind me about
+                <span class="settings-field-hint push-inactive-hint" hidden>Reminders go to devices with notifications on.</span>
+            </span>
+            <span class="spacer"></span>
+            {# 2026-09-27 direct feedback ("notification settings should use
+               drop down instead of plain checkboxes"): was a bare row of
+               `<label><input type="checkbox">...</label>` pairs. `ms_mode
+               ="select"`, not the default "filter" -- these are real
+               independent on/off flags (0 checked genuinely means "no
+               reminder types on," not "no filter, show every type" the
+               way an empty Label filter elsewhere means "all labels");
+               "filter" mode's own summary logic reads 0-checked and
+               all-checked as the same "All" text, which would be actively
+               wrong here (see _widget_list_multiselect.html's own
+               ms_mode comment on exactly this distinction). #}
+            {# ms_label is "Reminder types", not this row's own visible
+               "Remind me about" -- ms_bare skips rendering the macro's own
+               <label> (the row's span above already is one), but ms_label
+               still feeds the trigger's aria-label and "select" mode's own
+               "No {{ ms_label|lower }}" empty-state text, where "No remind
+               me about" would read as broken English; "No reminder types"
+               doesn't. #}
+            {% set ms_name = 'types' %}
+            {% set ms_mode = 'select' %}
+            {% set ms_label = 'Reminder types' %}
+            {% set ms_items = [] %}
+            {% for key, label in push_types %}{% set _ = ms_items.append({'uid': key, 'name': label}) %}{% endfor %}
+            {% set ms_selected = push_types_on %}
+            {% set ms_autosubmit = false %}
+            {% set ms_bare = true %}
+            {% set ms_form_id = 'push-prefs-form' %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+        <div class="settings-field-row">
+            <span class="settings-field-label">Morning reminder at</span>
+            <span class="spacer"></span>
+            {# Half-hour slots (plus the saved time if it's off-grid), shown
+               with fmt_time; the app's single-choice dropdown, like every
+               other setting on this page. #}
+            {% set _slots = [] %}
+            {% for h in range(24) %}{% for m in (0, 30) %}{% set _ = _slots.append('%02d:%02d'|format(h, m)) %}{% endfor %}{% endfor %}
+            {% if push_digest_time not in _slots %}{% set _ = _slots.append(push_digest_time) %}{% endif %}
+            {% set ms_name = 'digest_time' %}
+            {% set ms_mode = 'single' %}
+            {% set ms_label = 'Morning reminder at' %}
+            {% set ms_items = [] %}
+            {% for t in _slots|sort %}{% set _ = ms_items.append({'uid': t, 'name': t|fmt_time}) %}{% endfor %}
+            {% set ms_selected = push_digest_time %}
+            {% set ms_autosubmit = false %}
+            {% set ms_bare = true %}
+            {% set ms_form_id = 'push-prefs-form' %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+        <div class="settings-field-row">
+            <label class="settings-field-label" for="push-contact-email">Contact email for push services
+                <span class="settings-field-hint">Push services (Google, Mozilla, Apple) use it to reach you about delivery problems. Leave blank for the default.</span>
+            </label>
+            <span class="spacer"></span>
+            <input type="email" id="push-contact-email" name="email" value="{{ push_contact_email }}" maxlength="254" autocomplete="email" placeholder="you@example.com">
+        </div>
+        <div class="settings-field-row push-prefs-actions">
+            <span class="spacer"></span>
+            <button type="submit" class="btn tonal btn-sm">Save</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+{% block extra_scripts %}<script defer src="{{ static_url('push_settings.js') }}"></script>{% endblock %}

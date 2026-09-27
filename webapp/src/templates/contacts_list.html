@@ -63,18 +63,32 @@
 {% set fd_form_id = 'contacts-filters-form' %}
 {% include '_filter_dropdown.html' %}
 {% endif %}
-{# Item 19 (2026-09-26): archived is a real `contacts.archived_at` column
-   now, not a label -- so it gets its own toggle, separate from the Label
-   filter dropdown above (which only ever lists real labels again, see
-   routers/contacts.py's own comment on why the old "Archived" fake-label
-   suppression logic is gone). `data-change-submit` (app.js's generic
-   delegated listener, CSP-safe replacement for an inline onchange)
-   re-submits the same GET filter form the Label dropdown's own checkboxes
-   already post through. #}
-<label class="filter-toggle">
-    <input type="checkbox" name="archived" value="1" form="contacts-filters-form" data-change-submit {% if show_archived %}checked{% endif %}>
-    Show archived
-</label>
+{# Item 19 (2026-09-26) gave Archived its own bare checkbox+label toggle,
+   separate from the Label filter dropdown (routers/contacts.py's own
+   comment explains why "Archived" itself is no longer one of the real
+   labels in that dropdown's item list). 2026-09-27 direct feedback: that
+   plain toggle "doesn't work as expected" -- reverted to the original
+   shape, a `_filter_dropdown.html` dropdown of its own (same fancy-
+   dropdown component the Label filter next to it uses, just one checkbox
+   item), defaulting unchecked like every other filter here that isn't
+   explicitly active. The underlying functionality item 19 added is
+   unchanged -- `fd_name='archived'` still posts `archived=1` into this
+   same shared form, still resolved server-side against the real
+   `contacts.archived_at` column (`show_archived` above), not the old
+   fake-label suppression hack. #}
+{% set fd_name = 'archived' %}
+{% set fd_label = 'Archived' %}
+{% set fd_items = [{'value': '1', 'name': 'Show archived'}] %}
+{% set fd_selected = ['1'] if show_archived else [] %}
+{# "names" mode, not "multi" -- with exactly one item, "multi"'s own
+   0-selected-or-all-selected-both-read-"All" summary logic (app.js's
+   updateMsSummary) can never distinguish the two for a single checkbox,
+   so it would always show "All" regardless of state. "names" shows the
+   item's own name when checked, fd_placeholder otherwise. #}
+{% set fd_mode = 'names' %}
+{% set fd_placeholder = 'Archived' %}
+{% set fd_form_id = 'contacts-filters-form' %}
+{% include '_filter_dropdown.html' %}
 {% endcall %}
 
 {% include "_contacts_body.html" %}
