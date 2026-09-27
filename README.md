@@ -280,7 +280,7 @@ Radicale's local address instead and skip the tunnel setup entirely.
   ('auth_username','auth_password_hash');"`, then `sudo systemctl restart
   curodav`), which forces the one-time `/setup` page to run again. This
   does not touch your calendar/task/contact data — only the stored login.
-  See the Wiki's [Authentication](../../wiki/Features/Authentication) page
+  See the Wiki's [Authentication](../../wiki/Features-Authentication) page
   for the full auth model.
 - **Something else.** Check the Wiki's
   [Getting Started](../../wiki/Getting-Started) page, or open a GitHub
@@ -293,7 +293,7 @@ repository:
 
 | Page | What it is |
 |---|---|
-| [Features overview](../../wiki/Features/Overview) | Tour of what you can do today; links each area to its detailed page |
+| [Features overview](../../wiki/Features-Overview) | Tour of what you can do today; links each area to its detailed page |
 | [Architecture](../../wiki/Architecture) | The rulebook — data model, layering, design system, how a feature gets in. **Read this before touching code** |
 | [Code Style & Structure](../../wiki/Code-Style-and-Structure) | Naming, comments, file organization |
 | [UI Design Guide](../../wiki/UI-Design-Guide) | One canonical pattern per UI piece, and the Settings-specific layout rules |

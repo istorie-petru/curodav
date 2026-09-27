@@ -13,7 +13,7 @@ tagged release. Format loosely follows
   shared token across the app.
 - Default banner/avatar photos restored as an operator-supplied, keyword-matched
   "flairs" system instead of bundled copyrighted images (see the Wiki's
-  [Flairs](../../wiki/Flairs) page).
+  [Flairs](https://github.com/istorie-petru/curodav/wiki/Flairs) page).
 - Icon set reverted to Lucide stroke icons.
 
 ## [2.7.0]
@@ -97,7 +97,7 @@ tagged release. Format loosely follows
 - Information architecture rework: dedicated Today and Week planning
   surfaces (both later folded back into the Dashboard and Calendar once
   those covered the same ground — see 1.9's notes and the Wiki's
-  [Calendar](../../wiki/Features/Calendar) page).
+  [Calendar](https://github.com/istorie-petru/curodav/wiki/Features-Calendar) page).
 
 ## [1.6.0]
 
@@ -128,7 +128,7 @@ tagged release. Format loosely follows
 
 - Virtual and derived task states (later replaced by the simpler, purely
   temporal derivation described in the Wiki's
-  [Tasks](../../wiki/Features/Tasks) page).
+  [Tasks](https://github.com/istorie-petru/curodav/wiki/Features-Tasks) page).
 
 ## [1.0.0]
 
