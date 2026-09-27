@@ -4,6 +4,16 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.9.0]
+
+- Docker Compose deploy path (`deploy/docker/`): an alternative to
+  `curodav-ctl`'s systemd install, app + Radicale as containers.
+- README: app icon and screenshots, a new Docker Compose install section.
+- Fixed `uv.lock`'s workspace manifest, stale since the v2.8.0
+  `command-center` -> `curodav` rename -- `uv sync --frozen` (used by both
+  the new Docker build and `curodav-ctl`'s own install/update) was failing
+  outright with "Missing workspace member `curodav`".
+
 ## [2.8.0]
 
 - Settings notifications reworked onto its own dedicated page; accent-color
