@@ -4,6 +4,18 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.9.0]
+
+- Docker Compose deploy path (`deploy/docker/`): an alternative to
+  `curodav-ctl`'s systemd install, app + Radicale as containers.
+- README: app icon and screenshots, a new Docker Compose install section.
+- Fixed `uv.lock`'s workspace manifest, stale since the v2.8.0
+  `command-center` -> `curodav` rename -- `uv sync --frozen` (used by both
+  the new Docker build and `curodav-ctl`'s own install/update) was failing
+  outright with "Missing workspace member `curodav`".
+- Removed the stale `.mailmap`, which mapped old Codeberg-era author
+  identities to the current GitHub one.
+
 ## [2.8.0]
 
 - Settings notifications reworked onto its own dedicated page; accent-color
@@ -13,7 +25,7 @@ tagged release. Format loosely follows
   shared token across the app.
 - Default banner/avatar photos restored as an operator-supplied, keyword-matched
   "flairs" system instead of bundled copyrighted images (see the Wiki's
-  [Flairs](../../wiki/Flairs) page).
+  [Flairs](https://github.com/istorie-petru/curodav/wiki/Flairs) page).
 - Icon set reverted to Lucide stroke icons.
 
 ## [2.7.0]
@@ -97,7 +109,7 @@ tagged release. Format loosely follows
 - Information architecture rework: dedicated Today and Week planning
   surfaces (both later folded back into the Dashboard and Calendar once
   those covered the same ground — see 1.9's notes and the Wiki's
-  [Calendar](../../wiki/Features/Calendar) page).
+  [Feature Map](https://github.com/istorie-petru/curodav/wiki/Feature-Map) page).
 
 ## [1.6.0]
 
@@ -128,7 +140,7 @@ tagged release. Format loosely follows
 
 - Virtual and derived task states (later replaced by the simpler, purely
   temporal derivation described in the Wiki's
-  [Tasks](../../wiki/Features/Tasks) page).
+  [Feature Map](https://github.com/istorie-petru/curodav/wiki/Feature-Map) page).
 
 ## [1.0.0]
 

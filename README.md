@@ -1,135 +1,83 @@
+<img src="./.github/assets/icon.png" alt="Curodav icon" width="96" height="96">
+
 # Curodav
 
-A self-hosted **personal organizer / PWA dashboard** for one person: a home
-dashboard with widgets, a full calendar, tasks, a class timetable, habit
-tracking, contacts, and one universal label system that organizes all of it. It
-syncs to your phone through open standards (CalDAV/CardDAV) — no cloud account,
-no subscription.
+A self-hosted **personal organizer** for one person, which you run on your
+own server and open in any browser. It has a home dashboard with widgets, a
+calendar, tasks and projects, habit tracking, contacts and notes, all
+organized by one shared label system. You can install it on your phone as an
+app (a PWA), and it keeps working offline.
 
-## What it is
+No cloud account, no subscription, no telemetry. Your data stays in one file
+on a machine you control.
 
-- **Single-user by design.** Tasks, events, and contacts are the primary
-  objects; a *label* is a name they point at, not an entity with a lifecycle.
-  Everything else — Projects, Groups, Published Lists — is a behavior
-  over that pool, never a new kind of object.
-- **Runs entirely from one tree** with no external services beyond the optional
-  Radicale sync server. Self-host it where you like.
-- **The current version is tracked in [`VERSION`](VERSION)** at the
-  repository root, the authoritative source (see
-  [Versioning](#versioning) below).
-- **Licensed under AGPL-3.0** — see [`LICENSE`](LICENSE).
+|                                                          |                                                          |
+| -------------------------------------------------------- | -------------------------------------------------------- |
+| ![Dashboard](./.github/assets/screenshots/dashboard.png) | ![Calendar](./.github/assets/screenshots/calendar.png)   |
+| ![Tasks](./.github/assets/screenshots/tasks.png)         | ![Habits](./.github/assets/screenshots/habits.png)       |
+
+**Contents:** [Is this for you?](#is-this-for-you) ·
+[Try it in 2 minutes](#try-it-in-2-minutes) ·
+[Install it on a server](#install-it-on-a-server) ·
+[Before you expose it to a network](#before-you-expose-it-to-a-network) ·
+[Phone sync](#phone-sync-what-it-does-and-doesnt-do) ·
+[Everyday commands](#everyday-commands) ·
+[Documentation](#documentation)
 
 ## Is this for you?
 
-This is a self-hosted app: you run it on your own server (a spare computer,
-a Raspberry Pi, a cheap VPS, a Proxmox VM/LXC) rather than signing up for a
-hosted service. If you're comfortable running a few terminal commands over
-SSH and don't mind occasionally reading a log file, you can run this. If
-"self-hosted" and "systemd service" are unfamiliar terms, read the
-[Getting started](#getting-started) walkthrough below first — it explains
-each one as it comes up — before deciding whether to proceed.
+A good fit if:
 
-## The stack
+- You want **one private place** for your calendar, to-dos, habits and
+  contacts, and you're the only user. There are no shared accounts and no
+  team features, by design.
+- You're comfortable **running a few commands over SSH** on a Linux box (a
+  spare PC, a Raspberry Pi, a small VPS, or a Proxmox VM/LXC) and reading a
+  log file when something goes wrong.
 
-| Layer | Technology |
-|---|---|
-| App framework | **FastAPI** (Python 3.12+) + **Uvicorn** |
-| Server-side rendering | **Jinja2** templates; JS adds interactivity on top |
-| Database | **SQLite** (a single local file, treated as a rebuildable cache) |
-| Sync backend | **Radicale** (self-hosted CalDAV/CardDAV) + `caldav` / `icalendar` / `vobject` |
-| Frontend | Vanilla **JavaScript + CSS** (Material 3) — no framework, no build step |
-| Testing | **pytest** + httpx |
+Probably not a fit if:
 
-## Repository layout
+- You need several people to share it, or real-time collaboration.
+- You expect your phone's built-in calendar app to be the main way you edit
+  things. The app is browser-first. Phone calendar sync exists, but it only
+  goes one way (see [Phone sync](#phone-sync-what-it-does-and-doesnt-do)).
+- You'd rather not run a server at all. There's no hosted version.
 
-```
-webapp/      The app — FastAPI client (sole client)
-  src/       Routers, db layer, pure logic modules, static assets, templates
-  tests/     pytest suite (acceptance-oriented, one file per feature)
-  run.sh     One-command dev start (uv sync + dev Radicale + the app)
-deploy/      Public deployment tooling (Cloudflare Tunnel + Radicale for phone sync)
-scripts/     Deploy tooling (curodav-ctl)
-assets/      Default banner/avatar photos, seeded on first run
-.github/     CI + deploy/rollback workflows
-LICENSE, CONTRIBUTING.md, SECURITY.md, CHANGELOG.md, VERSION
-pyproject.toml / uv.lock   uv workspace
-```
+## Try it in 2 minutes
 
-Full documentation — feature guides, architecture, contributor guides — lives
-on the [project Wiki](../../wiki), not in this repository. See
-[Where docs live](#where-docs-live) below.
+This runs on your own computer, touches nothing outside the project folder,
+and gets deleted along with that folder. It's fine for evaluating the app,
+**but it isn't meant for real use**: it has no login and uses throwaway
+test credentials.
 
-## Getting started
-
-There are two different things people mean by "getting started" here — try
-it out on your own laptop first, or install it for real on a server you'll
-actually use day to day. Pick one.
-
-### Just trying it out (your own computer, nothing permanent)
-
-Requires [Python 3.12+](https://www.python.org/downloads/) and
-[`uv`](https://docs.astral.sh/uv/getting-started/installation/) (a
-Python package manager) installed first.
+You need [Python 3.12+](https://www.python.org/downloads/) and
+[`uv`](https://docs.astral.sh/uv/getting-started/installation/), a Python
+package manager that installs everything else for you.
 
 ```bash
 git clone https://github.com/istorie-petru/curodav.git
 cd curodav/webapp
-./run.sh                 # -> http://127.0.0.1:8000
+./run.sh
 ```
 
-Open `http://127.0.0.1:8000` in your browser. `run.sh` installs the app's
-dependencies (`uv sync`), starts a throwaway test sync server (Radicale) in
-the background, then the app itself, and shuts the sync server down again
-when you press Ctrl+C. Nothing here is written outside this folder, and
-there's no login screen — this mode is meant for one person poking around
-on their own machine, not for exposing to a network. When you're done
-evaluating it, delete the `curodav` folder and nothing is left behind.
+Open <http://127.0.0.1:8000> in a browser, and press `Ctrl+C` in the
+terminal to stop it. To remove it completely, delete the `curodav` folder.
 
-Run the test suite (optional, for anyone editing the code):
+## Install it on a server
 
-```bash
-cd webapp && PYTHONPATH=src ../.venv/bin/python -m pytest -q
-```
+You can install it in two ways. Both run the same app, so pick whichever
+matches how you already manage servers.
 
-All tests green or a change isn't done.
+| | **`curodav-ctl` (systemd)** | **Docker Compose** |
+|---|---|---|
+| Runs on | Debian 12 (bare metal, VM or LXC) | Any host with Docker |
+| Updates | One command, with an automatic rollback if the new version fails its health check | `git pull` + rebuild, no automatic rollback |
+| Phone sync over the internet | Automated (`install --dav`, via Cloudflare Tunnel) | Not automated, you set up the proxy yourself |
+| Best if | You want the most hands-off, supported path | You already run everything in containers |
 
-### Installing it for real (a server, always-on)
+### Option A: `curodav-ctl` (recommended)
 
-**What you need first:**
-
-- A **Debian 12** machine you have root/`sudo` access to — a spare PC, a
-  Raspberry Pi running Debian, a $5/mo VPS, or a VM/LXC container in
-  something like Proxmox. Not Windows or macOS. No Docker required (and
-  none used) — it installs directly as a system service.
-- That machine reachable over SSH from the computer you're typing commands
-  on.
-- A rough idea of how you'll reach it afterward: over your home network,
-  over a VPN like [Tailscale](https://tailscale.com/) (recommended — free,
-  easiest to set up, and keeps the app off the public internet entirely),
-  or publicly if you want phone sync from anywhere (see
-  [Connecting your phone](#connecting-your-phone-caldavcarddav) below).
-
-The app deploys as a systemd service via
-[`scripts/curodav-ctl`](scripts/curodav-ctl). Each deploy builds a fresh,
-isolated release and atomically swaps a symlink over to it; nothing is ever
-edited in place, and a deploy that fails its own health check rolls itself
-back automatically -- the site never goes down mid-upgrade.
-
-`curodav-ctl` at a glance:
-
-| Command | What it does |
-|---|---|
-| `install` | First install: system user, `/srv/curodav` layout, `.env`, the systemd unit, builds and starts the first release. Prompts to set an admin login and, optionally, DAV. |
-| `install --dav [--proxy=cloudflare\|manual] [--reconfigure]` | Adds/reconfigures public CalDAV/CardDAV (Radicale + nginx, optionally Cloudflare Tunnel). Reuses prior answers on re-run unless `--reconfigure` is passed; `--proxy=manual` skips Cloudflare Tunnel for your own reverse proxy. |
-| `update` | Deploys the latest `main`, atomic symlink swap, health-checked, auto-rolls-back on failure. |
-| `revert` | Swaps `current` back to `previous` locally, restarts, health-checks -- a manual escape hatch independent of `update`'s own auto-rollback. |
-| `status` | Reachability/consistency checks only (Radicale loopback, nginx path-route, public hostname, env-var agreement) -- no deploy, no root needed. |
-| `remove` | Tears down the service, system user, and `/srv/curodav` entirely -- destructive, confirms first. |
-| `flairs` | Creates the flair-photos folder (`/srv/curodav/shared/data/flairs`) and adds `CC_FLAIRS_DIR` to `.env` if missing -- `install` already does this for a brand new deploy; use this to add it to an existing one. See [Flairs](../../wiki/Flairs). |
-
-#### First install (fresh host)
-
-SSH into the server, then:
+SSH into a **Debian 12** machine where you have `sudo`, then run:
 
 ```bash
 git clone https://github.com/istorie-petru/curodav.git /tmp/bootstrap
@@ -137,181 +85,118 @@ sudo /tmp/bootstrap/scripts/curodav-ctl install
 rm -rf /tmp/bootstrap
 ```
 
-(`curodav-ctl` ships inside this repo rather than a separate infra repo, and
-figures out its own repo URL from the clone it's running from — that's why
-you clone first and run the script *from inside* that clone, rather than
-downloading just the one script file.)
+The installer creates a dedicated system user, installs the app under
+`/srv/curodav`, and registers it as a systemd service, so it starts on boot
+and restarts itself if it crashes. Along the way it asks two optional
+questions (an admin username, and phone sync); pressing Enter to skip both
+is fine.
 
-`install` will:
-
-1. Create a dedicated `curodav` system user and the `/srv/curodav` folder
-   layout it lives in.
-2. Generate `/srv/curodav/shared/.env` — the app's one config file — with a
-   random secret key already filled in and everything else left as
-   commented-out examples.
-3. Install and enable the `curodav.service` systemd unit (systemd is
-   Debian's standard "keep this program running, restart it if it crashes
-   or the server reboots" mechanism — no separate install step needed, it's
-   already on the machine).
-4. Create `/srv/curodav/shared/data/flairs/` — an empty folder for
-   optional default banner photos (see
-   [Flairs](../../wiki/Flairs)) — and set
-   `CC_FLAIRS_DIR` to it in `.env`. Empty is fine; nothing shows up until
-   you drop photos in yourself, same as an uploaded banner.
-5. Build and start the first release.
-
-By the end, the app is running at `http://<the server's IP address>:8000`.
-Open that in a browser (over Tailscale, your LAN, or however you chose to
-reach it above) and you'll land on a one-time **setup page**: pick a
-username and password there, right in the browser — no config file editing
-required for this part. That's your login from then on, and the app is now
-private to whoever knows that password.
-
-Deploying to a fork, or from a separate infra repo instead of in-tree, works
-the same way but with an explicit override: `sudo CURODAV_REPO_URL=<url> -E
-curodav-ctl install`.
-
-#### Updating (every deploy after that)
+### Option B: Docker Compose
 
 ```bash
-sudo curodav-ctl update
+git clone https://github.com/istorie-petru/curodav.git
+cd curodav/deploy/docker
+cp .env.example .env
+nano .env                    # set RADICALE_PASSWORD and CC_AUTH_SECRET
+./create-radicale-user.sh    # one-time
+docker compose up -d --build
 ```
 
-This clones the latest `main`, builds it (`uv sync --frozen --no-dev`) into
-a new timestamped release under `/srv/curodav/releases/`, atomically swaps
-the `current` symlink to it, restarts the service, and health-checks it
-over HTTP. If the health check fails, it swaps `current` back to the
-previous release, restarts again, and exits non-zero — the bad release
-never stays live. Releases beyond the last 5 are pruned automatically.
-Config in `shared/.env` and data in `shared/data/` live outside every
-release directory, so neither is touched by a swap.
+To generate a good value for `CC_AUTH_SECRET`, run `openssl rand -hex 32`.
 
-#### Reverting a bad deploy
+### Then: create your login
 
-```bash
-sudo curodav-ctl revert
-```
+Open `http://<your-server-ip>:8000` (for Docker, use the `APP_PORT` you set).
+The first visit shows a one-time **setup page** where you choose a username
+and password. After that, the app asks you to log in.
 
-For when something's wrong that `update`'s own auto-rollback didn't catch
-(a health check that passes but the app still misbehaves, say). Points
-`current` back at whatever `previous` currently is, restarts, and
-health-checks it the same way `update` does. One-way, not a redo stack --
-running it twice in a row doesn't "revert the revert," it just re-points
-`current` at the same release again.
+The full guides, covering what each step does, every `curodav-ctl` command,
+configuration options and troubleshooting, are on the Wiki:
+[Deploying with curodav-ctl](../../wiki/Deploying-with-curodav-ctl) and
+[Deploying with Docker](../../wiki/Deploying-with-Docker).
 
-#### Continuous deployment
+## Before you expose it to a network
 
-[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs
-`sudo curodav-ctl update` over SSH on every push to `main`, using the
-`LXC_IP`, `LXC_USER`, and `SSH_KEY` repo secrets.
-[`.github/workflows/rollback.yml`](.github/workflows/rollback.yml) is a
-manual (`workflow_dispatch`) escape hatch that swaps `current` back to
-`previous` on demand — unlike `update`'s automatic rollback, it doesn't
-health-check first, so use it only to undo a deploy that's already known
-to be broken.
+The login page keeps strangers out of the app, but **the app doesn't encrypt
+traffic itself**. It speaks plain HTTP. Choose one of these:
 
-#### Removing
+- **Tailscale (easiest, recommended).** [Tailscale](https://tailscale.com/)
+  is a free private network between your own devices. Install it on the
+  server and on your phone and laptop, then open the app at the server's
+  Tailscale address. Nothing is exposed to the public internet, and you
+  don't need a domain or a certificate.
+- **A public domain with HTTPS.** You need this only if you want the app or
+  phone sync reachable from anywhere without a VPN. `curodav-ctl install
+  --dav` sets this up through Cloudflare Tunnel, with no port-forwarding and
+  no certificates to renew. It also turns on a firewall that leaves only
+  SSH open, so from then on you reach the app at `https://your-domain`
+  instead of port 8000.
 
-```bash
-sudo curodav-ctl remove
-```
+**Don't** forward port 8000 on your router straight to the internet.
 
-Stops and disables the service, deletes the unit file, removes the
-`curodav` system user, and wipes `/srv/curodav` (all releases and data) —
-after a `type 'yes'` confirmation prompt.
+## Phone sync: what it does and doesn't do
 
-### Security note (read this before exposing the app to a network)
+You edit your data in the app, either in a browser or in the installed PWA,
+which also works offline. To get events, tasks or contacts into your
+**phone's own calendar or contacts app**, you create a **Published List** in
+Settings. A Published List is a label filter, such as "everything tagged
+Work", that turns into a calendar or address-book feed your phone can
+subscribe to with [DAVx5](https://www.davx5.com/) on Android or the built-in
+account settings on iOS.
 
-The login screen (from the one-time setup page above) only stops someone
-from *using* the app without your password — it does not encrypt the
-connection. Browser-to-server traffic is plain HTTP unless something in
-front of the app adds TLS. Two supported ways to do that safely:
+- The sync is **one-way**: changes made on the phone don't come back into
+  the app.
+- It needs **Radicale**, a small CalDAV/CardDAV server. The Docker setup
+  includes it. On the `curodav-ctl` path, the installer asks whether to set
+  it up, and you can add it later with `sudo curodav-ctl install --dav`. You
+  can skip Radicale if you only use the browser.
+- A Published List can also be made **public**, which gives it an
+  unguessable link that the app serves directly, with no Radicale needed.
+  This is handy for sharing a feed with someone else.
+- To reach it from outside your home network, see
+  [`deploy/README.md`](deploy/README.md). It has the Cloudflare Tunnel setup
+  and the exact DAVx5 fields to fill in.
 
-- **Tailscale (recommended for most people)** — a free VPN that gives your
-  server a private address only your own devices can reach. Nothing about
-  the app is exposed to the public internet at all; you don't need a
-  domain name or a certificate. Install it on the server and on your phone/
-  laptop, then reach the app at its Tailscale address instead of a public
-  IP.
-- **A public domain with TLS** — needed if you want CalDAV/CardDAV sync to
-  reach your phone from outside your home network (see
-  [Connecting your phone](#connecting-your-phone-caldavcarddav) below,
-  which walks through Cloudflare Tunnel — no port-forwarding or manual
-  certificates required).
+## Everyday commands
 
-Don't just forward port 8000 on your home router to the open internet
-without one of the above — the app has no rate-limit/lockout beyond a
-basic 5-attempts-per-15-minutes login throttle, and no TLS of its own.
+For the `curodav-ctl` install:
 
-### Connecting your phone (CalDAV/CardDAV)
-
-Syncing your calendar/tasks/contacts to your phone's native apps needs two
-things: **Radicale** (the sync server the app talks to) installed and
-running, and a CalDAV/CardDAV client app on the phone — **DAVx5** (Android,
-free/open-source) is the one this project is built and tested against;
-iOS can connect to the same Radicale server using its built-in
-Settings > Calendar/Contacts "Add Account" screen instead.
-
-If you only want sync between the app and *itself* (i.e. you're fine using
-the app through a browser and don't need a separate phone calendar app),
-you can skip this section — Radicale isn't required for the app to work.
-
-For phone sync reachable from outside your home network, the supported
-path is Cloudflare Tunnel (no port-forwarding, no certificates to renew)
-plus a real Radicale install with a password — full step-by-step
-instructions, including the exact fields to enter into DAVx5, are in
-[`deploy/README.md`](deploy/README.md). If your phone is on the same
-network/Tailscale as the server, you can point DAVx5 directly at
-Radicale's local address instead and skip the tunnel setup entirely.
-
-### Troubleshooting
-
-- **Can't reach the app after install.** Check the service is actually
-  running: `sudo systemctl status curodav`. Logs: `sudo journalctl -u
-  curodav -f`.
-- **Update seemed to fail / site is down after `curodav-ctl update`.** It
-  should have already rolled itself back — re-check `sudo systemctl status
-  curodav`. If it's still down, `sudo journalctl -u curodav -n 100` shows
-  what the last release logged before failing its health check.
-- **Forgot the login password.** There's no self-service password reset
-  yet, and no admin-only bypass — the only way back in is clearing the
-  stored account directly from the database (`sqlite3
-  /srv/curodav/shared/data/cache.sqlite "DELETE FROM app_meta WHERE key IN
-  ('auth_username','auth_password_hash');"`, then `sudo systemctl restart
-  curodav`), which forces the one-time `/setup` page to run again. This
-  does not touch your calendar/task/contact data — only the stored login.
-  See the Wiki's [Authentication](../../wiki/Features/Authentication) page
-  for the full auth model.
-- **Something else.** Check the Wiki's
-  [Getting Started](../../wiki/Getting-Started) page, or open a GitHub
-  issue.
-
-## Where docs live
-
-Full documentation lives on the **[project Wiki](../../wiki)**, not in this
-repository:
-
-| Page | What it is |
+| I want to… | Run |
 |---|---|
-| [Features overview](../../wiki/Features/Overview) | Tour of what you can do today; links each area to its detailed page |
-| [Architecture](../../wiki/Architecture) | The rulebook — data model, layering, design system, how a feature gets in. **Read this before touching code** |
-| [Code Style & Structure](../../wiki/Code-Style-and-Structure) | Naming, comments, file organization |
-| [UI Design Guide](../../wiki/UI-Design-Guide) | One canonical pattern per UI piece, and the Settings-specific layout rules |
-| [Flairs](../../wiki/Flairs) | Keyword-matched default banner photos — none ship with the app (copyright), where `install`/`curodav-ctl flairs` sets up the folder, full supported keyword list |
-| [Getting Started](../../wiki/Getting-Started) | Local dev setup and a plain-language deploy overview |
+| Update to the latest version | `sudo curodav-ctl update` |
+| Undo the last update | `sudo curodav-ctl revert` |
+| Check that everything is healthy | `curodav-ctl status` |
+| See the logs | `sudo journalctl -u curodav -f` |
 
-The Wiki is the canonical home for anything a user or contributor would want
-to read. This README stays focused on getting the app running.
+For Docker: `git pull && docker compose up -d --build` updates it, and
+`docker compose logs -f app` shows the logs.
 
-## Versioning
+Forgot your password, or something's broken? See
+[Maintenance & Troubleshooting](../../wiki/Maintenance-and-Troubleshooting).
 
-**The current version is tracked in [`VERSION`](VERSION) at the repository
-root** — that file, and the matching `vX.Y.Z` git tag, are authoritative;
-nothing else in this repo's prose should be treated as the source of truth if
-it ever drifts. [`CHANGELOG.md`](CHANGELOG.md) has one entry per tagged
-release.
+## Documentation
 
-Releases follow semantic versioning in two series: `1.x` covers the app's
-initial build-out through its first stable shape, and `2.x` covers everything
-since — each `x.y` a real, distinct release with its own tag. See the
-repository's tags for the full release history.
+The rest of the documentation lives on the **[project Wiki](../../wiki)**,
+which is split into two tracks:
+
+- **Running it:** [Getting Started](../../wiki/Getting-Started) ·
+  [Deploying with curodav-ctl](../../wiki/Deploying-with-curodav-ctl) ·
+  [Deploying with Docker](../../wiki/Deploying-with-Docker) ·
+  [Configuration](../../wiki/Configuration) ·
+  [Maintenance & Troubleshooting](../../wiki/Maintenance-and-Troubleshooting) ·
+  [Flairs](../../wiki/Flairs)
+- **Changing the code:** [Architecture](../../wiki/Architecture) (read this
+  first) · [Feature Map](../../wiki/Feature-Map) ·
+  [Code Style & Structure](../../wiki/Code-Style-and-Structure) ·
+  [UI Design Guide](../../wiki/UI-Design-Guide)
+
+Built with Python (FastAPI), server-rendered Jinja templates, vanilla
+JavaScript and SQLite. There's no frontend framework and no build step.
+Contributions are welcome. Start with [`CONTRIBUTING.md`](CONTRIBUTING.md).
+To report a security issue, see [`SECURITY.md`](SECURITY.md).
+
+## Versioning and license
+
+The current version is in [`VERSION`](VERSION), and it matches the latest
+`vX.Y.Z` git tag. [`CHANGELOG.md`](CHANGELOG.md) has one entry per release.
+Curodav is licensed under **AGPL-3.0** (see [`LICENSE`](LICENSE)).

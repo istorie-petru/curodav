@@ -1,0 +1,43 @@
+# Docker Compose deploy -- an alternative to scripts/curodav-ctl's
+# systemd-based install (see the repo root README.md's "Getting started").
+# Two services: the app itself, and Radicale (CalDAV/CardDAV sync) so
+# phone sync works out of the box. Radicale is optional -- comment its
+# block out, and CC_RADICALE_* in .env, if you only want the web UI.
+#
+# Usage (from this directory):
+#   cp .env.example .env && edit .env
+#   docker compose up -d --build
+#   docker compose logs -f app
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    environment:
+      CC_DB_PATH: /data/cache.sqlite
+      CC_RADICALE_URL: http://radicale:5232/${RADICALE_USER:-curodav}/
+      CC_RADICALE_USER: ${RADICALE_USER:-curodav}
+      CC_RADICALE_PASSWORD: "${RADICALE_PASSWORD:?set RADICALE_PASSWORD in .env}"
+      CC_AUTH_SECRET: "${CC_AUTH_SECRET:?set CC_AUTH_SECRET in .env, e.g. openssl rand -hex 32}"
+      CC_DEPLOY_MODE: production
+    volumes:
+      - app_data:/data
+    depends_on:
+      radicale:
+        condition: service_started
+
+  radicale:
+    build:
+      context: .
+      dockerfile: radicale.Dockerfile
+    restart: unless-stopped
+    volumes:
+      - radicale_data:/data
+      - ./radicale.config:/etc/radicale/config:ro
+
+volumes:
+  app_data:
+  radicale_data:

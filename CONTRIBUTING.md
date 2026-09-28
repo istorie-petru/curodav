@@ -38,6 +38,35 @@ Covered in full on the Wiki:
 
 The short version: comment the current reason something is built a certain way, not the history of how it got there; a filename should say what's inside it without opening the file; and before adding a new UI pattern that's a near-copy of an existing one, check whether one already covers your case.
 
+## Release process
+
+Every change that lands on `main` ships as part of a version bump -- there
+is no "merge now, release later." The commit that lands the change (or,
+if that commit is already pushed, the very next one before anything else
+lands) is itself titled `Release vX.Y.Z: <short summary>` and updates, in
+that same commit:
+
+- [`VERSION`](VERSION) (the authoritative source of truth -- see the root
+  `README.md`'s [Versioning](README.md#versioning-and-license) section)
+- `version` in both [`pyproject.toml`](pyproject.toml) (root) and
+  [`webapp/pyproject.toml`](webapp/pyproject.toml)
+- [`CHANGELOG.md`](CHANGELOG.md), a new `## [X.Y.Z]` entry above the
+  previous one, in the same terse bullet style as existing entries
+- `uv.lock`, re-run `uv lock` (from the repo root) after bumping the
+  `version` fields above so the lockfile's own embedded versions agree
+
+Bump the minor version (`X.Y.0`) for a normal batch of features/fixes,
+matching every release so far; reserve a major bump for something that
+actually breaks compatibility.
+
+Commits that land on `main` don't carry AI co-authorship trailers
+(`Co-Authored-By: Claude ...` or similar) -- the v2.8.0 release
+deliberately scrubbed these from history before the repo went public, and
+that's the standing policy going forward, not a one-time cleanup.
+
+`main` is never force-pushed, and already-pushed commits are never
+rewritten -- fix forward with a new commit instead.
+
 ## Reporting bugs
 
 Open a GitHub issue with steps to reproduce, what you expected, and what actually happened. If it's a security issue, see [`SECURITY.md`](SECURITY.md) instead — please don't open a public issue for it.
