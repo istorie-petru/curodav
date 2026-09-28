@@ -107,7 +107,7 @@ tagged release. Format loosely follows
 - Information architecture rework: dedicated Today and Week planning
   surfaces (both later folded back into the Dashboard and Calendar once
   those covered the same ground — see 1.9's notes and the Wiki's
-  [Calendar](https://github.com/istorie-petru/curodav/wiki/Features-Calendar) page).
+  [Feature Map](https://github.com/istorie-petru/curodav/wiki/Feature-Map) page).
 
 ## [1.6.0]
 
@@ -138,7 +138,7 @@ tagged release. Format loosely follows
 
 - Virtual and derived task states (later replaced by the simpler, purely
   temporal derivation described in the Wiki's
-  [Tasks](https://github.com/istorie-petru/curodav/wiki/Features-Tasks) page).
+  [Feature Map](https://github.com/istorie-petru/curodav/wiki/Feature-Map) page).
 
 ## [1.0.0]
 

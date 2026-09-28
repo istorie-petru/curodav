@@ -47,7 +47,7 @@ lands) is itself titled `Release vX.Y.Z: <short summary>` and updates, in
 that same commit:
 
 - [`VERSION`](VERSION) (the authoritative source of truth -- see the root
-  `README.md`'s [Versioning](README.md#versioning) section)
+  `README.md`'s [Versioning](README.md#versioning-and-license) section)
 - `version` in both [`pyproject.toml`](pyproject.toml) (root) and
   [`webapp/pyproject.toml`](webapp/pyproject.toml)
 - [`CHANGELOG.md`](CHANGELOG.md), a new `## [X.Y.Z]` entry above the

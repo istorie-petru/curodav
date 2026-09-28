@@ -5,12 +5,12 @@ sync against Radicale over the public internet through a Cloudflare
 Tunnel, with real bcrypt auth on the Radicale side. Pure infra, no app
 code (aside from one small Settings display field, see "Published Lists"
 below) -- everything here is scripts/config, run once on the server. See
-the [Getting Started](../../../wiki/Getting-Started) Wiki page for the
-short version of this whole flow.
+the [Deploying with curodav-ctl](../../../wiki/Deploying-with-curodav-ctl)
+Wiki page for the short version of this whole flow.
 
 This assumes the webapp itself is already deployed on this same host via
 [`scripts/curodav-ctl`](../scripts/curodav-ctl) (see the repo root
-`README.md`'s own "Installing it for real" section) -- `curodav.service`
+`README.md`'s "Install it on a server" section) -- `curodav.service`
 already listens on `127.0.0.1:8000` before any of this runs.
 
 ## One hostname, not two
