@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_detail_cover.html" import detail_cover with context %}
-{% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill, widget_event_dot %}
+{% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill, widget_event_icon %}
 {% block title %}{{ label.name }}{% endblock %}
 {% block content %}
 {# A label's preview modal (labels-as-modules slice d, 2026-09-25;
@@ -71,7 +71,10 @@
     {% elif item.is_deadline %}
     {{ widget_link_row(none, item.title, leading=icon('flag', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill(label_deadline.text if label_deadline else ('Deadline · ' ~ (item.start_at | relative_date)), label_deadline.color if label_deadline else 'gray')) }}
     {% else %}
-    {{ widget_link_row('/events/' ~ item.uid, item.title, leading=widget_event_dot(item.calendar_color), leading_class='widget-row-icon', right=widget_pill(((item.start_at | relative_date) ~ (' ' ~ (item.start_at | fmt_time) if not item.all_day else '')), 'blue')) }}
+    {# 2026-09-28 direct follow-up ("the label's icon should be used
+       when it's available") -- same pattern as the Agenda widget's
+       Events section (_widget_agenda.html). #}
+    {{ widget_link_row('/events/' ~ item.uid, item.title, leading=widget_event_icon(item.calendar_color, icon_name=(label_icon(request, item.tags | first | default('')) | default('calendar', true))), leading_class='widget-row-icon', right=widget_pill(((item.start_at | relative_date) ~ (' ' ~ (item.start_at | fmt_time) if not item.all_day else '')), 'blue')) }}
     {% endif %}
     {% endfor %}
 </table>

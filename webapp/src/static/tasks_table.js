@@ -392,8 +392,8 @@
     if (!listPath) return;
     try {
       await bulkPost("move_list", { list_path: listPath });
-      window.ccToast({ title: "Moved", message: "Reloading..." });
-      window.location.reload();
+      window.ccToast({ title: "Moved" });
+      dispatchTaskChange("move_list");
     } catch (err) {
       window.ccToast({ message: "Could not move the selected tasks.", variant: "error" });
     } finally {

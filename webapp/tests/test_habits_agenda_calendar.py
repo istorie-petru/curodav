@@ -66,8 +66,8 @@ class TestAgenda:
         _habit(conn, "w1", "Water", target_per_day=8)
         data = dashboard_router._render_agenda(conn, {"range": "today"})
         html = dashboard_router.templates.env.get_template("_widget_agenda.html").render(request=_req(), data=data)
-        assert f'action="/tasks/h1/completion/{TODAY.isoformat()}/toggle" class="form-inline habit-action"' in html
-        assert 'action="/tasks/w1/completions" class="form-inline habit-action"' in html
+        assert f'action="/tasks/h1/completion/{TODAY.isoformat()}/toggle" class="form-inline habit-action habit-toggle"' in html
+        assert 'action="/tasks/w1/completions" class="form-inline habit-action habit-plus"' in html
         assert "Nothing to show." not in html
 
     def test_builder_offers_habits(self):

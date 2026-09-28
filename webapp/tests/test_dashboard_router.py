@@ -384,20 +384,21 @@ class TestAgendaWidgetAllUpcoming:
         data = dashboard_router._render_agenda(conn, {"range": "all_upcoming", "show": ["events"], "limit": 2})
         assert len(data["events"]) == 2
 
-    def test_limit_zero_means_20_items_max(self, conn):
+    def test_limit_zero_means_8_items_max(self, conn):
         # 2026-08-31 direct feedback: "add a way to set the limit to 0
         # (0 = unlimited)" -- `config.get("limit") or 10` used to collapse
         # a stored 0 back into the 10-item default; must not fall back to
         # the default once explicitly set to 0.
         # 2026-09-13 direct request ("no limit should actually be 20
         # maximum items") -- 0 is no longer truly unlimited, it now caps at
-        # 20, so this seeds 25 (more than the cap) and asserts exactly 20
-        # come back, replacing the old "returns all 25" assertion.
+        # 20; 2026-09-28 direct feedback ("make the default limit smaller,
+        # maximum 8") dropped that cap (and the default) to 8 -- seeds 25
+        # (more than the cap) and asserts exactly 8 come back.
         now = datetime.now(timezone.utc)
         for i in range(25):
             _seed_event(conn, f"e{i}", start_at=(now + timedelta(days=i + 1)).isoformat())
         data = dashboard_router._render_agenda(conn, {"range": "all_upcoming", "show": ["events"], "limit": 0})
-        assert len(data["events"]) == 20
+        assert len(data["events"]) == 8
 
     def test_all_upcoming_range_bounds_to_364_days_out(self, conn):
         # 2026-09-13 direct request: "widgets that don't have a time limit
@@ -1250,17 +1251,18 @@ class TestContactListWidget:
         data = dashboard_router._render_contact_list(conn, {"tags": ["tagged"], "limit": 3})
         assert len(data["contacts"]) == 3
 
-    def test_limit_zero_means_20_items_max(self, conn):
+    def test_limit_zero_means_8_items_max(self, conn):
         # 2026-08-31 direct feedback: "add a way to set the limit to 0
         # (0 = unlimited)". 2026-09-13 direct request ("no limit should
         # actually be 20 maximum items") -- 0 no longer means truly
-        # unlimited, it now caps at 20; seeds 25 (more than the cap) and
-        # asserts exactly 20 come back, replacing the old "returns all 25"
-        # assertion.
+        # unlimited, it now caps at 20; 2026-09-28 direct feedback ("make
+        # the default limit smaller, maximum 8") dropped that cap (and the
+        # default) to 8 -- seeds 25 (more than the cap) and asserts exactly
+        # 8 come back.
         for i in range(25):
             self._seed_contact(conn, f"c{i}", f"Contact {i}", tags=["tagged"])
         data = dashboard_router._render_contact_list(conn, {"tags": ["tagged"], "limit": 0})
-        assert len(data["contacts"]) == 20
+        assert len(data["contacts"]) == 8
 
     def test_registered_in_widget_types(self, conn):
         assert "contact_list" in dashboard_router.WIDGET_TYPES

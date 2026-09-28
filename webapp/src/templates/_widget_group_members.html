@@ -2,49 +2,45 @@
      (2026-09-26, "redesign the toolbar's group-labels as a custom
      dashboard widget: show every label/project under a group with its
      related data, in the same spirit as the Unscheduled Work mockup").
-     Each member is a row: the label's own identity pill (`.cell-tag.cal-*`,
-     same swatch _widget_spaces_projects.html's "list" style already uses,
-     not widget_pill -- a genuinely different kind of colored chip) plus a
-     muted meta line (open task count, upcoming event count if any, next
-     due date if any), and a "..." kebab (_action_menu.html -- the same
-     shared macro item 11's redesigned Unscheduled Work row uses, per the
-     direct instruction to build these two together since they share
-     components).
 
-     The row is a wrapper `<div>`, not one whole-row `<a>` (same "can't
-     nest a kebab's own <form> inside an anchor" reasoning
-     _unscheduled_task_item.html/_contacts_body.html's row-wrap already
-     follow) -- `.group-member-link` is the inner clickable name+meta,
-     the kebab sits beside it.
+     2026-09-28, fourth pass (direct request: "always use card grid" --
+     the third pass's count-based list/cards switch, `<= 6 -> list, > 6 ->
+     cards`, is gone; every row renders as a card now regardless of how
+     many there are). Reuses `filled_card` (_widget_items.html) wholesale
+     -- the exact same Material-You tile _widget_spaces_projects.html's
+     ("Groups & Labels") own "cards" style renders for a Space, per the
+     earlier direct request to copy that widget's look. No kebab: a plain
+     `filled_card` is a whole-row `<a>` with nowhere for a second control
+     to live, matching that style's own convention (editing a label from
+     here means opening it, same as clicking a Space tile there) -- the
+     previous passes' `.group-member-row`/`.group-member-list` wrapper-
+     div-plus-kebab shape only existed for the list style, now unused.
+     `_render_group_members` still returns exactly `{rows}`
+     (test_group_members_widget.py's render-function tests do a strict
+     `== {"rows": [...]}` equality check) -- unaffected by this, this file
+     only changed how `rows` gets displayed.
 
-     2026-09-27 minimalist redesign (direct request "implement" off the
-     reviewed mockup, style.css's own comment on `.group-member-row` has
-     the fuller rationale): each meta fact gets a small icon (open tasks =
-     check-square, upcoming events = calendar, next due = clock) and the
-     whole `.group-member-meta` cluster moves to the row's own right edge
-     via `margin-left:auto`, instead of trailing the pill inline. Text
-     stays byte-for-byte the same ("N open task(s)" etc.) --
-     test_group_members_widget.py's TestRenderedWidgetTemplate checks
-     that substring, not the markup around it. -->
-{% from "_widget_items.html" import widget_empty %}
-{% from "_action_menu.html" import action_menu with context %}
+     2026-09-28, fifth pass (direct request: "make the cards smaller, less
+     space around it, and remove the 'Labels in this group' title") --
+     the title's gone via `_widget_inner.html`'s own `widget.type ==
+     'group_members'` special case (kept in edit mode, where the header
+     is how you reorder/edit/remove the widget itself), not anything in
+     this file. The smaller cards ARE scoped here: `.group-member-cards`
+     wraps the grid so the size override (style.css) only ever hits this
+     widget's own tiles, not `.filled-cards-grid`'s other consumer
+     (_widget_spaces_projects.html's "cards" style) -- both share the
+     exact same `filled_card` macro/markup, so a bare `.filled-card`
+     override would have resized Groups & Labels' cards too. -->
+{% from "_widget_items.html" import widget_empty, filled_card %}
 {% if data.rows %}
-<div class="group-member-list">
+<div class="group-member-cards">
+<div class="filled-cards-grid">
     {% for row in data.rows %}
-    <div class="group-member-row">
-        <a class="group-member-link" href="/labels/{{ row.label.name|urlencode }}">
-            <span class="cell-tag cal-{{ row.label.color }}">{{ icon(row.label.icon or 'tag', 'icon-sm') }} {{ row.label.name }}</span>
-            <span class="group-member-meta">
-                <span class="group-member-fact">{{ icon('check-square', 'icon-sm') }} {{ row.open_task_count }} open task{{ 's' if row.open_task_count != 1 }}</span>
-                {% if row.upcoming_event_count %}<span class="group-member-fact">{{ icon('calendar', 'icon-sm') }} {{ row.upcoming_event_count }} upcoming event{{ 's' if row.upcoming_event_count != 1 }}</span>{% endif %}
-                {% if row.next_due %}<span class="group-member-fact">{{ icon('clock', 'icon-sm') }} Next due {{ row.next_due | relative_date }}</span>{% endif %}
-            </span>
-        </a>
-        {{ action_menu([
-            {'label': 'Edit label', 'icon': 'edit', 'href': '/settings/labels/' ~ (row.label.name|urlencode) ~ '/edit', 'modal': true},
-        ], aria_label='More actions for ' ~ row.label.name) }}
-    </div>
+    {% set meta = row.open_task_count ~ ' open task' ~ ('s' if row.open_task_count != 1 else '') %}
+    {% if row.next_due %}{% set meta = meta ~ ' · Due ' ~ (row.next_due | relative_date) %}{% endif %}
+    {{ filled_card(row.label.name, '/labels/' ~ (row.label.name|urlencode), row.label.color, icon_name=row.label.icon or 'tag', meta=meta) }}
     {% endfor %}
+</div>
 </div>
 {% else %}
 {{ widget_empty('No labels in this group yet.') }}

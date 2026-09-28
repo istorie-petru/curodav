@@ -108,20 +108,25 @@ document.addEventListener("DOMContentLoaded", function () {
             deleteButtonId: "contacts-bulk-delete",
             deleteUrl: "/contacts/bulk-delete",
             itemLabel: "contact",
+            changeType: "contact",
         });
     }
     wireContactsBulkSelect();
-    // Unlike Labels/Holidays/Time Blocks (plain full-reload pages),
-    // Contacts already has an async-CRUD region swap (contacts_list.js's
+    // Unlike Holidays/Time Blocks (plain full-reload pages), Contacts
+    // already has an async-CRUD region swap (contacts_list.js's
     // cc-entity-changed listener -> ccApi.refreshRegion("#contacts-body"))
-    // for every non-bulk mutation (create/edit/delete from the detail
-    // modal). That swap replaces #contacts-body's whole subtree with a
-    // fresh server-rendered fragment, so the `#contacts-list` element
-    // CCBulkSelect.init() attached its listeners to above is gone -- the
-    // checkboxes on the new fragment would otherwise be dead until a full
-    // reload. Same "re-init on cc-region-swapped" pattern static/
-    // tasks_table.js's own reconcileAfterSwap listener already uses for
-    // #tasks-body. Any selection in progress is simply dropped on a
+    // for every mutation, bulk delete included (2026-09-28: CCBulkSelect's
+    // changeType option). That swap replaces #contacts-body's whole
+    // subtree with a fresh server-rendered fragment, so the
+    // `#contacts-list` element CCBulkSelect.init() attached its listeners
+    // to above is gone -- the checkboxes on the new fragment would
+    // otherwise be dead until a full reload. Same "re-init on
+    // cc-region-swapped" pattern static/tasks_table.js's own
+    // reconcileAfterSwap listener already uses for #tasks-body. Labels
+    // doesn't need this same re-init: its region refresh (labels_manage.js)
+    // replaces the container's innerHTML in place rather than the
+    // container itself, so CCBulkSelect's own element references survive
+    // a swap there. Any selection in progress is simply dropped on a
     // swap (the fragment renders every checkbox unchecked) -- an
     // acceptable, rare edge case (another surface editing a contact while
     // this page has a bulk selection open), not worth carrying selection

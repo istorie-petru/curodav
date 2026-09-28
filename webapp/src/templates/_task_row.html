@@ -118,7 +118,7 @@
     <td class="col-opt-1">
         <div class="cell-tags">
         {% if t.tags %}
-            {% for tag in t.tags %}{{ label_pill(tag) }}{% endfor %}
+            {% for tag in t.tags %}{{ label_pill(tag, 'modal') }}{% endfor %}
         {% else %}
             <span class="text-muted">No labels</span>
         {% endif %}

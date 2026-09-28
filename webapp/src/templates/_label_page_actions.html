@@ -9,8 +9,19 @@
    Archive asks first unless the label is "Pending Archiving" (every task
    done and the deadline passed), same rule the status row used. A plain
    label without a lifecycle can be archived too: it drops out of the
-   sidebar's Pinned list and its page says when it was archived. #}
-<a href="/settings/labels/{{ label.name|urlencode }}/edit" data-modal class="btn ghost label-page-edit">{{ icon('edit', 'icon-sm') }} Edit label</a>
+   sidebar's Pinned list and its page says when it was archived.
+
+   2026-09-28 (direct request: "rework the edit label and edit group as a
+   simple square button without text, only icon" + "the button should
+   always sit on the far right") -- Edit drops the "btn ghost" text-button
+   treatment for the same icon-only `.icon-btn` square every row-level
+   Edit control already uses (_row_action_buttons.html's own `edit_url`
+   link) -- `title`/`aria-label` carry "Edit label" for a hover tooltip
+   and screen readers now that there's no visible text. Reordered after
+   Archive/Unarchive (was first) and given `margin-left:auto`
+   (style.css's own `.label-page-edit` rule) so it's always the rightmost
+   control in the header's actions cluster, not just whichever happens to
+   render last. #}
 {% if label.archived_at %}
 <form method="post" action="/labels/{{ label.name|urlencode }}/unarchive" class="form-inline">
     <button type="submit" class="btn ghost">{{ icon('archive', 'icon-sm') }} Unarchive</button>
@@ -20,3 +31,4 @@
     <button type="submit" class="btn {{ 'primary' if label_status == 'Pending Archiving' else 'ghost' }}">{{ icon('archive', 'icon-sm') }} Archive</button>
 </form>
 {% endif %}
+<a href="/settings/labels/{{ label.name|urlencode }}/edit" data-modal class="icon-btn label-page-edit" title="Edit label" aria-label="Edit label">{{ icon('edit', 'icon-sm') }}</a>

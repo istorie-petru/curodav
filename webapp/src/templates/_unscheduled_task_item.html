@@ -63,28 +63,14 @@
    never 0 in practice.
 
    2026-09-27 (row modernization, direct request "implement" off the
-   reviewed mockup): three purely-visual additions on top of the shape
-   above, none of it touching data/behavior --
+   reviewed mockup): purely-visual additions on top of the shape above,
+   none of it touching data/behavior --
      - `.unscheduled-type-glyph` (repeat icon for a habit, check-square for
-       a plain task) up front, ahead of the drag handle, so a habit reads
-       as a habit without parsing the meta line's wording. Icon choice
-       matches existing usage (`icon('repeat', ...)` is the Habits tab/
-       all-day habit chip's own glyph -- see base.html/_calendar_day_grid.
-       html; `check-square` is the closest tasks-app default for "a plain
-       task").
-     - a left accent bar (`.unscheduled-task-item::before`, painted via the
-       `--um-accent` custom property set inline) picking up the row's own
-       project/label color the same way `.cell-tag.cal-*` and the calendar
-       chips already do, instead of a project pill that's the same neutral
-       gray regardless of which project it names. Falls back to
-       `--fg-tertiary` (the old neutral look) when the task has no project.
-       `item.project` is already `db.project_label_config_for`'s *effective*
-       config -- `.color` is always present once `.project` is truthy, no
-       extra lookup needed. The pill itself keeps its exact `class=
-       "unscheduled-project-pill"` attribute (test_calendar_week_scheduling.
-       py asserts that literal string) and only gains an inline `style` for
-       the same color, via the shared `--tag-*-bg`/`--tag-*-fg` pair every
-       other pill (`.cell-tag.cal-*`) already draws from.
+       a plain task) up front, so a habit reads as a habit without parsing
+       the meta line's wording. Icon choice matches existing usage
+       (`icon('repeat', ...)` is the Habits tab/all-day habit chip's own
+       glyph -- see base.html/_calendar_day_grid.html; `check-square` is
+       the closest tasks-app default for "a plain task").
      - a 7-dot week-progress strip on a DAILY habit's meta line only
        (`item.habit_sessions.required > 1` -- a weekly/monthly habit's
        `required` is 1, where a single dot would be a decoration, not
@@ -94,13 +80,27 @@
        from (db.habit_work_sessions_status), just given a shape instead of
        only appearing as the "Needs N more" sentence that stays alongside
        it unchanged.
+     A same-day follow-up ("not correct... redo") also colored the pill
+     itself and added a per-project left accent bar; a further follow-up
+     the same day ("remove the blue left borders") removed the accent bar
+     again -- gone along with the `--um-accent` custom property that only
+     existed to feed it, so the outer `<div>` carries no color-related
+     `data-style` at all anymore. The pill's own coloring (`--tag-*-bg`/
+     `--tag-*-fg`, the same pair `.cell-tag.cal-*` draws from) was NOT
+     part of what got asked to be removed and stays.
+
+   2026-09-28 (direct feedback, "move the move arrow to the far right"):
+   `.unscheduled-drag-handle` moved from right after the type glyph to the
+   very end of the row, past `.unscheduled-row-actions`. Purely a markup
+   reorder -- the whole row is still the one pointer-drag source it always
+   was (project_calendar.js interaction 1, unaffected by where the glyph
+   sits in the DOM), and the icon itself still carries no listener of its
+   own.
    Import with `with context` -- the macro body calls the `icon` global. #}
 {% from "_action_menu.html" import action_menu with context %}
 {% macro unscheduled_task_item(item, next_url) %}
-{% set accent = 'var(--tag-' ~ item.project.color ~ '-fg)' if item.project else 'var(--fg-tertiary)' %}
-<div class="unscheduled-task-item" data-task-uid="{{ item.task.uid }}" data-task-title="{{ item.task.title }}" data-undo-row data-style="--um-accent: {{ accent }};">
+<div class="unscheduled-task-item" data-task-uid="{{ item.task.uid }}" data-task-title="{{ item.task.title }}" data-undo-row>
     <span class="unscheduled-type-glyph" aria-hidden="true" title="{{ 'Habit' if item.is_habit else 'Task' }}">{{ icon('repeat' if item.is_habit else 'check-square', 'icon-sm') }}</span>
-    <span class="unscheduled-drag-handle" aria-hidden="true">{{ icon('move', 'icon-sm') }}</span>
     <div class="unscheduled-task-main">
         <span class="unscheduled-task-title" title="{{ item.task.title }}">{{ item.task.title }}</span>
         <div class="unscheduled-task-meta">
@@ -132,5 +132,6 @@
             {'label': 'Delete task', 'icon': 'trash', 'danger': true, 'form_action': '/tasks/' ~ item.task.uid ~ '/delete', 'undo': item.task.title, 'change': 'task'},
         ], aria_label='More actions for ' ~ item.task.title) }}
     </div>
+    <span class="unscheduled-drag-handle" aria-hidden="true">{{ icon('move', 'icon-sm') }}</span>
 </div>
 {% endmacro %}

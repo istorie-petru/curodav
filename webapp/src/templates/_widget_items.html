@@ -69,8 +69,12 @@
    the title link (plain text when url is None), and an optional
    right-aligned muted cell. The right-hand cell can be passed as `right`
    or rendered via a {% call %} block. #}
-{% macro widget_link_row(url, title, leading=None, leading_class=None, right=None) -%}
-<tr>
+{% macro widget_link_row(url, title, leading=None, leading_class=None, right=None, row_class=None) -%}
+{# `row_class` (2026-09-28, checkbox consolidation): lets a done task row
+   in the Agenda widget's Today list dim + strike its title -- same
+   `.task-row-completed` treatment the Tasks table already gives a done
+   row (style.css), reused rather than a second rule set. #}
+<tr{% if row_class %} class="{{ row_class }}"{% endif %}>
     {% if leading is not none %}<td{% if leading_class %} class="{{ leading_class }}"{% endif %}>{{ leading }}</td>{% endif %}
     <td>{% if url %}<a href="{{ url }}" data-modal>{{ title }}</a>{% else %}{{ title }}{% endif %}</td>
     {% if caller %}<td class="text-muted widget-row-right">{{ caller() }}</td>
@@ -86,10 +90,31 @@
 
 {# The agenda widget's inline "mark done" checkbox control -- a tiny form
    posting to the existing POST /tasks/{uid}/complete, async via
-   data-cc-complete (features/async-crud.md). #}
-{% macro widget_complete_button(uid) -%}
+   data-cc-complete (features/async-crud.md).
+
+   2026-09-28 (checkbox consolidation, direct feedback: "the habits one is
+   more advanced and should be prioritised"): was a bare `.icon-btn` with a
+   static `square` icon and no done-state styling at all -- harmless only
+   because a completed task used to vanish from the list on the widget's
+   next refresh, same as the habit rows above used to before this pass.
+   Now shares `.habit-check-btn`'s family (icon swap, filled `is-done`
+   background) sized via the same `.habit-check-widget` variant every
+   compact widget row uses (the Agenda widget's own habit rows, and the
+   Habit Check-in widget's rows via `_habit_page_row.html`'s
+   `habit_page_row(compact=true)`), so a task check and a habit check
+   anywhere on the dashboard look and feel identical. `done` is only ever
+   true in the Range:
+   Today view -- dashboard.py's `_render_agenda` keeps today's already-
+   completed tasks in that one list (todo first, then done, same grouping
+   `_render_habit_checkin` uses) instead of dropping them the instant
+   they're checked, so the row stays put and shows checked exactly like a
+   habit does. There's no "undo" here (unlike a habit's toggle endpoint,
+   `/tasks/{uid}/complete` is one-directional -- reopening a task is the
+   status dropdown's job), so a done row's button is `disabled` rather than
+   pretending a second click does something. #}
+{% macro widget_complete_button(uid, done=false) -%}
 <form class="form-inline" method="post" action="/tasks/{{ uid }}/complete" data-cc-complete>
-    <button type="submit" class="icon-btn" title="Mark done">{{ icon('square') }}</button>
+    <button type="submit" class="habit-check-btn habit-check-widget{% if done %} is-done{% endif %}" title="{{ 'Done' if done else 'Mark done' }}"{% if done %} disabled aria-label="Done"{% endif %}>{{ icon('check-circle' if done else 'square') }}</button>
 </form>
 {%- endmacro %}
 
@@ -98,8 +123,25 @@
    first, date second, circle dot like in mockup") -- occupies the same
    `widget-row-icon` leading slot a task's checkbox does, so an Agenda
    widget's Overdue/Tasks/Events sections all line up in the same column
-   rhythm, but a plain colored dot rather than a clickable control (an
-   event has no "mark done" action to offer here).
+   rhythm, but a plain marker rather than a clickable control (an event
+   has no "mark done" action to offer here).
+
+   2026-09-28 direct feedback ("move from the small dots to colored icons
+   the same size as the font"): the dot became a `calendar` glyph (the
+   same icon name command_palette.js's own TYPE_ICON map already uses for
+   "event" everywhere else in the app) via the plain, unscaled `.icon`
+   class -- 1em, so it reads at the row's own font-size, matching the
+   Tasks row's unscaled checkbox icon right above it in the same column.
+   `size` lets a caller in a smaller-type context (the week-overview
+   grid's own day cells) opt into `.icon-sm` instead, matching that
+   context's own task-icon sibling. Color still can't reuse the bare
+   `.cal-*` classes as-is: those pair a background with a *white*
+   `--cal-fg-*` foreground meant to sit ON that background (a filled
+   dot/pill), which would render invisible painted straight onto a
+   card's plain background with no fill behind it. style.css adds a
+   `.icon.cal-*` override per hue using the `--tag-*-fg` tokens instead --
+   the same saturated, background-less-safe colors labels already use for
+   a bare icon (_labels_table_body.html's own `cell-tag tag-*` icons).
 
    Direct request: "the color and icon of an event/task should be as the
    label's, not default on blue or any other accent color" -- used to be
@@ -108,7 +150,21 @@
    `e.calendar_color`, the same key/value calendar.py's own
    `_annotate_calendar_colors` already computes and sets for every other
    calendar surface in the app (first label alphabetically, 'blue'
-   default), reused here rather than a second color-resolution path. #}
-{% macro widget_event_dot(color='blue') -%}
-<span class="widget-event-dot cal-{{ color }}"></span>
+   default), reused here rather than a second color-resolution path.
+
+   2026-09-28 direct follow-up ("the label's icon should be used when
+   it's available"): `icon_name` defaults to the plain `calendar` glyph
+   (every existing call site keeps that look with no changes needed), but
+   a caller can now pass the label's own resolved icon name instead --
+   same `label_icon(request, ...)` global the week-overview grid's own
+   task icon already reads (_widget_agenda.html, `days` mode), so an
+   event under a label with a custom icon (e.g. a "star" habit label)
+   shows that icon here too instead of the generic calendar mark. Kept as
+   a plain string param rather than resolving `request`/tags inside the
+   macro itself -- `_widget_items.html`'s own header comment keeps every
+   macro here "pure" (only its own params + Jinja globals), and
+   `label_icon` needs `request`, which isn't available inside a macro
+   imported without `with context`. #}
+{% macro widget_event_icon(color='blue', size='', icon_name='calendar') -%}
+{{ icon(icon_name, 'cal-' ~ color ~ (' ' ~ size if size else '')) }}
 {%- endmacro %}

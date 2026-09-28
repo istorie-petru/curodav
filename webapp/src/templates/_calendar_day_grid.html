@@ -42,10 +42,28 @@
             <a class="allday-task{% if day < today_iso and t.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }}<span class="allday-title">{{ t.title }}</span></a>
             {% endfor %}
             {# Habits H7: habits scheduled today, one-tap checkable
-               (static/habit_actions.js re-renders #day-grid). #}
+               (static/habit_actions.js re-renders #day-grid).
+
+               2026-09-28 (checkbox consolidation): this chip stays its own
+               markup rather than the shared `habit_check_control` macro
+               (_habit_page_row.html) -- unlike every other habit check in
+               the app, the whole pill is the tap target (icon *and* title
+               together, so it fits the all-day strip's narrow row) rather
+               than a separate check control next to a title link; forcing
+               the icon-only macro here would mean either shrinking the tap
+               target to just the icon or restructuring this strip's
+               layout, neither asked for. It does now share the same
+               per-habit accent colour (`habit-c-*`, from `h.color` --
+               habit_view.habits_for_day carries `habit_look()`'s
+               icon/color same as every other habit row since this same
+               pass) and the same field names (`done_today`/`partial_today`/
+               `today_value`) as habit_item()'s shape, so this is the same
+               data/colour, just a different, deliberately chip-shaped
+               control. #}
             {% for h in habits | default([]) %}
+            {% set _c = ' habit-c-' ~ h.color if h.color else '' %}
             {% if h.is_future %}
-            <span class="allday-task allday-habit" title="{{ h.title }} (habit)">{{ icon('repeat', 'icon-sm') }} {{ h.title }}</span>
+            <span class="allday-task allday-habit{{ _c }}" title="{{ h.title }} (habit)">{{ icon('repeat', 'icon-sm') }} {{ h.title }}</span>
             {% elif h.is_quantity %}
             {# 2026-09-25 (UI audit C-5): an amount habit shows n/target and
                logs one more per tap (same +1 as the Agenda widget); it only
@@ -53,14 +71,14 @@
             <form method="post" action="{{ h.plus_url }}" class="form-inline habit-action allday-habit-form">
                 <input type="hidden" name="completion_date" value="{{ h.date }}">
                 <input type="hidden" name="value" value="{{ h.next_value|int }}">
-                <button type="submit" class="allday-task allday-habit is-qty{% if h.done %} is-done{% elif h.partial %} is-partial{% endif %}"
-                        title="{{ h.title }}: {{ h.value|int }} of {{ h.target|int }}. Click to log one more">
-                    <span class="allday-habit-count">{{ h.value|int }}/{{ h.target|int }}</span> {{ h.title }}</button>
+                <button type="submit" class="allday-task allday-habit{{ _c }} is-qty{% if h.done_today %} is-done{% elif h.partial_today %} is-partial{% endif %}"
+                        title="{{ h.title }}: {{ h.today_value|int }} of {{ h.target|int }}. Click to log one more">
+                    <span class="allday-habit-count">{{ h.today_value|int }}/{{ h.target|int }}</span> {{ h.title }}</button>
             </form>
             {% else %}
             <form method="post" action="{{ h.toggle_url }}" class="form-inline habit-action allday-habit-form">
-                <button type="submit" class="allday-task allday-habit{% if h.done %} is-done{% endif %}" aria-pressed="{{ 'true' if h.done else 'false' }}"
-                        title="{{ h.title }}: {% if h.done %}done. Click to undo{% else %}click to mark done{% endif %}">{{ icon('check-circle' if h.done else 'square', 'icon-sm') }} {{ h.title }}</button>
+                <button type="submit" class="allday-task allday-habit{{ _c }}{% if h.done_today %} is-done{% endif %}" aria-pressed="{{ 'true' if h.done_today else 'false' }}"
+                        title="{{ h.title }}: {% if h.done_today %}done. Click to undo{% else %}click to mark done{% endif %}">{{ icon('check-circle' if h.done_today else 'square', 'icon-sm') }} {{ h.title }}</button>
             </form>
             {% endif %}
             {% endfor %}

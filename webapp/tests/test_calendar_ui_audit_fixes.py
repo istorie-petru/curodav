@@ -221,7 +221,13 @@ class TestAgendaWidget:
 
     def test_habit_rows_match_task_rows(self):
         tpl = (TEMPLATES / "_widget_agenda.html").read_text(encoding="utf-8")
-        assert 'aria-label="Log one more: {{ h.title }}' in tpl
+        # 2026-09-28 (checkbox consolidation): the habit check itself moved
+        # into the shared `habit_check_control` macro (_habit_page_row.html,
+        # also used by the Habits page/widget and the Calendar day view) --
+        # its aria-label ("Log one more {title}, {value} of {target}") lives
+        # there now, not hand-rolled here.
+        assert 'from "_habit_page_row.html" import habit_check_control' in tpl
+        assert "habit_check_control(h, ' habit-check-widget')" in tpl
         assert ".agenda-habits .agenda-habit-title{font-size:var(--text-sm);}" in CSS
         assert ".agenda-habit > .form-inline{flex:none; width:36px;" in CSS
 

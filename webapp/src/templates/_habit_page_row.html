@@ -21,38 +21,66 @@
    (`habit-c-<name>`, style.css --habit-accent) paints the done states. #}
 {% from "_habit_heatmap.html" import heatmap %}
 {% from "_habit_history.html" import period_grid, insights_block %}
+{# The check/log/relapse control shared by every habit toggle in the app
+   (Habits page & Dashboard widget rows below, the Agenda widget's habit
+   rows in _widget_agenda.html, the Calendar day-grid's all-day habit
+   chips in _calendar_day_grid.html) -- 2026-09-28 checkbox consolidation:
+   before this, each of those three surfaces hand-rolled its own copy of
+   this same avoid/quantity/toggle form trio with its own CSS
+   (.agenda-habit-check, .allday-habit), so only this, the most-used
+   surface, ever got a fix or a new state. `extra_class` lets a caller
+   size/shape it for its own row (e.g. ' habit-check-widget', the one
+   compact-widget-row size every Dashboard widget check shares) without a
+   second CSS block re-declaring the base layout, hover and is-done/
+   is-partial/is-relapse rules (style.css's `.habit-check-btn` family).
+   Every field this macro reads (`done_today`, `partial_today`,
+   `today_value`, `is_avoid`, `relapsed_today`, `icon`, `unit`,
+   `remaining_today`) comes from habit_view.py's `habit_item`/
+   `habits_for_day`, which now share that naming on purpose. #}
+{% macro habit_check_control(h, extra_class='') %}
+{% if h.is_avoid %}
+{# Habits H5: an avoid habit logs relapses -- same toggle endpoint. #}
+<form method="post" action="{{ h.toggle_url }}" class="form-inline habit-action habit-toggle">
+    <button type="submit" class="habit-check-btn habit-check-avoid{{ extra_class }}{% if h.relapsed_today %} is-relapse{% endif %}"
+            aria-pressed="{{ 'true' if h.relapsed_today else 'false' }}"
+            title="{% if h.relapsed_today %}Relapsed today. Click to undo{% else %}Log a relapse today{% endif %}"
+            aria-label="{% if h.relapsed_today %}Undo today's relapse for{% else %}Log a relapse today:{% endif %} {{ h.title }}">
+        {{ icon(h.icon or ('x-circle' if h.relapsed_today else 'shield')) }}
+    </button>
+</form>
+{% elif h.is_quantity %}
+<form method="post" action="{{ h.plus_url }}" class="form-inline habit-action habit-plus">
+    <input type="hidden" name="completion_date" value="{{ h.date or h.today }}">
+    <input type="hidden" name="value" value="{{ h.next_value|int }}">
+    <button type="submit" class="habit-check-btn habit-check-qty{{ extra_class }}{% if h.done_today %} is-done{% elif h.partial_today %} is-partial{% endif %}"
+            title="Log one more ({{ h.today_value|int }} of {{ h.target|int }}{% if h.unit %} {{ h.unit }}{% endif %} today{% if h.remaining_today %}, {{ h.remaining_today|int }} left{% endif %})" aria-label="Log one more {{ h.title }}, {{ h.today_value|int }} of {{ h.target|int }}">
+        <span class="habit-qty-count">{{ h.today_value|int }}</span><span class="habit-qty-target">/{{ h.target|int }}</span>
+    </button>
+</form>
+{% else %}
+<form method="post" action="{{ h.toggle_url }}" class="form-inline habit-action habit-toggle">
+    <button type="submit" class="habit-check-btn{{ extra_class }}{% if h.done_today %} is-done{% endif %}"
+            aria-pressed="{{ 'true' if h.done_today else 'false' }}"
+            title="{% if h.done_today %}Done today. Click to undo{% else %}Mark done today{% endif %}"
+            aria-label="{% if h.done_today %}Undo today for{% else %}Mark done today:{% endif %} {{ h.title }}">
+        {{ icon(h.icon or ('check-circle' if h.done_today else 'square')) }}
+    </button>
+</form>
+{% endif %}
+{% endmacro %}
 {% macro habit_page_row(h, compact=false) %}
 <li class="habit-card{% if compact %} is-compact{% endif %}{% if h.color %} habit-c-{{ h.color }}{% endif %}{% if h.done_today and not h.is_avoid %} is-done-today{% endif %}{% if h.is_avoid %} is-avoid{% endif %}" data-uid="{{ h.uid }}">
     <div class="habit-card-check">
-        {% if h.is_avoid %}
-        {# Habits H5: an avoid habit logs relapses -- same toggle endpoint. #}
-        <form method="post" action="{{ h.toggle_url }}" class="form-inline habit-action habit-toggle">
-            <button type="submit" class="habit-check-btn habit-check-avoid{% if h.relapsed_today %} is-relapse{% endif %}"
-                    aria-pressed="{{ 'true' if h.relapsed_today else 'false' }}"
-                    title="{% if h.relapsed_today %}Relapsed today. Click to undo{% else %}Log a relapse today{% endif %}"
-                    aria-label="{% if h.relapsed_today %}Undo today's relapse for{% else %}Log a relapse today:{% endif %} {{ h.title }}">
-                {{ icon(h.icon or ('x-circle' if h.relapsed_today else 'shield')) }}
-            </button>
-        </form>
-        {% elif h.is_quantity %}
-        <form method="post" action="{{ h.plus_url }}" class="form-inline habit-action habit-plus">
-            <input type="hidden" name="completion_date" value="{{ h.today }}">
-            <input type="hidden" name="value" value="{{ h.next_value|int }}">
-            <button type="submit" class="habit-check-btn habit-check-qty{% if h.done_today %} is-done{% elif h.partial_today %} is-partial{% endif %}"
-                    title="Log one more ({{ h.today_value|int }} of {{ h.target|int }}{% if h.unit %} {{ h.unit }}{% endif %} today{% if h.remaining_today %}, {{ h.remaining_today|int }} left{% endif %})" aria-label="Log one more {{ h.title }}, {{ h.today_value|int }} of {{ h.target|int }}">
-                <span class="habit-qty-count">{{ h.today_value|int }}</span><span class="habit-qty-target">/{{ h.target|int }}</span>
-            </button>
-        </form>
-        {% else %}
-        <form method="post" action="{{ h.toggle_url }}" class="form-inline habit-action habit-toggle">
-            <button type="submit" class="habit-check-btn{% if h.done_today %} is-done{% endif %}"
-                    aria-pressed="{{ 'true' if h.done_today else 'false' }}"
-                    title="{% if h.done_today %}Done today. Click to undo{% else %}Mark done today{% endif %}"
-                    aria-label="{% if h.done_today %}Undo today for{% else %}Mark done today:{% endif %} {{ h.title }}">
-                {{ icon(h.icon or ('check-circle' if h.done_today else 'square')) }}
-            </button>
-        </form>
-        {% endif %}
+        {# 2026-09-28 (direct feedback: "font size/weight/checkbox hover bg
+           still not the same between widgets"): the compact Dashboard
+           widget row now sizes its check with the exact same
+           `.habit-check-widget` modifier the Agenda widget's rows use
+           (below/`_widget_agenda.html`), instead of a second, slightly
+           different size reached via the ambient `.is-compact` ancestor
+           selector -- one literal size (and therefore one hover box, one
+           icon size) for every compact widget row in the app, not two
+           that happened to be close. #}
+        {{ habit_check_control(h, ' habit-check-widget' if compact else '') }}
     </div>
     <div class="habit-card-main">
         <a href="{{ h.detail_url }}" data-modal class="habit-card-title">{{ h.title }}</a>

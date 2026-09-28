@@ -251,6 +251,39 @@ def _passes_filters(item_tags: list[str], tags_filter: list[str]) -> bool:
     return bool(real_tags and (item_tags_set & real_tags))
 
 
+# Agenda widget check-off grace period (2026-09-28 direct request: "when
+# marking a task completed it should remain there with checkbox complete,
+# for a few minutes") -- see `_agenda_with_grace`'s own docstring just
+# below for why this stays scoped to the Agenda widget's own task lists
+# rather than living inside `_filtered_tasks` itself (which several
+# non-checkbox surfaces -- the At-a-glance widget's counts, the mini month
+# calendar's busy-day dots -- also call and would otherwise start counting
+# a task that's actually already done). 9 minutes (middle of the
+# requested 8-10) chosen so a widget's own refresh cadence has time to
+# show the checked row at least once before it drops off.
+TASK_GRACE_MINUTES = 9
+
+
+def _agenda_with_grace(conn, config: dict, predicate) -> list[dict]:
+    """`_filtered_tasks(conn, config)` (open_only=True) plus any task that
+    would otherwise have just been excluded for being done/archived, but
+    was completed within the last `TASK_GRACE_MINUTES` and still passes
+    `predicate` (the same due-date/window test the open-task list already
+    applies) -- so a task checked off from an Agenda widget row (Overdue,
+    or the flat Tasks list in every Range) stays in that same list, shown
+    checked and struck through, instead of disappearing the instant the
+    widget re-fetches. Deliberately local to the Agenda widget's own task
+    lists (see TASK_GRACE_MINUTES' own comment) rather than folded into
+    `_filtered_tasks` itself."""
+    open_tasks = _filtered_tasks(conn, config)
+    cutoff_iso = (datetime.now(timezone.utc) - timedelta(minutes=TASK_GRACE_MINUTES)).isoformat()
+    done_recent = [
+        t for t in _filtered_tasks(conn, config, open_only=False)
+        if t["status"] in ("done", "archived") and t.get("completed_at") and t["completed_at"] >= cutoff_iso
+    ]
+    return [t for t in (open_tasks + done_recent) if predicate(t)]
+
+
 def _filtered_tasks(conn, config: dict, open_only: bool = True) -> list[dict]:
     tags_filter = _effective_tags_filter(config)
     scope_names = _scope_child_names(conn, config.get("label_name"))
@@ -389,27 +422,44 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
     today = date.today()
     today_iso = today.isoformat()
     # `0` used to mean "unlimited"; 2026-09-13 direct request ("no limit
-    # should actually be 20 maximum items") caps it at 20 instead --
+    # should actually be 20 maximum items") capped it at 20 instead --
+    # 2026-09-28 direct feedback ("make the default limit smaller, maximum
+    # 8") dropped both the default and the 0-means-unlimited cap to 8, so
+    # there's no longer a separate "unset" vs "explicit 0" number to track.
     # `config.get("limit")` can legitimately be the int `0` (see
     # _config_from_form, which stores it verbatim), so this can't collapse
-    # falsy-0 into the "not set" default the way `... or 10` used to; only
-    # an absent/None config value falls back to the real default of 10,
-    # while an explicit `0` now maps to the 20-item cap.
+    # falsy-0 into the "not set" default the way `... or 8` would; only an
+    # absent/None config value falls back to the real default of 8, while
+    # an explicit `0` maps to the same 8-item cap.
     _raw_limit = config.get("limit")
-    limit = int(_raw_limit) if _raw_limit is not None else 10
+    limit = int(_raw_limit) if _raw_limit is not None else 8
     if not limit:
-        limit = 20
+        limit = 8
 
     overdue_tasks: list[dict] = []
     if "overdue" in show:
-        overdue_tasks = [t for t in _filtered_tasks(conn, config) if t.get("due_at") and t["due_at"][:10] < today_iso]
+        overdue_tasks = _agenda_with_grace(conn, config, lambda t: t.get("due_at") and t["due_at"][:10] < today_iso)
         overdue_tasks.sort(key=lambda t: t["due_at"])
 
     if range_ == "today":
         tasks = []
         if "tasks" in show:
-            tasks = [t for t in _filtered_tasks(conn, config) if t.get("due_at") and t["due_at"][:10] == today_iso]
-            tasks.sort(key=lambda t: t["due_at"])
+            # 2026-09-28 (checkbox consolidation, direct feedback: "the
+            # habits one is more advanced and should be prioritised"): was
+            # `_filtered_tasks(conn, config)` (open_only=True, its default)
+            # -- a task checked off here used to vanish from the list on
+            # the widget's next refresh instead of staying put and showing
+            # checked, unlike every habit row (_render_habit_checkin/
+            # _agenda_habits both keep today's already-done items, todo
+            # first). Scoped to Range: Today only -- Overdue is done-tasks-
+            # excluded by definition, and Next 7/30 days / All upcoming stay
+            # open-only so a forward-looking list doesn't fill with
+            # yesterday's-done clutter.
+            tasks = [
+                t for t in _filtered_tasks(conn, config, open_only=False)
+                if t.get("due_at") and t["due_at"][:10] == today_iso and t["status"] != "archived"
+            ]
+            tasks.sort(key=lambda t: (t["status"] == "done", t["due_at"]))
         events = []
         if "events" in show:
             events = [e for e in _filtered_events_expanded(conn, config, today, today) if e.get("start_at") and e["start_at"][:10] == today_iso]
@@ -449,10 +499,10 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
 
     tasks = []
     if "tasks" in show:
-        tasks = [
-            t for t in _filtered_tasks(conn, config)
-            if t.get("due_at") and t["due_at"][:10] >= today_iso and (task_end_iso is None or t["due_at"][:10] <= task_end_iso)
-        ]
+        tasks = _agenda_with_grace(
+            conn, config,
+            lambda t: t.get("due_at") and t["due_at"][:10] >= today_iso and (task_end_iso is None or t["due_at"][:10] <= task_end_iso),
+        )
         tasks.sort(key=lambda t: t["due_at"])
         if limit:
             tasks = tasks[:limit]
@@ -985,16 +1035,18 @@ def _render_contact_list(conn, config: dict, nav: dict | None = None) -> dict:
             if any(tag.lower() in tags_lower for tag in (c.get("tags") or []))
         ]
     # `0` used to mean "unlimited"; 2026-09-13 direct request ("no limit
-    # should actually be 20 maximum items") caps it at 20 instead -- see
+    # should actually be 20 maximum items") capped it at 20 instead --
+    # 2026-09-28 direct feedback ("make the default limit smaller, maximum
+    # 8") dropped both the default and the 0-means-unlimited cap to 8, see
     # _render_agenda's own comment on the same `config.get("limit")`
-    # pattern for why `... or 20` can't be used here any more now that `0`
+    # pattern for why `... or 8` can't be used here any more now that `0`
     # is a legitimate stored value, not "unset" (an absent/None config
-    # value falls back to the real default of 20, same as an explicit `0`
+    # value falls back to the real default of 8, same as an explicit `0`
     # now does too).
     _raw_limit = config.get("limit")
-    limit = int(_raw_limit) if _raw_limit is not None else 20
+    limit = int(_raw_limit) if _raw_limit is not None else 8
     if not limit:
-        limit = 20
+        limit = 8
     return {"contacts": contacts[:limit]}
 
 
@@ -1611,6 +1663,21 @@ _DEFAULT_STACK_MEMBER_TYPES: list[tuple[str, dict, str]] = [
 _HOME_TODAY_AGENDA_CONFIG: dict = {"width": "quarter", "range": "today", "show": ["overdue", "tasks", "events"]}
 _HOME_HABIT_CHECKIN_CONFIG: dict = {"width": "quarter"}
 
+# 2026-09-28 (direct request: "I don't want Labels in this group to be
+# visible by default... for groups, copy the main dashboard design, but
+# instead of the habits 25% column have a Groups & Labels list of this
+# Space") -- a group page gets the exact same 25/50/25 row as Home
+# (_HOME_TODAY_AGENDA_CONFIG for the quarter-width Today), just with its
+# own `group_members` widget standing in the third quarter slot instead
+# of Habit Check-in. This replaces the old separate always-pinned,
+# full-width "Labels in this group" widget (the now-removed
+# `_ensure_group_members_widget` -- see `_migrate_group_layout_2026_09_28`
+# for how an existing installation's old pinned widget is converted) --
+# the group's label list is still there, just folded into the ordinary
+# quarter column instead of a second widget a user can't help but see
+# above the fold.
+_GROUP_MEMBERS_QUARTER_CONFIG: dict = {"width": "quarter"}
+
 _MINI_CALENDAR_BACKFILL_KEY = "dashboard_mini_calendar_backfilled_v1"
 _HOME_SEEDED_KEY = "dashboard_home_seeded_v1"
 
@@ -1633,11 +1700,16 @@ def _seed_agenda_stack_layout(conn, label_name: str | None, now: str) -> None:
     only) so its data query is filtered to this label, same as every
     other label-page widget (see _effective_tags_filter).
 
-    Home only (2026-09-24, plans/ui-cleanup-2026-09.md item 15): a 25/50/25
-    row -- Today at quarter width without the habits section, the stack at
-    half, and a quarter-width Habit Check-in after it."""
+    Home (2026-09-24, plans/ui-cleanup-2026-09.md item 15) and a group page
+    (2026-09-28, direct request) both get the 25/50/25 row -- Today at
+    quarter width, the stack at half, and a quarter-width third widget
+    after it: Habit Check-in on Home, `group_members` (this group's own
+    label list) on a group page. A plain label/Space/Project page keeps
+    the half/half pair, no third widget."""
     home = label_name is None
-    agenda_config = dict(_HOME_TODAY_AGENDA_CONFIG if home else _DEFAULT_TODAY_AGENDA_CONFIG)
+    is_group = label_name is not None and label_name.startswith(db.GROUP_KEY_PREFIX)
+    quarter_row = home or is_group
+    agenda_config = dict(_HOME_TODAY_AGENDA_CONFIG if quarter_row else _DEFAULT_TODAY_AGENDA_CONFIG)
     if label_name:
         agenda_config["label_name"] = label_name
     db.upsert_dashboard_widget(
@@ -1672,6 +1744,15 @@ def _seed_agenda_stack_layout(conn, label_name: str | None, now: str) -> None:
             {
                 "uid": str(uuid.uuid4()), "type": "habit_checkin", "title": "Habits",
                 "config": dict(_HOME_HABIT_CHECKIN_CONFIG), "position": 2.0, "created_at": now, "label_name": None,
+            },
+        )
+    elif is_group:
+        db.upsert_dashboard_widget(
+            conn,
+            {
+                "uid": str(uuid.uuid4()), "type": "group_members", "title": "Labels in this group",
+                "config": {**_GROUP_MEMBERS_QUARTER_CONFIG, "label_name": label_name}, "position": 2.0,
+                "created_at": now, "label_name": label_name,
             },
         )
 
@@ -1767,38 +1848,6 @@ def _ensure_default_label_widgets(conn, label_name: str) -> None:
         db.set_app_meta(conn, seeded_key, "1")
         return
     _seed_agenda_stack_layout(conn, label_name, _now())
-    db.set_app_meta(conn, seeded_key, "1")
-
-
-def _ensure_group_members_widget(conn, label_name: str) -> None:
-    """Item 20 (2026-09-26): a group's page always gets one `group_members`
-    widget -- it replaces the "group-labels" toolbar `label_detail.html`
-    used to render unconditionally ("the collapsed sidebar can't expand a
-    group, so this is the always-available way in"), so the same
-    guarantee has to hold even though it's now an ordinary widget
-    instance a user COULD delete. Seeded independently of
-    `_ensure_default_label_widgets`'s own one-time flag (a group page
-    still gets the normal Agenda/stack layout too -- this is an
-    ADDITIONAL widget on top of that, not a replacement for it), tracked
-    by its own app_meta key so a later full delete of every widget on this
-    page (this one included) doesn't bring it back uninvited on the next
-    visit -- same "seed once, respect a later full delete" contract every
-    other one-time seed in this module follows. `position=-1.0` renders it
-    first (before Today's Agenda at 0.0), matching the toolbar's own old
-    always-at-the-top placement."""
-    seeded_key = f"dashboard_group_members_{label_name}_seeded_v1"
-    if db.get_app_meta(conn, seeded_key):
-        return
-    if any(w["type"] == "group_members" for w in db.list_dashboard_widgets(conn, label_name=label_name)):
-        db.set_app_meta(conn, seeded_key, "1")
-        return
-    db.upsert_dashboard_widget(
-        conn,
-        {
-            "uid": str(uuid.uuid4()), "type": "group_members", "title": "Labels in this group",
-            "config": {"label_name": label_name}, "position": -1.0, "created_at": _now(), "label_name": label_name,
-        },
-    )
     db.set_app_meta(conn, seeded_key, "1")
 
 
@@ -1980,6 +2029,48 @@ def _migrate_widget_removal_2026_08_30(conn) -> None:
     db.set_app_meta(conn, _WIDGET_REMOVAL_2026_08_30_KEY, "1")
 
 
+_GROUP_LAYOUT_2026_09_28_KEY = "dashboard_group_layout_migrated_2026_09_28"
+
+
+def _migrate_group_layout_2026_09_28(conn) -> None:
+    """One-time migration (2026-09-28, direct request: "I don't want the
+    Labels in this group to be visible by default... for groups, copy the
+    main dashboard design, but instead of the habits 25% column have a
+    Groups & Labels List of this Space") -- converts every group page that
+    was already seeded under the old design (a half-width Today +
+    half-width stack, plus a separate always-pinned, full-width
+    `group_members` widget at position -1.0 -- see the now-unused
+    `_ensure_group_members_widget`) into the new one (see
+    `_seed_agenda_stack_layout`'s own docstring): Today moves to quarter
+    width, and the pinned `group_members` widget moves out of its own row
+    into the ordinary quarter-width third column, position 2.0 (after the
+    half-width stack), same as a group page seeded fresh now gets.
+
+    Same non-idempotent-forever pattern as the migrations above (runs
+    exactly once, tracked in its own app_meta key). Scoped to top-level
+    widgets only (`group_uid is None`) on a group page (`label_name`
+    starting with `db.GROUP_KEY_PREFIX`) -- a group page's stack members
+    are untouched (the stack itself stays half width), and this can never
+    touch Home or a plain label/Space/Project page, which never had a
+    pinned `group_members` widget to migrate away from."""
+    if db.get_app_meta(conn, _GROUP_LAYOUT_2026_09_28_KEY):
+        return
+    for w in db.list_all_dashboard_widgets(conn):
+        label_name = w.get("label_name")
+        if not label_name or not label_name.startswith(db.GROUP_KEY_PREFIX) or w.get("group_uid"):
+            continue
+        if w["type"] == "group_members":
+            row = dict(w)
+            row["config"] = {**(w.get("config") or {}), "width": "quarter"}
+            row["position"] = 2.0
+            db.upsert_dashboard_widget(conn, row)
+        elif w["type"] == "agenda" and (w.get("config") or {}).get("width") != "quarter":
+            row = dict(w)
+            row["config"] = {**(w.get("config") or {}), "width": "quarter"}
+            db.upsert_dashboard_widget(conn, row)
+    db.set_app_meta(conn, _GROUP_LAYOUT_2026_09_28_KEY, "1")
+
+
 # "Bare" tile-grid widgets (2026-08-30, direct feedback: "i like the quick
 # links grid but i'd like to not have them inside a div card") -- Spaces &
 # Projects' own "cards" style renders `.filled-cards-grid`/`.filled-card`
@@ -2095,6 +2186,7 @@ def widget_page_context(conn, space_uid: str | None = None, project_uid: str | N
     Settings > Appearance toggle rather than a per-page one."""
     _migrate_widget_consolidation(conn)
     _migrate_widget_removal_2026_08_30(conn)
+    _migrate_group_layout_2026_09_28(conn)
     label_name = project_uid or space_uid
     widgets = db.list_dashboard_widgets(conn, label_name=label_name)
     widget_contexts = _build_widget_contexts(conn, widgets, nav)

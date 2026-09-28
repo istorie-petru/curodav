@@ -46,9 +46,12 @@
     </form>
     {% endif %}
     {# 2026-09-25 (label page flesh-out): Edit label + Archive on a
-       label's page; Edit group (color + icon, UI audit L3) on a group's. #}
+       label's page; Edit group (color + icon, UI audit L3) on a group's.
+       2026-09-28 (direct request, see _label_page_actions.html's own
+       comment on Edit label for the same change): icon-only `.icon-btn`
+       square, no visible text -- title/aria-label carry "Edit group". #}
     {% if group_style is defined %}
-    <a href="/groups/{{ label.name|urlencode }}/edit" data-modal class="btn ghost">{{ icon('edit', 'icon-sm') }} Edit group</a>
+    <a href="/groups/{{ label.name|urlencode }}/edit" data-modal class="icon-btn label-page-edit" title="Edit group" aria-label="Edit group">{{ icon('edit', 'icon-sm') }}</a>
     {% elif not edit_mode %}
     {% include "_label_page_actions.html" %}
     {% endif %}
@@ -65,13 +68,16 @@
 {# 2026-09-26 (item 20): the plain pill-row toolbar that used to render
    here unconditionally ("the collapsed sidebar can't expand a group, so
    this is the always-available way in") is gone -- replaced by the
-   always-seeded `group_members` widget in the grid below (routers/
-   dashboard.py's `_ensure_group_members_widget`, called from
-   label_pages.py's group_page), which shows each member's own related
-   data (open task/event counts, next due date) instead of a bare pill.
-   `group_labels` is still in this page's context (routers/label_pages.py)
-   -- kept for `test_label_pages.py`'s own coverage of that context key,
-   not read by this template anymore. #}
+   `group_members` widget in the grid below, which shows each member's own
+   related data (open task/event counts, next due date) instead of a bare
+   pill. 2026-09-28 (direct request): no longer a second, always-pinned
+   full-width widget -- it's seeded as the ordinary quarter-width third
+   column of a group page's 25/50/25 row (routers/dashboard.py's
+   `_seed_agenda_stack_layout`/`_ensure_default_label_widgets`), so it's
+   just as removable/movable as any other widget. `group_labels` is still
+   in this page's context (routers/label_pages.py) -- kept for
+   `test_label_pages.py`'s own coverage of that context key, not read by
+   this template anymore. #}
 
 <!-- Widget grid -- the exact same customizable system as Home
      (routers/dashboard.py's widget_page_context/WIDGET_TYPES), scoped to

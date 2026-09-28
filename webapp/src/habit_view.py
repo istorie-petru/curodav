@@ -382,10 +382,18 @@ def habits_for_day(conn, d: date, today: date | None = None) -> list[dict]:
     a toggle URL unless `d` is in the future.
 
     2026-09-25 (UI audit C-5): an amount habit carries `is_quantity`,
-    `target`, `value`, `next_value`, `date` and `plus_url` so the Day view
-    renders n/target with a +1 (like the Agenda widget) instead of a
-    toggle that marked 8/day "done" at 1; `done` only at target,
-    `partial` below it."""
+    `target`, `today_value`, `next_value`, `date` and `plus_url` so the Day
+    view renders n/target with a +1 (like the Agenda widget) instead of a
+    toggle that marked 8/day "done" at 1; `done_today` only at target,
+    `partial_today` below it.
+
+    2026-09-28 (checkbox consolidation): field names (`done_today`,
+    `partial_today`, `today_value`, plus the added `icon`/`color`) match
+    `habit_item()`'s own naming so `_calendar_day_grid.html` can share
+    _habit_page_row.html's `habit_check_control` macro and per-habit
+    `habit-c-*` accent colour instead of a third bespoke shape -- `date`
+    stays its own key (not `today`) since `d` here can be a future day,
+    unlike `habit_item`'s always-today `today`."""
     today = today or date.today()
     iso = d.isoformat()
     pauses = db.list_habit_pauses(conn)
@@ -408,9 +416,9 @@ def habits_for_day(conn, d: date, today: date | None = None) -> list[dict]:
             {
                 "uid": t["uid"],
                 "title": t["title"],
-                "done": state == "done",
-                "partial": state == "partial",
-                "value": value,
+                "done_today": state == "done",
+                "partial_today": state == "partial",
+                "today_value": value,
                 "is_quantity": qty_target is not None,
                 "target": qty_target or 1,
                 "next_value": value + 1,
@@ -419,6 +427,7 @@ def habits_for_day(conn, d: date, today: date | None = None) -> list[dict]:
                 "is_future": d > today,
                 "toggle_url": f"/tasks/{t['uid']}/completion/{iso}/toggle",
                 "detail_url": f"/tasks/{t['uid']}",
+                **habit_look(t),
             }
         )
     return out

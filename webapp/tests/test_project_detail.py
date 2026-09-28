@@ -313,8 +313,12 @@ class TestAgendaCard:
     def test_event_dot_uses_the_events_own_label_color_not_the_default(self, conn):
         """Direct request: "the color... of an event/task should be as
         the label's, not default on blue or any other accent color" --
-        the Agenda card's event dot used to be a flat var(--accent), see
-        _widget_items.html's widget_event_dot()."""
+        the Agenda card's event marker used to be a flat var(--accent) dot,
+        see _widget_items.html's widget_event_dot(). 2026-09-28 direct
+        feedback ("move from the small dots to colored icons the same size
+        as the font") swapped the dot for a `calendar` glyph via the same
+        macro, renamed widget_event_icon() -- `icon('calendar', 'cal-
+        purple')` renders `class="icon cal-purple"` (deps.py's `_icon`)."""
         _promote(conn, "Trip", end=None)
         db.upsert_label_config(conn, {"name": "Trip", "is_project": 1, "has_dashboard": 0, "color": "purple", "created_at": _now()})
         future = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
@@ -322,7 +326,7 @@ class TestAgendaCard:
         resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert resp.context["agenda_items"][0]["calendar_color"] == "purple"
         body = resp.body.decode()
-        assert 'widget-event-dot cal-purple' in body
+        assert 'class="icon cal-purple"' in body
 
     def test_events_are_sorted_soonest_first(self, conn):
         _promote(conn, "Trip", end=None)

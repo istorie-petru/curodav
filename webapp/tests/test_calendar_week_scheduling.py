@@ -249,8 +249,10 @@ class TestPlannerHeaderButtons:
 
 
 class TestUnscheduledPanelHeaderCountAndSearch:
-    """Item 11 redesign: an item-count badge and a client-side search box
-    join the panel's existing collapse toggle in its header."""
+    """Item 11 redesign: an item-count badge joins the panel's existing
+    collapse toggle in its header. (The client-side search box this class
+    name still references was added in that same redesign and removed
+    2026-09-28, direct feedback -- see test_search_box_removed below.)"""
 
     def test_count_badge_reflects_the_list_length(self, conn):
         _task(conn, "t1", title="Research")
@@ -264,10 +266,18 @@ class TestUnscheduledPanelHeaderCountAndSearch:
         body = calendar_router.week_view(_request(), conn=conn).body.decode()
         assert '<span class="unscheduled-panel-count">(0)</span>' in body
 
-    def test_search_box_present_and_wired_to_its_own_script(self, conn):
+    def test_search_box_removed(self, conn):
+        """2026-09-28 direct feedback ("remove unscheduled-search"): the
+        panel header's search box and its dedicated JS are gone outright,
+        not just hidden -- the header is back to title+count and the
+        collapse toggle only."""
         body = calendar_router.week_view(_request(), conn=conn).body.decode()
-        assert 'id="unscheduled-search"' in body
-        assert "unscheduled_panel_search.js" in body
+        assert 'id="unscheduled-search"' not in body
+        # Checks the actual <script> reference, not prose -- the removal's
+        # own history comments (this file's docstring above, style.css,
+        # _calendar_week_grid.html) still mention the retired filename by
+        # name, which a blanket substring check would trip on.
+        assert 'src="/static/unscheduled_panel_search.js' not in body
 
 
 class TestUnscheduledPanelJSStructure:
@@ -289,7 +299,14 @@ class TestUnscheduledPanelJSStructure:
         script = (_STATIC_DIR / "project_calendar.js").read_text()
         assert "window.CCActionMenu" in script
         async_script = (_STATIC_DIR / "async_calendar.js").read_text()
-        assert "window.CCUnscheduledSearch" in async_script
+        assert "window.CCActionMenu.init()" in async_script
+        # 2026-09-28: the search box's own re-bind call is gone along with
+        # the search box itself (see TestUnscheduledPanelHeaderCountAndSearch.
+        # test_search_box_removed) -- checks the actual call, not a blanket
+        # substring, since this file's own explanatory comment above the
+        # remaining CCActionMenu call still mentions the retired global by
+        # name.
+        assert "if (window.CCUnscheduledSearch)" not in async_script
 
 
 class TestTimetableRedirect:

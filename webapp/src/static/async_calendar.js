@@ -197,12 +197,12 @@
         if (window.CCProjectCalendar) window.CCProjectCalendar.init();
         if (window.CCWeekAllDayDrag) window.CCWeekAllDayDrag.init();
         if (window.CCUnscheduledPanel) window.CCUnscheduledPanel.init();
-        // Item 11 redesign: the row's own "..." kebab (action-menu) and
-        // the panel header's search box are both swapped in fresh with the
-        // rest of #week-grid -- same re-bind-after-swap need as the four
-        // calls above.
+        // Item 11 redesign: the row's own "..." kebab (action-menu) is
+        // swapped in fresh with the rest of #week-grid -- same re-bind-
+        // after-swap need as the calls above. (The panel header's search
+        // box and its own CCUnscheduledSearch init call were removed
+        // 2026-09-28, direct feedback -- the search box itself is gone.)
         if (window.CCActionMenu) window.CCActionMenu.init();
-        if (window.CCUnscheduledSearch) window.CCUnscheduledSearch.init();
       });
     }
     bindCalNav("week-grid", "/calendar/week", refreshWeek);

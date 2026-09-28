@@ -1671,6 +1671,48 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .card tbody tr:hover > td:first-child{box-shadow:calc(-1 * var(--page-inset)) 0 0 var(--row-hover);}
 .card tbody tr:hover > td:last-child{box-shadow:var(--page-inset) 0 0 var(--row-hover);}
 .card tbody tr:hover > td:only-child{box-shadow:calc(-1 * var(--page-inset)) 0 0 var(--row-hover), var(--page-inset) 0 0 var(--row-hover);}
+/* 2026-09-28 bug fix (direct report, confirmed across three rounds of
+   screenshots: a row's hover/selected/add-row tint never actually
+   reached the card's true edge in ANY `.card.table-scroll` table --
+   Tasks, Labels, Groups, Holidays, Time Blocks, Published Lists --
+   "it looks the same as for any other row"). Root cause: `.table-
+   scroll` (further up this file) sets `overflow-x:auto` on the SAME
+   element as `.card` -- every one of those tables combines both classes
+   on one wrapper div. `overflow: auto` clips ALL descendant painting,
+   including box-shadow, at that element's OWN padding edge, regardless
+   of whether content is actually overflowing right now -- confirmed
+   against the CSS Overflow spec, not assumed. `overflow-clip-margin`
+   (the property built to widen a clip boundary) was tried here and
+   reverted -- it only applies to `overflow: clip`, not `auto`, so it
+   can't rescue the bleed trick above for these tables either; switching
+   `.table-scroll` itself to `overflow: clip` isn't an option -- that
+   drops the actual horizontal scrolling the class exists for.
+   The only real fix: stop relying on a box-shadow escaping into the
+   card's own padding at all. `.card.table-scroll` moves that horizontal
+   padding OFF the scrolling container and onto the table's own first/
+   last-child cells instead -- the row's plain `background` (`tbody
+   tr:hover` above, `tr.is-selected`/`.task-add-row:hover` further down)
+   then already covers that padding as part of the cell's own box, which
+   `overflow` never clips -- a box is only ever clipped for extending
+   BEYOND its ancestor's own box, and padding is inside it. Same visual
+   result (text/checkbox still sits --page-inset in from the true edge),
+   just relocated onto the cell instead of the container. */
+.card.table-scroll{padding-inline:0;}
+.card.table-scroll table :is(th, td):first-child{padding-left:var(--page-inset);}
+.card.table-scroll table :is(th, td):last-child{padding-right:var(--page-inset);}
+/* The box-shadow bleed rules above (and `tr.is-selected`/`.task-add-row`'s
+   own, further down) never actually rendered here (see comment above)
+   and aren't needed now that the plain background reaches the true edge
+   on its own -- neutralized rather than deleted, the same "opt out,
+   don't fight the generic rule" pattern `.widget-content` already uses
+   for its own unrelated reason (further down this file). */
+.card.table-scroll tbody tr:hover > td:first-child,
+.card.table-scroll tbody tr:hover > td:last-child,
+.card.table-scroll tbody tr:hover > td:only-child,
+.card.table-scroll tbody tr.is-selected > td:first-child,
+.card.table-scroll tbody tr.is-selected > td:last-child,
+.card.table-scroll tbody tr.is-selected > td:only-child,
+.card.table-scroll .task-add-row:hover > td:only-child{box-shadow:none;}
 /* Responsive tables (see `.table-responsive` above) -- smallest phones
    (~320-375px viewport): the last few px of overflow left after both
    tiers is just the default 8px side padding on every cell. */
@@ -2294,6 +2336,28 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    `<select>` -- direct request, not just relocated; see that template's
    own comment) -- this bar is Delete+Clear only everywhere now. */
 tr.is-selected{background:var(--accent-neutral-subtle);}
+/* 2026-09-28 bug fix (direct report: "`.card` padding in tables ... breaks
+   hover custom backgrounds"): `.card`'s own horizontal padding
+   (`--page-inset`) sits outside a `<tr>`'s own box, so a plain
+   `background` on the row only ever tints the table's inset content
+   width -- `.card tbody tr:hover`'s own box-shadow pair above (first/
+   last-child td, `calc(-1 * var(--page-inset)) 0 0 ...` /
+   `var(--page-inset) 0 0 ...`) is what bleeds THAT color out to the
+   card's true edges instead of leaving a plain gutter either side. This
+   rule never got the same treatment when `tr.is-selected` was added, so
+   a selected row's tint stopped short of the card edges while hovering
+   that same row -- .card tbody tr:hover's OWN box-shadow (the plain
+   --row-hover gray) -- filled those gutters instead, a visibly
+   different color from the row's own accent-neutral-subtle selected
+   tint bleeding out of sync with it. Same specificity as that hover
+   rule (one class + one pseudo-class each), so source order decides
+   which wins when both apply at once -- this sits after it, so a
+   selected row keeps its own tint all the way to the edges even while
+   hovered, matching .contact-row-wrap.is-selected's own already-working
+   version of this exact pattern (this file, further down). */
+.card tbody tr.is-selected > td:first-child{box-shadow:calc(-1 * var(--page-inset)) 0 0 var(--accent-neutral-subtle);}
+.card tbody tr.is-selected > td:last-child{box-shadow:var(--page-inset) 0 0 var(--accent-neutral-subtle);}
+.card tbody tr.is-selected > td:only-child{box-shadow:calc(-1 * var(--page-inset)) 0 0 var(--accent-neutral-subtle), var(--page-inset) 0 0 var(--accent-neutral-subtle);}
 .bulk-actions-bar{
   /* Starts hidden -- used to be each call site's own `style="display:
      none"` (audit-fixes-2.0.md item 11, CSP `'unsafe-inline'`
@@ -2514,6 +2578,21 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    companions above) -- this is the one straggler still on a different
    value for the same visual job. */
 .task-add-row:hover td{background:var(--row-hover);}
+/* 2026-09-28 direct follow-up ("this was happening '+ Add label' row
+   too" -- same `.card` padding/hover-bleed bug as `tr.is-selected`
+   above): its one `<td colspan="5">` (the whole point of "spans every
+   column," this rule's own 2026-08-28 comment) IS a `:only-child`, so it
+   should already have picked up the generic `.card tbody tr:hover > td:
+   only-child` bleed pair further up this file -- explicit here anyway
+   rather than left to depend on that still applying through every
+   table's own per-row overrides (`.task-add-row td`'s own padding
+   override two lines up is exactly that kind of "another rule on the
+   same cell" this guards against). Same --row-hover color as the
+   background right above, so the two blend into one seamless edge-to-
+   edge bar instead of a plain-background row with unlit gutters either
+   side on Labels/Groups/Holidays/Time blocks -- every page this class is
+   shared across (this rule's own 2026-08-29 comment). */
+.task-add-row:hover > td:only-child{box-shadow:calc(-1 * var(--page-inset)) 0 0 var(--row-hover), var(--page-inset) 0 0 var(--row-hover);}
 /* (The Tasks table's Habits-group check-in rules that sat here --
    .habit-checkin-row-inline/-value/-target -- went with that group in
    habits H2, 2026-09-24; habits have their own page now.) */
@@ -3698,51 +3777,33 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .project-calendar-grid{flex:1; min-width:0; min-height:0;}
 /* Collapsible "Unscheduled work" panel (1.9 side work,
    static/unscheduled_panel_toggle.js) -- header (title + count badge +
-   search box + toggle button) always visible; collapsed hides the item
-   list entirely, leaving just the header bar. */
-.unscheduled-panel-head{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+   toggle button) always visible; collapsed hides the item list entirely,
+   leaving just the header bar.
+   2026-09-28 (direct feedback, "remove unscheduled-search"): the header's
+   search box (and the two-auto-margin header-spacing saga that came with
+   it -- see git history on this block for that whole story) is gone. Back
+   to the simple two-child header this block was originally written for:
+   title/count at the start, one `margin-left:auto` on the toggle is
+   sufficient and unambiguous with only one flex item claiming it. */
+.unscheduled-panel-head{display:flex; align-items:center; gap:8px;}
 .unscheduled-panel-head h2{margin:0; display:flex; align-items:baseline; gap:6px;}
 .unscheduled-panel-count{font-weight:var(--font-weight-regular); color:var(--fg-secondary); font-size:var(--text-sm);}
-.unscheduled-search{flex:0 1 200px; min-width:120px; margin-left:auto;}
-.project-calendar-unscheduled.collapsed .unscheduled-panel-head h2 + .unscheduled-search,
+.unscheduled-panel-toggle-btn{margin-left:auto;}
 .project-calendar-unscheduled.collapsed #unscheduled-panel-body{display:none;}
 .project-calendar-unscheduled.collapsed .unscheduled-panel-toggle-btn svg{transform:rotate(180deg);}
-/* 2026-09-08 direct report (predates the redesign above, still holds):
-   collapsing the panel moved ITS OWN header's toggle button from the right
-   edge to the left when the header had only two children and the hidden
-   one was `justify-content:space-between`'s only counterweight. Now a
-   three/four-child header (title, count, search, toggle) with the search
-   box's own `margin-left:auto` already pushing the toggle to the row's
-   right edge, `margin-left:auto` on the toggle itself is redundant but
-   kept as a defensive pin -- it still holds the toggle at flex-end even
-   if the search box is hidden/removed independently later. */
-.unscheduled-panel-toggle-btn{margin-left:auto;}
-/* 2026-09-27 direct bug report ("the search box floats in the middle of
-   the header with a gap on both sides instead of sitting next to the
-   toggle") -- the comment above was wrong about that second margin-left:
-   auto being a no-op. Two flex items in the same row each carrying their
-   own margin-left:auto don't collapse into "the first one wins" -- the
-   browser splits the row's leftover free space EVENLY across every auto
-   margin present, so with both the search box and the toggle claiming
-   one, the free space gets divided in half: one half lands between the
-   title and the search box, the other between the search box and the
-   toggle, instead of all of it landing before the search box the way a
-   single auto margin would. Toggle still technically ends up pinned to
-   the row's right edge either way (satisfying the collapsed-panel case
-   this rule exists for), so the bug was invisible to
-   TestToggleStillPinsToTheRowEnd -- only visible/expanded, side-by-side
-   with the search box, does the split read as a stray floating box.
-   Fix: cancel the toggle's own auto margin specifically when it's right
-   after a VISIBLE search box (the adjacent-sibling selector still matches
-   in the collapsed state, since `display:none` doesn't remove the search
-   element from the DOM -- `:not(.collapsed)` on the ancestor keeps this
-   scoped to the expanded case so the collapsed pin is untouched), so the
-   search box's own auto margin is the only one left to resolve and it
-   absorbs the whole gap, landing the search box flush against the toggle
-   as one right-aligned cluster instead of two independently-centered
-   islands. */
-.project-calendar-unscheduled:not(.collapsed) .unscheduled-search + .unscheduled-panel-toggle-btn{margin-left:0;}
-.unscheduled-task-list{display:flex; flex-direction:column; gap:6px;}
+/* 2026-09-28 (direct feedback, "add max height for the unscheduled work to
+   about 3.5 items tall"): caps the row list instead of letting it grow to
+   fit every row (2026-09-26's change, made when the panel moved below the
+   grid specifically so a tall list COULD grow freely without reflowing
+   anything above it -- still true, this is a deliberate cap on top of
+   that freedom, not a reversion of it). ~46px per row (a two-line row:
+   13px title + 1px gap + 11px meta, 5px padding top/bottom, 1px border)
+   plus the list's own 6px row gap -> 3.5 rows ~= 3*46 + 3*6 + 23 = 179px;
+   rounded to 180px rather than kept as an exact `calc()` off custom
+   properties style.css doesn't otherwise define for row heights. The
+   partial next row peeking over the clipped edge is the "there's more,
+   scroll" affordance -- no separate scroll-shadow/fade needed. */
+.unscheduled-task-list{display:flex; flex-direction:column; gap:6px; max-height:180px; overflow-y:auto; overscroll-behavior:contain;}
 /* Per-task "Unscheduled work" panel row (shared _unscheduled_task_item.html
    partial). Two lines: drag handle + title on the first, a muted meta
    line (estimated hours or "needs N more"/tag pill) on the second, with
@@ -3755,43 +3816,82 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    its own buttons (see that class's own rule below, and project_
    calendar.js's `begin()` guard). */
 .unscheduled-task-item{
-  position:relative; display:flex; align-items:center; gap:8px; padding:8px 10px 8px 13px; border-radius:8px;
-  background:var(--bg-elevated); border:1px solid var(--separator); cursor:grab;
+  position:relative; display:flex; align-items:center; gap:6px; padding:5px 8px; border-radius:7px;
+  background:var(--bg-elevated); border:1px solid var(--border-strong); cursor:grab;
   touch-action:none; user-select:none; -webkit-user-select:none;
 }
 .unscheduled-task-item:active{cursor:grabbing;}
 .unscheduled-task-item.item-dragging{opacity:.5;}
-/* 2026-09-27 row modernization -- a left accent bar in the row's own
-   project/label color (`--um-accent`, set inline per-row by
-   _unscheduled_task_item.html since it varies per task, same "custom
-   property carries the one-off value, class carries the shared shape"
-   split every per-color override in this file already uses) so a long
-   list visually clusters by project the way the calendar chips and
-   `.cell-tag.cal-*` pills already do, instead of every row reading
-   identically regardless of which project it's under. */
-.unscheduled-task-item::before{
-  content:""; position:absolute; left:3px; top:8px; bottom:8px; width:3px; border-radius:3px;
-  background:var(--um-accent, var(--fg-tertiary));
-}
-.unscheduled-type-glyph{
-  flex:none; width:22px; height:22px; border-radius:7px; display:flex; align-items:center; justify-content:center;
-  background:var(--bg-secondary); color:var(--fg-secondary);
-}
+/* 2026-09-27 row modernization: the row's own border moved from
+   `--separator` (barely visible, meant for hairlines inside an already-
+   bordered card) to `--border-strong` (the token this file already uses
+   when a border needs to actually read as one, e.g. `.drag-ghost`) --
+   this row sits directly on the panel's own background, not inside
+   another bordered box, so it needs real definition of its own. The type
+   glyph is a plain muted icon, no filled background chip, matching the
+   drag handle's own weight.
+   2026-09-28 direct follow-up ("remove the blue left borders"): the
+   per-project-color left accent bar from the previous pass (`::before`,
+   painted from an inline `--um-accent` custom property) is gone --
+   `_unscheduled_task_item.html` no longer sets that property at all.
+   Padding went back to symmetric (was 11px on the left specifically to
+   clear the bar). Also that feedback: "move the move arrow to the far
+   right" -- `.unscheduled-drag-handle` is now the LAST child in the row's
+   markup (still purely visual, see this row's own template-side comment
+   for why moving it doesn't touch the actual drag mechanic at all). */
+.unscheduled-type-glyph{flex:none; display:flex; align-items:center; justify-content:center; color:var(--fg-tertiary);}
+.unscheduled-type-glyph .icon{width:14px; height:14px;}
 .unscheduled-drag-handle{flex:none; color:var(--fg-tertiary); display:flex; opacity:.55;}
-.unscheduled-task-main{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px;}
-.unscheduled-task-title{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:var(--font-weight-bold);}
-.unscheduled-task-meta{display:flex; align-items:center; gap:8px; font-size:var(--text-2xs); color:var(--fg-secondary); min-width:0;}
+/* 2026-09-28 (direct request, "can unscheduled-task-main items be
+   arranged as one row with same text size different colors"): was a
+   two-line stack (title, then a smaller/muted meta line below it,
+   `flex-direction:column`) -- now one row, title and meta sharing the
+   same `--text-sm` size (meta was `--text-2xs`) so color is what tells
+   them apart (title's default `--fg-primary` vs meta's `--fg-secondary`,
+   unchanged) rather than size. Title keeps its own bold weight -- not
+   part of what was asked to change, and still gives the row a clear
+   "name first" reading order even at matching sizes. `min-width:0` on
+   both children (not just the row) is what lets either one actually
+   shrink instead of forcing the row wider than its flex:1 share --
+   title caps at 55% so a long title can't push every meta fact
+   (hours/sessions, the project pill) off the row's right edge entirely.
+   Meta gets `overflow:hidden` as a hard clip rather than `text-overflow:
+   ellipsis` -- ellipsis only works for a single run of text inside the
+   SAME box; meta is itself a flex row of several separate elements (the
+   dot-progress strip, a text span, the project pill), so an ellipsis
+   rule on the container wouldn't render a "..." at all, just silently
+   fail to clip anything before the pill got cut off mid-shape. A plain
+   clip at the row's edge is the honest version of the same idea. */
+.unscheduled-task-main{flex:1; min-width:0; display:flex; align-items:center; gap:8px;}
+.unscheduled-task-title{flex:0 1 auto; max-width:55%; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:var(--font-weight-bold); font-size:var(--text-sm);}
+.unscheduled-task-meta{display:flex; align-items:center; gap:6px; font-size:var(--text-sm); color:var(--fg-secondary); flex:1; min-width:0; overflow:hidden;}
 /* A daily habit's "Needs N more this period" gains a 7-dot week strip
    (one dot per day `db.habit_work_sessions_status`'s `required` counts
    toward) -- a weekly/monthly habit's `required` is 1, where a single dot
    would be decoration rather than information, so the template only
    renders this for `required > 1`. */
-.unscheduled-dot-progress{display:inline-flex; align-items:center; gap:3px; flex:none;}
-.unscheduled-dot-progress span{width:6px; height:6px; border-radius:50%; background:var(--bg-tertiary);}
+.unscheduled-dot-progress{display:inline-flex; align-items:center; gap:2px; flex:none;}
+.unscheduled-dot-progress span{width:5px; height:5px; border-radius:50%; background:var(--bg-tertiary);}
 .unscheduled-dot-progress span.is-done{background:var(--fg-tertiary);}
+/* 2026-09-28 (direct request, "in dark theme, could we have a light
+   background option for .unscheduled-dot-progress span"): `--bg-tertiary`
+   is the app's darkest surface token in light theme, but dark theme's own
+   scale isn't a simple inversion of it -- `--bg-tertiary` (#303030) is
+   darker than the `.unscheduled-task-item` row it sits on
+   (`--bg-elevated`, #3e3e3e), so an empty (not-done) dot rendered barely
+   any different from the row's own background, reading as a faint smudge
+   instead of a visible unfilled slot next to the filled `--fg-tertiary`
+   dots. `--border-strong` (rgba(255,255,255,.22) in dark theme -- the
+   same token this row's own border already uses, see that rule's own
+   comment) reads as a light gray over the dark row, dim enough to still
+   lose clearly to an `.is-done` dot but bright enough to actually show up
+   as its own dot. Scoped to dark theme only -- light theme's own
+   `--bg-tertiary` already sits correctly darker than `--bg-elevated`
+   there, so its contrast was never the problem. */
+[data-theme="dark"] .unscheduled-dot-progress span{background:var(--border-strong);}
 .unscheduled-project-pill{
-  flex:none; display:inline-flex; align-items:center; gap:3px; max-width:120px;
-  padding:1px 7px; border-radius:999px; background:var(--accent-neutral-subtle);
+  flex:none; display:inline-flex; align-items:center; gap:3px; max-width:110px;
+  padding:1px 6px; border-radius:999px; background:var(--accent-neutral-subtle);
   color:var(--fg-primary); font-size:10px; font-weight:var(--font-weight-bold); white-space:nowrap;
   overflow:hidden; text-overflow:ellipsis;
 }
@@ -4174,7 +4274,7 @@ button.month-more-link{
    2026-08-08 rework's own comment warned a layered design must not
    reintroduce; this pass reintroduces layering for all-day events only,
    with this offset as the fix for that exact failure mode. */
-:root{--month-bar-h:16px; --month-bar-gap:2px;}
+:root{--month-bar-h:19px; --month-bar-gap:2px;}
 /* Extra room between the last bar lane and a cell's first text row -- the
    lane-to-lane gap alone (2px) made a bar read as glued to the row under
    it (2026-09-25, same report as --month-daynum-gap above). */
@@ -6197,53 +6297,91 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .project-preview-row:hover{text-decoration:none;}
 .project-preview-row:hover .cell-tag{box-shadow:0 0 0 1px var(--border-strong) inset;}
 
-/* Group labels widget (_widget_group_members.html, item 20, 2026-09-26) --
-   replaces label_detail.html's old always-visible plain pill-row toolbar.
-   Same "wrapper div + inner link" shape item 11's redesigned Unscheduled
-   Work row and the Contacts row-wrap both use (a "..." kebab's own <form>
-   can't nest inside a whole-row <a>), and the same `.cell-tag.cal-*`
-   identity-color swatch + muted meta line `.project-preview-row` above
-   already established for a label pill in a widget list. */
-.group-member-list{display:flex; flex-direction:column; gap:1px;}
-/* 2026-09-27 minimalist redesign (direct request "implement" off the
-   reviewed mockup) -- purely visual, same data/markup contract
-   (test_group_members_widget.py's TestRenderedWidgetTemplate still reads
-   the same "N open task(s)"/href/kebab strings): the three meta facts get
-   a small icon each and move to the row's own right edge as a compact
-   stat cluster instead of trailing the pill inline (a long label name and
-   a 3-fact meta string used to just butt up against each other on the
-   same wrapping line), and the kebab fades in on hover/focus-within
-   instead of sitting at full opacity on every row permanently -- same
-   convention `.task-row-delete` and the Unscheduled Work row actions
-   (above) already use, `(hover:none)` fallback included for touch.
-   Deliberately NOT given a full-row `--row-hover` background: same-day
-   follow-up commit ("Standardize row hover to one token...") explicitly
-   kept `.group-member-link` in the lighter-touch "underline removal only,
-   no full-row background" tier alongside `.project-preview-row`/
-   `widget_link_row`, as the deliberate other tier from real list/table
-   rows -- not a straggler to fold into `--row-hover` later. */
-.group-member-row{
-  display:flex; align-items:center; gap:var(--space-2); border-radius:var(--radius-sm);
-  padding:2px var(--space-1);
+/* "Labels in this group" widget (_widget_group_members.html, item 20,
+   2026-09-26 -- replaces label_detail.html's old always-visible plain
+   pill-row toolbar). Went through four visual passes the same week (git
+   history on this block has the full story -- a bespoke row shape, then
+   a `margin-left:auto` meta cluster that silently broke at the widget's
+   actual narrower widths, then a count-based list/cards switch copying
+   _widget_spaces_projects.html's ("Groups & Labels") two presentations)
+   before landing on the simplest version: direct request "always use
+   card grid" means every row renders via `filled_card` (_widget_items.
+   html) into `.filled-cards-grid` (styled above, Groups & Labels' own
+   "cards" style shares this exact class) regardless of count -- no
+   dedicated CSS of this widget's own left, the three `.group-member-*`
+   classes the list style needed (row wrapper, kebab fade, hairline
+   divider) are gone along with the list style itself. No kebab either
+   (a plain `filled_card` is a whole-row `<a>`, same as every other
+   `.filled-cards-grid` consumer) -- editing a label from here means
+   opening it, same as clicking a Space tile in Groups & Labels' own
+   cards.
+   2026-09-28 direct follow-up ("make the cards smaller, less space
+   around it"): `.group-member-cards` (the template's own wrapper div)
+   scopes a smaller size to just this widget's tiles -- `.filled-card`/
+   `.filled-cards-grid` are the same shared class/macro Groups & Labels'
+   own "cards" style renders with, so overriding them bare would have
+   shrunk those too. Roughly 60% of the base size: min column 140px ->
+   85px, min-height 120px -> 64px, title text-xl (18px) -> text-sm (13px).
+   The icon (`.icon-lg`, 1.35em -- relative to `.filled-card`'s own
+   font-size, which the base rule never sets so it inherits the page's
+   --text-base and renders ~20px) needed `.filled-card` itself given a
+   smaller font-size (--text-xs, 12px -> a ~16px icon) instead of a
+   pinned px value, so it shrinks by the same em math the base style
+   already uses; `.filled-card-title`/`-meta` re-pin their own font-size
+   right back to a legible size since they'd otherwise inherit that same
+   smaller 12px from the card.
+   Same-day further follow-up ("add some internal padding now"): padding
+   went to --space-2 (8px) in that first pass, tight enough that the icon/
+   title/meta stack read as pressed right up against the tile's own edge
+   -- back up to --space-3 (12px, the base `.filled-card`'s own value,
+   left otherwise untouched) with min-height bumped 64px -> 72px to match
+   rather than let the extra padding squeeze the content band inside it
+   even further. */
+.group-member-cards .filled-cards-grid{
+  gap:var(--space-2); grid-template-columns:repeat(auto-fill, minmax(85px,1fr)); margin:0;
 }
-.group-member-link{
-  flex:1; min-width:0; display:flex; align-items:center; gap:var(--space-3);
-  padding:var(--space-1) 0; text-decoration:none; color:inherit;
+/* direct follow-up ("make so the cards are always square"), then
+   ("then it's a bug after window resize") -- the first attempt used
+   `aspect-ratio:1` on `.filled-card` itself. That tracks column width
+   correctly in principle, but this grid sits inside app.js's masonry
+   layout (`#dashboard-grid`, position:absolute widget cards, JS sets
+   each card's pixel width then reads `offsetHeight` to stack the next
+   row) -- CSS Grid's own auto-fill track count and `aspect-ratio`'s
+   height-from-width feedback are exactly the kind of interdependent
+   intrinsic-sizing case browsers have documented resize/reflow bugs
+   around (a track recalculation not always re-triggering the
+   aspect-ratio-derived row height on a plain window resize, unlike a
+   width change from something like a flex/grid-item's own basis
+   changing). Replaced with the older, unconditionally reflow-safe
+   percentage-padding square technique instead: zero height + `padding-
+   bottom:100%` (percentage padding is always relative to the containing
+   block's WIDTH, on every axis -- an ordinary CSS fact, not a browser-
+   specific behavior with edge cases) makes the box's own height track
+   its width with no separate sizing algorithm involved at all, so app.js's
+   `offsetHeight` read is exactly as reliable after a resize as it always
+   was for any other widget's plain content-driven height.
+   `.filled-card` itself becomes the square-shaping box (no padding of
+   its own anymore -- box-sizing:border-box + padding-bottom:100% only
+   works cleanly on an otherwise-empty box); `.filled-card-content`
+   becomes an absolutely-positioned inset layer that carries the real
+   padding and the actual icon/title/meta stack, invisible to the square
+   math entirely. */
+.group-member-cards .filled-card{
+  position:relative; height:0; min-height:0; padding:0 0 100% 0; overflow:hidden;
+  font-size:var(--text-xs); transition:none;
 }
-.group-member-link:hover{text-decoration:none;}
-.group-member-link:hover .cell-tag{box-shadow:0 0 0 1px var(--border-strong) inset;}
-.group-member-meta{
-  display:flex; align-items:center; gap:var(--space-3); flex-wrap:wrap;
-  font-size:var(--text-2xs); color:var(--fg-secondary); margin-left:auto; padding-right:var(--space-1);
+/* direct follow-up ("remove the hover animation") -- the base
+   `.filled-card:hover` rule (lift + deeper shadow, shared with Groups &
+   Labels' own cards) is overridden back to the resting state, scoped to
+   this widget only; `transition:none` above on the base state keeps
+   anything else that might change on hover (e.g. a focus ring) from
+   animating in either. */
+.group-member-cards .filled-card:hover{transform:none; box-shadow:var(--elevation-1);}
+.group-member-cards .filled-card-content{
+  position:absolute; inset:0; padding:var(--space-3); box-sizing:border-box; gap:2px;
 }
-.group-member-fact{display:inline-flex; align-items:center; gap:4px; white-space:nowrap;}
-.group-member-fact .icon{opacity:.7; flex:none;}
-.group-member-row .action-menu-trigger{opacity:0; transition:opacity var(--dur-fast) var(--ease-standard);}
-.group-member-row:hover .action-menu-trigger,
-.group-member-row:focus-within .action-menu-trigger{opacity:1;}
-@media (hover:none){
-  .group-member-row .action-menu-trigger{opacity:.55;}
-}
+.group-member-cards .filled-card-title{font-size:var(--text-sm);}
+.group-member-cards .filled-card-meta{font-size:var(--text-2xs);}
 
 /* At a Glance widget (_widget_at_a_glance.html, dashboard usability
    rework 2026-08-07) -- a row of number+label stat blocks, each a link to
@@ -6300,6 +6438,17 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    live here. The old .habit-checkin-list/-row/-name rules went with
    habit_checkin.js. */
 .habit-widget-summary{display:flex; align-items:center; gap:var(--space-2); margin:0 0 var(--space-1); font-size:var(--text-sm); color:var(--fg-secondary);}
+/* 2026-09-28 (direct request, "the habit-widget-summary should be on the
+   same row as widget-header but on the far right"): the summary now
+   renders inside .widget-header itself (_widget_inner.html, after the
+   spacer that already pushes edit-mode controls right -- same mechanism
+   puts this flush right in view mode). The base rule's `margin:0 0
+   var(--space-1)` was sized for sitting above the habit list as its own
+   block; in the header row that bottom margin would sit the text
+   slightly off-center against the title's own baseline, so this zeroes
+   it out specifically there -- higher specificity beats the base rule
+   regardless of source order. */
+.widget-header .habit-widget-summary{margin:0;}
 .habit-widget-summary strong{color:var(--fg-primary);}
 .habit-widget-summary.is-all-done{color:var(--fg-primary); font-weight:var(--font-weight-bold);}
 .habit-widget-summary.is-all-done .icon{color:var(--accent); animation:habit-pop .5s ease-out;}
@@ -6352,43 +6501,96 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    column to its content's width, give everything else to the other
    column(s)" -- combined with the existing nowrap it now behaves the same
    whether or not a `right` cell happens to be present. */
-.widget-row-icon{width:26px;}
+/* 2026-09-28 (direct request, "widget-row-icon should have the same left
+   padding as the checkboxes"): a checkbox row's icon is centered INSIDE
+   its own 26px `.habit-check-widget` button (justify-content:center,
+   base `.habit-check-btn` rule), and that button fills this column's
+   full 26px width -- so the icon's left inset is really "half of (26px -
+   icon width)", not a literal padding value. A bare marker (the event
+   `.icon.cal-*` widget_event_icon renders, the deadline `flag` icon in
+   label_sections.html/label_preview_modal.html) has no such wrapper box
+   and used to sit flush against the cell's own left edge instead --
+   `text-align:center` centers it within this same 26px column the exact
+   same way, landing at the same inset regardless of that icon's own
+   px/em size (no separate hardcoded padding value to keep in sync with
+   the checkbox's own sizing). Harmless on the checkbox path itself: its
+   button already fills the full 26px width, so centering it changes
+   nothing there. */
+.widget-row-icon{width:26px; text-align:center;}
 .widget-row-time{white-space:nowrap; width:1%;}
 .widget-row-right{text-align:right;}
 /* 2026-09-13 (direct request, "the checkbox has a left margin the other
-   [rows] don't have"): a task row's leading cell is a real `.icon-btn`
-   (28px, 40px on coarse pointer -- the shared touch-target size every
-   icon-btn in the app uses), which centers its 16px icon inside that whole
-   box. An event/deadline row's leading marker (`.widget-event-dot`, the
-   flag `.icon-sm`) has no such wrapper box, so it sits flush against the
-   cell's own left padding -- the checkbox's icon, centered in a box wider
-   than itself, effectively sat ~6px further right of that same edge.
-   `justify-content:flex-start` only changes where the icon sits INSIDE the
-   button (flush left, matching the other rows) without shrinking the
-   button itself, so the tap target stays full-size at every breakpoint. */
-.widget-row-icon .icon-btn{justify-content:flex-start;}
+   [rows] don't have") introduced `justify-content:flex-start` here so a
+   task row's checkbox icon sat flush left, matching an event row's
+   wrapper-less marker. Reverted 2026-09-28 (direct request: "the checkbox
+   should be in the center of the hover background like habits have") --
+   the icon is centered in the button's hover/pressed background again,
+   same as every other `.habit-check-btn`, at the cost of the flush-left
+   alignment the 2026-09-13 change bought. */
 /* 2026-09-25 (UI audit F19): in one Agenda widget a task row measured
-   37px (42px on touch) against 35px for an event row -- the checkbox's
-   28px (40px coarse-pointer) icon-btn box was taller than a line of text
-   and set the row height. Negative block margins let the box overhang
-   into the cell's own padding instead: every row is text-height, and the
-   tap target keeps its full size. */
-.widget-row-icon .icon-btn{margin-block:-4px;}
-@media (pointer:coarse){ .widget-row-icon .icon-btn{margin-block:-10px;} }
-/* Event row leading marker (2026-09-13, direct request: "circle dot like
-   in mockup") -- sits in the same `.widget-row-icon` 26px slot a task's
-   checkbox occupies, so an Agenda widget's Overdue/Tasks/Events rows all
-   line up in the same column rhythm even though an event has nothing to
-   click there. Sized like the mockup's own `.dot-evt`; color comes from
-   the paired `.cal-{color}` class (widget_event_dot() macro, direct
-   request: "the color... of an event/task should be as the label's, not
-   default on blue or any other accent color") -- no `background` of its
-   own here anymore, `.cal-*`'s existing generic background rule paints
-   it, same mechanism `.color-dot.cal-*` already uses on the calendar
-   grids. */
-.widget-event-dot{
-  display:inline-block; width:7px; height:7px; border-radius:50%;
-}
+   37px (42px on touch) against 35px for an event row -- the checkbox
+   box was taller than a line of text and set the row height. A negative
+   block margin lets the box overhang into the cell's own padding
+   instead: every row is text-height, and the tap target keeps its full
+   size. */
+.widget-row-icon .habit-check-btn{margin-block:-3px;}
+/* A done task's checkbox is `disabled` (no undo -- see
+   widget_complete_button's own comment); the default pointer cursor
+   would otherwise still invite a click that does nothing. */
+.habit-check-btn:disabled{cursor:default;}
+/* Event row leading marker -- sits in the same `.widget-row-icon` 26px
+   slot a task's checkbox occupies, so an Agenda widget's Overdue/Tasks/
+   Events rows all line up in the same column rhythm even though an event
+   has nothing to click there. Was a plain 7x7px colored dot (2026-09-13,
+   "circle dot like in mockup") until 2026-09-28 direct feedback ("move
+   from the small dots to colored icons the same size as the font") swapped
+   it for a `calendar` glyph via the shared `.icon` class (widget_event_
+   icon() macro, templates/_widget_items.html) -- 1em by default, so it
+   reads at the row's own font-size rather than a fixed pixel size.
+
+   Color still comes from the paired `cal-{color}` class the macro adds
+   (direct request: "the color... of an event/task should be as the
+   label's, not default on blue or any other accent color"), but a bare
+   `.icon.cal-*` can't just inherit the plain `.cal-*` rule below --
+   that pairs a background with a *white* `--cal-fg-*` foreground meant to
+   sit ON that background (the filled dot/pill/chip look every other
+   `.cal-*` consumer wants); painted straight onto a card with no fill
+   behind it, that would render an invisible white icon. Each hue gets its
+   own override here using `--tag-*-fg` instead -- the same saturated,
+   background-less-safe foreground tokens `_labels_table_body.html`'s own
+   bare `cell-tag tag-*` icons already use. Specificity (two classes) beats
+   the plain `.cal-*` rule regardless of source order, so this can live
+   anywhere in the file.
+
+   2026-09-28 bug fix (direct report: "the colored icon for agenda widgets
+   doesn't work"): each override above only ever re-declared `color`.
+   `background` is a separate property with its own cascade -- `color`
+   here beats the plain `.cal-*` rule's `color` (higher specificity), but
+   nothing here was overriding `.cal-*`'s own `background: var(--cal-bg-
+   *)`, so that swatch-background rule (also targeting this same element)
+   still applied untouched. The icon rendered as a colored glyph sitting
+   inside its hue's filled background chip -- the "background-less-safe"
+   plain icon this comment already claimed to produce, in name only.
+   `background:none` on the shared selector below (one rule for every
+   hue, no per-color repetition needed since the value's identical)
+   actually clears it. */
+.icon[class*="cal-"]{background:none;}
+.icon.cal-red{color:var(--tag-red-fg);}
+.icon.cal-orange{color:var(--tag-orange-fg);}
+.icon.cal-yellow{color:var(--tag-yellow-fg);}
+.icon.cal-lime{color:var(--tag-lime-fg);}
+.icon.cal-green{color:var(--tag-green-fg);}
+.icon.cal-mint{color:var(--tag-mint-fg);}
+.icon.cal-teal{color:var(--tag-teal-fg);}
+.icon.cal-cyan{color:var(--tag-cyan-fg);}
+.icon.cal-blue{color:var(--tag-blue-fg);}
+.icon.cal-indigo{color:var(--tag-indigo-fg);}
+.icon.cal-purple{color:var(--tag-purple-fg);}
+.icon.cal-magenta{color:var(--tag-magenta-fg);}
+.icon.cal-pink{color:var(--tag-pink-fg);}
+.icon.cal-brown{color:var(--tag-brown-fg);}
+.icon.cal-gray{color:var(--tag-gray-fg);}
+.icon.cal-slate{color:var(--tag-slate-fg);}
 .widget-config{margin-top:12px; border-top:1px solid var(--separator); padding-top:8px;}
 .widget-config summary{cursor:pointer; font-size:var(--text-sm); color:var(--fg-tertiary); display:flex; align-items:center; gap:4px;}
 .widget-checkbox-row{display:flex; flex-wrap:wrap; gap:4px 14px;}
@@ -6619,10 +6821,10 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 /* 2026-09-25 (UI audit C-16): plain 1fr columns grew to fit their longest
    nowrap title and pushed the grid past the card -- minmax(0,1fr) keeps
    seven equal columns and lets titles ellipsize (.wo-title). Events lead,
-   sorted by time, with their colour dot + start time; tasks follow. */
+   sorted by time, with their colour icon + start time; tasks follow. */
 .week-overview-grid{grid-template-columns:repeat(7,minmax(0,1fr));}
 .week-overview-day{min-width:0;}
-.week-overview-item > .widget-event-dot, .week-overview-item > .icon{flex:none;}
+.week-overview-item > .icon{flex:none;}
 .wo-time{flex:none; font-size:var(--text-xs); color:var(--fg-secondary); font-variant-numeric:tabular-nums;}
 .wo-title{min-width:0; overflow:hidden; text-overflow:ellipsis;}
 .week-overview-day.is-today{border-color:var(--accent);}
@@ -7676,6 +7878,30 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .page-header-narrow-actions .icon-btn {
     height: 30px;
 }
+/* 2026-09-28 (direct request: "the icon-btn label-page-edit is 25.76 x
+   27.6. the button should always sit on the far right") -- two separate
+   fixes for a label/group page's own Edit control
+   (_label_page_actions.html / label_detail.html's group-page branch,
+   both now carry `.label-page-edit`):
+   1. Explicit width to match the height:30px rule above, which only ever
+      set height -- `.icon-btn`'s own base width:28px left it 28x30, not
+      square; pinning both to 30px here guarantees a true square
+      regardless of any fractional layout rounding upstream.
+   2. `margin-left:auto` so Edit is flush against the actions cluster's
+      right edge no matter how many buttons render before it (edit mode's
+      New widget/Add banner/Reset layout on a group page, or nothing at
+      all on a plain label page) -- it's the last child in both
+      label_detail.html branches, so this detaches it from the rest of
+      the group's left-packed flow without needing a second wrapper
+      element. `.page-header-narrow-actions`'s own flex-wrap:wrap means
+      this only pins Edit to the end of whichever row it lands on if the
+      cluster wraps on a narrow viewport, not the header's absolute right
+      edge in that case -- acceptable, since the wrap already reads as "a
+      second line of controls," not a broken layout. */
+.page-header-narrow-actions .icon-btn.label-page-edit {
+    width: 30px;
+    margin-left: auto;
+}
 
 /* 2026-09-08 (direct request: "rework the table in the spirit of any
    other table in the app"): this used to be its own hand-rolled table
@@ -7845,6 +8071,15 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .habit-panel .habit-bars-months{height:64px;}
 .habit-card-title{min-width:0; color:var(--fg-primary); font-weight:var(--font-weight-bold); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .habit-card-title:hover{text-decoration:underline;}
+/* 2026-09-28 (direct feedback: "font weight/size not the same between
+   widgets"): the full Habits-page row keeps its bolder, larger title (a
+   list of exactly one thing per row reads fine at that weight), but the
+   compact Dashboard widget row sits next to Agenda's own task/event rows
+   (`.agenda-habit-title`/`widget_link_row`'s title cell, both `--text-sm`
+   / `--font-weight-regular`) -- matching that instead of the Habits-page
+   styling is what makes a habit row and a task row in the same widget
+   read as one consistent list rather than two different typefaces. */
+.is-compact .habit-card-title{font-size:var(--text-sm); font-weight:var(--font-weight-regular);}
 .habit-card-meta{min-width:0; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:var(--text-sm); color:var(--fg-tertiary);}
 .habit-card-meta > span + span{margin-left:var(--space-2);}
 .habit-card-meta > span + span::before{content:"\00b7"; margin-right:var(--space-2); color:var(--fg-tertiary);}
@@ -7866,10 +8101,25 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .habit-check-btn{display:inline-flex; align-items:center; justify-content:center; min-width:34px; height:34px; padding:0 var(--space-1); border-radius:var(--radius-sm); border:none; background:transparent; color:var(--fg-tertiary); cursor:pointer;}
 .habit-check-btn .icon{width:18px; height:18px;}
 .habit-check-btn:not(.habit-check-qty){width:34px; padding:0;}
-.is-compact .habit-check-btn{min-width:28px; height:28px;}
-.is-compact .habit-check-btn:not(.habit-check-qty){width:28px;}
-.is-compact .habit-check-btn .icon{width:16px; height:16px;}
 .habit-check-btn:hover{background:var(--bg-secondary); color:var(--habit-accent);}
+/* 2026-09-28 (direct feedback: "checkbox hover bg still not the same
+   between widgets"): the one size variant for every compact Dashboard
+   widget row's check -- the Habit Check-in widget's rows
+   (_habit_page_row.html's `habit_page_row(compact=true)`), the Agenda
+   widget's own habit rows, and the Agenda widget's task checkbox
+   (`widget_complete_button`, _widget_items.html) all pass this same
+   `habit-check-widget` modifier now. Used to be two separately-tuned
+   sizes that happened to be close (28px reached via the ambient
+   `.is-compact` ancestor selector, 26px via a since-renamed
+   `.habit-check-agenda`) -- close-but-not-equal boxes made the identical
+   `:hover{background:var(--bg-secondary)}` rule above look different
+   between widgets purely because the box it was painted into wasn't the
+   same size. One class, one size, everywhere a widget row's check is
+   this small. */
+.habit-check-widget{min-width:26px; height:26px;}
+.habit-check-widget:not(.habit-check-qty){width:26px;}
+.habit-check-widget .icon{width:15px; height:15px;}
+.habit-check-widget.habit-check-qty{min-width:32px; height:26px; padding:0 3px;}
 .habit-check-btn.is-done{background:var(--habit-accent); color:var(--fg-on-accent);}
 .habit-check-qty{font-size:var(--text-sm); font-variant-numeric:tabular-nums; color:var(--fg-primary);}
 .habit-qty-target{color:inherit; opacity:.7;}
@@ -7892,7 +8142,18 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 /* A day later this week: shown for the week's shape, not clickable. */
 .habit-day.is-future{background:transparent; box-shadow:0 0 0 1px var(--separator) inset; opacity:.55; cursor:default;}
 .habit-day.is-done{background:var(--habit-accent); color:var(--fg-on-accent);}
-.habit-day.is-today{box-shadow:0 0 0 2px var(--habit-accent) inset;}
+/* 2026-09-28 (direct feedback: "I don't like the colored border around
+   unchecked today day for widgets -- I would much rather only gray bg
+   with same color border"): the ring alone, painted over the same faint
+   `--accent-neutral-subtle-strong` fill every other cell already has, read
+   as an empty outline rather than a filled cell -- at 30px (24px/22px in
+   a compact/narrow widget) that low-alpha gray barely registers next to a
+   2px colored ring. A little of the habit's own accent mixed into that
+   same gray (not swapped for a flat accent fill, still recognizably "the
+   gray cell") makes the fill itself read as present and highlighted,
+   with the ring still doing the "this one's today" job on top. Scoped to
+   the plain scheduled-and-not-done case; an unscheduled ("off") today
+   stays the deliberately empty/outlined cell below (H-16). */
 .habit-day.is-today.is-done{box-shadow:none;}
 .habit-day.is-excluded:not(.is-done){opacity:.45;}
 /* UI audit H-02: partial amount day (see .habit-check-btn.is-partial). */
@@ -8060,9 +8321,14 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 /* Habits H7: habits in the Agenda widget and the calendar day view. */
 .agenda-habits{list-style:none; margin:0 0 var(--space-2); padding:0;}
 .agenda-habit{display:flex; align-items:center; gap:var(--space-2); padding:4px 0; margin:0; min-width:0;}
-.agenda-habit-check{display:inline-flex; align-items:center; justify-content:center; min-width:26px; height:26px; padding:0 4px; border:none; border-radius:var(--radius-sm); background:none; color:var(--fg-secondary); cursor:pointer; font-size:var(--text-sm); font-variant-numeric:tabular-nums;}
-.agenda-habit-check:hover{color:var(--accent);}
-.agenda-habit-check.is-qty{background:var(--accent-neutral-subtle);}
+/* 2026-09-28 (checkbox consolidation): the check itself is the shared
+   `.habit-check-btn.habit-check-widget` (base layout/hover/is-done/
+   is-partial/is-relapse colors above) instead of a standalone
+   `.agenda-habit-check` block that had its own flatter hover/no-accent
+   styling -- this row's check now fills with the habit's own
+   `--habit-accent` (via `habit-c-*` on the `<li>`) like every other habit
+   check in the app, not a generic `--accent`. Only this row's own 36px
+   leading-column layout lives here. */
 .agenda-habit-title{flex:1; min-width:0; color:var(--fg-primary); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .agenda-habit-meta{font-size:var(--text-sm); color:var(--fg-tertiary); white-space:nowrap;}
 /* 2026-09-25 (UI audit H-09): habit rows line up with the task/event rows
@@ -8072,7 +8338,6 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    a task row. */
 .agenda-habits .agenda-habit{gap:4px; padding:3px 0;}
 .agenda-habit > .form-inline{flex:none; width:36px; display:flex; justify-content:center;}
-.agenda-habit-check.is-qty{min-width:32px; padding:0 3px;}
 .agenda-habits .agenda-habit-title{font-size:var(--text-sm);}
 .allday-habit-form{display:block;}
 /* appearance/background/padding reset + font-size (2026-09-25): `font:inherit`
@@ -8083,10 +8348,15 @@ button.allday-habit{
   appearance:none; background:none; padding:1px 0; color:inherit;
   width:100%; text-align:left; border:none; cursor:pointer; font:inherit; font-size:var(--text-xs);
 }
+/* 2026-09-28 (checkbox consolidation): was a flat `opacity:.6` regardless
+   of which habit -- now colors from the habit's own `--habit-accent`
+   (`habit-c-*`, same source _habit_page_row.html's `.habit-day.is-done`
+   uses) instead of the generic `--accent`, so a habit's colour is
+   consistent everywhere it appears, not just on the Habits page. */
 .allday-habit.is-done{opacity:.6; text-decoration:line-through;}
 /* UI audit C-5: an amount habit's n/target count in the Day view. */
 .allday-habit-count{display:inline-block; min-width:28px; padding:0 4px; margin-right:2px; border-radius:var(--radius-sm); background:var(--accent-neutral-subtle); font-variant-numeric:tabular-nums; text-align:center;}
-.allday-habit.is-partial .allday-habit-count{background:color-mix(in srgb, var(--accent) 35%, transparent);}
+.allday-habit.is-partial .allday-habit-count{background:color-mix(in srgb, var(--habit-accent, var(--accent)) 35%, transparent);}
 /* Habits H8: insights bars in the habit detail modal (heights via
    data-style / dynamic_styles.js). */
 .habit-bars-label{font-size:var(--text-sm); color:var(--fg-secondary); margin:var(--space-2) 0 var(--space-1);}

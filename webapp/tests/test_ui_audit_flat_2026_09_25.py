@@ -119,7 +119,11 @@ def test_f16_dead_rules_are_gone():
 
 
 def test_f19_widget_checkbox_does_not_set_row_height():
-    assert ".widget-row-icon .icon-btn{margin-block:-4px;}" in _CSS
+    # 2026-09-28 (checkbox consolidation): the widget task checkbox is now
+    # `.habit-check-btn.habit-check-widget` (shared with every compact
+    # widget row's habit check), not a bare `.icon-btn` -- same
+    # negative-margin fix, smaller box.
+    assert ".widget-row-icon .habit-check-btn{margin-block:-3px;}" in _CSS
 
 
 def test_f1_label_page_tasks_board_uses_the_page_inset():

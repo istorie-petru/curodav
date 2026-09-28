@@ -4,8 +4,9 @@
 // and re-renders the region it sits in from the server, so streaks and
 // the to-do order are always the server's own numbers:
 //   - on /habits: #habits-body from /habits/regions
-//   - in a Dashboard/label-page widget: that .widget-card from
-//     /dashboard/widgets/<uid>
+//   - in a Dashboard/label-page widget: a "task" cc-entity-changed event
+//     (2026-09-28 -- see regionFor's own comment), same broadcast a task
+//     completion already fires
 //   - in the calendar day view (H7): a task change event, which
 //     async_calendar.js answers by re-rendering #day-grid
 // Also re-renders /habits after a habit is created/edited/deleted in a
@@ -29,8 +30,20 @@
     // change (async_calendar.js -- keeps scroll, re-binds drag), so just
     // announce one instead of swapping it here.
     if (form.closest("#day-grid")) return { dispatch: true, id: "day-grid" };
+    // 2026-09-28 (direct bug report: checking a habit off in one Dashboard
+    // widget left a sibling widget also showing that habit -- e.g. the
+    // Habit Check-in widget lower on the same dashboard -- stale until a
+    // full reload): used to refresh only this one card directly
+    // (`/dashboard/widgets/<uid>`), the same narrow path the day-grid
+    // branch above deliberately avoids. Dispatching instead reuses
+    // async_crud.js's existing `cc-entity-changed` broadcast (the same one
+    // a task completion fires) -- it refreshes every `data-widget-uses=
+    // "tasks"` card on the page in one pass, including this one, so there's
+    // one "a task-flavoured thing changed" fan-out for the whole dashboard
+    // rather than two separate, narrower refresh paths that only agree by
+    // coincidence.
     const card = form.closest(".widget-card[data-uid]");
-    if (card && card.id) return { url: "/dashboard/widgets/" + card.dataset.uid, id: card.id };
+    if (card && card.id) return { dispatch: true, id: card.id };
     return null;
   }
 

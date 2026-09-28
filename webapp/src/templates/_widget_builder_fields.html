@@ -127,16 +127,18 @@
              10/20 default -- so this was purely a "let the field reach 0"
              change, no template-side unlimited-specific handling needed.
              2026-09-13 direct request ("no limit should actually be 20
-             maximum items"): those two renderers now cap an explicit `0`
-             at 20 too, so only the hint text below changed to match --
-             field/min/stepper themselves are still unchanged. -->
+             maximum items"): those two renderers capped an explicit `0`
+             at 20 too, so only the hint text below changed to match.
+             2026-09-28 direct feedback ("make the default limit smaller,
+             maximum 8"): default and 0-cap both dropped from 10/20 to a
+             single 8 -- field/min/stepper themselves are still unchanged. -->
         <label>Limit</label>
         <div class="stepper">
             <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease limit">&minus;</button>
-            <input type="number" name="limit" class="widget-preview-field stepper-input" min="0" placeholder="10">
+            <input type="number" name="limit" class="widget-preview-field stepper-input" min="0" placeholder="8">
             <button type="button" class="stepper-btn stepper-inc" aria-label="Increase limit">+</button>
         </div>
-        <div class="field-hint">0 = up to 20</div>
+        <div class="field-hint">0 = up to 8</div>
     </div>
     <!-- Width (2026-08-30, reinstated -- see this file's own header
          comment) -- every widget type gets this, unlike Show/Style/Scope

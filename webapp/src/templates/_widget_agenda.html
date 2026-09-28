@@ -24,28 +24,27 @@
      project_detail.html's own Agenda card (same fix applied there for the
      same reason). -->
 
-{% from "_widget_items.html" import widget_empty, widget_section_label, widget_pill, widget_link_row, widget_complete_button, widget_event_dot %}
+{% from "_widget_items.html" import widget_empty, widget_section_label, widget_pill, widget_link_row, widget_complete_button, widget_event_icon %}
+{% from "_habit_page_row.html" import habit_check_control %}
 {# Habits H7 (2026-09-24): today's still-to-do habits, each a one-tap
    check (form.habit-action -> static/habit_actions.js re-renders this
-   card). #}
+   card).
+
+   2026-09-28 (checkbox consolidation): the check control itself is the
+   shared `habit_check_control` macro (_habit_page_row.html) -- was a
+   third, smaller hand-rolled copy of the same toggle/plus-url forms
+   (`.agenda-habit-check`), with no per-habit accent colour and a
+   qty button that skipped the icon-button chrome entirely. `_agenda_habits`
+   only ever returns due-today, non-avoid habits (see dashboard.py), so
+   is-done/relapse never actually render here -- the shared control just
+   means this row looks and behaves like every other habit check in the
+   app instead of a slightly-off fourth variant. #}
 {% macro habit_rows(habits) %}
 {{ widget_section_label('Habits') }}
 <ul class="agenda-habits">
     {% for h in habits %}
-    <li class="agenda-habit">
-        {% if h.is_quantity %}
-        <form method="post" action="{{ h.plus_url }}" class="form-inline habit-action">
-            <input type="hidden" name="completion_date" value="{{ h.today }}">
-            <input type="hidden" name="value" value="{{ h.next_value|int }}">
-            {# 2026-09-25 (UI audit H-09): the qty button's visible text is
-               just "0/8" -- aria-label names the habit and the action. #}
-            <button type="submit" class="agenda-habit-check is-qty" title="Log one more ({{ h.today_value|int }} of {{ h.target|int }})" aria-label="Log one more: {{ h.title }}, {{ h.today_value|int }} of {{ h.target|int }}">{{ h.today_value|int }}/{{ h.target|int }}</button>
-        </form>
-        {% else %}
-        <form method="post" action="{{ h.toggle_url }}" class="form-inline habit-action">
-            <button type="submit" class="agenda-habit-check" title="Mark done today" aria-label="Mark done today: {{ h.title }}">{{ icon('square') }}</button>
-        </form>
-        {% endif %}
+    <li class="agenda-habit{% if h.color %} habit-c-{{ h.color }}{% endif %}">
+        {{ habit_check_control(h, ' habit-check-widget') }}
         <a href="{{ h.detail_url }}" data-modal class="agenda-habit-title">{{ h.title }}</a>
         <span class="agenda-habit-meta">{{ h.recurrence_label }}</span>
     </li>
@@ -56,7 +55,14 @@
 {{ widget_section_label('Overdue') }}
 <table>
     {% for t in tasks %}
-    {{ widget_link_row('/tasks/' ~ t.uid, t.title, leading=widget_complete_button(t.uid), leading_class='widget-row-icon', right=widget_pill((t.due_at[:10] | relative_date), 'gray')) }}
+    {# 2026-09-28: an overdue task ticked off from this row now stays put,
+       checked and struck through, for the same grace period `_agenda_
+       with_grace` gives the flat Tasks list below (dashboard.py's
+       TASK_GRACE_MINUTES) instead of the button silently rendering
+       unchecked/clickable again for a task that's actually already done
+       -- same `_done` treatment the Tasks table below already had. #}
+    {% set _done = t.status in ('done', 'archived') %}
+    {{ widget_link_row('/tasks/' ~ t.uid, t.title, leading=widget_complete_button(t.uid, _done), leading_class='widget-row-icon', right=widget_pill((t.due_at[:10] | relative_date), 'gray'), row_class=('task-row-completed' if _done else None)) }}
     {% endfor %}
 </table>
 {% endmacro %}
@@ -72,7 +78,12 @@
        each with its colour dot + start time, then tasks; titles in a span
        so they ellipsize inside the minmax(0,1fr) column. #}
     {% for e in day.events %}
-    <a class="week-overview-item" href="/events/{{ e.uid }}{% if e.recurrence and e.occurrence_date %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ e.title }}">{{ widget_event_dot(e.calendar_color or 'blue') }}{% if e.start_at and not e.all_day %}<span class="wo-time">{{ e.start_at | fmt_time }}</span>{% endif %}<span class="wo-title">{{ e.title }}</span></a>
+    {# 2026-09-28 direct follow-up ("the label's icon should be used when
+       it's available"): same `label_icon(request, ...)` lookup the task
+       icon right below already uses, falling back to the plain
+       `calendar` glyph -- `widget_event_icon`'s own default -- for an
+       unlabeled event or one whose label has no icon assigned. #}
+    <a class="week-overview-item" href="/events/{{ e.uid }}{% if e.recurrence and e.occurrence_date %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ e.title }}">{{ widget_event_icon(e.calendar_color or 'blue', 'icon-sm', label_icon(request, e.tags | first | default('')) | default('calendar', true)) }}{% if e.start_at and not e.all_day %}<span class="wo-time">{{ e.start_at | fmt_time }}</span>{% endif %}<span class="wo-title">{{ e.title }}</span></a>
     {% endfor %}
     {% for t in day.tasks %}
     <a class="week-overview-item" href="/tasks/{{ t.uid }}" data-modal title="{{ t.title }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }}<span class="wo-title">{{ t.title }}</span></a>
@@ -91,7 +102,17 @@
 {{ widget_section_label('Tasks') }}
 <table>
     {% for t in data.tasks %}
-    {{ widget_link_row('/tasks/' ~ t.uid, t.title, leading=widget_complete_button(t.uid), leading_class='widget-row-icon', right=(widget_pill('Today', 'blue') if data.range == 'today' else widget_pill((t.due_at[:10] | relative_date), 'gray'))) }}
+    {# 2026-09-28: Range: Today keeps a just-completed task in this list
+       (todo first, done after -- dashboard.py's _render_agenda), checked
+       and struck through, instead of dropping it the instant it's marked
+       done -- the same "stays put, shows checked" behavior the Habit
+       Check-in widget already has. Every other range normally only lists
+       open tasks, but `_agenda_with_grace`'s own grace period (dashboard.py,
+       TASK_GRACE_MINUTES) now also lets a just-completed task ride along
+       here for a few minutes after check-off, so `t.status` can be done
+       outside Today too, briefly. #}
+    {% set _done = t.status in ('done', 'archived') %}
+    {{ widget_link_row('/tasks/' ~ t.uid, t.title, leading=widget_complete_button(t.uid, _done), leading_class='widget-row-icon', right=(widget_pill('Today', 'blue') if data.range == 'today' else widget_pill((t.due_at[:10] | relative_date), 'gray')), row_class=('task-row-completed' if _done else None)) }}
     {% endfor %}
 </table>
 {% endif %}
@@ -112,10 +133,16 @@
        today for the old leading-cell shape -- widget-row-icon already has
        a fixed 26px width, so there's no unconstrained nowrap column left
        to run away with the table's width. #}
+    {# 2026-09-28 direct follow-up ("the label's icon should be used when
+       it's available"): resolved once per row and passed to both
+       branches below -- `label_icon` falls back to '' when the toggle is
+       off or the label has none, and `widget_event_icon`'s own default
+       (`calendar`) covers that case via the `| default(..., true)`. #}
+    {% set _icon_name = label_icon(request, e.tags | first | default('')) | default('calendar', true) %}
     {% if data.range == 'today' %}
-    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=widget_event_dot(e.calendar_color), leading_class='widget-row-icon', right=widget_pill(('All day' if e.all_day or not e.start_at else (e.start_at | fmt_time)), 'blue')) }}
+    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=widget_event_icon(e.calendar_color, icon_name=_icon_name), leading_class='widget-row-icon', right=widget_pill(('All day' if e.all_day or not e.start_at else (e.start_at | fmt_time)), 'blue')) }}
     {% else %}
-    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=widget_event_dot(e.calendar_color), leading_class='widget-row-icon', right=widget_pill(((e.start_at[:10] | relative_date) ~ (' ' ~ (e.start_at | fmt_time) if not e.all_day else '')), 'blue')) }}
+    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=widget_event_icon(e.calendar_color, icon_name=_icon_name), leading_class='widget-row-icon', right=widget_pill(((e.start_at[:10] | relative_date) ~ (' ' ~ (e.start_at | fmt_time) if not e.all_day else '')), 'blue')) }}
     {% endif %}
     {% endfor %}
 </table>

@@ -110,13 +110,15 @@ class TestLabelPageActions:
         db.upsert_label_config(conn, {"name": "Gym"})
         _task(conn, "t1", ["Gym"])
         body = _page(conn, "Gym").body.decode()
-        assert 'href="/settings/labels/Gym/edit" data-modal' in body and "Edit label" in body
+        # 2026-09-28 (direct request): Edit is icon-only now (no visible
+        # "Edit label" text) -- title/aria-label carry the name instead.
+        assert 'href="/settings/labels/Gym/edit" data-modal' in body and 'title="Edit label"' in body
         assert 'action="/labels/Gym/archive"' in body
 
     def test_dashboard_page_header_has_them_too(self, conn):
         db.upsert_label_config(conn, {"name": "Gym", "has_dashboard": 1})
         body = _page(conn, "Gym").body.decode()
-        assert "Edit label" in body and 'action="/labels/Gym/archive"' in body
+        assert 'title="Edit label"' in body and 'action="/labels/Gym/archive"' in body
 
     def test_archived_plain_label_shows_archived_on_line(self, conn):
         db.upsert_label_config(conn, {"name": "Gym"})
@@ -136,14 +138,16 @@ class TestLabelPageActions:
     def test_group_page_offers_edit_group_not_edit_label(self, conn):
         db.upsert_label_config(conn, {"name": "Art", "label_group": "Uni"})
         body = label_pages.group_page("Uni", _request("/groups/Uni"), conn=conn).body.decode()
-        assert 'href="/groups/Uni/edit" data-modal' in body
+        assert 'href="/groups/Uni/edit" data-modal' in body and 'title="Edit group"' in body
         # Scoped to the page's own header actions cluster, not the whole
         # body -- item 20's group_members widget legitimately has its own
         # per-MEMBER "Edit label" kebab item now (a different label than
         # this group's own page), which a bare whole-body substring check
-        # would collide with.
+        # would collide with. 2026-09-28: Edit label/group are icon-only
+        # now (no visible text), so this checks the title attribute
+        # instead of the old "Edit label" substring.
         header = body.split('class="page-header-narrow-actions"')[1].split("</div>")[0]
-        assert "Edit label" not in header
+        assert 'title="Edit label"' not in header
 
 
 class TestEmptyState:

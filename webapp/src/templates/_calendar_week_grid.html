@@ -45,7 +45,19 @@
      icon changed from a generic sidebar glyph to a plain up-chevron
      (points up = "collapse"; style.css's existing `.collapsed
      .unscheduled-panel-toggle-btn svg{transform:rotate(180deg)}` flips it
-     to point down once collapsed, no CSS change needed). -->
+     to point down once collapsed, no CSS change needed).
+
+     2026-09-28 (direct feedback, "remove unscheduled-search"): the search
+     box from the 2026-09-26 redesign above is gone -- `unscheduled_panel_
+     search.js` deleted outright (its only job was wiring that one input),
+     the header is back to just title+count and the collapse toggle. Also
+     from that same feedback: the panel body now caps at ~3.5 rows tall
+     (`.unscheduled-task-list`'s own `max-height`+`overflow-y:auto` in
+     style.css) instead of growing to fit every row, so a long list
+     scrolls in place rather than pushing the grid below it further down
+     the page; the partial 4th row peeking over the edge is the "there's
+     more, scroll" affordance, same idea a native picker's clipped last
+     row already gives for free. -->
 {% from "_unscheduled_task_item.html" import unscheduled_task_item with context %}
 <div class="project-calendar-layout" id="week-grid" data-date="{{ monday.isoformat() }}" data-label="{{ active_label | default('') }}" data-label-text="{{ label_text }}" data-prev="{{ prev_week }}" data-next="{{ next_week }}">
     <div class="card calendar-viewport project-calendar-grid">
@@ -169,7 +181,6 @@
     <aside class="card project-calendar-unscheduled" id="unscheduled-panel">
         <div class="unscheduled-panel-head">
             <h2>Unscheduled work <span class="unscheduled-panel-count">({{ unscheduled_tasks|length }})</span></h2>
-            <input type="search" id="unscheduled-search" class="unscheduled-search" placeholder="Search..." aria-label="Search unscheduled work" autocomplete="off">
             <button type="button" class="icon-btn unscheduled-panel-toggle-btn" id="unscheduled-panel-toggle" title="Collapse Unscheduled work" aria-label="Collapse Unscheduled work" aria-expanded="true" aria-controls="unscheduled-panel-body">{{ icon('chevron-up', 'icon-sm') }}</button>
         </div>
         <div id="unscheduled-panel-body">

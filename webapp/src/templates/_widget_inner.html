@@ -15,6 +15,18 @@
 {% set widget = wc.widget %}
 {% set spec = wc.spec %}
 {% set data = wc.data %}
+{# 2026-09-28 (direct request, "remove the labels in this group title"):
+   `group_members` is the one widget type that hides its own header text
+   outside edit mode -- in edit_mode the header (title, drag handle,
+   Edit/Delete) still renders as normal, since those controls are how the
+   widget gets reordered/removed/retitled from the customization UI; a
+   plain viewer just gets the card grid with no title bar/border eating
+   space above it. Scoped to this one type rather than a general "widgets
+   can hide their own title" option -- no other widget has asked for
+   this, and `_render_group_members`'s own page (a group's dashboard)
+   already says "labels in this group" via the page's own title, making
+   this widget's header redundant there specifically. #}
+{% if edit_mode or widget.type != 'group_members' %}
 <div class="widget-header">
     {% if edit_mode and not in_stack %}
     <button type="button" class="icon-btn widget-drag-handle" title="Drag to reorder, or drop onto another widget to stack them" aria-label="Drag to reorder">{{ icon('move', 'icon-sm') }}</button>
@@ -23,6 +35,24 @@
     {% endif %}
     <h2>{{ widget.title or (spec.label if spec else widget.type) }}</h2>
     <div class="spacer"></div>
+    {# 2026-09-28 (direct request, "the habit-widget-summary should be on
+       the same row as widget-header but on the far right"): was its own
+       `<p>` above the habit list inside `.widget-content`
+       (_widget_habit_checkin.html) -- moved here, after the spacer, so
+       the same flex row that already pushes the edit-mode Edit/Delete
+       controls to the far right does the same for this summary in view
+       mode (and sits just left of those controls in edit mode, rather
+       than fighting them for the same "far right" spot). Scoped to this
+       one widget type directly, same as the `group_members` header-hiding
+       special case above this macro -- `data` is `wc.data`, already in
+       scope from the `{% set data = wc.data %}` above. #}
+    {% if widget.type == 'habit_checkin' and data %}
+    {% if data.all_done %}
+    <p class="habit-widget-summary is-all-done">{{ icon('party-popper', 'icon-sm') }} <span>All done for now</span></p>
+    {% elif data.total %}
+    <p class="habit-widget-summary"><span><strong>{{ data.done_count }}</strong> of {{ data.total }} done</span></p>
+    {% endif %}
+    {% endif %}
     {% if edit_mode %}
     {% if in_stack %}
     <form method="post" action="/dashboard/widgets/{{ widget.uid }}/unstack" class="form-inline" data-confirm-sheet="Unstack this widget?">
@@ -35,6 +65,7 @@
     </form>
     {% endif %}
 </div>
+{% endif %}
 
 <!-- Content height (2026-08-07 -- manual height editor/drag-resize
      removed per direct feedback: a widget's height should just be

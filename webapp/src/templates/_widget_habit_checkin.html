@@ -10,15 +10,12 @@
 {% from "_habit_page_row.html" import habit_page_row with context %}
 {% if data.rows %}
 {# 2026-09-25 (UI audit H-08): done/total/all_done come from the renderer
-   (_render_habit_checkin), which leaves out avoid and paused habits. The
-   summary text is one span (a flex gap used to split "1" from "of 4
-   done"). #}
+   (_render_habit_checkin), which leaves out avoid and paused habits.
+   2026-09-28 (direct request, "the habit-widget-summary should be on the
+   same row as widget-header but on the far right"): the summary `<p>`
+   itself moved into the widget-header row (_widget_inner.html) -- this
+   content area is just the row list now. #}
 <div class="habit-widget">
-    {% if data.all_done %}
-    <p class="habit-widget-summary is-all-done">{{ icon('party-popper', 'icon-sm') }} <span>All done for now</span></p>
-    {% elif data.total %}
-    <p class="habit-widget-summary"><span><strong>{{ data.done_count }}</strong> of {{ data.total }} done</span></p>
-    {% endif %}
     <ul class="habit-list habit-list--widget">{% for h in data.rows %}{{ habit_page_row(h, compact=true) }}{% endfor %}</ul>
 </div>
 {% else %}

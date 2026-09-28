@@ -11,9 +11,14 @@ Covers: `routers/dashboard.py::_render_group_members` (the render function
 -- counts/next-due aggregation), the new `group_members` WIDGET_TYPES
 registration + its Home/plain-label scope exclusion (the CRUD-level
 exclusion itself is covered by test_dashboard_router.py::
-TestGroupMembersWidgetScope, not repeated here), the always-seeded
-`_ensure_group_members_widget`, and the rendered `_widget_group_members.html`
-template shape."""
+TestGroupMembersWidgetScope, not repeated here), the rendered
+`_widget_group_members.html` template shape, and (2026-09-28 redesign,
+direct request) `group_members` being seeded as the quarter-width third
+column of a group page's 25/50/25 row instead of a separate always-pinned
+full-width widget -- both the fresh-seed path (`_ensure_default_label_
+widgets`/`_seed_agenda_stack_layout`) and the migration that converts an
+existing installation's old pinned widget
+(`_migrate_group_layout_2026_09_28`)."""
 
 from __future__ import annotations
 
@@ -139,39 +144,133 @@ class TestWidgetTypeRegistration:
         assert "group_members" not in dashboard_router._excluded_widget_types("space")
 
 
-class TestAlwaysSeededOnGroupPages:
-    def test_group_page_auto_seeds_the_widget(self, conn):
+class TestSeededAsQuarterColumn:
+    """2026-09-28 (direct request: "I don't want the Labels in this group
+    to be visible by default... for groups, copy the main dashboard
+    design, but instead of the habits 25% column have a Groups & Labels
+    List of this Space") -- `group_members` is no longer a second,
+    always-pinned full-width widget (the old `_ensure_group_members_widget`,
+    now removed). A group page gets the same 25/50/25 row Home does
+    (`_seed_agenda_stack_layout`), with `group_members` standing in the
+    quarter-width third column instead of Habit Check-in."""
+
+    def test_group_page_seeds_the_widget_as_the_quarter_column(self, conn):
         key = _group(conn)
-        dashboard_router._ensure_group_members_widget(conn, key)
+        dashboard_router._ensure_default_label_widgets(conn, key)
         widgets = db.list_dashboard_widgets(conn, label_name=key)
         matches = [w for w in widgets if w["type"] == "group_members"]
         assert len(matches) == 1
         assert matches[0]["config"]["label_name"] == key
-        assert matches[0]["position"] == -1.0  # renders before Today's Agenda (0.0)
+        assert matches[0]["config"]["width"] == "quarter"
+        assert matches[0]["position"] == 2.0  # after Today (0.0) and the stack (1.0)
+
+    def test_today_agenda_is_quarter_width_on_a_group_page(self, conn):
+        key = _group(conn)
+        dashboard_router._ensure_default_label_widgets(conn, key)
+        widgets = db.list_dashboard_widgets(conn, label_name=key)
+        today = next(w for w in widgets if w["type"] == "agenda" and not w.get("group_uid"))
+        stack = next(w for w in widgets if w["type"] == "stack")
+        assert today["config"]["width"] == "quarter"
+        assert stack["config"]["width"] == "half"
 
     def test_seeding_is_one_time_and_respects_a_later_full_delete(self, conn):
         key = _group(conn)
-        dashboard_router._ensure_group_members_widget(conn, key)
-        widgets = db.list_dashboard_widgets(conn, label_name=key)
-        for w in widgets:
-            if w["type"] == "group_members":
-                db.delete_dashboard_widget(conn, w["uid"])
-        # A second visit (the seeded_key is already set) must NOT bring it
-        # back -- same "seed once" contract every other one-time seed here
-        # follows.
-        dashboard_router._ensure_group_members_widget(conn, key)
-        assert not [w for w in db.list_dashboard_widgets(conn, label_name=key) if w["type"] == "group_members"]
+        dashboard_router._ensure_default_label_widgets(conn, key)
+        for w in db.list_dashboard_widgets(conn, label_name=key):
+            db.delete_dashboard_widget(conn, w["uid"])
+        # A second visit (the seeded_key is already set) must NOT bring
+        # anything back -- same "seed once" contract every other one-time
+        # seed here follows.
+        dashboard_router._ensure_default_label_widgets(conn, key)
+        assert db.list_dashboard_widgets(conn, label_name=key) == []
 
     def test_group_page_route_seeds_it_end_to_end(self, conn):
         _group(conn)
         resp = label_pages.group_page("Uni", _request(), conn=conn)
         assert resp.status_code == 200
         widgets = db.list_dashboard_widgets(conn, label_name="group:Uni")
-        assert any(w["type"] == "group_members" for w in widgets)
+        matches = [w for w in widgets if w["type"] == "group_members"]
+        assert len(matches) == 1
+        assert matches[0]["config"]["width"] == "quarter"
+
+    def test_not_visible_twice_and_not_pinned_above_today(self, conn):
+        """The old design guaranteed a separate, always-visible row above
+        Today's Agenda; the new one doesn't -- Today (position 0.0) is
+        first, and there's exactly one group_members widget, not a pinned
+        extra on top of whatever's in the quarter column."""
+        key = _group(conn)
+        dashboard_router._ensure_default_label_widgets(conn, key)
+        widgets = db.list_dashboard_widgets(conn, label_name=key)
+        top_level = sorted((w for w in widgets if not w.get("group_uid")), key=lambda w: w["position"])
+        assert [w["type"] for w in top_level] == ["agenda", "stack", "group_members"]
+
+
+class TestMigrateExistingGroupLayout:
+    """The one-time migration (`_migrate_group_layout_2026_09_28`) that
+    converts an existing installation's old pinned, full-width
+    `group_members` widget (position -1.0) into the new quarter-width
+    third column, and widens that group's Today agenda from half to
+    quarter -- run from `widget_page_context` alongside the other
+    one-time widget migrations."""
+
+    def _seed_old_style(self, conn, key):
+        # Reproduces the pre-2026-09-28 shape by hand: half/half Today +
+        # stack (the old default), plus a separately-pinned, full-width
+        # group_members widget at position -1.0 (the old
+        # _ensure_group_members_widget's own shape).
+        now = _now()
+        db.upsert_dashboard_widget(conn, {
+            "uid": "agenda-uid", "type": "agenda", "title": "Today",
+            "config": {"width": "half", "range": "today", "label_name": key},
+            "position": 0.0, "created_at": now, "label_name": key,
+        })
+        db.upsert_dashboard_widget(conn, {
+            "uid": "stack-uid", "type": "stack", "title": None,
+            "config": {"width": "half"}, "position": 1.0, "created_at": now, "label_name": key,
+        })
+        db.upsert_dashboard_widget(conn, {
+            "uid": "gm-uid", "type": "group_members", "title": "Labels in this group",
+            "config": {"label_name": key}, "position": -1.0, "created_at": now, "label_name": key,
+        })
+
+    def test_converts_pinned_widget_to_quarter_column(self, conn):
+        key = _group(conn)
+        self._seed_old_style(conn, key)
+        dashboard_router._migrate_group_layout_2026_09_28(conn)
+        widgets = db.list_dashboard_widgets(conn, label_name=key)
+        gm = next(w for w in widgets if w["type"] == "group_members")
+        today = next(w for w in widgets if w["type"] == "agenda")
+        assert gm["config"]["width"] == "quarter"
+        assert gm["position"] == 2.0
+        assert today["config"]["width"] == "quarter"
+
+    def test_runs_once(self, conn):
+        key = _group(conn)
+        self._seed_old_style(conn, key)
+        dashboard_router._migrate_group_layout_2026_09_28(conn)
+        # Manually revert the widths to simulate "already migrated, don't
+        # touch again" -- a second run must be a no-op even though the
+        # data would otherwise match the old shape again.
+        db.upsert_dashboard_widget(conn, {**db.get_dashboard_widget(conn, "gm-uid"), "position": -1.0})
+        dashboard_router._migrate_group_layout_2026_09_28(conn)
+        assert db.get_dashboard_widget(conn, "gm-uid")["position"] == -1.0
+
+    def test_never_touches_a_plain_label_page(self, conn):
+        db.upsert_label_config(conn, {"name": "Solo"})
+        dashboard_router._ensure_default_label_widgets(conn, "Solo")
+        before = db.list_dashboard_widgets(conn, label_name="Solo")
+        dashboard_router._migrate_group_layout_2026_09_28(conn)
+        after = db.list_dashboard_widgets(conn, label_name="Solo")
+        assert before == after
 
 
 class TestRenderedWidgetTemplate:
-    def test_rows_show_counts_and_edit_kebab(self, conn):
+    def test_rows_show_as_cards(self, conn):
+        """2026-09-28, fourth pass (direct request: "always use card
+        grid") -- every row renders as a `filled_card` tile now, regardless
+        of count; no per-row kebab (a `filled_card` is a whole-row `<a>`,
+        same as every other `.filled-cards-grid` consumer -- editing a
+        label from here means opening it)."""
         key = _group(conn)
         _task(conn, "t1", ["Art"])
         data = dashboard_router._render_group_members(conn, {"label_name": key})
@@ -180,11 +279,11 @@ class TestRenderedWidgetTemplate:
         html = templates.get_template("_widget_group_members.html").render(
             data=data, icon=lambda *a, **k: "", relative_date=lambda v: v
         )
-        assert 'class="group-member-list"' in html
+        assert 'class="filled-cards-grid"' in html
         assert 'href="/labels/Art"' in html
         assert "1 open task" in html
-        assert "action-menu-trigger" in html
-        assert "/settings/labels/Art/edit" in html
+        assert "action-menu-trigger" not in html
+        assert "/settings/labels/Art/edit" not in html
 
     def test_empty_state_when_group_has_no_members(self, conn):
         db.upsert_label_config(conn, {"name": "Empty", "generate_space": 1})
@@ -197,4 +296,4 @@ class TestRenderedWidgetTemplate:
             data=data, icon=lambda *a, **k: "", relative_date=lambda v: v
         )
         assert "No labels in this group yet." in html
-        assert 'class="group-member-list"' not in html
+        assert 'class="filled-cards-grid"' not in html

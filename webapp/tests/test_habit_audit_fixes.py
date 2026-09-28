@@ -106,14 +106,14 @@ class TestDayViewQuantityHabit:
         db.upsert_task_completion(conn, "h1", TODAY.isoformat(), _now(), value=1)
         row = habit_view.habits_for_day(conn, TODAY)[0]
         assert row["is_quantity"] is True
-        assert (row["value"], row["target"], row["next_value"]) == (1, 8, 2)
-        assert (row["done"], row["partial"]) == (False, True)
+        assert (row["today_value"], row["target"], row["next_value"]) == (1, 8, 2)
+        assert (row["done_today"], row["partial_today"]) == (False, True)
         assert row["plus_url"] == "/tasks/h1/completions" and row["date"] == TODAY.isoformat()
 
     def test_day_grid_template_renders_plus_form(self):
         text = (SRC / "templates" / "_calendar_day_grid.html").read_text()
         assert 'action="{{ h.plus_url }}"' in text
-        assert "{{ h.value|int }}/{{ h.target|int }}" in text
+        assert "{{ h.today_value|int }}/{{ h.target|int }}" in text
 
 
 class TestStripOffDays:
@@ -217,6 +217,25 @@ class TestStylingHooks:
     def test_habit_actions_reads_error_body_and_has_no_undo_toast(self):
         js = (SRC / "static" / "habit_actions.js").read_text()
         assert "data.error" in js and 'label: "Undo"' not in js and "offerUndo" not in js
+
+    def test_widget_checkin_broadcasts_instead_of_refreshing_only_its_own_card(self):
+        """2026-09-28 direct bug report: checking a habit off in one
+        Dashboard widget left a sibling widget also showing that habit
+        (e.g. the Habit Check-in widget lower on the same dashboard) stale
+        until a full reload -- `regionFor`'s widget-card branch used to
+        call `ccApi.refreshRegion` directly for just that one card
+        (`/dashboard/widgets/<uid>`) instead of dispatching the same
+        "task" cc-entity-changed event a task completion fires, which
+        async_crud.js's own listener fans out to every
+        `data-widget-uses="tasks"` card on the page (see that file's own
+        `cc-entity-changed` listener)."""
+        js = (SRC / "static" / "habit_actions.js").read_text()
+        assert 'url: "/dashboard/widgets/"' not in js
+        # The widget-card branch of regionFor now shares the exact same
+        # `{ dispatch: true, id: ... }` shape the day-grid branch already
+        # used (both routed through the same `refresh()` dispatch call).
+        card_branch = js.split('form.closest(".widget-card[data-uid]")', 1)[1]
+        assert "{ dispatch: true, id: card.id }" in card_branch.split("\n\n", 1)[0]
 
 
 class TestCheckinSummaryCountsOnlyDoableHabits:

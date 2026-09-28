@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill, widget_complete_button, widget_event_dot %}
+{% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill, widget_complete_button, widget_event_icon %}
 {% from "_label_pill.html" import label_pill with context %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% block title %}{{ label.name }}{% endblock %}
@@ -18,6 +18,24 @@
     {% endif %}
     {% include "_label_page_actions.html" %}
 {% endcall %}
+{# 2026-09-28 (direct request: "for the project's page, could you remove
+   these pills from this widget because they are already present in the
+   agenda and it's redundant" -- the "Open"/deadline pills _label_status.
+   html renders under the header). `hide_redundant_status_pills` tells
+   that partial to drop just the status/deadline pills specifically (NOT
+   the "Archived on ... · Unarchive" line/button it also renders -- that
+   one's a real action control the Agenda section never duplicates, so it
+   always stays). Only set when the Agenda section below is actually on:
+   it's the one place that re-shows this label's deadline (the `item.
+   is_deadline` row, line ~40 below), which is what made the header pills
+   redundant in the first place. A label with Agenda switched off has
+   nowhere else this status/deadline shows, so the header pills still
+   render there. label_detail.html (the widget-dashboard variant of a
+   label's page) never sets this var, so it keeps showing both -- that
+   page's Agenda is an optional, removable widget like any other, not a
+   fixed section, so there's no reliable "it's shown below" guarantee to
+   suppress this on. #}
+{% set hide_redundant_status_pills = label.agenda_widget %}
 {% include "_label_status.html" %}
 {% if label.description %}<p class="label-description">{{ label.description }}</p>{% endif %}
 {% include "_label_empty_state.html" %}
@@ -41,7 +59,11 @@
         {# 2026-09-25 (UI audit L6): colored by how close it is, not always red. #}
         {{ widget_link_row(none, item.title, leading=icon('flag', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill(label_deadline.text if label_deadline else ('Deadline · ' ~ (item.start_at | relative_date)), label_deadline.color if label_deadline else 'gray')) }}
         {% else %}
-        {{ widget_link_row('/events/' ~ item.uid, item.title, leading=widget_event_dot(item.calendar_color), leading_class='widget-row-icon', right=widget_pill(((item.start_at | relative_date) ~ (' ' ~ (item.start_at | fmt_time) if not item.all_day else '')), 'blue')) }}
+        {# 2026-09-28 direct follow-up ("the label's icon should be used
+           when it's available") -- same `label_icon(request, ...)` ->
+           `widget_event_icon` pattern as the Agenda widget's own Events
+           section (_widget_agenda.html). #}
+        {{ widget_link_row('/events/' ~ item.uid, item.title, leading=widget_event_icon(item.calendar_color, icon_name=(label_icon(request, item.tags | first | default('')) | default('calendar', true))), leading_class='widget-row-icon', right=widget_pill(((item.start_at | relative_date) ~ (' ' ~ (item.start_at | fmt_time) if not item.all_day else '')), 'blue')) }}
         {% endif %}
         {% endfor %}
     </table>

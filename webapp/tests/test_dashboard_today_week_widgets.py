@@ -181,8 +181,12 @@ class TestUpcomingEventsDoubleLineFix:
         # request: "the color... of an event/task should be as the
         # label's, not default on blue or any other accent color") it now
         # takes the event's own resolved calendar_color -- assert the
-        # call, not the now-stale exact no-arg signature.
-        assert "widget_event_dot(e.calendar_color)" in partial
+        # call, not the now-stale exact no-arg signature. 2026-09-28
+        # (direct feedback: "move from the small dots to colored icons the
+        # same size as the font") renamed the macro itself to
+        # widget_event_icon() (_widget_items.html) -- same call shape,
+        # a `calendar` glyph instead of a dot.
+        assert "widget_event_icon(e.calendar_color)" in partial
         assert "width:110px" not in partial
         # no widget should hand-roll a fixed-width cell any more (the
         # spaces_projects progress fill's `style="width:{{ ... }}%"` is a

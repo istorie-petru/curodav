@@ -5,8 +5,12 @@
 // wherever a table exists"). static/tasks_table.js is that precedent and
 // keeps its own bespoke implementation unchanged (it has richer per-
 // domain bulk actions -- status/tag -- plus async-CRUD region-swap
-// reconciliation neither Labels/Holidays/Time blocks need, since those
-// pages are still plain full-reload-on-mutation surfaces); this module
+// reconciliation neither Labels nor Contacts need the same way: their
+// region refresh either swaps a persistent container's innerHTML in
+// place (Labels) or re-inits this module's listeners on cc-region-swapped
+// (Contacts, see contacts_list.html) instead of a bespoke reconciler;
+// Holidays/Time Blocks have no live region at all and genuinely stay
+// full-reload-on-mutation); this module
 // factors out just the reusable selection mechanics -- checkbox tracking,
 // shift-click range select, press-and-drag "paint" across the checkbox
 // column, the bar's show/hide/count -- for every other simple settings
@@ -31,6 +35,19 @@
 //   deleteButtonId   -- id of the bar's "Delete" button.
 //   deleteUrl        -- fetch() target for the bulk delete POST, always
 //                       sent as JSON `{uids: [...]}`.
+//   changeType       -- (2026-09-28, Contacts/Labels) when set, a
+//                       successful bulk delete dispatches cc-entity-
+//                       changed with this type instead of reloading the
+//                       page, same claim protocol every other async-CRUD
+//                       mutation uses (ccApi.dispatchChange) -- lets a
+//                       page's existing live region (e.g. contacts_list.js/
+//                       labels_manage.js's own cc-entity-changed listener)
+//                       pick up the delete instead of a full reload.
+//                       Falls back to a reload if nothing on the page
+//                       claims the event, or if window.ccApi isn't loaded.
+//                       Omit entirely for a table with no live region
+//                       (Holidays, Time Blocks) -- reload stays correct
+//                       there.
 //   itemLabel        -- singular noun for confirm/toast copy, e.g. "label".
 //   confirmMessage   -- optional `(count) => string` overriding the
 //                       default "Delete N selected X(s)? This cannot be
@@ -286,7 +303,11 @@
               });
               if (!resp.ok) throw new Error("bulk delete failed");
               window.ccToast({ title: "Deleted", message: `${uids.length} ${label}${uids.length === 1 ? "" : "s"}` });
-              window.location.reload();
+              const claimed =
+                cfg.changeType && window.ccApi && window.ccApi.dispatchChange
+                  ? window.ccApi.dispatchChange({ type: cfg.changeType, action: "delete" })
+                  : false;
+              if (!claimed) window.location.reload();
             } catch (err) {
               window.ccToast({ message: `Could not update the selected ${label}s.`, variant: "error" });
             }

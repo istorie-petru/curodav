@@ -4,6 +4,43 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.0.0]
+
+- Habit/task "mark done" checkboxes consolidated onto one shared component:
+  the Habit Check-in widget, the Agenda widget's habit and task rows, and
+  the Calendar day-grid's all-day habit chips all now share the same
+  toggle/quantity/avoid form markup, sizing, colors, and hover styling
+  instead of four hand-rolled copies.
+- A checked-off task or habit stays visible (checked, struck through) for a
+  short grace period instead of disappearing the instant a widget re-fetches.
+- Fixed a habit check-in not refreshing sibling Dashboard widgets that
+  also showed the same habit (e.g. Habit Check-in staying stale after a
+  check-in from the Agenda widget) until a full reload.
+- Widget row title size/weight, checkbox sizing/hover, and the week
+  strip's "today" cell fill unified across widgets.
+- Unscheduled Work row tightened; the "Labels in this group" widget always
+  renders as a card grid now (Groups & Labels style), with square card
+  sizing and padding fixes.
+- "Labels in this group" is no longer a separate, always-pinned full-width
+  widget. A group's page now gets the same 25/50/25 layout Home has --
+  quarter-width Today, half-width At a glance/Upcoming stack, and its own
+  label list in a quarter-width third column instead.
+- Edit label / Edit group are icon-only square buttons now, pinned to the
+  right edge of the page header's actions row.
+- Contacts/Labels bulk delete now refreshes the page's live region in
+  place instead of a full reload (`CCBulkSelect`'s new `changeType`
+  option, same claim protocol every other async-CRUD mutation uses).
+- Tasks table label pills link to the label preview again, now that the
+  Labels cell is a plain read-only cell rather than an editable dropdown
+  trigger a link couldn't nest inside.
+- Event markers everywhere (label preview modal, label/project Agenda
+  cards) finished moving from a plain color dot to a colored `calendar`
+  icon (`widget_event_dot` renamed `widget_event_icon`).
+- Widget "Limit" field's default and its `0` (no limit) cap both lowered
+  from 20 to 8.
+- Fixed a crash opening a group's page (`TypeError: 'NoneType' object is
+  not iterable`) from an incomplete `_filtered_tasks` edit.
+
 ## [2.9.0]
 
 - Docker Compose deploy path (`deploy/docker/`): an alternative to
@@ -13,8 +50,6 @@ tagged release. Format loosely follows
   `command-center` -> `curodav` rename -- `uv sync --frozen` (used by both
   the new Docker build and `curodav-ctl`'s own install/update) was failing
   outright with "Missing workspace member `curodav`".
-- Removed the stale `.mailmap`, which mapped old Codeberg-era author
-  identities to the current GitHub one.
 
 ## [2.8.0]
 

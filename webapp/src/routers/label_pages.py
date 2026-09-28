@@ -414,12 +414,17 @@ def group_page(name: str, request: Request, conn=Depends(get_db)):
     style = db.get_group_style(conn, name)
     dashboard_router._ensure_default_label_widgets(conn, key)
     # Item 20 (2026-09-26): label_detail.html's old always-visible
-    # "group-labels" toolbar is gone -- replaced by an always-SEEDED
-    # `group_members` widget with the same "always there, no customization
-    # needed" guarantee the toolbar used to give (see that seed function's
-    # own docstring for the one real tradeoff: unlike the toolbar, a widget
-    # instance CAN be deleted by the user, same as any other widget).
-    dashboard_router._ensure_group_members_widget(conn, key)
+    # "group-labels" toolbar is gone. It was first replaced by an always-
+    # pinned, full-width `group_members` widget seeded separately from the
+    # rest of the page's layout (_ensure_group_members_widget) -- 2026-09-28
+    # direct request ("I don't want Labels in this group to be visible by
+    # default") retired that: `_ensure_default_label_widgets` above now
+    # seeds a group page with the same 25/50/25 row Home gets, the group's
+    # own label list living in the ordinary quarter-width third column
+    # (_seed_agenda_stack_layout) instead of a second, unmissable widget.
+    # `_ensure_group_members_widget` itself is kept only as the shape
+    # `_migrate_group_layout_2026_09_28` (widget_page_context) converts an
+    # existing installation's old pinned widget from.
     ctx = dashboard_router.widget_page_context(conn, project_uid=key)
     ctx.update(
         {

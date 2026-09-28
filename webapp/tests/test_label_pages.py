@@ -128,13 +128,17 @@ class TestGroupPage:
         assert resp.context["page_label_scope"] == "group:Uni"
         body = resp.body.decode()
         # 2026-09-26 (item 20): the old always-visible plain toolbar
-        # (`class="toolbar group-labels"`) is gone -- replaced by an
-        # always-seeded `group_members` widget (see TestGroupMembersWidget
-        # below for that widget's own coverage); `href="/labels/Maths"`
-        # still holds, just from the widget's own row link now.
+        # (`class="toolbar group-labels"`) is gone -- replaced by a
+        # `group_members` widget (2026-09-28: seeded as the quarter-width
+        # third column of the page's 25/50/25 row, not a second pinned
+        # full-width widget -- see test_group_members_widget.py for that
+        # widget's own coverage); `href="/labels/Maths"` still holds, just
+        # from the widget's own row link now.
         assert 'href="/labels/Maths"' in body
         assert 'class="toolbar group-labels"' not in body
-        assert 'class="group-member-list"' in body
+        # 2026-09-28 (direct request, "always use card grid"): the widget
+        # renders every row as a `filled_card` tile now, not a list.
+        assert 'class="filled-cards-grid"' in body
         # Seeded with the default layout under the group key, plus the
         # group_members widget.
         widgets = db.list_dashboard_widgets(conn, label_name="group:Uni")
@@ -393,11 +397,30 @@ class TestLabelPillLinks:
         assert 'href="/labels/Legs/preview" data-modal' in body
         assert 'href="/labels/Gym/preview"' not in body  # the page's own label isn't repeated
 
-    def test_pills_inside_other_controls_stay_plain(self, conn):
+    def test_tasks_table_pills_link_to_the_preview(self, conn):
+        """2026-09-26 follow-up (_task_row.html's own header comment):
+        the Tasks table's Labels cell went from an editable dropdown
+        (briefly, 2026-08-29 - 2026-09-26 -- pills there had to stay plain,
+        nested inside that dropdown's trigger button) back to plain
+        read-only pills -- which are no longer nested inside any other
+        control, so 2026-09-28 gave them the same clickable-preview
+        treatment every other pill in the app has."""
         from src.routers import tasks as tasks_router
         db.upsert_task(conn, {"uid": "t1", "title": "Draft", "description": "", "status": "active",
                               "tags": ["Gym"], "created_at": _now()})
         body = tasks_router.list_tasks(_request("/tasks"), conn=conn).body.decode()
+        assert 'href="/labels/Gym/preview" data-modal' in body
+
+    def test_pills_inside_other_controls_stay_plain(self, conn):
+        """The still-live case the class docstring describes: a label
+        picker's own option pill (_widget_list_multiselect.html's
+        `ms_pill`, e.g. the task edit form's Labels field) sits inside a
+        `<label class="multiselect-option">` whose click must toggle its
+        checkbox, so it stays a plain (linkless) `label_pill`."""
+        from src.routers import tasks as tasks_router
+        db.upsert_task(conn, {"uid": "t1", "title": "Draft", "description": "", "status": "active",
+                              "tags": ["Gym"], "created_at": _now()})
+        body = tasks_router.edit_task_form("t1", _request("/tasks/t1/edit"), conn=conn).body.decode()
         assert "/labels/Gym/preview" not in body
 
 
