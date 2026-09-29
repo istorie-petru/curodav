@@ -455,6 +455,75 @@ class TestBannerForObjectOwnNameFallback:
         assert db.banner_for_task(conn, db.get_task(conn, "t1")) is None
 
 
+class TestBannerForObjectDescriptionFallback:
+    """2026-09-29 (direct request: "could we include the description as a
+    valid place to search?") -- the object's-own-title tier now also
+    tries its own description, but only as a backstop (confirmed via
+    AskUserQuestion): title stays the dominant signal, description is
+    only ever consulted once the title itself has produced nothing
+    usable (no keyword match at all, or a match with no photo configured
+    yet) -- never weighed equally against it."""
+
+    def test_title_with_no_match_falls_back_to_description(self, conn, flairs_dir):
+        _put(flairs_dir, "basketball")
+        db.upsert_task(conn, {
+            "uid": "t1", "title": "Evening plans", "description": "Playing basketball with friends",
+            "status": "active", "tags": [], "created_at": _now(),
+        })
+        banner = db.banner_for_task(conn, db.get_task(conn, "t1"))
+        assert banner is not None
+        assert "/flairs/basketball" in banner["image_url"]
+        assert banner["scope"] == "task"
+
+    def test_title_matches_but_has_no_photo_still_tries_description(self, conn, flairs_dir):
+        # "yoga" matches the title's own keyword, but no yoga.jpg has been
+        # placed under flairs_dir -- same "matched but no image = keep
+        # falling through" rule every other tier already applies.
+        _put(flairs_dir, "basketball")
+        db.upsert_task(conn, {
+            "uid": "t1", "title": "Yoga session", "description": "Followed by basketball practice",
+            "status": "active", "tags": [], "created_at": _now(),
+        })
+        banner = db.banner_for_task(conn, db.get_task(conn, "t1"))
+        assert banner is not None
+        assert "/flairs/basketball" in banner["image_url"]
+
+    def test_a_real_title_match_wins_over_a_description_match(self, conn, flairs_dir):
+        _put(flairs_dir, "yoga")
+        _put(flairs_dir, "basketball")
+        db.upsert_task(conn, {
+            "uid": "t1", "title": "Yoga session", "description": "Then maybe basketball later",
+            "status": "active", "tags": [], "created_at": _now(),
+        })
+        banner = db.banner_for_task(conn, db.get_task(conn, "t1"))
+        assert "/flairs/yoga" in banner["image_url"]
+
+    def test_neither_title_nor_description_matches_falls_through(self, conn, flairs_dir):
+        db.upsert_task(conn, {
+            "uid": "t1", "title": "Quarterly OKR sync", "description": "Review last quarter's numbers",
+            "status": "active", "tags": [], "created_at": _now(),
+        })
+        assert db.banner_for_task(conn, db.get_task(conn, "t1")) is None
+
+    def test_event_description_fallback_too(self, conn, flairs_dir):
+        _put(flairs_dir, "basketball")
+        db.upsert_event(conn, {
+            "uid": "e1", "title": "Evening out", "description": "Basketball with the team",
+            "start_at": None, "end_at": None, "all_day": False, "status": "active", "tags": [],
+            "created_at": _now(), "updated_at": _now(),
+        })
+        banner = db.banner_for_object(conn, "event", db.get_event(conn, "e1"))
+        assert banner is not None
+        assert "/flairs/basketball" in banner["image_url"]
+
+    def test_empty_description_is_a_no_op_not_an_error(self, conn, flairs_dir):
+        db.upsert_task(conn, {
+            "uid": "t1", "title": "Quarterly OKR sync", "description": "", "status": "active",
+            "tags": [], "created_at": _now(),
+        })
+        assert db.banner_for_task(conn, db.get_task(conn, "t1")) is None
+
+
 class TestContactsAreExcluded:
     def test_contact_named_like_a_flair_keyword_gets_no_banner(self, conn, flairs_dir):
         _put(flairs_dir, "basketball")

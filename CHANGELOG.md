@@ -4,6 +4,29 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.1.0]
+
+- 24 more flair ids: 18 real event-type icons (bills, delivery, doctor,
+  flight, hotel, interview, online classes, party, photography, shopping,
+  studying, trip, tv, video call, vote, ...), `restaurant` split out of
+  `dinner` as its own id, and 8 scenery/color backgrounds (university,
+  museum, mountain, sea, sky, wood, ...).
+- Months and seasons are matched by an object's own due/start DATE, not
+  by keyword against its name -- a new month tier (`db.MONTH_BANNER_
+  SCOPES`, one tier more specific than the existing season tier) joins
+  the app's existing season fallback. Both tiers now also read an
+  operator's `flairs_dir` as their default photo source (drop `july.jpg`/
+  `summer.jpg` in directly, same as any other flair), falling back from
+  an explicit banner-editor upload on that scope.
+- A task/event's own flair match now also tries its description, as a
+  backstop when the title alone matches nothing usable -- title stays
+  the dominant signal, description never outranks a real title match.
+- New Settings > Flairs page: shows how many of the ~106 known flair ids
+  currently have a photo configured, and a bulk-upload dropzone accepting
+  a `.zip`, a whole folder, or several photos at once -- a zip's contents
+  are smart-filtered by filename at any depth, with a result summary
+  reporting anything skipped and why.
+
 ## [3.0.0]
 
 - Habit/task "mark done" checkboxes consolidated onto one shared component:

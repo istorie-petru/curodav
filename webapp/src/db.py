@@ -5740,7 +5740,13 @@ def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str,
     exactly like any other flair and it just works, no banner-editor
     upload required. See SEASON_BANNER_SCOPES's own comment for why this
     still isn't a FLAIR_KEYWORDS entry despite now sharing flairs_dir as
-    its photo source."""
+    its photo source.
+
+    2026-09-29 (direct request, same day): the object's-own-title tier
+    now also tries the object's own DESCRIPTION, but only as a backstop
+    -- see that tier's own comment below for the exact precedence (title
+    match+image wins outright; description is only ever consulted once
+    the title has produced nothing usable, never weighed against it)."""
     tags = obj.get("tags") or []
     project = project_label_for(conn, object_type, obj["uid"]) if obj.get("uid") else None
     for tag in tags:
@@ -5766,12 +5772,29 @@ def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str,
     # Item 10 (2026-09-27): the object's OWN name, before season/global --
     # see this function's own docstring for why contacts are excluded and
     # why this outranks the generic seasonal guess below.
+    #
+    # 2026-09-29 (direct request): the title alone missing -- no keyword
+    # match at all, OR a match whose id has no photo configured yet
+    # (flairs.py's own docstring: keyword-matching is independent of
+    # whether a file actually exists for the id) -- now falls back to the
+    # object's own DESCRIPTION before giving up on this tier entirely.
+    # Confirmed via AskUserQuestion: title stays the dominant signal, not
+    # weighed equally against description -- a description match is a
+    # backstop that only ever fires once the title has produced nothing
+    # usable, never something that outranks a real title match. This
+    # mirrors the exact same "matched but no image = try the next thing"
+    # fallthrough the month/season/global tiers below already use, just
+    # one level earlier (title -> description -> month -> season ->
+    # global), rather than inventing a new kind of fallback rule.
     if object_type in _FLAIR_ELIGIBLE_TYPES:
         flair_id = flairs.match_flair(obj.get("title"))
-        if flair_id:
-            image_url = flairs.flair_image_url(flair_id)
-            if image_url:
-                return {"kind": "remote", "image_url": image_url, "scope": object_type}
+        image_url = flairs.flair_image_url(flair_id) if flair_id else None
+        if not image_url:
+            desc_flair_id = flairs.match_flair(obj.get("description"))
+            if desc_flair_id:
+                image_url = flairs.flair_image_url(desc_flair_id)
+        if image_url:
+            return {"kind": "remote", "image_url": image_url, "scope": object_type}
     # 2026-09-07 (direct request): a task/event with no matching label/
     # Project/Space banner falls back further instead of stopping at None
     # (a flat color gradient, _detail_cover.html) -- first to the month

@@ -42,6 +42,22 @@ shared/.env
 /git-commit.sh
 /git-push.sh
 
+# Personal reference notes -- a cheat sheet for the release process
+# (merging/squashing commits, tagging, gh release, the wiki repo), not
+# documentation for contributors (that's CONTRIBUTING.md, public).
+/LOCAL_RELEASE_GUIDE.md
+
+# 2026-09-29 direct correction: this reference folder (real Google
+# Calendar flair photos/icons, plus PNGs rasterized from Google's own
+# icon SVGs) was mistakenly committed and pushed to this public repo --
+# exactly the copyrighted-content problem flairs.py's own module
+# docstring already explains was fixed once (see that file's header).
+# Untracked here going forward; the commits that added it were rewritten
+# out of history in the same slice that added this line (git-filter-repo,
+# see LOCAL_RELEASE_GUIDE.md). Stays on disk locally as an operator's own
+# reference for populating their own flairs_dir -- never in git again.
+/google-calendar-flairs/
+
 # Test-run artifacts that shouldn't have been committed.
 webapp/encrypted.data
 .test_out.log
