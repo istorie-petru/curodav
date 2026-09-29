@@ -8,9 +8,10 @@
    Time blocks"). Same `.bulk-actions-bar` markup/CSS Tasks' own bar uses,
    hidden until a row is selected -- static/bulk_select.js drives it
    generically instead of a second hand-rolled selection JS. "Delete" here
-   means the same thing the per-row Delete button already does (clear
-   usage, not a real row delete -- label_config stays), so the confirm
-   wording matches that, not a generic "cannot be undone." Shared markup
+   means the same thing the per-row Delete button already does (clears
+   usage AND drops the label_config row -- db.delete_label_config, fixed
+   2026-09-29 after a direct bug report that Delete looked like it did
+   nothing), so the confirm wording matches that. Shared markup
    -- see _bulk_actions_bar.html (2026-09-07, audit-fixes-2.0.md item 9),
    relocated into the header's actions slot 2026-09-13
    (audit-fixes-2.1.md) -- see that partial's own header comment.
@@ -25,7 +26,7 @@
 {# 2026-09-26: shared by Settings > Labels and Settings > Projects
    (routers/labels.py _labels_context `kind`). #}
 {% call page_header_narrow(title, page_icon, title_extra=bulk_count("labels")) %}
-{{ bulk_actions_bar("labels", delete_label="Remove from everything", merge_label="Merge") }}
+{{ bulk_actions_bar("labels", merge_label="Merge") }}
 {% endcall %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <!-- 2026-09-08 (direct request, "check up ... it looks different
@@ -79,7 +80,7 @@ document.addEventListener("DOMContentLoaded", function () {
         mergeModalUrl: "/settings/labels/bulk-merge-modal",
         itemLabel: "{{ noun }}",
         confirmMessage: function (count) {
-            return "Remove " + count + " selected {{ noun }}" + (count === 1 ? "" : "s") + " from every object that carries " + (count === 1 ? "it" : "them") + "? This doesn't delete the label config, just clears its usage.";
+            return "Delete " + count + " selected {{ noun }}" + (count === 1 ? "" : "s") + "? This removes " + (count === 1 ? "it" : "them") + " from every object that carries " + (count === 1 ? "it" : "them") + " and from this list.";
         },
     });
 });

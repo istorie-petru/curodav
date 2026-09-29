@@ -248,14 +248,23 @@ def remove_banner(scope: str = Form(""), page_url: str = Form(""), conn=Depends(
     longer carries a `?edit=1` -- edit mode is a persistent Settings >
     Appearance toggle now, not part of the page's own URL.)
 
-    2026-09-27: stores an explicit "no image, deliberately" marker
-    (`db.set_page_banner_cleared`) instead of the old plain blank-out
-    (`db.clear_page_banner`, still used for scopes with no flair concept
-    at all, e.g. test_default_media_seed.py's own direct call on the
-    global page-header scope) -- now that an unset label/group/project/
-    task/event can default to a flair match, "Clear" has to mean "stay
-    blank even though my name matches a keyword," not just "delete
-    whatever's stored and let the next tier decide," or the flair would
-    silently reappear the moment this row was gone."""
-    db.set_page_banner_cleared(conn, scope)
+    2026-09-29 (direct request): "Clear" is a two-step ladder, not a
+    single jump straight to blank. When there's a real explicit banner
+    stored (`db.get_page_banner` returns something -- an upload, or a
+    legacy remote), this button's first job is just to remove THAT
+    (`db.clear_page_banner`, a plain blank-out) and let the next tier
+    decide -- which means a label/project/task/event whose name matches a
+    flair keyword lands on its flair, not on a forced blank, exactly the
+    same as it would if no explicit banner had ever been uploaded. Only
+    when there's no explicit banner left to remove (this same button
+    showing because `effective_page_banner` is already resolving to a
+    flair default, or there was never anything at all) does firing it
+    mean "stay blank even though my name matches a keyword" -- that's
+    when it stores the sticky "no image, deliberately" marker
+    (`db.set_page_banner_cleared`), so the flair doesn't just silently
+    reappear the moment this second Clear click is over."""
+    if db.get_page_banner(conn, scope):
+        db.clear_page_banner(conn, scope)
+    else:
+        db.set_page_banner_cleared(conn, scope)
     return RedirectResponse(url=_safe_page_url(page_url, scope), status_code=303)

@@ -296,10 +296,14 @@ class TestSettingsLabelsTable:
     """Settings > Labels (2026-09-26, second pass -- row-hover on this page
     was broken by the group section rows/hidden columns): flat, no section
     rows -- `labels` sorts by group name (ungrouped last), then by name;
-    each carries `group_style` for its row's Group pill. Settings >
-    Projects is unchanged -- still one header row per group (links to the
-    group's page, no checkbox or edit/delete, since a group isn't a
-    label), then its labels; ungrouped after. Within a group, by name."""
+    each carries `group_style` for its row's Group pill.
+
+    2026-09-29 (direct request, "redo the projects table from settings to
+    be without grouping and be like the labels one"): Settings > Projects
+    is flat now too -- no more per-group header row/"No group" divider,
+    same sort as Labels. Its own Due column (project-specific) is
+    unchanged; it just doesn't get a Group pill in that slot the way a
+    plain label does, since Due already occupies it."""
 
     def test_context_sorts_flat_grouped_then_ungrouped(self, conn):
         db.upsert_label_config(conn, {"name": "Zeta", "label_group": "Uni"})
@@ -312,9 +316,9 @@ class TestSettingsLabelsTable:
         assert [l["name"] for l in ctx["labels"]] == ["Run", "Alpha", "Zeta", "Loose"]
         assert ctx["labels"][0]["group_style"]["color"] == "gray"  # Run: Health, default style
         assert "group_style" not in ctx["labels"][-1]  # Loose: no group
-        # Settings > Projects keeps its grouped-section shape.
+        # Settings > Projects sorts the same flat way now.
         pctx = labels_router._labels_context(conn, _request("/settings/projects"), "projects")
-        assert [(g["name"], [l["name"] for l in g["labels"]]) for g in pctx["label_groups"]] == [("Uni", ["Thesis"])]
+        assert [l["name"] for l in pctx["labels"]] == ["Thesis"]
 
     def test_rendered_labels_table_has_no_group_section_rows(self, conn):
         db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni"})
@@ -325,13 +329,14 @@ class TestSettingsLabelsTable:
         assert 'href="/groups/Uni/view"' in body and "Uni</a>" in body  # the row's Group pill
         assert ">No group<" in body  # Loose's Group cell
 
-    def test_rendered_projects_group_row_links_to_the_group_page(self, conn):
+    def test_rendered_projects_table_has_no_group_section_rows(self, conn):
         db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni", "is_project": 1})
+        db.upsert_label_config(conn, {"name": "Solo", "is_project": 1})
         body = labels_router.manage_projects(_request("/settings/projects"), conn=conn).body.decode()
-        assert 'class="entity-section-row" data-label-group="Uni"' in body
-        assert 'href="/groups/Uni" class="icon-btn" title="Open group page"' in body
-        assert 'data-uid="Uni"' not in body  # no bulk-select checkbox for a group
+        assert "entity-section-row" not in body
+        assert 'href="/groups/Uni" class="icon-btn" title="Open group page"' not in body
         assert 'data-label-name="Maths" data-label-group="Uni"' in body
+        assert 'data-label-name="Solo" data-label-group=""' in body
 
     def test_rendered_projects_due_is_its_own_column(self, conn):
         db.upsert_label_config(conn, {"name": "Thesis", "is_project": 1, "has_deadline": 1,

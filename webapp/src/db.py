@@ -4901,8 +4901,36 @@ def clear_label(conn: sqlite3.Connection, name: str) -> None:
     from every object currently carrying it. Deliberately does NOT delete
     the label_config row -- a stale config row with nothing pointing at it
     is harmless (per the plan), and there is no delete-a-label endpoint at
-    all in this app."""
+    all in this app.
+
+    2026-09-29 (direct bug report, "deleting labels from settings doesn't
+    work"): this is still the right behavior for the legacy `/clear`
+    route (unused by any template/JS any more, kept for its own tests),
+    but Settings > Labels' actual Delete button (routers/labels.py's
+    delete_label/bulk_delete_labels) needs `delete_label_config` below
+    instead -- see that function's own comment for why calling only this
+    one made Delete look broken."""
     conn.execute("DELETE FROM object_labels WHERE label_name = ?", (name,))
+    conn.commit()
+
+
+def delete_label_config(conn: sqlite3.Connection, name: str) -> None:
+    """Settings > Labels/Projects' own "Delete" button (routers/labels.py's
+    delete_label/bulk_delete_labels) -- 2026-09-29 direct bug report
+    ("deleting labels from settings doesn't work"): every label created
+    through the UI has a `label_config` row, and `list_labels` unions
+    object_labels usage with label_config rows (its own docstring: "a
+    label can exist purely as config with nothing pointing at it yet").
+    Calling only `clear_label` (strips membership, leaves the config row
+    on purpose -- see its own docstring) therefore left the label sitting
+    right back in the table at "Not used" the moment the page reloaded --
+    Delete redirected successfully but visibly did nothing, which is
+    exactly the reported bug. `merge_labels` already treats "membership
+    repointed + config row dropped" as "the same 'deleting' semantics as
+    every other label removal in this app" for its own source label; this
+    is that same pair of statements with no destination to repoint onto."""
+    conn.execute("DELETE FROM object_labels WHERE label_name = ?", (name,))
+    conn.execute("DELETE FROM label_config WHERE name = ?", (name,))
     conn.commit()
 
 

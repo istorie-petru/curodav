@@ -260,8 +260,21 @@ class TestPhoneAutoScroll:
         css = (STATIC / "style.css").read_text()
         assert (
             "@media (max-width:720px){\n  main.main-calendar,\n  main.main-calendar .calendar-viewport,\n"
-            "  main.main-calendar .time-grid-wrap{overflow:visible;}\n}"
+            "  main.main-calendar .time-grid-wrap{overflow:visible;}\n"
+            "  main.main-calendar .unscheduled-task-list{max-height:none; overflow:visible;}\n}"
         ) in css
+
+    def test_unscheduled_task_list_also_stops_nested_scrolling_on_phones(self):
+        """2026-09-29 (direct bug report, "the unscheduled work inside
+        planner page breaks the flex no scrollbar behaviour that we
+        want"): the desktop-only 180px cap (2026-09-28) left the
+        Unscheduled work list as the one remaining internal scrollbar on
+        an otherwise single-page-scroll phone layout -- this same <=720px
+        block now un-caps it too, consistent with .calendar-viewport/
+        .time-grid-wrap right above it."""
+        css = (STATIC / "style.css").read_text()
+        assert ".unscheduled-task-list{display:flex; flex-direction:column; gap:6px; max-height:180px; overflow-y:auto; overscroll-behavior:contain;}" in css
+        assert "main.main-calendar .unscheduled-task-list{max-height:none; overflow:visible;}" in css
 
 
 def test_date_field_follows_week_start_setting():

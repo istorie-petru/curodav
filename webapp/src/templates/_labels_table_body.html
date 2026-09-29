@@ -7,22 +7,26 @@
    _groups_table_body.html uses too -- fixed column widths (select /
    name / usage / actions) so the columns line up on every page, the
    Actions header right-aligned over its buttons, one row height.
-   A group is a plain section row (icon + name, which opens the group's
-   view modal; its total usage; a button to its page) -- no tinted card.
-   Its labels follow, indented; "No group" is the same kind of section
-   row. Names are the default text colour, the icon carries the label's
-   colour (2026-09-21: "MAKE THEM THE DEFAULT TEXT COLOR").
+   Names are the default text colour, the icon carries the label's colour
+   (2026-09-21: "MAKE THEM THE DEFAULT TEXT COLOR").
 
    2026-09-26 (Peter, second pass -- broken row-hover on Settings > Labels,
    traced to the group section rows/hidden columns): Settings > Labels
-   (kind != "projects") drops `_group_row`/the "No group" divider entirely
-   -- `labels` (already sorted group-then-name, ungrouped last) renders
-   flat, one `_label_row` per label, its group shown as a `col-meta
-   col-opt-2` pill (`l.group_style`, "No group" muted text if it has none)
-   instead of a section heading. Settings > Projects (kind == "projects")
-   is unchanged here -- still grouped section rows -- but that same column
-   is Due (`l.deadline`) instead, since the deadline moved out of the name
-   cell into its own column on that page only.
+   drops any group-section-row/"No group" divider entirely -- `labels`
+   (already sorted group-then-name, ungrouped last) renders flat, one
+   `_label_row` per label, its group shown as a `col-meta col-opt-2` pill
+   (`l.group_style`, "No group" muted text if it has none) instead of a
+   section heading.
+
+   2026-09-29 (direct request, "redo the projects table from settings to
+   be without grouping and be like the labels one"): Settings > Projects
+   now renders exactly the same flat shape -- `_group_row` (the old
+   per-group section heading + "No group" divider) is gone, `labels`
+   alone drives the loop for both pages. The one real difference between
+   the two pages stays: that same `col-meta col-opt-2` column shows Due
+   (`l.deadline`) here instead of a Group pill, since a project's deadline
+   already lived in its own column, not the name cell, before this
+   change -- see `_label_row`'s own `kind == 'projects'` branch.
 
    Colors go through data-style (CSP: no inline style). Rows keep
    data-label-name / data-label-group and the .row-select checkboxes that
@@ -31,25 +35,8 @@
    Undo toast runs before anything is sent -- static/labels_manage.js). #}
 {% from "_row_action_buttons.html" import row_action_buttons %}
 {% from "_empty_state_row.html" import empty_state_row %}
-{% macro _group_row(group) %}
-{% set total_usage = group.labels | sum(attribute='usage_count') %}
-<tr class="entity-section-row" data-label-group="{{ group.name }}">
-    <td class="col-select"></td>
-    <td class="col-name">
-        <div class="label-cell">
-            <span class="label-cell-icon" data-style="color: var(--cal-text-{{ group.color or 'gray' }})">{{ icon(group.icon or group_default_icon, 'icon-sm') }}</span>
-            <a href="/groups/{{ group.name|urlencode }}/view" data-modal class="label-name">{{ group.name }}</a>
-        </div>
-    </td>
-    <td class="col-meta col-opt-2"></td>
-    <td class="col-meta col-opt-1">{% if total_usage > 0 %}Used in {{ total_usage }} item{{ 's' if total_usage != 1 }}{% else %}<span class="text-muted">Not used</span>{% endif %}</td>
-    <td class="col-actions">
-        <div class="action-buttons"><a href="/groups/{{ group.name|urlencode }}" class="icon-btn" title="Open group page">{{ icon('external-link', 'icon-sm') }}</a></div>
-    </td>
-</tr>
-{% endmacro %}
 {% macro _label_row(l) %}
-<tr class="entity-row{% if kind == 'projects' and l.label_group %} is-member{% endif %}" data-label-name="{{ l.name }}" data-label-group="{{ l.label_group or '' }}">
+<tr class="entity-row" data-label-name="{{ l.name }}" data-label-group="{{ l.label_group or '' }}">
     <td class="col-select">
         <input type="checkbox" class="row-select" data-uid="{{ l.name }}" aria-label="Select {{ l.name }}" autocomplete="off">
     </td>
@@ -75,7 +62,7 @@
             "/settings/labels/" ~ l.name ~ "/edit",
             "/settings/labels/" ~ l.name ~ "/delete",
             noun|default('label'),
-            'Remove "' ~ l.name ~ '" from every object that carries it? This doesn\'t delete the ' ~ noun|default('label') ~ ' itself.',
+            'Delete "' ~ l.name ~ '"? This removes it from every object that carries it and from this list.',
             "/labels/" ~ l.name
         ) %}
         {% if kind != 'projects' and not l.is_project %}
@@ -98,21 +85,7 @@
         </tr>
     </thead>
     <tbody id="labels-body">
-        {% if kind == 'projects' %}
-        {% for group in label_groups %}
-            {{ _group_row(group) }}
-            {% for l in group.labels %}{{ _label_row(l) }}{% endfor %}
-        {% endfor %}
-        {% if label_groups and ungrouped_labels %}
-        <tr class="entity-section-row is-nogroup" data-label-group="">
-            <td class="col-select"></td>
-            <td colspan="4"><div class="label-cell"><span class="label-name">No group</span></div></td>
-        </tr>
-        {% endif %}
-        {% for l in ungrouped_labels %}{{ _label_row(l) }}{% endfor %}
-        {% else %}
         {% for l in labels %}{{ _label_row(l) }}{% endfor %}
-        {% endif %}
         {% if not labels %}
         {{ empty_state_row(5, "No " ~ noun|default('label') ~ "s yet.", css_class='empty-state') }}
         {% endif %}

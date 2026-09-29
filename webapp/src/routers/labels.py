@@ -29,10 +29,15 @@ whole Schedule module it depended on for its only source of data (a
 "class" was a Schedule-created recurring event) -- see plans/STATE.md's
 removal entry. A label's scope is just tasks/events/contacts again.
 
-No delete endpoint anywhere in this file, per §0.1: "removing" a label in
-the UI is `clear_label` -- it empties `object_labels` for that name, not a
-row deletion. `label_config` can keep a stale config row with nothing
-pointing at it; that's harmless and expected, not cleaned up here.
+2026-09-29 (direct bug report, "deleting labels from settings doesn't
+work"): Settings' own Delete button (delete_label/bulk_delete_labels
+below) now calls `db.delete_label_config`, which empties `object_labels`
+for that name AND drops its `label_config` row -- `db.list_labels` unions
+both, so leaving the config row behind (the original §0.1 plan, and still
+what the legacy/unused `/clear` route's `clear_label` does) made a
+"deleted" label sit right back in the table at "Not used" on the very
+next render. `merge_labels` already set this same "config row goes too"
+precedent for its own source label; Delete just needed to follow it.
 """
 
 from __future__ import annotations
@@ -357,9 +362,14 @@ def _labels_context(conn, request: Request, kind: str = "labels") -> dict:
     `_labels_table_body.html`'s own docstring) -- a label now carries its
     group as a `group_style` pill in its own row instead, and `labels` is
     sorted flat (grouped rows together, ungrouped last, alphabetical
-    within each). Settings > Projects is unchanged here (still grouped
-    section rows); it gained a Due column instead of the inline deadline
-    badge next to the name."""
+    within each). Settings > Projects gained a Due column instead of the
+    inline deadline badge next to the name.
+
+    2026-09-29 (direct request, "redo the projects table from settings to
+    be without grouping and be like the labels one"): Settings > Projects
+    dropped its own group section rows too -- `labels` (same flat
+    grouped-then-name-then-ungrouped sort as Labels) is now the only
+    thing `_labels_table_body.html` loops over for either page."""
     from .label_pages import deadline_info
 
     want_projects = kind == "projects"
@@ -389,19 +399,6 @@ def _labels_context(conn, request: Request, kind: str = "labels") -> dict:
         _ROLE_SORT_RANK[_label_role(l)],
         l["name"].lower(),
     ))
-    by_group: dict[str, list[dict]] = {}
-    ungrouped: list[dict] = []
-    for lbl in labels:
-        group = lbl.get("label_group")
-        if group:
-            by_group.setdefault(group, []).append(lbl)
-        else:
-            ungrouped.append(lbl)
-    # 2026-09-25 (UI audit L3): each group row shows the group's own icon.
-    # Only Settings > Projects still renders these (kind == "projects").
-    label_groups = [
-        {"name": g, "labels": by_group[g], **db.get_group_style(conn, g)} for g in sorted(by_group, key=str.lower)
-    ]
 
     return {
         "request": request,
@@ -415,8 +412,6 @@ def _labels_context(conn, request: Request, kind: str = "labels") -> dict:
         "title": "Projects" if want_projects else "Labels",
         "labels": labels,
         "has_labels": bool(labels),
-        "label_groups": label_groups,
-        "ungrouped_labels": ungrouped,
     }
 
 
@@ -670,9 +665,13 @@ def create_label(
 
 @router.post("/{name}/delete")
 def delete_label(name: str, conn=Depends(get_db)):
-    """Remove this label from every object (same as clear) -- the config row
-    remains harmlessly. Named "delete" in the UI for clarity."""
-    db.clear_label(conn, name)
+    """Settings' own Delete button -- 2026-09-29 (direct bug report,
+    "deleting labels from settings doesn't work"): unlike `clear_label`
+    (kept for the legacy, unused `/clear` route), this drops the
+    `label_config` row too (`db.delete_label_config`), so the label
+    actually disappears from the manage list instead of reappearing at
+    "Not used" on the next render -- see that function's own comment."""
+    db.delete_label_config(conn, name)
     return RedirectResponse(url="/settings/labels", status_code=303)
 
 
@@ -691,7 +690,7 @@ async def bulk_delete_labels(request: Request, conn=Depends(get_db)):
     if not names:
         return JSONResponse({"error": "no labels selected"}, status_code=400)
     for name in names:
-        db.clear_label(conn, name)
+        db.delete_label_config(conn, name)
     return JSONResponse({"ok": True, "count": len(names)})
 
 

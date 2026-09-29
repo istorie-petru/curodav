@@ -44,10 +44,12 @@
                      "holidays-bulk-clear". Must match the barId/countId/
                      deleteButtonId/clearId passed to CCBulkSelect.init at
                      the call site.
-     delete_label -- text on the Delete button (default "Delete"; e.g.
-                     labels_manage.html uses "Remove from everything" since
-                     its bulk action clears label usage, not a real row
-                     delete).
+     delete_label -- text on the Delete button (default "Delete"). Labels
+                     used to override this to "Remove from everything"
+                     while its bulk action only cleared usage; now that
+                     Delete actually removes the label (2026-09-29,
+                     db.delete_label_config), it uses the plain default
+                     like every other caller.
 
    2026-09-15 (direct feedback on Tasks' own hand-rolled bar, applied here
    too for consistency -- one bulk-bar layout, not two that could drift):

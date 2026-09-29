@@ -25,6 +25,7 @@ pages (already have the full banner system), and entity detail pages
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -40,6 +41,8 @@ from src.routers import published_lists as published_lists_router
 from src.routers import search as search_router
 from src.routers import settings as settings_router
 from src.routers import tasks as tasks_router
+
+STATIC = Path(__file__).resolve().parent.parent / "src" / "static"
 
 
 @pytest.fixture()
@@ -335,6 +338,31 @@ class TestNarrowHeaderBackPosition:
         body = resp.body.decode()
         assert "page-header-narrow-back" in body
         assert "page-header-narrow-actions" not in body
+
+
+class TestMobileHeaderMinHeight:
+    """2026-09-29 (direct request, "calculate the minimum size of the
+    mobile narrow banner according to the size of the buttons that sit
+    inside it"): below 721px the header lost every height floor entirely
+    (2026-09-12 follow-up, "remove the height requirement for mobile
+    view") -- a plain-title page's strip could settle shorter than one
+    with a real icon-btn/actions row, reading as an inconsistent banner
+    height page to page. A `min-height` (not the old fixed `height`) is
+    back, computed from the actual controls this header renders --
+    `--icon-btn-size` (28px mouse / 40px `pointer:coarse`, this file's own
+    `.icon-btn` rule) plus this rule's own top+bottom padding -- rather
+    than a re-guessed flat number."""
+
+    def test_icon_btn_size_is_a_shared_variable(self):
+        css = (STATIC / "style.css").read_text()
+        assert "--icon-btn-size:28px;" in css
+        assert ".icon-btn{\n  width:var(--icon-btn-size); height:var(--icon-btn-size);" in css
+        assert ":root{ --icon-btn-size:40px; }" in css
+        assert "@media (pointer:coarse){\n  :root{ --icon-btn-size:40px; }\n  .icon-btn{width:var(--icon-btn-size); height:var(--icon-btn-size);}\n}" in css
+
+    def test_mobile_header_min_height_is_calculated_not_a_flat_number(self):
+        css = (STATIC / "style.css").read_text()
+        assert "min-height:calc(var(--icon-btn-size) + var(--space-3) * 2);" in css
 
 
 class TestPageHeaderBanner:

@@ -244,6 +244,17 @@
      equal to the banner's own border + horizontal padding. */
   --page-inset:13px;
 
+  /* 2026-09-29 (direct request, "calculate the minimum size of the mobile
+     narrow banner according to the size of the buttons that sit inside
+     it"): the plain mouse-pointer .icon-btn box (28px, this file's own
+     `.icon-btn` rule) -- named so that rule and .page-header-narrow's own
+     mobile min-height calc (below) both read off the SAME number instead
+     of two hand-copied ones that could drift apart. Redefined inside the
+     existing `@media (pointer:coarse)` block right below .icon-btn's own
+     rule for the 40px touch-target size, same reasoning as that block's
+     own 2026-09-04 comment. */
+  --icon-btn-size:28px;
+
   /* Material Design elevation system (§6 of the plan) */
   --elevation-0:none;
   --elevation-1:0 1px 3px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.06);
@@ -705,7 +716,7 @@ button.btn:disabled, a.btn[aria-disabled="true"]{
 button.btn:disabled::after, a.btn[aria-disabled="true"]::after{display:none;}
 
 .icon-btn{
-  width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center;
+  width:var(--icon-btn-size); height:var(--icon-btn-size); display:inline-flex; align-items:center; justify-content:center;
   background:transparent; border:1px solid transparent; border-radius:var(--radius-control); cursor:pointer;
   color:var(--fg-secondary); padding:0; font-size:var(--text-base);
   transition:background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard),
@@ -730,7 +741,8 @@ button.btn:disabled::after, a.btn[aria-disabled="true"]::after{display:none;}
    overrides further down are left alone -- out of scope here, and each
    would need its own layout check before growing. */
 @media (pointer:coarse){
-  .icon-btn{width:40px; height:40px;}
+  :root{ --icon-btn-size:40px; }
+  .icon-btn{width:var(--icon-btn-size); height:var(--icon-btn-size);}
 }
 /* The topbar's Settings gear is an icon-btn, not a .tab-btn, but still
    needs an active/current-section indicator -- reuses .tab-btn.active's
@@ -3505,11 +3517,27 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    never scrolls and the day names/all-day strip scrolled away with the
    hours. Letting them overflow visibly makes the viewport the sticky
    context, so the header stays pinned while calendar_now.js scrolls the
-   window to the first event. */
+   window to the first event.
+
+   2026-09-29 (direct bug report, "the unscheduled work inside planner
+   page breaks the flex no scrollbar behaviour that we want"): the same
+   C-7 fix never covered `.unscheduled-task-list` -- its own fixed
+   `max-height:180px; overflow-y:auto` (added 2026-09-28, "add max height
+   for the unscheduled work to about 3.5 items tall") is exactly the kind
+   of internal overflow container this whole block exists to eliminate on
+   a phone, so it was left as the one remaining nested scrollbar on an
+   otherwise single-page-scroll layout -- felt like the "no scrollbar,
+   one flex column" contract breaking right at the Unscheduled work panel.
+   Below 721px the list now grows to its full content height and scrolls
+   with the rest of the page, same as the grid above it; the 180px cap
+   (a real desktop affordance, where the panel sits in fixed space
+   alongside a grid that scrolls internally) stays exactly as it was
+   above this breakpoint. */
 @media (max-width:720px){
   main.main-calendar,
   main.main-calendar .calendar-viewport,
   main.main-calendar .time-grid-wrap{overflow:visible;}
+  main.main-calendar .unscheduled-task-list{max-height:none; overflow:visible;}
 }
 
 /* Week/Day time grid (routers/calendar.py week_view/day_view, grid_layout.py) */
@@ -7175,6 +7203,25 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
     flex-wrap:wrap; row-gap:var(--space-2);
     justify-content:center;
     padding-top:var(--space-3); padding-bottom:var(--space-3);
+    /* 2026-09-29 (direct request, "calculate the minimum size of the
+       mobile narrow banner according to the size of the buttons that sit
+       inside it"): the 2026-09-12 follow-up right above dropped every
+       floor here in favor of pure content sizing, which also let a
+       plain-title page's banner (no icon-btn/actions row at all, just a
+       line of text) settle noticeably shorter than a page whose header
+       carries a real button -- an inconsistent strip height from page to
+       page, and shorter than a comfortable tap target on a banner photo.
+       This isn't the old flat `height:48px` back (that was a fixed box,
+       clipping whatever didn't fit, and desktop-only now anyway) -- it's
+       a MINIMUM, `min-height`, so two-row wrapping still grows past it
+       exactly as the block above still allows. The number itself comes
+       from the actual controls this header renders, not a guess: one
+       `--icon-btn-size` (the tallest standard control here -- the back
+       arrow or any action icon-btn, 40px once `@media (pointer:coarse)`
+       redefines that same variable on a touch device) plus this rule's
+       own top+bottom padding, the same two pieces that made up every
+       row's real height before. */
+    min-height:calc(var(--icon-btn-size) + var(--space-3) * 2);
   }
   .page-header-narrow .spacer{display:none;}
   .page-header-narrow-actions{

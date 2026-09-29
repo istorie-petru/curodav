@@ -374,7 +374,9 @@ class TestMerge:
 
 
 # --------------------------------------------------------------------- #
-# No delete endpoint -- "clear" empties membership instead (§0.1)
+# The legacy `/clear` route -- "clear" empties membership only (§0.1),
+# distinct from Settings' own Delete (see TestSettingsDeleteRemovesConfig
+# below, 2026-09-29 fix for "deleting labels from settings doesn't work")
 # --------------------------------------------------------------------- #
 
 
@@ -391,7 +393,10 @@ class TestNoDeleteJustClear:
         db.clear_label(conn, "uni")
         assert db.list_object_ids_for_label(conn, "task", "uni") == []
         # The config row is left alone -- harmless stale metadata, not
-        # cleaned up (per the plan's own "no delete" semantics).
+        # cleaned up (per the plan's own "no delete" semantics). This is
+        # the legacy `clear_label`/`/clear` route only -- Settings' own
+        # Delete button goes through `delete_label_config` instead, which
+        # DOES drop it (see below).
         assert db.get_label_config(conn, "uni") is not None
 
     def test_clear_router_endpoint(self, conn):
@@ -400,6 +405,32 @@ class TestNoDeleteJustClear:
         resp = labels_router.clear_label("uni", conn=conn)
         assert resp.status_code == 303
         assert db.list_labels_for_object(conn, "task", "t1") == []
+
+
+class TestSettingsDeleteRemovesConfig:
+    """2026-09-29 (direct bug report, "deleting labels from settings
+    doesn't work"): Settings > Labels' Delete button calls
+    `db.delete_label_config`, not the legacy `clear_label` -- a label
+    created through the UI always has a `label_config` row, and
+    `db.list_labels` unions that with object_labels usage, so leaving the
+    config row behind made a "deleted" label reappear in the table at
+    "Not used" on the very next render."""
+
+    def test_delete_label_route_drops_the_config_row(self, conn):
+        db.upsert_task(conn, {"uid": "t1", "title": "X", "description": "", "status": "active",
+                               "tags": ["uni"], "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "uni", "color": "purple", "created_at": _now()})
+        resp = labels_router.delete_label("uni", conn=conn)
+        assert resp.status_code == 303
+        assert db.get_label_config(conn, "uni") is None
+        assert db.list_object_ids_for_label(conn, "task", "uni") == []
+        assert "uni" not in {l["name"] for l in db.list_labels(conn)}
+
+    def test_delete_label_config_helper_directly(self, conn):
+        db.upsert_label_config(conn, {"name": "Solo", "created_at": _now()})
+        db.delete_label_config(conn, "Solo")
+        assert db.get_label_config(conn, "Solo") is None
+        assert "Solo" not in {l["name"] for l in db.list_labels(conn)}
 
 
 # --------------------------------------------------------------------- #

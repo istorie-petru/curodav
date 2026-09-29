@@ -721,3 +721,42 @@ class TestBannerEditorRoute:
         body = banners_router.banner_editor(_request("/banners/editor"), scope="Basketball", conn=conn).body.decode()
         assert "No banner set yet" in body
         assert "/flairs/basketball" not in body
+
+    def test_clearing_an_explicit_upload_falls_back_to_its_flair_first(self, conn, flairs_dir):
+        """2026-09-29 (direct request): clearing a label that has a real
+        uploaded banner AND a matching flair keyword should land on the
+        flair, not jump straight to blank -- the sticky "stay blank"
+        marker is only for a second Clear after that."""
+        _put(flairs_dir, "basketball")
+        db.upsert_label_config(conn, {"name": "Basketball", "created_at": _now()})
+        db.set_page_banner(conn, "Basketball", {"kind": "upload", "image_b64": "", "image_type": "jpeg"})
+        banners_router.remove_banner(scope="Basketball", page_url="/labels/Basketball", conn=conn)
+        assert db._page_banner_explicitly_cleared(conn, "Basketball") is False
+        banner = db.effective_page_banner(conn, "Basketball", name="Basketball")
+        assert banner is not None
+        assert banner["kind"] == "remote"
+        assert "/flairs/basketball" in banner["image_url"]
+
+    def test_clearing_twice_reaches_a_true_blank(self, conn, flairs_dir):
+        """First Clear removes the upload and reveals the flair; a second
+        Clear (fired while the flair is the thing showing) is what forces
+        the sticky blank."""
+        _put(flairs_dir, "basketball")
+        db.upsert_label_config(conn, {"name": "Basketball", "created_at": _now()})
+        db.set_page_banner(conn, "Basketball", {"kind": "upload", "image_b64": "", "image_type": "jpeg"})
+        banners_router.remove_banner(scope="Basketball", page_url="/labels/Basketball", conn=conn)
+        banners_router.remove_banner(scope="Basketball", page_url="/labels/Basketball", conn=conn)
+        assert db._page_banner_explicitly_cleared(conn, "Basketball") is True
+        assert db.effective_page_banner(conn, "Basketball", name="Basketball") is None
+
+    def test_clearing_an_upload_with_no_flair_match_goes_straight_to_blank(self, conn):
+        """No keyword match at all -- there's no flair tier to land on, so
+        clearing the upload should behave like a plain blank-out, not
+        leave a dangling explicit-clear marker that would block a future
+        matching rename for no reason. (It still reads as None either way
+        -- this just documents which storage path it takes.)"""
+        db.upsert_label_config(conn, {"name": "Quarterly Sync", "created_at": _now()})
+        db.set_page_banner(conn, "Quarterly Sync", {"kind": "upload", "image_b64": "", "image_type": "jpeg"})
+        banners_router.remove_banner(scope="Quarterly Sync", page_url="/labels/Quarterly Sync", conn=conn)
+        assert db.effective_page_banner(conn, "Quarterly Sync", name="Quarterly Sync") is None
+        assert db._page_banner_explicitly_cleared(conn, "Quarterly Sync") is False

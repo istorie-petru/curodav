@@ -107,6 +107,21 @@ class TestLabelsBulkDelete:
         assert json.loads(resp.body)["count"] == 2
         assert db.list_labels_for_object(conn, "task", "t1") == []
 
+    def test_also_drops_the_config_row_so_it_leaves_the_table(self, conn):
+        """2026-09-29 fix: bulk delete uses delete_label_config now, same as
+        the single-row Delete button -- a config-only label (nothing else
+        pointing at it) must actually disappear from list_labels, not just
+        end up at "Not used"."""
+        import asyncio
+
+        db.upsert_label_config(conn, {"name": "Work", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Personal", "created_at": _now()})
+        resp = asyncio.run(labels_router.bulk_delete_labels(_json_request({"uids": ["Work", "Personal"]}), conn=conn))
+        assert resp.status_code == 200
+        names = {l["name"] for l in db.list_labels(conn)}
+        assert "Work" not in names
+        assert "Personal" not in names
+
     def test_empty_selection_400s(self, conn):
         import asyncio
 
