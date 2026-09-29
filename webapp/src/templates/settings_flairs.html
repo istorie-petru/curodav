@@ -1,100 +1,139 @@
 {% extends "base.html" %}
 {% block title %}Flairs - Settings{% endblock %}
 {% block content %}
-{% from "_page_header_narrow.html" import page_header_narrow with context %}
-{{ page_header_narrow("Flairs", "image") }}
+<!-- Flairs modal (2026-09-29, direct follow-up: moved off its own hub
+     category into a button on Settings > Appearance -- see HUB_CATEGORIES'
+     own comment in routers/settings.py) -- same "server-rendered
+     #modal-target fragment, degrades to a full standalone page" shape as
+     banner_editor.html/import_modal.html: a no-JS visit to /settings/flairs
+     still works exactly as before, static/modal.js's data-modal on
+     Appearance's Flairs button strips everything but #modal-target and
+     shows it as a dialog instead.
 
-{# 2026-09-29 -- same ?note=/?error= -> toast bridge settings_data_
-   maintenance.html established (see that file's own comment for the
-   full reasoning): every route on this page is a plain full-page form
-   post, this banner is the real no-JS fallback, settings_flairs.js
-   upgrades it into a floating ccToast and strips the query params. #}
+     Direct instruction: this modal must not carry the plain hint class
+     every OTHER full Settings page uses for its own small muted-text
+     paragraphs -- every hint below uses `text-muted` instead, the same
+     class every other modal's body already reaches for (note_form.html,
+     holiday_edit_modal.html, ...). The `?note=/?error=` -> ccToast bridge
+     (settings_flairs.js) still needs its own two flash divs for a
+     genuine no-JS submission, just paired with `text-muted` instead of
+     that other class -- their own color modifiers are plain color rules,
+     not tied to the class this instruction excludes.
+
+     settings_flairs.js is NOT loaded from this file when opened as a
+     modal -- injectModalContent only ever reads #modal-target's own
+     innerHTML, so a <script> tag sitting outside it here (as one still
+     does, below, for the standalone-page case) never runs. Its drag-drop/
+     status/toast-bridge listeners are all document-level delegated ones
+     though (same trick data_maintenance.js already relies on for
+     import_modal.html), so they keep working here as long as Settings >
+     Appearance -- the page this modal actually opens from -- has already
+     loaded that same script itself; see that template's own comment. -->
+<div id="modal-target">
+<div class="modal-header">
+<h1>Flairs</h1>
+</div>
+<div class="modal-body">
+
 {% if request.query_params.get('note') %}
-<div class="settings-hint settings-hint-accent" data-dm-flash="note">{{ request.query_params.get('note') }}</div>
+<div class="text-muted settings-hint-accent" data-dm-flash="note">{{ request.query_params.get('note') }}</div>
 {% endif %}
 {% if request.query_params.get('error') %}
-<div class="settings-hint settings-hint-error" data-dm-flash="error">{{ request.query_params.get('error') }}</div>
+<div class="text-muted settings-hint-error" data-dm-flash="error">{{ request.query_params.get('error') }}</div>
 {% endif %}
 
-<div class="settings-group">
-    <p class="settings-hint">Flairs are the photo banners this app can auto-attach to a task, event, label, group, or project based on a keyword in its name -- or, for months/seasons, its own due/start date instead.</p>
-</div>
+<p class="text-muted">Flairs are the photo banners this app can auto-attach to a task, event, label, group, or project based on a keyword in its name -- or, for months/seasons, its own due/start date instead.</p>
 
 {% if not flairs_dir_configured %}
-<div class="settings-group">
-    <div class="card card-danger">
-        <p class="settings-hint">No flairs folder is configured on the server (<code>CC_FLAIRS_DIR</code>) -- uploads here have nowhere to be saved yet. Ask whoever runs the server to set that up first.</p>
-    </div>
+<div class="card card-danger">
+    <p class="text-muted">No flairs folder is configured on the server (<code>CC_FLAIRS_DIR</code>) -- uploads here have nowhere to be saved yet. Ask whoever runs the server to set that up first.</p>
 </div>
 {% else %}
 
-<div class="settings-group">
-    <div class="system-status-grid" role="region" aria-label="Flair photo coverage">
-        <div class="status-card {{ 'healthy' if configured_count == total_count else 'warning' }}">
-            <div class="status-card-header">
-                <span class="status-card-title">{{ icon('image', 'icon-sm') }} Photo coverage</span>
-            </div>
-            <div class="status-card-status {{ 'healthy' if configured_count == total_count else 'warning' }}">
-                <svg class="icon" aria-hidden="true"><use href="#icon-{{ 'check-circle' if configured_count == total_count else 'alert-circle' }}"></use></svg>
-                <span>{{ configured_count }} of {{ total_count }} configured</span>
-            </div>
-            {% if missing_ids %}
-            <div class="status-card-meta">
-                <details>
-                    <summary class="text-muted" style="cursor:pointer;">{{ missing_ids|length }} missing &mdash; show ids</summary>
-                    <p class="settings-hint" style="margin-top:8px;">{{ missing_ids|join(', ') }}</p>
-                </details>
-            </div>
-            {% endif %}
+<div class="system-status-grid" role="region" aria-label="Flair photo coverage">
+    <div class="status-card {{ 'healthy' if configured_count == total_count else 'warning' }}">
+        <div class="status-card-header">
+            <span class="status-card-title">{{ icon('image', 'icon-sm') }} Photo coverage</span>
         </div>
+        <div class="status-card-status {{ 'healthy' if configured_count == total_count else 'warning' }}">
+            <svg class="icon" aria-hidden="true"><use href="#icon-{{ 'check-circle' if configured_count == total_count else 'alert-circle' }}"></use></svg>
+            <span>{{ configured_count }} of {{ total_count }} configured</span>
+        </div>
+        {% if missing_ids %}
+        <div class="status-card-meta">
+            <details>
+                <summary class="text-muted" style="cursor:pointer;">{{ missing_ids|length }} missing &mdash; show ids</summary>
+                <p class="text-muted" style="margin-top:8px;">{{ missing_ids|join(', ') }}</p>
+            </details>
+        </div>
+        {% endif %}
     </div>
 </div>
 
-<div class="settings-group">
-    <div class="card">
-        <h2 class="section-label">Add photos</h2>
-        <p class="settings-hint">A photo's filename (without the extension) needs to be one of the ids above &mdash; <code>basketball.jpg</code>, <code>july.png</code>, and so on. Uploading a photo for an id that already has one replaces it immediately. Drop a .zip or several photos below, or pick a whole folder; anything a .zip contains that isn't a real, recognizably-named photo (an unsupported extension, a name that isn't lowercase-kebab-case, a non-image file) is skipped and listed in the result, not silently dropped &mdash; an id this list doesn't know about yet still saves fine, in case you're staging one ahead of time.</p>
-        <form id="flairs-upload-form" method="post" action="/settings/flairs/upload" enctype="multipart/form-data" class="dm-import-form">
-            <label class="dm-dropzone" data-dm-dropzone>
-                <input type="file" name="zip_file" accept=".zip,application/zip" class="sr-only" data-dm-file="drop-zip">
-                <input type="file" name="files" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple class="sr-only" data-dm-file="drop-multi">
-                <span class="dm-dropzone-icon" aria-hidden="true">{{ icon('upload') }}</span>
-                <span class="dm-dropzone-title" data-dm-dropzone-title>Drop a .zip or photos here</span>
-                <span class="dm-dropzone-formats">.zip &middot; .jpg / .jpeg / .png / .webp (select or drop several at once)</span>
+<div class="card">
+    <h2 class="section-label">Add photos</h2>
+    <p class="text-muted">A photo's filename (without the extension) needs to be one of the ids above &mdash; <code>basketball.jpg</code>, <code>july.png</code>, and so on. Uploading a photo for an id that already has one replaces it immediately. Drop a .zip or several photos below, or pick a whole folder; anything a .zip contains that isn't a real, recognizably-named photo (an unsupported extension, a name that isn't lowercase-kebab-case, a non-image file) is skipped and listed in the result, not silently dropped &mdash; an id this list doesn't know about yet still saves fine, in case you're staging one ahead of time.</p>
+    <form id="flairs-upload-form" method="post" action="/settings/flairs/upload" enctype="multipart/form-data" class="dm-import-form">
+        <label class="dm-dropzone" data-dm-dropzone>
+            <input type="file" name="zip_file" accept=".zip,application/zip" class="sr-only" data-dm-file="drop-zip">
+            <input type="file" name="files" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple class="sr-only" data-dm-file="drop-multi">
+            <span class="dm-dropzone-icon" aria-hidden="true">{{ icon('upload') }}</span>
+            <span class="dm-dropzone-title" data-dm-dropzone-title>Drop a .zip or photos here</span>
+            <span class="dm-dropzone-formats">.zip &middot; .jpg / .jpeg / .png / .webp (select or drop several at once)</span>
+        </label>
+        <p class="dm-status" data-dm-status role="status"></p>
+        <div class="text-muted" style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+            <label class="btn ghost btn-sm" style="cursor:pointer;">
+                {{ icon('folder', 'icon-sm') }} Choose a folder&hellip;
+                {# webkitdirectory is a real, widely-supported (Chrome/
+                   Edge/Firefox/Safari) file-picker attribute for
+                   selecting an entire folder's worth of files at once
+                   -- it's a PICKER, not drag-and-drop: dropping a
+                   folder onto the page would need recursive
+                   DataTransferItem.webkitGetAsEntry() directory
+                   traversal, which this first version doesn't attempt,
+                   so "drop a folder" isn't supported, only "pick one"
+                   is. Either way the browser sends a flat list of
+                   files (their name attribute carries the folder's own
+                   relative path, e.g. "icons/basketball.svg") under
+                   this same "files" field ingest_uploaded_photos
+                   already smart-filters by basename regardless of
+                   depth. #}
+                <input type="file" name="files" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple webkitdirectory class="sr-only" data-dm-file="picker-folder">
             </label>
-            <p class="dm-status" data-dm-status role="status"></p>
-            <div class="settings-hint" style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
-                <label class="btn ghost btn-sm" style="cursor:pointer;">
-                    {{ icon('folder', 'icon-sm') }} Choose a folder&hellip;
-                    {# webkitdirectory is a real, widely-supported (Chrome/
-                       Edge/Firefox/Safari) file-picker attribute for
-                       selecting an entire folder's worth of files at once
-                       -- it's a PICKER, not drag-and-drop: dropping a
-                       folder onto the page would need recursive
-                       DataTransferItem.webkitGetAsEntry() directory
-                       traversal, which this first version doesn't attempt,
-                       so "drop a folder" isn't supported, only "pick one"
-                       is. Either way the browser sends a flat list of
-                       files (their name attribute carries the folder's own
-                       relative path, e.g. "icons/basketball.svg") under
-                       this same "files" field ingest_uploaded_photos
-                       already smart-filters by basename regardless of
-                       depth. #}
-                    <input type="file" name="files" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple webkitdirectory class="sr-only" data-dm-file="picker-folder">
-                </label>
-                <label class="btn ghost btn-sm" style="cursor:pointer;">
-                    {{ icon('image', 'icon-sm') }} Choose photos&hellip;
-                    <input type="file" name="files" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple class="sr-only" data-dm-file="picker-multi">
-                </label>
-            </div>
-            <div class="modal-footer" style="padding:0; margin-top:var(--space-4);">
-                <button type="submit" class="btn primary" data-dm-submit disabled>{{ icon('upload', 'icon-sm') }} Upload</button>
-            </div>
-        </form>
-    </div>
+            <label class="btn ghost btn-sm" style="cursor:pointer;">
+                {{ icon('image', 'icon-sm') }} Choose photos&hellip;
+                <input type="file" name="files" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple class="sr-only" data-dm-file="picker-multi">
+            </label>
+        </div>
+    </form>
 </div>
 
 {% endif %}
-
+</div>
+<!-- Upload lives in the shared modal footer, not a body-local submit
+     button (2026-09-29 modal-ization) -- same move import_modal.html's own
+     Import button already made, `form="flairs-upload-form"` ties it back
+     to the body's <form>. Starts disabled (footer_primary_disabled) since
+     nothing is staged yet; settings_flairs.js's refreshStatus toggles it
+     by id (`flairs-upload-submit-btn`, NOT a `[data-dm-submit]`
+     `f.querySelector` scoped to the form -- that lookup only ever finds a
+     DESCENDANT of the form, and this button is now the form's SIBLING in
+     the footer, same bug static/data_maintenance.js's own comment on
+     `import-submit-btn` already describes and fixes the same way). Only
+     rendered inside the flairs_dir_configured branch above -- when it's
+     None there's no form to submit at all, so the footer is Done-only. -->
+{% if flairs_dir_configured %}
+{% set footer_back_url = '/settings/appearance' %}
+{% set footer_primary_form = 'flairs-upload-form' %}
+{% set footer_primary_label = 'Upload' %}
+{% set footer_primary_icon = 'upload' %}
+{% set footer_primary_id = 'flairs-upload-submit-btn' %}
+{% set footer_primary_disabled = true %}
+{% else %}
+{% set footer_back_url = '/settings/appearance' %}
+{% endif %}
+{% include "_modal_footer.html" %}
+</div>
 <script defer src="{{ static_url('settings_flairs.js') }}"></script>
 {% endblock %}

@@ -172,14 +172,16 @@ HUB_CATEGORIES = [
     {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Named holiday calendars non-working recurrence respects"},
     {"url": "/settings/time-blocks", "icon": "moon", "name": "Sleep & Leisure Time", "desc": "Weekly hours the Week/Day grid highlights and warns about"},
     {"url": "/settings/data-maintenance", "icon": "database", "name": "Data & Maintenance", "desc": "Backups, integrity, sync conflicts, export, purge"},
-    # 2026-09-29 (direct request, item 10 follow-up: a UI for the flairs
-    # feature's own photo folder, "instead of an operator needing
-    # filesystem access") -- earns its own hub category on the same
-    # "distinct thing a user thinks about" basis Holidays did (2026-08-14):
-    # it has real state of its own (which of ~100 flair ids currently have
-    # a photo configured) and a real action (bulk upload), not a couple of
-    # fields that would otherwise just bloat an existing page.
-    {"url": "/settings/flairs", "icon": "image", "name": "Flairs", "desc": "Photo banners auto-attached by keyword or date"},
+    # Flairs was briefly its own hub category (2026-09-29, same day: "a UI
+    # for the flairs feature's own photo folder, instead of an operator
+    # needing filesystem access") -- direct follow-up the same day moved it
+    # into a modal button on Settings > Appearance instead (that page's own
+    # Flairs row comment), same "opened from a button on the page it's
+    # thematically part of" treatment the banner editor already gets rather
+    # than a hub tile of its own. `/settings/flairs` itself is unchanged --
+    # still a real GET route, still degrades to a full standalone page --
+    # it just isn't advertised here as a separate top-level destination any
+    # more; TestFlairsNotAHubCategory (test_settings_flairs.py) guards this.
     {"url": "/published-lists", "icon": "share-2", "name": "Published lists", "desc": "Subscribable filtered calendars/lists"},
 ]
 
@@ -279,6 +281,18 @@ def settings_general(request: Request, conn=Depends(get_db)):
             # the configured Sleep-kind time blocks don't agree on one
             # single start/end window.
             "current_hide_sleep_hours": db.get_app_meta(conn, HIDE_SLEEP_HOURS_KEY) == "1",
+            # "Flair languages" (2026-09-29, multilingual support first
+            # slice) -- which flairs.FLAIR_KEYWORDS_BY_LANG tables
+            # flairs.match_flair searches; see db.active_flair_languages's
+            # own comment for why missing/empty both resolve to English
+            # only rather than "every language." flair_language_options
+            # feeds the checkbox-dropdown's ms_items straight from
+            # flairs.FLAIR_LANGUAGE_LABELS so a future third language only
+            # needs adding there, not here too.
+            "current_flair_languages": db.active_flair_languages(conn),
+            "flair_language_options": [
+                {"uid": code, "name": label} for code, label in flairs.FLAIR_LANGUAGE_LABELS.items()
+            ],
         },
     )
 
@@ -954,6 +968,29 @@ def set_hide_sleep_hours(enabled: str = Form(""), conn=Depends(get_db)):
     return RedirectResponse(url="/settings/general", status_code=303)
 
 
+@router.post("/settings/flair-languages")
+def set_flair_languages(languages: list[str] = Form([]), conn=Depends(get_db)):
+    """"Flair languages" (Settings > General, 2026-09-29 direct request --
+    first slice of multilingual support, deliberately just English +
+    Romanian, not "20 languages") -- which of `flairs.
+    FLAIR_KEYWORDS_BY_LANG`'s keyword tables `flairs.match_flair` searches
+    when guessing a flair from an event/task/label/group/project's own
+    name (db.active_flair_languages reads this back). Same checkbox-
+    dropdown shape as General's other multi-value settings (ms_mode=
+    "select"), autosubmitting like every other row on that page. Only
+    ever stores a subset of `flairs.FLAIR_LANGUAGES` -- an unrecognized
+    value can't reach app_meta from this route even if the submitted form
+    were hand-crafted, same allowlist-not-blocklist discipline set_
+    accent_color already applies to its own fixed choice set. Unticking
+    every option stores an explicit empty string rather than refusing the
+    submission -- db.active_flair_languages's own comment is what turns
+    that back into "English only" on read, not a "zero languages" crash
+    state anywhere downstream."""
+    valid = [lang for lang in languages if lang in flairs.FLAIR_LANGUAGES]
+    db.set_app_meta(conn, flairs.FLAIR_LANGUAGES_KEY, ",".join(valid))
+    return RedirectResponse(url="/settings/general", status_code=303)
+
+
 @router.get("/settings/appearance")
 def settings_appearance(request: Request, conn=Depends(get_db)):
     return templates.TemplateResponse(
@@ -995,6 +1032,14 @@ def settings_appearance(request: Request, conn=Depends(get_db)):
             # icons/current_edit_mode above for the exact same shadowing
             # reason.
             "current_page_header_banner": db.get_page_banner(conn, PAGE_HEADER_BANNER_SCOPE),
+            # Flairs row (2026-09-29, moved here from its own hub category
+            # -- see HUB_CATEGORIES' own comment) -- the same coverage
+            # count settings_flairs itself computes (_known_flair_ids),
+            # shown next to the button that opens it as a modal so the "how
+            # many of mine are configured" answer is visible without a
+            # click, same reasoning the old hub tile's own status card had.
+            "flairs_configured_count": len({i for i in _known_flair_ids() if flairs.flair_image_url(i)}),
+            "flairs_total_count": len(_known_flair_ids()),
         },
     )
 

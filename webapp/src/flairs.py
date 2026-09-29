@@ -296,6 +296,148 @@ FLAIR_KEYWORDS: dict[str, list[tuple[str, int]]] = {
 }
 
 
+# 2026-09-29 (direct request: first step of multilingual support --
+# explicitly NOT "add 20 languages," just English + Romanian) --
+# `FLAIR_KEYWORDS` above is now understood as this table's "en" entry;
+# `FLAIR_KEYWORDS_RO` is the same 106 flair ids with a Romanian keyword
+# list per id (natural equivalent phrases, not a mechanical word-for-word
+# translation of every English synonym -- a shorter idiomatic Romanian
+# list matches real usage better than a longer stilted one). Priorities
+# mirror whatever tier that id's English list is dominated by (a scenery
+# word like "sea"/"mare" stays priority 5, a holiday like Chinese New
+# Year/"anul nou chinezesc" stays priority 4, and so on) -- match_flair's
+# tie-break logic doesn't care which language a keyword came from, so
+# keeping the same relative confidence per id is what makes a
+# cross-language tie between two flairs resolve the same way it would
+# within one language.
+#
+# `FLAIR_LANGUAGES`/`FLAIR_LANGUAGE_LABELS` back Settings > General's
+# "Flair languages" checkbox-dropdown (db.active_flair_languages reads the
+# stored choice, routers/settings.py's set_flair_languages writes it) --
+# English checked by default (db.active_flair_languages's own "missing =
+# English only" comment), Romanian is opt-in. `match_flair` below takes
+# whichever of these the caller resolved and searches only THOSE
+# language(s)' keyword tables, so an install that never touches this
+# setting keeps matching exactly like before this slice existed.
+FLAIR_LANGUAGES: tuple[str, ...] = ("en", "ro")
+FLAIR_LANGUAGE_LABELS: dict[str, str] = {"en": "English", "ro": "Română"}
+FLAIR_LANGUAGES_KEY = "flair_languages"
+
+FLAIR_KEYWORDS_RO: dict[str, list[tuple[str, int]]] = {
+    "american-football": [("fotbal american", 2), ("nfl", 2), ("super bowl", 2)],
+    "art": [("curs de artă", 2), ("atelier de artă", 2), ("curs de pictură", 2), ("atelier de pictură", 2), ("pictură", 2), ("desen", 2)],
+    "artistic-gymnastics": [("gimnastică artistică", 2)],
+    "athletics-jumping": [("sărituri", 2), ("săritură", 2)],
+    "baby-shower": [("petrecere pentru bebeluș", 2), ("baby shower", 2)],
+    "back-to-school": [("înapoi la școală", 2), ("prima zi de școală", 2), ("început de an școlar", 2)],
+    "badminton": [("badminton", 2)],
+    "baseball": [("baseball", 2)],
+    "basketball": [("baschet", 2), ("baschetbal", 2)],
+    "bbq": [("grătar", 2), ("grătare", 2), ("bbq", 2)],
+    "beer": [("bere", 2), ("beri", 2), ("berărie", 2), ("bar", 2)],
+    "birthday": [("zi de naștere", 2), ("ziua de naștere", 2), ("petrecere aniversară", 2), ("aniversare", 2)],
+    "book-club": [("club de carte", 2), ("cerc de lectură", 2)],
+    "bowling": [("bowling", 2), ("popice", 2)],
+    "breakfast": [("mic dejun", 2), ("micul dejun", 2), ("brunch", 2)],
+    "camping": [("camping", 2), ("tabără", 2), ("cort", 2)],
+    "chinese-new-year": [("anul nou chinezesc", 4), ("anul nou chinezesc lunar", 4), ("anul nou vietnamez", 4)],
+    "cinema": [("cinema", 2), ("film", 2), ("filme", 2), ("seară de film", 2)],
+    "clean": [("curățenie", 2), ("curăț casa", 2), ("curăț apartamentul", 2), ("aspirare", 2), ("treburi casnice", 2)],
+    "climbing": [("cățărare", 2), ("alpinism", 2), ("escaladă", 2), ("cățărare pe stânci", 2)],
+    "code": [("recenzie de cod", 2), ("programare", 2), ("hackathon", 2), ("învăț să programez", 2), ("scriu cod", 2)],
+    "coffee": [("cafea", 2), ("cafenea", 2), ("espresso", 2)],
+    "concert": [("concert", 2), ("concerte", 2)],
+    "cooking": [("gătesc cina", 3), ("gătesc prânzul", 3), ("gătit", 3), ("pregătesc cina", 3), ("pregătesc prânzul", 3)],
+    "cricket": [("meci de cricket", 2), ("cricket", 2)],
+    "cycling": [("bicicletă", 2), ("biciclete", 2), ("ciclism", 2), ("mers cu bicicleta", 2), ("mountain bike", 2)],
+    "cycling-bmx": [("bmx", 2)],
+    "dancing": [("dans", 2), ("dansuri", 2), ("dansez", 2)],
+    "date-night": [("cină romantică", 3), ("seară romantică", 2), ("cină la lumina lumânărilor", 3)],
+    "dentist": [("dentist", 2), ("programare la dentist", 2), ("control dentar", 2), ("curățare dentară", 3)],
+    "dinner": [("cină", 2), ("cine", 2)],
+    "drinks": [("băuturi", 2), ("cocktail", 2), ("petrecerea burlăcițelor", 2), ("seară în oraș", 2)],
+    "field-hockey": [("hochei pe iarbă", 2)],
+    "game-night": [("seară de jocuri", 2), ("joc de societate", 2), ("jocuri de societate", 2)],
+    "generic-new-year": [("anul nou", 3), ("revelion", 3)],
+    "golf": [("golf", 2), ("teren de golf", 2)],
+    "graduation": [("absolvire", 2), ("festivitate de absolvire", 2)],
+    "gym": [("sală de fitness", 2), ("crossfit", 2), ("antrenament", 2), ("fitness", 2), ("ridicare de greutăți", 2)],
+    "haircut": [("tuns", 2), ("frizerie", 2), ("coafor", 2), ("programare la coafor", 2)],
+    "halloween": [("halloween", 2)],
+    "hiking": [("drumeție", 2), ("drumeții", 2)],
+    "islamic-new-year": [("anul nou islamic", 4), ("anul nou musulman", 4)],
+    "karate": [("karate", 2), ("arte marțiale", 2), ("judo", 2), ("aikido", 2), ("taekwondo", 2)],
+    "kayaking": [("caiac", 2), ("caiac-canoe", 2)],
+    "learn-instrument": [("lecție de muzică", 2), ("lecție de pian", 2), ("lecție de chitară", 2), ("cor", 2), ("vioară", 2), ("orchestră", 2)],
+    "learn-language": [("curs de engleză", 2), ("curs de franceză", 2), ("curs de germană", 2), ("curs de spaniolă", 2), ("curs de italiană", 2), ("curs de limbă", 2)],
+    "lunch": [("prânz", 2), ("prânzuri", 2)],
+    "mardi-gras": [("marți gras", 2)],
+    "massage": [("masaj", 2), ("masaje", 2), ("spa", 2)],
+    "nowruz": [("nowruz", 4), ("anul nou persan", 4)],
+    "ping-pong": [("ping pong", 2), ("tenis de masă", 4)],
+    "plan-my-day": [("planific ziua", 2), ("planific săptămâna", 2), ("planific vacanța", 2)],
+    "pride": [("gay pride", 2), ("marș gay", 2), ("paradă gay", 2)],
+    "reach-out": [("scriu o scrisoare", 2), ("iau legătura cu", 2)],
+    "read": [("carte", 2), ("ebook", 2), ("citit", 2), ("timp de citit", 2)],
+    "repair": [("reparație", 2), ("electrician", 2), ("instalator", 2), ("meșter", 2), ("reparații casă", 2)],
+    "rhythmic-gymnastics": [("gimnastică ritmică", 2)],
+    "rowing": [("canotaj", 2)],
+    "rugby-sevens": [("rugby", 2)],
+    "running": [("alergare", 2), ("jogging", 2), ("alerg", 2)],
+    "saint-patricks-day": [("sfântul patrick", 2), ("ziua sfântului patrick", 2)],
+    "santa": [("moș crăciun", 2), ("vizită la moș crăciun", 2)],
+    "skiing": [("schi", 2), ("la schi", 2)],
+    "sleep": [("somn", 2), ("pui de somn", 2), ("relaxare", 2), ("odihnă", 2)],
+    "soccer": [("fotbal", 2)],
+    "swimming": [("înot", 2), ("scufundări", 2)],
+    "tennis": [("tenis", 2)],
+    "thanksgiving": [("ziua recunoștinței", 2)],
+    "triathlon": [("triatlon", 2)],
+    "valentines-day": [("ziua îndrăgostiților", 2), ("sfântul valentin", 2)],
+    "video-gaming": [("jocuri video", 2), ("gaming", 2)],
+    "volleyball": [("volei", 2)],
+    "walk": [("plimbare", 2), ("mă plimb", 2)],
+    "walking-dog": [("plimb câinele", 2), ("plimbare cu câinele", 2), ("scot câinele", 2)],
+    "wedding": [("nuntă", 2), ("nunți", 2)],
+    "christmas": [("crăciun", 3), ("crăciunul", 3)],
+    "christmas-meal": [("masă de crăciun", 5), ("cină de crăciun", 5), ("prânz de crăciun", 5)],
+    "christmas-party": [("petrecere de crăciun", 4)],
+    "yoga": [("yoga", 2)],
+    "bills": [("factură", 2), ("facturi", 2), ("plătesc facturile", 2)],
+    "bus": [("autobuz", 2), ("cu autobuzul", 2)],
+    "delivery": [("livrare", 2), ("colet", 2), ("ridicare colet", 2)],
+    "doctor": [("doctor", 2), ("programare la doctor", 2), ("medic", 2)],
+    "flight": [("zbor", 2), ("zboruri", 2)],
+    "hotel": [("hotel", 2), ("rezervare hotel", 2), ("cazare la hotel", 2)],
+    "interview": [("interviu", 2), ("interviu de angajare", 2)],
+    "kids-pickup-dropoff": [("iau copiii de la școală", 2), ("duc copiii la școală", 2), ("las copiii la școală", 2)],
+    "online-classes": [("curs online", 2), ("cursuri online", 2), ("clasă virtuală", 2)],
+    "party": [("petrecere", 2), ("petreceri", 2)],
+    "photography": [("fotografie", 2), ("ședință foto", 2)],
+    "restaurant": [("restaurant", 2), ("rezervare la restaurant", 2)],
+    "shopping": [("cumpărături", 2), ("fac cumpărături", 2)],
+    "studying": [("învăț", 2), ("sesiune de studiu", 2), ("temă", 2)],
+    "trip": [("călătorie", 2), ("excursie", 2), ("drum", 2)],
+    "tv": [("tv", 2), ("mă uit la tv", 2), ("televizor", 2)],
+    "video-call": [("apel video", 2), ("convorbire video", 2)],
+    "vote": [("vot", 2), ("votez", 2), ("ziua alegerilor", 2)],
+    "gymnastics-generic": [("gimnastică", 5)],
+    "university": [("universitate", 5), ("facultate", 5), ("campus", 5)],
+    "museum": [("muzeu", 5), ("galerie de artă", 5)],
+    "debate": [("dezbatere", 5), ("club de dezbateri", 5)],
+    "mountain": [("munte", 5), ("munți", 5)],
+    "sea": [("mare", 5), ("țărm", 5), ("plajă", 5), ("ocean", 5)],
+    "sky": [("cer", 5)],
+    "wood": [("lemn", 5), ("pădure", 5), ("tâmplărie", 5)],
+    "blue": [("albastru", 5)],
+}
+
+FLAIR_KEYWORDS_BY_LANG: dict[str, dict[str, list[tuple[str, int]]]] = {
+    "en": FLAIR_KEYWORDS,
+    "ro": FLAIR_KEYWORDS_RO,
+}
+
+
 SUPPORTED_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 
 # Set once, at app startup (main.py's lifespan calls `configure` with
@@ -360,7 +502,7 @@ def flair_image_url(flair_id: str) -> str | None:
     return None
 
 
-def match_flair(name: str | None) -> str | None:
+def match_flair(name: str | None, languages: Iterable[str] = ("en",)) -> str | None:
     """The flair (if any) whose keyword list best matches `name` -- a
     task/event/habit-task's own title, or a label/group/project's own
     name. Case-insensitive substring match (a keyword phrase anywhere in
@@ -376,6 +518,20 @@ def match_flair(name: str | None) -> str | None:
     collision is rare enough in practice not to be a real product
     decision either way.
 
+    `languages` (2026-09-29, multilingual support first slice) -- which
+    of `FLAIR_KEYWORDS_BY_LANG`'s tables to search, in caller-resolved
+    order (db.active_flair_languages reads Settings > General's "Flair
+    languages" checkbox-dropdown; every call site not yet updated for
+    that setting keeps the default `("en",)`, i.e. searches exactly like
+    before this parameter existed). Matches from every requested language
+    feed the SAME best-candidate comparison above -- a Romanian keyword
+    can beat an English one on priority/length the same way two English
+    keywords would, there's no separate "prefer this language" tier. An
+    unrecognized language code (a stale stored value from a since-removed
+    language) is silently skipped rather than raising, same "tolerate a
+    now-invalid stored setting instead of crashing on it" leniency the
+    rest of this app's app_meta readers already apply.
+
     Deliberately independent of whether `flair_image_url` would actually
     find a file for the winning id -- this is pure keyword matching over
     the full DATA table regardless of which photos an operator has
@@ -385,12 +541,16 @@ def match_flair(name: str | None) -> str | None:
         return None
     lowered = name.lower()
     best: tuple[int, int, str, str] | None = None  # (priority, -len(kw), kw, flair_id)
-    for flair_id, keywords in FLAIR_KEYWORDS.items():
-        for keyword, priority in keywords:
-            if keyword in lowered:
-                candidate = (priority, -len(keyword), keyword, flair_id)
-                if best is None or candidate < best:
-                    best = candidate
+    for lang in languages:
+        table = FLAIR_KEYWORDS_BY_LANG.get(lang)
+        if not table:
+            continue
+        for flair_id, keywords in table.items():
+            for keyword, priority in keywords:
+                if keyword in lowered:
+                    candidate = (priority, -len(keyword), keyword, flair_id)
+                    if best is None or candidate < best:
+                        best = candidate
     return best[3] if best else None
 
 

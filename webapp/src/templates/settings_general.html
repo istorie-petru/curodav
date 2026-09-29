@@ -168,5 +168,33 @@
          direct request) -- the Month/Day switcher's visibility toggle added
          2026-08-28 is gone; both views are unconditionally available now,
          same as before that setting existed. -->
+    <!-- Flair languages (2026-09-29, direct request: first step of
+         multilingual support -- explicitly NOT "add 20 new languages,"
+         just a checkbox-dropdown offering English (default) and Romanian)
+         -- which of flairs.FLAIR_KEYWORDS_BY_LANG's keyword tables
+         flairs.match_flair searches when guessing a flair from an
+         event/task/label/group/project's own name. `ms_mode="select"`,
+         same reasoning as Notifications' "Remind me about" row: these are
+         real independent on/off flags (unticking English genuinely means
+         "don't search English keywords," not "no filter, search
+         everything" the way an empty Labels filter elsewhere behaves) --
+         see that row's own comment in settings_notifications.html for the
+         full "select" vs "filter" distinction. Autosubmits like every
+         other row on this page. -->
+    <form class="settings-field-row" method="post" action="/settings/flair-languages" id="flair-languages-form">
+        <span class="settings-field-label">Flair languages
+            <span class="settings-field-hint">Keyword languages used to auto-guess a flair from a name</span>
+        </span>
+        <span class="spacer"></span>
+        {% set ms_name = 'languages' %}
+        {% set ms_mode = 'select' %}
+        {% set ms_label = 'Flair languages' %}
+        {% set ms_items = flair_language_options %}
+        {% set ms_selected = current_flair_languages %}
+        {% set ms_autosubmit = true %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'flair-languages-form' %}
+        {% include "_widget_list_multiselect.html" %}
+    </form>
 </div>
 {% endblock %}

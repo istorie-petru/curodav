@@ -5622,6 +5622,32 @@ def set_page_banner_cleared(conn: sqlite3.Connection, page_key: str) -> None:
     set_app_meta(conn, _page_banner_key(page_key), json.dumps({"kind": "none"}))
 
 
+def active_flair_languages(conn: sqlite3.Connection) -> list[str]:
+    """Which of `flairs.FLAIR_KEYWORDS_BY_LANG`'s tables `flairs.
+    match_flair` should search, per Settings > General's "Flair languages"
+    checkbox-dropdown (routers/settings.py's `set_flair_languages`).
+    Comma-stored, same convention as `reminders.py`'s `TYPES_KEY`/
+    `enabled_types` -- but unlike that setting, missing OR an empty stored
+    value both mean "English only" here, not "every language": turning on
+    Romanian (or unchecking English) is a deliberate opt-in an install has
+    to actually make, never a default every existing install silently
+    gets just because a second language now exists, and "nothing
+    selected" would otherwise mean match_flair searches zero tables --
+    technically harmless (just never matches anything) but almost
+    certainly not what a user who cleared a checkbox by accident wanted.
+    A stored code that isn't in `flairs.FLAIR_LANGUAGES` any more (a
+    since-removed language) is dropped rather than kept -- `match_flair`
+    itself already tolerates an unknown code by skipping it, but filtering
+    here too keeps this function's own return value trustworthy for any
+    other caller (e.g. rendering the settings row's checked state) that
+    doesn't want to re-derive that same guard."""
+    raw = get_app_meta(conn, flairs.FLAIR_LANGUAGES_KEY)
+    if not raw:
+        return ["en"]
+    langs = [lang for lang in raw.split(",") if lang in flairs.FLAIR_LANGUAGES]
+    return langs or ["en"]
+
+
 def effective_page_banner(conn: sqlite3.Connection, page_key: str, name: str | None = None) -> dict[str, Any] | None:
     """`get_page_banner`, extended with the flair default (item 10,
     2026-09-27, "dynamically attach a photo to an event/task/habit/label/
@@ -5650,7 +5676,7 @@ def effective_page_banner(conn: sqlite3.Connection, page_key: str, name: str | N
     if _page_banner_explicitly_cleared(conn, page_key):
         return None
     if name:
-        flair_id = flairs.match_flair(name)
+        flair_id = flairs.match_flair(name, active_flair_languages(conn))
         if flair_id:
             image_url = flairs.flair_image_url(flair_id)
             # A matched keyword with no actual file configured yet
@@ -5787,10 +5813,11 @@ def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str,
     # one level earlier (title -> description -> month -> season ->
     # global), rather than inventing a new kind of fallback rule.
     if object_type in _FLAIR_ELIGIBLE_TYPES:
-        flair_id = flairs.match_flair(obj.get("title"))
+        _flair_langs = active_flair_languages(conn)
+        flair_id = flairs.match_flair(obj.get("title"), _flair_langs)
         image_url = flairs.flair_image_url(flair_id) if flair_id else None
         if not image_url:
-            desc_flair_id = flairs.match_flair(obj.get("description"))
+            desc_flair_id = flairs.match_flair(obj.get("description"), _flair_langs)
             if desc_flair_id:
                 image_url = flairs.flair_image_url(desc_flair_id)
         if image_url:

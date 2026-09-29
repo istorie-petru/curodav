@@ -103,6 +103,60 @@ class TestFlairKeywordData:
             assert len(names) == len(set(names)), flair_id
 
 
+class TestMultilingualFlairData:
+    """2026-09-29 direct request: first step of multilingual support --
+    explicitly NOT "add 20 new languages," just English (default) +
+    Romanian. Covers flairs.FLAIR_KEYWORDS_RO/FLAIR_KEYWORDS_BY_LANG's own
+    shape and match_flair's new `languages` parameter; db.
+    active_flair_languages and the Settings > General route are covered in
+    their own modules below/in test_settings_general-adjacent files."""
+
+    def test_ro_table_covers_every_english_flair_id(self):
+        # Parity guard -- catches a future FLAIR_KEYWORDS addition that
+        # forgot its Romanian counterpart (or a typo'd id in either table)
+        # before it ships as a silent gap rather than a loud test failure.
+        assert set(flairs.FLAIR_KEYWORDS_RO) == set(flairs.FLAIR_KEYWORDS)
+
+    def test_ro_table_has_real_keywords_for_every_id(self):
+        assert all(kws for kws in flairs.FLAIR_KEYWORDS_RO.values())
+
+    def test_no_duplicate_keyword_within_one_ro_photo(self):
+        for flair_id, kws in flairs.FLAIR_KEYWORDS_RO.items():
+            names = [k for k, _ in kws]
+            assert len(names) == len(set(names)), flair_id
+
+    def test_by_lang_table_has_exactly_en_and_ro(self):
+        assert set(flairs.FLAIR_KEYWORDS_BY_LANG) == {"en", "ro"}
+        assert flairs.FLAIR_KEYWORDS_BY_LANG["en"] is flairs.FLAIR_KEYWORDS
+        assert flairs.FLAIR_KEYWORDS_BY_LANG["ro"] is flairs.FLAIR_KEYWORDS_RO
+
+    def test_flair_languages_tuple_and_labels_agree(self):
+        assert set(flairs.FLAIR_LANGUAGES) == set(flairs.FLAIR_LANGUAGE_LABELS)
+        assert flairs.FLAIR_LANGUAGE_LABELS["en"] == "English"
+
+    def test_match_flair_default_languages_is_english_only(self):
+        # No `languages` argument at all -- every pre-existing call site
+        # (and every other test in this file) must keep matching exactly
+        # like before this parameter existed.
+        assert flairs.match_flair("Weekly yoga class") == "yoga"
+        assert flairs.match_flair("Baschet cu prietenii") is None
+
+    def test_match_flair_searches_romanian_when_selected(self):
+        assert flairs.match_flair("Baschet cu prietenii", languages=["ro"]) == "basketball"
+        assert flairs.match_flair("Basketball with friends", languages=["ro"]) is None
+
+    def test_match_flair_can_search_both_languages_at_once(self):
+        assert flairs.match_flair("Basketball with friends", languages=["en", "ro"]) == "basketball"
+        assert flairs.match_flair("Baschet cu prietenii", languages=["en", "ro"]) == "basketball"
+
+    def test_match_flair_unknown_language_code_is_skipped_not_an_error(self):
+        assert flairs.match_flair("Basketball with friends", languages=["fr", "en"]) == "basketball"
+        assert flairs.match_flair("Basketball with friends", languages=["fr"]) is None
+
+    def test_match_flair_empty_languages_matches_nothing(self):
+        assert flairs.match_flair("Basketball with friends", languages=[]) is None
+
+
 class TestMatchFlair:
     def test_exact_name_match(self):
         assert flairs.match_flair("Basketball") == "basketball"
@@ -134,6 +188,58 @@ class TestMatchFlair:
         # is empty by default in this whole file's own fixture).
         assert flairs.match_flair("Basketball") == "basketball"
         assert flairs.flair_image_url("basketball") is None
+
+
+class TestActiveFlairLanguages:
+    def test_defaults_to_english_only_when_never_set(self, conn):
+        assert db.active_flair_languages(conn) == ["en"]
+
+    def test_defaults_to_english_only_when_stored_empty(self, conn):
+        # An explicit "" (every language unticked) still resolves to
+        # English, not zero languages -- db.active_flair_languages's own
+        # comment on why "nothing selected" isn't a real state to keep.
+        db.set_app_meta(conn, flairs.FLAIR_LANGUAGES_KEY, "")
+        assert db.active_flair_languages(conn) == ["en"]
+
+    def test_reads_back_a_stored_selection(self, conn):
+        db.set_app_meta(conn, flairs.FLAIR_LANGUAGES_KEY, "ro")
+        assert db.active_flair_languages(conn) == ["ro"]
+
+    def test_reads_back_multiple_stored_languages(self, conn):
+        db.set_app_meta(conn, flairs.FLAIR_LANGUAGES_KEY, "en,ro")
+        assert db.active_flair_languages(conn) == ["en", "ro"]
+
+    def test_drops_an_unrecognized_stored_code(self, conn):
+        db.set_app_meta(conn, flairs.FLAIR_LANGUAGES_KEY, "en,fr")
+        assert db.active_flair_languages(conn) == ["en"]
+
+    def test_falls_back_to_english_when_every_stored_code_is_unrecognized(self, conn):
+        db.set_app_meta(conn, flairs.FLAIR_LANGUAGES_KEY, "fr,de")
+        assert db.active_flair_languages(conn) == ["en"]
+
+
+class TestEffectivePageBannerRespectsFlairLanguages:
+    def test_romanian_name_matches_once_romanian_is_selected(self, conn, flairs_dir):
+        _put(flairs_dir, "basketball")
+        db.set_app_meta(conn, flairs.FLAIR_LANGUAGES_KEY, "ro")
+        banner = db.effective_page_banner(conn, "Baschet", name="Baschet")
+        assert banner is not None
+        assert "/flairs/basketball" in banner["image_url"]
+
+    def test_romanian_name_does_not_match_with_english_only_default(self, conn, flairs_dir):
+        _put(flairs_dir, "basketball")
+        assert db.effective_page_banner(conn, "Baschet", name="Baschet") is None
+
+    def test_banner_for_object_title_respects_the_setting_too(self, conn, flairs_dir):
+        _put(flairs_dir, "basketball")
+        db.set_app_meta(conn, flairs.FLAIR_LANGUAGES_KEY, "ro")
+        db.upsert_task(conn, {
+            "uid": "t1", "title": "Baschet cu prietenii", "description": "", "status": "active",
+            "tags": [], "created_at": _now(),
+        })
+        banner = db.banner_for_task(conn, db.get_task(conn, "t1"))
+        assert banner is not None
+        assert "/flairs/basketball" in banner["image_url"]
 
 
 class TestFlairImageUrl:

@@ -1,8 +1,17 @@
 /* Settings > Flairs (2026-09-29, direct request: a frontend for bulk-
  * adding flair photos -- "drop down the photos in either zip or folder
  * or multiple photos at once" -- instead of an operator needing
- * filesystem access to flairs_dir). Page-local, same convention as
- * data_maintenance.js: only settings_flairs.html loads this.
+ * filesystem access to flairs_dir). Loaded from settings_flairs.html
+ * itself (a real no-JS visit) AND from settings_appearance.html (see that
+ * template's own comment) -- every listener below is document-level
+ * delegated, same trick data_maintenance.js already relies on so its own
+ * import_modal.html works without loading a second copy of that script,
+ * so it doesn't matter which of the two pages actually requested this
+ * file, or whether the Flairs modal it targets is injected later via
+ * static/modal.js's innerHTML swap (a <script> tag inside a fetched
+ * fragment never executes, so settings_flairs.html's own copy of this
+ * tag is dead code whenever it's opened AS a modal -- only the
+ * Appearance-page copy matters then).
  *
  * The upload form (settings_flairs.html) works with zero JS: it's a
  * plain multipart POST with four real <input type=file> fields (a
@@ -17,6 +26,14 @@
  * upload otherwise), and (4) the same ?note=/?error= -> ccToast bridge
  * data_maintenance.js already established for this app's plain-POST
  * settings actions.
+ *
+ * 2026-09-29 modal-ization: the Upload button moved out of the body
+ * <form> into the shared #modal-footer (settings_flairs.html's own
+ * comment on why) -- it's now the form's SIBLING, not its descendant, so
+ * `form().querySelector("[data-dm-submit]")` (which only ever searches
+ * DESCENDANTS) stopped finding it. Same bug, same fix as
+ * data_maintenance.js's own `import-submit-btn` comment describes:
+ * looked up by id via `document.getElementById` instead.
  */
 (function () {
   "use strict";
@@ -77,7 +94,7 @@
     });
     var status = f.querySelector("[data-dm-status]");
     if (status) status.textContent = descriptions.join(" + ");
-    var submit = f.querySelector("[data-dm-submit]");
+    var submit = document.getElementById("flairs-upload-submit-btn");
     if (submit) submit.disabled = !anyStaged;
   }
 

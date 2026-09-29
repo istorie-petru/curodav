@@ -23,7 +23,7 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from src import db, deps
+from src import db, deps, flairs
 from src.routers import calendar as calendar_router
 from src.routers import settings as settings_router
 from src.routers import tasks as tasks_router
@@ -419,6 +419,44 @@ class TestSettingsGeneralNewFields:
         assert "current_time_format" in resp.context
         assert "week_start" not in resp.context
         assert "time_format" not in resp.context
+
+
+class TestFlairLanguagesSetting:
+    """"Flair languages" (Settings > General, 2026-09-29 direct request --
+    first step of multilingual support, English default + Romanian).
+    src/flairs.py's own FLAIR_KEYWORDS_RO/match_flair(languages=...) and
+    db.active_flair_languages are covered in test_flairs.py; these tests
+    focus on the Settings > General route/context/markup."""
+
+    def test_renders_flair_languages_control(self, conn):
+        resp = settings_router.settings_general(_settings_request("/settings/general"), conn=conn)
+        body = resp.body.decode()
+        assert 'action="/settings/flair-languages"' in body
+        assert resp.context["current_flair_languages"] == ["en"]
+        assert {"uid": "en", "name": "English"} in resp.context["flair_language_options"]
+        assert {"uid": "ro", "name": "Română"} in resp.context["flair_language_options"]
+
+    def test_set_flair_languages_route(self, conn):
+        resp = settings_router.set_flair_languages(languages=["en", "ro"], conn=conn)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/settings/general"
+        assert db.get_app_meta(conn, flairs.FLAIR_LANGUAGES_KEY) == "en,ro"
+
+    def test_set_flair_languages_drops_unrecognized_values(self, conn):
+        settings_router.set_flair_languages(languages=["en", "fr"], conn=conn)
+        assert db.get_app_meta(conn, flairs.FLAIR_LANGUAGES_KEY) == "en"
+
+    def test_set_flair_languages_can_store_an_empty_selection(self, conn):
+        # Unticking every option is a real, storable state -- it's
+        # db.active_flair_languages's own read-time fallback (not this
+        # route) that turns it back into "English only" for match_flair.
+        settings_router.set_flair_languages(languages=[], conn=conn)
+        assert db.get_app_meta(conn, flairs.FLAIR_LANGUAGES_KEY) == ""
+
+    def test_general_page_reflects_a_stored_selection(self, conn):
+        settings_router.set_flair_languages(languages=["ro"], conn=conn)
+        resp = settings_router.settings_general(_settings_request("/settings/general"), conn=conn)
+        assert resp.context["current_flair_languages"] == ["ro"]
 
 
 class TestSettingsAutoArchive:

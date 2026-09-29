@@ -138,7 +138,12 @@ class TestSettingsHub:
             "/settings/holidays",
             "/settings/time-blocks",
             "/settings/data-maintenance",
-            "/settings/flairs",  # 2026-09-29
+            # "/settings/flairs" was a hub category briefly (2026-09-29) --
+            # moved into a modal button on Settings > Appearance the same
+            # day (HUB_CATEGORIES' own comment); /settings/flairs itself
+            # still works, it just isn't one of these top-level tiles any
+            # more (test_settings_flairs.py's TestFlairsNotAHubCategory
+            # covers that directly).
             "/published-lists",
         }
 

@@ -160,5 +160,35 @@
          new upload/remove routes needed. 2026-09-27: moved into the
          Accent color row above as a `.look-side-btn` (see that row's own
          comment) -- no longer its own row here. -->
+    <!-- Flairs (2026-09-29, moved here from its own Settings hub category
+         -- see HUB_CATEGORIES' own comment in routers/settings.py) -- a
+         button, not a dropdown/toggle, since Flairs is a whole management
+         page (coverage status + bulk upload) rather than a single value;
+         opens it as a modal on top of Appearance the same way the Accent
+         color row's own banner button opens the banner editor (`.look-
+         side-btn`, same square icon-button styling, `data-modal` instead
+         of a real navigation). The coverage count is a straight read of
+         the same numbers settings_flairs.html's own status card computes,
+         shown here too so "how many of mine are configured" doesn't need
+         a click to answer. -->
+    <div class="settings-field-row">
+        <span class="settings-field-label">Flairs
+            <span class="settings-field-hint">{{ flairs_configured_count }} of {{ flairs_total_count }} configured</span>
+        </span>
+        <span class="spacer"></span>
+        <a href="/settings/flairs" data-modal class="look-side-btn" title="Manage flairs" aria-label="Manage flairs">{{ icon('image') }}</a>
+    </div>
 </div>
+{% endblock %}
+{% block extra_scripts %}
+<!-- Not this page's own feature -- settings_flairs.js's listeners are all
+     document-level delegated (see that file's own header comment), which
+     is what lets them keep working once static/modal.js swaps the Flairs
+     button's target in as a modal fragment here. Loaded on THIS page
+     (not just settings_flairs.html, which never actually executes its own
+     copy of this tag when fetched as a modal -- a <script> in an
+     innerHTML-injected fragment doesn't run) so the dropzone drag/drop,
+     live status, and Submit-enable logic are live the moment the modal
+     opens. -->
+<script defer src="{{ static_url('settings_flairs.js') }}"></script>
 {% endblock %}

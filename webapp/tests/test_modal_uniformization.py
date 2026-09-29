@@ -206,6 +206,7 @@ class TestFullAppModalSweep:
             "habit_task_form.html", "label_merge_modal.html",
             "note_form.html", "quick_add.html", "task_detail.html", "task_form.html",
             "banner_editor.html", "_widget_edit_modal.html", "_modal_widget_customize.html",
+            "settings_flairs.html",
         ]
         for name in modal_files:
             text = (templates_dir / name).read_text()

@@ -204,7 +204,56 @@ class TestUploadFlairsRoute:
         assert (flairs_dir / "basketball.jpg").read_bytes() == new_bytes
 
 
-class TestFlairsIsAHubCategory:
-    def test_flairs_is_listed_on_the_settings_hub(self):
+class TestFlairsNotAHubCategory:
+    """2026-09-29 direct follow-up: Flairs moved off its own top-level
+    Settings hub category into a modal button on Settings > Appearance
+    (see HUB_CATEGORIES' own comment) -- /settings/flairs itself is
+    unchanged (still a real GET route, still degrades to a full standalone
+    page, TestSettingsFlairsPage above still exercises it directly), it
+    just isn't advertised as a separate hub tile any more."""
+
+    def test_flairs_is_no_longer_listed_on_the_settings_hub(self):
         urls = [c["url"] for c in settings_router.HUB_CATEGORIES]
-        assert "/settings/flairs" in urls
+        assert "/settings/flairs" not in urls
+
+
+class TestFlairsModalMarkup:
+    """2026-09-29 modal-ization -- settings_flairs.html is now a real
+    #modal-target fragment (modal-header/modal-body/shared footer), opened
+    from Settings > Appearance's own Flairs row. Direct instruction: no
+    `settings-hint` anywhere in this template any more (every hint uses
+    `text-muted` instead, the general modal-body convention)."""
+
+    def test_no_settings_hint_class_anywhere(self, conn, flairs_dir):
+        body = settings_router.settings_flairs(_request(), conn=conn).body.decode()
+        assert "settings-hint" not in body
+
+    def test_no_settings_hint_class_when_dir_not_configured(self, conn):
+        flairs.configure(None)
+        body = settings_router.settings_flairs(_request(), conn=conn).body.decode()
+        assert "settings-hint" not in body
+
+    def test_uses_modal_target_and_shared_footer(self, conn, flairs_dir):
+        body = settings_router.settings_flairs(_request(), conn=conn).body.decode()
+        assert 'id="modal-target"' in body
+        assert '<h1>Flairs</h1>' in body
+        assert '{% include "_modal_footer.html" %}' not in body  # the include resolved, not literal
+        assert 'class="modal-footer"' in body
+        assert 'href="/settings/appearance"' in body
+
+    def test_upload_button_lives_in_the_footer_tied_to_the_body_form(self, conn, flairs_dir):
+        body = settings_router.settings_flairs(_request(), conn=conn).body.decode()
+        assert 'id="flairs-upload-submit-btn"' in body
+        assert 'form="flairs-upload-form"' in body
+        assert "disabled" in body  # starts disabled until a file is staged
+
+
+class TestAppearanceFlairsRow:
+    def test_shows_coverage_counts_and_modal_link(self, conn, flairs_dir):
+        (flairs_dir / "basketball.jpg").write_bytes(_TINY_JPEG)
+        resp = settings_router.settings_appearance(_request("/settings/appearance"), conn=conn)
+        assert resp.context["flairs_configured_count"] == 1
+        assert resp.context["flairs_total_count"] > 100
+        body = resp.body.decode()
+        assert 'href="/settings/flairs"' in body
+        assert "data-modal" in body
