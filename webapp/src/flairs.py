@@ -62,7 +62,76 @@ reference data's own jammed-together `americanfootball`) -- renamed in
 this same follow-up, deliberately NOT mirroring Google's own internal
 flair-id spelling, since this table is no longer a thin wrapper around
 their asset naming at all once the actual bytes stopped coming from
-them."""
+them.
+
+2026-09-29 (direct request: "update the keywords to cover all files in
+the folders", after the reference folder was itself reorganized/renamed
+into flairs-dir-ready photos + icons/ + unmatched/) -- 24 more flair ids
+added on top of the original 79, covering every file that folder
+reorganization turned up:
+
+  - 18 real event-type icons Google's own asset set has that the
+    original 336-row keyword research never covered (no CSV row at all,
+    not even an "unmatched" one): `bills`, `bus`, `delivery`, `doctor`,
+    `flight`, `hotel`, `interview`, `kids-pickup-dropoff`,
+    `online-classes`, `party`, `photography`, `shopping`, `studying`,
+    `trip`, `tv`, `video-call`, `vote`, `gymnastics-generic` (a fallback
+    below the two specific gymnastics disciplines -- see its own low
+    priority note). Five of these (`bus`, `doctor`, `flight`,
+    `shopping`, `trip`/`travel`/`travelling`, `video-call`) DO have a
+    literal row in the reference `mapping.csv`, just with `status=
+    unmatched` (no flair existed for them yet) -- those exact phrases
+    are reused verbatim rather than invented.
+  - `restaurant` split out of `dinner` as its own id (confirmed via
+    AskUserQuestion despite the reference data itself mapping
+    "restaurant"/"restaurants" to `dinner` -- Google ships a visually
+    distinct icon for it, and the operator wanted the two kept separate
+    even though their keyword lists now necessarily overlap in intent).
+    `dinner` no longer claims those two keywords -- see its own entry.
+
+  - 8 scenery/color backgrounds (`university`, `museum`, `debate`,
+    `mountain`, `sea`, `sky`, `wood`, `blue`) and 16 pure calendar-grid
+    entries (12 months + `spring`/`summer`/`autumn`/`winter`) added ONLY
+    because directly requested a second time after this file raised the
+    obvious objection: these are common English words (a person named
+    "June", "March for Science", "I may go", "feeling blue") that WILL
+    false-positive against unrelated names, something none of the
+    original 79 keywords risk. Half-mitigated by giving every one of
+    these 24 entries priority 5 (the loosest tier) instead of the usual
+    new-entry priority 2, so `match_flair`'s tie-break always prefers a
+    more specific competing match on the same name -- this does nothing
+    for a name with no OTHER keyword in it, which is the whole risk
+    being accepted here, confirmed as acceptable via AskUserQuestion.
+    Seasons in particular already have a completely separate, working,
+    DATE-based tier (`SEASON_BANNER_SCOPES` in db.py) that this does NOT
+    replace or interact with -- these are four new, independent,
+    NAME-matched ids that happen to share an English word with that
+    tier, not a second way of populating it. `banner_for_object`'s own
+    docstring still documents the original date-tier as unchanged.
+
+  - Deliberately did NOT add `.svg` to `SUPPORTED_EXTENSIONS`, even
+    though every one of the 18 event-type icons above only exists as an
+    SVG in Google's own set (no jpg/png/webp equivalent was ever
+    downloaded for them) -- so those 18 new ids match keywords
+    correctly but `flair_image_url` will keep returning None for all of
+    them until the operator supplies a real raster file, exactly as if
+    no file had been placed at all. This isn't an oversight: `image_
+    sniff.sniff_image_type` (this app's whole reason for re-sniffing
+    bytes instead of trusting an extension, see that module's own
+    docstring) only allowlists jpeg/png/gif/webp magic bytes, and SVG is
+    an XML format that can embed `<script>`/event-handler content -- an
+    app with no auth (see webapp/README.md's "Known gaps") serving
+    arbitrary operator-placed SVGs as `image/svg+xml` is a real
+    stored-XSS surface if that response is ever embedded somewhere a
+    browser executes it, unlike the four binary formats already
+    allowlisted. Adding `.svg` here without also teaching `sniff_
+    image_type` to validate (or sanitize) SVG content would have made
+    `flair_image_url` claim a photo exists while the serving route
+    404s on it (sniff returns None) -- silently broken, not silently
+    insecure, but still wrong, so this was left alone rather than
+    guessed at. `icons/` in the reference folder holds these as-is for
+    whoever converts them (rasterize to PNG, or add real SVG
+    sanitization + sniffing) -- a deliberate follow-up, not done here."""
 
 from __future__ import annotations
 
@@ -99,7 +168,7 @@ FLAIR_KEYWORDS: dict[str, list[tuple[str, int]]] = {
     "dancing": [("dance", 2), ("dances", 2), ("dancing", 2)],
     "date-night": [("candle light dinner", 3), ("candlelight dinner", 3), ("date night", 2), ("romantic dinner", 3)],
     "dentist": [("dental", 2), ("dental appointment", 2), ("dental checkup", 2), ("dentist", 2), ("dentistry", 2), ("teeth cleaning", 3)],
-    "dinner": [("dinner", 2), ("dinners", 2), ("restaurant", 2), ("restaurants", 2)],
+    "dinner": [("dinner", 2), ("dinners", 2)],
     "drinks": [("bachelorette party", 2), ("cocktail", 2), ("cocktails", 2), ("drinks", 2), ("happy hour", 2), ("night out", 2), ("stag party", 2)],
     "field-hockey": [("field hockey", 2)],
     "game-night": [("board game", 2), ("board games", 2), ("boardgame", 2), ("boardgames", 2), ("games night", 2)],
@@ -148,6 +217,59 @@ FLAIR_KEYWORDS: dict[str, list[tuple[str, int]]] = {
     "christmas-meal": [("christmas brunch", 5), ("christmas dinner", 5), ("christmas eve brunch", 5), ("christmas eve dinner", 5), ("christmas eve lunch", 5), ("christmas eve luncheon", 5), ("christmas lunch", 5), ("christmas luncheon", 5), ("x-mas brunch", 5), ("x-mas dinner", 5), ("x-mas eve brunch", 5), ("x-mas eve dinner", 5), ("x-mas eve lunch", 5), ("x-mas eve luncheon", 5), ("x-mas lunch", 5), ("x-mas luncheon", 5), ("xmas brunch", 5), ("xmas dinner", 5), ("xmas eve brunch", 5), ("xmas eve dinner", 5), ("xmas eve lunch", 5), ("xmas eve luncheon", 5), ("xmas lunch", 5), ("xmas luncheon", 5)],
     "christmas-party": [("christmas eve party", 4), ("christmas party", 4), ("x-mas eve party", 4), ("x-mas party", 4), ("xmas eve party", 4), ("xmas party", 4)],
     "yoga": [("yoga", 2)],
+
+    # 2026-09-29 additions -- see this file's own header docstring for
+    # the full reasoning behind each group below.
+    "bills": [("bill", 2), ("bills", 2), ("pay bill", 2), ("pay bills", 2), ("utility bill", 2), ("utilities", 2)],
+    "bus": [("bus", 2), ("bus ride", 2)],
+    "delivery": [("delivery", 2), ("parcel", 2), ("parcel pick-up", 2), ("parcel pickup", 2), ("package delivery", 2)],
+    "doctor": [("doctor", 2), ("doctor's appointment", 2), ("doctors appointment", 2), ("gp appointment", 2)],
+    "flight": [("flight", 2), ("flights", 2), ("catch a flight", 2), ("board a flight", 2)],
+    "hotel": [("hotel", 2), ("hotel booking", 2), ("hotel check-in", 2), ("check into hotel", 2)],
+    "interview": [("interview", 2), ("job interview", 2), ("interviewing", 2)],
+    "kids-pickup-dropoff": [("school pickup", 2), ("school pick-up", 2), ("school dropoff", 2), ("school drop-off", 2), ("pick up kids", 2), ("pick up the kids", 2), ("drop off kids", 2), ("drop off the kids", 2)],
+    "online-classes": [("online class", 2), ("online classes", 2), ("online course", 2), ("virtual class", 2), ("zoom class", 2)],
+    "party": [("party", 2), ("parties", 2), ("house party", 2)],
+    "photography": [("photography", 2), ("photo shoot", 2), ("photoshoot", 2), ("photography session", 2)],
+    "restaurant": [("restaurant", 2), ("restaurants", 2), ("table reservation", 2), ("book a table", 2), ("fine dining", 2)],
+    "shopping": [("shopping", 2), ("go shopping", 2), ("grocery shopping", 2)],
+    "studying": [("studying", 2), ("study session", 2), ("exam prep", 2), ("homework", 2)],
+    "trip": [("trip", 2), ("travel", 2), ("travelling", 2), ("traveling", 2), ("road trip", 2)],
+    "tv": [("tv", 2), ("watch tv", 2), ("television", 2), ("binge watch", 2), ("binge-watch", 2)],
+    "video-call": [("video call", 2), ("video call with", 2), ("video chat", 2), ("zoom call", 2)],
+    "vote": [("vote", 2), ("voting", 2), ("election day", 2), ("go vote", 2)],
+    # Generic fallback beneath the two specific disciplines above --
+    # "artistic gymnastics"/"rhythmic gymnastics" are both longer AND
+    # lower-priority than plain "gymnastics", so match_flair's own
+    # tie-break (longer keyword wins at equal priority, and priority 2
+    # beats 5 regardless) always prefers them when a name is specific.
+    "gymnastics-generic": [("gymnastics", 5)],
+    # Scenery/color backgrounds and calendar-grid entries -- priority 5
+    # throughout, see the header docstring's false-positive note.
+    "university": [("university", 5), ("college", 5), ("campus", 5)],
+    "museum": [("museum", 5), ("art gallery", 5), ("gallery", 5)],
+    "debate": [("debate", 5), ("debate club", 5), ("debate practice", 5)],
+    "mountain": [("mountain", 5), ("mountains", 5)],
+    "sea": [("sea", 5), ("seaside", 5), ("beach", 5), ("ocean", 5)],
+    "sky": [("sky", 5)],
+    "wood": [("wood", 5), ("woods", 5), ("forest", 5), ("woodworking", 5)],
+    "blue": [("blue", 5)],
+    "january": [("january", 5)],
+    "february": [("february", 5)],
+    "march": [("march", 5)],
+    "april": [("april", 5)],
+    "may": [("may", 5)],
+    "june": [("june", 5)],
+    "july": [("july", 5)],
+    "august": [("august", 5)],
+    "september": [("september", 5)],
+    "october": [("october", 5)],
+    "november": [("november", 5)],
+    "december": [("december", 5)],
+    "spring": [("spring", 5)],
+    "summer": [("summer", 5)],
+    "autumn": [("autumn", 5), ("fall", 5)],
+    "winter": [("winter", 5)],
 }
 
 
