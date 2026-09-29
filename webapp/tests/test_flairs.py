@@ -201,6 +201,122 @@ class TestFlairImageRoute:
         assert excinfo.value.status_code == 404
 
 
+class TestIngestUploadedPhotos:
+    """flairs.ingest_uploaded_photos (2026-09-29, Settings > Flairs bulk
+    upload) -- format-agnostic: routers/settings.py's upload route feeds
+    it plain (name, bytes) pairs regardless of whether they came from a
+    multi-file input or a zip's entries, so these tests exercise the
+    function directly with hand-built pairs rather than going through
+    either source."""
+
+    def test_none_configured_saves_nothing_and_reports_nothing(self):
+        flairs.configure(None)
+        result = flairs.ingest_uploaded_photos([("basketball.jpg", _TINY_JPEG)])
+        assert result.saved == []
+        assert result.skipped == []
+
+    def test_saves_a_valid_photo_under_its_basename(self, flairs_dir):
+        result = flairs.ingest_uploaded_photos([("basketball.jpg", _TINY_JPEG)])
+        assert result.saved == ["basketball"]
+        assert (flairs_dir / "basketball.jpg").read_bytes() == _TINY_JPEG
+        assert flairs.flair_image_url("basketball") is not None
+
+    def test_uses_basename_regardless_of_path_depth_or_separator(self, flairs_dir):
+        # Exactly what a zip entry's `filename` or a webkitdirectory
+        # folder-picker's relative path looks like -- any subfolder
+        # structure is discarded, only the leaf name matters.
+        result = flairs.ingest_uploaded_photos([
+            ("google-calendar-flairs/icons/basketball.jpg", _TINY_JPEG),
+            ("some\\windows\\path\\yoga.jpg", _TINY_JPEG),
+        ])
+        assert sorted(result.saved) == ["basketball", "yoga"]
+
+    def test_directory_entry_is_silently_ignored_not_skipped(self, flairs_dir):
+        result = flairs.ingest_uploaded_photos([("icons/", b"")])
+        assert result.saved == []
+        assert result.skipped == []
+
+    def test_id_not_yet_known_still_saves_fine(self, flairs_dir):
+        # Shape, not membership -- same rule the /flairs/{id} serving
+        # route already applies (routers/flairs.py's own _SAFE_ID, now
+        # `flairs.ID_SHAPE`). An id absent from FLAIR_KEYWORDS/MONTH_
+        # BANNER_SCOPES/SEASON_BANNER_SCOPES entirely still saves.
+        result = flairs.ingest_uploaded_photos([("not-a-real-flair-yet.jpg", _TINY_JPEG)])
+        assert result.saved == ["not-a-real-flair-yet"]
+
+    def test_overwrites_an_existing_photo_silently(self, flairs_dir):
+        flairs.ingest_uploaded_photos([("basketball.jpg", _TINY_JPEG)])
+        new_bytes = _TINY_JPEG + b"\x01"
+        result = flairs.ingest_uploaded_photos([("basketball.jpg", new_bytes)])
+        assert result.saved == ["basketball"]
+        assert (flairs_dir / "basketball.jpg").read_bytes() == new_bytes
+
+    def test_no_extension_is_skipped_with_a_reason(self, flairs_dir):
+        result = flairs.ingest_uploaded_photos([("basketball", _TINY_JPEG)])
+        assert result.saved == []
+        assert result.skipped == [("basketball", "no file extension")]
+
+    def test_unsupported_extension_is_skipped(self, flairs_dir):
+        # .svg specifically -- deliberately still not a supported
+        # extension, same reasoning as this module's own header docstring
+        # (image_sniff has no SVG sniffing, stored-XSS surface).
+        result = flairs.ingest_uploaded_photos([("basketball.svg", b"<svg></svg>")])
+        assert result.saved == []
+        assert result.skipped[0][0] == "basketball.svg"
+        assert "unsupported extension" in result.skipped[0][1]
+
+    def test_bad_id_shape_is_skipped(self, flairs_dir):
+        for bad_name in ("basket_ball.jpg", "-basketball.jpg", "basketball-.jpg", "bas ketball.jpg"):
+            result = flairs.ingest_uploaded_photos([(bad_name, _TINY_JPEG)])
+            assert result.saved == [], bad_name
+            assert "valid flair id" in result.skipped[0][1], bad_name
+
+    def test_uppercase_filename_is_lowercased_and_saved(self, flairs_dir):
+        # Leniency, not strictness, on case: "Basketball.JPG" is exactly
+        # what an operator would have if they renamed a file by hand
+        # without thinking about case -- auto-lowercasing it is friendlier
+        # than making them redo the upload, and ID_SHAPE only ever rejects
+        # genuinely wrong shapes (underscores, stray spaces, leading/
+        # trailing hyphens), not merely-uppercase ones.
+        result = flairs.ingest_uploaded_photos([("Basketball.JPG", _TINY_JPEG)])
+        assert result.saved == ["basketball"]
+        assert flairs.flair_image_url("basketball") is not None
+
+    def test_bytes_that_dont_sniff_as_a_real_image_are_skipped(self, flairs_dir):
+        result = flairs.ingest_uploaded_photos([("basketball.jpg", b"not a real image")])
+        assert result.saved == []
+        assert "doesn't look like a real image" in result.skipped[0][1]
+
+    def test_sniffed_type_must_match_the_extension_claimed(self, flairs_dir):
+        # Real PNG bytes under a .jpg name -- sniffing catches the
+        # mismatch even though the bytes ARE a real image, just not the
+        # one this extension claims.
+        png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+        result = flairs.ingest_uploaded_photos([("basketball.jpg", png_bytes)])
+        assert result.saved == []
+        assert "doesn't look like a real image" in result.skipped[0][1]
+
+    def test_oversized_file_is_skipped(self, flairs_dir):
+        oversized = _TINY_JPEG + b"\x00" * flairs.MAX_UPLOAD_BYTES
+        result = flairs.ingest_uploaded_photos([("basketball.jpg", oversized)])
+        assert result.saved == []
+        assert "too large" in result.skipped[0][1]
+
+    def test_summary_reports_saved_and_skipped_counts(self, flairs_dir):
+        result = flairs.ingest_uploaded_photos([
+            ("basketball.jpg", _TINY_JPEG),
+            ("yoga.jpg", _TINY_JPEG),
+            ("bad name.jpg", _TINY_JPEG),
+        ])
+        summary = result.summary()
+        assert "2 photos saved" in summary
+        assert "1 skipped" in summary
+        assert "bad name.jpg" in summary
+
+    def test_summary_nothing_to_upload(self):
+        assert flairs.ingest_uploaded_photos([]).summary() == "Nothing to upload."
+
+
 class TestEffectivePageBanner:
     def test_no_name_no_stored_banner_is_none(self, conn):
         assert db.effective_page_banner(conn, "Random Label", name=None) is None

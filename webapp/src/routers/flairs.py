@@ -17,8 +17,6 @@ versioned)."""
 
 from __future__ import annotations
 
-import re
-
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
@@ -36,7 +34,10 @@ router = APIRouter(tags=["flairs"])
 # `FLAIR_KEYWORDS` containment alone (an operator could legitimately drop
 # a file under an id this app doesn't know about yet, e.g. testing a
 # future keyword addition, so this checks *shape*, not *membership*).
-_SAFE_ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+# 2026-09-29: moved to flairs.py itself as `ID_SHAPE`, reused verbatim by
+# `flairs.ingest_uploaded_photos` (the bulk-upload feature) for the exact
+# same reason -- one definition of "what a safe flair id looks like".
+_SAFE_ID = flairs.ID_SHAPE
 
 
 @router.get("/flairs/{flair_id}")

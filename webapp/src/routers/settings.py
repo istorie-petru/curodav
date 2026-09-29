@@ -94,10 +94,12 @@ from __future__ import annotations
 
 import base64
 import hmac
+import io
 import logging
 import os
 import threading
 import uuid
+import zipfile
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -106,7 +108,7 @@ import httpx
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from .. import auth, config, data_health, db, env_file, offline_sync, push, reminders
+from .. import auth, config, data_health, db, env_file, flairs, offline_sync, push, reminders
 from ..image_sniff import sniff_image_type
 from ..deps import (
     ACCENT_COLOR_KEY,
@@ -170,6 +172,14 @@ HUB_CATEGORIES = [
     {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Named holiday calendars non-working recurrence respects"},
     {"url": "/settings/time-blocks", "icon": "moon", "name": "Sleep & Leisure Time", "desc": "Weekly hours the Week/Day grid highlights and warns about"},
     {"url": "/settings/data-maintenance", "icon": "database", "name": "Data & Maintenance", "desc": "Backups, integrity, sync conflicts, export, purge"},
+    # 2026-09-29 (direct request, item 10 follow-up: a UI for the flairs
+    # feature's own photo folder, "instead of an operator needing
+    # filesystem access") -- earns its own hub category on the same
+    # "distinct thing a user thinks about" basis Holidays did (2026-08-14):
+    # it has real state of its own (which of ~100 flair ids currently have
+    # a photo configured) and a real action (bulk upload), not a couple of
+    # fields that would otherwise just bloat an existing page.
+    {"url": "/settings/flairs", "icon": "image", "name": "Flairs", "desc": "Photo banners auto-attached by keyword or date"},
     {"url": "/published-lists", "icon": "share-2", "name": "Published lists", "desc": "Subscribable filtered calendars/lists"},
 ]
 
@@ -694,6 +704,120 @@ def profile_photo_image(conn=Depends(get_db)):
             "Content-Encoding": "identity",
         },
     )
+
+
+_FLAIRS_CRUMB = _ROOT_CRUMB
+
+# 2026-09-29 -- caps on one bulk-upload submission, independent of
+# flairs.MAX_UPLOAD_BYTES (which caps a single PHOTO once it's already
+# been read into memory): a zip is attacker-controlled input, so the
+# compressed upload itself needs its own ceiling, and the entry count
+# needs one too so a zip crammed with thousands of tiny bogus entries
+# can't turn one request into an unbounded loop. Multi-file/folder
+# uploads get the same entry-count cap for consistency, even though
+# there's no compression-amplification risk there (the browser already
+# sent exactly these bytes, nothing to decompress).
+_MAX_ZIP_UPLOAD_BYTES = 50 * 1024 * 1024  # 50MB compressed
+_MAX_UPLOAD_ENTRIES = 500
+
+
+def _known_flair_ids() -> list[str]:
+    """Every id the app currently recognizes across all three flair
+    mechanisms -- keyword-matched (flairs.FLAIR_KEYWORDS) and the two
+    date-matched tiers (db.MONTH_BANNER_SCOPES/SEASON_BANNER_SCOPES,
+    2026-09-29 -- see db.py's banner_for_object docstring for why those
+    aren't FLAIR_KEYWORDS entries despite sharing flairs_dir as their
+    photo source too). Sorted for a stable, readable settings_flairs.html
+    listing -- ordering has no bearing on the matching logic itself."""
+    return sorted(set(flairs.FLAIR_KEYWORDS) | set(db.MONTH_BANNER_SCOPES) | set(db.SEASON_BANNER_SCOPES))
+
+
+@router.get("/settings/flairs")
+def settings_flairs(request: Request, conn=Depends(get_db)):
+    all_ids = _known_flair_ids()
+    configured_ids = {i for i in all_ids if flairs.flair_image_url(i)}
+    return templates.TemplateResponse(
+        "settings_flairs.html",
+        {
+            "request": request,
+            "active_tab": "settings_flairs",
+            "crumbs": _FLAIRS_CRUMB,
+            "title": "Flairs",
+            "flairs_dir_configured": flairs.get_flairs_dir() is not None,
+            "total_count": len(all_ids),
+            "configured_count": len(configured_ids),
+            "missing_ids": [i for i in all_ids if i not in configured_ids],
+        },
+    )
+
+
+@router.post("/settings/flairs/upload")
+def upload_flairs(
+    files: list[UploadFile] = File(default=[]),
+    zip_file: UploadFile | None = File(None),
+    conn=Depends(get_db),
+):
+    """Bulk version of an operator manually copying files into flairs_dir
+    over SSH (direct request: a frontend for exactly that, "zip or folder
+    or multiple photos at once") -- accepts any combination of a .zip
+    (any file at any depth, smart-filtered by basename -- see flairs.
+    ingest_uploaded_photos's own docstring) and/or multiple individual
+    files (one `<input multiple>` or `webkitdirectory` folder picker,
+    same form field either way -- the browser sends N files under one
+    field name, FastAPI hands them back as a list already). Both sources
+    feed the SAME ingest call so one submission gets one summary message
+    covering everything dropped in at once, not one message per source.
+
+    Zip entries are read through `ZipFile.open(...).read(cap)` rather
+    than trusting `ZipInfo.file_size` -- that header is attacker-supplied
+    and a crafted zip can under-report it while the real deflate stream
+    decompresses to far more, the classic zip-bomb shape; bounding the
+    READ itself (not the size a lying header claims) means this can never
+    decompress more than `MAX_UPLOAD_BYTES + 1` for any single entry
+    regardless of what the header says. An entry that hits that cap is
+    reported as "too large" (same message ingest_uploaded_photos would
+    give it) without ever holding the full decompressed bytes in memory.
+
+    Confirmed via AskUserQuestion: overwrites an existing photo for an id
+    silently (flair_image_url's own mtime cache-bust means the new photo
+    shows up immediately everywhere, same as replacing the file by hand
+    already did), and non-matching zip contents (icons/*.svg, unmatched/*,
+    mapping.csv, a nested folder structure, ...) are smart-filtered by
+    basename regardless of depth rather than requiring a flat top-level
+    zip."""
+    if flairs.get_flairs_dir() is None:
+        return _redirect_with_error(
+            "/settings/flairs",
+            "No flairs folder is configured (CC_FLAIRS_DIR) -- there's nowhere to save these to.",
+        )
+    entries: list[tuple[str, bytes]] = []
+    pre_skipped: list[tuple[str, str]] = []
+    if zip_file is not None and zip_file.filename:
+        zip_bytes = zip_file.file.read(_MAX_ZIP_UPLOAD_BYTES + 1)
+        if len(zip_bytes) > _MAX_ZIP_UPLOAD_BYTES:
+            return _redirect_with_error("/settings/flairs", "That zip file is too large (max 50MB).")
+        try:
+            with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
+                for info in archive.infolist()[:_MAX_UPLOAD_ENTRIES]:
+                    if info.is_dir():
+                        continue
+                    with archive.open(info) as member:
+                        data = member.read(flairs.MAX_UPLOAD_BYTES + 1)
+                    if len(data) > flairs.MAX_UPLOAD_BYTES:
+                        pre_skipped.append((info.filename, "file too large (max 8MB)"))
+                        continue
+                    entries.append((info.filename, data))
+        except zipfile.BadZipFile:
+            return _redirect_with_error("/settings/flairs", "That file isn't a valid zip archive.")
+    for upload in (files or [])[:_MAX_UPLOAD_ENTRIES]:
+        if upload.filename:
+            entries.append((upload.filename, upload.file.read()))
+    result = flairs.ingest_uploaded_photos(entries)
+    result.skipped = pre_skipped + result.skipped
+    message = result.summary()
+    if result.saved or not result.skipped:
+        return _redirect_with_note("/settings/flairs", message)
+    return _redirect_with_error("/settings/flairs", message)
 
 
 @router.post("/settings/week-start")

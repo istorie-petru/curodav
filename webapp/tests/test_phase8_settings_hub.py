@@ -138,6 +138,7 @@ class TestSettingsHub:
             "/settings/holidays",
             "/settings/time-blocks",
             "/settings/data-maintenance",
+            "/settings/flairs",  # 2026-09-29
             "/published-lists",
         }
 

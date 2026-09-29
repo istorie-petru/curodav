@@ -158,7 +158,23 @@ reorganization turned up:
 
 from __future__ import annotations
 
-from pathlib import Path
+import os
+import re
+from dataclasses import dataclass, field
+from pathlib import Path, PurePosixPath
+from typing import Iterable
+
+from .image_sniff import sniff_image_type
+
+# Shared with routers/flairs.py's own `/flairs/{flair_id}` route (imported
+# from here, not redefined there -- see that route's own comment for why
+# this checks *shape*, not *membership*: an operator can legitimately drop
+# a file under an id this dict doesn't have yet, e.g. staging a future
+# keyword addition before its FLAIR_KEYWORDS entry ships). Also reused by
+# `ingest_uploaded_photos` below (2026-09-29, bulk upload) to validate an
+# uploaded file's name before it ever touches the filesystem, same
+# path-traversal/hostile-shape concern as the serving route has.
+ID_SHAPE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 FLAIR_KEYWORDS: dict[str, list[tuple[str, int]]] = {
     "american-football": [("american football", 2), ("football", 2), ("gridiron", 2), ("nfl", 2), ("super bowl", 2), ("superbowl", 2)],
@@ -376,3 +392,132 @@ def match_flair(name: str | None) -> str | None:
                 if best is None or candidate < best:
                     best = candidate
     return best[3] if best else None
+
+
+# 2026-09-29 (direct request: a Settings UI to drop in a zip/folder/
+# multiple photos at once, instead of an operator needing filesystem
+# access to flairs_dir at all) -- everything below is format-agnostic:
+# `ingest_uploaded_photos` takes plain (name, bytes) pairs, so
+# routers/settings.py's upload route can feed it entries from a `list[
+# UploadFile]` (multi-file or a `webkitdirectory` folder input, where
+# each `name` is the browser-supplied relative path) and/or from
+# `zipfile.ZipFile.infolist()`/`.read()` (a dropped .zip, any file at any
+# depth) through the exact same validation and save path -- no separate
+# "zip mode" vs "files mode" logic to keep in sync.
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8MB/photo, same cap banners.py/profile-photo already use
+
+_EXT_TO_SNIFF_TYPE = {".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png", ".webp": "webp"}
+
+
+@dataclass
+class IngestResult:
+    """What `ingest_uploaded_photos` did with one upload submission (which
+    may itself have come from a zip, a multi-file input, or both at once --
+    the caller merges entries from either source into one call so a single
+    "12 saved, 2 skipped" message covers the whole submission, not one
+    message per source)."""
+
+    saved: list[str] = field(default_factory=list)
+    skipped: list[tuple[str, str]] = field(default_factory=list)  # (original name/path, reason)
+
+    def summary(self, *, max_skip_detail: int = 5) -> str:
+        """One line for the ?note=/?error= redirect-to-toast bridge
+        (routers/settings.py, same pattern export.py's `_redirect_with_
+        note` already established) -- plain English, no HTML, since it's
+        rendered as both a static no-JS banner and a toast's textContent."""
+        if not self.saved and not self.skipped:
+            return "Nothing to upload."
+        parts = []
+        if self.saved:
+            parts.append(f"{len(self.saved)} photo{'s' if len(self.saved) != 1 else ''} saved")
+        if self.skipped:
+            parts.append(f"{len(self.skipped)} skipped")
+        line = ", ".join(parts) + "."
+        if self.skipped:
+            shown = self.skipped[:max_skip_detail]
+            detail = "; ".join(f"{name}: {reason}" for name, reason in shown)
+            more = len(self.skipped) - len(shown)
+            if more > 0:
+                detail += f"; +{more} more"
+            line += f" Skipped -- {detail}."
+        return line
+
+
+def ingest_uploaded_photos(entries: Iterable[tuple[str, bytes]]) -> IngestResult:
+    """Validates and saves each `(name, data)` pair into the configured
+    `flairs_dir`, same id-shape/extension/real-image-bytes rules the rest
+    of this module already enforces, just applied to operator-uploaded
+    bytes instead of files placed by hand:
+
+      - `name` is taken as a path (POSIX or Windows separators, any
+        depth) and only its BASENAME is used -- lets a zip entry like
+        `google-calendar-flairs/icons/basketball.svg` or a `webkitdirectory`
+        folder upload's relative path resolve the same way a flat filename
+        would, and means a caller never needs to pre-flatten paths itself.
+        A path with no basename at all (a directory entry) is silently
+        ignored, not counted as skipped -- it was never a candidate photo.
+      - No extension, or one outside `SUPPORTED_EXTENSIONS` (this
+        deliberately still excludes `.svg` -- see this module's own header
+        docstring for the stored-XSS reasoning; a batch of Google's own
+        icon SVGs dropped in here skip with a clear reason instead of
+        silently vanishing).
+      - The stem (lowercased) must match `ID_SHAPE` -- same "shape, not
+        membership" rule the serving route uses, so an id this dict
+        doesn't know about YET still saves (an operator staging a future
+        FLAIR_KEYWORDS addition, or a month/season id -- see db.py's
+        MONTH_BANNER_SCOPES/SEASON_BANNER_SCOPES, neither of which is a
+        FLAIR_KEYWORDS key at all, still needs to save here).
+      - Over `MAX_UPLOAD_BYTES`, or bytes that don't actually sniff
+        (`image_sniff.sniff_image_type`) as the type its extension claims,
+        are skipped -- the same "never trust the extension/header alone"
+        rule every other upload route in this app already follows.
+
+    Saving OVERWRITES an existing photo for that id silently (confirmed
+    via AskUserQuestion) -- `flair_image_url`'s own mtime-based cache-bust
+    means the new photo shows up immediately everywhere with no extra
+    step, same as replacing the file by hand over SSH already did.
+
+    Returns before touching the filesystem at all if `flairs_dir` was
+    never configured (caller -- routers/settings.py -- checks `get_
+    flairs_dir()` up front and shows a real error instead of a silent
+    "0 saved", but this guard exists too so the function is never called
+    accidentally against no directory)."""
+    result = IngestResult()
+    if _flairs_dir is None:
+        return result
+    _flairs_dir.mkdir(parents=True, exist_ok=True)
+    for raw_name, data in entries:
+        normalized = raw_name.replace("\\", "/")
+        if not normalized or normalized.endswith("/"):
+            continue  # a directory entry (zip folder, or a bare trailing slash) -- not a candidate at all;
+            # checked on the ORIGINAL trailing slash, not the parsed name -- PurePosixPath treats a
+            # trailing "/" as insignificant ("icons/".name == "icons"), so this can't be folded into
+            # the basename lookup below without silently treating a folder entry as a real photo named
+            # after the folder.
+        basename = PurePosixPath(normalized).name
+        if not basename:
+            continue
+        stem, dot, ext = basename.rpartition(".")
+        if not dot:
+            result.skipped.append((raw_name, "no file extension"))
+            continue
+        stem = stem.lower()
+        ext = f".{ext.lower()}"
+        if ext not in SUPPORTED_EXTENSIONS:
+            result.skipped.append((raw_name, f"unsupported extension ({ext})"))
+            continue
+        if not ID_SHAPE.match(stem):
+            result.skipped.append((raw_name, "filename isn't a valid flair id (lowercase, letters/numbers/hyphens)"))
+            continue
+        if len(data) > MAX_UPLOAD_BYTES:
+            result.skipped.append((raw_name, "file too large (max 8MB)"))
+            continue
+        if sniff_image_type(data) != _EXT_TO_SNIFF_TYPE[ext]:
+            result.skipped.append((raw_name, "doesn't look like a real image matching its extension"))
+            continue
+        target = _flairs_dir / f"{stem}{ext}"
+        tmp = target.with_suffix(target.suffix + ".tmp")
+        tmp.write_bytes(data)
+        os.replace(tmp, target)  # atomic on every platform this app targets -- no reader ever sees a half-written file
+        result.saved.append(stem)
+    return result
