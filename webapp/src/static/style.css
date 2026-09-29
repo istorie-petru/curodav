@@ -3011,7 +3011,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
   display:flex; align-items:center; justify-content:space-between; gap:var(--space-2);
   padding:12px 0 4px; font-weight:var(--font-weight-bold);
 }
-.contact-list .contact-section-row:not(:first-child){border-top:1px solid var(--border); margin-top:var(--space-1);}
+.contact-list .contact-section-row:not(:first-child){margin-top:var(--space-1);}
 .contact-section-row.is-nogroup{color:var(--fg-secondary); font-weight:var(--font-weight-regular);}
 .contact-row{
   display:flex; align-items:center; gap:var(--space-3); padding:var(--space-2) var(--space-1); flex:1; min-width:0;
@@ -4923,19 +4923,25 @@ main.main-shell > .toolbar.top-app-bar{
      stopped matching anything. */
   flex:none;
 }
-.main-shell-body{
-  flex:1 1 auto; min-height:0; overflow-y:auto; margin-bottom:6dvh;
-}
-/* 2026-09-24 direct report: on Dashboard specifically, the shared
-   margin-bottom above "creates a veil that hides content" -- the widget
+/* 2026-09-24 direct report: on Dashboard specifically, this rule's own
+   `margin-bottom:6dvh` "creates a veil that hides content" -- the widget
    grid's own JS-computed height (app.js's masonry layout) already leaves
-   no natural gap for that reserved space to sit in, so it just eats into
+   no natural gap for that reserved space to sit in, so it just ate into
    the last row of widgets instead of adding breathing room the way it
-   does over a plain scrolling list (Tasks/Contacts/Notes). Scoped to
-   Dashboard alone (dashboard.html's own .main-shell-body--flush) rather
-   than dropped for every .main-shell-body page -- Tasks/Contacts/Notes
-   weren't part of this report and keep the margin. */
-.main-shell-body--flush{margin-bottom:0;}
+   did over a plain scrolling list. Scoped to Dashboard alone at the time
+   via a `.main-shell-body--flush` modifier, since Tasks/Contacts/Notes
+   weren't part of that report.
+
+   2026-09-29 (direct follow-up, "remove margin-bottom because it
+   disrupts some items from showing"): the same symptom was confirmed
+   across every other `.main-shell-body` page too (Tasks/Contacts/Notes/
+   Habits) -- dropped from this shared rule outright rather than adding a
+   fourth/fifth `--flush` opt-in, so `.main-shell-body--flush` itself is
+   gone (dashboard.html's own class list trimmed back to plain
+   `.main-shell-body` -- see that template's own comment). */
+.main-shell-body{
+  flex:1 1 auto; min-height:0; overflow-y:auto;
+}
 @media (min-width:721px){
   /* No bottom bar to reserve on desktop, same as main.main-calendar. */
   main.main-shell{height:100vh; height:100dvh;}
@@ -5455,9 +5461,21 @@ body.command-palette-open{overflow:hidden;}
 }
 .command-palette-row .icon{color:var(--fg-tertiary); flex:none;}
 .command-palette-row:hover, .command-palette-row.is-active{background:var(--bg-secondary);}
-.command-palette-row-text{display:flex; flex-direction:column; min-width:0;}
-.command-palette-row-title{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.command-palette-row-subtitle{font-size:var(--text-sm); color:var(--fg-tertiary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+/* One line, not two (2026-09-29 direct request: "move away from two lines
+   buttons to only one line") -- title and subtitle used to stack in a
+   column (a separate row each), making every result row a two-line
+   button. Now a single flex row: the title truncates first (min-width:0,
+   ellipsis) and the subtitle is a flex:none trailing fragment so a long
+   title never pushes it off just the right edge of a still-multi-line
+   row -- the whole thing stays one line, full stop. */
+.command-palette-row-text{display:flex; align-items:baseline; gap:var(--space-2); min-width:0; overflow:hidden;}
+.command-palette-row-title{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1 1 auto;}
+.command-palette-row-subtitle{font-size:var(--text-sm); color:var(--fg-tertiary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:0 1 auto; max-width:40%;}
+/* A "·" separator, not just gap, so title and subtitle jammed on one line
+   read as two distinct fields ("Buy milk · Due 2026-09-30"), not one run-
+   together string. :not(:empty) skips it for a blank subtitle (a page
+   result's subtitle is "", search.py's _page_result). */
+.command-palette-row-subtitle:not(:empty)::before{content:"\00b7"; margin-inline-end:var(--space-2); color:var(--fg-tertiary);}
 .command-palette-empty{padding:var(--space-4); color:var(--fg-tertiary); font-size:var(--text-sm); text-align:center;}
 
 /* Command palette actions (open.md § Command palette actions) -- a result
@@ -5531,7 +5549,13 @@ body.command-palette-open{overflow:hidden;}
   width:100%; padding:var(--space-3) var(--page-inset); border-radius:var(--radius-control);
   border:1px solid var(--border); background:var(--bg-secondary); color:var(--fg-primary); font-size:var(--text-base);
 }
-.search-result-subtitle{display:block; font-size:var(--text-sm); color:var(--fg-tertiary);}
+/* One line, not two (2026-09-29 direct request, same change as the Ctrl-K
+   overlay's .command-palette-row-subtitle above) -- the subtitle used to
+   be `display:block`, forcing its own line under the title. Inline now,
+   with the whole row clipped to a single line rather than wrapping. */
+.search-page-results .checklist-text{overflow:hidden; white-space:nowrap; text-overflow:ellipsis; min-width:0;}
+.search-result-subtitle{display:inline; font-size:var(--text-sm); color:var(--fg-tertiary);}
+.search-result-subtitle:not(:empty)::before{content:"\00b7"; margin-inline:var(--space-2); color:var(--fg-tertiary);}
 
 /* --------------------------------------------------------------------- */
 /* Photo crop/resize/rotate editor (static/avatar_cropper.js,            */

@@ -4,6 +4,23 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.2.0]
+
+- Command palette and full search page: past events no longer clutter the
+  default empty-query browsing view (`exclude_past_events`, whole-day
+  cutoff) -- a real typed query still surfaces them, and the relation-
+  picker mode (for_task/for_event) is untouched.
+- Command palette rows and search-page results collapsed from two lines
+  to one: title and subtitle now sit on a single flex row with a "·"
+  separator, truncating the title first instead of always wrapping to a
+  second line.
+- Dropped the `.main-shell-body` `margin-bottom:6dvh` outright (and the
+  Dashboard-only `--flush` modifier that had opted just Dashboard out of
+  it) -- the same "veil that hides content" symptom reported for
+  Dashboard on 2026-09-24 was confirmed across Tasks/Contacts/Notes/
+  Habits too.
+- Removed the top border between contact list sections (label groups).
+
 ## [3.1.0]
 
 - 24 more flair ids: 18 real event-type icons (bills, delivery, doctor,

@@ -1,6 +1,6 @@
 [project]
 name = "command-center-web"
-version = "3.1.0"
+version = "3.2.0"
 description = "Curodav's FastAPI web client -- calendar, tasks, contacts, synced via CalDAV/CardDAV against a self-hosted Radicale server."
 requires-python = ">=3.12"
 dependencies = [

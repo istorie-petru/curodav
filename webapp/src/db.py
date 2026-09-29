@@ -2674,6 +2674,7 @@ def search_entities(
     event_end: str | None = None,
     exclude_uids: dict[str, set[str]] | None = None,
     include_habit_tasks: bool = False,
+    exclude_past_events: bool = False,
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
     """Search across tasks, events, contacts, and notes.
@@ -2706,6 +2707,14 @@ def search_entities(
                       drop ("not-already-linked" for the relation picker).
       - `include_habit_tasks` -- False hides habit-labeled tasks, the same
                       default list_tasks applies everywhere.
+      - `exclude_past_events` -- events only: drop anything that already
+                      started before today. Command palette browsing
+                      (2026-09-29 direct request, "harsh filtering ... remove
+                      past events from showing, they can only appear when
+                      searching") -- the default empty-query view on open
+                      shouldn't be cluttered with events that have already
+                      happened; a real typed query still surfaces them
+                      (routers/search.py only sets this when `q` is empty).
 
     Returns a flat list of result dicts, one per hit, ordered by type
     (tasks, events, contacts) and then by that type's natural order; each
@@ -2728,7 +2737,7 @@ def search_entities(
     if not wanted or "task" in wanted:
         result.extend(_search_tasks(conn, q, labels, task_status, task_due_on, exclude.get("task", set()), include_habit_tasks))
     if not wanted or "event" in wanted:
-        result.extend(_search_events(conn, q, labels, event_start, event_end, exclude.get("event", set())))
+        result.extend(_search_events(conn, q, labels, event_start, event_end, exclude.get("event", set()), exclude_past_events))
     if not wanted or "contact" in wanted:
         result.extend(_search_contacts(conn, q, labels, exclude.get("contact", set())))
     if not wanted or "note" in wanted:
@@ -2814,6 +2823,7 @@ def _search_events(
     event_start: str | None,
     event_end: str | None,
     excluded: set[str],
+    exclude_past: bool = False,
 ) -> list[dict[str, Any]]:
     query = "SELECT * FROM events"
     params: list[str] = []
@@ -2845,6 +2855,14 @@ def _search_events(
         placeholders = ", ".join("?" for _ in excluded)
         clauses.append(f"uid NOT IN ({placeholders})")
         params.extend(excluded)
+    if exclude_past:
+        # Whole-day cutoff (date(start_at) not start_at itself) -- an event
+        # still in progress or later today stays; only a start date before
+        # today is "past" here, matching the client's own dateBucket split
+        # (diffDays < 0) so this server-side drop and the palette's Overdue/
+        # Past/This week grouping agree on what "past" means.
+        clauses.append("date(start_at) >= date(?)")
+        params.append(date.today().isoformat())
 
     if clauses:
         query += " WHERE " + " AND ".join(clauses)

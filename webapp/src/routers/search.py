@@ -185,6 +185,14 @@ def api_search(
         types=effective_types,
         labels=effective_labels,
         exclude_uids=exclude_uids,
+        # Harsh filtering (2026-09-29 direct request): a past event only
+        # shows up once the person actually types a query -- the default
+        # empty-query browsing view (command_palette.js's open() -> runQuery(""))
+        # never surfaces one. Relation-picker mode (for_task/for_event) is
+        # untouched -- it already narrows to labels-shared candidates, a
+        # much smaller pool, and "was this event in the past" isn't the
+        # same kind of noise there.
+        exclude_past_events=not q and not for_task and not for_event,
         limit=limit,
     )
     picked = [_picker_result(r) for r in results]
