@@ -19,7 +19,7 @@ from fastapi import HTTPException
 from fastapi.responses import Response
 from starlette.requests import Request
 
-from src import db, deps
+from src import db, deps, flairs
 from src.routers import banners as banners_router
 from src.routers import label_pages
 from src.routers import calendar as calendar_router
@@ -48,6 +48,27 @@ def _request(path="/"):
 
 def _make_label(conn, name):
     db.upsert_label_config(conn, {"name": name, "color": "blue", "created_at": _now()})
+
+
+@pytest.fixture()
+def flairs_dir(tmp_path):
+    """Not autouse (most of this file's tests have nothing to do with
+    flairs) -- opt-in per test via the fixture argument, same `flairs.
+    configure`/teardown convention test_flairs.py's own autouse fixture
+    uses, just scoped to only the tests below that actually need it (the
+    month/season-tier-now-reads-flairs_dir-too tests, 2026-09-29)."""
+    directory = tmp_path / "flairs"
+    directory.mkdir()
+    flairs.configure(directory)
+    yield directory
+    flairs.configure(None)
+
+
+_TINY_JPEG = b"\xff\xd8\xff" + b"\x00" * 16
+
+
+def _put_flair(flairs_dir, flair_id: str, ext: str = ".jpg") -> None:
+    (flairs_dir / f"{flair_id}{ext}").write_bytes(_TINY_JPEG)
 
 
 class _FakeUploadFile:
@@ -440,6 +461,35 @@ class TestBannerSeasonAndDefaultFallback:
         contact = db.get_contact(conn, "c1")
         assert db.banner_for_object(conn, "contact", contact) is None
 
+    def test_season_falls_back_to_flairs_dir_when_no_explicit_banner_is_set(self, conn, flairs_dir):
+        # 2026-09-29 (direct request: "the months/seasons should work
+        # through the flairs system, even the default ones") -- no
+        # get_page_banner set for the summer scope at all, just a plain
+        # summer.jpg dropped under flairs_dir, same as any other flair.
+        _put_flair(flairs_dir, "summer")
+        db.upsert_task(
+            conn,
+            {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": [],
+             "due_at": "2026-07-15", "created_at": _now()},
+        )
+        task = db.get_task(conn, "t1")
+        banner = db.banner_for_task(conn, task)
+        assert banner is not None
+        assert "/flairs/summer" in banner["image_url"]
+        assert banner["scope"] == db.SEASON_BANNER_SCOPES["summer"]
+
+    def test_an_explicit_season_banner_still_beats_the_flairs_dir_default(self, conn, flairs_dir):
+        _put_flair(flairs_dir, "summer")
+        _set_remote(conn, cached=True, scope=db.SEASON_BANNER_SCOPES["summer"], image_url="https://cdn.example.com/summer-upload.jpg")
+        db.upsert_task(
+            conn,
+            {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": [],
+             "due_at": "2026-07-15", "created_at": _now()},
+        )
+        task = db.get_task(conn, "t1")
+        banner = db.banner_for_task(conn, task)
+        assert banner["image_url"] == "https://cdn.example.com/summer-upload.jpg"
+
 
 class TestBannerMonthAndDefaultFallback:
     """2026-09-29 (direct correction of an earlier keyword-based attempt at
@@ -537,6 +587,47 @@ class TestBannerMonthAndDefaultFallback:
         db.upsert_contact(conn, {"uid": "c1", "full_name": "Ada Lovelace", "created_at": _now(), "updated_at": _now()})
         contact = db.get_contact(conn, "c1")
         assert db.banner_for_object(conn, "contact", contact) is None
+
+    def test_month_falls_back_to_flairs_dir_when_no_explicit_banner_is_set(self, conn, flairs_dir):
+        # Same flairs_dir-as-default behavior as season (see
+        # TestBannerSeasonAndDefaultFallback), one tier finer: no
+        # get_page_banner set for the july scope, just july.jpg dropped
+        # under flairs_dir.
+        _put_flair(flairs_dir, "july")
+        db.upsert_task(
+            conn,
+            {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": [],
+             "due_at": "2026-07-15", "created_at": _now()},
+        )
+        task = db.get_task(conn, "t1")
+        banner = db.banner_for_task(conn, task)
+        assert banner is not None
+        assert "/flairs/july" in banner["image_url"]
+        assert banner["scope"] == db.MONTH_BANNER_SCOPES["july"]
+
+    def test_month_flairs_dir_default_beats_season_flairs_dir_default(self, conn, flairs_dir):
+        _put_flair(flairs_dir, "july")
+        _put_flair(flairs_dir, "summer")
+        db.upsert_task(
+            conn,
+            {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": [],
+             "due_at": "2026-07-15", "created_at": _now()},
+        )
+        task = db.get_task(conn, "t1")
+        banner = db.banner_for_task(conn, task)
+        assert "/flairs/july" in banner["image_url"]
+
+    def test_an_explicit_month_banner_still_beats_the_flairs_dir_default(self, conn, flairs_dir):
+        _put_flair(flairs_dir, "july")
+        _set_remote(conn, cached=True, scope=db.MONTH_BANNER_SCOPES["july"], image_url="https://cdn.example.com/july-upload.jpg")
+        db.upsert_task(
+            conn,
+            {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": [],
+             "due_at": "2026-07-15", "created_at": _now()},
+        )
+        task = db.get_task(conn, "t1")
+        banner = db.banner_for_task(conn, task)
+        assert banner["image_url"] == "https://cdn.example.com/july-upload.jpg"
 
 
 class TestLabelSettingsBannerEntryPoint:

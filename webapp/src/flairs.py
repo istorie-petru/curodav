@@ -37,12 +37,17 @@ single photo byte anymore. What ships instead:
     fresh install has zero photos configured until the operator adds
     some, same as a fresh install has no uploaded banners either.
 
-  The four reference season photos (spring/summer/autumn/winter) are
-  still deliberately not part of this table at all -- unrelated to the
-  copyright fix, see the "tried and reverted" note in db.py's
-  `banner_for_object` docstring (matched by DATE, not name, and wiring
-  them into the existing season-banner tier as a default had a much
-  bigger blast radius than this item ever asked for).
+  The four reference season photos (spring/summer/autumn/winter), and
+  later the 12 month photos, are deliberately not KEYS in this table --
+  matched by DATE, not name, so there's no `FLAIR_KEYWORDS["summer"]`
+  entry to string-match against an object's title (see the 2026-09-29
+  note further down for the full history and why). They DO still use
+  this module's `flair_image_url` as their actual photo source, though
+  (2026-09-29, direct request) -- db.py's `banner_for_object` calls it
+  directly with the season/month word as the id, bypassing `match_flair`
+  entirely, so an operator drops `summer.jpg`/`july.jpg` under
+  `flairs_dir` exactly like any other flair and it's picked up with no
+  code here even aware those ids aren't real dict keys.
 
 Each entry is `(keyword, priority)`; `priority` is the reference data's
 own confidence-ish ranking (2 = its dominant, most-confident tier, up to
@@ -109,12 +114,23 @@ reorganization turned up:
     "June" against an event's title is both redundant with that (most
     June-dated events don't say "June" in the title, and the ones that
     do already resolve correctly via the date) and a pure false-positive
-    generator for the ones that don't. See db.py's `MONTH_BANNER_SCOPES`/
-    `SEASON_BANNER_SCOPES` for the real (date-based) mechanism -- an
-    operator uploads a photo per month/season scope through the normal
-    banner editor, same as any other page banner, using this reorganized
-    folder's `seasonal/` photos as their source images. Nothing under
-    `FLAIR_KEYWORDS` drives that at all.
+    generator for the ones that don't.
+
+    That said (same day, direct follow-up: "the months/seasons should
+    work through the flairs system, even the default ones") they DO use
+    `flair_image_url` below as their photo source -- db.py's
+    `banner_for_object` calls it with the exact id `season_for_date`/
+    `month_for_date` computed ("summer", "july", ...), same function
+    every keyword flair's match already resolves through, just never via
+    `match_flair`/this dict. An operator drops `summer.jpg`/`july.jpg`
+    into `flairs_dir` -- this reorganized folder's root now has all 16
+    (the season/month photos moved back there from a short-lived
+    `seasonal/` subfolder once this landed) -- and it's picked up with
+    zero code changes needed here, `flair_image_url` has no idea these
+    ids aren't real `FLAIR_KEYWORDS` keys. An explicit per-scope banner
+    set through the normal /banners/editor still overrides it, same
+    priority order as every other flair default (see db.py's
+    `banner_for_object` docstring for the exact tier order).
 
   - Deliberately did NOT add `.svg` to `SUPPORTED_EXTENSIONS`, even
     though every one of the 18 event-type icons above only exists as an

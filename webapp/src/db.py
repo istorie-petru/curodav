@@ -5401,8 +5401,20 @@ PAGE_HEADER_BANNER_SCOPE = "__page_header__"
 # Project/Space banner" and the global default above: a task/event with no
 # banner of its own shows whichever of these matches its own due/start
 # date's month, before falling all the way back to PAGE_HEADER_BANNER_SCOPE.
-# Set/edited/removed through the exact same /banners/editor machinery as
-# any other scope -- nothing new to build, just four more page_keys.
+# An explicit banner set through the normal /banners/editor machinery on
+# one of these scopes still wins first (nothing new to build for that --
+# same get_page_banner every other scope already uses); failing that,
+# banner_for_object now falls back to flairs.flair_image_url(season) --
+# 2026-09-29 (direct request: months/seasons "should work through the
+# flairs system, even the default ones") -- the SAME flairs_dir file-drop
+# an operator already uses for every keyword flair (drop `summer.jpg`
+# under the configured directory and it's picked up, no editor upload
+# needed). This is a DIRECT id lookup, not `flairs.match_flair` against
+# the object's own name -- season/month were deliberately kept out of
+# FLAIR_KEYWORDS (see flairs.py's own docstring for why keyword-matching
+# a month/season word against a title is wrong); this only ever asks
+# flair_image_url for the exact id `season_for_date`/`month_for_date`
+# already computed, so nothing here reintroduces string-matching.
 SEASON_BANNER_SCOPES = {
     "spring": "__season_spring__",
     "summer": "__season_summer__",
@@ -5410,15 +5422,14 @@ SEASON_BANNER_SCOPES = {
     "winter": "__season_winter__",
 }
 
-# 2026-09-29 (direct correction -- an earlier version of this same slice
-# tried to cover the reorganized google-calendar-flairs/ folder's 12 month
-# photos as FLAIR_KEYWORDS entries, i.e. keyword-matched against an
-# object's own title; told directly that's wrong, months/seasons are a
-# property of the object's own DATE, not its name). Same shape as
-# SEASON_BANNER_SCOPES above, one sentinel page_key per calendar month --
-# a finer-grained tier than season, tried first (see banner_for_object):
-# an object dated in July matches both "summer" and "july", and the more
-# specific one should win if an operator has bothered to set both.
+# 2026-09-29 -- same shape as SEASON_BANNER_SCOPES above, one sentinel
+# page_key per calendar month, a finer-grained tier than season, tried
+# first (see banner_for_object): an object dated in July matches both
+# "summer" and "july", and the more specific one should win if an
+# operator has bothered to supply both (either as an explicit per-scope
+# banner-editor upload, or as flairs_dir/july.jpg -- see SEASON_BANNER_
+# SCOPES's own comment above for the full resolution order, identical
+# here just one tier finer).
 MONTH_BANNER_SCOPES = {
     "january": "__month_january__",
     "february": "__month_february__",
@@ -5710,14 +5721,26 @@ def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str,
     2026-09-29: a MONTH tier (`MONTH_BANNER_SCOPES`, `month_for_date`)
     was added between the object's-own-name tier and season -- more
     specific than season (a photo set for "july" wins over one merely set
-    for "summer" on the same date), same date field, same operator-
-    uploads-it-via-the-banner-editor mechanism as season already uses,
-    nothing to do with `flairs.FLAIR_KEYWORDS` at all. An earlier attempt
+    for "summer" on the same date), same date field. An earlier attempt
     at covering the reference folder's 12 month photos added them as
     FLAIR_KEYWORDS entries instead (keyword-matched against the object's
     own title) -- direct correction: a month/season is a property of the
     object's DATE, not something its name should be string-matched
-    against, so that approach was reverted in favor of this tier."""
+    against, so that approach was reverted in favor of this tier.
+
+    Both the month and season tiers resolve the same way (direct request,
+    same day: "the months/seasons should work through the flairs system,
+    even the default ones") -- an explicit banner set on that scope
+    through the normal /banners/editor still wins first (get_page_banner,
+    unchanged), but failing that, `flairs.flair_image_url` is asked for
+    the exact season/month word as an id (NOT `flairs.match_flair` --
+    this is a direct lookup of the id `season_for_date`/`month_for_date`
+    already computed, never a keyword scan of the object's title), so an
+    operator can drop `summer.jpg`/`july.jpg` straight into flairs_dir
+    exactly like any other flair and it just works, no banner-editor
+    upload required. See SEASON_BANNER_SCOPES's own comment for why this
+    still isn't a FLAIR_KEYWORDS entry despite now sharing flairs_dir as
+    its photo source."""
     tags = obj.get("tags") or []
     project = project_label_for(conn, object_type, obj["uid"]) if obj.get("uid") else None
     for tag in tags:
@@ -5770,6 +5793,9 @@ def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str,
             if banner:
                 banner["scope"] = month_scope
                 return banner
+            image_url = flairs.flair_image_url(month)
+            if image_url:
+                return {"kind": "remote", "image_url": image_url, "scope": month_scope}
         season = season_for_date(obj.get(date_field))
         if season:
             season_scope = SEASON_BANNER_SCOPES[season]
@@ -5777,6 +5803,9 @@ def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str,
             if banner:
                 banner["scope"] = season_scope
                 return banner
+            image_url = flairs.flair_image_url(season)
+            if image_url:
+                return {"kind": "remote", "image_url": image_url, "scope": season_scope}
         banner = get_page_banner(conn, PAGE_HEADER_BANNER_SCOPE)
         if banner:
             banner["scope"] = PAGE_HEADER_BANNER_SCOPE
