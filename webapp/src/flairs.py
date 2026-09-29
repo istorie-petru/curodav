@@ -90,24 +90,31 @@ reorganization turned up:
     `dinner` no longer claims those two keywords -- see its own entry.
 
   - 8 scenery/color backgrounds (`university`, `museum`, `debate`,
-    `mountain`, `sea`, `sky`, `wood`, `blue`) and 16 pure calendar-grid
-    entries (12 months + `spring`/`summer`/`autumn`/`winter`) added ONLY
-    because directly requested a second time after this file raised the
-    obvious objection: these are common English words (a person named
-    "June", "March for Science", "I may go", "feeling blue") that WILL
-    false-positive against unrelated names, something none of the
-    original 79 keywords risk. Half-mitigated by giving every one of
-    these 24 entries priority 5 (the loosest tier) instead of the usual
-    new-entry priority 2, so `match_flair`'s tie-break always prefers a
-    more specific competing match on the same name -- this does nothing
-    for a name with no OTHER keyword in it, which is the whole risk
-    being accepted here, confirmed as acceptable via AskUserQuestion.
-    Seasons in particular already have a completely separate, working,
-    DATE-based tier (`SEASON_BANNER_SCOPES` in db.py) that this does NOT
-    replace or interact with -- these are four new, independent,
-    NAME-matched ids that happen to share an English word with that
-    tier, not a second way of populating it. `banner_for_object`'s own
-    docstring still documents the original date-tier as unchanged.
+    `mountain`, `sea`, `sky`, `wood`, `blue`) added despite being common
+    English words (a person named "June" isn't a risk here since none of
+    these ARE calendar words, but "feeling blue"/"clear sky" etc. still
+    can false-positive) -- accepted via AskUserQuestion, priority 5 (the
+    loosest tier) on all 8 so `match_flair`'s tie-break always prefers a
+    more specific competing match on the same name where one exists.
+
+    Months and seasons are deliberately NOT in this table at all, even
+    though the reorganized reference folder has a photo for each --
+    direct correction after an initial version of this same slice DID
+    add them here as priority-5 keywords (`"march"`, `"summer"`, ...).
+    That was wrong for a reason specific to these two categories and
+    not the 8 scenery words above: a month/season isn't really a
+    *keyword* an event's name happens to contain, it's a property of
+    the event's own due/start DATE, which db.py already computes
+    directly (no string-matching needed or wanted). Keyword-matching
+    "June" against an event's title is both redundant with that (most
+    June-dated events don't say "June" in the title, and the ones that
+    do already resolve correctly via the date) and a pure false-positive
+    generator for the ones that don't. See db.py's `MONTH_BANNER_SCOPES`/
+    `SEASON_BANNER_SCOPES` for the real (date-based) mechanism -- an
+    operator uploads a photo per month/season scope through the normal
+    banner editor, same as any other page banner, using this reorganized
+    folder's `seasonal/` photos as their source images. Nothing under
+    `FLAIR_KEYWORDS` drives that at all.
 
   - Deliberately did NOT add `.svg` to `SUPPORTED_EXTENSIONS`, even
     though every one of the 18 event-type icons above only exists as an
@@ -254,22 +261,6 @@ FLAIR_KEYWORDS: dict[str, list[tuple[str, int]]] = {
     "sky": [("sky", 5)],
     "wood": [("wood", 5), ("woods", 5), ("forest", 5), ("woodworking", 5)],
     "blue": [("blue", 5)],
-    "january": [("january", 5)],
-    "february": [("february", 5)],
-    "march": [("march", 5)],
-    "april": [("april", 5)],
-    "may": [("may", 5)],
-    "june": [("june", 5)],
-    "july": [("july", 5)],
-    "august": [("august", 5)],
-    "september": [("september", 5)],
-    "october": [("october", 5)],
-    "november": [("november", 5)],
-    "december": [("december", 5)],
-    "spring": [("spring", 5)],
-    "summer": [("summer", 5)],
-    "autumn": [("autumn", 5), ("fall", 5)],
-    "winter": [("winter", 5)],
 }
 
 

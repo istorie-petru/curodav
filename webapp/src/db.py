@@ -5410,14 +5410,41 @@ SEASON_BANNER_SCOPES = {
     "winter": "__season_winter__",
 }
 
-# object_type -> the date field banner_for_object reads to pick a season,
-# for the two object types that get a seasonal fallback (2026-09-07, direct
-# request: "all data (events and tasks) default to their season"). A task's
-# own due date if it has one, an event's own start -- not creation date, so
-# rescheduling a task/event changes which season banner it shows.
-# Contacts (no due/start date at all) simply aren't in this map, so
-# banner_for_object's season/default fallback never applies to them --
-# unchanged behaviour there, per direct instruction not to touch it.
+# 2026-09-29 (direct correction -- an earlier version of this same slice
+# tried to cover the reorganized google-calendar-flairs/ folder's 12 month
+# photos as FLAIR_KEYWORDS entries, i.e. keyword-matched against an
+# object's own title; told directly that's wrong, months/seasons are a
+# property of the object's own DATE, not its name). Same shape as
+# SEASON_BANNER_SCOPES above, one sentinel page_key per calendar month --
+# a finer-grained tier than season, tried first (see banner_for_object):
+# an object dated in July matches both "summer" and "july", and the more
+# specific one should win if an operator has bothered to set both.
+MONTH_BANNER_SCOPES = {
+    "january": "__month_january__",
+    "february": "__month_february__",
+    "march": "__month_march__",
+    "april": "__month_april__",
+    "may": "__month_may__",
+    "june": "__month_june__",
+    "july": "__month_july__",
+    "august": "__month_august__",
+    "september": "__month_september__",
+    "october": "__month_october__",
+    "november": "__month_november__",
+    "december": "__month_december__",
+}
+
+# object_type -> the date field banner_for_object reads to pick a month or
+# season, for the two object types that get that fallback (2026-09-07,
+# direct request: "all data (events and tasks) default to their season";
+# extended 2026-09-29 to the same field for the new month tier -- there's
+# only ever one candidate date per object, so one shared map covers both).
+# A task's own due date if it has one, an event's own start -- not
+# creation date, so rescheduling a task/event changes which month/season
+# banner it shows. Contacts (no due/start date at all) simply aren't in
+# this map, so banner_for_object's month/season/default fallback never
+# applies to them -- unchanged behaviour there, per direct instruction not
+# to touch it.
 _SEASON_DATE_FIELD = {"task": "due_at", "event": "start_at"}
 
 # Item 10 (2026-09-27, flairs): which object types get a flair match
@@ -5450,6 +5477,24 @@ def season_for_date(value: Any) -> str | None:
     if month in (6, 7, 8):
         return "summer"
     return "autumn"
+
+
+_MONTH_NAMES = ("january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december")
+
+
+def month_for_date(value: Any) -> str | None:
+    """Same input/None-handling contract as `season_for_date` above (in
+    fact the same parsing -- kept as its own function rather than having
+    one derive the other so neither has to know the other exists), just
+    at calendar-month instead of season granularity: `MONTH_BANNER_SCOPES`
+    keys, lowercase English month name."""
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        month = date.fromisoformat(value[:10]).month
+    except ValueError:
+        return None
+    return _MONTH_NAMES[month - 1]
 
 
 def get_profile_photo(conn: sqlite3.Connection) -> dict[str, str] | None:
@@ -5655,12 +5700,24 @@ def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str,
     name coincidentally containing a keyword says nothing real about
     them, unlike a task/event's own title -- and a habit IS a task,
     `object_type == "task"` either way, nothing habit-specific needed
-    here). The season/global tiers below are UNCHANGED -- wiring the
-    reference folder's own four season photos in as real defaults there
-    too was tried and reverted (see flairs.py's own header comment): it
-    turned out to have a much bigger blast radius than this item asked
-    for, showing a photo on nearly every task/event that previously
-    showed none at all."""
+    here). The season/global tiers below were UNCHANGED by item 10 --
+    wiring the reference folder's own four season photos in as real
+    defaults there too was tried and reverted (see flairs.py's own header
+    comment): it turned out to have a much bigger blast radius than that
+    item asked for, showing a photo on nearly every task/event that
+    previously showed none at all.
+
+    2026-09-29: a MONTH tier (`MONTH_BANNER_SCOPES`, `month_for_date`)
+    was added between the object's-own-name tier and season -- more
+    specific than season (a photo set for "july" wins over one merely set
+    for "summer" on the same date), same date field, same operator-
+    uploads-it-via-the-banner-editor mechanism as season already uses,
+    nothing to do with `flairs.FLAIR_KEYWORDS` at all. An earlier attempt
+    at covering the reference folder's 12 month photos added them as
+    FLAIR_KEYWORDS entries instead (keyword-matched against the object's
+    own title) -- direct correction: a month/season is a property of the
+    object's DATE, not something its name should be string-matched
+    against, so that approach was reverted in favor of this tier."""
     tags = obj.get("tags") or []
     project = project_label_for(conn, object_type, obj["uid"]) if obj.get("uid") else None
     for tag in tags:
@@ -5694,17 +5751,25 @@ def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str,
                 return {"kind": "remote", "image_url": image_url, "scope": object_type}
     # 2026-09-07 (direct request): a task/event with no matching label/
     # Project/Space banner falls back further instead of stopping at None
-    # (a flat color gradient, _detail_cover.html) -- first to the seasonal
-    # banner matching its own due/start date (SEASON_BANNER_SCOPES,
-    # season_for_date), then to the same single global default every page
-    # already falls back to when it has no banner of its own
-    # (PAGE_HEADER_BANNER_SCOPE, routers/dashboard.py's
-    # _page_banner_context). Scoped to object types in _SEASON_DATE_FIELD
-    # only (task/event) -- contacts aren't in that map, so this whole block
-    # is a no-op for them and they keep resolving to None/the gradient
-    # fallback exactly as before.
+    # (a flat color gradient, _detail_cover.html) -- first to the month
+    # banner matching its own due/start date (2026-09-29, MONTH_BANNER_
+    # SCOPES, month_for_date -- more specific than season), then the
+    # seasonal banner (SEASON_BANNER_SCOPES, season_for_date), then to the
+    # same single global default every page already falls back to when it
+    # has no banner of its own (PAGE_HEADER_BANNER_SCOPE, routers/
+    # dashboard.py's _page_banner_context). Scoped to object types in
+    # _SEASON_DATE_FIELD only (task/event) -- contacts aren't in that map,
+    # so this whole block is a no-op for them and they keep resolving to
+    # None/the gradient fallback exactly as before.
     date_field = _SEASON_DATE_FIELD.get(object_type)
     if date_field:
+        month = month_for_date(obj.get(date_field))
+        if month:
+            month_scope = MONTH_BANNER_SCOPES[month]
+            banner = get_page_banner(conn, month_scope)
+            if banner:
+                banner["scope"] = month_scope
+                return banner
         season = season_for_date(obj.get(date_field))
         if season:
             season_scope = SEASON_BANNER_SCOPES[season]

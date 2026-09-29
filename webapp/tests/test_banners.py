@@ -441,6 +441,104 @@ class TestBannerSeasonAndDefaultFallback:
         assert db.banner_for_object(conn, "contact", contact) is None
 
 
+class TestBannerMonthAndDefaultFallback:
+    """2026-09-29 (direct correction of an earlier keyword-based attempt at
+    the same thing) -- a month tier (db.MONTH_BANNER_SCOPES, db.month_for_
+    date), more specific than season, tried first: an object dated in July
+    matches both "summer" and "july", and if an operator has set a photo
+    for both, the more specific month one should win. Uses the same
+    due/start date field as season (db._SEASON_DATE_FIELD) and the same
+    operator-uploads-it-via-the-banner-editor storage (db.get_page_banner)
+    -- nothing to do with flairs.FLAIR_KEYWORDS."""
+
+    def test_month_for_date_covers_all_twelve_months(self):
+        assert db.month_for_date("2026-01-15") == "january"
+        assert db.month_for_date("2026-02-01") == "february"
+        assert db.month_for_date("2026-03-01") == "march"
+        assert db.month_for_date("2026-04-01") == "april"
+        assert db.month_for_date("2026-05-01") == "may"
+        assert db.month_for_date("2026-06-01") == "june"
+        assert db.month_for_date("2026-07-04T09:00:00") == "july"
+        assert db.month_for_date("2026-08-01") == "august"
+        assert db.month_for_date("2026-09-07") == "september"
+        assert db.month_for_date("2026-10-01") == "october"
+        assert db.month_for_date("2026-11-01") == "november"
+        assert db.month_for_date("2026-12-25") == "december"
+
+    def test_month_for_date_none_for_missing_or_bad_input(self):
+        assert db.month_for_date(None) is None
+        assert db.month_for_date("") is None
+        assert db.month_for_date("not-a-date") is None
+
+    def test_task_with_no_label_falls_back_to_its_month_banner(self, conn):
+        _set_remote(conn, cached=True, scope=db.MONTH_BANNER_SCOPES["july"], image_url="https://cdn.example.com/july.jpg")
+        db.upsert_task(
+            conn,
+            {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": [],
+             "due_at": "2026-07-15", "created_at": _now()},
+        )
+        task = db.get_task(conn, "t1")
+        banner = db.banner_for_task(conn, task)
+        assert banner["image_url"] == "https://cdn.example.com/july.jpg"
+        assert banner["scope"] == db.MONTH_BANNER_SCOPES["july"]
+
+    def test_month_banner_beats_season_banner_on_the_same_date(self, conn):
+        _set_remote(conn, cached=True, scope=db.MONTH_BANNER_SCOPES["july"], image_url="https://cdn.example.com/july.jpg")
+        _set_remote(conn, cached=True, scope=db.SEASON_BANNER_SCOPES["summer"], image_url="https://cdn.example.com/summer.jpg")
+        db.upsert_task(
+            conn,
+            {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": [],
+             "due_at": "2026-07-15", "created_at": _now()},
+        )
+        task = db.get_task(conn, "t1")
+        banner = db.banner_for_task(conn, task)
+        assert banner["image_url"] == "https://cdn.example.com/july.jpg"
+
+    def test_falls_through_to_season_when_its_own_month_has_no_banner(self, conn):
+        _set_remote(conn, cached=True, scope=db.SEASON_BANNER_SCOPES["summer"], image_url="https://cdn.example.com/summer.jpg")
+        db.upsert_task(
+            conn,
+            {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": [],
+             "due_at": "2026-07-15", "created_at": _now()},
+        )
+        task = db.get_task(conn, "t1")
+        banner = db.banner_for_task(conn, task)
+        assert banner["image_url"] == "https://cdn.example.com/summer.jpg"
+        assert banner["scope"] == db.SEASON_BANNER_SCOPES["summer"]
+
+    def test_a_labels_own_banner_still_beats_the_month_fallback(self, conn):
+        _make_label(conn, "Client call")
+        _set_remote(conn, cached=True, scope="Client call", image_url="https://cdn.example.com/label.jpg")
+        _set_remote(conn, cached=True, scope=db.MONTH_BANNER_SCOPES["july"], image_url="https://cdn.example.com/july.jpg")
+        db.upsert_task(
+            conn,
+            {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Client call"],
+             "due_at": "2026-07-15", "created_at": _now()},
+        )
+        task = db.get_task(conn, "t1")
+        banner = db.banner_for_task(conn, task)
+        assert banner["image_url"] == "https://cdn.example.com/label.jpg"
+
+    def test_event_with_no_label_falls_back_to_its_month_banner(self, conn):
+        _set_remote(conn, cached=True, scope=db.MONTH_BANNER_SCOPES["january"], image_url="https://cdn.example.com/january.jpg")
+        db.upsert_event(
+            conn,
+            {
+                "uid": "e1", "title": "e1", "description": "", "start_at": "2026-01-10T09:00:00",
+                "status": "active", "all_day": False, "created_at": _now(), "updated_at": _now(),
+            },
+        )
+        event = db.get_event(conn, "e1")
+        banner = db.banner_for_object(conn, "event", event)
+        assert banner["image_url"] == "https://cdn.example.com/january.jpg"
+
+    def test_contact_is_unaffected_by_month_fallback(self, conn):
+        _set_remote(conn, cached=True, scope=db.MONTH_BANNER_SCOPES["january"], image_url="https://cdn.example.com/january.jpg")
+        db.upsert_contact(conn, {"uid": "c1", "full_name": "Ada Lovelace", "created_at": _now(), "updated_at": _now()})
+        contact = db.get_contact(conn, "c1")
+        assert db.banner_for_object(conn, "contact", contact) is None
+
+
 class TestLabelSettingsBannerEntryPoint:
     """label_form_modal.html's Banner field (2026-08-30 direct request) --
     a label's banner used to be reachable only via a dashboard page's own
