@@ -22,19 +22,19 @@ Grammar, per the design doc:
     in the design doc) -- this parser does not attempt to recognize a
     marker/date/label glued to adjacent text with no space.
 
-`!n` (note) is a valid marker in the design doc and `parse_note` below
-still implements it, but it's deliberately NOT wired into `MARKER_TYPES`/
-`_MARKER_RE` as of 2026-09-24 (direct request, "remove or hide Notes from
-the app's HTML" -- Peter chose hide, not delete: existing notes/routes/db
-functions stay intact, only the creation surfaces are turned off). Typing
-`!n ...` now just falls through to "no entity marker found" like any other
-unrecognized token, same as static/command_palette.js's matching
-`CAPTURE_MARKER_RE` change. Re-enabling later is a one-line revert of
-those two constants below, not a rebuild.
+`!n` (note) was a valid marker in the design doc's original scope,
+alongside a quick-capture-backed `notes` feature -- both are gone as of
+2026-10-01, absorbed into the Notebook module instead (curodav-notes/
+documentation/plans/STATE.md). `!n` was already unwired from
+`MARKER_TYPES`/`_MARKER_RE` before this (2026-09-24, "hide not delete");
+`parse_note` and its `_PARSERS` entry are now deleted outright instead of
+staying as unreachable code, per this app's "no compatibility layers,
+migrate and delete superseded paths" rule -- there's no Notebook-
+equivalent quick-capture marker to replace it with.
 
-See parse_task/parse_event/parse_contact/parse_note below for the
-per-type rules; `parse()` is the single dispatch entry point
-routers/quick_capture.py calls."""
+See parse_task/parse_event/parse_contact below for the per-type rules;
+`parse()` is the single dispatch entry point routers/quick_capture.py
+calls."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ class TimeBlock:
 
 @dataclass
 class ParsedCapture:
-    type: str  # "task" | "event" | "contact" | "note"
+    type: str  # "task" | "event" | "contact"
     title: str = ""
     labels: list[str] = field(default_factory=list)
     # Task-only:
@@ -80,8 +80,6 @@ class ParsedCapture:
     # Contact-only:
     phone: str | None = None
     email: str | None = None
-    # Note-only:
-    content: str = ""
 
 
 def _find_marker(tokens: list[str]) -> tuple[int, str]:
@@ -268,18 +266,7 @@ def parse_contact(tokens: list[str], today: date) -> ParsedCapture:
     return ParsedCapture(type="contact", title=name, labels=labels, phone=phone, email=email)
 
 
-def parse_note(tokens: list[str], today: date) -> ParsedCapture:
-    """`!n` -- plans/quick-capture.md § Notes. Only the marker and any
-    `#label` tokens are control syntax removed from the body; dates/times
-    are left as ordinary content ("do not automatically change the entity
-    type" -- and, by extension, aren't extracted out of the text either)."""
-    labels, label_idx = _extract_labels(tokens)
-    consumed = set(label_idx)
-    content = " ".join(tok for i, tok in enumerate(tokens) if i not in consumed).strip()
-    return ParsedCapture(type="note", title=content, labels=labels, content=content)
-
-
-_PARSERS = {"task": parse_task, "event": parse_event, "contact": parse_contact, "note": parse_note}
+_PARSERS = {"task": parse_task, "event": parse_event, "contact": parse_contact}
 
 
 def parse(text: str, today: date | None = None) -> ParsedCapture:
@@ -297,6 +284,4 @@ def parse(text: str, today: date | None = None) -> ParsedCapture:
         raise QuickCaptureError(f"A {entity_type} needs a title." if entity_type == "task" else "A contact needs a name.")
     if entity_type == "event" and not result.title:
         raise QuickCaptureError("An event needs a title.")
-    if entity_type == "note" and not result.content:
-        raise QuickCaptureError("A note needs some content.")
     return result

@@ -1,0 +1,25 @@
+{# Notebook (curodav-notes/documentation/plans, 2026-09-29) -- the "All
+   documents" view (routers/notebook.py's GET /notebook): Browser mode's
+   unfiltered safety-net listing, same .checklist row language notes.html
+   already uses for a flat list of linkable items. Label/group-scoped
+   browsing (Phase 3's dashboard widget, routers/dashboard.py's
+   notebook_list type) is a different, narrower view on top of the same
+   data -- this page always shows everything regardless of label. #}
+{% extends "base.html" %}
+{% block title %}Notebook{% endblock %}
+{% block main_class %}main-shell{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+<h1 class="sr-only">Notebook</h1>
+{# Plain form, no data-cc-change -- create_document redirects straight
+   into the new document's own Editor page, a real server-rendered
+   navigation, not an in-place list refresh (see routers/notebook.py's
+   create_document docstring for why). Works with no JS. #}
+{% call page_header_narrow("Notebook", "notebook") %}
+    <form method="post" action="/notebook" class="form-inline">
+        <button type="submit" class="btn primary" data-fab title="New document">{{ icon('plus', 'icon-sm') }} New</button>
+    </form>
+{% endcall %}
+
+{% include "_notebook_body.html" %}
+{% endblock %}

@@ -12,8 +12,8 @@ these:
     label the user hasn't committed to yet would be real, unwanted write
     traffic. Resolution only happens at actual creation time, below.
   - `POST /api/quick-capture` -- parse, resolve labels, create the right
-    entity (task/event/contact/note). src/quick_capture.py (the parser) is
-    a pure module with no `conn` argument at all -- every actual database
+    entity (task/event/contact). src/quick_capture.py (the parser) is a
+    pure module with no `conn` argument at all -- every actual database
     write lives here, not there."""
 
 from __future__ import annotations
@@ -46,8 +46,6 @@ def _preview_payload(result: ParsedCapture) -> dict:
         payload["title"] = result.title
         payload["phone"] = result.phone
         payload["email"] = result.email
-    else:  # note
-        payload["title"] = result.content[:80]
     return payload
 
 
@@ -126,12 +124,7 @@ def _create_from_capture(conn, result: ParsedCapture) -> dict:
         )
         return {"type": "contact", "uid": uid, "title": result.title}
 
-    # note
-    db.upsert_note(
-        conn,
-        {"uid": uid, "content": result.content, "tags": resolved_labels, "created_at": now, "updated_at": now},
-    )
-    return {"type": "note", "uid": uid, "title": db.note_title(db.get_note(conn, uid))}
+    raise ValueError(f"unknown capture type: {result.type!r}")
 
 
 @router.post("")

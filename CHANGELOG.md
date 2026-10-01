@@ -4,6 +4,20 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.3.0]
+
+- Added Notebook, a new block-based note-taking module (Editor.js, vendored
+  with no CDN dependency) -- a top-level nav destination with its own All
+  Documents view, organized through the existing Groups/Labels system
+  (not folders): a Notebook dashboard widget lists a label/group's
+  documents, with a "New document" action that pre-attaches the current
+  label and opens straight into the Editor. Document content autosaves;
+  title and delete are plain, no-JS-required forms.
+- Removed the old quick-capture `notes` feature outright (no migration --
+  nothing had real data in it) -- absorbed into Notebook instead. Its
+  router, table, and search/quick-capture/command-palette integration are
+  gone.
+
 ## [3.2.0]
 
 - Command palette and full search page: past events no longer clutter the

@@ -1078,6 +1078,46 @@ def _render_contact_list(conn, config: dict, nav: dict | None = None) -> dict:
     return {"contacts": contacts[:limit]}
 
 
+def _render_notebook_list(conn, config: dict, nav: dict | None = None) -> dict:
+    """Notebook documents tagged with this page's label/group scope --
+    same shape as `_render_contact_list` immediately above (direct
+    object_labels membership, no tasks/events involved, same hard-scope-
+    then-optional-tags-filter-then-limit pipeline). curodav-notes/
+    documentation/plans/roadmap-0-to-mvp-2026-09-29.md Phase 3: "a plain
+    list (title + last-edited), not the Pinterest-style visual gallery
+    yet" -- the gallery/board visual treatment is explicitly post-MVP
+    (STATE.md's "notes organization is Groups + Labels" decision)."""
+    scope_names = _scope_child_names(conn, config.get("label_name"))
+    tags_filter = _effective_tags_filter(config)
+
+    documents = db.list_notebook_documents(conn)
+    documents = [d for d in documents if _passes_scope(d.get("tags"), scope_names)]
+
+    if tags_filter:
+        tags_lower = {t.lower() for t in tags_filter}
+        documents = [
+            d for d in documents
+            if any(tag.lower() in tags_lower for tag in (d.get("tags") or []))
+        ]
+    _raw_limit = config.get("limit")
+    limit = int(_raw_limit) if _raw_limit is not None else 8
+    if not limit:
+        limit = 8
+    # "New note" pre-attaching this page's label (roadmap Phase 3) only
+    # makes sense on a plain label's own page, where there's exactly one
+    # unambiguous label to attach -- a group page aggregates several
+    # member labels (db.group_from_page_key returns non-None), so there's
+    # no single correct label to pre-attach there; the widget template
+    # omits its own "+ New document" action whenever this is None (Home
+    # included, since label_name is None there too).
+    label_name = config.get("label_name")
+    create_label = label_name if label_name and db.group_from_page_key(label_name) is None else None
+    # Already newest-updated-first (db.list_notebook_documents' own
+    # ORDER BY) -- the right default for a "recent documents" widget,
+    # same as every other list-shaped widget here.
+    return {"documents": documents[:limit], "create_label": create_label}
+
+
 def _render_habit_checkin(conn, config: dict, nav: dict | None = None) -> dict:
     """Check-off-today for every active habit, right on the Dashboard.
     `target_per_day == 1` habits render as a plain checkbox (the toggle
@@ -1310,6 +1350,17 @@ WIDGET_TYPES: dict[str, dict] = {
         "uses": set(),
         "default_width": "third",
     },
+    # Notebook (2026-10-01, curodav-notes/documentation/plans) -- Phase 3
+    # of the 0-to-MVP roadmap's "one genuinely new piece of UI work": a
+    # plain list of this page's Notebook documents, same shape/"uses"
+    # (no tasks/events) as contact_list immediately above.
+    "notebook_list": {
+        "label": "Notebook",
+        "template": "_widget_notebook_list.html",
+        "render": _render_notebook_list,
+        "uses": set(),
+        "default_width": "third",
+    },
     "scheduled_work_today": {
         "label": "Scheduled Work Hours Today",
         "template": "_widget_scheduled_work_today.html",
@@ -1394,6 +1445,9 @@ WIDGET_SOURCES: dict[str, dict] = {
     # group it's scoped to (see _render_group_members' own docstring for
     # why those can't share a style toggle on the same source).
     "group_members": {"label": "Group labels", "icon": "layers"},
+    # Notebook (2026-10-01) -- reads notebook_documents directly, no
+    # tasks/events, same "uses": set() shape as contacts above.
+    "notebooks": {"label": "Notebook", "icon": "notebook"},
 }
 
 # Which views exist per source, and which of those views take a Range.
@@ -1427,6 +1481,7 @@ WIDGET_VIEWS: dict[str, dict] = {
     "spaces_projects_view": {"label": "Groups & Labels", "source": "spaces_projects", "has_range": False, "has_style": True},
     "weekly_schedule_view": {"label": "Weekly schedule", "source": "calendar_tasks", "has_range": False},
     "group_members_view": {"label": "Group labels", "source": "group_members", "has_range": False},
+    "notebook_list_view": {"label": "Document list", "source": "notebooks", "has_range": False, "has_limit": True},
 }
 
 WIDGET_RANGES: dict[str, dict] = {
@@ -1466,6 +1521,7 @@ _SELECTION_TO_TYPE: dict[tuple[str, str | None], tuple[str, dict]] = {
     ("spaces_projects_view", None): ("spaces_projects", {}),
     ("weekly_schedule_view", None): ("weekly_schedule", {}),
     ("group_members_view", None): ("group_members", {}),
+    ("notebook_list_view", None): ("notebook_list", {}),
 }
 
 # Reverse of the above, for pre-filling the edit form from an existing
@@ -1484,6 +1540,7 @@ _TYPE_TO_SELECTION: dict[tuple[str, str | None], tuple[str, str, str | None]] = 
     ("scheduled_work_today", None): ("calendar_tasks", "scheduled_work_view", None),
     ("weekly_schedule", None): ("calendar_tasks", "weekly_schedule_view", None),
     ("group_members", None): ("group_members", "group_members_view", None),
+    ("notebook_list", None): ("notebooks", "notebook_list_view", None),
 }
 
 

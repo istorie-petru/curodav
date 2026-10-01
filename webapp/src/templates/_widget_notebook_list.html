@@ -1,0 +1,34 @@
+<!-- Notebook widget (routers/dashboard.py's _render_notebook_list) --
+     this page's Notebook documents, tagged-membership-scoped same as
+     _widget_contact_list.html. A plain link-list table, same shape every
+     other "list of things" widget uses (_widget_agenda.html's own
+     widget_link_row calls) -- not the Pinterest-style gallery, which is
+     explicitly post-MVP (STATE.md).
+
+     data.documents is a list of notebook_documents dicts (uid, title,
+     note_type, updated_at, tags) from db.list_notebook_documents.
+     data.create_label (routers/dashboard.py's _render_notebook_list) is
+     the one label to pre-attach a "New document" to -- None on a group
+     page (no single unambiguous label there) or Home (no label_name at
+     all), in which case this widget is read-only, same as every other
+     list widget here; see that render function's own comment. -->
+{% from "_widget_items.html" import widget_empty, widget_link_row %}
+{% if data.documents %}
+<table>
+{% for d in data.documents %}
+{{ widget_link_row('/notebook/' ~ d.uid, d.title, leading=icon('file-text', 'icon-sm'), leading_class='widget-row-icon', right=(d.note_type ~ ' · ' ~ (d.updated_at | relative_date))) }}
+{% endfor %}
+</table>
+{% else %}
+{{ widget_empty('No documents match this filter.') }}
+{% endif %}
+{% if data.create_label %}
+{# Plain form, no data-cc-change -- same "real redirect into the new
+   document's Editor page" mechanism as notebook_list.html's own "New"
+   button (routers/notebook.py's create_document docstring); there's no
+   sensible region on this page to refresh in place instead. #}
+<form method="post" action="/notebook" class="form-inline">
+    <input type="hidden" name="label" value="{{ data.create_label }}">
+    <button type="submit" class="btn ghost">{{ icon('plus', 'icon-sm') }} New document</button>
+</form>
+{% endif %}

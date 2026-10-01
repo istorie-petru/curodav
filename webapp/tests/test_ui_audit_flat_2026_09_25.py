@@ -47,13 +47,15 @@ def test_f3_detail_card_has_no_hover_lift():
     assert ".detail-card:hover" not in _CSS
 
 
-def test_f4_no_duplicate_top_app_bar_on_search_or_notes():
-    for name in ("search.html", "notes.html"):
-        html = (_TPL / name).read_text()
-        assert 'class="toolbar top-app-bar"' not in html
-        assert '<h1 class="sr-only">' in html
+def test_f4_no_duplicate_top_app_bar_on_search():
+    # notes.html (the quick-capture notes feature) was removed 2026-10-01,
+    # absorbed into the Notebook module instead -- this check was never
+    # about Notebook's own templates, so it's not carried over to them.
+    html = (_TPL / "search.html").read_text()
+    assert 'class="toolbar top-app-bar"' not in html
+    assert '<h1 class="sr-only">' in html
     # the search page's autofocus script must carry the CSP nonce
-    assert '<script nonce="{{ csp_nonce() }}">' in (_TPL / "search.html").read_text()
+    assert '<script nonce="{{ csp_nonce() }}">' in html
 
 
 def test_f5_settings_groups_have_dividers():

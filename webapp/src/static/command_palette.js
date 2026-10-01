@@ -38,14 +38,14 @@
 // of global mode rather than new modes of their own:
 //
 //   - Page navigation: global-mode results can now include the app's own
-//     pages (Dashboard/Calendar/Tasks/Contacts/Notes/Settings, every
-//     Space), computed server-side (routers/search.py's `_matching_pages`)
+//     pages (Dashboard/Calendar/Tasks/Contacts/Settings, every Space),
+//     computed server-side (routers/search.py's `_matching_pages`)
 //     and tagged `type: "page"` -- picking one is a plain navigation
 //     (`window.location.href`), not `CCModal.open`, and it carries no
 //     action buttons (buildActions skips `type === "page"` entirely).
 //   - Quick Capture (plans/quick-capture.md): typing a standalone `!t`/
-//     `!e`/`!c` token (`!n` note removed 2026-09-24, see CAPTURE_MARKER_RE's
-//     own comment) anywhere in the global-mode input switches the results
+//     `!e`/`!c` token (see CAPTURE_MARKER_RE's own comment) anywhere in
+//     the global-mode input switches the results
 //     panel from search results to a single live-parsed preview row, fed by
 //     `GET /api/quick-capture/preview` instead of `/api/search` for as
 //     long as a marker is present. Enter posts the raw text to
@@ -95,7 +95,7 @@
   // redesigned search overlay grouping by Overdue/This week/Later) --
   // global mode's result rows carry a `date` field now (routers/
   // search.py's _picker_result: a task's due_at, an event's start_at,
-  // null for contacts/notes/pages). Bucketed client-side rather than by
+  // null for contacts/pages). Bucketed client-side rather than by
   // the server so the grouping stays purely a display concern -- the
   // underlying /api/search ordering and relevance ranking are untouched.
   //
@@ -148,16 +148,16 @@
   // verbatim to POST /api/quick-capture on Enter so the server parses the
   // same string the preview was computed from.
   const captureState = { active: false, text: "" };
-  // "n" (note) dropped 2026-09-24 (direct request, "remove or hide Notes
-  // from the app's HTML" -- hide, not delete; src/quick_capture.py's
-  // MARKER_TYPES/_MARKER_RE made the matching server-side change). Typing
-  // "!n ..." now just falls through to a plain search query instead of
-  // triggering a capture preview that would 400 on submit.
+  // Quick Capture's entity markers -- "n" (note) was never wired in here
+  // (dropped 2026-09-24, then the whole notes feature removed 2026-10-01,
+  // see src/quick_capture.py's own docstring). Typing "!n ..." just falls
+  // through to a plain search query instead of triggering a capture
+  // preview that would 400 on submit.
   const CAPTURE_MARKER_RE = /(^|\s)!(t|e|c)(\s|$)/;
-  const CAPTURE_TYPE_LABEL = { task: "Task", event: "Event", contact: "Contact", note: "Note" };
-  const CAPTURE_ICON = { task: "check-square", event: "calendar", contact: "user", note: "file-text" };
+  const CAPTURE_TYPE_LABEL = { task: "Task", event: "Event", contact: "Contact" };
+  const CAPTURE_ICON = { task: "check-square", event: "calendar", contact: "user" };
 
-  const TYPE_ICON = { task: "check-square", event: "calendar", contact: "user", note: "file-text", page: "layout" };
+  const TYPE_ICON = { task: "check-square", event: "calendar", contact: "user", page: "layout" };
 
   // "Turn on/off Edit mode" (2026-09-13, direct request: "a way to
   // activate edit mode with the help of the command palette") -- a
@@ -555,7 +555,6 @@
     if (r.type === "page") return r.url;
     if (r.type === "task") return "/tasks/" + r.uid;
     if (r.type === "event") return "/events/" + r.uid;
-    if (r.type === "note") return "/notes/" + r.uid + "/edit"; // notes have no separate view page
     return "/contacts/" + r.uid;
   }
 

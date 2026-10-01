@@ -2,9 +2,11 @@
 plans/open.md's own numbering):
 
 - Slice A/B: habit_form.html, habit_task_form.html, label_edit_modal.html,
-  label_merge_modal.html, note_form.html, and quick_add.html all used to
-  hand-roll their own `.modal-footer` markup instead of including the
-  shared `_modal_footer.html` partial the core three entities (task/event/
+  label_merge_modal.html, note_form.html (removed 2026-10-01 along with
+  the rest of the quick-capture notes feature -- its own test coverage
+  went with it), and quick_add.html all used to hand-roll their own
+  `.modal-footer` markup instead of including the shared
+  `_modal_footer.html` partial the core three entities (task/event/
   contact) already used -- see plans/open.md's Modal window uniformization
   section for the full audit. They're migrated onto the shared partial
   here, which also folds in slice A: note_form.html's Delete had neither
@@ -33,8 +35,6 @@ plans/open.md's own numbering):
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 import pytest
 from starlette.requests import Request
 
@@ -42,7 +42,6 @@ from src import db, deps
 from src.routers import banners as banners_router
 from src.routers import dashboard as dashboard_router
 from src.routers import labels as labels_router
-from src.routers import notes as notes_router
 from src.routers import tasks as tasks_router
 
 
@@ -51,10 +50,6 @@ def conn(tmp_path):
     db_path = tmp_path / "cache.sqlite"
     with db.connect(db_path) as c:
         yield c
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _request(path="/"):
@@ -97,23 +92,6 @@ class TestLabelMergeModalFooter:
         assert "detail-delete-link" not in body
         assert 'form="label-merge-form"' in body
         assert "Merge" in body
-
-
-class TestNoteFormFooter:
-    def test_edit_note_delete_is_now_confirmed(self, conn):
-        db.upsert_note(conn, {"uid": "n1", "content": "hi", "created_at": _now(), "updated_at": _now()})
-        body = notes_router.edit_note_form("n1", _request(), conn=conn).body.decode()
-        assert 'class="detail-delete-link"' in body
-        assert 'class="btn danger"' not in body
-        # the actual safety fix: some confirmation mechanism now guards
-        # the delete POST, where before this slice there was none at all.
-        assert "data-confirm-sheet=" in body
-        assert "/notes/n1/delete" in body
-
-    def test_new_note_has_no_delete(self, conn):
-        body = notes_router.new_note_form(_request(), conn=conn).body.decode()
-        assert "detail-delete-link" not in body
-        assert 'form="note-form"' in body
 
 
 class TestQuickAddFooter:
@@ -204,7 +182,7 @@ class TestFullAppModalSweep:
         modal_files = [
             "contact_detail.html", "contact_form.html", "event_detail.html", "event_form.html",
             "habit_task_form.html", "label_merge_modal.html",
-            "note_form.html", "quick_add.html", "task_detail.html", "task_form.html",
+            "quick_add.html", "task_detail.html", "task_form.html",
             "banner_editor.html", "_widget_edit_modal.html", "_modal_widget_customize.html",
             "settings_flairs.html",
         ]

@@ -36,7 +36,7 @@ from src.routers import calendar as calendar_router
 from src.routers import label_pages
 from src.routers import contacts as contacts_router
 from src.routers import labels as labels_router
-from src.routers import notes as notes_router
+from src.routers import notebook as notebook_router
 from src.routers import published_lists as published_lists_router
 from src.routers import search as search_router
 from src.routers import settings as settings_router
@@ -112,9 +112,9 @@ class TestPageHeaderNarrowRollout:
         resp = search_router.search_page(_bare_request("/search"), conn=conn)
         _assert_narrow_header(resp.body.decode(), "Search", "command")
 
-    def test_notes(self, conn):
-        resp = notes_router.list_notes(_bare_request("/notes"), conn=conn)
-        _assert_narrow_header(resp.body.decode(), "Notes", "file-text")
+    def test_notebook(self, conn):
+        resp = notebook_router.list_documents(_bare_request("/notebook"), conn=conn)
+        _assert_narrow_header(resp.body.decode(), "Notebook", "notebook")
 
     def test_settings_index(self, conn):
         resp = settings_router.settings_index(_bare_request("/settings"), conn=conn)

@@ -1,12 +1,11 @@
 """Quick Capture (plans/quick-capture.md) -- everything the parser tests
 (test_quick_capture_parser.py) don't cover: the HTTP layer
-(routers/quick_capture.py's preview + create), label fuzzy-matching/alias
-persistence (db.resolve_capture_label), and the Notes entity CRUD
-(routers/notes.py). `!n` no longer creates notes as of 2026-09-24 (direct
-request, "remove or hide Notes from the app's HTML" -- hide, not delete;
-see TestCreateEndpointNote) -- the CRUD/search surface stays intact and
-covered here regardless, reachable directly (db.upsert_note et al.) or by
-a future re-enable of the marker."""
+(routers/quick_capture.py's preview + create) and label fuzzy-matching/
+alias persistence (db.resolve_capture_label). The quick-capture-backed
+Notes entity (`!n`, routers/notes.py) was removed outright 2026-10-01,
+absorbed into the Notebook module instead -- its CRUD/search/router
+coverage that used to live in this file went with it (see
+webapp/tests/test_notebook.py for Notebook's own equivalent coverage)."""
 
 from __future__ import annotations
 
@@ -18,7 +17,6 @@ import pytest
 from starlette.requests import Request
 
 from src import db
-from src.routers import notes as notes_router
 from src.routers import quick_capture as qcr
 
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
@@ -32,18 +30,6 @@ def conn(tmp_path):
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _get_request(path: str, query_string: bytes = b""):
-    return Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "path": path,
-            "query_string": query_string,
-            "headers": [],
-        }
-    )
 
 
 def _post_json_request(path: str, payload: dict):
@@ -201,32 +187,6 @@ class TestCreateEndpointContact:
         assert contact["tags"] == ["university"]
 
 
-class TestCreateEndpointNote:
-    """2026-09-24 direct request ("remove or hide Notes from the app's
-    HTML", hide not delete): `!n` no longer creates anything through this
-    endpoint -- quick_capture.py's MARKER_TYPES/_MARKER_RE no longer
-    recognize it, so this is just the ordinary "no entity marker found"
-    400 every other unrecognized marker already gets (test_no_marker_is_a_
-    400 above). The underlying note CRUD/search machinery is untouched --
-    see TestNotesCrud/TestNotesRouter below and
-    test_a_note_created_directly_is_still_findable_via_search here, which
-    create the note through db.upsert_note directly instead of `!n`."""
-
-    def test_n_marker_no_longer_creates_anything(self, conn):
-        resp = asyncio.run(
-            qcr.create(_post_json_request("/api/quick-capture", {"text": "!n Important points #university"}), conn=conn)
-        )
-        assert resp.status_code == 400
-        assert db.list_notes(conn) == []
-
-    def test_a_note_created_directly_is_still_findable_via_search(self, conn):
-        now = datetime.now(timezone.utc).isoformat()
-        db.upsert_note(conn, {"uid": "n1", "content": "Findable note content", "tags": [], "created_at": now, "updated_at": now})
-        results = db.search_entities(conn, q="Findable")
-        assert len(results) == 1
-        assert results[0]["type"] == "note"
-
-
 class TestLabelFuzzyMatching:
     def test_exact_match_wins_outright(self, conn):
         _seed_task(conn, "t1", tags=["University"])
@@ -260,60 +220,3 @@ class TestLabelFuzzyMatching:
         assert db.resolve_capture_label(conn, "brand-new") == "brand-new"
 
 
-class TestNotesCrud:
-    def test_upsert_and_get_roundtrip(self, conn):
-        now = _now()
-        db.upsert_note(conn, {"uid": "n1", "content": "Hello\nworld", "tags": ["A"], "created_at": now, "updated_at": now})
-        note = db.get_note(conn, "n1")
-        assert note["content"] == "Hello\nworld"
-        assert note["tags"] == ["A"]
-
-    def test_note_title_is_first_nonblank_line(self):
-        assert db.note_title({"content": "\n\nFirst real line\nsecond"}) == "First real line"
-
-    def test_note_title_placeholder_for_empty_content(self):
-        assert db.note_title({"content": ""}) == "(empty note)"
-
-    def test_list_notes_orders_newest_updated_first(self, conn):
-        db.upsert_note(conn, {"uid": "n1", "content": "old", "tags": [], "created_at": "2026-01-01T00:00:00", "updated_at": "2026-01-01T00:00:00"})
-        db.upsert_note(conn, {"uid": "n2", "content": "new", "tags": [], "created_at": "2026-02-01T00:00:00", "updated_at": "2026-02-01T00:00:00"})
-        notes = db.list_notes(conn)
-        assert [n["uid"] for n in notes] == ["n2", "n1"]
-
-    def test_delete_note_removes_row_and_labels(self, conn):
-        now = _now()
-        db.upsert_note(conn, {"uid": "n1", "content": "x", "tags": ["A"], "created_at": now, "updated_at": now})
-        db.delete_note(conn, "n1")
-        assert db.get_note(conn, "n1") is None
-        assert db.list_labels_for_object(conn, "note", "n1") == []
-
-
-class TestNotesRouter:
-    def test_list_page_renders_notes(self, conn):
-        now = _now()
-        db.upsert_note(conn, {"uid": "n1", "content": "Findable content", "tags": [], "created_at": now, "updated_at": now})
-        body = notes_router.list_notes(_get_request("/notes"), conn=conn).body.decode()
-        assert "Findable content" in body
-
-    def test_create_via_form_post(self, conn):
-        resp = notes_router.create_note(content="New note body", tags="", tags_labels=["A"], conn=conn)
-        assert resp.status_code == 303
-        notes = db.list_notes(conn)
-        assert len(notes) == 1
-        assert notes[0]["content"] == "New note body"
-        assert notes[0]["tags"] == ["A"]
-
-    def test_update_via_form_post(self, conn):
-        now = _now()
-        db.upsert_note(conn, {"uid": "n1", "content": "old", "tags": [], "created_at": now, "updated_at": now})
-        notes_router.update_note("n1", content="updated", tags="", tags_labels=["B"], conn=conn)
-        note = db.get_note(conn, "n1")
-        assert note["content"] == "updated"
-        assert note["tags"] == ["B"]
-
-    def test_delete_via_form_post(self, conn):
-        now = _now()
-        db.upsert_note(conn, {"uid": "n1", "content": "x", "tags": [], "created_at": now, "updated_at": now})
-        resp = notes_router.delete_note("n1", conn=conn)
-        assert resp.status_code == 303
-        assert db.get_note(conn, "n1") is None

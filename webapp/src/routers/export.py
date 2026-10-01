@@ -314,6 +314,10 @@ def build_backup_payload(conn) -> dict[str, Any]:
         # 2026-08-09 Relations -- deliberate user-made links, same
         # local-only-data backup treatment as task_completions.
         "event_task_relations": db.list_event_task_relations(conn),
+        # Notebook (2026-10-01, curodav-notes/documentation/plans) -- every
+        # document, content_json included (it's just this table's own text
+        # column, not a separate JSON export concern).
+        "notebook_documents": db.list_notebook_documents(conn),
     }
 
 
@@ -758,6 +762,12 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
         db.add_event_task_relation(
             conn, row["event_uid"], row["task_uid"], row.get("is_work_allocation", 0)
         )
+    # Notebook (2026-10-01) -- upsert_notebook_document already pops
+    # "tags" and re-applies it via set_object_labels, same contract every
+    # other upsert_* restore call above relies on.
+    for row in payload.get("notebook_documents", []):
+        db.upsert_notebook_document(conn, row)
+        count += 1
     return count
 
 

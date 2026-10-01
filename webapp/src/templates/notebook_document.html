@@ -1,0 +1,49 @@
+{# Notebook -- Editor mode (routers/notebook.py's GET /notebook/{uid}),
+   the one place Editor.js and its JS mount live (curodav-notes/
+   documentation/plans/architecture-notes-module-2026-09-29.md §3). This
+   page is a deliberate, narrow, documented exception to Curodav's
+   progressive-enhancement rule ("every page fully usable without JS") --
+   interactive rich-block editing has no plain-HTML-form equivalent. The
+   title field above the editor still works with no JS (a plain form
+   post); only the block-content area below it requires JavaScript. #}
+{% extends "base.html" %}
+{% block title %}{{ document.title }}{% endblock %}
+{% block main_class %}main-shell{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+<h1 class="sr-only">{{ document.title }}</h1>
+{% call page_header_narrow(document.title, 'notebook') %}
+    <span id="notebook-save-status" class="search-result-subtitle" data-state="idle"></span>
+    <form method="post" action="/notebook/{{ document.uid }}/delete" class="form-inline" data-confirm-sheet="Delete &ldquo;{{ document.title }}&rdquo;? This cannot be undone.">
+        <button type="submit" class="icon-btn danger" title="Delete document" aria-label="Delete document">{{ icon('trash', 'icon-sm') }}</button>
+    </form>
+{% endcall %}
+
+{# Deliberately a plain form, not data-cc-change -- this page's own header
+   (not a list region) is what needs to reflect a renamed title, and
+   async_crud.js's generic data-cc-change handler has no mechanism to
+   refresh the page it's sitting on, only a named region elsewhere (see
+   notebook_list.js) -- same "plain form, rely on the natural redirect"
+   choice label_detail.html's own archive/reset-layout forms make when
+   there's no live region to target. Works with no JS either way, per the
+   doc comment above. #}
+<form method="post" action="/notebook/{{ document.uid }}" class="form-inline notebook-title-form">
+    <label class="sr-only" for="notebook-title-input">Title</label>
+    <input id="notebook-title-input" type="text" name="title" value="{{ document.title }}" placeholder="Untitled" autocomplete="off">
+    <button type="submit" class="btn ghost">{{ icon('check-square', 'icon-sm') }} Save title</button>
+</form>
+
+<!-- Editor.js mount point (notebook_editor.js). Vendored dist files
+     (static/notebook/vendor/) -- no CDN at runtime, see STATE.md's
+     "Editor.js sourcing" decision. -->
+<div id="notebook-editor" class="card" data-uid="{{ document.uid }}" data-content-url="/notebook/{{ document.uid }}/content"></div>
+<noscript><p class="empty-state-text">Editing a document requires JavaScript. The title above can still be changed without it.</p></noscript>
+{% endblock %}
+{% block extra_scripts %}
+<script defer src="{{ static_url('notebook/vendor/editorjs.umd.js') }}"></script>
+<script defer src="{{ static_url('notebook/vendor/header.umd.js') }}"></script>
+<script defer src="{{ static_url('notebook/vendor/list.umd.js') }}"></script>
+<script defer src="{{ static_url('notebook/vendor/quote.umd.js') }}"></script>
+<script defer src="{{ static_url('notebook/vendor/code.umd.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_editor.js') }}"></script>
+{% endblock %}

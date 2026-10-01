@@ -1,0 +1,33 @@
+<!-- Notebook's #notebook-body region, included directly by notebook_list.html
+     (no separate /notebook/regions fragment route -- create/delete are both
+     real page navigations here, not in-place refreshes, see
+     routers/notebook.py's create_document docstring). Same shape as
+     notes.html's old _notes_body.html (removed 2026-10-01): .card off the
+     unconditional wrapper, onto .checklist itself, so the empty state is a
+     sibling, not a card-backed descendant. -->
+<div id="notebook-body" class="main-shell-body">
+{% if documents %}
+<div class="card checklist">
+    {% for d in documents %}
+    <div class="checklist-row">
+        {{ icon('file-text', 'icon-sm') }}
+        <a class="checklist-text" href="/notebook/{{ d.uid }}">
+            {{ d.title }}
+            <span class="search-result-subtitle">
+                {{ d.note_type }}{% if d.tags %} &middot; {% for tag in d.tags %}{{ tag }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
+            </span>
+        </a>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state empty-state-rich">
+    <div class="empty-state-icon">{{ icon('notebook') }}</div>
+    <div class="empty-state-title">No documents yet</div>
+    <div class="empty-state-text">Start writing and it'll show up here.</div>
+    <form method="post" action="/notebook" class="form-inline">
+        <button type="submit" class="btn primary">{{ icon('plus') }} New document</button>
+    </form>
+</div>
+{% endif %}
+</div>

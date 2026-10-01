@@ -935,21 +935,6 @@ CREATE TABLE IF NOT EXISTS sync_conflicts (
 );
 CREATE INDEX IF NOT EXISTS idx_sync_conflicts_unresolved ON sync_conflicts(resolved_at);
 
--- Quick Capture (plans/quick-capture.md) -- Notes are a fourth captured
--- entity type (`!n`), alongside the pre-existing tasks/events/contacts.
--- Deliberately minimal: a note is just free-text content plus labels
--- (via the same `object_labels` table every other type uses, object_type
--- 'note') -- no title field of its own (the content's first line serves
--- that purpose everywhere it's displayed, same as this app's habit-log
--- entries). Unrelated to `contacts.notes` (a free-text field on a
--- contact) -- same English word, different concept, no schema overlap.
-CREATE TABLE IF NOT EXISTS notes (
-    uid TEXT PRIMARY KEY,
-    content TEXT NOT NULL DEFAULT '',
-    created_at TEXT,
-    updated_at TEXT
-);
-
 -- Quick Capture's label resolution (plans/quick-capture.md § Labels and
 -- Approximate Matching): "user corrections may also be retained as
 -- aliases... future uses of #universitty can resolve directly to the
@@ -965,6 +950,40 @@ CREATE TABLE IF NOT EXISTS label_aliases (
     alias TEXT PRIMARY KEY,
     canonical_name TEXT NOT NULL,
     created_at TEXT
+);
+
+-- Notebook (curodav-notes/documentation/plans/STATE.md +
+-- architecture-notes-module-2026-09-29.md, 2026-09-29) -- a block-based
+-- note-taking module, MVP schema only (Phase 0 of the 0-to-MVP roadmap).
+-- `content_json` holds Editor.js's own OutputData JSON verbatim -- no
+-- markdown translation layer, no custom serialization -- viable only
+-- because this module deliberately dropped live Obsidian/markdown
+-- compatibility (see STATE.md's "no live Obsidian compatibility"
+-- decision); it's read/written as raw JSON by exactly one pair of routes
+-- (GET/PUT /notebook/{uid}/content), the one deliberate exception to this
+-- app's "never fetch JSON directly" rule, since there's no HTML fragment
+-- that represents live rich-block-editor state.
+-- `document_type` ('full' | 'simple') is app-set, not user-facing: 'full'
+-- for a document someone deliberately sat down to write, 'simple' for a
+-- lightweight note the app creates as a byproduct of something else
+-- (post-MVP; nothing creates 'simple' rows yet).
+-- `note_type` is user-set, free text for MVP -- STATE.md's canonical,
+-- enforced-in-code vocabulary (notes/analysis/wiki/research/person/
+-- country/...) is a post-MVP addition once the entity-kind/relationships-
+-- sidebar use of this column actually exists; nothing needs to reject an
+-- unrecognized value yet.
+-- No folder/parent column -- organization is via `object_labels`
+-- (object_type='notebook', reusing the existing label_config/label_groups
+-- infrastructure as-is), not a hierarchy on this table. See STATE.md's
+-- "notes organization is Groups + Labels, not folders" decision.
+CREATE TABLE IF NOT EXISTS notebook_documents (
+    uid TEXT PRIMARY KEY,
+    title TEXT NOT NULL DEFAULT '',
+    content_json TEXT NOT NULL DEFAULT '{"blocks": []}',
+    document_type TEXT NOT NULL DEFAULT 'full',
+    note_type TEXT NOT NULL DEFAULT 'notes',
+    created_at TEXT,
+    updated_at TEXT
 );
 """
 
@@ -2082,6 +2101,9 @@ def purge_all_data(conn: sqlite3.Connection) -> None:
         "habit_entries", "task_completions", "habit_pauses", "push_subscriptions", "push_sent", "dashboard_widgets",
         "time_blocks",
         "published_lists", "app_meta",
+        # Notebook (2026-10-01, curodav-notes/documentation/plans) -- "purge
+        # all" means everything in the app, a Notebook document included.
+        "notebook_documents",
     ]
     for table in tables:
         conn.execute(f"DELETE FROM {table}")
@@ -2677,21 +2699,23 @@ def search_entities(
     exclude_past_events: bool = False,
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Search across tasks, events, contacts, and notes.
+    """Search across tasks, events, and contacts.
 
     Explicit filters (AND together):
       - `q`        -- free-text, case-insensitive substring across the
                       meaningful metadata: task title/description/labels;
                       event title/description/labels; contact name/org/
-                      phone/email/labels; note content/labels. (Fuzzy = SQL
-                      LIKE, the same mechanism list_tasks/list_contacts
-                      already use -- no index, appropriate at personal-scale
-                      volumes.)
-      - `types`    -- subset of ("task", "event", "contact", "note");
-                      None/empty means all four. ("note" added 2026-08-15,
-                      Quick Capture -- every existing caller that passes an
-                      explicit `types` list of its own, e.g. the relation
-                      picker's `["event"]`/`["task"]`, is unaffected.)
+                      phone/email/labels. (Fuzzy = SQL LIKE, the same
+                      mechanism list_tasks/list_contacts already use -- no
+                      index, appropriate at personal-scale volumes.)
+      - `types`    -- subset of ("task", "event", "contact"); None/empty
+                      means all three. (Quick Capture's "note" type, added
+                      2026-08-15, was removed 2026-10-01 along with the
+                      rest of the quick-capture notes feature -- see
+                      db.py's `notebook_documents` schema comment; every
+                      existing caller that passes an explicit `types` list
+                      of its own, e.g. the relation picker's
+                      `["event"]`/`["task"]`, is unaffected.)
       - `labels`   -- multi-select label filter, any-match (a result needs
                       just one of the chosen labels), case-sensitive on the
                       stored object_labels name like every other label
@@ -2740,8 +2764,6 @@ def search_entities(
         result.extend(_search_events(conn, q, labels, event_start, event_end, exclude.get("event", set()), exclude_past_events))
     if not wanted or "contact" in wanted:
         result.extend(_search_contacts(conn, q, labels, exclude.get("contact", set())))
-    if not wanted or "note" in wanted:
-        result.extend(_search_notes(conn, q, labels, exclude.get("note", set())))
 
     if limit is not None:
         result = result[:limit]
@@ -2942,57 +2964,6 @@ def _search_contacts(
                 "type": "contact",
                 "uid": d["uid"],
                 "title": d["full_name"],
-                "subtitle": subtitle,
-                "tags": d["tags"],
-                "entity": d,
-            }
-        )
-    return out
-
-
-def _search_notes(
-    conn: sqlite3.Connection,
-    q: str | None,
-    labels: list[str] | None,
-    excluded: set[str],
-) -> list[dict[str, Any]]:
-    query = "SELECT * FROM notes"
-    params: list[str] = []
-    clauses: list[str] = []
-
-    if q:
-        like = f"%{q}%"
-        clauses.append(
-            "(content LIKE ? OR uid IN (SELECT object_id FROM object_labels "
-            "WHERE object_type = 'note' AND label_name LIKE ?))"
-        )
-        params.extend([like, like])
-    if labels:
-        placeholders = ", ".join("?" for _ in labels)
-        clauses.append(
-            f"uid IN (SELECT DISTINCT object_id FROM object_labels WHERE object_type = 'note' AND label_name IN ({placeholders}))"
-        )
-        params.extend(labels)
-    if excluded:
-        placeholders = ", ".join("?" for _ in excluded)
-        clauses.append(f"uid NOT IN ({placeholders})")
-        params.extend(excluded)
-
-    if clauses:
-        query += " WHERE " + " AND ".join(clauses)
-    query += " ORDER BY updated_at DESC"
-    rows = conn.execute(query, params).fetchall()
-    dicts = _attach_tags_bulk(conn, "note", [_row_to_dict(r, _NOTE_JSON_FIELDS) for r in rows])
-    out: list[dict[str, Any]] = []
-    for d in dicts:
-        title = note_title(d)
-        body = (d.get("content") or "").strip()
-        subtitle = body[len(title) :].strip()[:80] if body.startswith(title) else body[:80]
-        out.append(
-            {
-                "type": "note",
-                "uid": d["uid"],
-                "title": title,
                 "subtitle": subtitle,
                 "tags": d["tags"],
                 "entity": d,
@@ -3735,67 +3706,6 @@ def set_contact_social_profiles(conn: sqlite3.Connection, contact_uid: str, item
     conn.commit()
 
 
-# --------------------------------------------------------------------- #
-# Notes (Quick Capture, plans/quick-capture.md) -- see the `notes` CREATE
-# TABLE comment above for what a note is/isn't. Same shape as contacts'
-# own CRUD immediately above: upsert/get/delete/list, tags attached live
-# via object_labels like every other type.
-# --------------------------------------------------------------------- #
-
-_NOTE_JSON_FIELDS: tuple[str, ...] = ()
-
-
-def upsert_note(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
-    data = dict(row)
-    tags = data.pop("tags", None)
-    cols = ["uid", "content", "created_at", "updated_at"]
-    values = [data.get(c) for c in cols]
-    placeholders = ", ".join("?" for _ in cols)
-    updates = ", ".join(f"{c}=excluded.{c}" for c in cols if c != "uid")
-    conn.execute(
-        f"INSERT INTO notes ({', '.join(cols)}) VALUES ({placeholders}) "
-        f"ON CONFLICT(uid) DO UPDATE SET {updates}",
-        values,
-    )
-    if tags is not None:
-        set_object_labels(conn, "note", data["uid"], tags)
-    conn.commit()
-
-
-def delete_note(conn: sqlite3.Connection, uid: str) -> None:
-    conn.execute("DELETE FROM notes WHERE uid = ?", (uid,))
-    conn.execute("DELETE FROM object_labels WHERE object_type = 'note' AND object_id = ?", (uid,))
-    conn.commit()
-
-
-def get_note(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
-    row = conn.execute("SELECT * FROM notes WHERE uid = ?", (uid,)).fetchone()
-    return _attach_tags(conn, "note", _row_to_dict(row, _NOTE_JSON_FIELDS)) if row else None
-
-
-def list_notes(conn: sqlite3.Connection, q: str | None = None) -> list[dict[str, Any]]:
-    query = "SELECT * FROM notes"
-    params: list[str] = []
-    if q:
-        query += " WHERE content LIKE ?"
-        params.append(f"%{q}%")
-    query += " ORDER BY updated_at DESC"
-    rows = conn.execute(query, params).fetchall()
-    return _attach_tags_bulk(conn, "note", [_row_to_dict(r, _NOTE_JSON_FIELDS) for r in rows])
-
-
-def note_title(note: dict[str, Any]) -> str:
-    """A note has no title column (see the `notes` CREATE TABLE comment) --
-    every list/search/picker surface that needs a short label for one uses
-    this: the content's first non-blank line, truncated, or a placeholder
-    for a still-empty note."""
-    for line in (note.get("content") or "").splitlines():
-        line = line.strip()
-        if line:
-            return line[:80]
-    return "(empty note)"
-
-
 def list_object_label_names(conn: sqlite3.Connection, object_type: str) -> list[str]:
     """Distinct labels in use on every object of `object_type` -- the
     generic form of what list_contact_tag_names has done since Phase 7
@@ -3833,6 +3743,93 @@ def list_event_label_names(conn: sqlite3.Connection) -> list[str]:
 
 def all_contact_uids(conn: sqlite3.Connection) -> set[str]:
     return {r["uid"] for r in conn.execute("SELECT uid FROM contacts").fetchall()}
+
+
+# --------------------------------------------------------------------- #
+# Notebook (curodav-notes/documentation/plans, 2026-09-29) -- MVP CRUD
+# only (schema comment above has the full column rationale). `content_json`
+# is deliberately NOT run through _row_to_dict's generic *_json decoding
+# here: that helper renames `x_json` -> `x` and defaults a bad/missing
+# value to `[]`, which fits the "a column that's really a list" shape
+# every other *_json column has (tags_json, reminders_json, ...) but not
+# Editor.js's OutputData, which is an object (`{blocks: [...], ...}`), not
+# a list, and is read/written by its own dedicated get/set pair below
+# instead of flowing through the generic row-to-dict path every other
+# feature's list/get functions use.
+# --------------------------------------------------------------------- #
+
+def upsert_notebook_document(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
+    data = dict(row)
+    tags = data.pop("tags", None)
+    cols = ["uid", "title", "content_json", "document_type", "note_type", "created_at", "updated_at"]
+    values = [data.get(c) for c in cols]
+    placeholders = ", ".join("?" for _ in cols)
+    updates = ", ".join(f"{c}=excluded.{c}" for c in cols if c != "uid")
+    conn.execute(
+        f"INSERT INTO notebook_documents ({', '.join(cols)}) VALUES ({placeholders}) "
+        f"ON CONFLICT(uid) DO UPDATE SET {updates}",
+        values,
+    )
+    if tags is not None:
+        set_object_labels(conn, "notebook", data["uid"], tags)
+    conn.commit()
+
+
+def get_notebook_document(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
+    row = conn.execute("SELECT * FROM notebook_documents WHERE uid = ?", (uid,)).fetchone()
+    return _attach_tags(conn, "notebook", dict(row)) if row else None
+
+
+def list_notebook_documents(conn: sqlite3.Connection, label: str | None = None) -> list[dict[str, Any]]:
+    """All documents by default -- the "All documents" safety-net view
+    (STATE.md's MVP-readiness-check gap #2) for anything with no label at
+    all. `label` narrows to one label's membership, for the Groups/Labels
+    widget (Phase 3) -- note that's a different, narrower query than a
+    label/group *page* actually needs (those already aggregate membership
+    themselves via object_labels; this is just the plain per-label list)."""
+    query = "SELECT * FROM notebook_documents"
+    params: list[str] = []
+    if label:
+        query += (
+            " WHERE uid IN (SELECT object_id FROM object_labels "
+            "WHERE object_type = 'notebook' AND label_name = ?)"
+        )
+        params.append(label)
+    query += " ORDER BY updated_at DESC"
+    rows = conn.execute(query, params).fetchall()
+    return _attach_tags_bulk(conn, "notebook", [dict(r) for r in rows])
+
+
+def delete_notebook_document(conn: sqlite3.Connection, uid: str) -> None:
+    conn.execute("DELETE FROM notebook_documents WHERE uid = ?", (uid,))
+    conn.execute("DELETE FROM object_labels WHERE object_type = 'notebook' AND object_id = ?", (uid,))
+    conn.commit()
+
+
+def get_notebook_document_content(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
+    """Raw Editor.js OutputData for the one JSON-in/JSON-out endpoint pair
+    (GET/PUT /notebook/{uid}/content) -- see the `notebook_documents`
+    schema comment for why this bypasses the normal HTML-fragment
+    convention. Returns None only when the document itself doesn't exist;
+    a document that somehow has unparseable `content_json` gets an empty
+    document back rather than a 500, since Editor.js can always render and
+    resave an empty block list."""
+    row = conn.execute("SELECT content_json FROM notebook_documents WHERE uid = ?", (uid,)).fetchone()
+    if row is None:
+        return None
+    try:
+        return json.loads(row["content_json"])
+    except (json.JSONDecodeError, TypeError):
+        return {"blocks": []}
+
+
+def set_notebook_document_content(conn: sqlite3.Connection, uid: str, content: dict[str, Any]) -> bool:
+    cur = conn.execute(
+        "UPDATE notebook_documents SET content_json = ?, updated_at = ? WHERE uid = ?",
+        (json.dumps(content), datetime.now(timezone.utc).isoformat(), uid),
+    )
+    conn.commit()
+    return cur.rowcount > 0
 
 
 # --------------------------------------------------------------------- #
@@ -5948,7 +5945,6 @@ ENTITY_TABLES: dict[str, str] = {
     "task": "tasks",
     "event": "events",
     "contact": "contacts",
-    "note": "notes",
 }
 
 ENTITY_SYNC_FIELDS: dict[str, set[str]] = {
@@ -5967,9 +5963,6 @@ ENTITY_SYNC_FIELDS: dict[str, set[str]] = {
     "contact": {
         "full_name", "title", "org", "phone", "email", "address", "notes",
         "photo_b64", "photo_type", "created_at", "updated_at", "deleted_at",
-    },
-    "note": {
-        "content", "created_at", "updated_at", "deleted_at",
     },
 }
 
