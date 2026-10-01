@@ -293,6 +293,13 @@ def settings_general(request: Request, conn=Depends(get_db)):
             "flair_language_options": [
                 {"uid": code, "name": label} for code, label in flairs.FLAIR_LANGUAGE_LABELS.items()
             ],
+            # Timezone (2026-09-30, see config.py's TIMEZONE_KEY comment) --
+            # empty is "System default", listed first so the dropdown
+            # partial's single-mode empty-value fallback (its own docstring
+            # calls this out, see "Off" above) lands on it correctly.
+            "current_timezone": db.get_app_meta(conn, config.TIMEZONE_KEY) or "",
+            "timezone_options": [{"uid": "", "name": "System default"}]
+            + [{"uid": z, "name": z} for z in config.TIMEZONE_CHOICES],
         },
     )
 
@@ -893,6 +900,23 @@ def set_time_format(time_format: str = Form("24h"), conn=Depends(get_db)):
     minutesToDisplayTime(), which reads this via base.html's
     `data-time-format` body attribute)."""
     db.set_app_meta(conn, TIME_FORMAT_KEY, "12h" if time_format == "12h" else "24h")
+    return RedirectResponse(url="/settings/general", status_code=303)
+
+
+@router.post("/settings/timezone")
+def set_timezone(timezone: str = Form(""), conn=Depends(get_db)):
+    """Timezone (2026-09-30, direct report: Web Push notifications arriving
+    about two hours late -- see config.py's TIMEZONE_KEY comment for the
+    root cause). Empty ("System default") clears the override; anything
+    else must be one of the exact zone names settings_general.html's
+    dropdown offered (config.TIMEZONE_CHOICES) -- a tampered or
+    unrecognized value is dropped rather than stored, same "never store
+    what the UI didn't actually offer" convention as set_week_start above.
+    apply_persisted_timezone applies the change to this process's own
+    clock immediately, so it takes effect without a restart."""
+    value = timezone if timezone in config.TIMEZONE_CHOICES else ""
+    db.set_app_meta(conn, config.TIMEZONE_KEY, value)
+    config.apply_persisted_timezone(conn)
     return RedirectResponse(url="/settings/general", status_code=303)
 
 

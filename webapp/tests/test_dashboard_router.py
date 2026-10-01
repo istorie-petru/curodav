@@ -1376,10 +1376,15 @@ class TestSpaceScopedRenderers:
 class TestGroupsAndLabelsWidget:
     """The "spaces_projects" widget type, shown as "Groups & Labels" since
     labels-as-modules slice c (2026-09-25): driven by groups and each
-    label's widget_pin flag. On a group's page it lists that group's pinned
-    labels; on Home, every pinned label (List) or every group plus every
-    pinned ungrouped label (Cards). scope=="everything" still opts a page's
-    instance out of its page scope."""
+    label's widget_pin flag. 2026-09-30 fix (direct report: a group page
+    "always showed empty" for a group whose members were never converted
+    to a Project, since widget_pin only ever gets set that way) -- a
+    group's page now lists EVERY one of its member labels, pinned or not
+    (db.group_member_names), same "every member visible" guarantee
+    _render_group_members's sibling widget already gives. widget_pin still
+    curates the *unscoped* Home case: every pinned label (List) or every
+    group plus every pinned ungrouped label (Cards). scope=="everything"
+    still opts a page's instance out of its page scope."""
 
     def _seed(self, conn):
         db.upsert_label_config(conn, {"name": "CS101", "label_group": "Uni", "widget_pin": 1, "is_project": 1})
@@ -1388,10 +1393,10 @@ class TestGroupsAndLabelsWidget:
         db.upsert_label_config(conn, {"name": "Old", "widget_pin": 1})
         db.archive_project(conn, "Old")
 
-    def test_group_page_lists_its_pinned_labels(self, conn):
+    def test_group_page_lists_every_member_label_not_just_pinned(self, conn):
         self._seed(conn)
         data = dashboard_router._render_spaces_projects(conn, {"label_name": "group:Uni"})
-        assert [pv["project"]["name"] for pv in data["previews"]] == ["CS101"]
+        assert [pv["project"]["name"] for pv in data["previews"]] == ["Art", "CS101"]
 
     def test_home_list_is_every_pinned_open_label(self, conn):
         self._seed(conn)
@@ -1416,10 +1421,12 @@ class TestGroupsAndLabelsWidget:
         assert cards["Uni"]["href"] == "/groups/Uni" and cards["Uni"]["meta"] == "2 labels"
         assert cards["Personal"]["href"] == "/labels/Personal" and cards["Personal"]["meta"] == "Label"
 
-    def test_group_page_cards_are_its_pinned_labels(self, conn):
+    def test_group_page_cards_are_every_member_label_not_just_pinned(self, conn):
         self._seed(conn)
         data = dashboard_router._render_spaces_projects(conn, {"label_name": "group:Uni", "style": "cards"})
-        assert [(c["name"], c["icon"], c["meta"]) for c in data["cards"]] == [("CS101", "folder", "Project")]
+        assert [(c["name"], c["icon"], c["meta"]) for c in data["cards"]] == [
+            ("Art", "tag", "Label"), ("CS101", "folder", "Project"),
+        ]
 
     def test_add_widget_stores_scope(self, conn):
         dashboard_router.add_widget(

@@ -716,7 +716,22 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
     (Spaces only) when unscoped. Scoped instances (`label_name` set, a
     Space/Project page) are unaffected -- `db.list_child_labels` already
     pools both projects and sub-Spaces under that label, unlike this
-    unscoped branch which otherwise only ever saw `list_space_labels`."""
+    unscoped branch which otherwise only ever saw `list_space_labels`.
+
+    2026-09-30 fix (direct report: on a group's own page this "always
+    showed empty, unless [the group's labels] have tasks under them" --
+    `widget_pin` only ever gets set automatically by converting a label to
+    a Project, so a group whose members are plain labels used for
+    contacts/events/habits, never Projects, had nothing to show and no
+    obvious reason why): a *group* page (`label_name` a `db.group_page_key`)
+    now lists every one of that group's member labels via
+    `db.group_member_names`, not just the ones individually opted into
+    "Groups & Labels widget" -- the same "every member visible" guarantee
+    `_render_group_members`'s own docstring already establishes for the
+    sibling widget that replaced the old always-on group-labels toolbar.
+    `widget_pin` still curates the *unscoped* (Home) case, where showing
+    literally every label in the app would be noise; a plain label page
+    (not a group) still has no children of its own."""
     # labels-as-modules slice c (2026-09-25): driven by groups and the
     # per-label `widget_pin` flag instead of Spaces/projects. On a group's
     # page it shows that group's pinned labels; on a label's page, nothing
@@ -731,12 +746,25 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
 
     style = config.get("style") or "list"
     label_name = config.get("label_name") if config.get("scope") != "everything" else None
-    pinned = [lbl for lbl in db.list_labels(conn) if lbl.get("widget_pin") and not lbl.get("archived_at")]
-    if label_name:
-        group = db.group_from_page_key(label_name)
-        labels = [lbl for lbl in pinned if group is not None and lbl.get("label_group") == group]
+    group = db.group_from_page_key(label_name) if label_name else None
+    if group is not None:
+        # 2026-09-30 (direct report: "always show empty, unless they have
+        # tasks under them" -- widget_pin below only ever gets set by
+        # converting a label to a Project, so a group whose members are
+        # plain labels used for contacts/events/habits, never a Project,
+        # had nothing to show). A group's own page lists every one of its
+        # member labels, not just the ones individually opted into
+        # "Groups & Labels widget" -- same "every member visible"
+        # guarantee _render_group_members's own docstring already
+        # establishes for the sibling widget that replaced the old
+        # always-on group-labels toolbar. widget_pin still curates the
+        # *unscoped* (Home) case below, where showing literally every
+        # label in the app would be noise.
+        labels = [lbl for lbl in (db.effective_label_config(conn, name) for name in db.group_member_names(conn, group)) if not lbl.get("archived_at")]
+    elif label_name:
+        labels = []  # a plain label page (not a group) has no sub-labels
     else:
-        labels = pinned
+        labels = [lbl for lbl in db.list_labels(conn) if lbl.get("widget_pin") and not lbl.get("archived_at")]
 
     if style == "cards":
         cards = []
@@ -767,7 +795,7 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
                 "meta": "Project" if lbl.get("is_project") else "Label",
                 "deadline": deadline_info(lbl),
             })
-        return {"style": "cards", "cards": cards}
+        return {"style": "cards", "cards": cards, "scoped": group is not None}
 
     previews = []
     for lbl in labels:
@@ -777,7 +805,7 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
         progress = round(100 * done / total) if total else None
         previews.append({"project": lbl, "progress": progress, "tasks_done": done, "tasks_total": total,
                          "deadline": deadline_info(lbl)})
-    return {"style": "list", "previews": previews}
+    return {"style": "list", "previews": previews, "scoped": group is not None}
 
 
 def _render_group_members(conn, config: dict, nav: dict | None = None) -> dict:

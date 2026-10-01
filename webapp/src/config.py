@@ -7,6 +7,8 @@ off localhost."""
 from __future__ import annotations
 
 import os
+import time
+import zoneinfo
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -209,3 +211,70 @@ def uses_default_radicale_credentials(settings: "Settings") -> bool:
         settings.radicale_username == _DEV_RADICALE_USERNAME
         and settings.radicale_password == _DEV_RADICALE_PASSWORD
     )
+
+
+# Timezone (2026-09-30, direct report: Web Push notifications arriving
+# about two hours late, traced to the app running against whatever TZ the
+# host/container happens to start in -- Docker defaults to UTC, and every
+# `date.today()`/`datetime.now()` call across this codebase (src/
+# reminders.py's scheduler included -- see that module's own docstring:
+# "Times are the server's local wall clock") has always assumed that IS
+# the user's own local time. Rather than plumb an explicit timezone
+# through every one of those call sites, this setting overrides the
+# process's own wall clock (`os.environ["TZ"]` + `time.tzset()`, below),
+# so the existing "server local time = user's time" assumption becomes
+# true again without touching any of them. Same app_meta-backed,
+# empty-means-"no change from today" convention as every other Settings >
+# General preference (see deps.py's WEEK_START_KEY and friends).
+TIMEZONE_KEY = "app_timezone"
+
+# The offered dropdown choices (routers/settings.py's settings_general),
+# computed once at import time since the host's own tzdata doesn't change
+# while this process is running. Only `Region/City`-style IANA names plus
+# `UTC` itself -- zoneinfo.available_timezones() also yields legacy
+# top-level aliases (`GMT`, `PRC`, `Navajo`, ...) and sign-inverted `Etc/
+# GMT+N` entries that would only confuse a picker meant to answer "which
+# city/region am I in".
+TIMEZONE_CHOICES: tuple[str, ...] = tuple(
+    sorted(
+        {
+            z
+            for z in zoneinfo.available_timezones()
+            if "/" in z and not z.startswith(("Etc/", "posix/", "right/", "SystemV/"))
+        }
+        | {"UTC"}
+    )
+)
+
+
+def apply_persisted_timezone(conn) -> None:
+    """Applies the Timezone setting (TIMEZONE_KEY, above) to this
+    process's own clock. Empty/unset ("System default", the value every
+    existing install has -- nothing has ever written this key before)
+    leaves `os.environ["TZ"]` untouched, so an upgrade changes nothing
+    until the setting is actually used, same as every other preference
+    here. An unrecognized value (tampered request, or a zone this host's
+    own tzdata build doesn't ship) is likewise ignored rather than handed
+    to `time.tzset()`, which would otherwise leave the process on
+    whatever partial/garbage TZ state that call produces.
+
+    Called once at startup (main.py's lifespan, before the background
+    sync/reminder threads start so their very first tick already sees the
+    right clock) and again immediately after a save (routers/settings.py's
+    set_timezone) so a change takes effect without a restart --
+    `time.tzset()` re-reads `os.environ["TZ"]` and updates every thread in
+    this process immediately, there's no per-thread state to also update.
+
+    `time.tzset()` doesn't exist on Windows; guarded the same way this
+    app already assumes a Linux/Docker host everywhere else (see
+    deploy/docker, deploy/nginx, scripts/curodav-ctl).
+
+    Local import of `db`, same acyclic-import-graph reasoning as
+    apply_persisted_radicale_overrides above."""
+    from . import db
+
+    value = db.get_app_meta(conn, TIMEZONE_KEY)
+    if not value or value not in TIMEZONE_CHOICES or not hasattr(time, "tzset"):
+        return
+    os.environ["TZ"] = value
+    time.tzset()

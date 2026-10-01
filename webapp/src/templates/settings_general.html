@@ -12,6 +12,33 @@
 {% endif %}
 
 <div class="card">
+    <!-- Timezone (2026-09-30, direct report: Web Push notifications
+         arriving about two hours late -- traced to the app running on
+         whatever TZ the host/container happens to start in, since every
+         date.today()/datetime.now() call across the app, src/reminders.py's
+         scheduler included, has always assumed the server's own wall clock
+         IS the user's. See src/config.py's TIMEZONE_KEY comment for the
+         full story. "System default" (empty, listed first so the dropdown
+         partial's single-mode empty-value fallback lands on it, same
+         convention as Hide sleep hours' "Off" above) leaves the host/
+         container's own TZ untouched -- an existing install sees no
+         change until this is actually set. Same dropdown pattern as every
+         other row on this page. -->
+    <form class="settings-field-row" method="post" action="/settings/timezone" id="timezone-form">
+        <span class="settings-field-label">Timezone
+            <span class="settings-field-hint">Used for "today", due dates, and when reminders fire</span>
+        </span>
+        <span class="spacer"></span>
+        {% set ms_name = 'timezone' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Timezone' %}
+        {% set ms_items = timezone_options %}
+        {% set ms_selected = current_timezone %}
+        {% set ms_autosubmit = true %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'timezone-form' %}
+        {% include "_widget_list_multiselect.html" %}
+    </form>
     <!-- 2026-09-11 direct request: Profile picture, "Your name" (now
          "Nickname") and the Account (username/password/Radicale URL) card
          moved to a new Settings > Your Profile page

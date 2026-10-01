@@ -20,7 +20,7 @@ from starlette.types import Scope
 from . import db, reminders, sync
 from .auth import AuthMiddleware, CSRFMiddleware
 from .caldav_bridge import CalDavBridge
-from .config import apply_persisted_radicale_overrides, load_settings, uses_default_radicale_credentials
+from .config import apply_persisted_radicale_overrides, apply_persisted_timezone, load_settings, uses_default_radicale_credentials
 from .security_headers import SecurityHeadersMiddleware
 
 logging.basicConfig(level=logging.INFO)
@@ -139,6 +139,13 @@ async def lifespan(app: FastAPI):
     # was ever saved.
     with db.connect(settings.db_path) as _conn:
         settings = apply_persisted_radicale_overrides(settings, _conn)
+        # Timezone (2026-09-30, config.py's apply_persisted_timezone own
+        # docstring has the full story) -- applied before anything below
+        # reads a clock: the background sync/reminder threads started
+        # further down, and the initial sync.full_refresh call, all use
+        # plain datetime.now()/date.today() on the assumption that IS the
+        # user's own local time.
+        apply_persisted_timezone(_conn)
         # First-run default banners/avatar (2026-09-07, direct request) --
         # see _seed_default_media's own docstring. Must not be allowed to
         # fail startup over e.g. a missing assets/ directory on a deploy
