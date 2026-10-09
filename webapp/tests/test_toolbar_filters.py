@@ -268,7 +268,7 @@ class TestActiveFilterShownInDropdown:
         # checkboxes (direct request, "refactored as a checkbox drop
         # down"). contacts_filtered=1 must be present for an explicit
         # ?tag= pick to actually apply -- see
-        # test_phase7_contacts_global.py's TestContactsTagFilter.
+        # test_contacts_tag_filter.py's TestContactsTagFilter.
         db.upsert_contact(
             conn,
             {

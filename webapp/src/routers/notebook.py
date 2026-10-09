@@ -595,17 +595,35 @@ def _field_edit_context(request: Request, conn, field: dict | None, form_action:
 
 
 @field_settings_router.get("")
-def settings_notebook_fields(request: Request, conn=Depends(get_db)):
+def settings_notebook(request: Request, conn=Depends(get_db)):
+    """Notebook settings (a modal on the Settings page): how a document page
+    lays out its sidebar. The frontmatter field schema is its own page."""
     return templates.TemplateResponse(
-        "settings_notebook_fields.html",
+        "settings_notebook.html",
         {
             "request": request,
             "active_tab": "settings_notebook",
             "crumbs": _FIELD_SETTINGS_CRUMB,
             "title": "Notebook",
+            "sidebar_layout": db.get_notebook_settings(conn)["sidebar_layout"],
+        },
+    )
+
+
+frontmatter_settings_router = APIRouter(prefix="/settings/frontmatter", tags=["notebook-frontmatter-settings"])
+
+
+@frontmatter_settings_router.get("")
+def settings_frontmatter(request: Request, conn=Depends(get_db)):
+    return templates.TemplateResponse(
+        "settings_frontmatter.html",
+        {
+            "request": request,
+            "active_tab": "settings_frontmatter",
+            "crumbs": _FIELD_SETTINGS_CRUMB,
+            "title": "Frontmatter",
             "fields": db.list_notebook_field_config(conn),
             "option_types": db.NOTEBOOK_FIELD_OPTION_TYPES,
-            "sidebar_layout": db.get_notebook_settings(conn)["sidebar_layout"],
         },
     )
 
@@ -634,7 +652,7 @@ def new_notebook_field_modal(request: Request, conn=Depends(get_db)):
 def edit_notebook_field_modal(uid: str, request: Request, conn=Depends(get_db)):
     field = db.get_notebook_field_config(conn, uid)
     if field is None:
-        return RedirectResponse(url="/settings/notebook", status_code=303)
+        return RedirectResponse(url="/settings/frontmatter", status_code=303)
     return templates.TemplateResponse(
         "notebook_field_edit_modal.html",
         _field_edit_context(request, conn, field, f"/settings/notebook/{uid}/update"),
@@ -655,7 +673,7 @@ def create_notebook_field(
 ):
     key = _s(key)
     if not key:
-        return RedirectResponse(url="/settings/notebook", status_code=303)
+        return RedirectResponse(url="/settings/frontmatter", status_code=303)
     uid = db.upsert_notebook_field_config(
         conn,
         {
@@ -665,7 +683,7 @@ def create_notebook_field(
     )
     if type in db.NOTEBOOK_FIELD_OPTION_TYPES:
         db.set_notebook_field_options(conn, uid, _field_option_rows_from_form(option_value, option_color, option_icon))
-    return RedirectResponse(url="/settings/notebook", status_code=303)
+    return RedirectResponse(url="/settings/frontmatter", status_code=303)
 
 
 def _rebuild_builtin_options(existing_options: list[dict], colors: list[str], icons: list[str]) -> list[dict]:
@@ -700,7 +718,7 @@ def update_notebook_field(
 ):
     existing = db.get_notebook_field_config(conn, uid)
     if existing is None:
-        return RedirectResponse(url="/settings/notebook", status_code=303)
+        return RedirectResponse(url="/settings/frontmatter", status_code=303)
     if existing["builtin"]:
         # Built-in fields (2026-10-02 direct request, "nothing about them
         # can be changed besides the display name") -- key/type/default/
@@ -717,11 +735,11 @@ def update_notebook_field(
             db.set_notebook_field_options(
                 conn, uid, _rebuild_builtin_options(existing["options"], option_color, option_icon)
             )
-        return RedirectResponse(url="/settings/notebook", status_code=303)
+        return RedirectResponse(url="/settings/frontmatter", status_code=303)
 
     key = _s(key)
     if not key:
-        return RedirectResponse(url="/settings/notebook", status_code=303)
+        return RedirectResponse(url="/settings/frontmatter", status_code=303)
     db.upsert_notebook_field_config(
         conn,
         {
@@ -738,7 +756,7 @@ def update_notebook_field(
         # applies on read; this is that same rule's write-time mirror, so
         # a later switch back to Select doesn't resurrect stale options.
         db.set_notebook_field_options(conn, uid, [])
-    return RedirectResponse(url="/settings/notebook", status_code=303)
+    return RedirectResponse(url="/settings/frontmatter", status_code=303)
 
 
 @field_settings_router.post("/{uid}/delete")
@@ -752,7 +770,7 @@ def delete_notebook_field(uid: str, conn=Depends(get_db)):
     existing = db.get_notebook_field_config(conn, uid)
     if existing is not None and not existing["builtin"]:
         db.delete_notebook_field_config(conn, uid)
-    return RedirectResponse(url="/settings/notebook", status_code=303)
+    return RedirectResponse(url="/settings/frontmatter", status_code=303)
 
 
 # --------------------------------------------------------------------- #

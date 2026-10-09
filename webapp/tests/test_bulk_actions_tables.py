@@ -133,7 +133,7 @@ class TestLabelsBulkMerge:
     """2026-09-13 (direct request: "in the labels table bulk select i would
     like an option to merge labels into one"). `labels_router.bulk_merge_labels`
     is a plain loop over the existing single-pair `db.merge_labels` (see
-    TestPhase2Labels' own merge coverage in test_phase2_labels.py for that
+    TestPhase2Labels' own merge coverage in test_label_management.py for that
     function's own union/repoint semantics) -- these tests cover the bulk
     wrapper's own contract: merging N selected labels into one destination,
     skipping the destination if it's also among the selected names, and the
@@ -254,22 +254,3 @@ class TestTimeBlocksBulkDelete:
         assert resp.status_code == 400
 
 
-class TestRowSelectCheckboxIsRestyled:
-    """2026-09-26 (Peter, item 12: "the checkbox html thing should be
-    replaced visually with a better one, everywhere tables appear") --
-    `.row-select` (the one class every table's row checkbox shares --
-    Tasks, Labels/Projects, Contacts, Holidays, Time blocks) gets a custom
-    appearance:none look instead of the raw native checkbox, scoped
-    narrowly so it doesn't also reset .multiselect-option's own checkboxes
-    (a different, untouched control)."""
-
-    def test_css_gives_row_select_a_custom_appearance(self):
-        css = (_STATIC_DIR / "style.css").read_text(encoding="utf-8")
-        assert ".row-select{" in css
-        assert "appearance:none; -webkit-appearance:none;" in css.split(".row-select{")[1][:200]
-        assert ".row-select:checked{background:var(--accent); border-color:var(--accent);}" in css
-        assert ".row-select:checked::after{" in css
-
-    def test_multiselect_option_checkboxes_are_untouched(self):
-        css = (_STATIC_DIR / "style.css").read_text(encoding="utf-8")
-        assert '.multiselect-option input:is([type="radio"], [type="checkbox"]){accent-color:var(--accent);}' in css

@@ -753,6 +753,31 @@ def bulk_merge_labels(uids: list[str] = Form([]), dest_name: str = Form(...), co
     return RedirectResponse(url="/settings/labels", status_code=303)
 
 
+@router.get("/bulk-edit-modal")
+def bulk_edit_modal(uids: str, request: Request, conn=Depends(get_db)):
+    """Bulk-select "Edit": sets the same color on every selected label."""
+    fields = [{"name": "color", "label": "Color", "kind": "select", "options": [(c, c.title()) for c in COLORS]}]
+    return templates.TemplateResponse(
+        "bulk_edit_modal.html",
+        {"request": request, "uids": [n for n in uids.split(",") if n], "noun": "label", "fields": fields,
+         "post_url": "/settings/labels/bulk-edit", "change_type": "label", "back_url": "/settings/labels"},
+    )
+
+
+@router.post("/bulk-edit")
+def bulk_edit_labels(uids: list[str] = Form([]), color: str = Form(""), conn=Depends(get_db)):
+    if color and color not in COLORS:
+        raise HTTPException(400, f"unknown color '{color}'")
+    for name in uids:
+        if not color:
+            continue
+        # A label that is only in use (no settings row yet) gets one.
+        config = db.get_label_config(conn, name) or {"name": name, "created_at": _now()}
+        config["color"] = color
+        db.upsert_label_config(conn, config)
+    return RedirectResponse(url="/settings/labels", status_code=303)
+
+
 @router.post("/{name}/set")
 def set_label(
     name: str,

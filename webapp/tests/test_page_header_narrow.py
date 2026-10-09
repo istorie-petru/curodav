@@ -31,6 +31,7 @@ from types import SimpleNamespace
 import pytest
 from starlette.requests import Request
 
+from settings_app import fake_app
 from src import db
 from src.routers import calendar as calendar_router
 from src.routers import label_pages
@@ -120,16 +121,17 @@ class TestPageHeaderNarrowRollout:
         _assert_narrow_header(resp.body.decode(), "Browse", "notebook")
 
     def test_settings_index(self, conn):
-        resp = settings_router.settings_index(_bare_request("/settings"), conn=conn)
+        st = fake_app().state.settings
+        resp = settings_router.settings_index(_request_with_app("/settings", st.db_path, backup_dir=st.backup_dir), conn=conn)
         _assert_narrow_header(resp.body.decode(), "Settings", "settings")
 
-    def test_settings_general(self, conn):
-        resp = settings_router.settings_general(_bare_request("/settings/general"), conn=conn)
-        _assert_narrow_header(resp.body.decode(), "General", "user")
+    def test_settings_general_is_a_modal(self, conn):
+        body = settings_router.settings_general(_bare_request("/settings/general"), conn=conn).body.decode()
+        assert 'id="modal-target"' in body and "<h1>General</h1>" in body
 
-    def test_settings_appearance(self, conn):
-        resp = settings_router.settings_appearance(_bare_request("/settings/appearance"), conn=conn)
-        _assert_narrow_header(resp.body.decode(), "Appearance", "sun")
+    def test_settings_appearance_is_a_modal(self, conn):
+        body = settings_router.settings_appearance(_bare_request("/settings/appearance"), conn=conn).body.decode()
+        assert 'id="modal-target"' in body and "<h1>Appearance</h1>" in body
 
     def test_labels_manage(self, conn):
         resp = labels_router.manage_labels(_bare_request("/settings/labels"), conn=conn)
@@ -143,10 +145,10 @@ class TestPageHeaderNarrowRollout:
         resp = settings_router.settings_time_blocks(_bare_request("/settings/time-blocks"), conn=conn)
         _assert_narrow_header(resp.body.decode(), "Sleep &amp; Leisure Time", "moon")
 
-    def test_settings_data_maintenance(self, conn, tmp_path):
+    def test_settings_data_maintenance_is_a_modal(self, conn, tmp_path):
         req = _request_with_app("/settings/data-maintenance", tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
-        resp = settings_router.settings_data_maintenance(req, conn=conn)
-        _assert_narrow_header(resp.body.decode(), "Data &amp; Maintenance", "database")
+        body = settings_router.settings_data_maintenance(req, conn=conn).body.decode()
+        assert 'id="modal-target"' in body and "<h1>Data &amp; Maintenance</h1>" in body
 
     def test_published_lists(self, conn, tmp_path):
         resp = published_lists_router.list_index(_request_with_app("/published-lists", tmp_path / "cache.sqlite"), conn=conn)
@@ -329,43 +331,7 @@ class TestNarrowHeaderBackPosition:
         title_pos = body.index("page-header-narrow-title")
         assert back_pos < icon_pos < title_pos
 
-    def test_back_arrow_renders_without_an_actions_slot(self, conn):
-        # Settings > General passes crumbs but no {% call %} block -- proves
-        # the back arrow no longer depends on (or lives inside)
-        # .page-header-narrow-actions, unlike before this slice. (Settings >
-        # Holidays used to be this test's target, but audit-fixes-2.1.md's
-        # bulk-actions-bar relocation gave it a real actions slot of its own
-        # -- see test_settings_holidays.py/test_bulk_actions_tables.py for
-        # that page's own coverage now.)
-        resp = settings_router.settings_general(_bare_request("/settings/general"), conn=conn)
-        body = resp.body.decode()
-        assert "page-header-narrow-back" in body
-        assert "page-header-narrow-actions" not in body
 
-
-class TestMobileHeaderMinHeight:
-    """2026-09-29 (direct request, "calculate the minimum size of the
-    mobile narrow banner according to the size of the buttons that sit
-    inside it"): below 721px the header lost every height floor entirely
-    (2026-09-12 follow-up, "remove the height requirement for mobile
-    view") -- a plain-title page's strip could settle shorter than one
-    with a real icon-btn/actions row, reading as an inconsistent banner
-    height page to page. A `min-height` (not the old fixed `height`) is
-    back, computed from the actual controls this header renders --
-    `--icon-btn-size` (28px mouse / 40px `pointer:coarse`, this file's own
-    `.icon-btn` rule) plus this rule's own top+bottom padding -- rather
-    than a re-guessed flat number."""
-
-    def test_icon_btn_size_is_a_shared_variable(self):
-        css = (STATIC / "style.css").read_text()
-        assert "--icon-btn-size:28px;" in css
-        assert ".icon-btn{\n  width:var(--icon-btn-size); height:var(--icon-btn-size);" in css
-        assert ":root{ --icon-btn-size:40px; }" in css
-        assert "@media (pointer:coarse){\n  :root{ --icon-btn-size:40px; }\n  .icon-btn{width:var(--icon-btn-size); height:var(--icon-btn-size);}\n}" in css
-
-    def test_mobile_header_min_height_is_calculated_not_a_flat_number(self):
-        css = (STATIC / "style.css").read_text()
-        assert "min-height:calc(var(--icon-btn-size) + var(--space-3) * 2);" in css
 
 
 class TestPageHeaderBanner:

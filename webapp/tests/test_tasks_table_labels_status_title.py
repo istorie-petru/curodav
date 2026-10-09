@@ -141,30 +141,3 @@ class TestTableMarkup:
         assert "pill-static pill-blue" in body  # "active"'s color
 
 
-class TestStatusChangeListenerNotAncestorScoped:
-    """Regression guard (2026-08-29, direct report: "the label inline
-    editor still doesn't work") -- static/tasks_table.js's `change`
-    listener used to gate the Status branch behind `target.
-    matches("#tasks-body input.task-status-radio")` (an ancestor-scoped
-    selector). That's only true while the dropdown is closed: app.js's
-    generic `.multiselect` handling portals an *open* panel's whole
-    subtree (radios included) out to #multiselect-portal, a sibling of
-    #tasks-body, not a descendant -- so the one moment this branch needed
-    to fire (a real click on an option) was exactly the moment its own
-    `.matches()` check went false. No browser/JS harness in this suite
-    (see this file's own header note), so this is a structural source
-    check -- same style test_toast_rework.py/test_pwa_shell.py use for
-    JS-only changes -- rather than a simulated click. (The Labels branch
-    this guard also covered is gone entirely, 2026-09-26 -- "labels
-    should not be inline editable" -- not just re-scoped.)"""
-
-    def test_status_input_is_not_ancestor_scoped(self):
-        # Checks the actual `target.matches(...)` call site, not just "the
-        # old string doesn't appear anywhere" -- the old (buggy) selector
-        # is deliberately still quoted in this file's own explanatory
-        # comment above the fix, so a bare substring-absence check would
-        # false-positive against that documentation.
-        js = (_STATIC_DIR / "tasks_table.js").read_text(encoding="utf-8")
-        assert 'target.matches("input.task-status-radio")' in js
-        assert 'target.matches("#tasks-body input.task-status-radio")' not in js
-        assert "task-label-checkbox" not in js

@@ -154,6 +154,9 @@ async def lifespan(app: FastAPI):
             _seed_default_media(_conn)
         except Exception:
             logger.exception("Default media seed failed; continuing without it")
+        from . import auth as auth_core
+
+        auth_core.ensure_recovery_token(_conn)
     app.state.settings = settings
 
     # Item 10 follow-up (2026-09-27) -- points src/flairs.py at wherever
@@ -389,6 +392,7 @@ def create_app() -> FastAPI:
     # "feature's own router hosts its /settings/* routes" precedent as
     # Groups/Projects above.
     app.include_router(notebook.field_settings_router)
+    app.include_router(notebook.frontmatter_settings_router)
     app.include_router(push.router)
     app.include_router(banners.router)
     app.include_router(flairs_router.router)

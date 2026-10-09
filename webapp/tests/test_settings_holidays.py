@@ -24,6 +24,7 @@ import re
 import pytest
 from starlette.requests import Request
 
+from settings_app import fake_app
 from src import db
 from src.routers import settings as settings_router
 
@@ -40,7 +41,7 @@ def _request(path="/settings/holidays"):
         {
             "type": "http", "method": "GET", "path": path, "query_string": b"",
             "scheme": "http", "server": ("testserver", 80), "root_path": "",
-            "headers": [],
+            "headers": [], "app": fake_app(),
         }
     )
 

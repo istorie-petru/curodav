@@ -52,9 +52,9 @@
 <form method="post" action="{{ h.plus_url }}" class="form-inline habit-action habit-plus">
     <input type="hidden" name="completion_date" value="{{ h.date or h.today }}">
     <input type="hidden" name="value" value="{{ h.next_value|int }}">
-    <button type="submit" class="habit-check-btn habit-check-qty{{ extra_class }}{% if h.done_today %} is-done{% elif h.partial_today %} is-partial{% endif %}"
+    <button type="submit" class="habit-check-btn{{ extra_class }}{% if h.done_today %} is-done{% elif h.partial_today %} is-partial{% endif %}"
             title="Log one more ({{ h.today_value|int }} of {{ h.target|int }}{% if h.unit %} {{ h.unit }}{% endif %} today{% if h.remaining_today %}, {{ h.remaining_today|int }} left{% endif %})" aria-label="Log one more {{ h.title }}, {{ h.today_value|int }} of {{ h.target|int }}">
-        <span class="habit-qty-count">{{ h.today_value|int }}</span><span class="habit-qty-target">/{{ h.target|int }}</span>
+        {{ icon(h.icon or ('check-circle' if h.done_today else 'square')) }}
     </button>
 </form>
 {% else %}
@@ -88,6 +88,7 @@
         {% set _tip %}{{ h.recurrence_label }}{% if h.is_quantity %}, {{ h.target|int }}{% if h.unit %} {{ h.unit }}{% endif %} a day{% if h.remaining_today and h.today_value %} ({{ h.remaining_today|int }} left today){% endif %}{% endif %}{% if h.reminder_time and not h.is_avoid %}, reminder at {{ h.reminder_time|fmt_time }}{% endif %}. Best: {{ h.longest_streak }} {{ h.streak_unit }}{{ 's' if h.longest_streak != 1 }}{% if h.completion_rate is not none %}, {{ (h.completion_rate * 100)|round|int }}% {{ 'clean' if h.is_avoid else 'kept' }}{% endif %}{% if h.strength is not none %}, strength {{ h.strength }}%{% endif %}{% endset %}
         <span class="habit-card-meta" title="{{ _tip|trim }}">
             {% if h.paused_today %}<span class="habit-paused-badge">{{ icon('pause', 'icon-sm') }} Paused until {{ h.paused_until|relative_date }}</span>
+            {% elif h.is_quantity %}<span class="habit-card-progress">{{ h.today_value|int }}/{{ h.target|int }}{% if h.unit %} {{ h.unit }}{% endif %} today</span>
             {% elif h.is_period and h.period_target > 1 %}<span>{{ h.period_done }}/{{ h.period_target }} this {{ h.streak_unit }}</span>
             {% else %}<span>{{ h.recurrence_label }}</span>{% endif %}
             <span class="habit-card-streak">{% if h.is_avoid %}{% if h.relapsed_today %}Relapsed today{% else %}{{ h.current_streak }} day{{ 's' if h.current_streak != 1 }} clean{% endif %}{% else %}{{ habit_streak_text(request, h.current_streak, h.streak_unit) }}{% endif %}</span>

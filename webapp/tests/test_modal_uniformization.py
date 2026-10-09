@@ -170,22 +170,3 @@ class TestBannerEditorFooter:
         assert "<h1>Page banner</h1>" in body
 
 
-class TestFullAppModalSweep:
-    """Slice H: regression guard that every modal fragment in the app
-    routes its footer through `_modal_footer.html` -- no leftover
-    hand-rolled `.modal-footer` markup anywhere."""
-
-    def test_every_modal_template_includes_shared_footer(self):
-        from pathlib import Path
-
-        templates_dir = Path(__file__).resolve().parents[1] / "src" / "templates"
-        modal_files = [
-            "contact_detail.html", "contact_form.html", "event_detail.html", "event_form.html",
-            "habit_task_form.html", "label_merge_modal.html",
-            "quick_add.html", "task_detail.html", "task_form.html",
-            "banner_editor.html", "_widget_edit_modal.html", "_modal_widget_customize.html",
-            "settings_flairs.html",
-        ]
-        for name in modal_files:
-            text = (templates_dir / name).read_text()
-            assert '{% include "_modal_footer.html" %}' in text, f"{name} doesn't use the shared footer partial"

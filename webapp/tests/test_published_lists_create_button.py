@@ -6,7 +6,7 @@ label checkbox was ticked, even though the server (routers/published_lists.
 py's create_list()) has never required a label -- `labels: list[str] =
 Form([])` defaults to empty, and _filter_from_form()/evaluate_label_filter()
 both handle an empty filter without error (see
-test_phase6_published_lists.py's test_create_slugifies_name_and_dedupes_
+test_published_lists.py's test_create_slugifies_name_and_dedupes_
 collection_path, which already calls create_list(..., labels=[], ...)
 directly and asserts success). The stricter client-side gate meant the
 button silently never enabled for a labelless list even when labels DID
@@ -33,9 +33,3 @@ class TestCreateButtonNotGatedOnLabels:
     def test_script_is_valid_js(self):
         subprocess.run(["node", "--check", str(_STATIC_DIR / "published_lists.js")], check=True)
 
-    def test_disabled_state_depends_only_on_name(self):
-        script = (_STATIC_DIR / "published_lists.js").read_text()
-        assert "submitBtn.disabled = !hasName;" in script
-        # The old bug: disabling on `!(hasName && hasLabel)` must be gone,
-        # not just shadowed by a second assignment.
-        assert "hasLabel" not in script

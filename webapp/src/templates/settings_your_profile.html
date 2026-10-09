@@ -2,8 +2,10 @@
 {% extends "base.html" %}
 {% block title %}Your Profile - Settings{% endblock %}
 {% block content %}
-{% from "_page_header_narrow.html" import page_header_narrow with context %}
-{{ page_header_narrow("Your Profile", "user-check") }}
+<div id="modal-target">
+<div class="modal-header"><h1>Your Profile</h1></div>
+<div class="modal-body">
+<div data-keep-open>
 
 {% if request.query_params.get('note') %}
 <div class="settings-hint settings-hint-accent">{{ request.query_params.get('note') }}</div>
@@ -130,5 +132,29 @@
          mechanism (data_maintenance.js) surfaces the confirmation right
          next to the button that applies it. See account_settings' own
          docstring in routers/settings.py. -->
+</div>
+{% if has_account and recovery_token %}
+<div class="card">
+    <div class="settings-field-row">
+        <span class="settings-field-label">Recovery token
+            <span class="settings-field-hint">If you forget your password, run <code>scripts/password_reset.py</code> on the server and enter this token. Keep it somewhere safe.</span>
+        </span>
+        <span class="spacer"></span>
+        <details class="recovery-token">
+            <summary class="btn ghost btn-sm">{{ icon('eye', 'icon-sm') }} Show</summary>
+            <code id="recovery-token-value">{{ recovery_token }}</code>
+        </details>
+    </div>
+    <form class="settings-field-row" method="post" action="/settings/recovery-token/regenerate" data-confirm-sheet="Make a new recovery token? The old one stops working.">
+        <span class="settings-field-label">New recovery token
+            <span class="settings-field-hint">Replaces the current one</span>
+        </span>
+        <span class="spacer"></span>
+        <button type="submit" class="btn ghost btn-sm">{{ icon('repeat', 'icon-sm') }} Regenerate</button>
+    </form>
+</div>
+{% endif %}
+</div>
+</div>
 </div>
 {% endblock %}

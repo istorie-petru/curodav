@@ -45,7 +45,7 @@ class TestSettingsDataMaintenanceRadicaleCard:
 def _settings(**overrides):
     """Minimal stand-in for config.Settings, radicale-related fields only
     -- same SimpleNamespace-fake convention every other test file in this
-    suite uses (see test_data_health.py's/test_phase8_settings_hub.py's own
+    suite uses (see test_data_health.py's/test_settings_hub.py's own
     _request(_with_radicale) helpers)."""
     from types import SimpleNamespace
 
@@ -147,7 +147,7 @@ class TestCheckRadicaleConnection:
         assert "Could not reach Radicale" in message
 
     def test_route_redirects_with_error_note_on_failure(self, tmp_path):
-        from test_phase8_settings_hub import _request_with_radicale
+        from test_settings_hub import _request_with_radicale
 
         req = _request_with_radicale("/settings/data-maintenance")
         req.app.state.settings.radicale_base_url = "http://127.0.0.1:59991/devuser/"

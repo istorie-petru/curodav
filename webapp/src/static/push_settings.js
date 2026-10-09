@@ -5,6 +5,7 @@
 // stores the subscription (/push/subscribe), and can send a test push.
 // Per device: a phone and a laptop each turn it on separately.
 (function () {
+  function init() {
   const status = document.getElementById("push-status");
   if (!status) return;
   const enableBtn = document.getElementById("push-enable");
@@ -155,4 +156,9 @@
   });
 
   refresh().catch(() => show("Couldn't check notification status.", "none"));
+  }
+
+  // Notifications opens in a modal, so the markup arrives after load.
+  init();
+  document.addEventListener("cc-modal-content", init);
 })();

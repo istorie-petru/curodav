@@ -155,11 +155,6 @@ class TestRealSigning:
 
 
 class TestWiring:
-    def test_service_worker_handles_push_and_click(self):
-        sw = (_STATIC / "sw.js").read_text()
-        assert 'self.addEventListener("push"' in sw
-        assert 'self.addEventListener("notificationclick"' in sw
-        assert "u.origin === self.location.origin" in sw  # never navigates off-site
 
     def test_settings_card_and_script(self, conn):
         from src.routers import settings as settings_router

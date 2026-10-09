@@ -3,10 +3,13 @@
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {{ page_header_narrow("Settings", "settings") }}
+{% if request.query_params.get('note') %}<div class="settings-hint settings-hint-accent" data-dm-flash="note">{{ request.query_params.get('note') }}</div>{% endif %}
+{% if request.query_params.get('error') %}<div class="settings-hint settings-hint-error" data-dm-flash="error">{{ request.query_params.get('error') }}</div>{% endif %}
+{% include "_settings_status_cards.html" %}
 
 <div class="card">
 {% for c in categories %}
-<a class="calendar-row settings-row settings-hub-row" href="{{ c.url }}">
+<a class="calendar-row settings-row settings-hub-row" href="{{ c.url }}"{% if c.modal %} data-modal{% endif %}>
     <span class="settings-row-icon">{{ icon(c.icon) }}</span>
     <span class="settings-row-text">
         <span class="settings-row-name">{{ c.name }}</span>
@@ -25,4 +28,9 @@
 </a>
 {% endfor %}
 </div>
+{% endblock %}
+{% block extra_scripts %}
+<script defer src="{{ static_url('data_maintenance.js') }}"></script>
+<script defer src="{{ static_url('push_settings.js') }}"></script>
+<script defer src="{{ static_url('settings_flairs.js') }}"></script>
 {% endblock %}

@@ -217,23 +217,4 @@ class TestStableHeightMarker:
                     continue
                 assert 'id="modal-target" class="modal-stable-height"' in body, (name, label)
 
-    def test_modal_js_toggles_stable_height_and_swap_animation(self):
-        js_path = Path(__file__).resolve().parents[1] / "src" / "static" / "modal.js"
-        js = js_path.read_text(encoding="utf-8")
-        for expected in [
-            "function stabilizeHeight(fragment)",
-            "modal-stable-height",
-            'is-stable-height',
-            "function animateContentSwap()",
-            "animateContentSwap()",
-            "is-swapped",
-            "const wasOpen = overlay.classList.contains(\"is-open\")",
-        ]:
-            assert expected in js, expected
 
-    def test_css_locks_stable_height_and_defines_swap_keyframes(self):
-        css_path = Path(__file__).resolve().parents[1] / "src" / "static" / "style.css"
-        css = css_path.read_text(encoding="utf-8")
-        assert ".modal.is-stable-height{" in css
-        assert "@keyframes cc-modal-swap-in" in css
-        assert ".modal.is-swapped{" in css

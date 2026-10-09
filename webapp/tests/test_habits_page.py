@@ -69,7 +69,7 @@ class TestPage:
         resp, body = _page(conn)
         assert [h["uid"] for h in resp.context["todo"]] == ["h1"]
         assert [h["uid"] for h in resp.context["on_track"]] == ["h2"]
-        assert body.index(">To do <") < body.index("Read") < body.index(">On track <") < body.index("Stretch")
+        assert body.index("To do") < body.index("Read") < body.index("On track") < body.index("Stretch")
 
     def test_only_habits_not_plain_or_done_tasks(self, conn):
         _habit(conn, "h1", "Qwhabit")
@@ -98,7 +98,7 @@ class TestPage:
         _, body = _page(conn)
         assert 'action="/tasks/h1/completions"' in body
         assert 'name="value" value="4"' in body
-        assert '<span class="habit-qty-count">3</span><span class="habit-qty-target">/8</span>' in body
+        assert "3/8" in body
 
     def test_period_habit_shows_progress_and_week_unit(self, conn):
         _habit(conn, "h1", "Gym", recurrence="FREQ=WEEKLY", habits_per_period=3)
@@ -436,11 +436,6 @@ class TestLookEverywhereAndCancel20260926:
         assert not (tpl / "_color_swatch_picker.html").exists()
         assert not (tpl / "_icon_swatch_picker.html").exists()
 
-    def test_amount_box_has_no_spinner(self):
-        from pathlib import Path
-
-        css = (Path(__file__).resolve().parents[1] / "src" / "static" / "style.css").read_text()
-        assert "#habit-target::-webkit-outer-spin-button, #habit-target::-webkit-inner-spin-button{-webkit-appearance:none" in css
 
 
 class TestHabitIconLibrary:

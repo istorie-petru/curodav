@@ -124,6 +124,7 @@ AUTH_SECRET_KEY = "auth_session_secret"
 # secret.
 AUTH_USERNAME_KEY = "auth_username"
 AUTH_PASSWORD_HASH_KEY = "auth_password_hash"
+AUTH_RECOVERY_TOKEN_KEY = "auth_recovery_token"
 
 # The route the forced first-run flow lives at. Public only conditionally
 # (see setup_required) -- unlike PUBLIC_PATHS below, which is unconditional.
@@ -214,6 +215,48 @@ def set_persisted_credentials(conn, username: str, password: str) -> None:
     not a secret) and the password hashed (hash_password)."""
     db.set_app_meta(conn, AUTH_USERNAME_KEY, username)
     db.set_app_meta(conn, AUTH_PASSWORD_HASH_KEY, hash_password(password))
+
+
+def new_recovery_token() -> str:
+    """A recovery token is easy to read out and type: four groups of four
+    characters, no look-alikes (no 0/O or 1/I/L)."""
+    alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+    return "-".join("".join(secrets.choice(alphabet) for _ in range(4)) for _ in range(4))
+
+
+def get_recovery_token(conn) -> str | None:
+    return db.get_app_meta(conn, AUTH_RECOVERY_TOKEN_KEY)
+
+
+def ensure_recovery_token(conn) -> str:
+    """Returns the install's recovery token, creating it the first time (this
+    is also the one-time migration for installs that predate it). Stored
+    readable, not hashed, because Settings shows it to the logged-in owner."""
+    token = get_recovery_token(conn)
+    if not token:
+        token = regenerate_recovery_token(conn)
+    return token
+
+
+def regenerate_recovery_token(conn) -> str:
+    token = new_recovery_token()
+    db.set_app_meta(conn, AUTH_RECOVERY_TOKEN_KEY, token)
+    return token
+
+
+def reset_credentials_with_token(settings, conn, token: str, username: str, password: str) -> str:
+    """Sets a new username and password when `token` is the install's recovery
+    token, then rotates the token and the session secret (every session is
+    logged out). Returns the new token; raises ValueError for a wrong token
+    or an empty username/password."""
+    stored = get_recovery_token(conn)
+    if not stored or not hmac.compare_digest(stored.upper(), (token or "").strip().upper()):
+        raise ValueError("That recovery token is not correct.")
+    if not username.strip() or not password:
+        raise ValueError("Username and password are required.")
+    set_persisted_credentials(conn, username.strip(), password)
+    rotate_session_secret(settings, conn)
+    return regenerate_recovery_token(conn)
 
 
 def setup_required(settings, conn=None) -> bool:

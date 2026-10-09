@@ -1331,7 +1331,7 @@ def create_event(
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
     if isinstance(contacts, list):
-        db.set_object_contacts(conn, "event", row["uid"], contacts)
+        db.set_object_contacts(conn, "event", row["uid"], db.resolve_contact_entries(conn, contacts))
     return respond(x_requested_with, "/calendar", status_code=201, ok=True, uid=row["uid"])
 
 
@@ -1467,7 +1467,7 @@ def update_event(
             task_row["updated_at"] = datetime.now(timezone.utc).isoformat()
             db.upsert_task(conn, task_row)
     if contacts_present == "1" and isinstance(contacts, list):
-        db.set_object_contacts(conn, "event", row["uid"], contacts)
+        db.set_object_contacts(conn, "event", row["uid"], db.resolve_contact_entries(conn, contacts))
     return respond(x_requested_with, "/calendar", ok=True)
 
 

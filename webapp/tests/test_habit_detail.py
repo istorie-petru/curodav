@@ -140,7 +140,7 @@ class TestSmarterHeatmap:
         modal -- even when the habit has some. (The edit modal got it
         back the same day, reversed: "should be able to be work scheduled
         -- return it to the edit modal" -- see
-        test_habit_ui_rework.py::TestHabitTaskEditModal::
+        test_habit_rows_and_modals.py::TestHabitTaskEditModal::
         test_has_a_work_sessions_card.)"""
         _habit(conn, "h1")
         db.create_work_allocation(conn, "h1")

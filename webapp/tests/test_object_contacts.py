@@ -61,3 +61,12 @@ def test_deleting_a_contact_removes_its_links(conn):
     db.set_object_contacts(conn, "task", "t1", ["c1"])
     db.delete_contact(conn, "c1")
     assert db.list_object_contacts(conn, "task", "t1") == []
+
+
+def test_a_typed_name_creates_a_contact_or_reuses_one_by_name(conn):
+    _contact(conn, "c1", "Amy Adams")
+    uids = db.resolve_contact_entries(conn, ["c1", "amy adams", "Zed Zane", "", "3f2b8c1e-1111-4222-8333-444455556666"])
+    assert uids[0] == "c1" and uids[1] == "c1"
+    created = db.get_contact(conn, uids[2])
+    assert created["full_name"] == "Zed Zane"
+    assert len(uids) == 3

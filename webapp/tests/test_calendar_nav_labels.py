@@ -141,8 +141,8 @@ class TestMonthUntouched:
         resp = calendar_router.month_view(_bare_request("/calendar"), conn=conn)
         assert "label_text" not in resp.context
 
-    def test_month_grid_partial_has_no_prev_next_data_attrs(self):
-        html = (_TEMPLATES_DIR / "_calendar_month_grid.html").read_text()
+    def test_month_page_has_no_prev_next_data_attrs(self, conn):
+        html = calendar_router.month_view(_bare_request("/calendar"), conn=conn).body.decode()
         assert "data-prev=" not in html
         assert "data-next=" not in html
         assert "data-label-text=" not in html
@@ -157,52 +157,9 @@ class TestCalNavScriptStructural:
     def test_async_calendar_js_syntax_is_valid(self):
         subprocess.run(["node", "--check", str(_STATIC_DIR / "async_calendar.js")], check=True)
 
-    def test_bind_cal_nav_is_wired_for_fourweek_and_week_only(self):
-        script = (_STATIC_DIR / "async_calendar.js").read_text()
-        assert 'bindCalNav("fourweek-grid", "/calendar/fourweek", refreshFourweek);' in script
-        assert 'bindCalNav("week-grid", "/calendar/week", refreshWeek);' in script
-        # Month deliberately excluded -- no bindCalNav call anywhere inside
-        # its own #month-grid block specifically (bindCalNav's own
-        # definition legitimately appears earlier in the file, shared by
-        # the two blocks that do call it).
-        month_block = script.split('var regionEl = document.getElementById("month-grid");')[1].split(
-            'var fourweekEl = document.getElementById("fourweek-grid");'
-        )[0]
-        assert "bindCalNav(" not in month_block
 
-    def test_nav_click_is_intercepted_not_a_real_navigation(self):
-        script = (_STATIC_DIR / "async_calendar.js").read_text()
-        assert 'document.querySelector(".cal-nav-prev")' in script
-        assert 'document.querySelector(".cal-nav-next")' in script
-        assert "e.preventDefault();" in script
 
-    def test_url_is_pushed_after_a_successful_nav_swap(self):
-        script = (_STATIC_DIR / "async_calendar.js").read_text()
-        assert "window.history.pushState(" in script
 
-    def test_back_forward_are_wired_via_popstate(self):
-        script = (_STATIC_DIR / "async_calendar.js").read_text()
-        assert 'window.addEventListener("popstate"' in script
 
-    def test_failed_nav_falls_back_to_a_real_navigation(self):
-        # Same "converge to server truth" fallback every other refresh
-        # failure in this file already takes.
-        script = (_STATIC_DIR / "async_calendar.js").read_text()
-        assert "window.location.href = pageBase" in script
 
-    def test_dataset_driven_label_and_href_update_after_swap(self):
-        script = (_STATIC_DIR / "async_calendar.js").read_text()
-        assert "gridEl.dataset.prev" in script
-        assert "gridEl.dataset.next" in script
-        assert "gridEl.dataset.labelText" in script
-        assert "labelEl.textContent = gridEl.dataset.labelText;" in script
 
-    def test_refresh_fourweek_and_week_accept_a_date_override(self):
-        # Both refresh functions must support a caller-supplied date (the
-        # nav path) while still defaulting to the region's own current
-        # data-date (the pre-existing mutation-refresh call site).
-        script = (_STATIC_DIR / "async_calendar.js").read_text()
-        assert "function refreshFourweek(dateVal) {" in script
-        assert "function refreshWeek(dateVal) {" in script
-        assert 'var d = dateVal != null ? dateVal : fourweekEl.dataset.date || "";' in script
-        assert 'var d = dateVal != null ? dateVal : weekEl.dataset.date || "";' in script

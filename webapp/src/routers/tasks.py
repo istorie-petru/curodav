@@ -629,7 +629,7 @@ def create_task(
     if isinstance(habit_icon, str) or isinstance(habit_color, str):
         _save_habit_look(conn, row["uid"], habit_icon, habit_color)
     if isinstance(contacts, list):
-        db.set_object_contacts(conn, "task", row["uid"], contacts)
+        db.set_object_contacts(conn, "task", row["uid"], db.resolve_contact_entries(conn, contacts))
     return respond(x_requested_with, "/tasks", status_code=201, uid=row["uid"])
 
 
@@ -654,6 +654,79 @@ def create_task(
 # list to move a task to, only labels to add/remove (the `tag` action
 # below already does that generically).
 # --------------------------------------------------------------------- #
+
+
+BULK_RECURRENCE = {
+    "none": "Does not repeat",
+    "FREQ=DAILY": "Daily",
+    "FREQ=WEEKLY": "Weekly",
+    "FREQ=MONTHLY": "Monthly",
+    "FREQ=YEARLY": "Yearly",
+}
+
+
+def _label_options(conn):
+    return [(l["name"], l["name"]) for l in sorted(db.list_labels(conn), key=lambda l: l["name"].lower())]
+
+
+@router.get("/bulk-edit-modal")
+def bulk_edit_modal(uids: str, request: Request, conn=Depends(get_db)):
+    """Bulk-select "Edit": one modal that sets the same value on every selected task."""
+    labels = _label_options(conn)
+    fields = [
+        {"name": "status", "label": "Status", "kind": "select", "options": [(k, STATUS_LABELS[k]) for k in STATUSES]},
+        {"name": "start_at", "label": "Start date", "kind": "date"},
+        {"name": "due_at", "label": "Due date", "kind": "date"},
+        {"name": "recurrence", "label": "Repeats", "kind": "select", "options": list(BULK_RECURRENCE.items())},
+        {"name": "add_tag", "label": "Add label", "kind": "select", "options": labels},
+        {"name": "remove_tag", "label": "Remove label", "kind": "select", "options": labels},
+    ]
+    return templates.TemplateResponse(
+        "bulk_edit_modal.html",
+        {"request": request, "uids": [u for u in uids.split(",") if u], "noun": "task", "fields": fields,
+         "post_url": "/tasks/bulk-edit", "change_type": "task", "back_url": "/tasks"},
+    )
+
+
+@router.post("/bulk-edit")
+def bulk_edit(
+    uids: list[str] = Form([]),
+    status: str = Form(""),
+    start_at: str = Form(""),
+    due_at: str = Form(""),
+    recurrence: str = Form(""),
+    add_tag: str = Form(""),
+    remove_tag: str = Form(""),
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
+    if status and status not in STATUSES:
+        raise HTTPException(400, f"invalid status '{status}'")
+    for uid in uids:
+        row = db.get_task(conn, uid)
+        if row is None:
+            continue
+        if status:
+            row["status"] = status
+            row["progress"] = _progress_for_status(status)
+        if start_at:
+            row["start_at"] = start_at
+        if due_at:
+            row["due_at"] = due_at
+        if recurrence in BULK_RECURRENCE:
+            row["recurrence"] = None if recurrence == "none" else recurrence
+        tags = set(row.get("tags") or [])
+        if add_tag:
+            tags.add(add_tag)
+        if remove_tag:
+            tags.discard(remove_tag)
+        row["tags"] = sorted(tags)
+        row["updated_at"] = datetime.now(timezone.utc).isoformat()
+        try:
+            db.upsert_task(conn, row)
+        except db.MultipleProjectLabelsError as exc:
+            raise HTTPException(400, f"{row.get('title') or uid}: {exc}")
+    return respond(x_requested_with, "/tasks", count=len(uids))
 
 
 @router.post("/bulk")
@@ -1031,7 +1104,7 @@ def update_task(
     if isinstance(habit_icon, str) or isinstance(habit_color, str):
         _save_habit_look(conn, row["uid"], habit_icon, habit_color)
     if contacts_present == "1" and isinstance(contacts, list):
-        db.set_object_contacts(conn, "task", row["uid"], contacts)
+        db.set_object_contacts(conn, "task", row["uid"], db.resolve_contact_entries(conn, contacts))
     return respond(x_requested_with, "/tasks")
 
 

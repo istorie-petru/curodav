@@ -32,6 +32,7 @@ from datetime import date
 import pytest
 from starlette.requests import Request
 
+from settings_app import fake_app
 from src import db
 from src.routers import calendar as calendar_router
 from src.routers import settings as settings_router
@@ -49,7 +50,7 @@ def _request(path="/settings/time-blocks", query_string=b""):
         {
             "type": "http", "method": "GET", "path": path, "query_string": query_string,
             "scheme": "http", "server": ("testserver", 80), "root_path": "",
-            "headers": [],
+            "headers": [], "app": fake_app(),
         }
     )
 

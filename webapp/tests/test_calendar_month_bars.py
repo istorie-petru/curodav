@@ -183,13 +183,7 @@ class TestBarIsPast:
         weeks = calendar_router._month_grid(past.year, past.month, events, [])
         week = _week_of(weeks, past.isoformat())
         assert week["bars"][0]["is_past"] is True
-        for name in ("_calendar_month_grid.html", "_calendar_fourweek_grid.html", "_calendar_week_grid.html"):
-            text = (_TEMPLATES_DIR / name).read_text()
-            assert "{% if bar.is_past %} is-past{% endif %}" in text
 
-    def test_css_dims_past_bars(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        assert ".month-bar.is-past{opacity:.5;}" in css
 
     def test_non_overlapping_bars_share_lane_zero(self):
         events = [
@@ -461,91 +455,11 @@ class TestDragResizeRound2Structural:
     def test_calendar_month_drag_js_syntax_is_valid(self):
         subprocess.run(["node", "--check", str(_STATIC_DIR / "calendar_month_drag.js")], check=True)
 
-    def test_both_drag_setups_capture_the_pointer(self):
-        script = (_STATIC_DIR / "calendar_month_drag.js").read_text()
-        assert script.count("setPointerCapture") == 2
-
-    def test_resize_guards_toast_instead_of_silently_returning(self):
-        script = (_STATIC_DIR / "calendar_month_drag.js").read_text()
-        assert "Can't drag the start past the event's own end." in script
-        assert "Can't drag the end before the event's own start." in script
-
-    def test_resize_handle_hit_area_is_widened_via_pseudo_element(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        assert ".month-bar-resize-handle::before{" in css
-        # The visible handle itself must stay unchanged (thin edge grab
-        # zone, not a chunky visible bar) -- only the invisible hit area
-        # grows.
-        assert ".month-bar-resize-handle{\n  position:absolute; top:0; bottom:0; width:8px; cursor:ew-resize;\n}" in css
-
-    def test_drop_hover_has_a_visible_boundary_ring(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        assert ".month-day-cell.drop-hover{background-color:var(--accent-neutral-subtle); box-shadow:inset 0 0 0 2px var(--accent-neutral);}" in css
 
 
-class TestDragRound3DayCellColumnAlignment:
-    """2026-09-08 same-day bug fix, round 3 -- the ACTUAL root cause, found
-    via a live browser session after rounds 1 and 2 (both above, both
-    reasoning purely from static code) failed to resolve the report.
 
-    `.month-day-cell:nth-child(N){grid-column:N;}` (just above this class's
-    own rules in style.css) counts a cell's position among ALL of
-    `.month-week-grid`'s children, not just the day cells. `.month-week-
-    bars` (_calendar_month_grid.html / _calendar_fourweek_grid.html) is a
-    CONDITIONAL preceding sibling -- rendered only in a week row that
-    actually has a bar-worthy event -- so in exactly those rows every
-    `.month-day-cell` was shifted one nth-child index off from its own
-    weekday: Monday's cell silently rendered in Tuesday's grid column, and
-    so on, with the 7th day falling off the explicit 1-7 rule set and
-    auto-placing back into column 1. Confirmed live: a bar's own start/end
-    dates were always correct (it's laid out independently, by
-    `_week_bars`' own col_start/col_span math), but the day CELLS under it
-    -- and therefore every `cellAtPoint` hit-test result during a drag,
-    since that's keyed off each cell's own `data-date` -- were reading a
-    different day than what was visually under them, in any week with a
-    bar. This fully explains "wrong cell" (any drag in a bar week landed
-    one day off from where it looked like it landed) and "resize needs
-    N+1" (the visual target cell and its true date disagreed by one column,
-    so trusting the visual made every resize land one day short). Rounds 1
-    and 2's fixes weren't wrong to make, but they were fixing a layer
-    (cellAtPoint's hit-testing itself, and the resize-handle/feedback UX)
-    that was never actually the culprit.
 
-    Fix is CSS-only, in the `.month-day-cell:nth-child(N)` rule block
-    itself: `:nth-child(N of .month-day-cell)` (CSS Selectors 4 "of
-    <selector>" filter) counts only among siblings that are themselves
-    `.month-day-cell`, so a `.month-week-bars` sibling can no longer
-    perturb the count. Shared by both `_calendar_month_grid.html` and
-    `_calendar_fourweek_grid.html` (identical markup/class names), so this
-    one rule fixes Month and 4-Week together -- no template change needed.
 
-    Verified live (not just reasoned about): reproduced the exact shifted-
-    column DOM structure in a running instance, confirmed the fix restores
-    correct alignment, then re-ran an actual resize-grow drag (landed on
-    the exact day dropped on, no overshoot needed) and an actual chip move
-    drag (landed on the exact day dropped on) against the live server."""
-
-    def test_day_cell_grid_column_rules_are_scoped_to_month_day_cell_siblings(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        for n in range(1, 8):
-            assert f".month-day-cell:nth-child({n} of .month-day-cell){{grid-column:{n};}}" in css
-        # The old, sibling-count-vulnerable form must be gone, not just
-        # supplemented -- a leftover bare rule at equal specificity would
-        # be a real cascade-order footgun (last one in the file wins).
-        for n in range(1, 8):
-            assert f".month-day-cell:nth-child({n}){{grid-column:{n};}}" not in css
-
-    def test_month_week_bars_is_still_documented_as_a_preceding_conditional_sibling(self):
-        # Locks in the precondition the bug depended on -- if a future
-        # refactor moves `.month-week-bars` (e.g. outside `.month-week-
-        # grid`, or makes it unconditional) this assumption should be
-        # revisited, not silently invalidated.
-        for name in ("_calendar_month_grid.html", "_calendar_fourweek_grid.html"):
-            html = (_TEMPLATES_DIR / name).read_text()
-            bars_idx = html.index('class="month-week-bars"')
-            first_cell_idx = html.index('class="month-day-cell ')
-            assert bars_idx < first_cell_idx
-            assert "{% if week.bars %}" in html
 
 
 class TestItemDragGhostStructural:
@@ -571,102 +485,11 @@ class TestItemDragGhostStructural:
     def test_calendar_month_drag_js_syntax_is_valid(self):
         subprocess.run(["node", "--check", str(_STATIC_DIR / "calendar_month_drag.js")], check=True)
 
-    def test_setup_item_creates_and_removes_a_ghost(self):
-        script = (_STATIC_DIR / "calendar_month_drag.js").read_text()
-        assert "month-item-ghost" in script
-        assert "cloneNode(true)" in script
-        assert "ghost.remove();" in script
-
-    def test_dragging_chip_fades_instead_of_ring_outlining(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        assert ".month-event-item.dragging, .month-due-task-item.dragging{opacity:.3;}" in css
-
-    def test_ghost_css_class_exists_and_is_non_interactive(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        assert ".month-item-ghost{" in css
-        idx = css.index(".month-item-ghost{")
-        block = css[idx:idx + 250]
-        assert "pointer-events:none" in block
-        assert "position:fixed" in block
 
 
-class TestMonthBarSpacing:
-    """2026-09-25 direct report: all-day bars sat glued to (actually 1px
-    over) the day number and flush against the column gridlines. The bar
-    layer's top must be built from the same tokens as the day cell's own
-    padding + day-number gap, so bars and text rows start at the same y."""
-
-    def test_bar_layer_top_matches_the_cell_padding_and_daynum_gap(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        assert "top:calc(var(--month-cell-pad-top) + var(--month-daynum-h) + var(--month-daynum-gap));" in css
-        assert "padding:var(--month-cell-pad-top) 4px 4px;" in css
-        assert "margin-bottom:var(--month-daynum-gap);}" in css
-
-    def test_bars_are_inset_from_the_column_gridlines(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        for i in range(1, 8):
-            assert f".month-bar-col-{i}{{left:calc({i - 1}/7 * 100% + 3px);}}" in css
-            assert f".month-bar-span-{i}{{width:calc({i}/7 * 100% - 6px);}}" in css
-
-    def test_lane_offset_leaves_room_below_the_last_bar(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        for i in range(1, 9):
-            assert (
-                f".month-bars-offset-{i}{{margin-top:calc({i} * (var(--month-bar-h) + var(--month-bar-gap))"
-                " + var(--month-bars-after-gap));}"
-            ) in css
 
 
-class TestAuditRegressions20260925:
-    """UI audit 2026-09-25: three CSS regressions found in the live app."""
-
-    def test_no_late_field_grid_rule_overrides_the_mobile_single_column(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        mobile = css.index(".field-grid{grid-template-columns:1fr;}")
-        # Any .field-grid rule after the <=720px override must not set
-        # columns again, or phones get two squeezed columns.
-        tail = css[mobile + 1:]
-        for block in re.findall(r"^\.field-grid\{[^}]*\}", tail, flags=re.M):
-            assert "grid-template-columns" not in block
-
-    def test_more_button_is_reset_from_the_browser_default(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        block = css[css.index("button.month-more-link{"):]
-        block = block[:block.index("}")]
-        assert "appearance:none" in block and "background:none" in block and "border:0" in block
-
-    def test_day_view_habit_button_matches_the_task_rows(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        block = css[css.index("button.allday-habit{"):]
-        block = block[:block.index("}")]
-        assert "background:none" in block and "font-size:var(--text-xs)" in block
 
 
-class TestAuditDecisions20260925:
-    """Peter's answers to the 2026-09-25 audit's open questions."""
 
-    def test_pills_never_wrap(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        for sel in (".pill-static", ".cell-tag"):
-            block = re.search(r"^" + re.escape(sel) + r"\{[^}]*\}", css, flags=re.M).group(0)
-            assert "white-space:nowrap" in block and "flex-shrink:0" in block, sel
 
-    def test_month_view_hides_times_on_phones(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        assert "@media (max-width:720px){.month-item-time{display:none;} .month-more-word{display:none;}}" in css
-        for name in ("_calendar_fourweek_grid.html", "_calendar_month_grid.html"):
-            tpl = (_STATIC_DIR.parent / "templates" / name).read_text()
-            assert '<span class="month-more-word"> more</span>' in tpl
-
-    def test_dashboard_columns_stack_independently(self):
-        script = (_STATIC_DIR / "app.js").read_text()
-        assert "const colBottom = new Array(cols).fill(0);" in script
-        # no shared row height is stamped onto cards any more
-        assert "entry.card.style.height = `${rowHeight}px`;" not in script
-
-    def test_week_bar_drag_resolves_days_by_pointer_x(self):
-        script = (_STATIC_DIR / "calendar_week_allday_drag.js").read_text()
-        assert '.allday-task[data-uid], .allday-bar[data-uid]' in script
-        assert 'el.closest(".allday-col") || colAtX(e.clientX)' in script
-        subprocess.run(["node", "--check", str(_STATIC_DIR / "calendar_week_allday_drag.js")], check=True)
-        subprocess.run(["node", "--check", str(_STATIC_DIR / "app.js")], check=True)

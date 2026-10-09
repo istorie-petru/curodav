@@ -812,6 +812,24 @@ cmd_flairs() {
   echo "    No restart needed -- read fresh on every page render."
 }
 
+cmd_password_reset() {
+  require_root
+  if [ ! -f "$ENV_FILE" ] || [ ! -d "$CURRENT_LINK" ]; then
+    err "No deployment found -- has 'install' been run yet?"
+    exit 1
+  fi
+  # Runs webapp/scripts/password_reset.py as the app user with the app's own
+  # environment, so it opens the same database. It asks for the recovery
+  # token (Settings > Your Profile), a new username and a new password.
+  if runuser -u "$APP_USER" -- bash -c 'set -a; . "$1"; set +a; cd "$2/webapp" && exec "$2/.venv/bin/python" scripts/password_reset.py' _ "$ENV_FILE" "$CURRENT_LINK"; then
+    log "Restarting ${APP_NAME} so the new login applies..."
+    systemctl restart "$APP_NAME"
+  else
+    err "Password reset did not complete; nothing was restarted."
+    exit 1
+  fi
+}
+
 case "${1:-}" in
   install)
     DAV_ONLY=0
@@ -851,8 +869,9 @@ case "${1:-}" in
     ;;
   remove)  cmd_remove ;;
   flairs)  cmd_flairs ;;
+  password-reset)  cmd_password_reset ;;
   *)
-    echo "Usage: curodav-ctl {install [--dav [--proxy=cloudflare|manual] [--reconfigure]]|update|status|revert|remove|flairs}" >&2
+    echo "Usage: curodav-ctl {install [--dav [--proxy=cloudflare|manual] [--reconfigure]]|update|status|revert|remove|flairs|password-reset}" >&2
     exit 2
     ;;
 esac

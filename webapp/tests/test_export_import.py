@@ -104,7 +104,7 @@ def _seed(conn):
 
 
 class TestIndex:
-    def test_index_redirects_to_settings_data_maintenance(self, conn):
+    def test_index_redirects_to_settings(self, conn):
         # 2026-08-08: /export is no longer a page of its own -- direct
         # feedback ("export and backup should be fully with all
         # buttons... in the advanced page") moved every download/import
@@ -117,7 +117,7 @@ class TestIndex:
         # than 404ing.
         resp = export_router.export_index(_request_with_settings(), conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/data-maintenance"
+        assert resp.headers["location"] == "/settings"
 
     def test_export_context_has_the_counts_data_maintenance_needs(self, conn):
         _seed(conn)

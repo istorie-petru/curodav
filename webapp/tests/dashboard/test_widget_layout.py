@@ -281,7 +281,7 @@ class TestDashboardRoute:
         assert "data-height-key" not in body
         # Every widget's .widget-content opens with the exact same bare
         # markup -- no per-widget/per-type variation left at all .
-        assert body.count('<div class="widget-content">') == len([w for w in db.list_dashboard_widgets(conn) if w["type"] != "stack"])
+        assert body.count('<div class="card-body widget-content">') == len([w for w in db.list_dashboard_widgets(conn) if w["type"] != "stack"])
 
 
 class TestBareTileWidgets:

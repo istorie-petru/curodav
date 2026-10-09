@@ -5492,6 +5492,36 @@ def remove_object_label(conn: sqlite3.Connection, object_type: str, object_id: s
     conn.commit()
 
 
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
+
+
+def resolve_contact_entries(conn: sqlite3.Connection, entries: list[str]) -> list[str]:
+    """Turns the Contacts field's values into contact uids. A value that is a
+    known uid stays; a typed name matches an existing contact by name or
+    becomes a new contact (name only); a stray unknown uid is dropped."""
+    resolved: list[str] = []
+    for raw in entries or []:
+        value = (raw or "").strip()
+        if not value:
+            continue
+        if conn.execute("SELECT 1 FROM contacts WHERE uid = ? AND is_draft = 0", (value,)).fetchone():
+            resolved.append(value)
+            continue
+        if _UUID_RE.match(value) or not any(ch.isalpha() for ch in value):
+            continue
+        row = conn.execute(
+            "SELECT uid FROM contacts WHERE lower(full_name) = lower(?) AND is_draft = 0 LIMIT 1", (value,)
+        ).fetchone()
+        if row:
+            resolved.append(row["uid"])
+            continue
+        now = datetime.now(timezone.utc).isoformat()
+        uid = str(uuid.uuid4())
+        upsert_contact(conn, {"uid": uid, "full_name": value, "org": None, "tags": [], "created_at": now, "updated_at": now})
+        resolved.append(uid)
+    return resolved
+
+
 def set_object_contacts(conn: sqlite3.Connection, object_type: str, object_id: str, contact_uids: list[str]) -> None:
     """Replaces the contacts linked to (object_type, object_id) with exactly
     `contact_uids`; unknown or draft contacts are ignored."""

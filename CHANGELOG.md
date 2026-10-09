@@ -4,6 +4,15 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.5.0]
+
+- Settings: General, Your Profile, Notifications, Appearance, Data & Maintenance and Notebook open as modals that stay open while a setting saves. The Database, Backup and Sync status cards now sit on the main Settings page. Notebook settings split into Notebook (sidebar layout) and Frontmatter (custom fields).
+- Bulk select: buttons are icon-only with tooltips, and an Edit button changes the same fields on every selected row (tasks: status, dates, repeat, labels; contacts: label, organization, title; labels: color).
+- Habits and Contacts share one section heading; cards share title, body and footer parts; amount habits use the same check button as other habits and show their count in the row.
+- Contacts field: type a new name to create a contact straight from a task or event.
+- Password recovery: Settings shows a recovery token, and `curodav-ctl password-reset` (or `scripts/password_reset.py`) resets the login with it. Local dev builds can clear the stored login with `--dev-clear`.
+- Tests: files renamed by feature, rules about assets and templates moved to core tests, and tests that asserted on CSS, script or template text removed.
+
 ## [3.4.0]
 
 - Shared interface components: round radio and square checkbox, named input

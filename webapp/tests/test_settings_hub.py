@@ -33,6 +33,7 @@ from datetime import datetime, timezone
 import pytest
 from starlette.requests import Request
 
+from settings_app import fake_app
 from src import db
 from src.routers import dashboard as dashboard_router
 from src.routers import export as export_router
@@ -63,6 +64,7 @@ def _request(path="/settings"):
             "server": ("testserver", 80),
             "root_path": "",
             "headers": [],
+            "app": fake_app(),
         }
     )
 
@@ -137,6 +139,7 @@ class TestSettingsHub:
             "/settings/projects",  # 2026-09-26
             "/settings/holidays",
             "/settings/notebook",  # 2026-10-02
+            "/settings/frontmatter",
             "/settings/time-blocks",
             "/settings/data-maintenance",
             # "/settings/flairs" was a hub category briefly (2026-09-29) --
@@ -309,7 +312,7 @@ class TestDataAndBackupCategoryRemoved:
         # /export is just a redirect for old links/bookmarks.
         resp = export_router.export_index(_request_with_radicale("/export"), conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/data-maintenance"
+        assert resp.headers["location"] == "/settings"
 
     def test_export_import_live_in_sync_menu_dialogs_not_on_the_page(self, conn, tmp_path):
         # 2026-08-26 third pass: the standalone Export & import card is
@@ -319,7 +322,7 @@ class TestDataAndBackupCategoryRemoved:
         # file…", a verbatim duplicate of this same Import dialog, was
         # removed -- Import now has exactly one entry point (the Sync
         # menu), not two.
-        resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
+        resp = settings_router.settings_index(_request_with_radicale("/settings", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         body = resp.body.decode()
         assert 'href="/export/modal" data-modal' in body
         # 2 now, not 1: the Sync menu's own entry (this page's content) plus
@@ -398,8 +401,7 @@ class TestSettingsAdvanced:
     "Reset layout" button already does the exact same thing."""
 
     def test_purge_completed_in_database_menu_and_purge_all_behind_the_confirm_toast(self, conn, tmp_path):
-        resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
-        assert resp.context["active_tab"] == "settings_data_maintenance"
+        resp = settings_router.settings_index(_request_with_radicale("/settings", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         body = resp.body.decode()
         # Housekeeping purge is a plain form, now inside the Database
         # card's context menu...
@@ -439,7 +441,7 @@ class TestSettingsAdvanced:
         _make_task(conn, "t1", status="done")
         resp = settings_router.purge_completed(conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/data-maintenance"
+        assert resp.headers["location"] == "/settings"
         assert db.list_tasks(conn) == []
 
     def test_purge_completed_cascades_object_labels(self, conn):
@@ -484,7 +486,7 @@ class TestSettingsAdvanced:
         )
         resp = settings_router.purge_all(req, conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/data-maintenance"
+        assert resp.headers["location"] == "/settings"
         assert db.list_tasks(conn) == []
 
     def test_purge_all_lets_home_reseed_fresh(self, conn):

@@ -100,12 +100,17 @@
    static/bulk_select.js's `mergeButtonId`/`mergeModalUrl` config, which
    opens a modal (window.CCModal.open) instead of a confirm-sheet+fetch,
    since picking a merge destination needs real UI, not just a yes/no. #}
-{% macro bulk_actions_bar(id_prefix, delete_label='Delete', merge_label=None) %}
+{# Icon-only buttons (Phase D): every button carries a tooltip and aria-label.
+   `edit=true` adds the Edit button (id "<prefix>-bulk-edit"), wired by
+   bulk_select.js's editButtonId/editModalUrl to open the bulk edit modal. #}
+{% macro bulk_button(id, label, icon_name, kind='ghost') %}
+<button type="button" id="{{ id }}" class="btn {{ kind }} btn-sm btn-icon-only" title="{{ label }}" aria-label="{{ label }}">{{ icon(icon_name, 'icon-sm') }}<span class="btn-label">{{ label }}</span></button>
+{% endmacro %}
+{% macro bulk_actions_bar(id_prefix, delete_label='Delete', merge_label=None, edit=false) %}
 <div class="bulk-actions-bar" id="{{ id_prefix }}-bulk-bar">
-    <button type="button" id="{{ id_prefix }}-bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
-    {% if merge_label %}
-    <button type="button" id="{{ id_prefix }}-bulk-merge" class="btn ghost btn-sm">{{ icon('git-pull-request', 'icon-sm') }} {{ merge_label }}</button>
-    {% endif %}
-    <button type="button" id="{{ id_prefix }}-bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} {{ delete_label }}</button>
+    {{ bulk_button(id_prefix ~ '-bulk-clear', 'Clear', 'x') }}
+    {% if merge_label %}{{ bulk_button(id_prefix ~ '-bulk-merge', merge_label, 'git-pull-request') }}{% endif %}
+    {% if edit %}{{ bulk_button(id_prefix ~ '-bulk-edit', 'Edit', 'edit') }}{% endif %}
+    {{ bulk_button(id_prefix ~ '-bulk-delete', delete_label, 'trash', 'danger') }}
 </div>
 {% endmacro %}

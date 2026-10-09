@@ -309,6 +309,52 @@ def list_contacts(
     )
 
 
+@router.get("/bulk-edit-modal")
+def bulk_edit_modal(uids: str, request: Request, conn=Depends(get_db)):
+    """Bulk-select "Edit": one modal that sets the same value on every selected contact."""
+    labels = [(l["name"], l["name"]) for l in sorted(db.list_labels(conn), key=lambda l: l["name"].lower())]
+    fields = [
+        {"name": "remove_tag", "label": "Remove label", "kind": "select", "options": labels},
+        {"name": "add_tag", "label": "Set label", "kind": "select", "options": labels},
+        {"name": "org", "label": "Organization", "kind": "text"},
+        {"name": "title", "label": "Title", "kind": "text"},
+    ]
+    return templates.TemplateResponse(
+        "bulk_edit_modal.html",
+        {"request": request, "uids": [u for u in uids.split(",") if u], "noun": "contact", "fields": fields,
+         "post_url": "/contacts/bulk-edit", "change_type": "contact", "back_url": "/contacts"},
+    )
+
+
+@router.post("/bulk-edit")
+def bulk_edit(
+    uids: list[str] = Form([]),
+    add_tag: str = Form(""),
+    remove_tag: str = Form(""),
+    org: str = Form(""),
+    title: str = Form(""),
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
+    for uid in uids:
+        row = db.get_contact(conn, uid)
+        if row is None:
+            continue
+        if org.strip():
+            row["org"] = org.strip()
+        if title.strip():
+            row["title"] = title.strip()
+        tags = set(row.get("tags") or [])
+        if remove_tag:
+            tags.discard(remove_tag)
+        if add_tag:
+            tags = {add_tag}  # a contact carries at most one label
+        row["tags"] = sorted(tags)
+        row["updated_at"] = datetime.now(timezone.utc).isoformat()
+        db.upsert_contact(conn, row)
+    return respond(x_requested_with, "/contacts", count=len(uids))
+
+
 @router.post("/bulk-delete")
 async def bulk_delete_contacts(request: Request, conn=Depends(get_db)):
     """Bulk-select "Delete" bar (contacts_list.html/_contacts_body.html,

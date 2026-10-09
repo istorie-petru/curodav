@@ -33,7 +33,7 @@
    comment), so this is otherwise identical to settings_holidays.html's
    own call site. 2026-09-12: the count span itself moved up to
    title_extra above (see _bulk_actions_bar.html's own comment). #}
-{{ bulk_actions_bar("contacts") }}
+{{ bulk_actions_bar("contacts", edit=true) }}
 <!-- This form's own visible content is always empty (just an optional
      hidden `q` field) -- what it's actually for is being a submit target
      the Label filter's checkbox inputs below (when contact_tags exist)
@@ -107,6 +107,8 @@ document.addEventListener("DOMContentLoaded", function () {
             clearId: "contacts-bulk-clear",
             deleteButtonId: "contacts-bulk-delete",
             deleteUrl: "/contacts/bulk-delete",
+            editButtonId: "contacts-bulk-edit",
+            editModalUrl: "/contacts/bulk-edit-modal",
             itemLabel: "contact",
             changeType: "contact",
         });

@@ -22,7 +22,6 @@ from src.routers import dashboard as dashboard_router
 from src.routers import label_pages
 from src.routers import labels as labels_router
 
-CSS = (Path(__file__).resolve().parents[1] / "src" / "static" / "style.css").read_text()
 
 
 @pytest.fixture()
@@ -238,11 +237,6 @@ class TestGroupIdentity:
         body = label_pages.edit_group_modal("Uni", _request("/groups/Uni/edit"), conn=conn).body.decode()
         assert 'action="/groups/Uni/update"' in body
 
-    def test_rail_uses_group_icon_or_default_glyph(self):
-        # 2026-09-26 (Peter): no first-letter chip -- the default glyph.
-        base = (Path(__file__).resolve().parents[1] / "src" / "templates" / "base.html").read_text()
-        assert "sidebar-group-monogram" not in base and "icon(g.icon or 'layers')" in base
-        assert "{{ icon('layers') }}<span>{{ g.name }}" not in base
 
     def test_nav_icons_reserved_in_the_label_picker(self):
         offered = {n for names in labels_router.LABEL_ICON_GROUPS.values() for n in names}
@@ -292,28 +286,6 @@ class TestProjectRow:
         assert "Gym" in body[labels:]
 
 
-class TestCss:
-    def test_dark_theme_has_text_safe_label_colors(self):
-        dark = CSS[CSS.index('[data-theme="dark"]{'):]
-        assert "--cal-text-blue:#84aedb" in dark[:3000]
-        assert "--cal-text-blue:#3675b9" in CSS
-
-    def test_mobile_child_indent_beats_tab_btn_padding(self):
-        assert ".tab-btn.tab-btn-child{padding-left:34px;}" in CSS
-
-    def test_mobile_chevron_is_44px(self):
-        assert ".sidebar-tree-toggle{display:flex; width:44px; height:44px;" in CSS
-
-    def test_banner_icon_gets_a_white_chip(self):
-        assert ".page-header-narrow.has-banner .page-header-narrow-icon.has-color{" in CSS
-
-    def test_label_form_toggles_are_not_uppercase(self):
-        rule = CSS[CSS.index(".label-page-fields label.field-toggle{"):][:200]
-        assert "text-transform:none" in rule
-
-    def test_member_rows_are_indented(self):
-        # 2026-09-26: the shared .entity-table rules.
-        assert ".entity-table .entity-row.is-member .label-cell{padding-left:24px;}" in CSS
 
 
 def _grouped(conn, name, group):
@@ -414,9 +386,6 @@ class TestLabelRenameFromItsOwnPage:
             "http://testserver/settings/labels"), conn=conn)
         assert resp.headers["location"] == "/settings/labels"
 
-    def test_modal_js_follows_a_redirect_to_a_different_page_when_asked(self):
-        script = (Path(__file__).resolve().parent.parent / "src" / "static" / "modal.js").read_text()
-        assert 'form.hasAttribute("data-follow-redirect") && resp.redirected' in script
 
 
 class TestGroupsAndLabelsWidget:

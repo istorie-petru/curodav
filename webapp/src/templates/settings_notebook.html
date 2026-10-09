@@ -1,0 +1,26 @@
+{% from "_inputs.html" import select_input %}
+{% extends "base.html" %}
+{% block title %}Notebook - Settings{% endblock %}
+{% block content %}
+<div id="modal-target">
+<div class="modal-header"><h1>Notebook</h1></div>
+<div class="modal-body">
+<div data-keep-open>
+<div class="settings-group">
+<div class="card">
+    <form class="settings-field-row" method="post" action="/settings/notebook/layout">
+        <span class="settings-field-label">Document sidebar layout
+            <span class="settings-field-hint">How Outline/Endnotes/Bibliography/Glossary/Relationships are arranged on a document page</span>
+        </span>
+        <span class="spacer"></span>
+        {% call select_input({'name': 'sidebar_layout', 'data-change-submit': true}) %}
+            <option value="stacked" {% if sidebar_layout == 'stacked' %}selected{% endif %}>Stacked (one column, same on desktop and mobile)</option>
+            <option value="sidebar" {% if sidebar_layout == 'sidebar' %}selected{% endif %}>Sidebar (desktop only -- mobile shows just the document)</option>
+        {% endcall %}
+    </form>
+</div>
+</div>
+</div>
+</div>
+</div>
+{% endblock %}

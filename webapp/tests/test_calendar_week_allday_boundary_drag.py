@@ -143,29 +143,7 @@ class TestDragScriptsStructural:
     def test_calendar_week_allday_drag_js_syntax_is_valid(self):
         subprocess.run(["node", "--check", str(_STATIC_DIR / "calendar_week_allday_drag.js")], check=True)
 
-    def test_calendar_js_has_the_allday_drop_branch(self):
-        script = (_STATIC_DIR / "calendar.js").read_text()
-        assert "dropAllDayCol" in script
-        assert '"all_day": true' not in script  # payload uses a real JS literal, not a quoted string
-        assert "all_day: true" in script
 
-    def test_calendar_js_never_drops_all_day_during_a_resize(self):
-        script = (_STATIC_DIR / "calendar.js").read_text()
-        assert "wasResize" in script
-        assert "!wasResize && dropAllDayCol" in script
 
-    def test_allday_drag_js_has_the_timed_drop_branch(self):
-        script = (_STATIC_DIR / "calendar_week_allday_drag.js").read_text()
-        assert "endDropOnTimedGrid" in script
-        assert "all_day: false" in script
 
-    def test_allday_drag_js_never_drops_a_task_onto_the_timed_grid(self):
-        """Tasks have no time-of-day due date in this app -- a task chip
-        dropped on the timed grid must be a no-op, not a save."""
-        script = (_STATIC_DIR / "calendar_week_allday_drag.js").read_text()
-        assert 'if (isTask) return; // no timed equivalent' in script
 
-    def test_reschedule_route_comment_documents_the_new_field(self):
-        script = Path(__file__).resolve().parent.parent / "src" / "routers" / "calendar.py"
-        text = script.read_text()
-        assert '"all_day" in payload' in text

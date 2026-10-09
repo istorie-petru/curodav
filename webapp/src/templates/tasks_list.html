@@ -4,6 +4,7 @@
 {% block main_class %}main-shell{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_bulk_actions_bar.html" import bulk_button %}
 <!-- Real page heading, kept sr-only -- the narrow header's own title
      (_page_header_narrow.html) is deliberately an h2 element, not h1 (see
      that partial's own comment), since most pages using it already have
@@ -76,8 +77,9 @@
      document.getElementById("bulk-count") still finds it regardless of
      where in the DOM it now lives. -->
 <div class="bulk-actions-bar" id="bulk-actions-bar">
-    <button type="button" id="bulk-clear" class="btn ghost btn-sm">{{ icon('x', 'icon-sm') }} Clear</button>
-    <button type="button" id="bulk-delete" class="btn danger btn-sm">{{ icon('trash', 'icon-sm') }} Delete</button>
+    {{ bulk_button('bulk-clear', 'Clear', 'x') }}
+    {{ bulk_button('bulk-edit', 'Edit', 'edit') }}
+    {{ bulk_button('bulk-delete', 'Delete', 'trash', 'danger') }}
 </div>
 {% include "_tasks_toolbar.html" %}
 {% endcall %}

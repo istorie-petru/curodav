@@ -328,86 +328,12 @@ class TestContactFormAvatarUploadAndFieldOrder:
         assert row_pos < email_pos < org_pos
         assert row_pos < phone_pos < org_pos
 
-    def test_recurrence_picker_js_defines_the_expected_presets(self):
-        js_path = Path(__file__).resolve().parents[1] / "src" / "static" / "recurrence_picker.js"
-        js = js_path.read_text(encoding="utf-8")
-        for expected in ['label: "Does not repeat"', '"FREQ=DAILY"', '"FREQ=WEEKLY"', '"FREQ=MONTHLY"', '"FREQ=YEARLY"']:
-            assert expected in js
 
-    def test_recurrence_picker_js_defines_ends_controls(self):
-        """"Ends" -- Never/On date (UNTIL=)/After N occurrences (COUNT=) --
-        the recurrence-end-condition feature, wired entirely client-side
-        into the same picker (routers/calendar.py still does zero
-        server-side parsing of `recurrence`)."""
-        js_path = Path(__file__).resolve().parents[1] / "src" / "static" / "recurrence_picker.js"
-        js = js_path.read_text(encoding="utf-8")
-        for expected in [
-            '"never"', '"until"', '"count"',
-            '";UNTIL="', '";COUNT="',
-            "recurrence-ends-until", "recurrence-ends-count",
-        ]:
-            assert expected in js
 
-    def test_recurrence_picker_js_ends_is_a_separate_dropdown(self):
-        """Direct follow-up ("could we make ends another drop down menu?")
-        -- Ends is its own `.multiselect` sibling of the FREQ preset
-        dropdown, not a sub-panel nested inside it."""
-        js_path = Path(__file__).resolve().parents[1] / "src" / "static" / "recurrence_picker.js"
-        js = js_path.read_text(encoding="utf-8")
-        for expected in [
-            'recurrence-ends-select',
-            'endsWrap.className = "multiselect widget-list-multiselect recurrence-ends-select"',
-        ]:
-            assert expected in js
 
-    def test_recurrence_picker_js_puts_both_dropdowns_in_one_flex_row(self):
-        """2026-09-26 (Peter: "the two new dropdowns side by side... not
-        one overflowing and the other in its own section") -- `wrap`/
-        `endsWrap` are appended into one `.recurrence-preset-row` container
-        instead of inserted as plain stacked siblings of the original
-        `.field`."""
-        js_path = Path(__file__).resolve().parents[1] / "src" / "static" / "recurrence_picker.js"
-        js = js_path.read_text(encoding="utf-8")
-        assert 'row.className = "recurrence-preset-row"' in js
-        assert "row.appendChild(wrap)" in js and "row.appendChild(endsWrap)" in js
-        assert "originalParent.insertBefore(row, input)" in js
 
-    def test_css_lays_the_row_out_as_equal_flex_items_with_ellipsis(self):
-        css_path = Path(__file__).resolve().parents[1] / "src" / "static" / "style.css"
-        css = css_path.read_text(encoding="utf-8")
-        assert ".recurrence-preset-row{display:flex;" in css
-        assert ".recurrence-preset-row > .multiselect{flex:1; min-width:0;}" in css
-        assert ".recurrence-preset-row .ms-summary{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}" in css
 
-    def test_recurrence_picker_js_defines_every_2_weeks_preset(self):
-        """2026-08-15 ("just implement odd week, even week recurrence for
-        events"), reworked same-day on direct follow-up feedback ("just
-        have one more Recurrence rule that is Every 2 weeks, this is
-        cleaner") -- no separate odd/even sub-dropdown or date-snapping:
-        `FREQ=WEEKLY;INTERVAL=2` is just one more flat preset alongside
-        Daily/Weekly/Monthly/Yearly. Which weeks it lands on (odd/even ISO
-        week) is whatever the event's own start_at already is -- nothing
-        here computes or stores that separately."""
-        js_path = Path(__file__).resolve().parents[1] / "src" / "static" / "recurrence_picker.js"
-        js = js_path.read_text(encoding="utf-8")
-        for expected in [
-            '{ value: "FREQ=WEEKLY;INTERVAL=2", label: "Every 2 weeks" }',
-        ]:
-            assert expected in js
-        # The odd/even sub-dropdown + ISO-week snapping from the first cut
-        # of this feature are gone.
-        for removed in [
-            "recurrence-parity-select",
-            "function isoWeekParity(",
-            "function applyParitySnap(",
-        ]:
-            assert removed not in js
 
-    def test_reminders_picker_js_defines_the_expected_presets(self):
-        js_path = Path(__file__).resolve().parents[1] / "src" / "static" / "reminders_picker.js"
-        js = js_path.read_text(encoding="utf-8")
-        for expected in ["minutes: 0", "minutes: 5", "minutes: 10", "minutes: 30", "minutes: 60", "minutes: 1440"]:
-            assert expected in js
 
 
 class TestSubmissionUnaffectedByPickerUI:

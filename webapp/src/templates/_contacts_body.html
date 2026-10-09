@@ -10,6 +10,7 @@
      background it was never meant to have. -->
 {% from "_label_pill.html" import label_pill with context %}
 {% from "_action_menu.html" import action_menu with context %}
+{% from "_section_row.html" import section_row %}
 <div id="contacts-body" class="main-shell-body">
 {% if contacts %}
 <!-- 2026-09-14 (direct request: "add bulk select for contacts too"): each
@@ -32,7 +33,7 @@
      grouped into `contact_groups` (routers/contacts.py's
      `_group_contacts_by_label` -- a contact carries at most one label
      since item 16, so this is a clean partition), each a
-     `.contact-section-row` heading (its label as a pill + a count) plus
+     `section_row` heading (its label as a pill + a count) plus
      its rows, same "group heading, members indented after" shape
      Settings > Projects' `_group_row` already established for label
      groups. The Unlabeled bucket's own heading is skipped when it's the
@@ -51,10 +52,7 @@
 <div class="card contact-list" id="contacts-list">
     {% for group in contact_groups %}
     {% if group.name or contact_groups|length > 1 %}
-    <div class="contact-section-row{% if not group.name %} is-nogroup{% endif %}">
-        {% if group.name %}{{ label_pill(group.name) }}{% else %}<span>Unlabeled</span>{% endif %}
-        <span class="text-muted">{{ group.contacts|length }} contact{{ 's' if group.contacts|length != 1 }}</span>
-    </div>
+    {% call section_row(group.contacts|length ~ ' contact' ~ ('s' if group.contacts|length != 1 else ''), muted=not group.name) %}{% if group.name %}{{ label_pill(group.name) }}{% else %}Unlabeled{% endif %}{% endcall %}
     {% endif %}
     {% for c in group.contacts %}
     <div class="contact-row-wrap" data-uid="{{ c.uid }}" data-undo-row>

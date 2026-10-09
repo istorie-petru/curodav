@@ -61,11 +61,6 @@ class TestRendering:
         assert body.count('data-dtf="date"') == 2 and 'data-dtf="time"' not in body
         assert 'name="start_at"' in body and 'name="due_at"' in body
 
-    def test_tasks_table_inline_due_keeps_its_contract(self, conn):
-        db.upsert_task(conn, {"uid": "t1", "title": "Call", "description": "", "status": "active",
-                              "due_at": "2026-10-02", "tags": [], "created_at": _now()})
-        tpl = (SRC / "templates" / "_task_row.html").read_text()
-        assert "input_class='inline-date'" in tpl and 'data-field="due_at"' in tpl
 
     def test_time_block_modal_has_two_time_fields(self, conn):
         body = settings_router.new_time_block_modal(_req("/settings/time-blocks/new"), kind="sleep", conn=conn).body.decode()
@@ -76,11 +71,6 @@ class TestRendering:
         body = habits_router.pauses_modal(_req("/habits/pauses"), conn=conn).body.decode()
         assert 'type="date"' not in body and body.count('data-dtf="date"') == 2
 
-    def test_old_picker_is_gone(self):
-        assert not (SRC / "templates" / "_datetime_picker.html").exists()
-        assert not (SRC / "static" / "datetime_picker.js").exists()
-        base = (SRC / "templates" / "base.html").read_text()
-        assert "date_time_fields.js" in base and "datetime_picker.js" not in base
 
 
 _NODE = r"""

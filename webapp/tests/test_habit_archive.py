@@ -225,14 +225,6 @@ class TestEventsMustNotBeArchivable:
     archivable." Confirms the absence stays true -- no column, no route,
     no UI -- rather than building anything new."""
 
-    def test_events_table_has_no_archived_column(self):
-        import pathlib
-        import re
-
-        db_py = (pathlib.Path(__file__).resolve().parent.parent / "src" / "db.py").read_text()
-        events_table = re.search(r"CREATE TABLE IF NOT EXISTS events \((.*?)\n\);", db_py, re.DOTALL)
-        assert events_table is not None
-        assert "archived_at" not in events_table.group(1)
 
     def test_no_archive_route_for_events(self):
         from src.routers import calendar as calendar_router

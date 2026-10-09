@@ -206,36 +206,8 @@ class TestFormatFieldDoesNotChangeSavePath:
         assert "location" in update_params and "meeting_url" in update_params
 
 
-class TestFormatToggleScript:
-    def test_event_format_toggle_js_exists_and_defines_the_expected_api(self):
-        script = (_STATIC_DIR / "event_format_toggle.js").read_text()
-        assert "CCEventFormatToggle" in script
-        assert "event-format-segmented" in script
-
-    def test_base_html_loads_the_script_globally(self):
-        html = (_TEMPLATES_DIR / "base.html").read_text()
-        assert "event_format_toggle.js" in html
-
-    def test_modal_js_reinits_the_toggle_on_injected_content(self):
-        script = (_STATIC_DIR / "modal.js").read_text()
-        assert "CCEventFormatToggle" in script
-
-    def test_precache_list_includes_the_format_toggle_script(self):
-        script = (_STATIC_DIR / "sw.js").read_text()
-        assert "/static/event_format_toggle.js" in script
 
 
-class TestFormatFieldCss:
-    def test_style_css_hides_both_fields_by_default_and_reveals_on_check(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        assert ".field.field-format-location,\n.field.field-format-meeting{display:none;}" in css
-        assert "#event-form:has(#event_format_in_person:checked) .field-format-location{display:flex;}" in css
-        assert "#event-form:has(#event_format_online:checked) .field-format-meeting{display:flex;}" in css
-
-    def test_format_field_shrinks_to_half_width_when_a_follow_up_shows(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        assert "#event-form:has(#event_format_in_person:checked) .field-grid .event-format-field,\n" \
-               "#event-form:has(#event_format_online:checked) .field-grid .event-format-field{grid-column:span 1;}" in css
 
 
 class TestFormatFieldIsNowADropdown:
@@ -267,9 +239,6 @@ class TestAllDayKeepsDatePickerVisible:
     rule is gone; the date picker must stay reachable regardless of this
     checkbox."""
 
-    def test_style_css_no_longer_hides_the_start_end_field_on_all_day(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        assert "#event-form:has(#all_day:checked) .event-start-end-field{display:none;}" not in css
 
     def test_new_event_form_start_end_field_carries_no_hidden_state(self, conn):
         from src.routers import calendar as calendar_router

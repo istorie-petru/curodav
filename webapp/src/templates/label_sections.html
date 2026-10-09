@@ -49,8 +49,8 @@
      open due-dated tasks, in one chronological list. -->
 {% if label.agenda_widget %}
 <div class="card widget-card-static">
-    <div class="widget-header"><h2>{{ icon('calendar', 'icon-sm') }} Agenda</h2></div>
-    <div class="widget-content">
+    <div class="card-title widget-header"><h2>{{ icon('calendar', 'icon-sm') }} Agenda</h2></div>
+    <div class="card-body widget-content">
     {% if agenda_items %}
     <table>
         {% for item in agenda_items %}
@@ -80,8 +80,8 @@
      the Dashboard's Contact List widget partial. -->
 {% if label.contacts_widget %}
 <div class="card widget-card-static">
-    <div class="widget-header"><h2>{{ icon('user', 'icon-sm') }} Contacts</h2></div>
-    <div class="widget-content">
+    <div class="card-title widget-header"><h2>{{ icon('user', 'icon-sm') }} Contacts</h2></div>
+    <div class="card-body widget-content">
     {% set data = {'contacts': contacts} %}
     {% set contacts_empty_text = 'No contacts tagged ' ~ label.name ~ ' yet.' %}
     {% include "_widget_contact_list.html" %}
@@ -94,8 +94,8 @@
      Notebook List widget partial (same reuse pattern as Contacts above). -->
 {% if label.notebook_widget %}
 <div class="card widget-card-static">
-    <div class="widget-header"><h2>{{ icon('file-text', 'icon-sm') }} Notebook</h2></div>
-    <div class="widget-content">
+    <div class="card-title widget-header"><h2>{{ icon('file-text', 'icon-sm') }} Notebook</h2></div>
+    <div class="card-body widget-content">
     {% set data = notebook_documents %}
     {% include "_widget_notebook_list.html" %}
     </div>
@@ -108,7 +108,7 @@
 {% if label.tasks_widget %}
 {# 2026-09-25 (UI audit L12): the board had no heading, unlike the Agenda
    and Contacts sections above it. #}
-<div class="widget-header label-section-heading"><h2>{{ icon('check-square', 'icon-sm') }} Tasks</h2></div>
+<div class="card-title widget-header label-section-heading"><h2>{{ icon('check-square', 'icon-sm') }} Tasks</h2></div>
 <div class="kanban-board-wrap">
 <div class="kanban-board" id="kanban-board">
     {% for status in board_statuses %}

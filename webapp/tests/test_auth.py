@@ -1195,7 +1195,7 @@ class TestPurgeAllInvalidatesSession:
         )
         resp = settings_router.purge_all(req, conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/data-maintenance"
+        assert resp.headers["location"] == "/settings"
         # The session cookie is cleared and the memoized secret dropped.
         header = resp.headers["set-cookie"]
         assert auth.SESSION_COOKIE in header

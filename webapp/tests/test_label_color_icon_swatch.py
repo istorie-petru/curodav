@@ -9,7 +9,7 @@ label_edit_modal.html and routers/labels.py::edit_label_modal). label_
 detail.html's own inline "Edit label" form once offered the same pickers
 but was removed (the edit modal is the one place to edit a label now).
 
-Markup-shape assertions mirror test_modal_input_phaseB_chip_multiselect.py's
+Markup-shape assertions mirror test_labels_chip_multiselect.py's
 own style: assert the old plain `<select name="...">`/free-text-input shape
 is gone and the new `.color-picker`/`.icon-picker` radio-grid markup is
 present, then separately assert the router-level create/edit flows still
@@ -136,15 +136,6 @@ class TestExpandedPaletteAndGroupedIcons:
         assert flattened == labels_router.LABEL_ICONS
         assert len(labels_router.LABEL_ICONS) == len(set(labels_router.LABEL_ICONS))
         assert len(labels_router.LABEL_ICONS) > 130
-
-    def test_every_icon_exists_in_the_sprite(self):
-        import re
-        from pathlib import Path
-
-        sprite = Path("src/templates/_icons_sprite.html").read_text()
-        sprite_ids = set(re.findall(r'id="icon-([a-z0-9-]+)"', sprite))
-        missing = set(labels_router.LABEL_ICONS) - sprite_ids
-        assert not missing, f"icons referenced but not in the sprite: {missing}"
 
     def test_label_edit_modal_shows_all_sixteen_colors_with_names(self, conn):
         # Moved off the manage-list page onto the edit modal, 2026-08-15

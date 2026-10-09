@@ -17,8 +17,8 @@ Two related changes, both covered here:
 This file replaces test_databases_router.py/test_databases_db.py/
 test_phase9_grades.py/test_formula_engine.py (deleted outright, per §4's
 standing rule -- their whole subject no longer exists) and complements
-the in-place fixes made to test_phase2_labels.py/test_phase4_modules.py/
-test_phase10_export.py/test_phase8_settings_hub.py, which each covered
+the in-place fixes made to test_label_management.py/test_phase4_modules.py/
+test_export_import.py/test_settings_hub.py, which each covered
 other things too and so were edited rather than deleted.
 
 2026-08-15: the Schedule tab/tests (TestActiveTabHighlighting's Schedule

@@ -7,7 +7,7 @@ down, row kept). Radicale is optional throughout -- every mutating route
 is best-effort about the bridge (see published_lists.py's module
 docstring), so a None bridge must never turn into an unhandled exception.
 
-Coverage, following test_phase6_published_lists.py's conventions (direct
+Coverage, following test_published_lists.py's conventions (direct
 router-function calls, a FakeBridge modeling Radicale as in-memory dicts):
 
   - db.py: the visibility/public_token migration defaults, get/set
@@ -34,7 +34,7 @@ from starlette.requests import Request
 
 from src import db
 from src.published_lists import materialize_all, new_public_token
-from test_phase6_published_lists import FakeBridge, _make_task
+from test_published_lists import FakeBridge, _make_task
 
 
 def _now() -> str:

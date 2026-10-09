@@ -348,6 +348,11 @@
     window.ccApi.dispatchChange({ type: "task", action });
   }
 
+  document.getElementById("bulk-edit")?.addEventListener("click", () => {
+    if (!selected.size || !window.CCModal) return;
+    window.CCModal.open("/tasks/bulk-edit-modal?uids=" + encodeURIComponent(Array.from(selected).join(",")));
+  });
+
   document.getElementById("bulk-delete")?.addEventListener("click", () => {
     const count = selected.size;
     if (!count) return;

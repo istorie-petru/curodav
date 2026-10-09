@@ -4,23 +4,24 @@
    check-in or habit edit so streaks and the To do / On track split stay
    exact. Expects: todo, on_track, has_habits (routers/habits.py). #}
 {% from "_habit_page_row.html" import habit_page_row with context %}
+{% from "_section_row.html" import section_row %}
 <div id="habits-body" class="main-shell-body habits-body">
 {% if has_habits %}
     {% if todo %}
     <section class="habits-section" aria-labelledby="habits-todo-h">
-        <h2 class="habits-section-title" id="habits-todo-h">To do <span class="habits-section-count">{{ todo|length }}</span></h2>
+        {% call section_row(todo|length, id='habits-todo-h') %}To do{% endcall %}
         <ul class="habit-list">{% for h in todo %}{{ habit_page_row(h) }}{% endfor %}</ul>
     </section>
     {% endif %}
     {% if on_track %}
     <section class="habits-section" aria-labelledby="habits-done-h">
-        <h2 class="habits-section-title" id="habits-done-h">{% if todo %}On track{% else %}All done for now{% endif %} <span class="habits-section-count">{{ on_track|length }}</span></h2>
+        {% call section_row(on_track|length, id='habits-done-h') %}{% if todo %}On track{% else %}All done for now{% endif %}{% endcall %}
         <ul class="habit-list">{% for h in on_track %}{{ habit_page_row(h) }}{% endfor %}</ul>
     </section>
     {% endif %}
     {% if paused %}
     <section class="habits-section" aria-labelledby="habits-paused-h">
-        <h2 class="habits-section-title" id="habits-paused-h">Paused <span class="habits-section-count">{{ paused|length }}</span></h2>
+        {% call section_row(paused|length, id='habits-paused-h') %}Paused{% endcall %}
         <ul class="habit-list">{% for h in paused %}{{ habit_page_row(h) }}{% endfor %}</ul>
     </section>
     {% endif %}

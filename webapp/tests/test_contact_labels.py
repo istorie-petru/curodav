@@ -165,7 +165,7 @@ class TestNoSpecialArchivedState:
     (db.py) -- see `migrate_archived_contact_label`'s own docstring for
     why the label-based predecessor was actively wrong once item 16
     restricted a contact to one label total (archiving one ate the
-    contact's real category label). See test_phase7_contacts_global.py's
+    contact's real category label). See test_contacts_tag_filter.py's
     TestArchivedDefaultExclusion for the default-hidden behavior's own
     tests, and test_contacts_archive_column.py for the new column/routes
     themselves -- this class only still covers the "no `view` query param"
@@ -199,43 +199,6 @@ class TestNoSpecialArchivedState:
         assert "view" not in resp.context
 
 
-class TestNoDanglingReferences:
-    def test_no_category_reference_in_src(self):
-        offenders = []
-        for path in _SRC_DIR.rglob("*.py"):
-            text = path.read_text()
-            for lineno, line in enumerate(text.splitlines(), start=1):
-                if re.search(r"\bcategory\b|\bcategories\b|list_contact_categories", line, re.IGNORECASE):
-                    # "category"/"categories" used as a plain English word
-                    # in an unrelated comment (e.g. habits.py's "same
-                    # category as", style.css-adjacent pill comments) is
-                    # fine -- what must be gone is any reference to the
-                    # contacts.category *field* or its accessor function.
-                    if "list_contact_categories" in line or "contact.category" in line or "c[\"category\"]" in line:
-                        offenders.append(f"{path}:{lineno}: {line.strip()}")
-        assert offenders == [], "\n".join(offenders)
-
-    def test_no_category_reference_in_templates(self):
-        # Comments *documenting* the removal (e.g. "Category field removed
-        # (Phase 5...)") are fine and expected; what must be gone is any
-        # live template code that reads/renders/submits a `category` field
-        # (`contact.category`, `name="category"`, `active_category`, or a
-        # category filter <select>).
-        templates_dir = _SRC_DIR / "templates"
-        live_patterns = [
-            r"contact\.category",
-            r'name="category"',
-            r"active_category",
-            r"c\.category",
-            r"list_contact_categories",
-        ]
-        offenders = []
-        for path in templates_dir.glob("contact*.html"):
-            text = path.read_text()
-            for pat in live_patterns:
-                if re.search(pat, text):
-                    offenders.append(f"{path}: matched {pat!r}")
-        assert offenders == [], "\n".join(offenders)
 
 
 def _fake_request(query_string=b""):

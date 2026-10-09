@@ -26,7 +26,7 @@
 {# 2026-09-26: shared by Settings > Labels and Settings > Projects
    (routers/labels.py _labels_context `kind`). #}
 {% call page_header_narrow(title, page_icon, title_extra=bulk_count("labels")) %}
-{{ bulk_actions_bar("labels", merge_label="Merge") }}
+{{ bulk_actions_bar("labels", merge_label="Merge", edit=true) }}
 {% endcall %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <!-- 2026-09-08 (direct request, "check up ... it looks different
@@ -76,6 +76,8 @@ document.addEventListener("DOMContentLoaded", function () {
         deleteButtonId: "labels-bulk-delete",
         deleteUrl: "/settings/labels/bulk-delete",
         changeType: "label",
+        editButtonId: "labels-bulk-edit",
+        editModalUrl: "/settings/labels/bulk-edit-modal",
         mergeButtonId: "labels-bulk-merge",
         mergeModalUrl: "/settings/labels/bulk-merge-modal",
         itemLabel: "{{ noun }}",

@@ -2,8 +2,10 @@
 {% extends "base.html" %}
 {% block title %}Notifications - Settings{% endblock %}
 {% block content %}
-{% from "_page_header_narrow.html" import page_header_narrow with context %}
-{{ page_header_narrow("Notifications", "bell") }}
+<div id="modal-target">
+<div class="modal-header"><h1>Notifications</h1></div>
+<div class="modal-body">
+<div data-keep-open>
 
 {% if request.query_params.get('note') %}
 <div class="settings-hint settings-hint-accent">{{ request.query_params.get('note') }}</div>
@@ -115,6 +117,9 @@
             <button type="submit" class="btn tonal btn-sm">Save</button>
         </div>
     </form>
+</div>
+</div>
+</div>
 </div>
 {% endblock %}
 {% block extra_scripts %}<script defer src="{{ static_url('push_settings.js') }}"></script>{% endblock %}

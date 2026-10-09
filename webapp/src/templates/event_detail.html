@@ -157,7 +157,8 @@
      CREATE TABLE comment for the model. -->
 {% if occurrence_date and event.recurrence %}
 <div class="detail-card detail-section-gap">
-    <h2>{{ icon('calendar', 'icon-sm') }} This occurrence</h2>
+    <h2 class="card-title">{{ icon('calendar', 'icon-sm') }} This occurrence</h2>
+    <div class="card-body">
     <p class="text-muted-secondary text-caption">
         {{ occurrence_date | relative_date }} — changes here affect only this one
         occurrence, not the whole recurring series.
@@ -170,11 +171,15 @@
             Moved to {{ occurrence_override.start_at | relative_date }} {{ occurrence_override.start_at | fmt_time }}
         </p>
         {% endif %}
+    </div>
+    <div class="card-footer">
         <form method="post" action="/events/{{ event.uid }}/occurrences/restore" data-cc-change="event" data-cc-action="restore">
             <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
             <button type="submit" class="btn ghost btn-sm">{{ icon('rotate-ccw', 'icon-sm') }} Restore to series</button>
         </form>
     {% else %}
+    </div>
+    <div class="card-footer">
         <form method="post" action="/events/{{ event.uid }}/occurrences/cancel" class="form-inline" data-cc-change="event" data-cc-action="cancel">
             <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
             <button type="submit" class="btn ghost btn-sm">{{ icon('x-circle', 'icon-sm') }} Cancel this occurrence</button>
@@ -191,6 +196,7 @@
             </form>
         </details>
     {% endif %}
+    </div>
 </div>
 {% endif %}
 </div>

@@ -81,7 +81,7 @@ def export_index(request: Request, conn=Depends(get_db)):
     stays registered as a plain redirect rather than being deleted
     outright, so an old bookmark/link to /export still lands somewhere
     real."""
-    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
+    return RedirectResponse(url="/settings", status_code=303)
 
 
 # The two export/import dialogs (2026-08-26 third pass: the Data &
@@ -472,7 +472,7 @@ def download_selective(
         )
     entry = _SELECTIVE_EXPORTS.get((data_type, "csv" if file_format == "csv" else "standard"))
     if entry is None:
-        return _redirect_with_error("/settings/data-maintenance", f"Unknown export selection ({data_type} / {file_format}).")
+        return _redirect_with_error("/settings", f"Unknown export selection ({data_type} / {file_format}).")
     return entry[1](conn)
 
 
@@ -561,19 +561,19 @@ def import_events(file: UploadFile, conn=Depends(get_db)):
     URL after the 2026-08-26 unified-import redesign for old bookmarks and
     direct callers; the page itself posts to /import/auto now."""
     events_added, _ = _import_ics_text(conn, file.file.read().decode("utf-8"))
-    return _redirect_with_note("/settings/data-maintenance", f"Imported {events_added} event(s).")
+    return _redirect_with_note("/settings", f"Imported {events_added} event(s).")
 
 
 @router.post("/import/tasks")
 def import_tasks(file: UploadFile, conn=Depends(get_db)):
     _, tasks_added = _import_ics_text(conn, file.file.read().decode("utf-8"))
-    return _redirect_with_note("/settings/data-maintenance", f"Imported {tasks_added} task(s).")
+    return _redirect_with_note("/settings", f"Imported {tasks_added} task(s).")
 
 
 @router.post("/import/contacts")
 def import_contacts(file: UploadFile, conn=Depends(get_db)):
     added = _import_vcf_text(conn, file.file.read().decode("utf-8"))
-    return _redirect_with_note("/settings/data-maintenance", f"Imported {added} contact(s).")
+    return _redirect_with_note("/settings", f"Imported {added} contact(s).")
 
 
 @router.post("/import/json")
@@ -585,8 +585,8 @@ def import_json(file: UploadFile, conn=Depends(get_db)):
     try:
         _restore_json_text(conn, file.file.read())
     except ValueError:
-        return _redirect_with_error("/settings/data-maintenance", "That file isn't a readable backup.")
-    return _redirect_with_note("/settings/data-maintenance", "Backup restored.")
+        return _redirect_with_error("/settings", "That file isn't a readable backup.")
+    return _redirect_with_note("/settings", "Backup restored.")
 
 
 # The drop zone's .csv acceptance (2026-08-26 page redesign): a CSV is
@@ -735,7 +735,7 @@ def import_auto(file: UploadFile, merge: str = Form(""), conn=Depends(get_db)):
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
-        return _redirect_with_error("/settings/data-maintenance", "Couldn't read that file as text (.ics/.vcf/.csv/.json expected).")
+        return _redirect_with_error("/settings", "Couldn't read that file as text (.ics/.vcf/.csv/.json expected).")
     head = text.lstrip("\ufeff \t\r\n")[:64].upper()
     skip_existing = merge != "1"
     try:
@@ -757,10 +757,10 @@ def import_auto(file: UploadFile, merge: str = Form(""), conn=Depends(get_db)):
             note = f"Backup restored ({count} item{'s' if count != 1 else ''})."
     except ValueError:
         return _redirect_with_error(
-            "/settings/data-maintenance",
+            "/settings",
             "Couldn't detect the file type -- use an .ics calendar, .vcf contacts, .csv spreadsheet, or a data.json backup.",
         )
-    return _redirect_with_note("/settings/data-maintenance", note)
+    return _redirect_with_note("/settings", note)
 
 
 def restore_backup_payload(conn, payload: dict[str, Any]) -> int:

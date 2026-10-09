@@ -1,6 +1,5 @@
-{% from "_inputs.html" import select_input %}
 {% extends "base.html" %}
-{% block title %}Notebook - Settings{% endblock %}
+{% block title %}Frontmatter - Settings{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_row_action_buttons.html" import row_action_buttons %}
@@ -12,7 +11,7 @@
      routers/notebook.py's field_settings_router for the full reasoning).
      v1 is descriptive only: nothing here is enforced against a document's
      actual properties yet. -->
-{% call page_header_narrow("Notebook", "file-text") %}{% endcall %}
+{% call page_header_narrow("Frontmatter", "list") %}{% endcall %}
 <div id="modal-target">
 <!-- Sidebar layout (2026-10-04 direct request) -- "stacked" (default)
      flows Outline/Endnotes/Bibliography/Glossary/Relationships in one
@@ -22,21 +21,7 @@
      confirmed directly, not guessed, that none of that content should
      appear on mobile at all in this mode). See notebook_document.html's
      own header comment for how each value actually changes the markup. -->
-<div class="settings-group">
-<div class="card">
-    <form class="settings-field-row" method="post" action="/settings/notebook/layout">
-        <span class="settings-field-label">Document sidebar layout
-            <span class="settings-field-hint">How Outline/Endnotes/Bibliography/Glossary/Relationships are arranged on a document page</span>
-        </span>
-        <span class="spacer"></span>
-        {% call select_input({'name': 'sidebar_layout', 'data-change-submit': true}) %}
-            <option value="stacked" {% if sidebar_layout == 'stacked' %}selected{% endif %}>Stacked (one column, same on desktop and mobile)</option>
-            <option value="sidebar" {% if sidebar_layout == 'sidebar' %}selected{% endif %}>Sidebar (desktop only -- mobile shows just the document)</option>
-        {% endcall %}
-    </form>
-</div>
-</div>
-<hr class="settings-divider">
+
 <div class="settings-group">
 <div class="card table-scroll table-responsive" id="notebook-fields-table-wrapper">
     <table id="notebook-fields-table">

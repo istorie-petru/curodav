@@ -10,7 +10,7 @@
     {% set ms_items = contact_items(request) %}
     {% set ms_selected = object_contact_uids(request, contacts_object_type, contacts_object_id) %}
     {% set ms_mode = 'select' %}
-    {% set ms_allow_new = false %}
+    {% set ms_allow_new = true %}
     {% set ms_pill = false %}
     {% include "_widget_list_multiselect.html" %}
 </div>

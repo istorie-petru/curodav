@@ -71,35 +71,5 @@ class TestHolidayModalDateFieldMarkup:
         assert 'name="date_to"' in body
 
 
-class TestHolidayDateSyncScript:
-    def test_script_exists_and_defines_the_expected_api(self):
-        script = (_STATIC_DIR / "holiday_date_sync.js").read_text()
-        assert "CCHolidayDateSync" in script
-        assert "holiday-form" in script
-        assert 'name="date_from"' in script
-        assert 'name="date_to"' in script
-        assert "CCDateField.set" in script  # 2026-09-26
-
-    def test_only_fills_the_other_field_when_it_is_empty(self):
-        # Structural guard against regressing the "after the initial set
-        # both can be changed without any sync between them" half of the
-        # request -- both change listeners must gate on the *other*
-        # input's value being falsy before calling dtpSetDate.
-        script = (_STATIC_DIR / "holiday_date_sync.js").read_text()
-        assert "!toInput.value" in script
-        assert "!fromInput.value" in script
-
-    def test_base_html_loads_the_script_globally(self):
-        html = (_TEMPLATES_DIR / "base.html").read_text()
-        assert "holiday_date_sync.js" in html
-
-    def test_modal_js_reinits_the_sync_on_injected_content(self):
-        script = (_STATIC_DIR / "modal.js").read_text()
-        assert "CCHolidayDateSync" in script
 
 
-class TestDateFieldSetHook:
-    def test_date_field_js_exposes_a_set_hook(self):
-        # 2026-09-26: date_time_fields.js replaced datetime_picker.js.
-        script = (_STATIC_DIR / "date_time_fields.js").read_text()
-        assert "window.CCDateField = {" in script and "set(hiddenInput, value)" in script

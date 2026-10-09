@@ -2,7 +2,7 @@
 contact_form.html/habit_form.html's Labels field, reworked from a
 free-text `tags` input + `<datalist>` into the same chip multiselect
 (checkbox-dropdown) pattern Phase A already used for the widget builder's
-Labels field (see test_phase10_customize_modal.py). A label's own name IS
+Labels field (see test_dashboard_customize_modal.py). A label's own name IS
 its identity (no separate uid, see object_labels' natural-key design), so
 the checkboxes are named `tags_labels` and folded server-side into the
 legacy comma-separated `tags` string via routers/dashboard.py's

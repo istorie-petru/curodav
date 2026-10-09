@@ -100,13 +100,13 @@ class TestRenderedGrouping:
         _make_contact(conn, "c1", full_name="Zed", tags=["Work"])
         _make_contact(conn, "c2", full_name="Amy", tags=["Work"])
         body = contacts_router.list_contacts(_request(), conn=conn).body.decode()
-        assert 'class="contact-section-row">' in body
+        assert 'class="section-row"' in body
         assert ">Work<" in body and "2 contacts" in body
 
     def test_no_section_heading_when_nobody_has_a_label(self, conn):
         _make_contact(conn, "c1", full_name="Zed")
         body = contacts_router.list_contacts(_request(), conn=conn).body.decode()
-        assert 'class="contact-section-row' not in body
+        assert 'class="section-row' not in body
         assert ">Unlabeled<" not in body
 
 

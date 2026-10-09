@@ -55,6 +55,10 @@
 //                       usage," not an irreversible row delete, so it
 //                       supplies its own wording -- see
 //                       labels_manage.html.)
+//   editButtonId     -- (Phase D) id of the bar's Edit button
+//                       (`bulk_actions_bar(edit=true)`); with editModalUrl
+//                       it opens the bulk edit modal for the selection.
+//   editModalUrl     -- GET URL of that modal; `?uids=a,b` is appended.
 //   mergeButtonId    -- (2026-09-13, Labels only) id of the bar's optional
 //                       Merge button (`_bulk_actions_bar.html`'s
 //                       `merge_label` param). Omit entirely for every
@@ -256,13 +260,24 @@
     }
     document.addEventListener("pointermove", onDocPointerMove);
     document.addEventListener("pointerup", onDocPointerUp);
+    // The bar's buttons outlive a region swap, so a re-init must unbind the
+    // previous instance's click handlers or each one would fire twice.
+    const unbinders = [];
+    function bindButton(id, handler) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener("click", handler);
+      unbinders.push(() => el.removeEventListener("click", handler));
+    }
     instances[cfg.tableId] = function teardown() {
       document.removeEventListener("pointermove", onDocPointerMove);
       document.removeEventListener("pointerup", onDocPointerUp);
+      unbinders.forEach((off) => off());
     };
+    updateBar();
 
     if (cfg.clearId) {
-      document.getElementById(cfg.clearId)?.addEventListener("click", () => {
+      bindButton(cfg.clearId, () => {
         checkboxes().forEach((cb) => setSelected(cb, false));
         lastClickedIdx = null;
         updateBar();
@@ -270,7 +285,7 @@
     }
 
     if (cfg.mergeButtonId && cfg.mergeModalUrl) {
-      document.getElementById(cfg.mergeButtonId)?.addEventListener("click", () => {
+      bindButton(cfg.mergeButtonId, () => {
         const label = cfg.itemLabel || "item";
         if (selected.size < 2) {
           window.ccToast({ message: `Select at least 2 ${label}s to merge.`, variant: "error" });
@@ -282,8 +297,16 @@
       });
     }
 
+    if (cfg.editButtonId && cfg.editModalUrl) {
+      bindButton(cfg.editButtonId, () => {
+        if (!selected.size) return;
+        const url = cfg.editModalUrl + "?uids=" + encodeURIComponent(Array.from(selected).join(","));
+        if (window.CCModal) window.CCModal.open(url);
+      });
+    }
+
     if (cfg.deleteButtonId && cfg.deleteUrl) {
-      document.getElementById(cfg.deleteButtonId)?.addEventListener("click", () => {
+      bindButton(cfg.deleteButtonId, () => {
         const count = selected.size;
         if (!count) return;
         const label = cfg.itemLabel || "item";

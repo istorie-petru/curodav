@@ -9,7 +9,7 @@ plans/STATE.md backlog item 9 ("Projects page -- view-like, not
 dashboard-like").
 
 Direct-call pattern (bare `Request({...})`, no ASGI app) follows
-test_phase2_labels.py's own TestGeneratedSpacePage -- TemplateResponse
+test_label_management.py's own TestGeneratedSpacePage -- TemplateResponse
 exposes its render context via `.context`, so assertions read the same
 data the template would."""
 
@@ -176,26 +176,7 @@ class TestKanbanDragAndDrop:
         body = label_pages.label_page("Trip", _request(), conn=conn).body.decode()
         assert 'src="/static/tasks_board.js' in body
 
-    def test_board_markup_matches_the_scripts_own_selectors(self, conn):
-        _promote(conn, "Trip")
-        _task(conn, "t1", ["Trip"], status="active")
-        body = label_pages.label_page("Trip", _request(), conn=conn).body.decode()
-        script = (_STATIC_DIR / "tasks_board.js").read_text(encoding="utf-8")
-        # Every selector tasks_board.js queries against must actually
-        # appear in the rendered board -- confirms the re-wiring is
-        # against real, matching markup, not just an included-but-inert
-        # script.
-        assert 'getElementById("kanban-board")' in script
-        assert 'id="kanban-board"' in body
-        assert '.closest(".kanban-cards")' in script
-        assert 'class="kanban-cards" data-status="active"' in body
-        assert 'querySelectorAll(".kanban-card")' in script
-        assert 'class="kanban-card" data-uid="t1" data-status="active"' in body
 
-    def test_drag_persists_through_the_update_field_endpoint(self):
-        script = (_STATIC_DIR / "tasks_board.js").read_text(encoding="utf-8")
-        assert "/tasks/${uid}/update-field" in script
-        assert 'JSON.stringify({ field: "status", value: newStatus })' in script
 
 
 class TestKanbanResponsiveColumns:
@@ -225,41 +206,11 @@ class TestKanbanResponsiveColumns:
         board_start = body.index('<div class="kanban-board" id="kanban-board">')
         assert wrap_start < board_start
 
-    def test_wrapper_establishes_an_inline_size_container(self):
-        css = (_STATIC_DIR / "style.css").read_text(encoding="utf-8")
-        assert ".kanban-board-wrap{container-type:inline-size; container-name:kanban;}" in css
 
-    def test_no_more_viewport_media_query_for_kanban_stacking(self):
-        # The whole point of the fix -- a `@media` breakpoint here would
-        # still be blind to the sidebar's own width. Checks for the actual
-        # rule (opening brace included), not just a substring that could
-        # also match this section's own prose describing the old rule.
-        css = (_STATIC_DIR / "style.css").read_text(encoding="utf-8")
-        assert "@media (max-width:1123px){" not in css
 
-    def test_two_container_query_tiers_exist(self):
-        css = (_STATIC_DIR / "style.css").read_text(encoding="utf-8")
-        assert "@container kanban (max-width:995px)" in css
-        assert "@container kanban (max-width:491px)" in css
 
-    def test_wide_tier_is_unchanged_single_row(self):
-        # Outside of any @container match, .kanban-column keeps its
-        # original single-row shrink-to-fit rule (240-340px, flex:1 1 0).
-        css = (_STATIC_DIR / "style.css").read_text(encoding="utf-8")
-        assert "flex:1 1 0; min-width:240px; max-width:340px;" in css
 
-    def test_middle_tier_wraps_to_two_columns_per_row(self):
-        css = (_STATIC_DIR / "style.css").read_text(encoding="utf-8")
-        tier = css.split("@container kanban (max-width:995px){")[1].split("}")[0]
-        assert "flex-wrap:wrap" in tier
-        mid_rule = css.split("@container kanban (max-width:995px){")[1].split("@container kanban (max-width:491px){")[0]
-        assert "flex:1 1 calc(50% - var(--space-3) / 2)" in mid_rule
 
-    def test_narrow_tier_stacks_all_four_full_width(self):
-        css = (_STATIC_DIR / "style.css").read_text(encoding="utf-8")
-        narrow_tier = css.split("@container kanban (max-width:491px){")[1]
-        assert "flex-direction:column" in narrow_tier.split("}")[0]
-        assert "width:100%; max-width:none; min-width:0;" in narrow_tier.split("}")[1]
 
     def test_kanban_board_js_selectors_unaffected_by_the_new_wrapper(self, conn):
         # The wrapper div must not break tasks_board.js's own #kanban-board

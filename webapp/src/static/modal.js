@@ -229,6 +229,9 @@
    }
 
    function wireContent() {
+    // Lets a page script (e.g. push_settings.js) set itself up on content
+    // that was injected after the page loaded.
+    document.dispatchEvent(new CustomEvent("cc-modal-content"));
      body.querySelectorAll("[data-modal-cancel]").forEach((el) => {
        el.addEventListener("click", (e) => {
          e.preventDefault();
@@ -322,7 +325,7 @@
       // let both handlers fight over the same submit.
       if (form.hasAttribute("data-modal-get")) return;
       let submitting = false;
-      const keepOpen = form.hasAttribute("data-modal-keep-open");
+      const keepOpen = form.hasAttribute("data-modal-keep-open") || !!form.closest("[data-keep-open]");
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         // Forms inside a modal submit via this handler directly (not the
@@ -365,6 +368,14 @@
             body: new FormData(form),
           });
           if (resp.ok) {
+            // A handler that answers a fetch with `redirect(...?note=/?error=)`
+            // (the settings pages) reports through a toast, since the
+            // redirected page itself is never shown here.
+            if (resp.redirected) {
+              const q = new URL(resp.url, window.location.href).searchParams;
+              if (q.get("error")) window.ccToast({ message: q.get("error"), variant: "error" });
+              else if (q.get("note")) window.ccToast({ message: q.get("note") });
+            }
             if (keepOpen) {
               pendingReload = true;
               const keepChange = form.getAttribute("data-cc-change");

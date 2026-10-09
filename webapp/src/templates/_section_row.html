@@ -1,0 +1,9 @@
+{# The one section heading row for grouped lists (Habits To do / On track,
+   Contacts by label). `caller()` is the title (plain text or a label pill);
+   `count_text` is the muted count beside it. #}
+{% macro section_row(count_text='', id='', muted=false) %}
+<div class="section-row{% if muted %} is-muted{% endif %}" role="heading" aria-level="2"{% if id %} id="{{ id }}"{% endif %}>
+    <span class="section-row-title">{{ caller() }}</span>
+    {% if count_text %}<span class="section-row-count">{{ count_text }}</span>{% endif %}
+</div>
+{% endmacro %}

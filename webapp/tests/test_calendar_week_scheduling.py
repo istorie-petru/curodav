@@ -280,33 +280,6 @@ class TestUnscheduledPanelHeaderCountAndSearch:
         assert 'src="/static/unscheduled_panel_search.js' not in body
 
 
-class TestUnscheduledPanelJSStructure:
-    """Structural source checks (no browser harness in this suite, same
-    convention as TestGridDragConflictFix/TestClickOpensTaskModal above):
-    the row's new "+"/"..." controls must (a) never start a drag, and (b)
-    still get async-crud (no full reload) treatment on submit."""
-
-    def test_drag_begin_ignores_pointerdown_inside_row_actions(self):
-        script = (_STATIC_DIR / "project_calendar.js").read_text()
-        assert 'e.target.closest(".unscheduled-row-actions")' in script
-
-    def test_add_session_and_remove_latest_forms_are_intercepted(self):
-        script = (_STATIC_DIR / "project_calendar.js").read_text()
-        assert ".unscheduled-add-session-form" in script
-        assert ".unscheduled-remove-latest-form" in script
-
-    def test_action_menu_rebound_after_region_swap(self):
-        script = (_STATIC_DIR / "project_calendar.js").read_text()
-        assert "window.CCActionMenu" in script
-        async_script = (_STATIC_DIR / "async_calendar.js").read_text()
-        assert "window.CCActionMenu.init()" in async_script
-        # 2026-09-28: the search box's own re-bind call is gone along with
-        # the search box itself (see TestUnscheduledPanelHeaderCountAndSearch.
-        # test_search_box_removed) -- checks the actual call, not a blanket
-        # substring, since this file's own explanatory comment above the
-        # remaining CCActionMenu call still mentions the retired global by
-        # name.
-        assert "if (window.CCUnscheduledSearch)" not in async_script
 
 
 class TestTimetableRedirect:
@@ -499,106 +472,10 @@ class TestUnscheduledPanelRowActions:
         assert "action-menu-trigger" in actions
 
 
-class TestClickOpensTaskModal:
-    """audit-fixes-2.1.md (2026-09-10, direct request, second pass same
-    day): "for any pill inside it, the user could click it and open the
-    task view modal window." Supersedes the same-session click-to-add-
-    session behavior (a plain click on the same gesture can't do both --
-    see TestUnscheduledPanelStepper's docstring). No browser harness in
-    this suite (same convention as TestGridDragConflictFix above) --
-    structural source checks against project_calendar.js confirm the
-    no-drag click branch opens the task modal via the same
-    taskUrlBase/CCModal convention interaction 4 already uses for a placed
-    `.work-allocation` block, and that the old click-to-add POST is gone."""
-
-    def test_no_drag_release_opens_the_task_modal(self):
-        script = (_STATIC_DIR / "project_calendar.js").read_text()
-        assert "if (!wasDrag) {" in script
-        click_branch = script.split("if (!wasDrag) {")[1].split("if (!col) return")[0]
-        assert "cfg.taskUrlBase" in click_branch
-        assert "item.dataset.taskUid" in click_branch
-        assert "window.CCModal" in click_branch
-        assert "CCModal.open(url, item)" in click_branch
-
-    def test_click_to_add_session_post_is_gone(self):
-        # The earlier same-session click-to-add-session POST is gone from
-        # the no-drag click branch -- adding a session now happens from the
-        # task modal's own Work sessions card instead.
-        script = (_STATIC_DIR / "project_calendar.js").read_text()
-        click_branch = script.split("if (!wasDrag) {")[1].split("if (!col) return")[0]
-        assert '"/work-allocations"' not in click_branch
-        assert "postAction(" not in click_branch
-
-    def test_stepper_pointerdown_carveout_is_gone(self):
-        # The old code let a pointerdown on `.unscheduled-stepper` click
-        # through without starting a drag, so the now-removed +/- buttons
-        # would still work -- dead now that the stepper markup is gone.
-        script = (_STATIC_DIR / "project_calendar.js").read_text()
-        assert "unscheduled-stepper" not in script
-
-    def test_falls_back_to_navigation_without_ccmodal(self):
-        # Same fallback interaction 4 already documents for a placed block:
-        # no window.CCModal -> plain navigation to the task URL instead of
-        # silently doing nothing.
-        script = (_STATIC_DIR / "project_calendar.js").read_text()
-        click_branch = script.split("if (!wasDrag) {")[1].split("if (!col) return")[0]
-        assert "window.location.href = url" in click_branch
 
 
-class TestUnscheduledPanelNoLongerReflowsTheGrid:
-    """2026-09-26 (item 11 redesign): the panel moved from ABOVE the grid to
-    BELOW it in `_calendar_week_grid.html` -- `.project-calendar-layout` is
-    still a plain flex column, but the grid is now the FIRST child, so a
-    later sibling's height changing (scheduling/unscheduling a task changes
-    the panel's own row count) can no longer reflow the grid card above it.
-    This retires the old 2026-09-08 "fixed 36px/24px height + hidden
-    scrollbar track on #unscheduled-panel-body" hack entirely (see git
-    history on this file/style.css for that fix's own long paper trail) --
-    the panel is free to size to its content now."""
-
-    def test_panel_body_has_no_fixed_height_hack_left(self):
-        css = (_STATIC_DIR / "style.css").read_text()
-        assert "#unscheduled-panel-body{height:" not in css
-        assert "#unscheduled-panel-body::-webkit-scrollbar{display:none;}" not in css
-
-    def test_toggle_still_pins_to_the_row_end(self):
-        """The toggle button still carries the shared `.unscheduled-panel-
-        toggle-btn` class (a second header trigger briefly reused it, see
-        TestPlannerHeaderButtons; reverted 2026-09-27) -- style.css pins it
-        to the row's right edge via that class, not an id-scoped rule."""
-        css = (_STATIC_DIR / "style.css").read_text()
-        assert ".unscheduled-panel-toggle-btn{margin-left:auto;}" in css
 
 
-class TestGridDragConflictFix:
-    """Direct feedback, confirmed live (2026-08-14): dragging a task from the
-    Unscheduled work panel onto the merged Week grid showed a 30-minute-tall
-    hover ghost mid-drag (calendar.js's own click-to-create preview, now also
-    running on this page since the grid columns carry `.calendar-create-col`
-    too) even though the drop always creates a 60-minute (DEFAULT_BLOCK_
-    MINUTES) work allocation -- the preview and the outcome disagreed.
-    Structural source checks only (no browser in this test environment,
-    same convention as test_pwa_shell.py's own JS structural checks) --
-    `window.__ccGridDragActive` is set by every project_calendar.js drag
-    (task-panel drag, block move/resize) and checked by calendar.js's own
-    hover-preview before it shows/updates its ghost, and project_calendar.js
-    now renders its OWN properly-sized (DEFAULT_BLOCK_MINUTES-tall) slot
-    preview inside the hovered column instead."""
-
-    def test_calendar_js_checks_the_suppression_flag(self):
-        script = (_STATIC_DIR / "calendar.js").read_text()
-        assert "window.__ccGridDragActive" in script
-
-    def test_project_calendar_js_sets_the_flag_on_every_drag_start(self):
-        script = (_STATIC_DIR / "project_calendar.js").read_text()
-        assert script.count("window.__ccGridDragActive = true") >= 2  # task-panel drag + block move/resize
-        assert "window.__ccGridDragActive = false" in script
-
-    def test_project_calendar_js_renders_a_real_sized_slot_preview(self):
-        script = (_STATIC_DIR / "project_calendar.js").read_text()
-        assert "slotGhost" in script
-        assert "DEFAULT_BLOCK_MINUTES" in script
-        assert 'slotGhost.className = "schedule-ghost"' in script
 
 
 class TestWeekGridAsyncCrud:

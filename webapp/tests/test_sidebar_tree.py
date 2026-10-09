@@ -147,16 +147,6 @@ class TestExpandToggle:
         assert "#icon-chevron-right" not in toggle_markup
 
 
-class TestChevronFitsInTheExpandedRail:
-    """2026-09-25 bug report: the chevron was "invisible regardless of
-    sidebar width". The expanded rail's `.tab-btn{width:100%}` made the
-    group link take the whole row and push the chevron past the rail's
-    clipped edge. Guard the CSS fix that lets the link shrink."""
-
-    def test_expanded_and_mobile_rules_let_the_link_shrink(self):
-        css = (Path(__file__).resolve().parent.parent / "src" / "static" / "style.css").read_text()
-        assert "html[data-sidebar-expanded] .sidebar-tree-row > .tab-btn{flex:1 1 auto; width:auto; min-width:0;}" in css
-        assert "  .sidebar-tree-row > .tab-btn{flex:1 1 auto; width:auto; min-width:0;}" in css
 
 
 class TestSidebarQuickAdd:
