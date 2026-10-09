@@ -1,3 +1,4 @@
+{% from "_inputs.html" import number_input, radio_input, text_input %}
 <!-- Per-widget Filters editor form. Used inside the widget edit modal
      (_widget_edit_modal.html), opened from the Filters button on each
      widget card in edit mode. Expects in context:
@@ -19,7 +20,7 @@
          visually diverge, per this file's header comment). -->
     <div class="field">
         <label>Title</label>
-        <input type="text" name="title" value="{{ widget.title or '' }}" placeholder="{{ spec.label if spec else '' }}">
+        {{ text_input({'name': 'title', 'value': (widget.title or '')}) }}
     </div>
     {% if wc.selection.source in widget_sources %}
     <div class="field">
@@ -27,7 +28,7 @@
         <div class="tile-select widget-source-select">
             {% for key, sspec in widget_sources.items() %}
             <label class="tile-option">
-                <input type="radio" name="source" value="{{ key }}" class="tile-radio" {% if wc.selection.source == key %}checked{% endif %}>
+                {{ radio_input({'name': 'source', 'value': key, 'class': 'tile-radio', 'checked': (true if (wc.selection.source == key) else false)}) }}
                 <span class="tile-icon">{{ icon(sspec.icon, 'icon-sm') }}</span>
                 <span class="tile-option-label">{{ sspec.label }}</span>
             </label>
@@ -105,7 +106,7 @@
             <label>Limit</label>
             <div class="stepper">
                 <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease limit">&minus;</button>
-                <input type="number" name="limit" class="stepper-input" min="0" value="{{ widget.config.limit if widget.config.limit is defined and widget.config.limit is not none else '' }}" placeholder="10">
+                {{ number_input({'name': 'limit', 'class': 'stepper-input', 'min': '0', 'value': (widget.config.limit if widget.config.limit is defined and widget.config.limit is not none else '')}) }}
                 <button type="button" class="stepper-btn stepper-inc" aria-label="Increase limit">+</button>
             </div>
             <div class="field-hint">0 = up to 20</div>
@@ -174,8 +175,8 @@
         <div class="field widget-style-field" {% if widget.type != 'spaces_projects' %}hidden{% endif %}>
             <label>Style</label>
             <div class="field-toggle-group">
-                <label class="field-toggle"><input type="radio" name="style" value="list" {% if (widget.config.style or 'list') == 'list' %}checked{% endif %}> List</label>
-                <label class="field-toggle"><input type="radio" name="style" value="cards" {% if widget.config.style == 'cards' %}checked{% endif %}> Cards</label>
+                <label class="field-toggle">{{ radio_input({'name': 'style', 'value': 'list', 'checked': (true if ((widget.config.style or 'list') == 'list') else false)}) }} List</label>
+                <label class="field-toggle">{{ radio_input({'name': 'style', 'value': 'cards', 'checked': (true if (widget.config.style == 'cards') else false)}) }} Cards</label>
             </div>
         </div>
         <!-- Scope -- Spaces & Projects-only, and only shown for a widget
@@ -187,8 +188,8 @@
         <div class="field widget-scope-field">
             <label>Scope</label>
             <div class="field-toggle-group">
-                <label class="field-toggle"><input type="radio" name="scope" value="space" {% if (widget.config.scope or 'space') == 'space' %}checked{% endif %}> This Space</label>
-                <label class="field-toggle"><input type="radio" name="scope" value="everything" {% if widget.config.scope == 'everything' %}checked{% endif %}> Everything</label>
+                <label class="field-toggle">{{ radio_input({'name': 'scope', 'value': 'space', 'checked': (true if ((widget.config.scope or 'space') == 'space') else false)}) }} This Space</label>
+                <label class="field-toggle">{{ radio_input({'name': 'scope', 'value': 'everything', 'checked': (true if (widget.config.scope == 'everything') else false)}) }} Everything</label>
             </div>
         </div>
         {% endif %}

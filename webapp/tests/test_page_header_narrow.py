@@ -113,8 +113,11 @@ class TestPageHeaderNarrowRollout:
         _assert_narrow_header(resp.body.decode(), "Search", "command")
 
     def test_notebook(self, conn):
+        # 2026-10-02: the Browse page's filing-rail redesign renamed the
+        # header title from "Notebook" (redundant with the nav tab) to
+        # "Browse" -- the icon stays the same.
         resp = notebook_router.list_documents(_bare_request("/notebook"), conn=conn)
-        _assert_narrow_header(resp.body.decode(), "Notebook", "notebook")
+        _assert_narrow_header(resp.body.decode(), "Browse", "notebook")
 
     def test_settings_index(self, conn):
         resp = settings_router.settings_index(_bare_request("/settings"), conn=conn)

@@ -537,6 +537,7 @@ def create_task(
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
+    contacts: list[str] = Form([]),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -627,6 +628,8 @@ def create_task(
         db.set_task_reminder_time(conn, row["uid"], reminder_time)
     if isinstance(habit_icon, str) or isinstance(habit_color, str):
         _save_habit_look(conn, row["uid"], habit_icon, habit_color)
+    if isinstance(contacts, list):
+        db.set_object_contacts(conn, "task", row["uid"], contacts)
     return respond(x_requested_with, "/tasks", status_code=201, uid=row["uid"])
 
 
@@ -945,6 +948,8 @@ def update_task(
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
+    contacts: list[str] = Form([]),
+    contacts_present: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -1025,6 +1030,8 @@ def update_task(
         db.set_task_reminder_time(conn, row["uid"], reminder_time)
     if isinstance(habit_icon, str) or isinstance(habit_color, str):
         _save_habit_look(conn, row["uid"], habit_icon, habit_color)
+    if contacts_present == "1" and isinstance(contacts, list):
+        db.set_object_contacts(conn, "task", row["uid"], contacts)
     return respond(x_requested_with, "/tasks")
 
 

@@ -1,0 +1,24 @@
+{% from "_inputs.html" import text_input %}
+{# One author row in the citation create/edit modal -- plain parallel
+   `author_family[]`/`author_given[]` text fields, the same repeatable-row
+   add/remove mechanism (static/contact_phone_email_rows.js's generic
+   `data-repeatable-*` contract, loaded globally in base.html) as
+   _contact_form_fields.html's phone/email rows. Simpler than those rows:
+   no per-row type picker, so there's no shared-name-vs-independent-radio
+   problem to solve (compare _notebook_field_option_row.html's own Look
+   picker, which needed one) -- just two plain inputs per row.
+
+   `.contact-multi-row` is REQUIRED alongside `.citation-author-row` --
+   contact_phone_email_rows.js's remove handler is hardcoded to
+   `removeBtn.closest(".contact-multi-row")` (not parameterized per
+   caller), so every repeatable row using this generic script needs that
+   exact class regardless of its own feature-specific class, same as every
+   row in _contact_form_fields.html. Omitting it (as an earlier version of
+   this file did) makes the Remove button a silent no-op. #}
+{% macro citation_author_row(family, given) %}
+<div class="citation-author-row contact-multi-row">
+    {{ text_input({'name': 'author_family', 'value': (family or '')}) }}
+    {{ text_input({'name': 'author_given', 'value': (given or '')}) }}
+    <button type="button" class="checklist-delete" data-repeatable-remove title="Remove author" aria-label="Remove author">{{ icon('x') }}</button>
+</div>
+{% endmacro %}

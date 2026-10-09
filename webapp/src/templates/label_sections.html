@@ -1,3 +1,4 @@
+{% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
 {% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill, widget_complete_button, widget_event_icon %}
 {% from "_label_pill.html" import label_pill with context %}
@@ -89,6 +90,19 @@
 
 {% endif %}
 
+<!-- Notebook: documents tagged with this label, reusing the Dashboard's
+     Notebook List widget partial (same reuse pattern as Contacts above). -->
+{% if label.notebook_widget %}
+<div class="card widget-card-static">
+    <div class="widget-header"><h2>{{ icon('file-text', 'icon-sm') }} Notebook</h2></div>
+    <div class="widget-content">
+    {% set data = notebook_documents %}
+    {% include "_widget_notebook_list.html" %}
+    </div>
+</div>
+
+{% endif %}
+
 <!-- Tasks: every non-archived task carrying this label on a Kanban board
      grouped by status (drag and drop via static/tasks_board.js). -->
 {% if label.tasks_widget %}
@@ -128,8 +142,8 @@
 </div>
 </div>
 {% endif %}
-{% if not (label.agenda_widget or label.contacts_widget or label.tasks_widget) %}
-<p class="text-muted">Nothing is switched on for this page. Turn on Agenda, Contacts or Tasks in this label's settings.</p>
+{% if not (label.agenda_widget or label.contacts_widget or label.notebook_widget or label.tasks_widget) %}
+{{ empty_state('Nothing is switched on for this page', text='Turn on Agenda, Contacts, Notebook or Tasks in this label\'s settings.', size='compact') }}
 {% endif %}
 {% endif %}
 {% endblock %}

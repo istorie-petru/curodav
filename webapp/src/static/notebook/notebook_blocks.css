@@ -1,0 +1,207 @@
+/* Styles for the custom Quote/Callout blocks (notebook_blocks.js,
+   2026-10-03) -- first-party component CSS, not a patch on vendored
+   third-party chrome, so it's a separate file from editor-theme.css
+   rather than a third section tacked onto that one.
+
+   Color mapping: both blocks and their type/color-picker swatches read
+   this app's existing 5-color tag palette (style.css's
+   --tag-{color}-fg/-bg, already theme-aware under [data-theme="dark"])
+   via a `--nb-color-fg`/`--nb-color-bg` pair set per `data-color` value --
+   one mapping table reused by every element below instead of repeating
+   five rules per element. */
+.cdx-nb-quote[data-color="blue"],
+.cdx-nb-callout[data-color="blue"],
+.nb-color-swatch[data-color="blue"],
+.nb-type-swatch[data-color="blue"] {
+  --nb-color-fg: var(--tag-blue-fg);
+  --nb-color-bg: var(--tag-blue-bg);
+}
+.cdx-nb-quote[data-color="green"],
+.cdx-nb-callout[data-color="green"],
+.nb-color-swatch[data-color="green"],
+.nb-type-swatch[data-color="green"] {
+  --nb-color-fg: var(--tag-green-fg);
+  --nb-color-bg: var(--tag-green-bg);
+}
+.cdx-nb-quote[data-color="yellow"],
+.cdx-nb-callout[data-color="yellow"],
+.nb-color-swatch[data-color="yellow"],
+.nb-type-swatch[data-color="yellow"] {
+  --nb-color-fg: var(--tag-yellow-fg);
+  --nb-color-bg: var(--tag-yellow-bg);
+}
+.cdx-nb-quote[data-color="purple"],
+.cdx-nb-callout[data-color="purple"],
+.nb-color-swatch[data-color="purple"],
+.nb-type-swatch[data-color="purple"] {
+  --nb-color-fg: var(--tag-purple-fg);
+  --nb-color-bg: var(--tag-purple-bg);
+}
+.cdx-nb-quote[data-color="red"],
+.cdx-nb-callout[data-color="red"],
+.nb-color-swatch[data-color="red"],
+.nb-type-swatch[data-color="red"] {
+  --nb-color-fg: var(--tag-red-fg);
+  --nb-color-bg: var(--tag-red-bg);
+}
+
+/* ----------------------- Quote ----------------------- */
+
+.cdx-nb-quote {
+  margin: 0.4em 0;
+  padding: 0.2em 0 0.2em 1em;
+  border-left: 3px solid var(--nb-color-fg);
+}
+.cdx-nb-quote__text {
+  line-height: 1.6em;
+  outline: none;
+}
+.cdx-nb-quote__caption {
+  margin-top: 4px;
+  font-size: 0.85em;
+  color: var(--fg-secondary);
+  outline: none;
+}
+
+/* ----------------------- Callout ----------------------- */
+
+.cdx-nb-callout {
+  display: flex;
+  gap: 0.6em;
+  margin: 0.4em 0;
+  padding: 0.75em 1em;
+  border-radius: var(--radius-md);
+  background: var(--nb-color-bg);
+}
+.cdx-nb-callout__icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  padding-top: 2px;
+  color: var(--nb-color-fg);
+}
+.cdx-nb-callout__icon svg {
+  width: 20px;
+  height: 20px;
+}
+.cdx-nb-callout__body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.cdx-nb-callout__title {
+  font-weight: var(--font-weight-bold);
+  margin-bottom: 2px;
+  outline: none;
+}
+.cdx-nb-callout__message {
+  line-height: 1.5em;
+  outline: none;
+}
+
+/* ------------- Shared color/type-picker swatches ------------- */
+
+.cdx-nb-color-picker,
+.cdx-nb-type-picker {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 4px;
+}
+.nb-color-swatch,
+.nb-type-swatch {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  margin: 2px;
+  border-radius: 50%;
+  background: var(--nb-color-bg);
+  color: var(--nb-color-fg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+.nb-type-swatch svg {
+  width: 14px;
+  height: 14px;
+}
+.nb-color-swatch--active,
+.nb-type-swatch--active {
+  border-color: var(--nb-color-fg);
+}
+@media (hover: hover) {
+  .nb-color-swatch:hover,
+  .nb-type-swatch:hover {
+    opacity: 0.85;
+  }
+}
+
+/* Callout's type-picker row + "hide title" toggle, grouped under one
+   settings popover (renderSettings() returns one element, not several
+   independent ones -- see notebook_blocks.js). */
+.cdx-nb-callout-settings {
+  display: flex;
+  align-items: center;
+}
+.cdx-nb-settings-separator {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 2px;
+  background: var(--border);
+}
+.nb-title-toggle {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  margin: 2px;
+}
+.nb-title-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+.nb-title-toggle--active {
+  color: var(--fg-secondary);
+  opacity: 0.5;
+}
+
+/* ----------------------- Delimiter ----------------------- */
+
+.cdx-nb-delimiter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0.6em 0;
+  min-height: 1.6em;
+  color: var(--fg-secondary);
+}
+.cdx-nb-delimiter[data-style="stars"]::before {
+  content: "* * *";
+  font-size: 1.2em;
+  letter-spacing: 0.3em;
+}
+.cdx-nb-delimiter[data-style="dots"]::before {
+  content: "\2022 \2022 \2022";
+  font-size: 1.1em;
+  letter-spacing: 0.4em;
+}
+.cdx-nb-delimiter[data-style="line"] {
+  min-height: auto;
+}
+.cdx-nb-delimiter[data-style="line"]::before {
+  content: "";
+  display: block;
+  width: 100%;
+  border-top: 1px solid var(--border-strong);
+}
+
+.cdx-nb-delimiter-select {
+  margin: 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--control-bg);
+  color: var(--fg-primary);
+  font-family: inherit;
+  font-size: 14px;
+}

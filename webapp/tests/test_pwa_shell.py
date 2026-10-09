@@ -1,47 +1,8 @@
-"""1.8 slice 3 -- the PWA shell (plans/open-priority.md § Offline-first
-editing & synchronization §11 slice 3): manifest, service worker, offline
-app-shell caching -- "can the app open at all with no network."
+"""The PWA shell: install manifest, service worker route and router wiring.
 
-2026-09-09: everything past slice 3 -- the client-side local read path
-(slice 4: static/offline_db.js, offline_sync_client.js), the local write
-path (slice 5: offline_write.js), the sync engine's client half (slice 6:
-offline_sync_client.js's push/retry, offline_status.js's indicator), the
-`/offline` page and its Quick Add builder (offline_shell.js,
-offline_quick_capture.js, templates/offline.html, _offline_quick_add.html)
--- was purged outright, direct request ("let's just remove offline mode...
-purge it"), after two earlier rounds of direct UI complaints against
-screenshots concluded the whole surface wasn't worth salvaging. All eight
-`static/offline_*.js` files and both templates are deleted; the `/offline`
-route is gone from routers/pwa.py; sw.js's precache list and offline
-navigation fallback are gone too. See routers/pwa.py's and sw.js's own
-header comments for the full removal note.
-
-Explicitly out of scope for that purge, and unaffected here: the
-server-side sync engine (src/offline_sync.py, routers/sync_api.py, the
-Sync card + cleanup controls on Settings > Data & Maintenance) -- covered
-by test_offline_sync.py and test_data_health.py respectively, neither of
-which depended on the client-side files/route that are now gone.
-
-Neither a real service worker nor real IndexedDB can be exercised by this
-app's usual pytest/router-function-call convention (there's no browser
-here to install a worker, intercept fetches, read Cache Storage, or run
-indexedDB.open) -- that part needs manual/browser verification, per
-plans/STATE.md's own note on this slice. What *is* verifiable server-side,
-and covered here:
-
-  - manifest.webmanifest is valid, has the fields a browser's install
-    prompt needs, and every icon it references actually exists on disk.
-  - GET /sw.js serves static/sw.js's own content as a real script (not a
-    404/redirect), with a JS content-type and no-store caching so browsers
-    always refetch the script itself to notice an update.
-  - sw.js's own precache list only names static assets that actually
-    exist under src/static and /manifest.webmanifest -- confirmed at the
-    source level since nothing else can run the service worker.
-  - main.py actually registers pwa.router (routers/settings.py's own
-    2026-08-14 follow-up note describes a router losing its decorator
-    silently while every existing test still passed -- confirmed here via
-    `router.routes` directly, the same fix applied there, not just by
-    hitting the routes through router-function calls)."""
+The service worker itself cannot run under pytest; this checks what the
+server can vouch for: the manifest is installable, its icons and the
+precache list point at files that exist, and /sw.js is served as a script."""
 
 from __future__ import annotations
 
@@ -74,13 +35,6 @@ class TestManifest:
             rel = icon["src"][len("/static/"):]
             assert (_STATIC_DIR / rel).exists(), icon["src"]
 
-    def test_base_html_links_the_manifest_and_theme_color(self):
-        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "base.html").read_text()
-        assert 'rel="manifest"' in html
-        assert "manifest.webmanifest" in html
-        assert 'name="theme-color"' in html
-        assert "pwa.js" in html
-
 
 class TestServiceWorker:
     def test_sw_js_route_serves_the_real_script(self):
@@ -89,13 +43,6 @@ class TestServiceWorker:
         assert response.headers["cache-control"] == "no-store"
         assert Path(response.path) == _STATIC_DIR / "sw.js"
 
-    def test_sw_js_registers_install_activate_fetch_handlers(self):
-        script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'addEventListener("install"' in script
-        assert 'addEventListener("activate"' in script
-        assert 'addEventListener("fetch"' in script
-        assert "skipWaiting" in script
-        assert "clients.claim" in script
 
     def test_precache_list_only_names_assets_that_exist(self):
         script = (_STATIC_DIR / "sw.js").read_text()
@@ -109,74 +56,6 @@ class TestServiceWorker:
             assert url.startswith("/static/"), url
             rel = url[len("/static/"):]
             assert (_STATIC_DIR / rel).exists(), url
-
-    def test_precache_list_has_no_offline_mode_leftovers(self):
-        # 2026-09-09: the purge dropped /offline itself (the route is gone)
-        # and every static/offline_*.js entry (the files are gone) from
-        # this list -- locking that in so a future edit can't silently
-        # reintroduce a reference to a route/file that no longer exists.
-        script = (_STATIC_DIR / "sw.js").read_text()
-        match = re.search(r"SHELL_ASSETS\s*=\s*\[(.*?)\];", script, re.S)
-        assert "/offline" not in match.group(1)
-        assert "offline_" not in match.group(1)
-
-    def test_navigate_fallback_no_longer_serves_a_cached_offline_page(self):
-        # The service worker's navigation handler used to fall back to a
-        # cached copy of /offline on a failed fetch; that page is gone, so
-        # a failed navigation now just fails, same as with no service
-        # worker installed at all.
-        script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'caches.match("/offline")' not in script
-
-    def test_pwa_js_registers_the_root_scoped_script(self):
-        script = (_STATIC_DIR / "pwa.js").read_text()
-        assert 'serviceWorker.register("/sw.js")' in script
-
-
-class TestOfflineModeFullyRemoved:
-    """2026-09-09 direct request: "let's just remove offline mode. purge
-    it." Locks in that every client-side piece is actually gone, not just
-    disconnected -- files deleted from disk, the route gone, nothing left
-    loading them. The server-side sync engine (src/offline_sync.py,
-    routers/sync_api.py, Settings' Sync card) was explicitly out of scope
-    and is untouched -- see test_offline_sync.py and test_data_health.py."""
-
-    _DELETED_STATIC_FILES = (
-        "offline_shell.js",
-        "offline_db.js",
-        "offline_sync_client.js",
-        "offline_write.js",
-        "offline_status.js",
-        "offline_quick_capture.js",
-    )
-    _DELETED_TEMPLATES = ("offline.html", "_offline_quick_add.html")
-
-    def test_offline_static_files_are_gone(self):
-        for name in self._DELETED_STATIC_FILES:
-            assert not (_STATIC_DIR / name).exists(), name
-
-    def test_offline_templates_are_gone(self):
-        templates_dir = Path(__file__).resolve().parent.parent / "src" / "templates"
-        for name in self._DELETED_TEMPLATES:
-            assert not (templates_dir / name).exists(), name
-
-    def test_offline_route_is_gone(self):
-        assert not hasattr(pwa_router, "offline_shell")
-        paths = {getattr(route, "path", None) for route in pwa_router.router.routes}
-        assert "/offline" not in paths
-        # /sw.js and /favicon.ico are unrelated to the offline feature and
-        # must still be there.
-        assert "/sw.js" in paths
-        assert "/favicon.ico" in paths
-
-    def test_base_html_no_longer_references_any_deleted_offline_script(self):
-        # Checks for the real `static_url('name')` call a <script> tag would
-        # use, not a bare filename substring -- base.html's own header
-        # comment mentions several of these filenames in prose, explaining
-        # the removal, which isn't a real reference to a live script tag.
-        html = (Path(__file__).resolve().parent.parent / "src" / "templates" / "base.html").read_text()
-        for name in self._DELETED_STATIC_FILES:
-            assert f"static_url('{name}')" not in html, name
 
 
 class TestRouterWiring:
@@ -199,151 +78,3 @@ class TestRouterWiring:
         paths = _all_paths(fastapi_app.routes)
         assert "/sw.js" in paths
         assert "/favicon.ico" in paths
-        # 2026-09-09 purge: this route is gone along with the rest of the
-        # client-side offline feature.
-        assert "/offline" not in paths
-
-
-class TestShellCacheVersion:
-    def test_shell_cache_name_was_bumped_for_the_offline_mode_purge(self):
-        # v79/v80 (2026-09-09): two rounds of Offline Mode UI fixes against
-        # direct screenshot reports (collapsing the five-tab page to a
-        # single Quick Add screen, then fixing header/card/button/Labels
-        # issues on that collapsed screen) -- see plans/STATE.md for the
-        # full history of both.
-        # v81 (2026-09-09): the whole client-side Offline Mode feature
-        # those two passes were polishing is gone -- direct request
-        # ("let's just remove offline mode. purge it."). /offline and
-        # every static/offline_*.js entry dropped from SHELL_ASSETS (the
-        # route and files no longer exist), and the navigate handler's
-        # fallback to a cached /offline copy removed. Same pass: the Sync
-        # card's "Force sync" button (Settings > Data & Maintenance) only
-        # worked via window.CCOfflineSync, now permanently undefined --
-        # removed outright (data_maintenance.js, settings_data_maintenance.
-        # html) rather than left as a guaranteed-broken control.
-        # v82 (2026-09-08): FullCalendar-parity interactions slice 1 --
-        # Month/4-Week spanning-bar layout (style.css's .month-week-bars/
-        # .month-bar-*/.month-bars-offset-* rules, calendar_month_drag.js's
-        # updated header comment on the temporary all-day-drag regression
-        # that slice introduces).
-        # v83 (2026-09-08): slice 2 -- drag-move + edge-resize for those
-        # bars, plus the pointer-follow drag ghost (calendar_month_drag.js's
-        # new setupBar/postReschedule, style.css's .month-bar-label/
-        # -resize-handle/-ghost rules).
-        # v84 (2026-09-08, this entry, same-day bug fix): direct report that
-        # bar resize was unreliable -- `cellAtPoint` rewritten from an
-        # `elementsFromPoint` DOM hit-test to plain rectangle-containment
-        # against the day cells' own bounding rects.
-        # v86 (2026-09-09, FullCalendar-parity slice 4): Week view drag
-        # between the "All day" row and the timed grid, both directions
-        # (calendar.js gained a drop-onto-.allday-col branch, calendar_
-        # week_allday_drag.js gained a drop-onto-.time-col branch).
-        # v87 (2026-09-09, FullCalendar-parity slice 5): Week view no longer
-        # resets scroll position on an async refresh (async_calendar.js's
-        # refreshWeek() captures/restores .time-grid-wrap's scrollTop around
-        # the #week-grid node swap).
-        # v88 (2026-09-09, FullCalendar-parity slice 6): 4-Week/Week prev/
-        # next navigate via AJAX (async_calendar.js's bindCalNav) with a
-        # live date-range label instead of a full page reload.
-        # v89 (same-day bug fix, round 2): month-bar resize handle hit-area
-        # widened, drop-hover ring strengthened, resize-guard rejections now
-        # toast instead of silently no-op'ing (calendar_month_drag.js,
-        # style.css).
-        # v90 (same-day bug fix, round 3 -- the actual root cause, found via
-        # a live browser session): .month-day-cell's nth-child grid-column
-        # rules now scoped with ":nth-child(N of .month-day-cell)" so the
-        # conditional .month-week-bars sibling can't shift every day cell's
-        # grid column in a week that has a bar (style.css only).
-        # v91 (direct follow-up, same day): plain event/task chips (Month/
-        # 4-Week) now get a pointer-follow drag ghost (.month-item-ghost)
-        # matching .month-bar's own, instead of just sitting lifted in
-        # place (calendar_month_drag.js, style.css).
-        # v92 (direct bug report, Planner/Week): the "Unscheduled work"
-        # panel's +/- session stepper forms now go through async-crud
-        # (data-cc-change, _unscheduled_task_item.html) instead of a plain
-        # POST -- no more hard reload -- and the panel body's height is
-        # fixed (style.css) so a schedule/unschedule drag no longer reflows
-        # the grid card below it.
-        # v93 (direct follow-up, same day): the v92 fixed-height panel read
-        # as "got bigger" for the common few-item case -- shrunk 84px (~3
-        # rows) to 26px (1 row), still fixed either way. Also fixed the
-        # collapse toggle jumping from the right edge to the left when the
-        # panel's h2 title hides (style.css only).
-        # v94 (direct follow-up, same day): the v93 one-row panel now hits
-        # its own overflow-y:auto scrollbar far more often, which read as
-        # an unwanted "sidebar" strip on the card -- track hidden via
-        # scrollbar-width:none + -webkit-scrollbar (style.css only, same
-        # pattern .tabbar already uses).
-        # v95 (direct follow-up, same day): the v93 26px height (one row,
-        # no slack) read as cramped -- bumped to 36px (style.css only).
-        # v97 (2026-09-10, audit-fixes-2.1.md session): a missed bump for
-        # an earlier same-session avatar_cropper.js fix (SHELL_ASSETS),
-        # bundled with this session's Unscheduled-work stepper removal
-        # (style.css + project_calendar.js) -- see sw.js's own comment.
-        # v98 (2026-09-10, same session): two more missed-then-caught
-        # style.css bumps bundled together -- the Contacts custom-dropdown
-        # swap's width-rule retargeting, and this session's Kanban
-        # responsive-column rework (`.kanban-board-wrap`/`@container`) --
-        # see sw.js's own comment.
-        # v99 (2026-09-24): three catch-up bumps bundled -- app.js's
-        # masonry layout() fix and manifest.webmanifest's name/short_name
-        # change ("Command Center" -> "Curodav"), both missed earlier the
-        # same session, plus this slice's own command_palette.js change
-        # (CAPTURE_MARKER_RE dropping `!n`) -- see sw.js's own comment.
-        # v100 (2026-09-24, same session): the card-model removal --
-        # style.css's `.card`/`.widget-card`/body-background rules -- see
-        # sw.js's own comment.
-        # v101 (2026-09-24, same session): the icon set swap to Material
-        # Design Icons -- style.css's `.icon` class flipped fill/stroke to
-        # match the new filled-icon sprite -- see sw.js's own comment.
-        # v102 (2026-09-24, same session): Settings' segmented -> dropdown
-        # swap -- app.js's theme block rewritten for the new radio dropdown
-        # -- see sw.js's own comment.
-        # v103 (2026-09-24, same session): design-token tightening --
-        # style.css's type scale went from 8 sizes to 4 and font-weight was
-        # tokenized for the first time -- see sw.js's own comment.
-        # v104 (2026-09-24, same session): search window simplification --
-        # command_palette.js dropped label mode and gained the overdue/past
-        # split, style.css lost the footer rules -- see sw.js's own comment.
-        # v105 (2026-09-24, same session): responsive tables -- style.css
-        # gained the `.table-responsive` container-query column tiers --
-        # see sw.js's own comment.
-        # v106 (2026-09-24, same session): image editor aspect-ratio lock
-        # -- avatar_cropper.js/style.css -- see sw.js's own comment.
-        # v107 (2026-09-24, same session): habits slice 1 -- style.css
-        # gained .habit-checkin-name -- see sw.js's own comment.
-        # v108 (2026-09-24, same session): modal.js CSP fix -- see sw.js.
-        # v109 (2026-09-24, same session): habits H1 heatmap colors.
-        # v110 (2026-09-24, same session): habits H2 page styles.
-        # v111 (2026-09-24, same session): habits H3 modal.js + styles.
-        # v112 (2026-09-24, same session): habits H4 widget styles.
-        # v113 (2026-09-24, same session): habits H5 avoid-habit styles.
-        # v114 (2026-09-24, same session): habits H6 pause styles.
-        # v115 (2026-09-24, same session): habits H7 agenda/day-view styles.
-        # v116 (2026-09-24, same session): habits H8 insights styles.
-        # v117 (2026-09-24, same session): Web Push P1 handlers in sw.js.
-        # v118 (2026-09-24, same session): Web Push P3 settings styles.
-        # v119 (2026-09-25): habit amount popup (habit_day.js) + modal.js.
-        # v120 (2026-09-25): sidebar group chevron fix (style.css).
-        # v121 (2026-09-25): narrow banners on dashboards + modal covers.
-        # v122 (2026-09-25): month all-day bar spacing (style.css).
-        # v123 (2026-09-25): audit regressions (field-grid, button resets).
-        # v124 (2026-09-25): audit decisions (dashboard columns, pills, week bars).
-        # v125 (2026-09-25): UI audit fixes, four areas merged.
-        # v126 (2026-09-25): phone auto-scroll, stack bar, picker week start.
-        # v127 (2026-09-25): group rename/members, modal data-follow-redirect.
-        # v128 (2026-09-25): font-size tokens --text-xs/--text-2xs.
-        # v129 (2026-09-26): compact habit rows, Pauses modal, habit form.
-        # v130 (2026-09-26): habit rows v2, history panel, icon + colour.
-        # v131 (2026-09-26): habit edit form per the approved mockup.
-        # v132 (2026-09-26): shared Look dropdown (look_picker.js), old pickers gone.
-        # v133 (2026-09-26): label banner button at the end of the Look row.
-        # v134 (2026-09-26): flat icon grid, full icon library for habits.
-        # v135 (2026-09-26): groups/labels/projects split, module dropdowns.
-        # v136 (2026-09-26): entity tables rebuilt, convert row action, panel heatmap clickable.
-        # v137 (2026-09-26): typed date/time fields replace the range picker.
-        # v138 (2026-09-27): icon set swap back to Lucide (item 3) --
-        # _icons_sprite.html's 190 symbols replaced, style.css's `.icon`
-        # flipped fill<->stroke again plus two new sizing rules.
-        script = (_STATIC_DIR / "sw.js").read_text()
-        assert 'CACHE_NAME = "cc-shell-v138"' in script

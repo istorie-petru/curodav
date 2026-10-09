@@ -1,3 +1,4 @@
+{% from "_inputs.html" import text_input %}
 <!-- 2026-08-29 (STATE.md backlog item 8, direct request): brought in line
      with the rest of the app's modal styling (features/design-system.md §
      Modal windows) -- this modal predated the 2026-08-15 uniformization
@@ -105,7 +106,7 @@
             <div class="field-grid">
                 <div class="field field-wide">
                     <label for="name">Name</label>
-                    <input type="text" id="name" name="name" placeholder="e.g., Team Calendar, Public Contacts" value="{{ _editing.name if _editing else '' }}" required autocomplete="off">
+                    {{ text_input({'id': 'name', 'name': 'name', 'value': (_editing.name if _editing else ''), 'required': true, 'autocomplete': 'off'}) }}
                 </div>
 
                 {% if _editing %}
@@ -135,29 +136,21 @@
                     </div>
                 </div>
                 {% else %}
-                {% set ms_name = 'entity_type' %}
-                {% set ms_mode = 'single' %}
-                {% set ms_label = 'Type' %}
-                {% set ms_items = [] %}
-                {% for et in entity_types %}{% set _ = ms_items.append({'uid': et, 'name': entity_labels[et]}) %}{% endfor %}
-                {% set ms_selected = entity_types[0] %}
-                {% set ms_wide = false %}
-                {% set ms_form_id = _form_id %}
-                {% include "_widget_list_multiselect.html" %}
+                {% set st_name = 'entity_type' %}{% set st_label = 'Type' %}
+                {% set st_items = [] %}
+                {% for et in entity_types %}{% set _ = st_items.append({'uid': et, 'name': entity_labels[et]}) %}{% endfor %}
+                {% set st_selected = entity_types[0] %}{% set st_form_id = _form_id %}
+                {% include "_status_type_row.html" %}
                 {% endif %}
 
-                {% set ms_name = 'visibility' %}
-                {% set ms_mode = 'single' %}
-                {% set ms_label = 'Sharing' %}
-                {% set ms_items = [
+                {% set st_name = 'visibility' %}{% set st_label = 'Sharing' %}
+                {% set st_items = [
                     {'uid': 'private', 'name': 'Private'},
                     {'uid': 'public', 'name': 'Public'},
                 ] %}
-                {% if _editing %}{% set _ = ms_items.append({'uid': 'archived', 'name': 'Paused'}) %}{% endif %}
-                {% set ms_selected = _editing.visibility if _editing else 'private' %}
-                {% set ms_wide = false %}
-                {% set ms_form_id = _form_id %}
-                {% include "_widget_list_multiselect.html" %}
+                {% if _editing %}{% set _ = st_items.append({'uid': 'archived', 'name': 'Paused'}) %}{% endif %}
+                {% set st_selected = _editing.visibility if _editing else 'private' %}{% set st_form_id = _form_id %}
+                {% include "_status_type_row.html" %}
 
                 {% if all_labels %}
                 {% set ms_name = 'labels' %}
@@ -203,7 +196,12 @@
                 {% else %}
                 <div class="field field-wide">
                     <label>Filter by labels <span class="text-muted">(optional)</span></label>
-                    <p class="settings-hint settings-hint-flush">No labels yet, so everything is included. <a href="/settings/labels/new" data-modal data-modal-size="wide">Create one</a> to narrow it down later.</p>
+                    {# Modal-stack Cancel fix (curodav-notes memory
+                       curodav-webapp-modal-stack-cancel-fix) -- return_to
+                       carries this same modal's own URL, so the nested "new
+                       label" modal's Cancel returns here instead of closing
+                       the whole flow back to /settings/labels. #}
+                    <p class="settings-hint settings-hint-flush">No labels yet, so everything is included. <a href="/settings/labels/new?return_to={{ (('/published-lists/' ~ _editing.id ~ '/edit') if _editing else '/published-lists/new') | urlencode }}" data-modal data-modal-size="wide">Create one</a> to narrow it down later.</p>
                 </div>
                 {% endif %}
             </div>

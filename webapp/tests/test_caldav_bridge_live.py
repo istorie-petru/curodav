@@ -23,6 +23,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.live
+
 radicale = pytest.importorskip("radicale")
 
 from src import db, sync  # noqa: E402

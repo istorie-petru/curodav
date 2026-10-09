@@ -1,3 +1,4 @@
+{% from "_inputs.html" import checkbox_input, text_input %}
 {% extends "base.html" %}
 {% block title %}{{ form_title }}{% endblock %}
 {% block content %}
@@ -42,7 +43,7 @@
     <div class="field-grid">
         <div class="field">
             <label>Title</label>
-            <input type="text" name="label" value="{{ h.label if h else '' }}" placeholder="(untitled)">
+            {{ text_input({'name': 'label', 'value': (h.label if h else '')}) }}
         </div>
         <div class="field">
             {% set ms_mode = 'single' %}
@@ -68,7 +69,7 @@
             {{ date_field('date_to', date_to_value, required=true, label='End date') }}
         </div>
         <div class="field field-toggle field-wide">
-            <input type="checkbox" id="year_agnostic" name="year_agnostic" value="1" {% if year_agnostic %}checked{% endif %}>
+            {{ checkbox_input({'id': 'year_agnostic', 'name': 'year_agnostic', 'value': '1', 'class': 'checkbox', 'checked': (true if (year_agnostic) else false)}) }}
             <label for="year_agnostic">Repeats every year (ignore year above)</label>
             <span class="field-hint">For a fixed-date holiday like a national or religious holiday -- only the month and day above are saved, so it applies every year.</span>
         </div>

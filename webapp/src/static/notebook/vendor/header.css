@@ -1,0 +1,6 @@
+/* Extracted from header.umd.js's self-injected <style> (see NOTICE.md) --
+   loaded via <link> instead of the bundle's own runtime injection because
+   this app's CSP (style-src with a per-request nonce, no 'unsafe-inline')
+   blocks unnonced inline <style> tags; a same-origin linked stylesheet
+   needs no nonce at all. */
+.ce-header{padding:.6em 0 3px;margin:0;line-height:1.25em;outline:none}.ce-header p,.ce-header div{padding:0!important;margin:0!important}

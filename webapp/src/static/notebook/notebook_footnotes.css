@@ -1,0 +1,255 @@
+/* Styles for footnotes (notebook_footnotes.js, 2026-10-03) -- first-party
+   component CSS, same reasoning as notebook_blocks.css for living outside
+   editor-theme.css (that file is patches on *vendored* chrome; this is
+   ours start to finish). */
+
+.cdx-footnote-ref {
+  cursor: pointer;
+  /* 2026-10-04 direct request: the marker numbers should read as the
+     app's own accent color (consistent with other in-app "this is a
+     clickable reference" treatments), not the --tag-orange-fg this used
+     before. */
+  color: var(--accent);
+  font-weight: var(--font-weight-bold);
+  padding: 0 2px;
+}
+
+/* Inline toolbar's note-text box -- similar sizing to `.ce-inline-tool-
+   input` (the built-in link tool's URL box), just taller since a
+   footnote is usually more than one line. Editor.js's own Popover
+   component mounts/unmounts this element based on the tool's
+   checkState() return value (a `children.isOpen` flag read straight
+   from editorjs.umd.js's inline-toolbar rendering, not a CSS class this
+   tool toggles itself) -- no show/hide class of our own needed. */
+.cdx-footnote-input {
+  display: block;
+  width: 260px;
+  min-height: 60px;
+  margin: 4px 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  resize: vertical;
+}
+/* 2026-10-04 direct request: a brand-new empty footnote (still showing
+   its placeholder) shouldn't default to the full 60px box -- that reads
+   as an oversized blank rectangle before there's anything to fill it.
+   `:placeholder-shown` only matches while the field is genuinely empty
+   (an HTML state, not a class we have to toggle ourselves), so typing
+   anything at all lifts both the min- and max-height caps automatically,
+   falling back to the rule above's 60px/resize:vertical for any real
+   amount of text. */
+.cdx-footnote-input:placeholder-shown {
+  min-height: 32px;
+  max-height: 32px;
+}
+
+/* Auto-generated list at the document's end -- not an Editor.js block,
+   see notebook_footnotes.js's header comment for why. */
+.cdx-footnote-footer {
+  margin-top: 1.5em;
+  padding-top: 1em;
+  border-top: 1px solid var(--border);
+}
+.cdx-footnote-footer__heading {
+  font-size: 0.8em;
+  font-weight: var(--font-weight-bold);
+  color: var(--fg-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.5em;
+}
+.cdx-footnote-list {
+  margin: 0;
+  padding-left: 1.4em;
+  font-size: 0.9em;
+  line-height: 1.4;
+  color: var(--fg-secondary);
+}
+.cdx-footnote-list li {
+  cursor: text;
+  /* A contentEditable <li> with an empty textContent has no child nodes at
+     all, so it collapses to zero height (no line box without a text node
+     or <br>) -- two consecutive empty footnotes then look squashed
+     together since their margin-bottoms collapse against each other's
+     zero-height boxes. min-height pinned to the list's own line-height
+     keeps every <li> occupying one line's worth of space whether or not
+     it has text, which is exactly what makes the gap "disappear" the
+     moment the first one gets typed into (it already had implicit height
+     from its own text). */
+  min-height: 1.4em;
+  margin-bottom: 0.3em;
+  outline: none;
+}
+.cdx-footnote-list li:hover,
+.cdx-footnote-list li:focus {
+  color: var(--fg-primary);
+}
+
+/* A structured entry (built via the slash-menu action flow, item J
+   session 9a) isn't contentEditable -- its text + "Edit" button sit
+   side by side instead of the plain-text li's single text node. The flex
+   row lives on `.cdx-footnote-structured-row`, an inner wrapper, not on
+   the <li> itself -- `display:flex` directly on an <ol> item suppresses
+   its own numbered ::marker (confirmed live: the structured entry's
+   number disappeared while its plain-text siblings kept theirs). */
+.cdx-footnote-list-item-structured {
+  cursor: default;
+}
+.cdx-footnote-structured-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.cdx-footnote-text {
+  flex: 1;
+}
+.cdx-footnote-edit-btn {
+  flex: none;
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 0.85em;
+  color: var(--tag-blue-fg);
+  cursor: pointer;
+  opacity: 0;
+}
+.cdx-footnote-list-item-structured:hover .cdx-footnote-edit-btn,
+.cdx-footnote-edit-btn:focus {
+  opacity: 1;
+}
+
+/* The "Footnote" slash-command block (NotebookFootnoteBlock) -- its
+   placeholder render() cycles through an action menu, then a citation
+   picker, then a page-number step, all inside the one block wrap below.
+   Visual sizing mirrors `.cdx-wikilink-picker`/-input/-results in
+   style.css (same picker shape, different source/target data), kept as
+   its own footnote-scoped classes rather than sharing those exact
+   classnames across files -- these are also reused by the footer "Edit"
+   floating popover above. */
+.cdx-footnote-action-block {
+  padding: 4px 0;
+}
+.cdx-footnote-action-menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.cdx-footnote-action-btn {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-elevated);
+  font-size: 14px;
+  cursor: pointer;
+}
+.cdx-footnote-action-btn:hover:not(:disabled) {
+  background: var(--bg-secondary);
+}
+.cdx-footnote-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.cdx-footnote-action-hint {
+  margin-top: 4px;
+  font-size: 0.8em;
+  color: var(--fg-tertiary);
+}
+.cdx-footnote-picker {
+  display: block;
+  width: 320px;
+}
+/* "Custom note" step (direct clarification, 2026-10-03) -- a plain
+   textarea + Insert button, same width as the citation picker steps but
+   stacked vertically (a free-text aside needs room to wrap, unlike the
+   single-line search/page inputs). */
+.cdx-footnote-custom-note {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 320px;
+}
+.cdx-footnote-custom-note .cdx-footnote-input {
+  width: 100%;
+}
+.cdx-footnote-custom-note .cdx-footnote-picker-insert-btn {
+  align-self: flex-end;
+}
+/* 2026-10-04 (floating-popover -> real-modal rewrite,
+   notebook_footnotes.js's openFootnoteEditPicker) -- this used to be
+   `.cdx-footnote-float-picker`, a `position:fixed` popover with its own
+   background/border/shadow chrome, anchored to the footer entry being
+   edited. Now rendered inside the shared `#modal-body` (static/modal.js's
+   `CCModal.openCustom`), which already supplies that chrome -- only the
+   width reset is still needed, since `.cdx-footnote-picker` above is
+   sized for the slash-command block's own embedded steps, not a modal
+   body's full content width. */
+.cdx-footnote-modal-picker {
+  width: auto;
+}
+.cdx-footnote-picker-input {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  font-family: inherit;
+  font-size: 14px;
+}
+.cdx-footnote-picker-results {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.cdx-footnote-picker-result {
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  cursor: pointer;
+}
+.cdx-footnote-picker-result:hover {
+  background: var(--bg-secondary);
+}
+.cdx-footnote-picker-empty {
+  padding: 6px 8px;
+  font-size: 14px;
+  color: var(--fg-tertiary);
+}
+.cdx-footnote-picker-page-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 6px;
+}
+.cdx-footnote-picker-page-label {
+  flex: 1;
+  font-size: 14px;
+  color: var(--fg-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cdx-footnote-picker-page-input {
+  flex: none;
+  width: 90px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  font-family: inherit;
+  font-size: 14px;
+}
+.cdx-footnote-picker-insert-btn {
+  flex: none;
+  padding: 6px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--fg-on-accent);
+  font-size: 14px;
+  cursor: pointer;
+}

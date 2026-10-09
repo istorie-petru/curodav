@@ -92,7 +92,7 @@ class TestRendering:
         body = habits_router.habits_page(_req(), conn=conn).body.decode()
         assert "8 glasses a day" in body
         form = tasks_router.edit_task_form("w1", _req("/tasks/w1/edit"), conn=conn).body.decode()
-        assert 'name="habit_unit" id="habit-unit" maxlength="24" placeholder="glasses" value="glasses"' in form
+        assert 'name="habit_unit" id="habit-unit" maxlength="24" value="glasses"' in form
         assert 'data-goal="amount"' in form
 
     def test_avoid_detail(self, conn):

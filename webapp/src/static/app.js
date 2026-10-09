@@ -410,9 +410,49 @@ document.addEventListener("submit", (event) => {
     openPanel = null;
   }
 
+  // In-panel fuzzy search (ms_search, 2026-10-03 -- _widget_list_
+  // multiselect.html's own doc comment has the full reasoning). A plain
+  // subsequence match ("brl" matches "Bloch, Marc L.") -- enough to feel
+  // fuzzy without pulling in a library for what's still just a client-
+  // side option filter. Deliberately never touches `.disabled` inputs
+  // (rows already hidden by an unrelated gating mechanism, e.g.
+  // dashboard_widget_preview.js's View/Range filtering) -- this only
+  // ever narrows what a search ALSO hides, never un-hides something an
+  // enclosing feature decided shouldn't be offered at all.
+  function fuzzyMatch(query, text) {
+    if (!query) return true;
+    text = text.toLowerCase();
+    let ti = 0;
+    for (const ch of query.toLowerCase()) {
+      ti = text.indexOf(ch, ti);
+      if (ti === -1) return false;
+      ti += 1;
+    }
+    return true;
+  }
+
+  function applySearchFilter(panel, query) {
+    panel.querySelectorAll(".multiselect-option").forEach((row) => {
+      if (row.classList.contains("multiselect-new-option")) return;
+      const input = row.querySelector("input");
+      if (input && input.disabled) return;
+      const span = row.querySelector("span:last-child");
+      row.hidden = !fuzzyMatch(query, span ? span.textContent : "");
+    });
+  }
+
   function openPanelFor(trigger, panel) {
     const anchor = panel.parentElement;
     const nextSibling = panel.nextSibling;
+    // Reset any search filter left over from the last time this panel was
+    // open -- the DOM node (and whatever's typed into its search input)
+    // persists across opens, so without this a panel closed mid-search
+    // would reopen pre-narrowed instead of showing the full list again.
+    const searchInput = panel.querySelector(".multiselect-search-input, .ms-merged .multiselect-new-input");
+    if (searchInput) {
+      searchInput.value = "";
+      applySearchFilter(panel, "");
+    }
     if (!portal) {
       // No portal container on the page (shouldn't happen -- it's in
       // base.html -- but degrade to the old in-place behavior rather than
@@ -420,6 +460,7 @@ document.addEventListener("submit", (event) => {
       panel.classList.add("is-open");
       anchor.classList.add("is-open");
       openPanel = { panel, trigger, anchor, nextSibling };
+      if (searchInput) searchInput.focus();
       return;
     }
     portal.appendChild(panel);
@@ -427,6 +468,7 @@ document.addEventListener("submit", (event) => {
     anchor.classList.add("is-open");
     position(panel, trigger);
     openPanel = { panel, trigger, anchor, nextSibling };
+    if (searchInput) searchInput.focus();
   }
 
   // Finds the `.multiselect-panel` belonging to a given `.multiselect`
@@ -444,7 +486,15 @@ document.addEventListener("submit", (event) => {
     if (!wrapper) return null;
     return wrapper.querySelector(".multiselect-panel") || (openPanel && openPanel.anchor === wrapper ? openPanel.panel : null);
   }
-  window.CCMultiselect = { panelFor: resolvePanel };
+  // `close` (2026-10-02, added for static/notebook_properties_rows.js's
+  // own Enter-to-commit handler -- a *different* script, so it can't call
+  // the closure-private `closeOpenPanel` directly the way this file's own
+  // "New label..." handler does below) -- exposing the real close
+  // function here, rather than having that script try to fake the same
+  // effect itself (remove `is-open`, move the panel back...), keeps
+  // `openPanel`'s bookkeeping consistent regardless of which script
+  // triggers a close.
+  window.CCMultiselect = { panelFor: resolvePanel, close: closeOpenPanel };
 
   document.addEventListener("click", (e) => {
     const trigger = e.target.closest(".multiselect-trigger");
@@ -467,6 +517,23 @@ document.addEventListener("submit", (event) => {
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeOpenPanel();
+    // Enter inside the in-panel search box must never submit whatever
+    // `<form>` the panel's checkboxes belong to -- filtering is already
+    // live on every keystroke, there's no "commit" step to trigger, and
+    // this input lives inside a portaled panel so a stray Enter bubbling
+    // up through its `form="..."` association would otherwise submit the
+    // enclosing modal prematurely (same class of trap as the ms_allow_new
+    // "New label..." input's own Enter handling, see that code's
+    // comment).
+    if (e.key === "Enter" && e.target.matches && e.target.matches(".multiselect-search-input")) {
+      e.preventDefault();
+    }
+  });
+
+  document.addEventListener("input", (e) => {
+    if (!e.target.matches || !e.target.matches(".multiselect-search-input, .ms-merged .multiselect-new-input")) return;
+    const panel = e.target.closest(".multiselect-panel");
+    if (panel) applySearchFilter(panel, e.target.value.trim());
   });
 
   window.addEventListener("resize", () => {
@@ -584,18 +651,79 @@ document.addEventListener("submit", (event) => {
   document.addEventListener("keydown", (e) => {
     const input = e.target.closest(".multiselect-new-input");
     if (!input || e.key !== "Enter") return;
+    // 2026-10-02 direct follow-up bugfix ("it doesn't save after the
+    // first enter, but after two"): `e.preventDefault()` used to live
+    // only at the very end of this handler, past an early `if (!value)
+    // return` for a blank input. That's exactly the state this same
+    // input is in immediately *after* a successful first Enter (the code
+    // below clears it) -- so a second Enter press on the now-empty field
+    // took the early-return path, skipped `preventDefault()` entirely,
+    // and fell through to the browser's native "Enter submits the form"
+    // behavior. That native, JS-uncontrolled submission is what was
+    // actually persisting the form -- the *first* Enter only updated
+    // local dropdown state (correctly, per the original bugfix above),
+    // never the server. Hoisted to the top so this input's Enter key
+    // never reaches native form-submit, empty value or not.
+    e.preventDefault();
     const value = input.value.trim();
     if (!value) return;
     const panel = input.closest(".multiselect-panel");
     if (!panel) return;
     const ms = panel.closest(".multiselect") || (openPanel && openPanel.panel === panel ? openPanel.anchor : null);
     if (!ms) return;
-    const msName = ms.querySelector('input[type="checkbox"], input[type="radio"]').name;
+    // 2026-10-02 direct bugfix ("pressing enter should not also close the
+    // modal, but should first of all save the value and keep the modal
+    // open"): this used to read the submitted field name off a sibling
+    // checkbox/radio inside `ms` -- `ms.querySelector('input[type=
+    // "checkbox"], input[type="radio"]')`. That throws the moment `ms` is
+    // the portaled fallback (`openPanel.anchor`, true for essentially
+    // every real caller -- see openPanelFor's own header comment: the
+    // panel, radios/checkboxes included, gets moved out to
+    // #multiselect-portal on open, so the *anchor* left behind has no
+    // input descendants left to find) or whenever `ms_items` is empty (a
+    // picker with zero options yet, e.g. the very first custom property on
+    // a document -- no radio/checkbox rendered at all to read a name off
+    // of even when not portaled). Either way `.name` on that `null` threw
+    // an uncaught TypeError, which aborted this handler *before* it ever
+    // reached `e.preventDefault()` below -- so typing a new value and
+    // pressing Enter fell through to the browser's native "Enter submits
+    // the form" behavior instead, submitting (and closing) whatever modal
+    // this dropdown lived in. Reading the name off `input` itself instead
+    // needs no sibling to exist at all: list/select/names mode's
+    // allow-new input already shares `name="{{ ms_name }}"` directly with
+    // its checkboxes (see _widget_list_multiselect.html's own
+    // `ms_allow_new` docstring), so `input.name` *is* msName there;
+    // single mode's allow-new input is deliberately `name="{{ ms_name }}
+    // _new"` instead (same docstring, same reasoning as routers/
+    // settings.py's `_resolve_calendar_name`), so msName is that name
+    // with the `_new` suffix stripped back off.
+    const isSingle = ms.dataset.msMode === "single";
+    const msName = isSingle ? input.name.replace(/_new$/, "") : input.name;
+    // Merged search-and-add box (more than 7 items): Enter on a name that
+    // already exists picks that option instead of adding a duplicate.
+    const merged = input.closest(".ms-merged");
+    if (merged) {
+      const existing = Array.from(panel.querySelectorAll(".multiselect-option:not(.multiselect-new-option)")).find((row) => {
+        const label = row.querySelector("span:last-child");
+        return label && label.textContent.trim().toLowerCase() === value.toLowerCase();
+      });
+      if (existing) {
+        const box = existing.querySelector("input");
+        if (box && !box.disabled) {
+          box.checked = true;
+          box.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        input.value = "";
+        applySearchFilter(panel, "");
+        updateMsSummary(ms);
+        return;
+      }
+    }
     const formId = input.getAttribute("form");
     const newOption = document.createElement("label");
     newOption.className = "multiselect-option";
     const checkbox = document.createElement("input");
-    checkbox.type = ms.dataset.msMode === "single" ? "radio" : "checkbox";
+    checkbox.type = isSingle ? "radio" : "checkbox";
     checkbox.name = msName;
     checkbox.value = value;
     checkbox.checked = true;
@@ -605,14 +733,29 @@ document.addEventListener("submit", (event) => {
     newOption.appendChild(checkbox);
     newOption.appendChild(span);
     const newOptionWrapper = input.closest(".multiselect-new-option");
-    if (newOptionWrapper) {
+    if (newOptionWrapper && newOptionWrapper.classList.contains("ms-merged")) {
+      newOptionWrapper.parentNode.insertBefore(newOption, newOptionWrapper.nextElementSibling.nextSibling);
+      applySearchFilter(panel, "");
+    } else if (newOptionWrapper) {
       newOptionWrapper.parentNode.insertBefore(newOption, newOptionWrapper);
     } else {
       panel.appendChild(newOption);
     }
     input.value = "";
     updateMsSummary(ms);
-    e.preventDefault();
+    // Close the panel right away for single mode, same as a real mouse
+    // click on a radio already does (the generic `change` listener above,
+    // `ms.dataset.msMode === "single" && e.target.type === "radio"`) --
+    // that listener doesn't fire here since `checkbox.checked = true` is
+    // a plain property assignment, not a user interaction, and never
+    // dispatches a `change` event on its own. Without this, a single-mode
+    // pick made via Enter gave no visible confirmation at all (summary
+    // text updates, but behind an still-open panel the user's looking
+    // at) -- part of the same "doesn't look like the first Enter did
+    // anything" report as the preventDefault fix above. List/select/names
+    // mode deliberately stays open (same as a real checkbox click there),
+    // so more than one new item can be typed in a row without reopening.
+    if (isSingle) closeOpenPanel();
   });
 
   document.querySelectorAll(".widget-list-multiselect").forEach(updateMsSummary);

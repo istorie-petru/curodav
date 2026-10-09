@@ -1,0 +1,11 @@
+{# Canonical Status / Type row: a single-choice dropdown. Set st_name,
+   st_label, st_items ({uid, name} pairs), st_selected and st_form_id before
+   including. #}
+{% set ms_name = st_name %}
+{% set ms_mode = 'single' %}
+{% set ms_label = st_label %}
+{% set ms_items = st_items %}
+{% set ms_selected = st_selected %}
+{% set ms_wide = false %}
+{% set ms_form_id = st_form_id %}
+{% include "_widget_list_multiselect.html" %}

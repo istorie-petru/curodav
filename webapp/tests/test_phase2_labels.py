@@ -135,6 +135,40 @@ class TestModalHeaderAppearanceButtons:
         assert 'class="modal-header-actions"' not in body
 
 
+class TestNewLabelModalReturnTo:
+    """Modal-stack Cancel fix (curodav-notes memory
+    curodav-webapp-modal-stack-cancel-fix, same family as routers/
+    notebook.py's citation/glossary "new" modals) -- when the New Label
+    modal is opened from inside another picker modal with nothing to pick
+    yet (published_list_create_modal.html's "Create one" link), Cancel
+    should swap back into that picker instead of closing the whole overlay
+    back to /settings/labels."""
+
+    def test_no_return_to_keeps_the_plain_cancel(self, conn):
+        resp = labels_router.new_label_modal(_request("/settings/labels/new"), conn=conn)
+        body = resp.body.decode()
+        assert 'data-modal-cancel' in body
+        assert 'href="/settings/labels"' in body
+
+    def test_return_to_swaps_cancel_to_a_modal_link(self, conn):
+        req = _request("/settings/labels/new?return_to=/published-lists/new")
+        resp = labels_router.new_label_modal(req, return_to="/published-lists/new", conn=conn)
+        body = resp.body.decode()
+        assert 'href="/published-lists/new" class="btn ghost" data-modal' in body
+        assert 'data-modal-cancel' not in body
+
+    def test_return_to_must_be_same_origin_relative(self, conn):
+        """Same guard family as routers/notebook.py's `_safe_return_to` --
+        an absolute/off-origin value is dropped rather than trusted, since
+        it becomes an href modal.js's openModal() would fetch."""
+        req = _request("/settings/labels/new")
+        resp = labels_router.new_label_modal(req, return_to="//evil.example/x", conn=conn)
+        body = resp.body.decode()
+        assert 'data-modal-cancel' in body
+        assert 'href="/settings/labels"' in body
+        assert "evil.example" not in body
+
+
 class TestBannerEditorFromModal:
     """Direct request: "if a button allows the user to navigate from one
     modal to the other, instead of the 'Done' there should always be a

@@ -3,47 +3,333 @@
    documentation/plans/architecture-notes-module-2026-09-29.md §3). This
    page is a deliberate, narrow, documented exception to Curodav's
    progressive-enhancement rule ("every page fully usable without JS") --
-   interactive rich-block editing has no plain-HTML-form equivalent. The
-   title field above the editor still works with no JS (a plain form
-   post); only the block-content area below it requires JavaScript. #}
+   interactive rich-block editing has no plain-HTML-form equivalent.
+   Title/label/note_type editing and delete (2026-10-02) now live in the
+   properties modal (notebook_properties_modal.html, opened via the
+   header's icon button below) -- that modal is a real page too
+   (GET /notebook/{uid}/properties), so all of that still works with no
+   JS, exactly as the inline title form it replaced did; only the block-
+   content area below requires JavaScript. #}
 {% extends "base.html" %}
 {% block title %}{{ document.title }}{% endblock %}
-{% block main_class %}main-shell{% endblock %}
+{# `notebook-main` is what reserves the 240px right margin for the fixed
+   sidebar rail (style.css's `main.notebook-main{margin-right:240px;}`) --
+   the 'stacked' layout renders no sidebar at all, so it drops that class
+   entirely rather than needing a zero-margin override rule. #}
+{% block main_class %}main-shell{% if sidebar_layout == 'sidebar' %} notebook-main{% endif %}{% endblock %}
+{% block extra_head %}
+{# Real <link>s, not the bundles' own runtime-injected <style> tags -- see
+   base.html's extra_head block comment and
+   static/notebook/vendor/NOTICE.md for why (CSP blocks unnonced inline
+   <style>, which is all a third-party vendored bundle can produce). #}
+<link rel="stylesheet" href="{{ static_url('notebook/vendor/editorjs.css') }}">
+<link rel="stylesheet" href="{{ static_url('notebook/vendor/header.css') }}">
+<link rel="stylesheet" href="{{ static_url('notebook/vendor/list.css') }}">
+<link rel="stylesheet" href="{{ static_url('notebook/vendor/table.css') }}">
+<link rel="stylesheet" href="{{ static_url('notebook/vendor/simpleimage.css') }}">
+<link rel="stylesheet" href="{{ static_url('notebook/vendor/inlinecode.css') }}">
+{# Notebook's own dark-theme + focus-outline patches on top of the vendor
+   CSS above -- loaded last so its selectors' higher specificity (not
+   source order) is what actually wins; see that file's own header
+   comment. #}
+<link rel="stylesheet" href="{{ static_url('notebook/editor-theme.css') }}">
+{# First-party Quote/Callout/Delimiter blocks (notebook_blocks.js) -- not
+   vendored, so not in the list above; own stylesheet for the same reason
+   editor-theme.css stays separate from the vendor/*.css files. #}
+<link rel="stylesheet" href="{{ static_url('notebook/notebook_blocks.css') }}">
+<link rel="stylesheet" href="{{ static_url('notebook/notebook_footnotes.css') }}">
+{# First-party Code block (notebook_code.js) -- Prism.js token colors are
+   plain CSS classes (.token.*), not scoped under a vendor/ stylesheet,
+   so this loads alongside the other first-party block CSS above. #}
+<link rel="stylesheet" href="{{ static_url('notebook/notebook_code.css') }}">
+{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 <h1 class="sr-only">{{ document.title }}</h1>
-{% call page_header_narrow(document.title, 'notebook') %}
+{# Settings > Notebook's "sidebar layout" preference (2026-10-04 direct
+   request, db.get_notebook_settings) decides the whole shape of this page
+   below -- two genuinely different template branches rather than one
+   maximally-conditional one, since they share almost no markup once
+   Outline/Endnotes/Bibliography/Glossary/Relationships move from five
+   sidebar tabs (today's original shape) into one reading-order column:
+
+   - 'stacked' (the default): no right sidebar at all, on either desktop
+     or mobile -- Outline before the body, then the body itself (Endnotes
+     already append inside #notebook-editor, see notebook_footnotes.js's
+     `footerFor`), then Bibliography, then Glossary, then Relationships,
+     all in that order, in the one scrollable main column. Same order on
+     mobile as desktop since there's only ever one column now; no
+     collapse toggle because there's nothing left to collapse.
+   - 'sidebar': today's original shape, unchanged, plus Endnotes folded in
+     as a new sidebar tab (so footnotes/bibliography really do move
+     "entirely" into the sidebar, per that setting's own description --
+     the bottom-of-page Bibliography card is dropped in this branch, not
+     duplicated). Confirmed directly (not guessed) that mobile in this
+     branch shows the editor body ONLY -- no stacked fallback, no drawer;
+     the sidebar is a deliberately desktop-only affordance here. See
+     style.css's `.notebook-sidebar`/`#notebook-sidebar-toggle` mobile
+     rule for the CSS half of that. #}
+{% call page_header_narrow(document.title, 'notebook', sidebar_toggle=(sidebar_layout == 'sidebar')) %}
     <span id="notebook-save-status" class="search-result-subtitle" data-state="idle"></span>
-    <form method="post" action="/notebook/{{ document.uid }}/delete" class="form-inline" data-confirm-sheet="Delete &ldquo;{{ document.title }}&rdquo;? This cannot be undone.">
-        <button type="submit" class="icon-btn danger" title="Delete document" aria-label="Delete document">{{ icon('trash', 'icon-sm') }}</button>
-    </form>
+    <a href="/notebook/{{ document.uid }}/properties" data-modal class="icon-btn" title="Edit document properties" aria-label="Edit document properties">{{ icon('edit', 'icon-sm') }}</a>
 {% endcall %}
 
-{# Deliberately a plain form, not data-cc-change -- this page's own header
-   (not a list region) is what needs to reflect a renamed title, and
-   async_crud.js's generic data-cc-change handler has no mechanism to
-   refresh the page it's sitting on, only a named region elsewhere (see
-   notebook_list.js) -- same "plain form, rely on the natural redirect"
-   choice label_detail.html's own archive/reset-layout forms make when
-   there's no live region to target. Works with no JS either way, per the
-   doc comment above. #}
-<form method="post" action="/notebook/{{ document.uid }}" class="form-inline notebook-title-form">
-    <label class="sr-only" for="notebook-title-input">Title</label>
-    <input id="notebook-title-input" type="text" name="title" value="{{ document.title }}" placeholder="Untitled" autocomplete="off">
-    <button type="submit" class="btn ghost">{{ icon('check-square', 'icon-sm') }} Save title</button>
-</form>
-
-<!-- Editor.js mount point (notebook_editor.js). Vendored dist files
-     (static/notebook/vendor/) -- no CDN at runtime, see STATE.md's
-     "Editor.js sourcing" decision. -->
-<div id="notebook-editor" class="card" data-uid="{{ document.uid }}" data-content-url="/notebook/{{ document.uid }}/content"></div>
-<noscript><p class="empty-state-text">Editing a document requires JavaScript. The title above can still be changed without it.</p></noscript>
+{% if sidebar_layout == 'sidebar' %}
+<!-- Right sidebar (2026-10-03 direct request, extended 2026-10-04 with an
+     Endnotes tab) -- reuses the shared sidebar shell the Browse page's
+     filing rail introduced (style.css's `.notebook-page-layout`/
+     `.notebook-sidebar` comment). `main-shell-body` (style.css's shared
+     flex-shell pattern) now lives on this whole row instead of directly
+     on #notebook-editor -- without it, main.main-shell's overflow:hidden
+     just clips this instead of scrolling it; the row is this page's one
+     scrollable region, same as #tasks-body/#contacts-body/#notes-body
+     elsewhere, so the Outline scrolls together with the document rather
+     than being clipped on its own. notebook/notebook_toc.js fills
+     #notebook-toc from the live Editor.js DOM (its own `.ce-header`
+     blocks) on load and on every change, the same "walk the rendered DOM,
+     re-run on change" approach notebook_footnotes.js's footer list
+     already uses. -->
+<div class="notebook-page-layout main-shell-body">
+    <div class="notebook-page-main">
+        <!-- Editor.js mount point (notebook_editor.js). Vendored dist files
+             (static/notebook/vendor/) -- no CDN at runtime, see STATE.md's
+             "Editor.js sourcing" decision. -->
+        <div id="notebook-editor" class="card" data-uid="{{ document.uid }}" data-title="{{ document.title }}" data-content-url="/notebook/{{ document.uid }}/content"></div>
+        <noscript><p class="empty-state-text">Editing a document requires JavaScript. The title above can still be changed without it.</p></noscript>
+        {# No bottom Bibliography card in this branch -- 2026-10-04: this
+           layout's whole point is that Bibliography (and Endnotes) live
+           ONLY in the sidebar now, not duplicated below the body the way
+           the original "both" placement (STATE.md) had it. #}
+    </div>
+    <aside class="notebook-sidebar">
+        {# Sidebar view switcher (2026-10-03, backlog item A -- "replace the
+           segmented control with a dropdown"): a custom icon+label dropdown,
+           not a native `<select>` (can't render each option's own icon,
+           which item D's icon swaps below need) and not the app's generic
+           `.multiselect` component (built around real form radio/checkbox
+           inputs + modal-clipped-context portaling -- this sidebar is a
+           plain, always-unclipped `position:fixed` rail, so none of that is
+           needed for what's just a client-side display toggle). JS in
+           static/notebook_sidebar.js. The "add" buttons next to it (item A's
+           "square plus-icon button, not the pencil/edit icon") replace what
+           used to be a per-panel Edit-icon header inside the Bibliography/
+           Glossary panels themselves -- only one is ever visible at a time,
+           matched to the dropdown's current selection. #}
+        <div class="notebook-sidebar-head">
+            <div class="notebook-sidebar-select" data-notebook-sidebar-select>
+                <button type="button" class="notebook-sidebar-select-trigger" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="notebook-sidebar-select-icon">{{ icon('list', 'icon-sm') }}</span>
+                    <span class="notebook-sidebar-select-label">Outline</span>
+                    <span class="notebook-sidebar-select-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
+                </button>
+                <div class="notebook-sidebar-select-panel" role="listbox" aria-label="Sidebar views">
+                    <button type="button" class="notebook-sidebar-select-option active" role="option" aria-selected="true" data-notebook-sidebar-tab="outline">{{ icon('list', 'icon-sm') }} Outline</button>
+                    {# Endnotes tab (2026-10-04, "sidebar" layout option) --
+                       the live footer notebook_footnotes.js already builds
+                       just gets appended into this panel's own slot div
+                       instead of inside #notebook-editor, see that file's
+                       `footerFor`. Same hash icon the old inline tool uses. #}
+                    <button type="button" class="notebook-sidebar-select-option" role="option" aria-selected="false" data-notebook-sidebar-tab="endnotes">{{ icon('hash', 'icon-sm') }} Endnotes</button>
+                    {# Closed-book icon (item D: "Bibliography sidebar/nav
+                       icon -> closed book icon" -- was icon-book-open). #}
+                    <button type="button" class="notebook-sidebar-select-option" role="option" aria-selected="false" data-notebook-sidebar-tab="bibliography">{{ icon('book', 'icon-sm') }} Bibliography</button>
+                    {# Glossary tab (2026-10-03 direct follow-up, "add a
+                       sidebar tab") -- same shape as the Bibliography tab,
+                       reading list_notebook_glossary_terms instead of
+                       list_notebook_citations. Align-left icon (item D: was
+                       icon-tag; that symbol didn't exist in the Lucide
+                       sprite yet, added alongside this change). #}
+                    <button type="button" class="notebook-sidebar-select-option" role="option" aria-selected="false" data-notebook-sidebar-tab="glossary">{{ icon('align-left', 'icon-sm') }} Glossary</button>
+                    {# Relationships tab (2026-10-03, roadmap-mvp-to-full-
+                       product-checklist's "Wikilinks & relationships"
+                       section) -- "Links to" is filled client-side from the
+                       live `.cdx-wikilink` markers (static/notebook/
+                       notebook_wikilinks.js, same "walk the rendered DOM,
+                       re-run on change" approach notebook_toc.js already
+                       uses for headings); "Linked from" is server-rendered
+                       below from db.list_notebook_backlinks, since another
+                       document's content isn't loaded into this page's DOM
+                       for a client-side walk to ever find it. #}
+                    <button type="button" class="notebook-sidebar-select-option" role="option" aria-selected="false" data-notebook-sidebar-tab="relationships">{{ icon('family-tree', 'icon-sm') }} Relationships</button>
+                </div>
+            </div>
+            <a href="/notebook/{{ document.uid }}/bibliography" data-modal class="icon-btn notebook-sidebar-add" data-notebook-sidebar-add="bibliography" hidden title="Add citation" aria-label="Add citation">{{ icon('plus', 'icon-sm') }}</a>
+            <a href="/notebook/{{ document.uid }}/glossary" data-modal class="icon-btn notebook-sidebar-add" data-notebook-sidebar-add="glossary" hidden title="Add glossary term" aria-label="Add glossary term">{{ icon('plus', 'icon-sm') }}</a>
+        </div>
+        <div class="notebook-sidebar-panel is-active" data-notebook-sidebar-panel="outline" role="tabpanel">
+            <nav id="notebook-toc" class="notebook-toc" aria-label="Table of contents">
+                <p class="notebook-toc-empty">No headings yet</p>
+            </nav>
+        </div>
+        {# Empty slot only -- notebook_footnotes.js's footerFor() builds and
+           appends the real #notebook-footnotes element here itself (same
+           element, same classes/behavior as the 'stacked' layout's, just a
+           different parent), so this file doesn't need to duplicate that
+           markup or its "hidden with nothing to show" rule. #}
+        <div class="notebook-sidebar-panel" data-notebook-sidebar-panel="endnotes" role="tabpanel">
+            <div id="notebook-footnotes-sidebar-slot"></div>
+        </div>
+        {# The Edit-icon header row that used to live inside this panel
+           moved up into the shared `.notebook-sidebar-head` row above as a
+           plus-icon "add" button (item A) -- `data-notebook-sidebar-add=
+           "bibliography"` there points at the same /bibliography modal. #}
+        <div class="notebook-sidebar-panel" data-notebook-sidebar-panel="bibliography" role="tabpanel">
+            {% if citations %}
+            <ul class="notebook-bibliography-sidebar-list">
+                {% for c in citations %}<li>{{ c.display }}</li>{% endfor %}
+            </ul>
+            {% else %}
+            <p class="notebook-toc-empty">No citations attached yet</p>
+            {% endif %}
+        </div>
+        <div class="notebook-sidebar-panel" data-notebook-sidebar-panel="glossary" role="tabpanel">
+            {% if glossary_terms %}
+            <ul class="notebook-bibliography-sidebar-list">
+                {% for t in glossary_terms %}<li><strong>{{ t.term }}</strong>{% if t.definition %} -- {{ t.definition }}{% endif %}</li>{% endfor %}
+            </ul>
+            {% else %}
+            <p class="notebook-toc-empty">No terms attached yet</p>
+            {% endif %}
+        </div>
+        {# Minimalist empty state (2026-10-03, item A: "Relationships tab's
+           empty-state placeholder should be more minimalist -- currently
+           too heavy/noisy"). Previously both "Links to" and "Linked from"
+           always rendered their own heading, even with nothing under it --
+           two headings plus two one-line placeholders is a lot of chrome
+           for "there's nothing here yet." Now each section only renders at
+           all once it actually has content (`#notebook-relationships-out-
+           section` starts hidden and is only revealed by notebook_
+           wikilinks.js's renderRelationships() once it finds a live
+           `.cdx-wikilink`; `#notebook-relationships-in-section` is hidden
+           server-side up front when `backlinks` is empty, since that part
+           never changes client-side), and a single shared `#notebook-
+           relationships-empty` line covers the "nothing in either" case --
+           reusing the existing `.notebook-toc-empty` look other panels
+           already use (STATE.md: "reuse the two existing [empty-state]
+           variants, don't invent a Notebook-specific one"), not a new
+           richer/noisier treatment. #}
+        <div class="notebook-sidebar-panel" data-notebook-sidebar-panel="relationships" role="tabpanel">
+            <div class="notebook-relationships-section" id="notebook-relationships-out-section" hidden>
+                <div class="notebook-sidebar-panel-header"><h3 class="notebook-relationships-heading">Links to</h3></div>
+                {# Filled by notebook_wikilinks.js on load and on every
+                   change -- see that file's own header comment. Starts
+                   empty server-side, same as #notebook-toc/#notebook-
+                   footnotes above, since it depends entirely on Editor.js
+                   having mounted. #}
+                <nav id="notebook-relationships-out" class="notebook-toc" aria-label="Links to other documents"></nav>
+            </div>
+            <div class="notebook-relationships-section" id="notebook-relationships-in-section"{% if not backlinks %} hidden{% endif %}>
+                <div class="notebook-sidebar-panel-header"><h3 class="notebook-relationships-heading">Linked from</h3></div>
+                <ul class="notebook-toc">
+                    {% for b in backlinks %}
+                    <li class="notebook-relationships-item">
+                        {{ icon(b.type_icon, 'cal-' ~ b.type_color ~ ' icon-sm') }}
+                        {# item G (session 8, 2026-10-03): carries this document as
+                           back_to/back_label so the target document's own back
+                           arrow returns here. #}
+                        <a href="/notebook/{{ b.uid }}?back_to={{ self_url|urlencode }}&amp;back_label={{ self_title|urlencode }}">{{ b.title }}</a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <p class="notebook-toc-empty" id="notebook-relationships-empty"{% if backlinks %} hidden{% endif %}>No relationships yet</p>
+        </div>
+    </aside>
+</div>
+{% else %}
+<!-- 'stacked' layout (2026-10-04 direct request, the default) -- no right
+     sidebar at all: Outline/Bibliography/Glossary/Relationships are
+     plain `.card` sections in the one main column instead of sidebar
+     tabs, in reading order (Outline before the body; Bibliography,
+     Glossary, Relationships after it, in that order -- Endnotes need no
+     section of their own here, they already append right after the body
+     inside #notebook-editor, see notebook_footnotes.js's `footerFor`).
+     Same markup/ids as the 'sidebar' branch's panels (`#notebook-toc`,
+     `#notebook-relationships-out`/`-in`/`-empty`) so notebook_toc.js/
+     notebook_wikilinks.js need zero layout-awareness of their own --
+     only their container's position in the page changed. -->
+<div class="notebook-page-layout notebook-page-stacked main-shell-body">
+    <div class="notebook-page-main">
+        <div class="card notebook-stacked-section">
+            <div class="cdx-footnote-footer__heading">Outline</div>
+            <nav id="notebook-toc" class="notebook-toc" aria-label="Table of contents">
+                <p class="notebook-toc-empty">No headings yet</p>
+            </nav>
+        </div>
+        <!-- Editor.js mount point (notebook_editor.js). Vendored dist files
+             (static/notebook/vendor/) -- no CDN at runtime, see STATE.md's
+             "Editor.js sourcing" decision. -->
+        <div id="notebook-editor" class="card" data-uid="{{ document.uid }}" data-title="{{ document.title }}" data-content-url="/notebook/{{ document.uid }}/content"></div>
+        <noscript><p class="empty-state-text">Editing a document requires JavaScript. The title above can still be changed without it.</p></noscript>
+        {# Bibliography (2026-10-03, STATE.md's "document apparatus"
+           placement, now the only copy -- the 'sidebar' layout's own
+           branch above is what keeps a second, sidebar-tab copy for
+           itself instead). Plain server-rendered Jinja, not part of
+           content_json/Editor.js's block model. Omitted entirely with
+           nothing attached, same "don't render an empty section" rule
+           notebook_footnotes.js's own footer follows. #}
+        {% if citations %}
+        <div class="card notebook-bibliography-footer notebook-stacked-section">
+            <div class="cdx-footnote-footer__heading-row">
+                <div class="cdx-footnote-footer__heading">Bibliography</div>
+                <a href="/notebook/{{ document.uid }}/bibliography" data-modal class="icon-btn" title="Add citation" aria-label="Add citation">{{ icon('plus', 'icon-sm') }}</a>
+            </div>
+            <ol class="notebook-bibliography-list">
+                {% for c in citations %}<li>{{ c.display }}</li>{% endfor %}
+            </ol>
+        </div>
+        {% endif %}
+        <div class="card notebook-stacked-section">
+            <div class="cdx-footnote-footer__heading-row">
+                <div class="cdx-footnote-footer__heading">Glossary</div>
+                <a href="/notebook/{{ document.uid }}/glossary" data-modal class="icon-btn" title="Add glossary term" aria-label="Add glossary term">{{ icon('plus', 'icon-sm') }}</a>
+            </div>
+            {% if glossary_terms %}
+            <ul class="notebook-bibliography-sidebar-list">
+                {% for t in glossary_terms %}<li><strong>{{ t.term }}</strong>{% if t.definition %} -- {{ t.definition }}{% endif %}</li>{% endfor %}
+            </ul>
+            {% else %}
+            <p class="notebook-toc-empty">No terms attached yet</p>
+            {% endif %}
+        </div>
+        <div class="card notebook-stacked-section">
+            <div class="cdx-footnote-footer__heading">Relationships</div>
+            <div class="notebook-relationships-section" id="notebook-relationships-out-section" hidden>
+                <div class="notebook-sidebar-panel-header"><h3 class="notebook-relationships-heading">Links to</h3></div>
+                <nav id="notebook-relationships-out" class="notebook-toc" aria-label="Links to other documents"></nav>
+            </div>
+            <div class="notebook-relationships-section" id="notebook-relationships-in-section"{% if not backlinks %} hidden{% endif %}>
+                <div class="notebook-sidebar-panel-header"><h3 class="notebook-relationships-heading">Linked from</h3></div>
+                <ul class="notebook-toc">
+                    {% for b in backlinks %}
+                    <li class="notebook-relationships-item">
+                        {{ icon(b.type_icon, 'cal-' ~ b.type_color ~ ' icon-sm') }}
+                        <a href="/notebook/{{ b.uid }}?back_to={{ self_url|urlencode }}&amp;back_label={{ self_title|urlencode }}">{{ b.title }}</a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <p class="notebook-toc-empty" id="notebook-relationships-empty"{% if backlinks %} hidden{% endif %}>No relationships yet</p>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 {% block extra_scripts %}
 <script defer src="{{ static_url('notebook/vendor/editorjs.umd.js') }}"></script>
 <script defer src="{{ static_url('notebook/vendor/header.umd.js') }}"></script>
 <script defer src="{{ static_url('notebook/vendor/list.umd.js') }}"></script>
-<script defer src="{{ static_url('notebook/vendor/quote.umd.js') }}"></script>
-<script defer src="{{ static_url('notebook/vendor/code.umd.js') }}"></script>
+<script defer src="{{ static_url('notebook/vendor/table.umd.js') }}"></script>
+<script defer src="{{ static_url('notebook/vendor/dragdrop.umd.js') }}"></script>
+<script defer src="{{ static_url('notebook/vendor/simpleimage.umd.js') }}"></script>
+<script defer src="{{ static_url('notebook/vendor/inlinecode.umd.js') }}"></script>
+<script defer src="{{ static_url('notebook/vendor/undo.umd.js') }}"></script>
+<script defer src="{{ static_url('notebook/vendor/prism.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_blocks.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_code.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_footnotes.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_toc.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_wikilinks.js') }}"></script>
 <script defer src="{{ static_url('notebook/notebook_editor.js') }}"></script>
+<script defer src="{{ static_url('notebook_sidebar.js') }}"></script>
 {% endblock %}

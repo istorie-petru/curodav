@@ -1,3 +1,5 @@
+{% from "_inputs.html" import number_input, textarea_input %}
+{% from "_form_rows.html" import title_row, title_date_row, recurrence_row %}
 {# Shared task create/edit field grid (2026-08-10) -- the exact inner
    content of task_form.html's #task-form, extracted so the standalone
    new/edit forms AND the merged dashboard quick-add modal
@@ -18,10 +20,6 @@
    see src/derived_state.py's module docstring. #}
     {% set ms_form_id = 'task-form' %}
     <div class="field-grid">
-        <div class="field field-wide">
-            <label>Title</label>
-            <input type="text" name="title" required value="{{ task.title if task else (prefill_title or '') }}">
-        </div>
         {% from "_date_time_fields.html" import date_field with context %}
         <!-- Start + Due merged into one field (2026-09-21 direct request:
              "always have a merged due and start date", "prioritise
@@ -35,6 +33,7 @@
              here; each keeps its own 'date' mode picker). 2026-08-08
              direct feedback (still true): Start date defaults to today
              on a brand-new task, same as before this merge. -->
+        {% call title_date_row(task.title if task else (prefill_title or '')) %}
         <div class="field field-wide task-start-due-field">
             <label>Start &amp; due date</label>
             <div class="task-start-due-row">
@@ -48,6 +47,7 @@
                 </div>
             </div>
         </div>
+        {% endcall %}
         <!-- Status -- 2026-08-08 direct feedback ("rework the drop down
              menus for priority, status, Recurrence to look the same as
              ... range, view, labels") -- single-mode
@@ -58,14 +58,9 @@
              Importance/Urgency used to have their own fields right here
              (1.1's two independent 1..3 axes); that whole feature is now
              removed, see this partial's own header comment. -->
-        {% set ms_name = 'status' %}
-        {% set ms_mode = 'single' %}
-        {% set ms_label = 'Status' %}
-        {% set ms_items = status_items %}
-        {% set ms_selected = task.status if task else '' %}
-        {% set ms_wide = false %}
-        {% set ms_form_id = 'task-form' %}
-        {% include "_widget_list_multiselect.html" %}
+        {% set st_name = 'status' %}{% set st_label = 'Status' %}{% set st_items = status_items %}
+        {% set st_selected = task.status if task else '' %}{% set st_form_id = 'task-form' %}
+        {% include "_status_type_row.html" %}
         <!-- Phase 1 (label-space rework, 2026-08-06) removed the List
              picker here -- task_lists is gone, every task lives in one
              universal pool now (see db.py's Phase 1 comments). Organizing
@@ -86,18 +81,10 @@
         {% set pf_tags = task.tags if task else (prefill_tags or []) %}
         {% set pf_form_id = 'task-form' %}
         {% include "_project_field.html" %}
-        <div class="field">
-            {% set ms_name = 'tags_labels' %}
-            {% set ms_icon = 'tag' %}
-            {% set ms_label = 'Labels' %}
-            {# Projects have their own dropdown above (_project_field.html). #}
-            {% set ms_items = tag_name_items | rejectattr('uid', 'in', project_names | default([])) | list %}
-            {% set ms_selected = task.tags if task else (prefill_tags or []) %}
-            {% set ms_mode = 'select' %}
-            {% set ms_allow_new = true %}
-            {% set ms_pill = true %}
-            {% include "_widget_list_multiselect.html" %}
-        </div>
+        {% set labels_selected = task.tags if task else (prefill_tags or []) %}
+        {% include "_labels_row.html" %}
+        {% set contacts_object_type = 'task' %}{% set contacts_object_id = task.uid if task else '' %}
+        {% include "_contacts_row.html" %}
         <!-- 2026-08-08 follow-up ("both tasks and event should have
              recurrence") -- back after a brief removal the same day
              ("remove recurrence-input... add a way to add subtasks in
@@ -112,10 +99,7 @@
              own header comment. routers/tasks.py's create_task/
              update_task still just pass this straight through unparsed,
              completely unchanged. -->
-        <div class="field">
-            <label>Recurrence</label>
-            <input type="text" name="recurrence" class="recurrence-input" value="{{ task.recurrence if task else '' }}">
-        </div>
+        {{ recurrence_row(task.recurrence if task else '') }}
         <!-- 2026-08-29 (STATE.md backlog item 3, direct request): the same
              non-working-day policy _event_form_fields.html has had since
              1.6 -- holiday calendar + exclude Saturday/Sunday -- extended
@@ -168,7 +152,7 @@
             <label>Daily target</label>
             <div class="stepper">
                 <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease daily target">&minus;</button>
-                <input type="number" name="target_per_day" class="stepper-input" min="1" step="1" value="{{ task.target_per_day|int if task and task.target_per_day else 1 }}">
+                {{ number_input({'name': 'target_per_day', 'class': 'stepper-input', 'min': '1', 'step': '1', 'value': (task.target_per_day|int if task and task.target_per_day else 1)}) }}
                 <button type="button" class="stepper-btn stepper-inc" aria-label="Increase daily target">+</button>
             </div>
         </div>
@@ -180,6 +164,6 @@
              behind all of them instead of pushing them below the fold. -->
         <div class="field field-wide">
             <label>Description</label>
-            <textarea name="description" rows="3">{{ task.description if task else '' }}</textarea>
+            {{ textarea_input({'name': 'description', 'rows': '3'}, task.description if task else '') }}
         </div>
     </div>

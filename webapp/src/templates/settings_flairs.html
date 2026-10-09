@@ -1,3 +1,4 @@
+{% from "_inputs.html" import file_input %}
 {% extends "base.html" %}
 {% block title %}Flairs - Settings{% endblock %}
 {% block content %}
@@ -75,8 +76,8 @@
     <p class="text-muted">A photo's filename (without the extension) needs to be one of the ids above &mdash; <code>basketball.jpg</code>, <code>july.png</code>, and so on. Uploading a photo for an id that already has one replaces it immediately. Drop a .zip or several photos below, or pick a whole folder; anything a .zip contains that isn't a real, recognizably-named photo (an unsupported extension, a name that isn't lowercase-kebab-case, a non-image file) is skipped and listed in the result, not silently dropped &mdash; an id this list doesn't know about yet still saves fine, in case you're staging one ahead of time.</p>
     <form id="flairs-upload-form" method="post" action="/settings/flairs/upload" enctype="multipart/form-data" class="dm-import-form">
         <label class="dm-dropzone" data-dm-dropzone>
-            <input type="file" name="zip_file" accept=".zip,application/zip" class="sr-only" data-dm-file="drop-zip">
-            <input type="file" name="files" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple class="sr-only" data-dm-file="drop-multi">
+            {{ file_input({'name': 'zip_file', 'accept': '.zip,application/zip', 'class': 'sr-only', 'data-dm-file': 'drop-zip'}) }}
+            {{ file_input({'name': 'files', 'accept': '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp', 'multiple': true, 'class': 'sr-only', 'data-dm-file': 'drop-multi'}) }}
             <span class="dm-dropzone-icon" aria-hidden="true">{{ icon('upload') }}</span>
             <span class="dm-dropzone-title" data-dm-dropzone-title>Drop a .zip or photos here</span>
             <span class="dm-dropzone-formats">.zip &middot; .jpg / .jpeg / .png / .webp (select or drop several at once)</span>
@@ -99,11 +100,11 @@
                    this same "files" field ingest_uploaded_photos
                    already smart-filters by basename regardless of
                    depth. #}
-                <input type="file" name="files" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple webkitdirectory class="sr-only" data-dm-file="picker-folder">
+                {{ file_input({'name': 'files', 'accept': '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp', 'multiple': true, 'webkitdirectory': true, 'class': 'sr-only', 'data-dm-file': 'picker-folder'}) }}
             </label>
             <label class="btn ghost btn-sm" style="cursor:pointer;">
                 {{ icon('image', 'icon-sm') }} Choose photos&hellip;
-                <input type="file" name="files" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple class="sr-only" data-dm-file="picker-multi">
+                {{ file_input({'name': 'files', 'accept': '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp', 'multiple': true, 'class': 'sr-only', 'data-dm-file': 'picker-multi'}) }}
             </label>
         </div>
     </form>

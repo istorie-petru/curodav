@@ -1,42 +1,8 @@
-"""Single-user authentication (2026-08-16, src/auth.py + routers/auth.py).
-2026-08-29: forced first-run /setup for production deploys, CSRF
-middleware, and login rate limiting -- all added to this same file.
+"""Single-user login: credentials, signed sessions, middleware, CSRF, rate limiting and first-run setup.
 
-The app runs with NO login by default (CC_DEPLOY_MODE="local", the
-default); configure CC_AUTH_USERNAME + CC_AUTH_PASSWORD and every request
-except /login, /setup and /static requires a signed session cookie.
-Coverage, following this suite's usual conventions:
-
-  - config: load_settings maps the CC_AUTH_*/CC_DEPLOY_MODE env vars onto
-    Settings.
-  - src/auth.py's pure functions: auth_enabled, verify_credentials
-    (constant-time, disabled install), and the signed-cookie round trip
-    (valid, tampered, wrong-secret, malformed, expired).
-  - src/auth.py's password hashing (hash_password/_verify_password_hash)
-    and persisted-credential helpers (get/set/has_persisted_credentials),
-    plus setup_required's deploy_mode gating.
-  - src/auth.py's AuthMiddleware over a real (minimal) FastAPI app via
-    TestClient -- the middleware is the one layer this suite can't reach
-    through router-function calls, so it gets its own tiny ASGI app with
-    settings pointed at a test secret (no DB needed). Covers: 302-to-login
-    for a signed-out page request, 401 JSON for /api/fetch requests, the
-    public-path exemptions, a valid cookie passing through, and the forced
-    /setup redirect for an unconfigured production install.
-  - src/auth.py's CSRFMiddleware over the same kind of tiny app: same-origin
-    POST passes, cross-origin POST is rejected, GET is never checked, and a
-    request with no session cookie is never checked either.
-  - src/auth.py's login rate limiting (login_rate_limited/
-    record_failed_login/clear_login_attempts): a sliding window, keyed by
-    client IP.
-  - routers/auth.py's login/logout/setup routes via direct calls (the
-    suite's router-function-call convention): disabled-install redirect,
-    renders the form, already-logged-in redirect, successful login sets
-    the cookie and honors a safe `next`, wrong credentials get a 401 +
-    error message, rate-limited attempts get a 429, logout clears the
-    cookie, `next` open-redirect safety, and the /setup flow (rendered
-    only when required, validates the chosen password, persists it
-    hashed, logs the browser in, and refuses to re-run once configured).
-"""
+Pure functions are tested directly, the middleware through a minimal
+FastAPI app, and the login, logout and setup routes by calling them with
+a synthetic Request."""
 
 from __future__ import annotations
 
@@ -56,6 +22,12 @@ from src import auth, db
 from src.config import Settings
 from src.routers import auth as auth_router
 from src.routers import settings as settings_router
+
+
+@pytest.fixture(autouse=True)
+def _isolated_tempdir(tmp_path, monkeypatch):
+    """_settings() builds its paths under the temp dir; point that at tmp_path."""
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
 
 
 @pytest.fixture(autouse=True)
@@ -295,20 +267,9 @@ class TestAuthEnabled:
     def test_no_settings_disables(self):
         assert not auth.auth_enabled(None)
 
-    def test_local_deploy_mode_honors_persisted_credentials(self, conn):
-        # 2026-08-30: local mode (the default) used to ignore the DB
-        # entirely here -- only the env-var pair could turn login on for a
-        # local/dev install. Changed so Settings > General's password form
-        # (routers/settings.py::change_login_password) actually takes
-        # effect locally too, not just in production -- see auth_enabled's
-        # own docstring for the tradeoff.
-        settings = _settings(enabled=False)
-        assert not auth.auth_enabled(settings, conn)
-        auth.set_persisted_credentials(conn, "alice", "s3cret123")
-        assert auth.auth_enabled(settings, conn)
-
-    def test_production_deploy_mode_honors_persisted_credentials(self, conn):
-        settings = _settings(enabled=False, deploy_mode="production")
+    @pytest.mark.parametrize("deploy_mode", ["local", "production"])
+    def test_persisted_credentials_enable_login_in_every_deploy_mode(self, conn, deploy_mode):
+        settings = _settings(enabled=False, deploy_mode=deploy_mode)
         assert not auth.auth_enabled(settings, conn)
         auth.set_persisted_credentials(conn, "alice", "s3cret123")
         assert auth.auth_enabled(settings, conn)

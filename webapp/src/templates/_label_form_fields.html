@@ -1,3 +1,4 @@
+{% from "_inputs.html" import text_input, textarea_input %}
 {# Shared label create/edit field grid (2026-09-14) -- the exact inner
    content of label_form_modal.html's #label-form, extracted so the
    standalone New Label/Edit Label modal AND the merged dashboard
@@ -23,7 +24,7 @@
 <div class="field-grid label-form-grid" data-page="{{ 'dashboard' if (l and l.has_dashboard) else 'sections' }}">
     <div class="field field-wide">
         <label>Name</label>
-        <input type="text" name="new_name" value="{{ l.name if l else '' }}" required {% if not l %}autofocus{% endif %}>
+        {{ text_input({'name': 'new_name', 'value': l.name if l else '', 'required': true, 'autofocus': (true if (not l) else false)}) }}
     </div>
     {# 2026-09-26 (Peter): colour and icon are one "Look" dropdown
        (_look_picker.html) here, in the edit modal and quick add alike --
@@ -85,7 +86,8 @@
     {% set ms_items = [
         {'uid': '1', 'field': 'agenda_widget', 'name': 'Agenda', 'checked': (not l or l.agenda_widget)},
         {'uid': '1', 'field': 'tasks_widget', 'name': 'Tasks', 'checked': (not l or l.tasks_widget)},
-        {'uid': '1', 'field': 'contacts_widget', 'name': 'Contacts', 'checked': (not l or l.contacts_widget)}] %}
+        {'uid': '1', 'field': 'contacts_widget', 'name': 'Contacts', 'checked': (not l or l.contacts_widget)},
+        {'uid': '1', 'field': 'notebook_widget', 'name': 'Notebook', 'checked': (not l or l.notebook_widget)}] %}
     {% set ms_wide = false %}
     {% set ms_extra_class = 'label-sections-field' %}
     {% include "_widget_list_multiselect.html" %}
@@ -102,6 +104,6 @@
        bottom, like every other form. #}
     <div class="field field-wide">
         <label for="label-description-input">Description</label>
-        <textarea id="label-description-input" name="description" rows="2" maxlength="500">{{ l.description or '' if l else '' }}</textarea>
+        {{ textarea_input({'id': 'label-description-input', 'name': 'description', 'rows': '2', 'maxlength': '500'}, l.description or '' if l else '') }}
     </div>
 </div>

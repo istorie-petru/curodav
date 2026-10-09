@@ -1,0 +1,19 @@
+{# The named input components (frontend-conventions.md, Inputs). A template
+   writes `{{ text_input({'name': 'title', 'required': true}) }}` instead of a
+   bare <input>. `attrs` is a dict of HTML attributes in output order: true
+   writes a bare attribute, false or none leaves it out. Styling and any
+   future behaviour for a control type lives here, in one place. #}
+{% macro _attrs(attrs) -%}
+{%- for k, v in attrs.items() -%}
+{%- if v is sameas true %} {{ k }}{% elif v is not none and v is not sameas false %} {{ k }}="{{ v }}"{% endif -%}
+{%- endfor -%}
+{%- endmacro %}
+
+{% macro text_input(attrs, type='text') -%}<input type="{{ type }}"{{ _attrs(attrs) }}>{%- endmacro %}
+{% macro number_input(attrs) -%}<input type="number"{{ _attrs(attrs) }}>{%- endmacro %}
+{% macro password_input(attrs) -%}<input type="password"{{ _attrs(attrs) }}>{%- endmacro %}
+{% macro file_input(attrs) -%}<input type="file"{{ _attrs(attrs) }}>{%- endmacro %}
+{% macro checkbox_input(attrs) -%}<input type="checkbox"{{ _attrs(attrs) }}>{%- endmacro %}
+{% macro radio_input(attrs) -%}<input type="radio"{{ _attrs(attrs) }}>{%- endmacro %}
+{% macro textarea_input(attrs, content='') -%}<textarea{{ _attrs(attrs) }}>{{ content }}</textarea>{%- endmacro %}
+{% macro select_input(attrs) -%}<select{{ _attrs(attrs) }}>{{ caller() }}</select>{%- endmacro %}

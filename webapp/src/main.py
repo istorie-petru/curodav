@@ -375,7 +375,20 @@ def create_app() -> FastAPI:
     app.include_router(spaces.router)
     app.include_router(projects.router)
     app.include_router(habits.router)
+    # 2026-10-03: citations_router must be registered BEFORE notebook.router
+    # -- its literal "/notebook/citations" path would otherwise be caught
+    # by notebook.router's "/notebook/{uid}" catch-all first (FastAPI
+    # matches routes in registration order, not by specificity), making
+    # GET /notebook/citations 404-redirect as if "citations" were a
+    # document uid. glossary_router has the same literal "/notebook/
+    # glossary" path, so it needs the same ordering.
+    app.include_router(notebook.citations_router)
+    app.include_router(notebook.glossary_router)
     app.include_router(notebook.router)
+    # 2026-10-02: Settings > Notebook's frontmatter field schema, same
+    # "feature's own router hosts its /settings/* routes" precedent as
+    # Groups/Projects above.
+    app.include_router(notebook.field_settings_router)
     app.include_router(push.router)
     app.include_router(banners.router)
     app.include_router(flairs_router.router)

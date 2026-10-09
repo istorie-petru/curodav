@@ -45,6 +45,6 @@
    `style=` attribute. #}
 {% macro empty_state_row(colspan, message, css_class='text-muted') %}
 <tr id="empty-state-row">
-    <td colspan="{{ colspan }}" class="{{ css_class }}">{{ message|safe }}</td>
+    <td colspan="{{ colspan }}">{% from "_empty_state.html" import empty_state %}{{ empty_state(message|safe, size='compact') }}</td>
 </tr>
 {% endmacro %}

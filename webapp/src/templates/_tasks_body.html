@@ -1,3 +1,4 @@
+{% from "_empty_state.html" import empty_state %}
 {# Tasks Table view body -- shared single source of truth between the full
    page (tasks_list.html, which includes this) and the async-CRUD region
    fragment (GET /tasks/regions?region=table, features/async-crud.md).
@@ -115,19 +116,14 @@
 {% endif %}
 
 {% else %}
-<div class="empty-state empty-state-rich">
-    <div class="empty-state-icon">{{ icon('check-square') }}</div>
-    {% if q or active_date_filter != 'all' %}
-    <div class="empty-state-title">No tasks match this filter</div>
-    <div class="empty-state-text">Try a different date range, or clear the search.</div>
-    {% elif is_inbox %}
-    <div class="empty-state-title">Nothing to triage</div>
-    <div class="empty-state-text">Tasks captured with no project-linked list show up here. Use the bulk "Move to list" action to file them.</div>
-    {% else %}
-    <div class="empty-state-title">No tasks yet</div>
-    <div class="empty-state-text">Add your first task to get started.</div>
-    <a class="btn primary" href="/tasks/new" data-modal data-fab>{{ icon('plus') }} New task</a>
-    {% endif %}
-</div>
+{% if q or active_date_filter != 'all' %}
+{{ empty_state('No tasks match this filter', 'check-square', 'Try a different date range, or clear the search.') }}
+{% elif is_inbox %}
+{{ empty_state('Nothing to triage', 'check-square', 'Tasks captured with no project-linked list show up here. Use the bulk "Move to list" action to file them.') }}
+{% else %}
+{% call empty_state('No tasks yet', 'check-square', 'Add your first task to get started.') %}
+<a class="btn primary" href="/tasks/new" data-modal data-fab>{{ icon('plus') }} New task</a>
+{% endcall %}
+{% endif %}
 {% endif %}
 </div>

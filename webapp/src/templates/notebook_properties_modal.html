@@ -1,0 +1,132 @@
+{% from "_inputs.html" import text_input %}
+{# Notebook's document-properties modal (2026-10-02, direct request) --
+   replaces the Editor page's old inline title textbox + bare header
+   delete button with the app's standard "edit a record via modal"
+   pattern (contact_form.html/_modal_footer.html/_widget_list_
+   multiselect.html, all reused as-is). Reachable both as a real page
+   (GET /notebook/{uid}/properties, works with no JS) and as an in-place
+   modal (data-modal from notebook_document.html's header), same dual-mode
+   contract every other form template in this app follows.
+
+   Covers title, label(s) (object_labels, object_type='notebook' --
+   STATE.md's Groups/Labels mechanism, reused with no new plumbing), and
+   note_type (still a free-text column at the DB level, MVP scope -- see
+   db.py's notebook_documents schema comment; the picker below offers
+   STATE.md's starter canonical list as *suggestions*, not an enforced
+   set, via the same ms_allow_new "pick one or type your own" mechanism
+   Settings > Holidays' Calendar field already uses).
+
+   Delete moved here from the page header (routers/notebook.py's
+   delete_document route itself is unchanged, just relocated to this
+   modal's footer) since the header's icon slot now opens this modal
+   instead.
+
+   Custom properties (2026-10-02, curodav-notes/documentation/plans/
+   architecture-notes-module-2026-09-29.md §4 + STATE.md) -- arbitrary
+   user-named key/value rows (institution, author(s), DOI, date, ...),
+   added below the title/type/labels grid. Same repeatable-row idiom
+   contact_form.html's phone/email rows established (clone a <template>
+   row client-side, submit the whole ordered list as parallel form arrays
+   on this same Save button), but not that script/those CSS classes --
+   its own small static/notebook_properties_rows.js and neutral
+   .notebook-property-row classes instead of borrowing contacts' markup.
+   The key cell (2026-10-02, direct request: "use a drop down similar to
+   the labels one") is _notebook_property_key_picker.html's per-row
+   dropdown -- every key already used on any document, plus free-text for
+   a new one -- not a plain text input; see that macro's own header
+   comment for the full picker/proxy mechanism. The value cell stays a
+   plain text input (property values are genuinely free text, not a
+   reusable vocabulary the way keys are). #}
+{% extends "base.html" %}
+{% from "_notebook_property_key_picker.html" import notebook_property_key_picker %}
+{% from "_modal_header_back.html" import modal_header_back %}
+{% block title %}Document properties{% endblock %}
+{% block content %}
+<div id="modal-target" class="modal-stable-height">
+<div class="modal-header">
+{{ modal_header_back('/notebook/' ~ document.uid, document.title) }}
+<h1>Document properties</h1>
+</div>
+<div class="modal-body">
+<div class="card">
+<form method="post" id="notebook-properties-form" action="/notebook/{{ document.uid }}">
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label>Title</label>
+            {{ text_input({'name': 'title', 'required': true, 'value': (document.title)}) }}
+        </div>
+        <div class="field">
+            {% set ms_form_id = 'notebook-properties-form' %}
+            {% set ms_name = 'note_type' %}
+            {% set ms_label = 'Type' %}
+            {% set ms_items = note_type_items %}
+            {% set ms_selected = document.note_type %}
+            {% set ms_mode = 'single' %}
+            {% set ms_allow_new = true %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+        <div class="field">
+            {% set ms_form_id = 'notebook-properties-form' %}
+            {% set ms_name = 'tags_labels' %}
+            {% set ms_label = 'Labels' %}
+            {% set ms_items = tag_name_items %}
+            {% set ms_selected = document.tags %}
+            {% set ms_mode = 'select' %}
+            {% set ms_allow_new = true %}
+            {% set ms_pill = true %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+        {# `data-notebook-properties-scope`, not the generic
+           `data-repeatable-rows-scope` contacts' rows use -- both scripts
+           query DOMContentLoaded-wide for their own scope attribute and
+           guard re-wiring via a shared `data-cc-wired` marker; sharing the
+           *same* attribute here would let whichever script's listener
+           registers first "claim" this container, and contacts' own
+           remove handler looks for `.closest(".contact-multi-row")`,
+           which would silently never match `.notebook-property-row` --
+           a real collision, not just redundant wiring. A feature-scoped
+           attribute name keeps the two scripts from ever touching the
+           same container. #}
+        <div class="field field-wide" data-notebook-properties-scope>
+            <div class="field-label-row">
+                <label>Properties</label>
+                <button type="button" class="icon-btn" data-repeatable-add="notebook-property-rows" data-repeatable-template="notebook-property-row-template" title="Add property" aria-label="Add property">{{ icon('plus', 'icon-sm') }}</button>
+            </div>
+            <div id="notebook-property-rows" class="notebook-property-rows">
+                {% for p in document.properties %}
+                <div class="notebook-property-row">
+                    {{ notebook_property_key_picker(property_key_items, p.key, loop.index, 'notebook-properties-form') }}
+                    {{ text_input({'name': 'property_value', 'value': (p.value)}) }}
+                    <button type="button" class="checklist-delete" data-repeatable-remove title="Remove property" aria-label="Remove property">{{ icon('x') }}</button>
+                </div>
+                {% endfor %}
+            </div>
+            <template id="notebook-property-row-template">
+                <div class="notebook-property-row">
+                    {{ notebook_property_key_picker(property_key_items, '', 'tmpl', 'notebook-properties-form') }}
+                    {{ text_input({'name': 'property_value', 'value': ''}) }}
+                    <button type="button" class="checklist-delete" data-repeatable-remove title="Remove property" aria-label="Remove property">{{ icon('x') }}</button>
+                </div>
+            </template>
+        </div>
+    </div>
+</form>
+</div>
+</div>
+{% set footer_back_url = '/notebook/' ~ document.uid %}
+{% set footer_back_mode = 'cancel' %}
+{% set footer_back_label = 'Cancel' %}
+{% set footer_delete_url = '/notebook/' ~ document.uid ~ '/delete' %}
+{% set footer_delete_mode = 'confirm' %}
+{# Plain straight quotes, not &ldquo;/&rdquo; entities -- those are only
+   safe as literal template HTML (the page header's old inline delete
+   button used them that way); inside a `{% set %}` string assigned
+   through _modal_footer.html's `{{ footer_delete_label }}`, Jinja's
+   autoescape would double-escape the entity's `&` into `&amp;ldquo;`. #}
+{% set footer_delete_label = 'Delete "' ~ document.title ~ '"? This cannot be undone.' %}
+{% set footer_primary_form = 'notebook-properties-form' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

@@ -4,6 +4,27 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.4.0]
+
+- Shared interface components: round radio and square checkbox, named input
+  components for every form control, one empty-state component, one pill
+  look, a shared drag-and-drop upload zone, and icon-only header buttons
+  with tooltips. Placeholder text is gone from forms (search boxes use a
+  magnifier icon instead); the contact form's address parts have labels.
+- Dropdowns: search turns on automatically above seven items, and a long
+  dropdown that can add items merges search and add-new into one box.
+- Modals keep a back-stack: Escape and Cancel walk back through the modals
+  you opened.
+- Contacts: a new contact is a hidden buffer contact from the moment the
+  form opens, so its photo can be uploaded and cropped before saving; the
+  photo can be re-cropped later from the upload modal. Tasks and events have
+  a Contacts field, and a contact lists the tasks and events it is involved
+  in.
+- Event and accent colors are checked against both themes for readability;
+  dark-theme fills are lighter, with dark text.
+- Test suite reorganized (dashboard, auth and offline-sync areas) with new
+  core tests for the interface rules.
+
 ## [3.3.0]
 
 - Added Notebook, a new block-based note-taking module (Editor.js, vendored

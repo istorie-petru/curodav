@@ -1,3 +1,4 @@
+{% from "_inputs.html" import radio_input, text_input %}
 {% extends "base.html" %}
 {% block title %}{{ form_title }}{% endblock %}
 {% block content %}
@@ -36,13 +37,13 @@
         <div class="field">
             <label>Type</label>
             <div class="segmented" role="radiogroup" aria-label="Type">
-                <label class="seg-btn"><input type="radio" name="kind" value="sleep" class="seg-radio" {% if kind == 'sleep' %}checked{% endif %}> {{ icon('moon', 'icon-sm') }} Sleep</label>
-                <label class="seg-btn"><input type="radio" name="kind" value="leisure" class="seg-radio" {% if kind == 'leisure' %}checked{% endif %}> {{ icon('sun', 'icon-sm') }} Leisure</label>
+                <label class="seg-btn">{{ radio_input({'name': 'kind', 'value': 'sleep', 'class': 'seg-radio', 'checked': (true if (kind == 'sleep') else false)}) }} {{ icon('moon', 'icon-sm') }} Sleep</label>
+                <label class="seg-btn">{{ radio_input({'name': 'kind', 'value': 'leisure', 'class': 'seg-radio', 'checked': (true if (kind == 'leisure') else false)}) }} {{ icon('sun', 'icon-sm') }} Leisure</label>
             </div>
         </div>
         <div class="field">
             <label>Title</label>
-            <input type="text" name="label" value="{{ b.label if b else '' }}" placeholder="(optional)">
+            {{ text_input({'name': 'label', 'value': (b.label if b else '')}) }}
         </div>
         {# 2026-09-26: two plain time fields (typed or picked). #}
         {% from "_date_time_fields.html" import time_field with context %}

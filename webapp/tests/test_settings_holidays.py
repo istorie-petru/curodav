@@ -19,6 +19,8 @@ routes on is itself gone now. See plans/STATE.md's removal entry.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from starlette.requests import Request
 
@@ -187,20 +189,20 @@ class TestHolidayEditModalYearAgnostic:
         resp = settings_router.new_holiday_modal(_request("/settings/holidays/new"), conn=conn)
         body = resp.body.decode()
         assert 'name="year_agnostic"' in body
-        assert 'id="year_agnostic" name="year_agnostic" value="1" checked' not in body
+        assert not re.search(r'<input[^>]*id="year_agnostic"[^>]* checked', body)
 
     def test_edit_modal_prefills_placeholder_year_and_checks_the_box(self, conn):
         db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "National", "label": "Christmas", "date_from": "--12-25", "date_to": "--12-25"})
         resp = settings_router.edit_holiday_modal("h1", _request("/settings/holidays/h1/edit"), conn=conn)
         body = resp.body.decode()
         assert 'value="2000-12-25"' in body
-        assert 'id="year_agnostic" name="year_agnostic" value="1" checked' in body
+        assert re.search(r'<input[^>]*id="year_agnostic"[^>]* checked', body)
 
     def test_edit_modal_leaves_the_checkbox_unchecked_for_an_ordinary_holiday(self, conn):
         db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "Default", "label": "Break", "date_from": "2026-09-14", "date_to": "2026-09-16"})
         resp = settings_router.edit_holiday_modal("h1", _request("/settings/holidays/h1/edit"), conn=conn)
         body = resp.body.decode()
-        assert 'id="year_agnostic" name="year_agnostic" value="1" checked' not in body
+        assert not re.search(r'<input[^>]*id="year_agnostic"[^>]* checked', body)
 
 
 class TestHolidayCalendarNameResolution:

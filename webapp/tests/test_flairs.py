@@ -697,7 +697,7 @@ class TestBannerEditorRoute:
     def test_home_scope_never_gets_a_flair(self, conn, flairs_dir):
         _put(flairs_dir, "basketball")
         body = banners_router.banner_editor(_request("/banners/editor"), scope="", conn=conn).body.decode()
-        assert "No banner set yet" in body
+        assert "data-upload-zone" in body and "detail-cover-img" not in body
 
     def test_clear_banner_button_present_when_a_banner_is_showing(self, conn, flairs_dir):
         _put(flairs_dir, "basketball")
@@ -719,7 +719,7 @@ class TestBannerEditorRoute:
         db.upsert_label_config(conn, {"name": "Basketball", "created_at": _now()})
         banners_router.remove_banner(scope="Basketball", page_url="/labels/Basketball", conn=conn)
         body = banners_router.banner_editor(_request("/banners/editor"), scope="Basketball", conn=conn).body.decode()
-        assert "No banner set yet" in body
+        assert "data-upload-zone" in body and "detail-cover-img" not in body
         assert "/flairs/basketball" not in body
 
     def test_clearing_an_explicit_upload_falls_back_to_its_flair_first(self, conn, flairs_dir):

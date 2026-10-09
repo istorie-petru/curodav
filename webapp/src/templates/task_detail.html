@@ -1,3 +1,4 @@
+{% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
 {% from "_task_work_allocations.html" import task_work_allocations_section with context %}
 {% from "_label_pill.html" import label_pill with context %}
@@ -122,6 +123,13 @@
             <span class="detail-meta-value">{% for tag in _plain %}{{ label_pill(tag, 'modal') }} {% endfor %}</span>
         </div>
         {% endif %}
+        {% set _people = object_contacts(request, 'task', task.uid) %}
+        {% if _people %}
+        <div class="detail-meta-item detail-meta-wide">
+            <span class="detail-meta-label">Contacts</span>
+            <span class="detail-meta-value">{% for p in _people %}<a href="/contacts/{{ p.uid }}" data-modal>{{ p.full_name or 'Unnamed' }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
+        </div>
+        {% endif %}
     </div>
     {% if task.description %}
     <div class="detail-meta-description">
@@ -162,7 +170,7 @@
 {% include "_modal_footer.html" %}
 {% else %}
 <div class="modal-body">
-<div class="empty-state">Task not found.</div>
+{{ empty_state('Task not found', size='compact') }}
 <p><a href="/tasks" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Back to tasks</a></p>
 </div>
 {% endif %}

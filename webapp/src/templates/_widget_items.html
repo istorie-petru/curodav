@@ -22,7 +22,7 @@
    pills / conditional spans). #}
 
 {% macro widget_empty(message, inset=False) -%}
-<div class="empty-state{% if inset %} empty-state--inset{% endif %}">{{ message }}</div>
+{% from "_empty_state.html" import empty_state %}{{ empty_state(message, size='inset' if inset else 'compact') }}
 {%- endmacro %}
 
 {% macro widget_section_label(text) -%}
@@ -66,10 +66,13 @@
 
 {# One <table> row for a widget's simple link list -- an optional leading
    cell (icon / checkbox / time, width handled by a .widget-row-* class),
-   the title link (plain text when url is None), and an optional
-   right-aligned muted cell. The right-hand cell can be passed as `right`
-   or rendered via a {% call %} block. #}
-{% macro widget_link_row(url, title, leading=None, leading_class=None, right=None, row_class=None) -%}
+   the title link (plain text when url is None), an optional right-aligned
+   muted cell (passed as `right` or rendered via a {% call %} block), and
+   an optional trailing actions cell (icon-btn links, e.g. Notebook's
+   per-row "edit properties" link -- a separate cell from `right` since
+   that one's semantics are muted meta text everywhere else it's used,
+   not a place for an interactive control). #}
+{% macro widget_link_row(url, title, leading=None, leading_class=None, right=None, row_class=None, actions=None) -%}
 {# `row_class` (2026-09-28, checkbox consolidation): lets a done task row
    in the Agenda widget's Today list dim + strike its title -- same
    `.task-row-completed` treatment the Tasks table already gives a done
@@ -79,6 +82,7 @@
     <td>{% if url %}<a href="{{ url }}" data-modal>{{ title }}</a>{% else %}{{ title }}{% endif %}</td>
     {% if caller %}<td class="text-muted widget-row-right">{{ caller() }}</td>
     {% elif right is not none %}<td class="text-muted widget-row-right">{{ right }}</td>{% endif %}
+    {% if actions is not none %}<td class="widget-row-actions">{{ actions }}</td>{% endif %}
 </tr>
 {%- endmacro %}
 

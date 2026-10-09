@@ -1,3 +1,4 @@
+{% from "_empty_state.html" import empty_state %}
 <!-- Shared widget grid + each widget's own Filters panel. Factored out of dashboard.html
      (2026-08-02, per-space widgets) so a Space page (routers/projects.py's
      space_detail) gets the *exact* same widget system as Home, not a
@@ -78,13 +79,5 @@
 {% endfor %}
 </div>
 {% else %}
-<div class="empty-state empty-state-rich">
-    <div class="empty-state-icon">{{ icon('home' if not space_uid and not project_uid else ('folder' if space_uid else 'target')) }}</div>
-    <div class="empty-state-title">No widgets yet</div>
-    {% if edit_mode %}
-    <div class="empty-state-text">Click "New widget" in the toolbar to add one.</div>
-    {% else %}
-    <div class="empty-state-text">Switch to Edit mode to add and arrange widgets.</div>
-    {% endif %}
-</div>
+{{ empty_state('No widgets yet', 'home' if not space_uid and not project_uid else ('folder' if space_uid else 'target'), 'Click "New widget" in the toolbar to add one.' if edit_mode else 'Switch to Edit mode to add and arrange widgets.') }}
 {% endif %}

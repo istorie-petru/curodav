@@ -1,3 +1,5 @@
+{% from "_inputs.html" import checkbox_input, number_input, text_input, textarea_input %}
+{% from "_form_rows.html" import title_row, title_date_row %}
 {% extends "base.html" %}
 {% block title %}{% if task %}Edit habit{% else %}New habit{% endif %}{% endblock %}
 {% block content %}
@@ -56,10 +58,7 @@
 <form method="post" id="habit-task-form" data-repeat="{{ _rep0.mode }}" data-goal="{{ 'amount' if task and (task.target_per_day or 1) > 1 else 'once' }}" class="habit-task-form{% if task and task.habit_kind == 'avoid' %} is-avoid{% endif %}" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}" data-cc-change="task" data-cc-action="{% if task %}edit{% else %}create{% endif %}">
     <input type="hidden" name="tags_labels" value="{{ habit_label }}">
     <div class="field-grid">
-        <div class="field field-wide">
-            <label>Title</label>
-            <input type="text" name="title" required autofocus value="{{ task.title if task else '' }}">
-        </div>
+        {{ title_row(task.title if task else '', autofocus=true) }}
         {# 2026-09-26 (Peter): the habit's own colour and icon -- the
            shared Look dropdown (_look_picker.html). The icon draws the
            check button, the colour paints the heatmap, the strip and the
@@ -112,7 +111,7 @@
                 <div class="multiselect-panel ms-panel">
                     {% for d in _rep.day_options %}
                     <label class="multiselect-option">
-                        <input type="checkbox" name="habit_days" value="{{ d.code }}" form="habit-task-form" data-short="{{ d.short }}"{% if d.code in _rep.days %} checked{% endif %}>
+                        {{ checkbox_input({'name': 'habit_days', 'value': d.code, 'form': 'habit-task-form', 'data-short': d.short, 'checked': (true if (d.code in _rep.days) else false)}) }}
                         <span>{{ d.name }}</span>
                     </label>
                     {% endfor %}
@@ -141,11 +140,11 @@
             <div class="habit-amount-pair">
                 <div class="habit-amount-cell">
                     <label for="habit-target">Amount</label>
-                    <input type="number" name="target_per_day" id="habit-target" min="2" max="999999" step="1" inputmode="numeric" value="{{ _target if _target > 1 else '' }}" placeholder="8">
+                    {{ number_input({'name': 'target_per_day', 'id': 'habit-target', 'min': '2', 'max': '999999', 'step': '1', 'inputmode': 'numeric', 'value': (_target if _target > 1 else ''), 'placeholder': '8'}) }}
                 </div>
                 <div class="habit-amount-cell">
                     <label for="habit-unit">Unit</label>
-                    <input type="text" name="habit_unit" id="habit-unit" maxlength="24" placeholder="glasses" value="{{ task.habit_unit if task and task.habit_unit else '' }}">
+                    {{ text_input({'name': 'habit_unit', 'id': 'habit-unit', 'maxlength': '24', 'value': (task.habit_unit if task and task.habit_unit else '')}) }}
                 </div>
             </div>
         </div>
@@ -164,7 +163,7 @@
         {% include "_widget_list_multiselect.html" %}
         <div class="field field-wide">
             <label>Description</label>
-            <textarea name="description" rows="2">{{ task.description if task else '' }}</textarea>
+            {{ textarea_input({'name': 'description', 'rows': '2'}, task.description if task else '') }}
         </div>
     </div>
     {# 2026-09-26 (Peter, same day, reversed: "should be able to be work

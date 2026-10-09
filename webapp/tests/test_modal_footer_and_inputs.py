@@ -264,7 +264,10 @@ class TestContactFormAvatarUploadAndFieldOrder:
     def test_file_input_still_present_with_name_photo(self, conn):
         resp = contacts_router.new_contact_form(_request("/contacts/new"), conn=conn)
         body = resp.body.decode()
-        assert '<input type="file" name="photo"' in body
+        # A new contact's photo is managed in the upload modal, so the form
+        # carries a button that saves the buffer contact and opens it.
+        assert 'data-draft-photo="' in body
+        assert '<input type="file" name="photo"' not in body
 
     def test_file_input_has_no_visible_browse_button_markup(self, conn):
         # The old layout had a `.photo-field-controls` wrapper holding a
@@ -273,7 +276,7 @@ class TestContactFormAvatarUploadAndFieldOrder:
         resp = contacts_router.new_contact_form(_request("/contacts/new"), conn=conn)
         body = resp.body.decode()
         assert "photo-field-controls" not in body
-        assert 'class="avatar-upload-input"' in body
+        assert 'data-draft-photo="' in body
 
     def test_avatar_and_file_input_share_one_wrapper(self, conn):
         resp = contacts_router.new_contact_form(_request("/contacts/new"), conn=conn)
@@ -287,12 +290,10 @@ class TestContactFormAvatarUploadAndFieldOrder:
         # they need no scoping.
         avatar_pos = wrapper_pos + _index(body[wrapper_pos:], 'class="avatar-circle')
         overlay_pos = _index(body, 'class="avatar-upload-overlay"')
-        input_pos = _index(body, 'class="avatar-upload-input"')
         # All three (avatar image/initials, hover overlay, real file input)
         # sit after the wrapper div opens, i.e. inside `.avatar-upload`.
         assert wrapper_pos < avatar_pos
         assert wrapper_pos < overlay_pos
-        assert wrapper_pos < input_pos
 
     def test_avatar_and_full_name_are_siblings_in_one_row(self, conn):
         resp = contacts_router.new_contact_form(_request("/contacts/new"), conn=conn)
@@ -306,12 +307,14 @@ class TestContactFormAvatarUploadAndFieldOrder:
         # no longer its own separate field below the photo row.
         assert row_pos < avatar_pos < name_label_pos < footer_pos
 
-    def test_remove_photo_checkbox_still_present_when_photo_exists(self, conn):
+    def test_remove_photo_lives_in_the_upload_modal(self, conn):
         _seed_contact(conn, "c1", photo_b64="abc123", photo_type="jpeg")
         resp = contacts_router.edit_contact_form("c1", _request("/contacts/c1/edit"), conn=conn)
         body = resp.body.decode()
-        assert "Remove current photo" in body
-        assert 'name="remove_photo"' in body
+        # Removing a photo moved into the upload modal.
+        assert "Remove current photo" not in body
+        modal = contacts_router.contact_photo_modal("c1", _request("/contacts/c1/photo/modal"), conn=conn).body.decode()
+        assert "/contacts/c1/photo/remove" in modal
 
     def test_email_and_phone_come_right_after_the_photo_name_row(self, conn):
         resp = contacts_router.new_contact_form(_request("/contacts/new"), conn=conn)

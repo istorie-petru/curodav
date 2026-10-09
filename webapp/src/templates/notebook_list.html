@@ -1,25 +1,105 @@
-{# Notebook (curodav-notes/documentation/plans, 2026-09-29) -- the "All
-   documents" view (routers/notebook.py's GET /notebook): Browser mode's
-   unfiltered safety-net listing, same .checklist row language notes.html
-   already uses for a flat list of linkable items. Label/group-scoped
-   browsing (Phase 3's dashboard widget, routers/dashboard.py's
-   notebook_list type) is a different, narrower view on top of the same
-   data -- this page always shows everything regardless of label. #}
+{# Notebook's Browse page (`/notebook`, curodav-notes/documentation/plans/
+   notebook-browse-page-widget-plans.md's "filing rail" redesign, 2026-10-02,
+   from a mockup Peter provided) -- a persistent left rail of facets
+   (Everything / TYPE / LABELS / GROUPS, each with a global count) plus a
+   quiet separator-row main list, replacing the plain unfiltered checklist
+   this page used to be. See routers/notebook.py's `_notebook_browse_context`
+   for the full filtering/counting reasoning -- every facet pick is a real
+   GET navigation (no client-side filter engine), same server-GET-reload
+   convention Tasks/Calendar/Contacts already use via _filter_dropdown.html,
+   just without that partial's own checkbox-panel UI since the rail's rows
+   are plain links (single-select per dimension), not a multi-select
+   dropdown. #}
 {% extends "base.html" %}
 {% block title %}Notebook{% endblock %}
-{% block main_class %}main-shell{% endblock %}
+{% block main_class %}main-full-width notebook-main{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
-<h1 class="sr-only">Notebook</h1>
 {# Plain form, no data-cc-change -- create_document redirects straight
    into the new document's own Editor page, a real server-rendered
    navigation, not an in-place list refresh (see routers/notebook.py's
    create_document docstring for why). Works with no JS. #}
-{% call page_header_narrow("Notebook", "notebook") %}
+{% set _doc_count_extra %}<span class="notebook-browse-doc-count">{{ total_documents }} document{{ 's' if total_documents != 1 else '' }}</span>{% endset %}
+{# Sidebar collapse toggle (2026-10-03 direct request) -- shared with
+   notebook_document.html, rendered by page_header_narrow's own
+   `sidebar_toggle=true` param now (2026-10-03 follow-up, backlog item A.4)
+   so it's guaranteed to render as the true-rightmost header action on both
+   Notebook pages instead of wherever each page's own call-site block
+   happened to put it -- this page used to render it FIRST, before the
+   Citations/Glossary links below, which is exactly the "drifts" bug that
+   prompted centralizing it; see _page_header_narrow.html's own comment.
+   Assumes expanded (the common case, and what base.html's pre-paint script
+   leaves alone when no preference is stored yet) -- notebook_sidebar.js
+   corrects title/aria-pressed to match the real stored state immediately
+   on load, same "render the common case, let JS sync the rest" approach
+   the left nav's own `#sidebar-expand-toggle` uses (sidebar_tree.js). #}
+{% call page_header_narrow("Browse", "notebook", title_extra=_doc_count_extra, sidebar_toggle=true) %}
+    {# Citations library (2026-10-03) -- a secondary, cross-document view
+       reached via a plain link, same "generated pages are reached via
+       links, not extra tabs" rule the rest of Notebook already follows. #}
+    <a href="/notebook/citations" class="icon-btn" title="Citations library" aria-label="Citations library">{{ icon('book-open', 'icon-sm') }}</a>
+    {# Glossary library (2026-10-03) -- same "secondary, cross-document
+       view reached via a plain link" treatment as Citations above. #}
+    <a href="/notebook/glossary" class="icon-btn" title="Glossary" aria-label="Glossary">{{ icon('tag', 'icon-sm') }}</a>
+    {# Sort (2026-10-02, direct follow-up -- moved out of the list area
+       into the header bar, next to New). Its own tiny GET form; hidden
+       fields carry the rail's current facet picks through so changing
+       Sort alone doesn't drop them, same "preserve the other query
+       params via a hidden field" convention _tasks_toolbar.html's own
+       Date filter already uses for `q`. #}
+    <form method="get" action="/notebook" id="notebook-sort-form" class="form-inline">
+        {% if active_note_type %}<input type="hidden" name="note_type" value="{{ active_note_type }}">{% endif %}
+        {% if active_label %}<input type="hidden" name="label" value="{{ active_label }}">{% endif %}
+        {% if active_group %}<input type="hidden" name="group" value="{{ active_group }}">{% endif %}
+        {% set fd_name = 'sort' %}
+        {% set fd_label = 'Sort' %}
+        {% set fd_items = [{'value': 'updated', 'name': 'Last edited'}, {'value': 'title', 'name': 'Title'}] %}
+        {% set fd_selected = sort %}
+        {% set fd_mode = 'single' %}
+        {% set fd_form_id = 'notebook-sort-form' %}
+        {% include '_filter_dropdown.html' %}
+    </form>
     <form method="post" action="/notebook" class="form-inline">
         <button type="submit" class="btn primary" data-fab title="New document">{{ icon('plus', 'icon-sm') }} New</button>
     </form>
 {% endcall %}
 
-{% include "_notebook_body.html" %}
+<!-- Right sidebar (2026-10-03 direct request) -- the filing rail moved
+     from a left-hand column to this shared right-sidebar shell
+     (style.css's own `.notebook-page-layout`/`.notebook-sidebar` comment),
+     so notebook_document.html's Editor-mode Outline tab could reuse the
+     same shell instead of a second bespoke layout. Only one tab today,
+     but the tablist/panel markup already supports more -- see
+     static/notebook_sidebar.js. -->
+<div class="notebook-page-layout">
+    {% include "_notebook_browse_list.html" %}
+    <aside class="notebook-sidebar">
+        {# Same dropdown shell as notebook_document.html's sidebar -- see
+           that template's own comment for why a custom dropdown instead of
+           a native `<select>` or the app's generic `.multiselect`. Only one
+           view today (Filters), so the dropdown has one option and no "add"
+           button, but it shares the exact same markup/JS contract so a
+           future second Browse-sidebar view costs nothing extra to wire
+           up. #}
+        <div class="notebook-sidebar-head">
+            <div class="notebook-sidebar-select" data-notebook-sidebar-select>
+                <button type="button" class="notebook-sidebar-select-trigger" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="notebook-sidebar-select-icon">{{ icon('filter', 'icon-sm') }}</span>
+                    <span class="notebook-sidebar-select-label">Filters</span>
+                    <span class="notebook-sidebar-select-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
+                </button>
+                <div class="notebook-sidebar-select-panel" role="listbox" aria-label="Sidebar views">
+                    <button type="button" class="notebook-sidebar-select-option active" role="option" aria-selected="true" data-notebook-sidebar-tab="filters">{{ icon('filter', 'icon-sm') }} Filters</button>
+                </div>
+            </div>
+        </div>
+        <div class="notebook-sidebar-panel is-active" data-notebook-sidebar-panel="filters" role="tabpanel">
+            {% include "_notebook_browse_rail.html" %}
+        </div>
+    </aside>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script defer src="{{ static_url('notebook_browse_rows.js') }}"></script>
+<script defer src="{{ static_url('notebook_sidebar.js') }}"></script>
 {% endblock %}

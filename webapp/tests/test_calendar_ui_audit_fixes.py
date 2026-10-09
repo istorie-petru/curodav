@@ -75,7 +75,7 @@ class TestEventColourContrast:
 
     def test_all_sixteen_swatches_pass_aa(self):
         pairs = re.findall(r"--cal-bg-(\w+):(#[0-9a-f]{6});\s*--cal-fg-\1:(#[0-9a-f]{6})", CSS)
-        assert len(pairs) == 16
+        assert {n for n, _, _ in pairs} >= {"red", "slate"} and len(pairs) >= 16  # plus the dark-theme overrides
         for name, bg, fg in pairs:
             assert _ratio(bg, fg) >= 4.5, (name, bg, fg, round(_ratio(bg, fg), 2))
 

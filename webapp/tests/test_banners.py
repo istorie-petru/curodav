@@ -189,7 +189,9 @@ class TestBannerUploadUsesCropEditor:
         # CCBannerUpload.onFile in prose while explaining the removal.
         body = banners_router.banner_editor(_request("/banners/editor"), conn=conn).body.decode()
         assert 'onchange="window.CCBannerUpload' not in body
-        assert '<input type="file" name="banner_file" accept="image/jpeg,image/png,image/gif,image/webp" class="banner-upload-input" aria-label="Choose a banner image to upload">' in body
+        assert 'class="banner-upload-input"' in body
+        assert 'name="banner_file"' in body
+        assert "data-upload-zone" in body
 
 
 class TestBannerUploadImageSniffing:

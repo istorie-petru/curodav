@@ -31,10 +31,18 @@ _STATIC_DIR = Path(__file__).resolve().parent.parent / "src" / "static"
 # the app (a template call site, ICON_GROUPS, HABIT_ICONS, a user's
 # already-stored label/habit icon choice in an existing database) was
 # updated to reference a different name for this swap.
+#
+# 2026-10-03 follow-up (sidebar/glossary/footnotes backlog item D): the
+# Notebook sidebar's Glossary tab needed an "Align Left" icon that didn't
+# exist in the 190-name MDI-era set, so `align-left` was added to the
+# sprite (real Lucide source, see _icons_sprite.html's own symbol comment)
+# -- a legitimate 191st name, not a dropped/renamed one, so it's added here
+# too rather than this test staying frozen at the original swap's count
+# forever. `search` (192nd) was added for the search-box magnifier.
 _EXPECTED_NAMES = frozenset("""
-activity address-book airplay alert-circle alert-triangle anchor aperture
-archive atom at-sign award baby backpack balloon bar-chart bar-chart-2
-battery bell bluetooth book bookmark book-open box briefcase cake
+activity address-book airplay alert-circle alert-triangle align-left anchor
+aperture archive atom at-sign award baby backpack balloon bar-chart
+bar-chart-2 battery bell bluetooth book bookmark book-open box briefcase cake
 calculator calendar camera candle cast chalkboard check-circle check-square
 chevron-down chevron-left chevron-right chevron-up clipboard clock cloud
 cloud-rain code coffee columns command compass confetti corner-down-right
@@ -48,7 +56,7 @@ megaphone merge message-circle message-square mic minus monitor moon
 more move music navigation navigation-2 notebook package paperclip
 party-popper pause pencil pen-tool phone pie-chart play plus podium
 printer quote radio repeat ribbon rotate-ccw rss ruler scale school
-scissors send server settings share share-2 shield shopping-bag
+scissors search send server settings share share-2 shield shopping-bag
 shopping-cart shuffle sidebar sliders smartphone smile sparkles speaker
 square star stop-circle sun sunrise sunset tablet tag target terminal
 thermometer thumbs-up tool trash trash-2 trending-down trending-up trophy
@@ -67,8 +75,10 @@ def _sprite_ids() -> set[str]:
 
 class TestEveryPreExistingNameSurvivedTheSwap:
     def test_exactly_190_names_both_before_and_after(self):
-        assert len(_EXPECTED_NAMES) == 190
-        assert len(_sprite_ids()) == 190
+        # 192 now, not 190 -- see _EXPECTED_NAMES's own 2026-10-03 comment
+        # on the `align-left` addition.
+        assert len(_EXPECTED_NAMES) == 192
+        assert len(_sprite_ids()) == 192
 
     def test_no_name_dropped_or_added(self):
         ids = _sprite_ids()
@@ -103,7 +113,7 @@ class TestSpriteIsNowRealStrokeBasedLucide:
         # just a different (correct, upstream) way of applying it.
         text = _sprite_text()
         symbols = re.findall(r"<symbol[^>]*>.*?</symbol>", text)
-        assert len(symbols) == 190
+        assert len(symbols) == 192
         for s in symbols:
             for attr in re.findall(r'(?:fill|stroke)="([^"]*)"', s):
                 assert attr == "currentColor", f"hardcoded color in: {s}"

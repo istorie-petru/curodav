@@ -1,3 +1,4 @@
+{% from "_inputs.html" import select_input %}
 {% extends "base.html" %}
 {% block title %}Pauses{% endblock %}
 {% block content %}
@@ -30,10 +31,10 @@
 {% endif %}
 <form method="post" action="/habits/pauses" class="habit-pause-form" {{ _keep|safe }}>
     <label class="habit-log-field habit-pause-which"><span>Habit</span>
-        <select name="task_uid" data-no-autofocus>
+        {% call select_input({'name': 'task_uid', 'data-no-autofocus': true}) %}
             <option value="">All habits</option>
             {% for h in habits %}<option value="{{ h.uid }}">{{ h.title }}</option>{% endfor %}
-        </select>
+        {% endcall %}
     </label>
     {# UI audit H-15: Until starts empty (both dates defaulting to today
        set a one-day pause by accident). #}

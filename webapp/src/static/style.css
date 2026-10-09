@@ -140,8 +140,8 @@
      separate tokens and unaffected. */
   --cal-bg-red:#c35045;   --cal-fg-red:#ffffff;
   --cal-bg-orange:#a1672b;--cal-fg-orange:#ffffff;
-  --cal-bg-yellow:#b59b33;--cal-fg-yellow:#1d1d1f;
-  --cal-bg-lime:#96a93e;  --cal-fg-lime:#1d1d1f;
+  --cal-bg-yellow:#a38c2e;--cal-fg-yellow:#1d1d1f;
+  --cal-bg-lime:#839436;  --cal-fg-lime:#1d1d1f;
   --cal-bg-green:#398156; --cal-fg-green:#ffffff;
   --cal-bg-mint:#278172;  --cal-fg-mint:#ffffff;
   --cal-bg-teal:#2a7f91;  --cal-fg-teal:#ffffff;
@@ -303,6 +303,22 @@
 }
 [data-theme="dark"]{
   color-scheme:dark;
+  /* Accent fills on dark surfaces: nudged lighter by src/readability.py so each
+     stands out (3:1) and keeps readable text (4.5:1). */
+  --cal-bg-red:#cd6d64;--cal-fg-red:#1d1d1f;
+  --cal-bg-orange:#bc7932;--cal-fg-orange:#1d1d1f;
+  --cal-bg-green:#439865;--cal-fg-green:#1d1d1f;
+  --cal-bg-mint:#2e9887;--cal-fg-mint:#1d1d1f;
+  --cal-bg-teal:#3194a9;--cal-fg-teal:#1d1d1f;
+  --cal-bg-cyan:#3391b9;--cal-fg-cyan:#1d1d1f;
+  --cal-bg-blue:#4f8ccc;--cal-fg-blue:#1d1d1f;
+  --cal-bg-indigo:#7b80d9;--cal-fg-indigo:#1d1d1f;
+  --cal-bg-purple:#a075cc;--cal-fg-purple:#1d1d1f;
+  --cal-bg-magenta:#bd6ea8;--cal-fg-magenta:#1d1d1f;
+  --cal-bg-pink:#c86a8d;--cal-fg-pink:#1d1d1f;
+  --cal-bg-brown:#a3844a;--cal-fg-brown:#1d1d1f;
+  --cal-bg-gray:#838990;--cal-fg-gray:#1d1d1f;
+  --cal-bg-slate:#788a9d;--cal-fg-slate:#1d1d1f;
   /* 2026-09-25 (UI audit L5): label colors as text, see :root's --cal-text-*. */
   --cal-text-red:#dc9a94;--cal-text-orange:#d7a068;--cal-text-yellow:#c5a937;--cal-text-lime:#a0b442;
   --cal-text-green:#68bd8b;--cal-text-mint:#3abfa9;--cal-text-teal:#52b8cd;--cal-text-cyan:#66b4d5;
@@ -388,7 +404,7 @@ body{
   font-size:var(--text-base); -webkit-font-smoothing:antialiased;
 }
 a{color:var(--fg-primary); text-decoration:none;}
-a:hover{text-decoration:underline;}
+a:hover, a:active, a:focus{text-decoration:none;}
 h1{font-size:var(--text-xl); margin:0 0 14px;}
 h2{font-size:var(--text-lg); margin:20px 0 8px;}
 
@@ -584,6 +600,38 @@ input[type="checkbox"], input[type="radio"]{
 .row-select:checked::after{
   content:""; position:absolute; left:5px; top:1px; width:5px; height:9px;
   border:solid var(--fg-on-accent); border-width:0 2px 2px 0; transform:rotate(45deg);
+}
+/* Square checkbox for the remaining places (forms, dropdown options, field
+   toggles): same look as .row-select above. */
+input.checkbox,
+.multiselect-option input[type="checkbox"],
+.field-toggle input[type="checkbox"]{
+  appearance:none; -webkit-appearance:none; width:18px; height:18px; flex:none;
+  border:1.5px solid var(--control-border); border-radius:5px; background:var(--control-bg);
+  position:relative; cursor:pointer;
+}
+input.checkbox:hover, .multiselect-option input[type="checkbox"]:hover, .field-toggle input[type="checkbox"]:hover{border-color:var(--border-strong);}
+input.checkbox:focus-visible, .multiselect-option input[type="checkbox"]:focus-visible, .field-toggle input[type="checkbox"]:focus-visible{outline:none; box-shadow:0 0 0 3px var(--accent-neutral-subtle);}
+input.checkbox:checked, .multiselect-option input[type="checkbox"]:checked, .field-toggle input[type="checkbox"]:checked{background:var(--accent); border-color:var(--accent);}
+input.checkbox:checked::after, .multiselect-option input[type="checkbox"]:checked::after, .field-toggle input[type="checkbox"]:checked::after{
+  content:""; position:absolute; left:5px; top:1px; width:5px; height:9px;
+  border:solid var(--fg-on-accent); border-width:0 2px 2px 0; transform:rotate(45deg);
+}
+/* Custom radio, the round counterpart of .row-select. Opt-in via `.radio`
+   plus the two places visible radios already live (dropdown options and
+   field toggles); visually hidden radios (.seg-radio, .tile-radio, look
+   swatches) keep their own styling. */
+input.radio, .multiselect-option input[type="radio"], .field-toggle input[type="radio"]{
+  appearance:none; -webkit-appearance:none; width:18px; height:18px; flex:none;
+  border:1.5px solid var(--control-border); border-radius:50%; background:var(--control-bg);
+  position:relative; cursor:pointer;
+}
+input.radio:hover, .multiselect-option input[type="radio"]:hover, .field-toggle input[type="radio"]:hover{border-color:var(--border-strong);}
+input.radio:focus-visible, .multiselect-option input[type="radio"]:focus-visible, .field-toggle input[type="radio"]:focus-visible{outline:none; box-shadow:0 0 0 3px var(--accent-neutral-subtle);}
+input.radio:checked, .multiselect-option input[type="radio"]:checked, .field-toggle input[type="radio"]:checked{border-color:var(--accent); background:var(--accent);}
+input.radio:checked::after, .multiselect-option input[type="radio"]:checked::after, .field-toggle input[type="radio"]:checked::after{
+  content:""; position:absolute; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px;
+  border-radius:50%; background:var(--fg-on-accent);
 }
 input[type="range"]{
   padding:0; background:none; border:none; accent-color:var(--accent-neutral); cursor:pointer;
@@ -1786,7 +1834,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .entity-table .label-cell{display:flex; align-items:center; gap:var(--space-2); min-width:0; flex-wrap:nowrap;}
 .entity-table .label-cell-icon{color:var(--fg-secondary);}
 .entity-table .label-name{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:var(--font-weight-regular); color:var(--fg-primary); text-decoration:none;}
-.entity-table a.label-name:hover{text-decoration:underline;}
+.entity-table a.label-name:hover{text-decoration:none;}
 .entity-table .label-row-badge{flex:none;}
 .entity-table .entity-row.is-member .label-cell{padding-left:24px;}
 .entity-table .entity-section-row td{height:48px; padding-top:12px; padding-bottom:4px;}
@@ -1840,9 +1888,12 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 /* 7. Tags / pills (status, priority, category, credit labels)           */
 /* --------------------------------------------------------------------- */
 
+/* One pill look: .cell-tag, .pill-static and the pill dropdown trigger all
+   read these tokens. */
+:root{--pill-padding:3px 8px; --pill-radius:var(--radius-sm); --pill-font-size:var(--text-sm); --pill-font-weight:var(--font-weight-bold); --pill-gap:5px;}
 .cell-tag{
-  display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border-radius:var(--radius-sm);
-  font-size:var(--text-sm); font-weight:var(--font-weight-bold); white-space:nowrap; flex-shrink:0;
+  display:inline-flex; align-items:center; gap:var(--pill-gap); padding:var(--pill-padding); border-radius:var(--pill-radius);
+  font-size:var(--pill-font-size); font-weight:var(--pill-font-weight); white-space:nowrap; flex-shrink:0;
 }
 /* Wherever multiple tags sit back-to-back in the same cell (Tasks table's
    Tags column, task/contact detail's Tags row) -- a CSS rule instead of
@@ -2080,6 +2131,16 @@ tbody td{padding:10px 8px; vertical-align:middle;}
   min-width:0;
 }
 .multiselect-divider{height:1px; background:var(--separator); margin:6px 2px;}
+/* In-panel fuzzy search (ms_search, 2026-10-03 -- _widget_list_multiselect
+   .html's own doc comment has the full reasoning) -- same input look as
+   `.multiselect-new-input` just full-width (not flexed alongside a plus
+   icon) and sitting in its own row above the option list, not an option
+   row itself. */
+.multiselect-search{padding:2px 4px 4px;}
+.multiselect-search-input{
+  width:100%; border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:4px 8px; font-size:var(--text-base); background:var(--bg-elevated); color:var(--fg-primary);
+}
 .multiselect-manage{
   display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:var(--radius-sm);
   font-size:var(--text-sm); color:var(--fg-secondary); text-decoration:none;
@@ -2222,8 +2283,8 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    -- direct feedback after the first pass still showed a bordered field
    box instead of a borderless pill. */
 .task-status-select .multiselect-trigger.pill-select-trigger{
-  width:auto; background:none; border:none; border-radius:var(--radius-sm);
-  padding:3px 8px; font-size:var(--text-sm); font-weight:var(--font-weight-bold); font-family:inherit; cursor:pointer;
+  width:auto; background:none; border:none; border-radius:var(--pill-radius);
+  padding:var(--pill-padding); font-size:var(--pill-font-size); font-weight:var(--pill-font-weight); font-family:inherit; cursor:pointer;
 }
 /* Direct follow-up ("status pills but they don't display as pills in the
    inline table"): the `background:none` above -- needed to beat `.widget-
@@ -2688,8 +2749,8 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    field instead of centering a few characters. */
 .inline-edit-input.inline-edit-input--text{width:100% !important; text-align:left;}
 .pill-select{
-  border:none; border-radius:var(--radius-sm); padding:3px 22px 3px 8px; font-size:var(--text-sm);
-  font-weight:var(--font-weight-bold); background-position:right 6px center; background-size:9px;
+  border:none; border-radius:var(--pill-radius); padding:3px 22px 3px 8px; font-size:var(--pill-font-size);
+  font-weight:var(--pill-font-weight); background-position:right 6px center; background-size:9px;
 }
 /* Read-only sibling of .pill-select (side work, post-1.1) -- for values
    that are displayed but no longer manually editable, e.g. the computed
@@ -2697,8 +2758,8 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    .pill-select minus the dropdown-chrome padding/background-position, so
    the column doesn't visibly shift width next to other pill-selects. */
 .pill-static{
-  display:inline-flex; align-items:center; gap:5px; border-radius:var(--radius-sm); padding:3px 8px; font-size:var(--text-sm);
-  font-weight:var(--font-weight-bold);
+  display:inline-flex; align-items:center; gap:var(--pill-gap); border-radius:var(--pill-radius); padding:var(--pill-padding); font-size:var(--pill-font-size);
+  font-weight:var(--pill-font-weight);
   /* 2026-09-25 direct rule: "pills should NEVER be two lines" (titles may
      wrap). nowrap keeps "27 Sep"/"Today 09:00" on one line; flex-shrink:0
      makes a flex row hand the squeeze to the title beside the pill. */
@@ -2811,7 +2872,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
   border-radius:var(--radius-control) var(--radius-control) 0 0;
 }
 .kanban-card-title{color:var(--fg-primary); font-size:var(--text-base); font-weight:var(--font-weight-bold); text-decoration:none;}
-.kanban-card-title:hover{text-decoration:underline;}
+.kanban-card-title:hover{text-decoration:none;}
 .kanban-card-meta{display:flex; flex-wrap:wrap; gap:4px;}
 .kanban-empty{color:var(--fg-tertiary); font-size:var(--text-sm); text-align:center; padding:14px 0;}
 /* 2026-09-02: the per-card status `<select>` (.kanban-status-select) is
@@ -2932,6 +2993,56 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 .field-wide .contact-multi-row .contact-type-select{width:110px; flex:none;}
 .field-wide .contact-multi-row input{width:auto; flex:1;}
 .contact-multi-row .checklist-delete{flex:none;}
+
+/* Notebook custom properties (notebook_properties_modal.html, 2026-10-02)
+   -- same single-line flex layout as .contact-multi-row above (key cell
+   fixed-ish width, value input takes the rest, remove button flex:none),
+   but its own class names -- not a shared/renamed version of the contacts
+   rules, see that template's own comment on why the two scripts/markup
+   stay separate. */
+.notebook-property-rows{display:flex; flex-direction:column; gap:6px; margin-bottom:6px;}
+.notebook-property-row{display:flex; align-items:center; gap:8px;}
+/* Key cell (2026-10-02 follow-up, "use a drop down similar to the labels
+   one"): a .multiselect trigger now, not a plain text input --
+   _notebook_property_key_picker.html's own `.notebook-property-key-select`
+   class, same fixed-ish width the old `input[name="property_key"]` rule
+   gave it (that selector still exists in the DOM, just on the row's now-
+   hidden proxy input, so it needs no :not() exclusion -- a `display:none`
+   hidden input ignores flex-basis regardless). */
+.notebook-property-row .notebook-property-key-select{flex:0 0 140px;}
+.notebook-property-row input[name="property_value"]{flex:1; width:auto;}
+.notebook-property-row .checklist-delete{flex:none;}
+
+/* Settings > Notebook field edit modal (notebook_field_edit_modal.html,
+   _notebook_field_option_row.html, 2026-10-02) -- a Select/Multi-select
+   field's option rows. Same single-line flex layout as
+   .notebook-property-row above (value input takes the rest, the Look
+   picker and remove button stay their natural width), own class names
+   since it's its own template/script, same "not a shared/renamed copy"
+   precedent that file's own comment explains. The Options field itself is
+   hidden unless Type is Select/Multi-select -- same
+   `[data-page]`/label_role_picker.js idiom the label form's Page/Sections
+   switch already uses, see static/notebook_field_options_rows.js's own
+   Type-change listener. */
+.notebook-field-option-rows{display:flex; flex-direction:column; gap:6px; margin-bottom:6px;}
+.notebook-field-option-row{display:flex; align-items:center; gap:8px;}
+.notebook-field-option-row input[name="option_value"]{flex:1; width:auto;}
+/* A locked option's value (notebook_field_option_row's `locked` param,
+   2026-10-02 -- note_type's own fixed value list) -- same flex slot the
+   editable text input takes, just plain text instead of a control. */
+.notebook-field-option-row .notebook-field-option-value{flex:1; color:var(--fg-primary);}
+.notebook-field-option-row .notebook-field-option-look{flex:0 0 auto; margin:0;}
+/* look_picker always renders a "Look" <label> above its trigger -- fine
+   as the modal's one Look field, redundant repeated on every option row
+   here (the row already reads as "value, then its look"); kept in the DOM
+   for the trigger's own aria-labelledby, just visually hidden the same way
+   .sr-only (above) hides text without removing it from the a11y tree. */
+.notebook-field-option-row .notebook-field-option-look > label{
+  position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden;
+  clip:rect(0,0,0,0); white-space:nowrap; border:0;
+}
+.notebook-field-option-row .checklist-delete{flex:none;}
+.notebook-field-form-grid:not([data-field-type="select"]):not([data-field-type="multi-select"]) .notebook-field-options-field{display:none;}
 
 /* Contacts field parity slice 5 of 6 -- Address (contact_form.html). A
    structured ADR row has seven value fields, not one, so it can't share
@@ -3567,7 +3678,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    the same --accent-neutral-subtle wash + bold text every other
    selected/today state below now uses. */
 .time-grid-head .thd-link{color:inherit; text-decoration:none; display:inline-flex; align-items:center; gap:2px; border-radius:999px; padding:0 2px 0 6px;}
-.time-grid-head .thd-link:hover .thd-dow{text-decoration:underline;}
+.time-grid-head .thd-link:hover .thd-dow{text-decoration:none;}
 .time-grid-head .thd-num{display:inline-flex; align-items:center; justify-content:center; min-width:24px; height:24px; padding:0 4px; border-radius:999px; box-sizing:border-box;}
 .time-grid-head .thd.is-today .thd-num{background:var(--accent-neutral-subtle); color:var(--fg-primary);}
 .time-grid-head.day .thd-link{gap:6px;}
@@ -3623,7 +3734,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .allday-task > .allday-title{min-width:0; flex:0 1 auto; white-space:nowrap;}
 .allday-task > .icon, .allday-task > .color-dot{flex:none;}
 .allday-task .color-dot{margin:0;}
-.allday-task:hover{text-decoration:underline;}
+.allday-task:hover{text-decoration:none;}
 /* Week all-day row drag-to-move (static/calendar_week_allday_drag.js,
    2026-09-03) -- only items carrying data-uid get a drag cursor/touch-
    action override (a recurring event has no data-uid and stays a plain
@@ -4248,7 +4359,7 @@ main.main-calendar .project-calendar-layout > .project-calendar-grid{padding-top
    `title="..."` attribute (native tooltip) so the full text is still
    reachable on hover once it's visually truncated. */
 .month-item-title{flex:1 1 auto; min-width:0;}
-.month-task-item:hover{text-decoration:underline;}
+.month-task-item:hover{text-decoration:none;}
 .month-more-link{font-size:var(--text-2xs); font-weight:var(--font-weight-bold); color:var(--fg-secondary); text-decoration:none; padding-top:1px;}
 /* 2026-09-25: it's been a <button> since the 2026-09-09 overflow popover,
    but the rule above was never reset for that -- it rendered as the
@@ -4257,7 +4368,7 @@ button.month-more-link{
   appearance:none; background:none; border:0; padding:1px 0 0; font-family:inherit;
   text-align:left; cursor:pointer; white-space:nowrap; align-self:flex-start;
 }
-.month-more-link:hover{text-decoration:underline;}
+.month-more-link:hover{text-decoration:none;}
 /* All-day rows are the only colored thing left in a day cell (single-day
    timed events are quiet text above) -- a full-width row in the same
    `.cal-*` palette the old bars used, now as a plain flow item inside
@@ -6172,7 +6283,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    pieces of the same mockup (see `.at-a-glance-stat`'s own 2026-09-13
    comment) specifically because of the "archaic" feedback this comment
    already documents. */
-.widget-content table{font-size:var(--text-sm);}
+.widget-content table{font-size:var(--text-base);}
 .widget-content tbody tr{border-bottom:none;}
 .widget-content tbody td{padding:7px 4px;}
 .widget-content tbody tr:first-child td{padding-top:2px;}
@@ -6195,7 +6306,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .widget-content tbody tr:hover > td:first-child,
 .widget-content tbody tr:hover > td:last-child,
 .widget-content tbody tr:hover > td:only-child{box-shadow:none;}
-.widget-content td a:hover{text-decoration:underline;}
+.widget-content td a:hover{text-decoration:none;}
 /* 2026-09-27 (direct feedback: "for the projects page, the text inside
    the agenda ... should not be text-sm, but normal text"). A label/
    project's own page (label_sections.html, `.widget-card-static` --
@@ -6571,6 +6682,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .widget-row-icon{width:26px; text-align:center;}
 .widget-row-time{white-space:nowrap; width:1%;}
 .widget-row-right{text-align:right;}
+.widget-row-actions{width:1%; white-space:nowrap; text-align:right;}
 /* 2026-09-13 (direct request, "the checkbox has a left margin the other
    [rows] don't have") introduced `justify-content:flex-start` here so a
    task row's checkbox icon sat flush left, matching an event row's
@@ -8141,7 +8253,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .habit-panel .habit-insights{margin-top:0;}
 .habit-panel .habit-bars-months{height:64px;}
 .habit-card-title{min-width:0; color:var(--fg-primary); font-weight:var(--font-weight-bold); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.habit-card-title:hover{text-decoration:underline;}
+.habit-card-title:hover{text-decoration:none;}
 /* 2026-09-28 (direct feedback: "font weight/size not the same between
    widgets"): the full Habits-page row keeps its bolder, larger title (a
    list of exactly one thing per row reads fine at that weight), but the
@@ -8556,3 +8668,412 @@ td .dtf--compact:hover .dtf-input, td .dtf--compact .dtf-input:focus, td .dtf--c
 .session-when-form{display:flex; align-items:center; gap:var(--space-2); flex:1; min-width:0;}
 .session-when-form .dtr{flex:1; min-width:0;}
 .session-save-btn{flex:none; color:var(--accent);}
+
+/* Notebook's right sidebar (notebook_list.html's Filters tab,
+   notebook_document.html's Outline tab, 2026-10-03 direct request) -- one
+   shared shell for both pages: a main content pane plus a persistent
+   right-hand `aside` whose tab strip can hold more than one view (today
+   each page only ever renders one tab, but the markup/JS already
+   supports several -- see static/notebook_sidebar.js). Originally just
+   the Browse page's own LEFT-hand filing rail (notebook-browse-page-
+   widget-plans.md's mockup, 2026-10-02, `.notebook-browse-layout`/
+   `.notebook-browse-rail`/`.notebook-browse-main`); generalized and moved
+   to the right side here so the Editor page's new Outline view could
+   reuse the same shell instead of inventing a second one.
+
+   2026-10-03 direct follow-up ("should be the right most one ... visually
+   the same as the expanded left sidebar, but on the right -- same css,
+   same width"): re-done as a `position:fixed` full-height rail pinned to
+   the viewport's own right edge, mirroring `.tabbar`'s desktop rule above
+   almost exactly (same `background`/`border`/width:240px, the left
+   sidebar's own EXPANDED width, mirrored to `border-left` since this one
+   sits on the opposite edge) -- no longer a flex sibling of
+   `.notebook-page-main` inside a shared row, since a fixed-position
+   element already sits outside any flow, flex or not. The matching 240px
+   is reserved on `main.notebook-main` itself (both templates' own
+   `main_class` block), the same way `main`'s own base
+   `margin-left:52px/240px` reserves space for `.tabbar` -- reserving it
+   there instead of only on `.notebook-page-main` is what keeps the page
+   header (a sibling of `.notebook-page-layout`, not a child of it) from
+   running underneath the fixed rail too. */
+.notebook-sidebar{
+  position:fixed; top:0; right:0; bottom:0; z-index:var(--z-rail);
+  width:240px;
+  display:flex; flex-direction:column; gap:var(--space-4);
+  padding:var(--space-4) var(--space-2);
+  background:var(--bg-elevated);
+  border-left:1px solid var(--separator);
+  overflow-y:auto; overflow-x:hidden;
+}
+main.notebook-main{margin-right:240px;}
+html[data-notebook-sidebar-collapsed] main.notebook-main{margin-right:0;}
+@media (max-width:860px){
+  /* No room for a fixed 240px rail once the viewport itself is that
+     narrow -- falls back to a plain stacked block below the main content,
+     same simplest-correct mobile fallback the original left-rail mockup's
+     own grounding notes called for (notebook-browse-page-widget-plans.md).
+     DOM order already puts `.notebook-page-main` before `.notebook-sidebar`
+     on both pages, so static positioning alone is enough to stack them
+     correctly with no flex-direction override needed. */
+  .notebook-sidebar{position:static; width:100%; height:auto; border-left:none; border-top:1px solid var(--separator);}
+  main.notebook-main{margin-right:0;}
+}
+/* 2026-10-04 direct request: the Document editor's "sidebar" layout
+   option (db.get_notebook_settings, notebook_document.html's own header
+   comment) is confirmed desktop-only -- on mobile this page should show
+   the editor body ONLY, not the stacked tab-switcher fallback above
+   (Browse's own Filters sidebar, `#notebook-filters-sidebar-toggle`, is
+   untouched -- this is scoped to the Document page's toggle button id and
+   `.notebook-sidebar`, not every `.notebook-sidebar` user). Narrower than
+   the 860px rule above (390px, this app's existing phone breakpoint, see
+   style.css's own "Mobile" section) isn't right here: the confirmed
+   answer was "mobile," not "very narrow desktop," so this reuses the same
+   860px cutoff as the fallback above, just replacing "reposition" with
+   "hide entirely." The 'stacked' layout never renders either element in
+   the first place, so this rule is inert there. */
+@media (max-width:860px){
+  .notebook-sidebar, #notebook-sidebar-toggle{display:none;}
+}
+
+/* 'Stacked' layout (2026-10-04, the Document editor's sidebar-layout
+   default) -- Outline/Bibliography/Glossary/Relationships are plain
+   `.card` sections in the one main column (notebook_document.html's own
+   header comment) instead of sidebar tabs; this just gives them normal
+   vertical rhythm between cards, same gap `.notebook-page-main` would
+   otherwise rely on flex `gap` for if it had one declared (it doesn't --
+   `.notebook-page-layout` is the flex row; `.notebook-page-main` itself
+   is a plain block, so adjacent `.card` children need their own spacing
+   rule here). `.notebook-page-stacked` also never applies
+   `.notebook-main`'s margin-right:240px (that class is omitted from
+   main_class entirely in this branch, not overridden here), so the
+   column is simply the page's full width throughout, mirroring the
+   'sidebar' layout's effective centered-column max-width via the
+   existing `.notebook-page-main` rule rather than a new one. */
+.notebook-stacked-section{margin-bottom:var(--space-4);}
+.cdx-footnote-footer__heading-row{display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5em;}
+.cdx-footnote-footer__heading-row .cdx-footnote-footer__heading{margin-bottom:0;}
+
+/* Sidebar collapse toggle (2026-10-03 direct request) -- the header-bar
+   button that hides/shows `.notebook-sidebar` entirely, state applied
+   pre-paint via base.html's own inline script + static/notebook_sidebar.js
+   (same `html[data-...]` + localStorage mechanism the left nav's own
+   `#sidebar-expand-toggle` uses, see sidebar_tree.js). Reuses that same
+   button's `icon-sidebar` sprite symbol ("look like the expanded left
+   sidebar," direct request) -- `scaleX(-1)` is the literal "inverted"
+   asked for: the glyph's own divider line sits in its left third, reading
+   as a LEFT-hand panel; flipped, it reads as a RIGHT-hand one instead,
+   matching which side this button actually controls. */
+.notebook-sidebar-toggle-icon{transform:scaleX(-1);}
+html[data-notebook-sidebar-collapsed] .notebook-sidebar{display:none;}
+
+/* Sidebar view switcher (2026-10-03, backlog item A -- replaces the old
+   `.segmented`/`.seg-btn` `.notebook-sidebar-tabs` row with a dropdown).
+   Custom-built rather than a native `<select>` (can't show each option's
+   own icon, item D) or the app's generic `.multiselect` (built for real
+   form inputs + modal-clipped-context portaling this always-unclipped
+   `position:fixed` rail doesn't need) -- see notebook_document.html's own
+   comment on the markup and static/notebook_sidebar.js for the open/close/
+   pick behavior. `.notebook-sidebar-add` is the square plus-icon button
+   beside it (item A: "not the pencil/edit icon"), reusing `.icon-btn`'s
+   existing square sizing -- only the one matching the active view stays
+   visible. */
+.notebook-sidebar-head{display:flex; align-items:center; gap:var(--space-2); align-self:stretch;}
+.notebook-sidebar-select{position:relative; flex:1; min-width:0;}
+.notebook-sidebar-select-trigger{
+  display:flex; align-items:center; gap:var(--space-2); width:100%;
+  padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius-control);
+  background:var(--bg-primary); color:var(--fg-primary); font-size:var(--text-sm); cursor:pointer;
+}
+.notebook-sidebar-select-trigger:hover{background:var(--bg-secondary);}
+.notebook-sidebar-select-label{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left;}
+.notebook-sidebar-select-caret{display:flex; color:var(--fg-tertiary); transition:transform .15s ease;}
+.notebook-sidebar-select.is-open .notebook-sidebar-select-caret{transform:rotate(180deg);}
+.notebook-sidebar-select-panel{
+  display:none; flex-direction:column; gap:2px;
+  position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:var(--z-overlay-panel);
+  background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-control);
+  box-shadow:var(--elevation-2); padding:4px;
+}
+.notebook-sidebar-select.is-open .notebook-sidebar-select-panel{display:flex;}
+.notebook-sidebar-select-option{
+  display:flex; align-items:center; gap:var(--space-2); width:100%;
+  padding:6px 8px; border:none; border-radius:var(--radius-sm); background:none;
+  color:var(--fg-secondary); font-size:var(--text-sm); text-align:left; cursor:pointer;
+}
+.notebook-sidebar-select-option:hover{background:var(--bg-secondary); color:var(--fg-primary);}
+.notebook-sidebar-select-option.active{color:var(--fg-primary); font-weight:var(--font-weight-bold); background:var(--accent-neutral-subtle);}
+.notebook-sidebar-add{flex:none;}
+/* Same "only the active one is visible" convention as .quick-add-panel/
+   .is-active above. */
+.notebook-sidebar-panel{display:none;}
+.notebook-sidebar-panel.is-active{display:block;}
+
+/* Editor page's Outline tab (notebook/notebook_toc.js) -- a plain list of
+   the document's own `.ce-header` blocks, indented by heading level. */
+.notebook-toc{display:flex; flex-direction:column; gap:2px;}
+.notebook-toc-empty{color:var(--fg-tertiary); font-size:var(--text-sm); padding:0 var(--space-2);}
+.notebook-toc-item{
+  display:block; padding:6px var(--space-2); border-radius:var(--radius-sm); font-size:var(--text-sm);
+  color:var(--fg-secondary); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.notebook-toc-item:hover{background:var(--bg-secondary); color:var(--fg-primary);}
+.notebook-toc-item[data-level="3"]{padding-left:calc(var(--space-2) + 12px);}
+.notebook-toc-item[data-level="4"]{padding-left:calc(var(--space-2) + 24px);}
+.notebook-toc-item[data-level="5"]{padding-left:calc(var(--space-2) + 36px);}
+
+/* In-document heading numbering (2026-10-03, backlog item B -- Part/
+   Chapter/Section/Subsection/Paragraph scheme) -- a pure `::before`
+   overlay reading `data-toc-label` (stamped live by notebook/
+   notebook_toc.js's renderToc(), recomputed on every change), not text
+   baked into the heading itself; see that file's own header comment for
+   why mutating `h.textContent` would be wrong here. `display:inline`
+   keeps it flowing as part of the same visual line as the heading text,
+   quieter color/weight than the heading itself so it reads as a label,
+   not a fourth heading level of its own. No `content:none` fallback
+   needed for headings with no label yet (first paint, before Editor.js
+   has mounted) -- the attribute simply isn't present then, so the rule
+   doesn't match at all. */
+.ce-header[data-toc-label]::before{
+  content:attr(data-toc-label) " — ";
+  color:var(--fg-tertiary); font-weight:var(--font-weight-regular);
+}
+
+/* Editor page's Bibliography tab (2026-10-03) -- the attached-citation
+   list and its own Edit-icon header row, same shape as a card header's
+   action row elsewhere in the app. */
+.notebook-sidebar-panel-header{display:flex; justify-content:flex-end; margin-bottom:var(--space-2);}
+.notebook-bibliography-sidebar-list{
+  display:flex; flex-direction:column; gap:var(--space-3); margin:0; padding:0 var(--space-2);
+  list-style:none; font-size:var(--text-sm); color:var(--fg-secondary);
+}
+/* Bottom-of-document read-only bibliography (STATE.md's "footnotes"
+   placement for citations -- reuses the generic footer-heading look
+   notebook_footnotes.css already defines for its own, unrelated inline-
+   footnotes feature, since both are "quiet section heading at the
+   document's end" treatments). */
+.notebook-bibliography-footer{margin-top:var(--space-4);}
+.notebook-bibliography-list{margin:0; padding-left:1.4em; font-size:var(--text-sm); color:var(--fg-secondary);}
+.notebook-bibliography-list li{margin-bottom:var(--space-2);}
+
+/* Glossary library's header search (2026-10-03 direct follow-up, "move the
+   searchbar to the headerbar") -- a fixed, compact width so it sits
+   naturally alongside the Add term button instead of stretching to the
+   input's unconstrained default. */
+.notebook-glossary-search-form input{width:220px;}
+/* 2026-10-03 (backlog item E): this input is the only plain `<input>`
+   ever placed directly in a `.page-header-narrow-actions` row -- every
+   other item there is a `.btn`/`.icon-btn`, both pinned to `height:30px`
+   by the rule above (search this file for "same height" -- "most of the
+   time the same width... the ask was same height"). Nothing targeted a
+   bare `<input>` for that same rule, so it kept the generic form-control
+   default (`padding:10px 14px`, style.css's own `input{...}` base,
+   ~44px tall) and visibly didn't match its header neighbors. Matches the
+   30px box exactly, tighter padding to keep the placeholder text from
+   looking cramped at that height. */
+.page-header-narrow-actions .notebook-glossary-search-form input{height:30px; padding:4px 10px;}
+
+/* Editor page's Relationships tab (2026-10-03, roadmap's "Wikilinks &
+   relationships" section) -- "Links to" (live, grouped by the target's
+   note_type, notebook/notebook_wikilinks.js) and "Linked from" (server-
+   rendered backlinks) each get their own quiet section heading, same
+   look as the Browse rail's `.notebook-rail-heading`. */
+.notebook-relationships-section + .notebook-relationships-section{margin-top:var(--space-4);}
+.notebook-relationships-heading{
+  font-size:var(--text-2xs); font-weight:var(--font-weight-bold); letter-spacing:.04em; text-transform:uppercase;
+  color:var(--fg-tertiary); padding:0 var(--space-2); margin:0;
+}
+.notebook-relationships-group-heading{
+  font-size:var(--text-2xs); font-weight:var(--font-weight-bold); letter-spacing:.04em; text-transform:uppercase;
+  color:var(--fg-tertiary); padding:var(--space-2) var(--space-2) 2px;
+}
+.notebook-relationships-item{display:flex; align-items:center; gap:var(--space-2); padding:4px var(--space-2);}
+.notebook-relationships-item a{color:var(--fg-secondary); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.notebook-relationships-item a:hover{color:var(--fg-primary);}
+
+/* Wikilink inline marker (notebook_wikilinks.js) -- an atomic, non-
+   editable widget inside the block text, same `contenteditable="false"`
+   treatment as `.cdx-footnote-ref`. Styled with a plain underline (not a
+   color) -- inverted from a plain URL's own `#notebook-editor a` rule
+   below, which carries the color instead -- so the two are visually
+   distinct without either needing its own hue. */
+.cdx-wikilink{
+  cursor:default; color:inherit; text-decoration:underline; text-decoration-thickness:1px; padding:0 1px;
+}
+
+/* Plain URL links typed/pasted into editor text (the built-in Link
+   inline tool's own `<a>` tags) -- excludes `.cdx-wikilink` above, which
+   uses underline instead of color for its own distinct treatment.
+   `--tag-blue-fg` already flips darker-on-light/lighter-on-dark (see its
+   definition), which is exactly the contrast behavior asked for here. */
+#notebook-editor a:not(.cdx-wikilink){color:var(--tag-blue-fg);}
+
+/* Wikilink inline tool's search/pick popover (renderActions) -- same
+   sizing as `.cdx-footnote-input`'s own inline-toolbar box, but a text
+   input + live result list instead of a single textarea. Reused as-is
+   for the slash-command block variant (NotebookWikilinkBlock) and the
+   `[[`-triggered floating popup, both in notebook_wikilinks.js. */
+.cdx-wikilink-picker{display:block; width:260px; margin:4px 6px;}
+/* 2026-10-04 (floating-popover -> real-modal rewrite, notebook_wikilinks.
+   js's openFloatingPicker) -- this used to be `.cdx-wikilink-float-
+   picker`, a `position:fixed` popover with its own background/border/
+   shadow chrome (appended straight to `document.body`). Now rendered
+   inside the shared `#modal-body` (static/modal.js's `CCModal.openCustom`),
+   which already supplies that chrome -- only the width/margin reset is
+   still needed, since `.cdx-wikilink-picker` above is sized for a narrow
+   inline-toolbar popover, not a modal body's full content width. Still
+   used standalone (no modifier class) by the inline-toolbar `renderActions`
+   path and the slash-command block, both unchanged by this rewrite. */
+.cdx-wikilink-modal-picker{width:auto; margin:0;}
+.cdx-wikilink-picker-input{
+  display:block; width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:var(--radius-control);
+  font-family:inherit; font-size:14px;
+}
+.cdx-wikilink-picker-results{list-style:none; margin:4px 0 0; padding:0; max-height:220px; overflow-y:auto;}
+.cdx-wikilink-picker-result{
+  display:flex; align-items:center; gap:var(--space-2); padding:6px 8px; border-radius:var(--radius-sm);
+  font-size:14px; cursor:pointer;
+}
+.cdx-wikilink-picker-result:hover, .cdx-wikilink-picker-result.is-active{background:var(--bg-secondary);}
+.cdx-wikilink-picker-empty{padding:6px 8px; font-size:14px; color:var(--fg-tertiary);}
+
+/* Citation create/edit modal's repeatable author rows (citation_edit_
+   modal.html) -- the row's own `.contact-multi-row` class (required for
+   contact_phone_email_rows.js's remove handler, see _citation_author_
+   row.html's own comment) already supplies the flex layout + `.field-wide
+   input{flex:1}` rule every other repeatable row gets; `.citation-author-
+   row` itself carries no styling of its own, kept only as a scoping hook
+   in case this ever needs citation-specific rules later. */
+
+/* Citations Filters modal's Year range inputs (notebook_citations_filters_
+   modal.html, 2026-10-03) -- plain `type="number"` for the numeric
+   keyboard on mobile and native validation, but every other numeric input
+   in this app (`.inline-edit-input`, `#habit-target`) hides the native
+   up/down spinner rather than keep it -- a bare browser spinner reads as
+   "bulky form field" next to the rest of this app's flat-bordered inputs,
+   same reasoning as those two. No custom `.stepper` +/- buttons either
+   (unlike `.stepper-input` elsewhere): stepping a year by 1 repeatedly
+   isn't how anyone picks a year, so a full stepper control would just add
+   visual weight for no real interaction benefit. No `min`/`max` set --
+   BCE/negative years are a real case for this app's history-coursework
+   use (db.parse_citation_year's own comment), so nothing here should
+   constrain the field to positive numbers. */
+.citation-year-input{-webkit-appearance:none; appearance:none; -moz-appearance:textfield;}
+.citation-year-input::-webkit-outer-spin-button,
+.citation-year-input::-webkit-inner-spin-button{
+  -webkit-appearance:none; margin:0;
+}
+
+.notebook-browse-doc-count{color:var(--fg-secondary); font-size:var(--text-sm); font-weight:var(--font-weight-regular); margin-left:var(--space-2);}
+
+/* The rail's own section-stacking -- used to be the outer
+   `.notebook-browse-layout` row's job (flex-direction:column applied to
+   `.notebook-browse-rail` as a whole flex item); now the rail sits one
+   level deeper, inside `.notebook-sidebar-panel`, so it needs its own
+   display:flex here instead. */
+.notebook-browse-rail{display:flex; flex-direction:column; gap:var(--space-4);}
+
+.notebook-rail-section{display:flex; flex-direction:column;}
+.notebook-rail-heading{
+  font-size:var(--text-2xs); font-weight:var(--font-weight-bold); letter-spacing:.04em; text-transform:uppercase;
+  color:var(--fg-tertiary); padding:0 var(--space-2) var(--space-1);
+}
+/* Type/Labels/Groups sections (2026-10-02 direct follow-up) -- real
+   `<details>`, so the heading above is also a `<summary>` now: list-style
+   none hides the native disclosure triangle (same fix widget-add-config's
+   own summary uses), replaced with a `.filter-caret` chevron that rotates
+   open/closed, same rotation rule every other `.filter-caret` trigger in
+   this app already follows (_filter_dropdown.html's own). No JS needed --
+   `<details>` is natively collapsible. */
+summary.notebook-rail-heading{
+  display:flex; align-items:center; cursor:pointer; list-style:none; user-select:none;
+}
+summary.notebook-rail-heading::-webkit-details-marker{display:none;}
+summary.notebook-rail-heading .filter-caret{margin-left:auto; transition:transform var(--dur-fast) var(--ease-standard);}
+details[open] > summary.notebook-rail-heading .filter-caret{transform:rotate(180deg);}
+.notebook-rail-row{
+  display:flex; align-items:center; gap:var(--space-2); padding:var(--space-1) var(--space-2);
+  border-radius:var(--radius-sm); color:var(--fg-primary); text-decoration:none;
+}
+.notebook-rail-row:hover{background:var(--bg-secondary);}
+.notebook-rail-row.is-active{background:var(--accent-neutral-subtle); font-weight:var(--font-weight-bold);}
+.notebook-rail-row-name{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.notebook-rail-row-count{color:var(--fg-tertiary); font-size:var(--text-sm); font-variant-numeric:tabular-nums;}
+
+/* Type/Labels/Groups rail pills (2026-10-02 direct follow-up: "should
+   look like pills") -- the exact same `.cell-tag.cal-*` colored-chip
+   component label_pill/the Browse list's own type pill already use, just
+   wrapped to flow instead of one-per-line. */
+.notebook-rail-pills{display:flex; flex-wrap:wrap; gap:6px; padding:0 var(--space-2);}
+/* 2026-10-03 (backlog item C: "pills must render full-width/full-line --
+   no text-overflow:ellipsis truncation... if this means the pill row
+   needs to wrap or the container needs to grow, do that instead of
+   clipping text"). `.cell-tag`'s own base rule is `white-space:nowrap;
+   flex-shrink:0` app-wide (correct for the short one-line tags it's
+   usually used for) -- inside this rail's fixed 240px sidebar column,
+   though, a long type/label/group name (e.g. "Historiography Pre-1800")
+   doesn't fit on one line and, with nowrap + no-shrink, just overflows
+   past the sidebar's own `overflow-x:hidden` and gets visually clipped.
+   Overriding to let THIS pill's own text wrap onto a second line instead
+   -- still fully readable, no characters lost -- rather than changing the
+   shared `.cell-tag` base (which would affect every other one-line pill
+   in the app that actually wants to stay single-line). */
+.notebook-rail-pill{
+  text-decoration:none; cursor:pointer;
+  white-space:normal; overflow-wrap:break-word; flex-shrink:1; max-width:100%;
+}
+.notebook-rail-pill.is-active{box-shadow:0 0 0 2px var(--fg-primary) inset;}
+.notebook-rail-pill-count{opacity:.75; font-weight:var(--font-weight-regular);}
+
+/* Browse rows -- same quiet .checklist-row separator look the old
+   unfiltered list already used, just with the recency pill/type pill/
+   label pills a row didn't carry before (notebook-browse-page-widget-
+   plans.md flagged this as a real gap vs. the dashboard widget, which
+   already had it). The whole row navigates to the Editor
+   (static/notebook_browse_rows.js), with the trailing pencil exempted.
+   2026-10-02 direct follow-up ("the icon and text a bit smaller"): the
+   leading icon dropped from icon-lg to the plain 1em default, and the
+   title itself reads at --text-sm instead of the app's base size. */
+.notebook-browse-row{cursor:pointer;}
+.notebook-browse-row:hover{background:var(--bg-secondary);}
+.notebook-browse-row .checklist-text{font-size:var(--text-base);}
+.notebook-browse-pills{display:inline-flex; align-items:center; gap:var(--space-1); margin-left:var(--space-2); flex-wrap:wrap;}
+.notebook-type-pill{letter-spacing:.03em;}
+
+/* Search box cue: a magnifier icon inside the field instead of placeholder text. */
+.search-field{position:relative; display:flex; align-items:center; flex:1; min-width:0;}
+.search-field > .icon{position:absolute; left:8px; color:var(--fg-tertiary); pointer-events:none;}
+.search-field > input{padding-left:30px;}
+/* Merged search-and-add box at the top of a long, add-able dropdown. */
+.multiselect-new-option.ms-merged{padding:2px 4px 4px;}
+.multiselect-new-option.ms-merged > .icon{color:var(--fg-tertiary);}
+/* Non-editable fields inside an editable form: transparent with a dashed
+   border and secondary text, so they never read as an input. */
+input[readonly]:not([type="checkbox"], [type="radio"]), textarea[readonly], .field-readonly-swatch{
+  background:transparent; border:1px dashed var(--control-border); color:var(--fg-secondary); cursor:default;
+}
+input[readonly]:not([type="checkbox"], [type="radio"]):focus-visible, textarea[readonly]:focus-visible{box-shadow:none; outline:none;}
+input:disabled:not([type="checkbox"], [type="radio"]), select:disabled, textarea:disabled{border-style:dashed;}
+/* Compact and inset variants of the single empty-state component
+   (_empty_state.html): a quieter title, no big padding. */
+.empty-state-compact .empty-state-title, .empty-state-inset .empty-state-title{font-size:var(--text-base); font-weight:normal; color:var(--fg-tertiary); margin-bottom:0;}
+.empty-state-compact .empty-state-text, .empty-state-inset .empty-state-text{font-size:var(--text-sm);}
+.empty-state-inset{padding:16px 0;}
+/* Icon + label buttons in headers and toolbars show only the icon
+   (static/icon_buttons.js); the label stays as tooltip and aria-label. */
+.btn-icon-only .btn-label{display:none;}
+.btn-icon-only{min-width:var(--icon-btn-size, 32px); justify-content:center; padding-inline:var(--space-2);}
+.contact-address-part{display:flex; flex-direction:column; gap:2px; font-size:var(--text-sm); color:var(--fg-secondary);}
+.contact-address-part input{width:100%;}
+/* Shared media drop zone (_upload_zone.html, static/upload_zone.js). */
+.upload-zone{
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:var(--space-2);
+  padding:var(--space-8) var(--space-5); border:2px dashed var(--control-border); border-radius:var(--radius-control);
+  color:var(--fg-secondary); cursor:pointer; text-align:center;
+}
+.upload-zone:hover, .upload-zone.is-dragover{border-color:var(--accent); background:var(--accent-neutral-subtle);}
+.upload-zone input[type="file"]{position:absolute; width:1px; height:1px; opacity:0; pointer-events:none;}
+.upload-zone:focus-within{outline:2px solid var(--accent); outline-offset:2px;}
+.upload-preview{display:flex; align-items:center; justify-content:center; gap:var(--space-4); margin-bottom:var(--space-4);}
+.upload-preview-img{max-width:160px; max-height:160px; border-radius:var(--radius-control); object-fit:cover;}
+.avatar-upload-static{display:inline-flex;}
+button.avatar-upload{background:none; border:none; padding:0; cursor:pointer;}

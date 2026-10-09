@@ -9,17 +9,11 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 from starlette.requests import Request
 
-from src import db, habit_schedule, habit_view
+from src import db, deps, habit_schedule, habit_view
 from src.routers import calendar as calendar_router
 from src.routers import dashboard as dashboard_router
 
-TODAY = date.today()
-
-
-@pytest.fixture()
-def conn(tmp_path):
-    with db.connect(tmp_path / "cache.sqlite") as c:
-        yield c
+TODAY = date(2026, 10, 9)  # matches the pinned clock in conftest
 
 
 def _now():
@@ -70,9 +64,10 @@ class TestAgenda:
         assert 'action="/tasks/w1/completions" class="form-inline habit-action habit-plus"' in html
         assert "Nothing to show." not in html
 
-    def test_builder_offers_habits(self):
-        src = open(dashboard_router.templates.env.loader.searchpath[0] + "/_widget_builder_fields.html").read()
-        assert "{'uid': 'habits', 'name': 'Habits'}" in src
+    def test_builder_offers_habits(self, conn):
+        db.set_app_meta(conn, deps.EDIT_MODE_KEY, "1")
+        resp = dashboard_router.dashboard_customize(_req("/dashboard/customize"), conn=conn)
+        assert 'value="habits"' in resp.body.decode()
 
 
 class TestDayView:

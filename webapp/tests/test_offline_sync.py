@@ -1,20 +1,10 @@
-"""Tests for 1.8 slices 1-2 -- "Field-HLC shadow store + sync API
-skeleton" and "Sync conflicts surface" (plans/open-priority.md §
-Offline-first editing & synchronization, §11). Per slice 1's own
-acceptance shape: POST synthetic operation batches and assert the
-resulting field values/HLCs, and (for a deliberately-conflicting batch)
-that the losing value is retained somewhere inspectable rather than
-silently dropped -- no browser, no PWA client, same router-function-call
-pytest convention as every other slice. Slice 2 adds the two §7b/c
-conflict-*surfacing* exceptions plus the Settings > Sync conflicts
-restore/dismiss actions.
+"""Device sync: the field-level merge, the push/pull API and the sync conflicts page.
 
-Covers `src/offline_sync.py` (the pure §6/§7a/§4/§7b/§7c apply logic)
-directly, `src/routers/sync_api.py` (the §8 push/pull HTTP wrapper), and
-`src/routers/settings.py`'s sync-conflicts routes -- the latter two the
-same way test_search_api.py exercises routers/search.py: call the route
-function directly (`asyncio.run` for the async ones) with a synthetic
-Request."""
+Covers `src/offline_sync.py` (last-write-wins per field, tombstones,
+idempotent replays, retention purge, conflict recording), the push/pull
+routes in `src/routers/sync_api.py`, and the restore/dismiss actions on
+the Data & Maintenance page. Routes are called directly with a synthetic
+Request; no browser or PWA client is involved."""
 
 from __future__ import annotations
 
@@ -22,6 +12,7 @@ import asyncio
 import json as _json
 
 import pytest
+
 from starlette.requests import Request
 
 from src import db, offline_sync
@@ -609,6 +600,8 @@ class TestSyncConflictsSettingsPage:
         from types import SimpleNamespace
 
         db.create_sync_conflict(conn, "event", "e1", "start_at", "2026-08-10T11:00:00", (1000, 0, "device-b"), (2000, 0, "device-a"))
+        # Commit so the template helpers' own connections are not locked out.
+        conn.commit()
         # The merged Data & Maintenance page (2026-08-17; sync conflicts
         # moved off their own page into its "Needs attention" section)
         # reads app.state.settings' db_path/backup_dir/radicale_base_url.

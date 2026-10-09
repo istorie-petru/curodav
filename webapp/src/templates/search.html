@@ -1,3 +1,5 @@
+{% from "_inputs.html" import text_input %}
+{% from "_empty_state.html" import empty_state %}
 {# Standalone search entry point (1.2 side work, Universal command surface
    step 4) -- a bookmarkable, no-JS-required page over the same
    `search_entities` query layer Ctrl-K uses. Once loaded, static/
@@ -17,8 +19,8 @@
    same as Tasks' sr-only h1. #}
 <h1 class="sr-only">Search</h1>
 <form class="search-page-form" data-command-palette-page action="/search" method="get">
-    <input type="search" name="q" value="{{ q }}" placeholder="Search tasks, events, contacts..."
-           class="search-page-input" data-command-palette-input autocomplete="off">
+    <span class="search-field">{{ icon('search') }}
+    {{ text_input({'name': 'q', 'value': (q), 'aria-label': 'Search tasks, events, contacts', 'class': 'search-page-input', 'data-command-palette-input': true, 'autocomplete': 'off'}, 'search') }}</span>
 </form>
 {# Plain HTML `autofocus` has no media-query equivalent, so it can't be
    made mobile-only in markup -- moved to a tiny inline script that only
@@ -37,9 +39,9 @@
 </script>
 <div class="checklist search-page-results" data-command-palette-results>
     {% if not q %}
-    <div class="empty-state empty-state-loose">Type to search across tasks, events, and contacts.</div>
+    {{ empty_state('Type to search across tasks, events, and contacts', size='compact') }}
     {% elif not results %}
-    <div class="empty-state empty-state-loose">No results for "{{ q }}".</div>
+    {{ empty_state('No results for "' ~ q ~ '"', size='compact') }}
     {% else %}
     {% for r in results %}
     {% set _icon = {'task': 'check-square', 'event': 'calendar', 'contact': 'user'} %}

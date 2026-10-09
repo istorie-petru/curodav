@@ -1,3 +1,4 @@
+{% from "_inputs.html" import radio_input %}
 {# audit-fixes-2.1.md ("Contacts edit modal window doesn't use the custom
    drop down menus"): contact_form.html's Phone/Email/Website/Address/
    Social "type" pickers (Home/Work/Other etc, db.CONTACT_*_TYPES) used to
@@ -78,10 +79,7 @@
     <div class="multiselect-panel ms-panel">
         {% for t in options %}
         <label class="multiselect-option">
-            <input type="radio" name="{{ field_name }}__{{ row_key }}" value="{{ t }}"
-                   class="contact-type-radio" data-proxy-name="{{ field_name }}" data-proxy-target="{{ proxy_id }}"
-                   form="{{ ms_form_id }}"
-                   {% if t == selected %}checked{% endif %}>
+            {{ radio_input({'name': (field_name) ~ '__' ~ (row_key), 'value': t, 'class': 'contact-type-radio', 'data-proxy-name': field_name, 'data-proxy-target': proxy_id, 'form': ms_form_id, 'checked': (true if (t == selected) else false)}) }}
             <span>{{ t }}</span>
         </label>
         {% endfor %}

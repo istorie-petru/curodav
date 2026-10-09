@@ -1,3 +1,4 @@
+{% from "_inputs.html" import file_input, text_input, textarea_input %}
 {# Shared contact create/edit field grid (2026-09-14) -- the exact inner
    content of contact_form.html's #contact-form, extracted so the standalone
    new/edit form AND the merged dashboard quick-add modal (quick_add.html)
@@ -37,19 +38,26 @@
          `.avatar-large`) is untouched by any of this. -->
     <div class="field field-wide">
         <div class="photo-field-row">
+            {% if draft_uid %}
+            {# New contact: the photo is managed in the upload modal. data-draft-photo saves the form so far to the buffer contact, then opens it. #}
+            <button type="button" class="avatar-upload" title="Change photo" aria-label="Change photo" data-draft-photo="{{ draft_uid }}">
+                {{ avatar(contact, 'avatar-large') }}
+                <span class="avatar-upload-overlay" aria-hidden="true">{{ icon('camera', 'icon-sm') }}</span>
+            </button>
+            {% elif contact %}
+            <div class="avatar-upload-static">{{ avatar(contact, 'avatar-large') }}</div>
+            {% else %}
             <div class="avatar-upload" title="Change photo">
                 {{ avatar(contact, 'avatar-large') }}
                 <span class="avatar-upload-overlay" aria-hidden="true">{{ icon('camera', 'icon-sm') }}</span>
-                <input type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/webp" class="avatar-upload-input" aria-label="Change photo">
+                {{ file_input({'name': 'photo', 'accept': 'image/jpeg,image/png,image/gif,image/webp', 'class': 'avatar-upload-input', 'aria-label': 'Change photo'}) }}
             </div>
+            {% endif %}
             <div class="field">
                 <label>Full name</label>
-                <input type="text" name="full_name" required value="{{ contact.full_name if contact else '' }}">
+                {{ text_input({'name': 'full_name', 'required': true, 'value': (contact.full_name if contact else '')}) }}
             </div>
         </div>
-        {% if contact and contact.photo_b64 %}
-        <label class="field-toggle field avatar-remove-toggle"><input type="checkbox" name="remove_photo" value="1"> Remove current photo</label>
-        {% endif %}
     </div>
     <!-- Contacts field parity slice 2 of 6 (plans/open.md): phone/email
          are multi-value now (contact_phones/contact_emails, db.py), each
@@ -88,7 +96,7 @@
             {% for p in (contact.phones if contact else []) %}
             <div class="contact-multi-row">
                 {{ contact_type_picker('phone_type', phone_types, p.type, loop.index) }}
-                <input type="text" name="phone_value" value="{{ p.value }}" placeholder="Phone number">
+                {{ text_input({'aria-label': 'Phone number', 'name': 'phone_value', 'value': (p.value)}) }}
                 <button type="button" class="checklist-delete" data-repeatable-remove title="Remove phone" aria-label="Remove phone">{{ icon('x') }}</button>
             </div>
             {% endfor %}
@@ -96,7 +104,7 @@
         <template id="phone-row-template">
             <div class="contact-multi-row">
                 {{ contact_type_picker('phone_type', phone_types, 'Other', 'tmpl') }}
-                <input type="text" name="phone_value" value="" placeholder="Phone number">
+                {{ text_input({'aria-label': 'Phone number', 'name': 'phone_value', 'value': ''}) }}
                 <button type="button" class="checklist-delete" data-repeatable-remove title="Remove phone" aria-label="Remove phone">{{ icon('x') }}</button>
             </div>
         </template>
@@ -110,7 +118,7 @@
             {% for e in (contact.emails if contact else []) %}
             <div class="contact-multi-row">
                 {{ contact_type_picker('email_type', email_types, e.type, loop.index) }}
-                <input type="email" name="email_value" value="{{ e.value }}" placeholder="Email address">
+                {{ text_input({'aria-label': 'Email address', 'name': 'email_value', 'value': (e.value)}, 'email') }}
                 <button type="button" class="checklist-delete" data-repeatable-remove title="Remove email" aria-label="Remove email">{{ icon('x') }}</button>
             </div>
             {% endfor %}
@@ -118,7 +126,7 @@
         <template id="email-row-template">
             <div class="contact-multi-row">
                 {{ contact_type_picker('email_type', email_types, 'Other', 'tmpl') }}
-                <input type="email" name="email_value" value="" placeholder="Email address">
+                {{ text_input({'aria-label': 'Email address', 'name': 'email_value', 'value': ''}, 'email') }}
                 <button type="button" class="checklist-delete" data-repeatable-remove title="Remove email" aria-label="Remove email">{{ icon('x') }}</button>
             </div>
         </template>
@@ -144,7 +152,7 @@
             {% for w in (contact.websites if contact else []) %}
             <div class="contact-multi-row">
                 {{ contact_type_picker('website_type', website_types, w.type, loop.index) }}
-                <input type="url" name="website_url" value="{{ w.url }}" placeholder="https://example.com">
+                {{ text_input({'aria-label': 'https://example.com', 'name': 'website_url', 'value': (w.url)}, 'url') }}
                 <button type="button" class="checklist-delete" data-repeatable-remove title="Remove website" aria-label="Remove website">{{ icon('x') }}</button>
             </div>
             {% endfor %}
@@ -152,7 +160,7 @@
         <template id="website-row-template">
             <div class="contact-multi-row">
                 {{ contact_type_picker('website_type', website_types, 'Other', 'tmpl') }}
-                <input type="url" name="website_url" value="" placeholder="https://example.com">
+                {{ text_input({'aria-label': 'https://example.com', 'name': 'website_url', 'value': ''}, 'url') }}
                 <button type="button" class="checklist-delete" data-repeatable-remove title="Remove website" aria-label="Remove website">{{ icon('x') }}</button>
             </div>
         </template>
@@ -169,11 +177,11 @@
          grouping is now purely via the Tags field below. -->
     <div class="field">
         <label>Title</label>
-        <input type="text" name="title" value="{{ contact.title if contact else '' }}">
+        {{ text_input({'name': 'title', 'value': (contact.title if contact else '')}) }}
     </div>
     <div class="field">
         <label>Organization</label>
-        <input type="text" name="org" value="{{ contact.org if contact else '' }}">
+        {{ text_input({'name': 'org', 'value': (contact.org if contact else '')}) }}
     </div>
     <!-- Contacts field parity slice 5 of 6 (plans/open.md): Address is
          now the full structured, multi-value vCard ADR (db.
@@ -201,13 +209,13 @@
             <div class="contact-multi-row contact-address-row">
                 {{ contact_type_picker('address_type', address_types, a.type, loop.index) }}
                 <div class="contact-address-fields">
-                    <input type="text" name="address_po_box" value="{{ a.po_box }}" placeholder="PO Box">
-                    <input type="text" name="address_extended" value="{{ a.extended }}" placeholder="Extended address">
-                    <input type="text" name="address_street" value="{{ a.street }}" placeholder="Street" class="contact-address-full">
-                    <input type="text" name="address_city" value="{{ a.city }}" placeholder="City">
-                    <input type="text" name="address_region" value="{{ a.region }}" placeholder="Region / State">
-                    <input type="text" name="address_postal_code" value="{{ a.postal_code }}" placeholder="Postal code">
-                    <input type="text" name="address_country" value="{{ a.country }}" placeholder="Country">
+                    <label class="contact-address-part"><span>PO Box</span>{{ text_input({'name': 'address_po_box', 'value': (a.po_box)}) }}</label>
+                    <label class="contact-address-part"><span>Extended address</span>{{ text_input({'name': 'address_extended', 'value': (a.extended)}) }}</label>
+                    <label class="contact-address-part contact-address-full"><span>Street</span>{{ text_input({'name': 'address_street', 'value': (a.street)}) }}</label>
+                    <label class="contact-address-part"><span>City</span>{{ text_input({'name': 'address_city', 'value': (a.city)}) }}</label>
+                    <label class="contact-address-part"><span>Region / State</span>{{ text_input({'name': 'address_region', 'value': (a.region)}) }}</label>
+                    <label class="contact-address-part"><span>Postal code</span>{{ text_input({'name': 'address_postal_code', 'value': (a.postal_code)}) }}</label>
+                    <label class="contact-address-part"><span>Country</span>{{ text_input({'name': 'address_country', 'value': (a.country)}) }}</label>
                 </div>
                 <button type="button" class="checklist-delete" data-repeatable-remove title="Remove address" aria-label="Remove address">{{ icon('x') }}</button>
             </div>
@@ -217,13 +225,13 @@
             <div class="contact-multi-row contact-address-row">
                 {{ contact_type_picker('address_type', address_types, 'Other', 'tmpl') }}
                 <div class="contact-address-fields">
-                    <input type="text" name="address_po_box" value="" placeholder="PO Box">
-                    <input type="text" name="address_extended" value="" placeholder="Extended address">
-                    <input type="text" name="address_street" value="" placeholder="Street" class="contact-address-full">
-                    <input type="text" name="address_city" value="" placeholder="City">
-                    <input type="text" name="address_region" value="" placeholder="Region / State">
-                    <input type="text" name="address_postal_code" value="" placeholder="Postal code">
-                    <input type="text" name="address_country" value="" placeholder="Country">
+                    <label class="contact-address-part"><span>PO Box</span>{{ text_input({'name': 'address_po_box', 'value': ''}) }}</label>
+                    <label class="contact-address-part"><span>Extended address</span>{{ text_input({'name': 'address_extended', 'value': ''}) }}</label>
+                    <label class="contact-address-part contact-address-full"><span>Street</span>{{ text_input({'name': 'address_street', 'value': ''}) }}</label>
+                    <label class="contact-address-part"><span>City</span>{{ text_input({'name': 'address_city', 'value': ''}) }}</label>
+                    <label class="contact-address-part"><span>Region / State</span>{{ text_input({'name': 'address_region', 'value': ''}) }}</label>
+                    <label class="contact-address-part"><span>Postal code</span>{{ text_input({'name': 'address_postal_code', 'value': ''}) }}</label>
+                    <label class="contact-address-part"><span>Country</span>{{ text_input({'name': 'address_country', 'value': ''}) }}</label>
                 </div>
                 <button type="button" class="checklist-delete" data-repeatable-remove title="Remove address" aria-label="Remove address">{{ icon('x') }}</button>
             </div>
@@ -243,7 +251,7 @@
             {% for s in (contact.social_profiles if contact else []) %}
             <div class="contact-multi-row">
                 {{ contact_type_picker('social_type', social_types, s.type, loop.index) }}
-                <input type="text" name="social_value" value="{{ s.value }}" placeholder="Profile URL or username">
+                {{ text_input({'aria-label': 'Profile URL or username', 'name': 'social_value', 'value': (s.value)}) }}
                 <button type="button" class="checklist-delete" data-repeatable-remove title="Remove social profile" aria-label="Remove social profile">{{ icon('x') }}</button>
             </div>
             {% endfor %}
@@ -251,7 +259,7 @@
         <template id="social-row-template">
             <div class="contact-multi-row">
                 {{ contact_type_picker('social_type', social_types, 'Other', 'tmpl') }}
-                <input type="text" name="social_value" value="" placeholder="Profile URL or username">
+                {{ text_input({'aria-label': 'Profile URL or username', 'name': 'social_value', 'value': ''}) }}
                 <button type="button" class="checklist-delete" data-repeatable-remove title="Remove social profile" aria-label="Remove social profile">{{ icon('x') }}</button>
             </div>
         </template>
@@ -268,10 +276,9 @@
          every other field on this form (see e.g. the phone/email type
          pickers falling back to "Other" server-side rather than a
          stricter client-only guard). -->
-    <div class="field">
-        <label>Birthday</label>
-        <input type="text" name="birthday" value="{{ contact.birthday or '' }}" placeholder="YYYY-MM-DD or --MM-DD" pattern="\d{4}-\d{2}-\d{2}|--\d{2}-\d{2}">
-        <span class="field-hint">Full date, or --MM-DD if you don't know the year.</span>
+    <div class="field field-wide">
+        <label>Birthday (YYYY-MM-DD, or --MM-DD without a year)</label>
+        {{ text_input({'name': 'birthday', 'value': contact.birthday or '', 'pattern': '\\d{4}-\\d{2}-\\d{2}|--\\d{2}-\\d{2}'}) }}
     </div>
     <!-- Label -- 2026-09-26 (Peter: "Contacts should only allow one
          label"): a single-select dropdown (ms_mode="single") instead of
@@ -312,6 +319,6 @@
     </div>
     <div class="field field-wide">
         <label>Notes</label>
-        <textarea name="notes" rows="3">{{ contact.notes if contact else '' }}</textarea>
+        {{ textarea_input({'name': 'notes', 'rows': '3'}, contact.notes if contact else '') }}
     </div>
 </div>

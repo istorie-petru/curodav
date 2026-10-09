@@ -1,3 +1,4 @@
+{% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
 {% from "_habit_heatmap.html" import heatmap %}
 {% from "_habit_history.html" import period_grid %}
@@ -168,7 +169,7 @@
 {% include "_modal_footer.html" %}
 {% else %}
 <div class="modal-body">
-<div class="empty-state">Task not found.</div>
+{{ empty_state('Task not found', size='compact') }}
 <p><a href="/tasks" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Back to tasks</a></p>
 </div>
 {% endif %}

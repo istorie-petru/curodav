@@ -1,0 +1,15 @@
+{# Canonical Labels row: the multiselect with search and add-new merged.
+   Set `labels_selected` (the item's current label names) before including.
+   Projects have their own dropdown (_project_field.html), so they are
+   left out of this list. #}
+<div class="field">
+    {% set ms_name = 'tags_labels' %}
+    {% set ms_icon = 'tag' %}
+    {% set ms_label = 'Labels' %}
+    {% set ms_items = tag_name_items | rejectattr('uid', 'in', project_names | default([])) | list %}
+    {% set ms_selected = labels_selected %}
+    {% set ms_mode = 'select' %}
+    {% set ms_allow_new = true %}
+    {% set ms_pill = true %}
+    {% include "_widget_list_multiselect.html" %}
+</div>

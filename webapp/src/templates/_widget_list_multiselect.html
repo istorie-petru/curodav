@@ -210,7 +210,31 @@ ms_hidden    -- when true, the outer `.field` starts with the
                       renders as plain text even with ms_pill on (it isn't a
                       real label, coloring it would just paint it the
                       default blue like an actual unconfigured label and
-                      imply it's one). #}
+                      imply it's one).
+     it.color/it.icon -- (2026-10-02, Notebook's note_type picker: "look
+                      should be consistent everywhere") a per-item colored
+                      `.cell-tag` pill, independent of `ms_pill`/
+                      `label_pill` -- for an option whose color comes from
+                      somewhere other than `label_config` (note_type's own
+                      look, db.notebook_note_type_looks). Only an item that
+                      actually carries `color` renders this way; every
+                      existing caller's items have none, so this is a pure
+                      opt-in addition, not a behavior change for them. Takes
+                      priority over plain text but not over `ms_pill`
+                      (which already implies a real label and its own color
+                      lookup) -- a caller shouldn't set both.
+     Search      -- automatic: with more than 7 items the panel gets a
+                      search row (a magnifier icon and a text input, no
+                      placeholder) that live-narrows the options as you
+                      type (static/app.js's multiselect IIFE, fuzzy
+                      subsequence match against each option's visible
+                      text). There is no per-caller flag. A value hidden by
+                      an in-progress search is never disabled, only
+                      visually hidden, so a checked option stays checked
+                      and still submits. Options already `disabled` by an
+                      unrelated mechanism (dashboard_widget_preview.js)
+                      are skipped, never overridden. The search input has
+                      no `name` or `form`: it never submits a value. #}
 {#   ms_mode="names" (2026-09-26) -- checkboxes whose trigger lists the
      ticked options' names ("Agenda, Tasks"), or ms_placeholder when none
      is ticked. Items may carry `field` (their own form field name instead
@@ -239,6 +263,19 @@ ms_hidden    -- when true, the outer `.field` starts with the
             <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
         </button>
         <div class="multiselect-panel ms-panel">
+            {% set _merged = _allow_new and ms_items | length > 7 %}
+            {% set _new_row %}
+            <label class="multiselect-option multiselect-new-option{% if _merged %} ms-merged{% endif %}">
+                {{ icon('search' if _merged else 'plus', 'icon-sm') }}
+                {# Single mode: distinct name from the radios above --
+                   see this partial's own ms_allow_new docstring for why
+                   sharing one name with a single-select's radios silently
+                   lost whichever radio the user actually picked. #}
+                <input type="text" name="{{ (ms_name ~ '_new') if _single else ms_name }}" class="multiselect-new-input" aria-label="{{ 'Search or add' if _merged else 'New' }} {{ ms_label|lower|replace('labels', 'label') }}"
+                       {% if ms_form_id %}form="{{ ms_form_id }}"{% endif %}>
+            </label>
+            {% endset %}
+            {% if _merged %}{{ _new_row }}<div class="multiselect-divider"></div>{% elif ms_items | length > 7 %}{% set _ms_search_label = ms_label|lower %}{% include "_ms_search_row.html" %}{% endif %}
             {% for it in ms_items %}
             <label class="multiselect-option">
                 <input type="{{ 'radio' if _single else 'checkbox' }}" name="{{ it.field or ms_name }}" value="{{ it.uid }}"
@@ -246,20 +283,12 @@ ms_hidden    -- when true, the outer `.field` starts with the
                        {% if it.data %}{% for _k, _v in it.data.items() %}data-{{ _k }}="{{ _v }}" {% endfor %}{% endif %}
                        {% if (it.checked if it.checked is defined else (it.uid in _sel or (_single and not _sel and loop.first))) %}checked{% endif %}
                        {% if _autosubmit %}data-change-submit{% endif %}>
-                {% if _pill and it.uid != '__no_label__' %}{{ label_pill(it.name) }}{% else %}<span>{{ it.name }}</span>{% endif %}
+                {% if _pill and it.uid != '__no_label__' %}{{ label_pill(it.name) }}
+                {% elif it.color is defined and it.color %}<span class="cell-tag cal-{{ it.color }}">{% if it.icon %}{{ icon(it.icon, 'icon-sm') }} {% endif %}{{ it.name }}</span>
+                {% else %}<span>{{ it.name }}</span>{% endif %}
             </label>
             {% endfor %}
-            {% if _allow_new %}
-            <label class="multiselect-option multiselect-new-option">
-                {{ icon('plus', 'icon-sm') }}
-                {# Single mode: distinct name from the radios above --
-                   see this partial's own ms_allow_new docstring for why
-                   sharing one name with a single-select's radios silently
-                   lost whichever radio the user actually picked. #}
-                <input type="text" name="{{ (ms_name ~ '_new') if _single else ms_name }}" class="multiselect-new-input" placeholder="New {{ ms_label|lower|replace('labels', 'label') }}&hellip;"
-                       {% if ms_form_id %}form="{{ ms_form_id }}"{% endif %}>
-            </label>
-            {% endif %}
+            {% if _allow_new and not _merged %}{{ _new_row }}{% endif %}
             {% if ms_extra_checkboxes %}
             {% if ms_items or _allow_new %}<div class="multiselect-option-divider"></div>{% endif %}
             {% for cb in ms_extra_checkboxes %}

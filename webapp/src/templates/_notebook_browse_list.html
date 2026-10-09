@@ -1,0 +1,61 @@
+{# Browse page's main list (notebook_list.html, 2026-10-02) -- the document
+   rows themselves. Quiet separator rows (reuses .checklist/.checklist-row,
+   same as the old unfiltered list this page replaces), not the card-
+   bordered look Tasks' Kanban cards or the dashboard widgets use -- per
+   the mockup's own "plain list, not cards" rail+list split. Sort lives in
+   the page header now (notebook_list.html's page_header_narrow call), not
+   here -- direct follow-up, 2026-10-02: the active-filter chips this
+   partial used to render above the list are gone outright (not useful --
+   the rail's own `.is-active` row already shows what's filtered, and
+   "Everything" is right there to clear it).
+
+   Full-row click to the Editor, with the trailing "Edit properties"
+   pencil exempted (static/notebook_browse_rows.js's click-delegate --
+   can't nest a real `<a>` inside another `<a>`, so the row itself isn't
+   the anchor; `data-row-href` + a document-level click listener is the
+   simplest correct way to still make the *whole* row act like one,
+   same as this app's established "no client-side filter engine, only a
+   little real navigation JS" approach everywhere else on this page). #}
+{% from "_widget_items.html" import widget_empty, widget_pill %}
+{% from "_label_pill.html" import label_pill with context %}
+<div class="notebook-browse-main">
+    {% if documents %}
+    <div class="card checklist notebook-browse-rows">
+        {% for d in documents %}
+        <div class="checklist-row notebook-browse-row" data-row-href="/notebook/{{ d.uid }}">
+            {# Same icon+color the TYPE rail shows for this note_type
+               (db.notebook_note_type_looks, Settings > Notebook's note_type
+               row) -- plain default size (2026-10-02 direct follow-up:
+               "a bit smaller" than the earlier icon-lg pass), style.css's
+               `.notebook-browse-row .checklist-text` shrinks the title to
+               match. #}
+            {{ icon(d.type_icon, 'cal-' ~ d.type_color) }}
+            <a class="checklist-text" href="/notebook/{{ d.uid }}">
+                {{ d.title }}
+                <span class="notebook-browse-pills">
+                    {% if d.note_type %}<span class="cell-tag cal-{{ d.type_color }} notebook-type-pill">{{ d.note_type|upper }}</span>{% endif %}
+                    {% for tag in d.tags %}{{ label_pill(tag) }}{% endfor %}
+                </span>
+            </a>
+            {{ widget_pill(d.updated_at | relative_date, 'gray') }}
+            <a href="/notebook/{{ d.uid }}/properties" data-modal class="icon-btn" title="Edit properties" aria-label="Edit properties">{{ icon('edit', 'icon-sm') }}</a>
+        </div>
+        {% endfor %}
+    </div>
+    {% elif notebook_filter_active %}
+    <div class="empty-state empty-state-rich">
+        <div class="empty-state-icon">{{ icon('filter') }}</div>
+        <div class="empty-state-title">No documents match this filter</div>
+        <div class="empty-state-text">Try a different label, type or group.</div>
+    </div>
+    {% else %}
+    <div class="empty-state empty-state-rich">
+        <div class="empty-state-icon">{{ icon('notebook') }}</div>
+        <div class="empty-state-title">No documents yet</div>
+        <div class="empty-state-text">Start writing and it'll show up here.</div>
+        <form method="post" action="/notebook" class="form-inline">
+            <button type="submit" class="btn primary">{{ icon('plus') }} New document</button>
+        </form>
+    </div>
+    {% endif %}
+</div>

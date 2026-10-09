@@ -1,0 +1,78 @@
+{% from "_inputs.html" import text_input %}
+{% from "_empty_state.html" import empty_state %}
+{% extends "base.html" %}
+{% block title %}Glossary{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_row_action_buttons.html" import row_action_buttons %}
+{% from "_empty_state_row.html" import empty_state_row %}
+<!-- Glossary library (2026-10-03, roadmap-mvp-to-full-product-checklist's
+     "Glossary" section, "almost the same as citations") -- the global,
+     cross-document pool of term/definition pairs, server-rendered Jinja2,
+     same Field/Type/Actions-shaped table + Edit-opens-a-modal interaction
+     as the Citations library/Settings > Notebook. Reached from the Browse
+     page's header (notebook_list.html); not itself a top-level nav entry.
+     No Filters modal (unlike Citations) -- just two fields, so a plain
+     `q` search box covers the roadmap's "term lookup/search backend". -->
+{% call page_header_narrow("Glossary", "tag") %}
+    {# Search (2026-10-03 direct follow-up, "move the searchbar to the
+       headerbar") -- a plain GET form in the header actions slot, same
+       "real navigation, no client-side filtering" convention the rest of
+       this app's list pages use. #}
+    <form method="get" action="/notebook/glossary" class="form-inline notebook-glossary-search-form">
+        <span class="search-field">{{ icon('search') }}{{ text_input({'name': 'q', 'value': (q), 'aria-label': 'Search terms'}, 'search') }}</span>
+    </form>
+    <a href="/notebook/glossary/new" data-modal class="btn primary" title="Add term">{{ icon('plus', 'icon-sm') }} Add term</a>
+{% endcall %}
+<div id="modal-target">
+<div class="settings-group">
+{% if q and not terms %}
+{% call empty_state('No terms match "' ~ q ~ '"', size='compact') %}<a href="/notebook/glossary">Clear search</a>{% endcall %}
+{% else %}
+<div class="card table-scroll table-responsive" id="glossary-table-wrapper">
+    <table id="glossary-table">
+        <thead>
+            <tr>
+                <th>Term</th>
+                <th class="col-opt-2">Definition</th>
+                {# References (item F, 2026-10-03) -- in its own dedicated
+                   column, not inline superscripts, per the roadmap item's
+                   own split between browse-table and in-document rendering
+                   (the latter depends on item H's auto-detected inline
+                   occurrences, not built yet -- see
+                   [[curodav-webapp-modal-stack-cancel-fix]]'s sibling memory
+                   for this session's own notes). #}
+                <th class="col-opt-2">References</th>
+                <th class="col-actions-narrow">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="glossary-body">
+            {% if terms %}
+                {% for t in terms %}
+                <tr data-uid="{{ t.uid }}">
+                    <td><span class="label-name">{{ t.term }}</span></td>
+                    <td class="col-opt-2"><span class="settings-hint">{{ t.definition or '—' }}</span></td>
+                    <td class="col-opt-2"><span class="settings-hint">{{ t.references | map(attribute='name') | join(', ') if t.references else '—' }}</span></td>
+                    <td>
+                        {{ row_action_buttons(
+                            "/notebook/glossary/" ~ t.uid ~ "/edit",
+                            "/notebook/glossary/" ~ t.uid ~ "/delete",
+                            "term",
+                            'Delete "' ~ t.term ~ '"?'
+                        ) }}
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                {{ empty_state_row(4, "No terms yet") }}
+            {% endif %}
+            <tr class="task-add-row">
+                <td colspan="4"><a href="/notebook/glossary/new" data-modal>{{ icon('plus', 'icon-sm') }} Add term</a></td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endif %}
+</div>
+</div>
+{% endblock %}

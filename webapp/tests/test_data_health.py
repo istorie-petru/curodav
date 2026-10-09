@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
+
+pytestmark = pytest.mark.slow
 from starlette.applications import Starlette
 from starlette.requests import Request
 
@@ -594,7 +596,7 @@ class TestDataMaintenanceScriptGate:
         assert 'href="/settings/purge-confirm"' not in self.PAGE
         for marker in ("data-dm-preview=", "data-dm-export-root", "data-modal-get", 'action="/export/download"'):
             assert marker in self.EXPORT
-        for marker in ("data-dm-dropzone", "data-dm-file", 'name="merge"', 'action="/export/import/auto"'):
+        for marker in ("data-dm-dropzone", "data-dm-file", "'name': 'merge'", 'action="/export/import/auto"'):
             assert marker in self.IMPORT
 
 

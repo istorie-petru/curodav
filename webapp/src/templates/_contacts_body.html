@@ -1,3 +1,5 @@
+{% from "_inputs.html" import checkbox_input %}
+{% from "_empty_state.html" import empty_state %}
 <!-- 2026-09-07 (direct report: the empty state was showing the card
      background behind it, unlike Tasks' own empty state which has none)
      -- .card moved off this outer body wrapper and onto .contact-list
@@ -56,7 +58,7 @@
     {% endif %}
     {% for c in group.contacts %}
     <div class="contact-row-wrap" data-uid="{{ c.uid }}" data-undo-row>
-        <input type="checkbox" class="row-select" data-uid="{{ c.uid }}" aria-label="Select {{ c.full_name }}" autocomplete="off">
+        {{ checkbox_input({'class': 'row-select', 'data-uid': (c.uid), 'aria-label': 'Select ' ~ (c.full_name), 'autocomplete': 'off'}) }}
         <a class="contact-row" href="/contacts/{{ c.uid }}" data-modal>
             {{ avatar(c, lazy=True) }}
             <span class="contact-row-main">
@@ -88,16 +90,12 @@
     {% endfor %}
 </div>
 {% else %}
-<div class="empty-state empty-state-rich">
-    <div class="empty-state-icon">{{ icon('address-book') }}</div>
-    {% if contacts_filter_active %}
-    <div class="empty-state-title">No contacts match</div>
-    <div class="empty-state-text">Try clearing the search or label filter.</div>
-    {% else %}
-    <div class="empty-state-title">No contacts yet</div>
-    <div class="empty-state-text">Add your first contact to get started.</div>
-    <a class="btn primary" href="/contacts/new" data-modal data-fab>{{ icon('plus') }} New contact</a>
-    {% endif %}
-</div>
+{% if contacts_filter_active %}
+{{ empty_state('No contacts match', 'address-book', 'Try clearing the search or label filter.') }}
+{% else %}
+{% call empty_state('No contacts yet', 'address-book', 'Add your first contact to get started.') %}
+<a class="btn primary" href="/contacts/new" data-modal data-fab>{{ icon('plus') }} New contact</a>
+{% endcall %}
+{% endif %}
 {% endif %}
 </div>

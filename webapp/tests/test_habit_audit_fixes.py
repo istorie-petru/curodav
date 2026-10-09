@@ -160,11 +160,11 @@ class TestWidget:
     def test_count_skips_avoid_habits(self, conn):
         _habit(conn, "h1", title="Read")
         _habit(conn, "h2", title="No sugar", kind="avoid")
-        html = self._render(conn)
-        assert "<strong>0</strong> of 1 done" in html
+        data = dashboard_router._render_habit_checkin(conn, {})
+        assert (data["done_count"], data["total"], data["all_done"]) == (0, 1, False)
         db.upsert_task_completion(conn, "h1", TODAY.isoformat(), _now(), value=1)
-        html = self._render(conn)
-        assert "All done for now" in html and 'habit-widget-link' not in html
+        data = dashboard_router._render_habit_checkin(conn, {})
+        assert (data["done_count"], data["total"], data["all_done"]) == (1, 1, True)
 
     def test_empty_state_links_to_new_habit(self, conn):
         html = self._render(conn)

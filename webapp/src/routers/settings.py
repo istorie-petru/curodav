@@ -170,6 +170,12 @@ HUB_CATEGORIES = [
     {"url": "/settings/groups", "icon": "layers", "name": "Groups", "desc": "Collections of labels, with their own page"},
     {"url": "/settings/projects", "icon": "folder", "name": "Projects", "desc": "Deadlines, dashboards, archiving"},
     {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Named holiday calendars non-working recurrence respects"},
+    # 2026-10-02 (STATE.md's "custom frontmatter field schema" decision):
+    # routes live in routers/notebook.py's own notebook_field_settings_router
+    # (same "feature's own router hosts its /settings/* routes" precedent as
+    # Groups -- see label_pages.py's groups_settings_router), only the hub
+    # tile itself lives here.
+    {"url": "/settings/notebook", "icon": "file-text", "name": "Notebook", "desc": "Custom frontmatter fields for Notebook documents"},
     {"url": "/settings/time-blocks", "icon": "moon", "name": "Sleep & Leisure Time", "desc": "Weekly hours the Week/Day grid highlights and warns about"},
     {"url": "/settings/data-maintenance", "icon": "database", "name": "Data & Maintenance", "desc": "Backups, integrity, sync conflicts, export, purge"},
     # Flairs was briefly its own hub category (2026-09-29, same day: "a UI
@@ -683,6 +689,27 @@ def set_profile_photo(
             raise HTTPException(400, "That file doesn't look like a real JPEG, PNG, GIF, or WEBP image.")
         db.set_profile_photo(conn, base64.b64encode(data).decode("ascii"), sniffed)
     return RedirectResponse(url="/settings/your-profile", status_code=303)
+
+
+@router.get("/settings/profile-photo/upload")
+def profile_photo_upload_modal(request: Request, conn=Depends(get_db)):
+    """The shared upload modal (upload_modal.html) for the profile picture."""
+    return templates.TemplateResponse(
+        "upload_modal.html",
+        {
+            "request": request,
+            "title": "Profile picture",
+            "form_id": "profile-photo-upload-form",
+            "upload_action": "/settings/profile-photo",
+            "field_name": "photo",
+            "input_class": "avatar-upload-input",
+            "zone_label": "Choose or drop a photo",
+            "preview_url": ("/settings/profile-photo/image?v=" + str(db.get_profile_photo(conn).get("version"))) if db.get_profile_photo(conn) else "",
+            "delete_url": "/settings/profile-photo-remove" if db.get_profile_photo(conn) else "",
+            "delete_label": "Remove your profile picture?",
+            "back_url": "/settings/your-profile",
+        },
+    )
 
 
 @router.post("/settings/profile-photo-remove")

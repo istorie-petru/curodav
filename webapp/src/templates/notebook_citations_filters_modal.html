@@ -1,0 +1,137 @@
+{% from "_inputs.html" import number_input %}
+{% extends "base.html" %}
+{% block title %}Filter citations{% endblock %}
+{% block content %}
+<!-- Citations Filters modal (2026-10-03, direct request) -- Type/Author/
+     Year filters (plain AND across dimensions) + Sort, all submitted
+     together as one GET navigation back to /notebook/citations rather
+     than per-field auto-submit (routers/notebook.py's citations_filters_
+     modal has the full reasoning for why this is a modal at all, a
+     one-off departure from the inline-fancy-dropdown convention every
+     other list page uses).
+
+     This form is deliberately NOT a real <form method="get"> whose Apply
+     button is a type="submit" -- modal.js's generic form-submit
+     interceptor (wireForm) always does `fetch(form.action, {method:
+     form.method || "POST", body: new FormData(form)})`, and attaching a
+     body to a GET fetch throws (`Request with GET/HEAD method cannot
+     have body`). `data-modal-get` (the one other GET-form path modal.js
+     supports) re-fetches and re-renders this SAME modal with new query
+     params -- also wrong here, since Apply needs to navigate the page
+     underneath, not refresh the modal. So Apply is a plain `<a href>`
+     with no `data-modal` attribute (see the footer comment below for why
+     that rules out reusing `_modal_footer.html`'s own primary-href slot)
+     -- modal.js's click delegation leaves a plain link alone, so clicking
+     it is a normal browser navigation that closes the modal as a side
+     effect. Its href starts out matching the current filtered view and
+     is kept in sync with every control change by static/
+     notebook_citations_filters.js. The method="get" on this <form> is
+     only there so a real browser can still submit it as a graceful
+     no-JS fallback (Enter inside a text field, or on a very old/broken
+     client) -- modal.js never gets a chance to intercept a GET submit
+     that already has no submit button of its own to trigger it through
+     the normal path.
+
+     The footer below is hand-written, NOT `_modal_footer.html`'s own
+     `footer_primary_href` slot -- that slot always renders its `<a>` with
+     `data-modal` baked in unconditionally (see that file's own primary-
+     href branch), which would make Apply open ANOTHER modal fetch
+     instead of navigating the page underneath. Same `.modal-footer`/
+     `.btn`/`.spacer` classes as that macro produces, so it looks
+     identical; Cancel still uses `data-modal-cancel` (modal.js's real
+     close handler) since that part has no such conflict. -->
+<div id="modal-target" class="modal-stable-height">
+<div class="modal-header">
+<h1>Filter citations</h1>
+</div>
+<div class="modal-body">
+<div class="card">
+<form method="get" action="/notebook/citations" id="citations-filters-form">
+    <div class="field-grid">
+        <div class="field field-wide">
+            {% set ms_mode = 'select' %}
+            {% set ms_form_id = 'citations-filters-form' %}
+            {% set ms_name = 'type' %}
+            {% set ms_label = 'Type' %}
+            {% set ms_items = type_items %}
+            {% set ms_selected = selected_types %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+        <div class="field field-wide">
+            {% set ms_mode = 'select' %}
+            {% set ms_form_id = 'citations-filters-form' %}
+            {% set ms_name = 'author' %}
+            {% set ms_label = 'Author' %}
+            {% set ms_items = author_items %}
+            {% set ms_selected = selected_authors %}
+            {% include "_widget_list_multiselect.html" %}
+            {% if not author_items %}<span class="field-hint">No authors recorded yet.</span>{% endif %}
+        </div>
+        {# Year, a from/to interval (2026-10-03 direct request), not a
+           dropdown -- plain number inputs, both children of the real
+           <form> directly (no `form="..."` attribute needed: unlike the
+           multiselects above, these never get portaled out of it).
+           Default both blank, no autocomplete, until Start gets a value
+           -- then a blank End is filled with the current year (routers/
+           notebook.py's `_resolve_citation_year_range`/`citations_
+           filters_modal` docstrings have the full reasoning); static/
+           notebook_citations_filters.js mirrors the same rule live for a
+           Start typed after this page already rendered. #}
+        <div class="field">
+            <label for="citations-filter-year-from">From year</label>
+            {{ number_input({'inputmode': 'numeric', 'class': 'citation-year-input', 'id': 'citations-filter-year-from', 'name': 'year_from', 'value': (selected_year_from)}) }}
+        </div>
+        <div class="field">
+            <label for="citations-filter-year-to">To year</label>
+            {{ number_input({'inputmode': 'numeric', 'class': 'citation-year-input', 'id': 'citations-filter-year-to', 'name': 'year_to', 'value': (selected_year_to)}) }}
+        </div>
+        {# Primary/secondary sort (2026-10-03 direct request) -- two
+           independent single-select dropdowns side by side (field-grid's
+           plain 2-column flow, same as the pair above), not one combined
+           control. `sort` picks the main ordering field; `sort2` breaks
+           ties within it -- routers/notebook.py's `_citation_sort_value`/
+           `_filter_and_sort_citations` always appends Title as an
+           unconditional final tiebreaker after both, so results stay
+           fully deterministic even if Primary/Secondary end up equal (or
+           are the same field picked twice). #}
+        <div class="field">
+            {% set ms_mode = 'single' %}
+            {% set ms_form_id = 'citations-filters-form' %}
+            {% set ms_name = 'sort' %}
+            {% set ms_label = 'Sort by' %}
+            {% set ms_items = sort_items %}
+            {% set ms_selected = selected_sort %}
+            {% set ms_wide = false %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+        <div class="field">
+            {% set ms_mode = 'single' %}
+            {% set ms_form_id = 'citations-filters-form' %}
+            {% set ms_name = 'sort2' %}
+            {% set ms_label = 'Then by' %}
+            {% set ms_items = sort_items %}
+            {% set ms_selected = selected_sort2 %}
+            {% set ms_wide = false %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+    </div>
+</form>
+</div>
+</div>
+<div class="modal-footer">
+    <a href="/notebook/citations" class="btn ghost" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Cancel</a>
+    <span class="spacer"></span>
+    <a href="/notebook/citations" class="btn ghost">Clear filters</a>
+    <a href="{{ apply_href }}" id="citations-filters-apply" class="btn primary">{{ icon('filter', 'icon-sm') }} Apply</a>
+</div>
+</div>
+{% endblock %}
+<!-- No extra_scripts block -- only ever opened via data-modal, so
+     anything outside #modal-target above is never part of what modal.js
+     actually injects (same note as notebook_field_edit_modal.html's own
+     footer comment). static/notebook_citations_filters.js is loaded from
+     notebook_citations_list.html instead -- the real page this modal is
+     always opened from -- since its document-level delegated listener
+     works regardless of whether this modal's markup existed at script-
+     load time. -->
+

@@ -1,3 +1,4 @@
+{% from "_inputs.html" import checkbox_input %}
 {% extends "base.html" %}
 {% block title %}Sleep & Leisure Time - Settings{% endblock %}
 {% block content %}
@@ -51,7 +52,7 @@
                     {% for b in time_blocks %}
                     <tr data-uid="{{ b.uid }}">
                         <td>
-                            <input type="checkbox" class="row-select" data-uid="{{ b.uid }}" aria-label="Select {{ b.label or (b.kind ~ ' time block') }}" autocomplete="off">
+                            {{ checkbox_input({'class': 'row-select', 'data-uid': (b.uid), 'aria-label': 'Select ' ~ (b.label or (b.kind ~ ' time block')), 'autocomplete': 'off'}) }}
                         </td>
                         <td>
                             <div class="label-cell">

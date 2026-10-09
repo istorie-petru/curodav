@@ -1,3 +1,4 @@
+{% from "_empty_state.html" import empty_state %}
 <!-- 1.9 side work: Week merged with the former "Timetable" sub-view (direct
      feedback -- "merge the calendar's week view with the timetable view").
      One grid, both capabilities: ordinary events stay fully interactive
@@ -191,7 +192,7 @@
             {% endfor %}
         </div>
         {% else %}
-        <div class="empty-state empty-state-compact">No unscheduled work -- every open task already has scheduled work.</div>
+        {{ empty_state('No unscheduled work', text='Every open task already has scheduled work.', size='compact') }}
         {% endif %}
         </div>
     </aside>

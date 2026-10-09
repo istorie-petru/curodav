@@ -411,6 +411,54 @@ class TestNoLabelsPresent:
         assert "No labels available" not in body
         assert "publish-btn" in body
 
+    def test_create_one_label_link_carries_return_to_this_modal(self, conn):
+        """Modal-stack Cancel fix (curodav-notes memory curodav-webapp-
+        modal-stack-cancel-fix) -- the "Create one" link's return_to tells
+        the nested New Label modal's Cancel to come back here instead of
+        closing the whole flow back to /settings/labels."""
+        from starlette.requests import Request
+
+        from src.routers import published_lists as router
+
+        request = Request(
+            {
+                "type": "http", "method": "GET", "path": "/published-lists/new",
+                "query_string": b"", "scheme": "http", "server": ("testserver", 80),
+                "root_path": "", "headers": [],
+            }
+        )
+        resp = router.new_list_modal(request, conn=conn)
+        body = resp.body.decode()
+        assert '/settings/labels/new?return_to=/published-lists/new' in body
+
+    def test_edit_mode_create_one_label_link_carries_return_to_the_edit_url(self, conn):
+        """Same modal-stack fix as the create-mode test above, but for
+        edit_list_modal -- return_to must point at this List's own /edit
+        URL, not /published-lists/new, since both modes share this
+        template."""
+        from starlette.requests import Request
+
+        from src.routers import published_lists as router
+
+        db.upsert_published_list(
+            conn,
+            {
+                "id": "lst1", "name": "My List", "entity_type": "task",
+                "label_filter": {}, "radicale_collection_path": "published-my-list",
+                "sync_direction": "read_only", "last_materialized_at": None, "created_at": _now(),
+            },
+        )
+        request = Request(
+            {
+                "type": "http", "method": "GET", "path": "/published-lists/lst1/edit",
+                "query_string": b"", "scheme": "http", "server": ("testserver", 80),
+                "root_path": "", "headers": [],
+            }
+        )
+        resp = router.edit_list_modal("lst1", request, conn=conn)
+        body = resp.body.decode()
+        assert '/settings/labels/new?return_to=/published-lists/lst1/edit' in body
+
     def test_create_with_no_labels_in_account_includes_everything(self, conn):
         from src.routers import published_lists as router
 

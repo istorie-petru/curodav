@@ -46,6 +46,7 @@ class TestDefaults:
         assert cfg["agenda_widget"] is True
         assert cfg["tasks_widget"] is True
         assert cfg["contacts_widget"] is True
+        assert cfg["notebook_widget"] is True
         assert cfg["is_archived"] is False
 
     def test_upsert_round_trips_module_fields(self, conn):

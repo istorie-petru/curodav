@@ -25,7 +25,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from .. import db, derived_state, habit_view, recurrence_expand
+from .. import clock, db, derived_state, habit_view, recurrence_expand
 from ..deps import EDIT_MODE_KEY, PAGE_HEADER_BANNER_SCOPE, get_db, templates
 
 router = APIRouter(tags=["dashboard"])
@@ -276,7 +276,7 @@ def _agenda_with_grace(conn, config: dict, predicate) -> list[dict]:
     lists (see TASK_GRACE_MINUTES' own comment) rather than folded into
     `_filtered_tasks` itself."""
     open_tasks = _filtered_tasks(conn, config)
-    cutoff_iso = (datetime.now(timezone.utc) - timedelta(minutes=TASK_GRACE_MINUTES)).isoformat()
+    cutoff_iso = (clock.now() - timedelta(minutes=TASK_GRACE_MINUTES)).isoformat()
     done_recent = [
         t for t in _filtered_tasks(conn, config, open_only=False)
         if t["status"] in ("done", "archived") and t.get("completed_at") and t["completed_at"] >= cutoff_iso
@@ -419,7 +419,7 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
     "no limit" widget setting)."""
     show = _agenda_show(config)
     range_ = _agenda_range(config)
-    today = date.today()
+    today = clock.today()
     today_iso = today.isoformat()
     # `0` used to mean "unlimited"; 2026-09-13 direct request ("no limit
     # should actually be 20 maximum items") capped it at 20 instead --
@@ -639,7 +639,7 @@ def _render_mini_month_calendar(conn, config: dict, nav: dict | None = None) -> 
     from ..deps import WEEK_START_KEY
 
     week_start = db.get_app_meta(conn, WEEK_START_KEY) or "monday"
-    today = date.today()
+    today = clock.today()
     year = (nav or {}).get("year") or today.year
     month = (nav or {}).get("month") or today.month
     cal = py_calendar.Calendar(firstweekday=6 if week_start == "sunday" else 0)
@@ -1115,7 +1115,18 @@ def _render_notebook_list(conn, config: dict, nav: dict | None = None) -> dict:
     # Already newest-updated-first (db.list_notebook_documents' own
     # ORDER BY) -- the right default for a "recent documents" widget,
     # same as every other list-shaped widget here.
-    return {"documents": documents[:limit], "create_label": create_label}
+    documents = documents[:limit]
+    # Same per-row look-attachment as routers/notebook.py's
+    # `_notebook_browse_context` (2026-10-02 direct request: note_type's
+    # look should be consistent everywhere it renders, not just the
+    # Browse page) -- db.notebook_note_type_looks is the one place every
+    # note_type-rendering surface reads color/icon from now.
+    type_looks = db.notebook_note_type_looks(conn)
+    for d in documents:
+        look = type_looks.get(d.get("note_type") or "", db.NOTEBOOK_TYPE_LOOK_FALLBACK)
+        d["type_icon"] = look["icon"]
+        d["type_color"] = look["color"]
+    return {"documents": documents, "create_label": create_label}
 
 
 def _render_habit_checkin(conn, config: dict, nav: dict | None = None) -> dict:
@@ -1166,7 +1177,7 @@ def _render_scheduled_work_today(conn, config: dict, nav: dict | None = None) ->
     to its own Dashboard widget type at the same time -- that widget type
     (and the whole Importance/Urgency feature behind it) is now removed;
     see src/derived_state.py's module docstring."""
-    today_iso = date.today().isoformat()
+    today_iso = clock.today().isoformat()
     events = _filtered_events(conn, config, start=f"{today_iso}T00:00:00", end=f"{today_iso}T23:59:59")
     events = [e for e in events if e.get("start_at") and e["start_at"][:10] == today_iso]
     sessions = []
@@ -2475,7 +2486,7 @@ def quick_add_form(
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
             "prefill_tags": [label] if label else [],
             **db.project_picker_context(conn),
-            "today": date.today().isoformat(),
+            "today": clock.today().isoformat(),
             "habit_label": db.get_task_habit_settings(conn)["habit_label"],
             # Event-side context -- same union new_event_form passes, all
             # blank so the event form starts empty.

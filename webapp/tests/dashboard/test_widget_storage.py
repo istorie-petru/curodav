@@ -10,13 +10,6 @@ import pytest
 from src import db
 
 
-@pytest.fixture()
-def conn(tmp_path):
-    db_path = tmp_path / "cache.sqlite"
-    with db.connect(db_path) as c:
-        yield c
-
-
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 

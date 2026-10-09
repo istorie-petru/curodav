@@ -1,3 +1,4 @@
+{% from "_inputs.html" import text_input %}
 {% extends "base.html" %}
 {% block title %}{% if group %}Edit group{% else %}New group{% endif %}{% endblock %}
 {% block content %}
@@ -19,7 +20,7 @@
     <div class="field-grid">
         <div class="field field-wide">
             <label for="group-new-name">Name</label>
-            <input type="text" id="group-new-name" name="new_name" value="{{ group.name if group else '' }}" required maxlength="60" autocomplete="off"{% if not group %} autofocus{% endif %}>
+            {{ text_input({'id': 'group-new-name', 'name': 'new_name', 'value': group.name if group else '', 'required': true, 'maxlength': '60', 'autocomplete': 'off', 'autofocus': (true if (not group) else false)}) }}
         </div>
         {% call look_picker('look-group-form', 'group-form', group.color if group else 'gray', group.icon if group else none, colors, icon_groups,
                             no_icon_label='Default icon', default_icon=group_default_icon) %}

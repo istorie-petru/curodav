@@ -1,0 +1,16 @@
+{# Canonical Contacts row: who a task or event involves. Set `contacts_object_type`
+   ("task" or "event") and `contacts_object_id` ('' for a new one) before
+   including. `contacts_present` tells the server this form carries the field,
+   so a form without it never clears the links. #}
+<div class="field">
+    <input type="hidden" name="contacts_present" value="1">
+    {% set ms_name = 'contacts' %}
+    {% set ms_icon = 'address-book' %}
+    {% set ms_label = 'Contacts' %}
+    {% set ms_items = contact_items(request) %}
+    {% set ms_selected = object_contact_uids(request, contacts_object_type, contacts_object_id) %}
+    {% set ms_mode = 'select' %}
+    {% set ms_allow_new = false %}
+    {% set ms_pill = false %}
+    {% include "_widget_list_multiselect.html" %}
+</div>

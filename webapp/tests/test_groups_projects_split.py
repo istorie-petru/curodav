@@ -175,7 +175,7 @@ class TestLabelsVsProjects:
 class TestModuleDropdowns:
     def test_page_sections_and_show_in_are_dropdowns(self, conn):
         db.upsert_label_config(conn, {"name": "Gym", "sidebar_pin": 1, "tasks_widget": 1, "agenda_widget": 0,
-                                      "contacts_widget": 0, "created_at": _now()})
+                                      "contacts_widget": 0, "notebook_widget": 0, "created_at": _now()})
         body = labels_router.edit_label_modal("Gym", _req("/settings/labels/Gym/edit"), conn=conn).body.decode()
         assert 'data-ms-label="page"' in body and 'data-ms-label="sections"' in body and 'data-ms-label="show in"' in body
         assert '<span class="ms-summary">Tasks</span>' in body

@@ -1,0 +1,138 @@
+/* Styles for the custom Code block (notebook_code.js, 2026-10-03) --
+   first-party, not a patch on vendored chrome, same reasoning as
+   notebook_blocks.css for being its own file.
+
+   The highlighted <pre><code> and the real <textarea> MUST share
+   identical font/padding/border/white-space metrics -- the textarea's
+   text is invisible (only its caret/selection show), so every glyph the
+   user sees actually comes from the <pre> positioned directly behind it;
+   any metric mismatch between the two would make clicks land on the
+   wrong character. Both halves of that pairing are written together
+   below rather than one inheriting from the other, so a future edit to
+   one isn't silently missed on the other. */
+.cdx-nb-code {
+  position: relative;
+  margin: 0.4em 0;
+}
+.cdx-nb-code__highlight,
+.cdx-nb-code__textarea {
+  box-sizing: border-box;
+  margin: 0;
+  width: 100%;
+  min-height: 200px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono",
+    Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5em;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  tab-size: 2;
+}
+.cdx-nb-code__highlight {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--bg-secondary);
+  color: var(--fg-primary);
+}
+.cdx-nb-code__highlight-code {
+  font-family: inherit;
+  white-space: inherit;
+}
+.cdx-nb-code__textarea {
+  position: relative;
+  display: block;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--fg-primary);
+  resize: none;
+  overflow: hidden;
+  outline: none;
+}
+.cdx-nb-code__textarea::selection {
+  background: var(--accent-neutral-subtle);
+}
+/* The invisible-text trick means a native `::placeholder` would also
+   render invisible -- shown through the highlight layer instead (the
+   layer the user actually sees). `:has()` rather than a `~` sibling
+   selector: the textarea is the LAST child (appended after <pre> in
+   render()), so a sibling combinator could only select something AFTER
+   it, the wrong direction to reach <pre> from here. Needs a real
+   `placeholder` attribute on the textarea (set in notebook_code.js) for
+   `:placeholder-shown` to ever match at all -- `data-placeholder` alone,
+   the convention every other block in this editor uses, doesn't trigger
+   this pseudo-class. */
+.cdx-nb-code:has(.cdx-nb-code__textarea:placeholder-shown)
+  .cdx-nb-code__highlight-code:empty::before {
+  content: "Enter code";
+  color: var(--fg-secondary);
+}
+
+.cdx-nb-code-lang-select {
+  margin: 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--control-bg);
+  color: var(--fg-primary);
+  font-family: inherit;
+  font-size: 14px;
+}
+
+/* ----------------- Prism token colors ----------------- */
+
+/* First-party palette, not a vendored Prism theme -- Prism's own themes
+   are each a fixed single color scheme (light OR dark, not both), which
+   would need the same dark-mode patching exercise as every other
+   vendored CSS file in this editor anyway. Reuses this app's existing
+   5-color tag palette (style.css's --tag-*-fg, already theme-aware)
+   instead of introducing new hardcoded colors, same technique as the
+   Quote/Callout blocks. Mapped to Prism's standard `.token.*` class
+   names by conventional role (keyword/string/number act the same way
+   across every language Prism ships). */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: var(--fg-secondary);
+  font-style: italic;
+}
+.token.keyword,
+.token.important,
+.token.atrule {
+  color: var(--tag-purple-fg);
+  font-weight: var(--font-weight-bold);
+}
+.token.string,
+.token.char,
+.token.attr-value {
+  color: var(--tag-green-fg);
+}
+.token.number,
+.token.boolean,
+.token.constant {
+  color: var(--tag-blue-fg);
+}
+.token.function,
+.token.class-name {
+  color: var(--tag-yellow-fg);
+}
+.token.tag,
+.token.selector,
+.token.deleted,
+.token.property {
+  color: var(--tag-red-fg);
+}
+.token.punctuation,
+.token.operator,
+.token.entity,
+.token.symbol {
+  color: var(--fg-secondary);
+}
+.token.inserted {
+  color: var(--tag-green-fg);
+}

@@ -432,6 +432,16 @@
     return `<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-${name}"></use></svg>`;
   }
 
-  window.CCAvatarCropper = { init };
+  // Re-open the crop editor on an image that is already stored (the upload
+  // modal's Edit button): fetch it, then run the same editor a freshly picked
+  // file gets. Apply fills `input` and the form's autosubmit takes it from there.
+  async function edit(url, input, kind) {
+    const resp = await fetch(url);
+    if (!resp.ok) return;
+    const blob = await resp.blob();
+    openEditor(new File([blob], "current", { type: blob.type }), input, kind);
+  }
+
+  window.CCAvatarCropper = { init, edit };
   document.addEventListener("DOMContentLoaded", () => init(document));
 })();

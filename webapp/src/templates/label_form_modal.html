@@ -46,7 +46,19 @@
 </form>
 </div>
 </div>
-{% set footer_back_url = '/settings/projects' if is_project_form else '/settings/labels' %}
+{# Modal-stack Cancel fix (same family as routers/notebook.py's citation/
+   glossary "new" modals, curodav-notes memory
+   curodav-webapp-modal-stack-cancel-fix) -- return_to carries the caller's
+   own URL when this modal was opened from inside another picker modal with
+   nothing to pick yet (published_list_create_modal.html's "Create one"
+   link), so Cancel swaps back into it (footer_back_mode "modal") instead
+   of closing the whole overlay back to /settings/labels or /settings/
+   projects. Falls back to the plain list-page Cancel otherwise -- every
+   other caller of this modal (Settings > Labels' own "+ New Label",
+   quick-add's Label panel, ...) never sets return_to, so their Cancel is
+   unchanged. #}
+{% set footer_back_url = return_to if return_to else ('/settings/projects' if is_project_form else '/settings/labels') %}
+{% set footer_back_mode = 'modal' if return_to else 'cancel' %}
 {% set footer_back_label = 'Cancel' %}
 {% set footer_delete_url = '/settings/labels/' ~ l.name ~ '/delete' if l else '' %}
 {% set footer_delete_mode = 'confirm' %}

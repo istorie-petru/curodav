@@ -88,7 +88,19 @@
    _bulk_actions_bar.html's new `bulk_count()` macro and each call site's
    own comment. Empty string by default (`title_extra=''`), so pages with
    nothing to add here render exactly as before. #}
-{% macro page_header_narrow(title, icon_name, title_extra='', banner=none, banner_image_scope=none, icon_color=none) %}
+{# 2026-10-03 follow-up (sidebar/glossary/footnotes backlog item A.4,
+   direct callback: "the sidebar-toggle header button currently drifts; it
+   must always sit at the far right of the header"): `sidebar_toggle`
+   renders Notebook's collapse/expand button (static/notebook_sidebar.js)
+   as the guaranteed-last child of `.page-header-narrow-actions`, after
+   `caller()`'s own content, rather than relying on each call site to put
+   it last in its own block -- notebook_list.html had it FIRST (before the
+   Citations/Glossary links), notebook_document.html had it last, so the
+   two pages visibly disagreed. Same "move it out of caller-dependent
+   ordering, guarantee the position centrally" fix the 2026-09-11 back-
+   arrow follow-up above already made for true-leftmost; this is the same
+   idea for true-rightmost. #}
+{% macro page_header_narrow(title, icon_name, title_extra='', banner=none, banner_image_scope=none, icon_color=none, sidebar_toggle=false) %}
 {# 2026-09-25 (ui-cleanup item 2, "all banners should be narrow, even on
    dashboard pages"): Home, label and group pages use this header too now,
    so it can take the page's own banner instead of the global one. `banner`
@@ -120,9 +132,12 @@
     <h2 class="page-header-narrow-title">{{ title }}</h2>
     {% if title_extra %}{{ title_extra }}{% endif %}
     <div class="spacer"></div>
-    {% if caller %}
+    {% if caller or sidebar_toggle %}
     <div class="page-header-narrow-actions">
-        {{ caller() }}
+        {% if caller %}{{ caller() }}{% endif %}
+        {% if sidebar_toggle %}
+        <button type="button" id="notebook-sidebar-toggle" class="icon-btn" title="Collapse sidebar" aria-label="Collapse sidebar" aria-pressed="true">{{ icon('sidebar', 'icon-sm notebook-sidebar-toggle-icon') }}</button>
+        {% endif %}
     </div>
     {% endif %}
 </div>

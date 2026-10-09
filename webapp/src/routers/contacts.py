@@ -375,12 +375,14 @@ def unarchive_contact(uid: str, x_requested_with: str | None = Header(default=No
 @router.get("/new")
 def new_contact_form(request: Request, conn=Depends(get_db)):
     tag_names = db.list_tag_names_in_use(conn)
+    draft_uid = db.create_contact_draft(conn)
     return templates.TemplateResponse(
         "contact_form.html",
         {
             "request": request,
             "active_tab": "contacts",
             "contact": None,
+            "draft_uid": draft_uid,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
             "phone_types": db.CONTACT_PHONE_TYPES,
@@ -419,6 +421,7 @@ async def create_contact(
     tags_labels_new: str = Form(""),
     notes: str = Form(""),
     photo: UploadFile | None = File(None),
+    draft_uid: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -426,9 +429,19 @@ async def create_contact(
     birthday_value = _parse_birthday_field(birthday)
     photo_result = await _read_photo(photo)
     photo_b64, photo_type = photo_result if photo_result else (None, None)
+    uid = str(uuid.uuid4())
+    draft = db.get_contact(conn, draft_uid) if isinstance(draft_uid, str) and draft_uid else None
+    if draft and draft.get("is_draft"):
+        # Save turns the buffer contact into the real one: keep its uid and
+        # photo, then drop the buffer row so the real one is written (and
+        # synced) as a brand-new contact.
+        uid = draft_uid
+        if not photo_b64:
+            photo_b64, photo_type = draft.get("photo_b64"), draft.get("photo_type")
+        db.delete_contact(conn, draft_uid, record_server_write=False)
     now = datetime.now(timezone.utc).isoformat()
     row = {
-        "uid": str(uuid.uuid4()),
+        "uid": uid,
         "full_name": full_name,
         "title": title if title and title.strip().lower() not in ("none", "nothing") else None,
         "org": org if org and org.strip().lower() not in ("none", "nothing") else None,
@@ -578,6 +591,7 @@ def edit_contact_form(uid: str, request: Request, conn=Depends(get_db)):
             "request": request,
             "active_tab": "contacts",
             "contact": contact,
+            "draft_uid": uid if contact and contact.get("is_draft") else "",
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
             "phone_types": db.CONTACT_PHONE_TYPES,
@@ -624,6 +638,7 @@ async def update_contact(
     resolved_tags = _resolve_contact_label(tags, tags_labels, tags_labels_new)
     birthday_value = _parse_birthday_field(birthday)
     existing = db.get_contact(conn, uid) or {}
+    is_draft = bool(existing.get("is_draft"))
     row = dict(existing)
     row.update(
         {
@@ -659,7 +674,81 @@ async def update_contact(
             row["photo_b64"], row["photo_type"] = photo_result
         # else: no new file chosen -- row already carries the existing
         # photo_b64/photo_type through from `dict(existing)` above.
-    db.upsert_contact(conn, row)
+    db.upsert_contact(conn, row, record_server_write=not is_draft)
+    return respond(x_requested_with, f"/contacts/{uid}")
+
+
+@router.post("/{uid}/discard")
+def discard_contact_draft(uid: str, conn=Depends(get_db)):
+    """Closing or cancelling a new-contact form drops its buffer contact. A
+    saved contact is never touched."""
+    contact = db.get_contact(conn, uid)
+    if contact and contact.get("is_draft"):
+        db.delete_contact(conn, uid, record_server_write=False)
+    return Response(status_code=204)
+
+
+@router.get("/{uid}/photo/modal")
+def contact_photo_modal(uid: str, request: Request, conn=Depends(get_db)):
+    """The shared upload modal (upload_modal.html) for a contact's photo."""
+    contact = db.get_contact(conn, uid)
+    if not contact:
+        raise HTTPException(404)
+    draft = bool(contact.get("is_draft"))
+    _attach_photo_url(contact)
+    return templates.TemplateResponse(
+        "upload_modal.html",
+        {
+            "request": request,
+            "title": "Contact photo",
+            "form_id": "contact-photo-upload-form",
+            "upload_action": f"/contacts/{uid}/photo",
+            "field_name": "photo",
+            "input_class": "avatar-upload-input",
+            "zone_label": "Choose or drop a photo",
+            "preview_url": contact.get("photo_url") or "",
+            "delete_url": f"/contacts/{uid}/photo/remove" if contact.get("photo_b64") else "",
+            "delete_label": "Remove this photo?",
+            "back_url": f"/contacts/{uid}/edit" if draft else f"/contacts/{uid}",
+            "back_mode": "modal",
+            "discard_url": f"/contacts/{uid}/discard" if draft else "",
+        },
+    )
+
+
+@router.post("/{uid}/photo")
+async def set_contact_photo(
+    uid: str,
+    photo: UploadFile | None = File(None),
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
+    contact = db.get_contact(conn, uid)
+    if not contact:
+        raise HTTPException(404)
+    result = await _read_photo(photo)
+    if result:
+        row = dict(contact)
+        row["photo_b64"], row["photo_type"] = result
+        row["updated_at"] = datetime.now(timezone.utc).isoformat()
+        db.upsert_contact(conn, row, record_server_write=not contact.get("is_draft"))
+    return respond(x_requested_with, f"/contacts/{uid}")
+
+
+@router.post("/{uid}/photo/remove")
+def remove_contact_photo(
+    uid: str,
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
+    contact = db.get_contact(conn, uid)
+    if not contact:
+        raise HTTPException(404)
+    row = dict(contact)
+    row["photo_b64"] = None
+    row["photo_type"] = None
+    row["updated_at"] = datetime.now(timezone.utc).isoformat()
+    db.upsert_contact(conn, row, record_server_write=not contact.get("is_draft"))
     return respond(x_requested_with, f"/contacts/{uid}")
 
 

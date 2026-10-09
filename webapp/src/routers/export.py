@@ -275,6 +275,55 @@ def _export_object_labels(conn) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def _export_notebook_citations(conn) -> list[dict[str, Any]]:
+    """Flat join rows (notebook_uid, citation_uid, position, created_at) --
+    same "separate flat export key, not nested under one owning parent"
+    treatment as object_labels above, since a citation can be attached to
+    many documents (not a one-document-owns-it relationship like
+    properties/tags)."""
+    rows = conn.execute(
+        "SELECT notebook_uid, citation_uid, position, created_at FROM notebook_citations"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _export_notebook_glossary_terms(conn) -> list[dict[str, Any]]:
+    """Flat join rows, same "separate flat export key" treatment as
+    _export_notebook_citations above (2026-10-03 direct follow-up, "add a
+    sidebar tab" -- the per-document attach table). `auto` (roadmap item H,
+    session 7) round-trips too, so a restored document doesn't lose the
+    manual-vs-auto-detected distinction on its attached terms."""
+    rows = conn.execute(
+        "SELECT notebook_uid, term_uid, position, created_at, auto FROM notebook_glossary_terms"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _export_notebook_glossary_excluded_terms(conn) -> list[dict[str, Any]]:
+    """Flat rows for the auto-detect override table (roadmap item H,
+    session 7) -- same "separate flat export key" treatment as the other
+    glossary join tables. Without this, a restore would lose every
+    "manually removed this false-positive match" override, and the next
+    content save's auto-detect pass would silently re-attach it."""
+    rows = conn.execute(
+        "SELECT notebook_uid, term_uid, created_at FROM notebook_glossary_excluded_terms"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _export_glossary_term_references(conn) -> list[dict[str, Any]]:
+    """Flat join rows (term_uid, ref_type, ref_uid, position, created_at) --
+    same "separate flat export key" treatment as the two functions above
+    (roadmap item F, 2026-10-03). Raw table rows, not
+    db.list_glossary_term_references' resolved-name shape -- a backup
+    should round-trip the actual stored reference, not a name that was
+    only ever a read-time convenience."""
+    rows = conn.execute(
+        "SELECT term_uid, ref_type, ref_uid, position, created_at FROM glossary_term_references"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def build_backup_payload(conn) -> dict[str, Any]:
     """The full-backup dict -- every synced object plus all local-only
     data. Factored out of export_data_json (below) so it has exactly one
@@ -316,8 +365,42 @@ def build_backup_payload(conn) -> dict[str, Any]:
         "event_task_relations": db.list_event_task_relations(conn),
         # Notebook (2026-10-01, curodav-notes/documentation/plans) -- every
         # document, content_json included (it's just this table's own text
-        # column, not a separate JSON export concern).
+        # column, not a separate JSON export concern). Custom properties
+        # (2026-10-02) ride along nested under each document's "properties"
+        # key (list_notebook_documents attaches them, same as "tags") --
+        # no separate "notebook_properties" backup key, same convention as
+        # contacts' phones/emails (no separate "contact_phones" key either;
+        # restore_backup_payload's upsert_notebook_document call below
+        # re-applies "properties" the same way it already does "tags").
         "notebook_documents": db.list_notebook_documents(conn),
+        # Settings > Notebook's frontmatter field schema (2026-10-02) --
+        # schema config, same "a backup restores how the app is set up,
+        # not just the content" treatment "labels" gets above. A field's
+        # own option list (list_notebook_field_config attaches it, same as
+        # "tags"/"properties" elsewhere) rides along nested, no separate
+        # "notebook_field_options" key.
+        "notebook_field_config": db.list_notebook_field_config(conn),
+        # Citations (2026-10-03) -- the global library, plus the flat
+        # notebook<->citation join table (a citation can be attached to
+        # several documents, so it can't ride along nested under one of
+        # them the way properties/tags do).
+        "citations": db.list_citations(conn),
+        "notebook_citations": _export_notebook_citations(conn),
+        # Glossary (2026-10-03, per-document attach added on the same
+        # direct follow-up that added the sidebar tab) -- the global term
+        # library, plus the flat notebook<->term join table, same
+        # "can't ride along nested under one document" treatment as
+        # notebook_citations above.
+        "glossary_terms": db.list_glossary_terms(conn),
+        "notebook_glossary_terms": _export_notebook_glossary_terms(conn),
+        # Glossary term references (roadmap item F, 2026-10-03) -- a term's
+        # own "further reading" list, owned by the term (not a document),
+        # same flat-join-table treatment as notebook_glossary_terms above.
+        "glossary_term_references": _export_glossary_term_references(conn),
+        # Auto-detect override bookkeeping (roadmap item H, session 7) --
+        # same "can't ride along nested under one document" treatment as
+        # notebook_glossary_terms above.
+        "notebook_glossary_excluded_terms": _export_notebook_glossary_excluded_terms(conn),
     }
 
 
@@ -763,11 +846,54 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
             conn, row["event_uid"], row["task_uid"], row.get("is_work_allocation", 0)
         )
     # Notebook (2026-10-01) -- upsert_notebook_document already pops
-    # "tags" and re-applies it via set_object_labels, same contract every
-    # other upsert_* restore call above relies on.
+    # "tags" (and, since 2026-10-02, "properties") and re-applies them via
+    # set_object_labels/set_notebook_properties, same contract every other
+    # upsert_* restore call above relies on.
     for row in payload.get("notebook_documents", []):
         db.upsert_notebook_document(conn, row)
         count += 1
+    # Settings > Notebook's frontmatter field schema (2026-10-02) --
+    # upsert_notebook_field_config already pops "options" and re-applies it
+    # via set_notebook_field_options, same contract as
+    # upsert_notebook_document above.
+    for row in payload.get("notebook_field_config", []):
+        db.upsert_notebook_field_config(conn, row)
+    # Citations (2026-10-03) -- the library restores first (documents'
+    # attach rows below reference it), then the flat join rows via the
+    # idempotent single-row attach (set_notebook_citations' whole-list
+    # replace isn't right here -- these rows arrive ungrouped, one at a
+    # time, same as event_task_relations above).
+    for row in payload.get("citations", []):
+        db.upsert_citation(conn, row)
+    for row in payload.get("notebook_citations", []):
+        db.attach_notebook_citation(
+            conn, row["notebook_uid"], row["citation_uid"], row.get("position", 0), row.get("created_at")
+        )
+    # Glossary (2026-10-03) -- same restore order as Citations above: the
+    # library first, then the flat join rows via the idempotent single-row
+    # attach.
+    for row in payload.get("glossary_terms", []):
+        db.upsert_glossary_term(conn, row)
+    for row in payload.get("notebook_glossary_terms", []):
+        db.attach_notebook_glossary_term(
+            conn, row["notebook_uid"], row["term_uid"], row.get("position", 0), row.get("created_at"),
+            row.get("auto", 0),
+        )
+    # Glossary term references (roadmap item F, 2026-10-03) -- restores
+    # last of the three: it points at glossary_terms (just restored above)
+    # and at notebook_documents/citations (both restored earlier still),
+    # so every target it could reference already exists by this point.
+    for row in payload.get("glossary_term_references", []):
+        db.attach_glossary_term_reference(
+            conn, row["term_uid"], row["ref_type"], row["ref_uid"], row.get("position", 0), row.get("created_at")
+        )
+    # Auto-detect override bookkeeping (roadmap item H, session 7) -- order
+    # doesn't matter relative to the two blocks above (it has no FK target
+    # of its own to wait on, just a plain (notebook_uid, term_uid) pair),
+    # restored last anyway for locality with the glossary block it belongs
+    # to.
+    for row in payload.get("notebook_glossary_excluded_terms", []):
+        db.attach_notebook_glossary_excluded_term(conn, row["notebook_uid"], row["term_uid"], row.get("created_at"))
     return count
 
 

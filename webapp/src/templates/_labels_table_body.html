@@ -1,3 +1,4 @@
+{% from "_inputs.html" import checkbox_input %}
 {# Labels / Projects table body (Settings > Labels and Settings >
    Projects; routers/labels.py _labels_context `kind`). Shared by the page
    load and the async-CRUD `region=list` refresh.
@@ -38,7 +39,7 @@
 {% macro _label_row(l) %}
 <tr class="entity-row" data-label-name="{{ l.name }}" data-label-group="{{ l.label_group or '' }}">
     <td class="col-select">
-        <input type="checkbox" class="row-select" data-uid="{{ l.name }}" aria-label="Select {{ l.name }}" autocomplete="off">
+        {{ checkbox_input({'class': 'row-select', 'data-uid': (l.name), 'aria-label': 'Select ' ~ (l.name), 'autocomplete': 'off'}) }}
     </td>
     <td class="col-name">
         <div class="label-cell">

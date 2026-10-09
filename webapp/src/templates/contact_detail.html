@@ -1,3 +1,4 @@
+{% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
 {% from "_label_pill.html" import label_pill with context %}
 {% from "_detail_cover.html" import detail_cover with context %}
@@ -47,7 +48,8 @@
          margins so that padding could stay intact for every plain
          *_form.html edit modal (a bare <h1>, no cover) that relies on it. -->
     <div class="detail-header-inner">
-        {{ detail_cover('var(--cal-accent-' ~ stable_color(contact.uid) ~ ')', banner, avatar(contact, 'avatar-large'), avatar_mode=true) }}
+        {% set _badge %}<a href="/contacts/{{ contact.uid }}/photo/modal" data-modal class="avatar-upload" title="Change photo">{{ avatar(contact, 'avatar-large') }}<span class="avatar-upload-overlay" aria-hidden="true">{{ icon('camera', 'icon-sm') }}</span></a>{% endset %}
+        {{ detail_cover('var(--cal-accent-' ~ stable_color(contact.uid) ~ ')', banner, _badge, avatar_mode=true) }}
         <div class="detail-heading-row">
             <div class="detail-heading-text">
                 <h1 class="detail-title">{{ contact.full_name }}</h1>
@@ -157,6 +159,13 @@
             <span class="detail-meta-value">{% for tag in contact.tags %}{{ label_pill(tag, 'modal') }} {% endfor %}</span>
         </div>
         {% endif %}
+        {% set _involved = contact_objects(request, contact.uid) %}
+        {% if _involved.tasks or _involved.events %}
+        <div class="detail-meta-item detail-meta-wide">
+            <span class="detail-meta-label">Involved in</span>
+            <span class="detail-meta-value">{% for t in _involved.tasks %}<a href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>{% if not loop.last or _involved.events %}, {% endif %}{% endfor %}{% for e in _involved.events %}<a href="/events/{{ e.uid }}" data-modal>{{ e.title }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
+        </div>
+        {% endif %}
     </div>
     {% if contact.notes %}
     <div class="detail-meta-description">
@@ -165,7 +174,7 @@
     </div>
     {% endif %}
     {% if not (contact.phones or contact.emails or contact.websites or contact.addresses or contact.social_profiles or contact.birthday or contact.tags or contact.notes) %}
-    <div class="empty-state">No other details yet &mdash; <a href="/contacts/{{ contact.uid }}/edit" data-modal>add some</a>.</div>
+    {% call empty_state('No other details yet', size='compact') %}<a href="/contacts/{{ contact.uid }}/edit" data-modal>Add some</a>{% endcall %}
     {% endif %}
 </div>
 </div>
@@ -183,7 +192,7 @@
 {% include "_modal_footer.html" %}
 {% else %}
 <div class="modal-body">
-<div class="empty-state">Contact not found.</div>
+{{ empty_state('Contact not found', size='compact') }}
 </div>
 {% endif %}
 </div>

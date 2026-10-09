@@ -1,3 +1,4 @@
+{% from "_inputs.html" import password_input, text_input %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -28,22 +29,22 @@
             <form method="post" action="/setup">
                 <div class="field">
                     <label for="username">Username</label>
-                    <input id="username" type="text" name="username" autocomplete="username" required autofocus>
+                    {{ text_input({'id': 'username', 'name': 'username', 'autocomplete': 'username', 'required': true, 'autofocus': true}) }}
                 </div>
                 <div class="field">
                     <label for="password">Password</label>
-                    <input id="password" type="password" name="password" autocomplete="new-password" minlength="8" required>
+                    {{ password_input({'id': 'password', 'name': 'password', 'autocomplete': 'new-password', 'minlength': '8', 'required': true}) }}
                 </div>
                 <div class="field">
                     <label for="password_confirm">Confirm password</label>
-                    <input id="password_confirm" type="password" name="password_confirm" autocomplete="new-password" minlength="8" required>
+                    {{ password_input({'id': 'password_confirm', 'name': 'password_confirm', 'autocomplete': 'new-password', 'minlength': '8', 'required': true}) }}
                 </div>
 
                 {% if not radicale_env_configured %}
                 <hr class="setup-radicale-divider">
                 <div class="field">
                     <label for="radicale_url">Radicale server URL <span class="text-muted">(optional, for phone sync)</span></label>
-                    <input id="radicale_url" type="text" name="radicale_url" placeholder="http://127.0.0.1:5232/you/" autocomplete="off">
+                    {{ text_input({'id': 'radicale_url', 'name': 'radicale_url', 'autocomplete': 'off'}) }}
                     <p class="settings-hint setup-radicale-hint">Uses the account above. Leave blank to skip — add it later in Settings.</p>
                 </div>
                 {% endif %}

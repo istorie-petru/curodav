@@ -1,3 +1,4 @@
+{% from "_inputs.html" import checkbox_input, radio_input %}
 {% from "_date_time_fields.html" import date_field with context %}
 {# Shared task-table row (extracted 2026-08-14, 1.4 Project pages & views'
    Tasks view) -- originally a local macro inside tasks_list.html; the
@@ -61,7 +62,7 @@
 <tr data-uid="{{ t.uid }}" class="{% if t.status in ('done', 'archived') %}task-row-completed{% endif %}">
     {% if show_select %}
     <td>
-        <input type="checkbox" class="row-select" data-uid="{{ t.uid }}" aria-label="Select {{ t.title }}" autocomplete="off">
+        {{ checkbox_input({'class': 'row-select', 'data-uid': (t.uid), 'aria-label': 'Select ' ~ (t.title), 'autocomplete': 'off'}) }}
     </td>
     {% endif %}
     <td class="task-title-cell">
@@ -78,9 +79,7 @@
             <div class="multiselect-panel ms-panel">
                 {% for s in statuses %}
                 <label class="multiselect-option">
-                    <input type="radio" name="task-status-{{ t.uid }}" value="{{ s }}"
-                           class="task-status-radio" data-uid="{{ t.uid }}" data-field="status" data-color="{{ status_colors[s] }}"
-                           {% if t.status == s %}checked{% endif %}>
+                    {{ radio_input({'name': 'task-status-' ~ (t.uid), 'value': s, 'class': 'task-status-radio', 'data-uid': t.uid, 'data-field': 'status', 'data-color': status_colors[s], 'checked': (true if (t.status == s) else false)}) }}
                     {# 2026-08-29 direct follow-up ("status options still
                        aren't pills") -- the trigger already shows the
                        current status as a colored pill; each option in the

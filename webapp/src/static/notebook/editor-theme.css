@@ -1,0 +1,447 @@
+/* Notebook's own patches on top of the vendored Editor.js CSS
+   (static/notebook/vendor/*.css) -- first-party code, not vendored, so it
+   lives next to vendor/ rather than inside it. Two unrelated concerns
+   share this one file because both are "Notebook's visual adjustments to
+   third-party chrome," not unrelated features (a third, text selection,
+   joined 2026-10-04 -- see its own section at the end):
+
+   1. Dark theme (2026-10-02) -- Editor.js's own CSS is light-theme-only
+      (hardcoded colors, no awareness of this app's theme). Scoped under
+      [data-theme="dark"], the exact attribute base.html's inline
+      before-first-paint <script> sets on <html> -- see style.css's own
+      :root/[data-theme="dark"] custom-property blocks for the token
+      names reused below (--bg-elevated, --fg-primary, --fg-secondary,
+      --border, --border-strong, --row-hover, --accent-neutral-subtle,
+      --control-bg). Most of Editor.js's chrome already keys off ITS OWN
+      local custom properties (e.g. `.ce-popover{--color-background:
+      white; ...}`) -- redefining those under [data-theme="dark"] is
+      enough for everything that reads them, and a selector like
+      `[data-theme="dark"] .ce-popover` is always more specific than
+      Editor.js's own bare `.ce-popover`, so this wins regardless of
+      which CSS file loaded first -- no !important needed anywhere in
+      this file. A handful of elements have no local custom property
+      (hardcoded colors) and get direct overrides instead.
+
+   2. Focus-ring scoping (2026-10-02, direct request, corrected same day
+      after the first two attempts targeted the wrong rule) -- the block-
+      picker popover's search field rings only its bare `<input>` on
+      focus, not the icon beside it. Two wrong diagnoses before the real
+      one, kept here since the trail matters for whoever touches this
+      next:
+        a. First guess: style.css's `a:focus-visible, button:focus-
+           visible, [tabindex]:focus-visible { outline: ... }`. Scoped a
+           `button, [tabindex]` copy of it to #notebook-editor -- no
+           visible change, because Editor.js's chrome (`.ce-toolbar__
+           plus`, `.ce-popover-item`, etc.) is plain `<div>`/`<span>` with
+           no tabindex at all; it tracks "active" via its own CSS modifier
+           classes, not real DOM focus. That selector list never matched
+           anything in here to begin with.
+        b. Second guess: broadened the scoped rule to `#notebook-editor
+           *:focus-visible { outline: none }`, reasoning the real
+           focusable elements (`.cdx-search-field__input`, `.ce-code__
+           textarea`, `.cdx-input`) just needed a wider selector. Still
+           didn't fix the actual visible ring, because the ring was never
+           an `outline` in the first place.
+        c. The real cause (confirmed by direct request): style.css's
+           shared form-control base -- `input:focus, select:focus,
+           textarea:focus { outline:none; border-color:var(--accent-
+           neutral); box-shadow:0 0 0 3px var(--accent-neutral-subtle); }`
+           (style.css's own "Form controls" section: "the one shared base
+           every input/select/textarea in the app inherits," ~81 fields
+           across every template) -- applies directly to the bare
+           `.cdx-search-field__input` the instant it's focused, since it's
+           a real `<input>`. A `box-shadow` draws around exactly the
+           element it's on, not a sibling icon, which is the actual gap:
+           not a stray outline, a box-shadow ring too narrow to cover the
+           field's icon.
+      Not touching that shared rule itself -- it's core, load-bearing
+      styling for every form field in the app, wildly disproportionate to
+      change (or remove and replace with some other signal) over one
+      search box in one feature. Scoped instead: suppress it on the bare
+      input, reproduce the identical look on the `.cdx-search-field`
+      wrapper's `:focus-within` state so the ring wraps the icon too. The
+      `*:focus-visible{outline:none}` rule from guess (b) stays anyway --
+      harmless, and cheap insurance if a future custom block ever is a
+      real `<button>`. */
+
+/* ----------------------- 1. Dark theme ----------------------- */
+
+/* The block-type/"+" popover AND the inline (bold/italic/link) toolbar
+   are the same underlying component (`.ce-popover`/`.ce-popover--inline`
+   -- see .ce-inline-toolbar's own rule below, which is the inline
+   variant of this same element) -- fixing these custom properties once
+   covers both surfaces the user actually sees. */
+[data-theme="dark"] .ce-popover {
+  --color-border: var(--border-strong);
+  --color-shadow: rgba(0, 0, 0, .45);
+  --color-background: var(--bg-elevated);
+  --color-text-primary: var(--fg-primary);
+  --color-text-secondary: var(--fg-secondary);
+  --color-border-icon: var(--border-strong);
+  --color-border-icon-disabled: var(--border);
+  --color-background-item-focus: var(--accent-neutral-subtle);
+  --color-background-item-hover: var(--row-hover);
+}
+/* Defensive explicit override -- harmless whether `.ce-inline-toolbar`
+   turns out to be the same element as `.ce-popover` above (specificity
+   already wins either way) or a separate node with its own copy of
+   these properties. */
+[data-theme="dark"] .ce-inline-toolbar {
+  --color-text-primary: var(--fg-primary);
+  --color-background-icon-active: var(--accent-neutral-subtle);
+}
+/* Not using var(--color-text-secondary) despite matching its default
+   value -- a coincidental same color, hardcoded separately upstream. */
+[data-theme="dark"] .ce-popover__nothing-found-message {
+  color: var(--fg-secondary);
+}
+
+/* Block-picker search field (also see the focus-outline section below --
+   same element, different concern). */
+[data-theme="dark"] .cdx-search-field {
+  background: var(--control-bg);
+  border-color: var(--border-strong);
+}
+[data-theme="dark"] .cdx-search-field__icon svg {
+  color: var(--fg-secondary);
+}
+[data-theme="dark"] .cdx-search-field__input {
+  color: var(--fg-primary);
+}
+
+/* The "+" and block-settings buttons in the block toolbar -- hardcoded
+   colors, no local custom property to redefine. */
+[data-theme="dark"] .ce-toolbar__plus,
+[data-theme="dark"] .ce-toolbar__settings-btn {
+  color: var(--fg-primary);
+}
+@media (hover: hover) {
+  [data-theme="dark"] .ce-toolbar__plus:hover,
+  [data-theme="dark"] .ce-toolbar__settings-btn:hover,
+  [data-theme="dark"] .ce-inline-tool:hover,
+  [data-theme="dark"] .cdx-settings-button:hover {
+    background-color: var(--row-hover);
+  }
+}
+[data-theme="dark"] .ce-toolbar__plus--active,
+[data-theme="dark"] .ce-toolbar__settings-btn--active {
+  background-color: var(--row-hover);
+}
+
+/* 2026-10-04 direct report: the "+" (and block-settings) button had the
+   wrong colors specifically on mobile in dark mode -- editorjs.css's own
+   mobile-only rule (`@media (max-width:650px){.ce-toolbar__plus{...}}`)
+   redraws these as a small floating white card (`background-color:#fff`,
+   a light `border`/`box-shadow`) for the touch-sized tap target, a
+   second, separate hardcoding from the plain desktop version above that
+   the dark-theme `color` override here never reached -- the icon turned
+   --fg-primary (light) but still sat on that same hardcoded white box,
+   same low-contrast "light-on-light" failure mode editor-theme.css's own
+   new text-selection fix (further down this file) hit for a different
+   element. Scoped to the same 650px breakpoint as the rule it's
+   patching, not the 860px breakpoint the Document page's own sidebar
+   layout uses elsewhere -- this is Editor.js's own internal mobile
+   cutoff, unrelated to that one. */
+@media (max-width: 650px) {
+  [data-theme="dark"] .ce-toolbar__plus,
+  [data-theme="dark"] .ce-toolbar__settings-btn {
+    background-color: var(--bg-elevated);
+    border-color: var(--border-strong);
+    box-shadow: var(--elevation-2);
+  }
+}
+
+/* A selected block's highlight -- the light-blue wash reads wrong on a
+   dark background; same hue, toned for dark instead of a straight swap
+   to a neutral gray (still reads as "selected," not just "hovered"). */
+[data-theme="dark"] .ce-block--selected .ce-block__content {
+  background: rgba(56, 138, 229, .18);
+}
+
+/* Checklist/ordered/unordered list items (list.css) -- also local
+   custom properties on .cdx-list, same technique as .ce-popover above. */
+[data-theme="dark"] .cdx-list {
+  --checkbox-background: var(--control-bg);
+  --color-border: var(--border-strong);
+}
+
+/* Table block (table.css) -- local custom properties on `.tc-wrap` and
+   `.tc-popover` (its column/row context menu), same technique as
+   `.ce-popover` above. The toolbox's add-row/add-column "..." trigger has
+   its own separate hardcoded pair, no shared property with the above. */
+[data-theme="dark"] .tc-wrap {
+  --color-background: var(--bg-elevated);
+  --color-text-secondary: var(--fg-secondary);
+  --color-border: var(--border);
+}
+[data-theme="dark"] .tc-popover {
+  --color-border: var(--border-strong);
+  --color-background: var(--bg-elevated);
+  --color-background-hover: var(--row-hover);
+}
+[data-theme="dark"] .tc-toolbox {
+  --toggler-dots-color: var(--fg-secondary);
+  --toggler-dots-color-hovered: var(--fg-primary);
+}
+/* table.css's default --popover-margin (30px) assumes a wide page with
+   room in the gutter outside the content column for the row-toggler to
+   float into -- this app's #notebook-editor card has no such gutter (it
+   spans the card's own padding, ~13px), so the toggler was rendering
+   mostly outside the card's visible/clickable bounds (confirmed live:
+   its default position sits at x=-5 while the card's own content starts
+   at x=25 -- all but a sliver of it unclickable/invisible over the page
+   background). Shrunk so it sits inside that padding instead; also
+   tightens the popover's own offset from the toggler since both read
+   this same custom property. */
+.tc-toolbox {
+  --popover-margin: 8px;
+}
+
+/* Toast notifications (e.g. paste-confirmation prompts) -- low-traffic
+   surface but cheap to cover while here. */
+[data-theme="dark"] .cdx-notify {
+  background: var(--bg-elevated);
+  color: var(--fg-primary);
+}
+[data-theme="dark"] .cdx-notify__input {
+  background: var(--control-bg);
+  color: var(--fg-primary);
+}
+
+/* Inline settings/link-input fields (e.g. the link tool's URL box). */
+[data-theme="dark"] .cdx-input {
+  border-color: var(--border-strong);
+}
+
+/* Inline toolbar's link-URL edit box (`.ce-inline-tool-input`) -- a
+   different element from `.cdx-input` above despite the similar role, no
+   local custom property, fully hardcoded background upstream. */
+[data-theme="dark"] .ce-inline-tool-input {
+  background: var(--control-bg);
+  color: var(--fg-primary);
+}
+[data-theme="dark"] .ce-inline-tool-input::placeholder {
+  color: var(--fg-secondary);
+}
+
+/* Unsupported/failed-block placeholder -- hardcoded, no local custom
+   property upstream. */
+[data-theme="dark"] .ce-stub {
+  background: var(--bg-elevated);
+  border-color: var(--border);
+  color: var(--fg-secondary);
+}
+
+/* Generic action button (e.g. a block's "select file"/"convert to"
+   prompt) -- hardcoded, no local custom property upstream. */
+[data-theme="dark"] .cdx-button {
+  background: var(--control-bg);
+  border-color: var(--border-strong);
+  color: var(--fg-primary);
+}
+@media (hover: hover) {
+  [data-theme="dark"] .cdx-button:hover {
+    background: var(--row-hover);
+  }
+}
+
+/* Image block caption placeholder (simpleimage.css) -- same pattern as
+   the quote/callout placeholders above. Its "with background"/"with
+   border" style variants (toggled via block settings) are also hardcoded
+   light-gray, which reads wrong floating behind a photo in dark mode. */
+[data-theme="dark"] .cdx-simple-image__caption[contentEditable=true][data-placeholder]:before {
+  color: var(--fg-secondary);
+}
+[data-theme="dark"] .cdx-simple-image__picture--with-background {
+  background: var(--bg-elevated);
+}
+[data-theme="dark"] .cdx-simple-image__picture--with-border {
+  border-color: var(--border-strong);
+}
+
+/* Inline code (inlinecode.css) -- hardcoded light-pink/dark-red pair,
+   no local custom property upstream. Same hue mapping as Callout's
+   "Danger" tone (--tag-red-*) rather than inventing a new color, since
+   both are "a small reddish highlight on text." */
+[data-theme="dark"] .inline-code {
+  background: var(--tag-red-bg);
+  color: var(--tag-red-fg);
+}
+
+/* ----------------- 2. Focus-outline scoping ----------------- */
+
+/* Editor.js has its own hover/focus visual language (background-color
+   swaps via its own --active/--focused modifier classes, or no visible
+   state at all for its own plain-div "buttons" -- see this file's header
+   comment for why `button, [tabindex]` wasn't actually broad enough) --
+   the app's generic focus-visible outline (style.css, untouched) looks
+   out of place layered on top of it. `*` scoped to #notebook-editor only;
+   the rest of the app keeps the global rule exactly as it was. */
+#notebook-editor *:focus-visible {
+  outline: none;
+}
+
+/* ...except the block-picker popover's search field, which gets the
+   identical ring the rest of the app's form fields already show on
+   focus (style.css's shared input/select/textarea base) -- just moved
+   from the bare .cdx-search-field__input to the whole .cdx-search-field
+   wrapper via :focus-within (an already-established pattern elsewhere in
+   style.css), so it wraps the icon too instead of stopping at the input's
+   own edge. Same property values as style.css's rule, on purpose -- this
+   is "the app's own focus ring, correctly scoped," not a new one. */
+#notebook-editor .cdx-search-field__input:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+#notebook-editor .cdx-search-field:focus-within {
+  border-color: var(--accent-neutral);
+  box-shadow: 0 0 0 3px var(--accent-neutral-subtle);
+}
+
+/* ------------------- 3. Border-radius tokens ------------------- */
+
+/* Editor.js ships its own hardcoded pixel radii (6px/7px/3px/5px/10px,
+   scattered per element, no shared scale) -- direct request, 2026-10-02,
+   to bring these in line with this app's own --radius-* scale instead.
+   Mapped by matching each Editor.js element to its closest shape/role
+   equivalent already in style.css, not by guesswork:
+     .ce-popover (a floating dropdown panel)   <-> .multiselect-panel
+                                                    -> --radius-md (12px)
+     .ce-popover-item (a row inside that panel) <-> .multiselect-option
+                                                    -> --radius-sm (8px)
+     .ce-toolbar__plus/__settings-btn,
+     .cdx-settings-button (icon-only buttons)   <-> .icon-btn
+                                                    -> --radius-control (12px)
+     .cdx-search-field, .cdx-input
+     (real text inputs)                         <-> this app's own form
+                                                      controls (style.css
+                                                      :1566 etc.)
+                                                    -> --radius-control (12px)
+     .cdx-notify (a toast)                      <-> .toast
+                                                    -> --radius-md (12px)
+   Each of these had its own local custom property upstream
+   (`--border-radius`) in most cases, same "redefine Editor.js's own
+   variable" technique section 1 above uses -- not scoped to
+   [data-theme="dark"] this time, these apply in both themes. */
+.ce-popover {
+  --border-radius: var(--radius-md);
+}
+.ce-popover-item {
+  --border-radius: var(--radius-sm);
+}
+.ce-toolbar__plus,
+.ce-toolbar__settings-btn,
+.cdx-settings-button {
+  border-radius: var(--radius-control);
+}
+.cdx-search-field,
+.cdx-input {
+  border-radius: var(--radius-control);
+}
+.cdx-notify {
+  border-radius: var(--radius-md);
+}
+/* A bordered action button (e.g. the "convert to" prompt) and the
+   error/placeholder stub a failed/unrecognized block renders as -- same
+   icon-btn/card-like mapping reasoning as above. */
+.cdx-button {
+  border-radius: var(--radius-control);
+}
+.ce-stub {
+  border-radius: var(--radius-md);
+}
+/* The checklist/ordered-list checkbox square -- same technique, its own
+   local custom property (list.css: `.cdx-list{--radius-border: 5px}`). */
+.cdx-list {
+  --radius-border: var(--radius-sm);
+}
+/* Table block's column/row context menu (table.css) -- hardcoded pixel
+   radii, no local custom property upstream, same panel/row-item mapping
+   as `.ce-popover`/`.ce-popover-item` above. */
+.tc-popover {
+  border-radius: var(--radius-md);
+}
+.tc-popover__item,
+.tc-popover__item-icon {
+  border-radius: var(--radius-sm);
+}
+
+/* ------------------- 4. Word wrap ------------------- */
+
+/* Direct report, 2026-10-03: long unbroken text overflows instead of
+   wrapping. Checked each block type live (paragraph/header/quote/
+   callout/list item/table cell all already wrap correctly, confirmed via
+   scrollWidth===clientWidth -- editorjs.css's own `.ce-paragraph` etc.
+   inherit a working `overflow-wrap` from somewhere upstream already) --
+   the one real, reproducible case was the code block (@editorjs/code's
+   `white-space:pre;overflow-x:auto`, deliberate upstream choice to
+   preserve exact formatting and scroll sideways instead of wrapping).
+   That tool was replaced outright the same day (notebook_code.js, for
+   the syntax-highlighting request below) -- its own CSS
+   (notebook_code.css) wraps by construction, so there's nothing left to
+   fix here for code specifically; this section now covers only the
+   defensive hardening below.
+
+   `break-word` (what every block already resolves to) still has edge
+   cases it won't wrap (e.g. a long run with no soft-wrap opportunity at
+   all in some engines); `anywhere` is strictly more aggressive and
+   correct for prose content where there's no formatting to preserve, so
+   applied directly to every text-bearing surface rather than relying on
+   inheritance from elsewhere. */
+.ce-paragraph,
+.ce-header,
+.cdx-nb-quote__text,
+.cdx-nb-quote__caption,
+.cdx-nb-callout__title,
+.cdx-nb-callout__message,
+.cdx-list__item-content,
+.tc-cell {
+  overflow-wrap: anywhere;
+}
+
+/* ------------------- 5. Slash-menu item sizing ------------------- */
+
+/* Direct report, 2026-10-03: the block-picker ("+"/"/") list rows feel
+   cramped -- editorjs.css's own defaults (`--icon-size:20px`,
+   `--item-padding:3px`, giving a 26px row) were sized for a short,
+   mostly-icon-only list; this editor's list has grown past a dozen
+   entries (Text/Heading/3 list types/Quote/Code/Table/Delimiter/
+   Callout, plus Convert-to variants), so bigger, more touch-friendly
+   rows read better than the stock sizing. Both are the component's own
+   custom properties (`.ce-popover{--icon-size:...; --item-padding:...}`
+   in editorjs.css) -- redefining them here is the same technique as the
+   radius-token section above, not a layout rebuild; `--item-height`
+   itself is computed from these two upstream (`calc(var(--icon-size) + 2
+   * var(--item-padding))`), so it grows automatically without needing
+   its own override. Width bumped slightly too so the extra padding
+   doesn't crowd longer labels like "Unordered List" against the panel
+   edge. */
+.ce-popover {
+  --icon-size: 22px;
+  --item-padding: 6px;
+  --width: 240px;
+}
+.ce-popover-item__title {
+  font-size: 15px;
+}
+
+/* ----------------------- 3. Text selection ----------------------- */
+
+/* 2026-10-04 direct report: editorjs.css's own `::selection` rule
+   (`.codex-editor ::selection{background-color:#d4ecff}`) is a light-
+   theme-only hardcoded hex with no text-color pairing of its own --
+   fine over dark body text in light mode, but in dark mode
+   (--fg-primary is #f5f5f7, near-white) that same near-white text sits
+   on a near-white highlight with nothing to separate them, reading as
+   "selection looks the same color as the text." Same selector
+   specificity as the vendor rule (`.codex-editor ::selection`), so this
+   wins purely by loading after editorjs.css (see this file's own header
+   comment) -- no !important needed. Uses the app's own --accent/--fg-
+   on-accent pairing (already proven readable together everywhere else
+   buttons use it) instead of a bespoke highlight color, and covers both
+   themes at once since neither token is redefined under
+   [data-theme="dark"]. */
+.codex-editor ::selection {
+  background-color: var(--accent);
+  color: var(--fg-on-accent);
+}

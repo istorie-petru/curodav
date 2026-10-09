@@ -1298,6 +1298,7 @@ def create_event(
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
+    contacts: list[str] = Form([]),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -1329,6 +1330,8 @@ def create_event(
         db.upsert_event(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
+    if isinstance(contacts, list):
+        db.set_object_contacts(conn, "event", row["uid"], contacts)
     return respond(x_requested_with, "/calendar", status_code=201, ok=True, uid=row["uid"])
 
 
@@ -1416,6 +1419,8 @@ def update_event(
     holiday_calendar: str = Form(""),
     exclude_saturday: str = Form(""),
     exclude_sunday: str = Form(""),
+    contacts: list[str] = Form([]),
+    contacts_present: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -1461,6 +1466,8 @@ def update_event(
             task_row["title"] = title
             task_row["updated_at"] = datetime.now(timezone.utc).isoformat()
             db.upsert_task(conn, task_row)
+    if contacts_present == "1" and isinstance(contacts, list):
+        db.set_object_contacts(conn, "event", row["uid"], contacts)
     return respond(x_requested_with, "/calendar", ok=True)
 
 

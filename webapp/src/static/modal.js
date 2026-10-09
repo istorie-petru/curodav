@@ -113,6 +113,9 @@
     if (!overlay || !body) return;
 
   let currentUrl = null;
+  // Back stack: the modals visited before the current one, so Escape and
+  // Cancel can walk back to the original window like a browser does.
+  const modalStack = [];
   let pendingReload = false;
   // Habits H3 (2026-09-24): when every keep-open form that changed
   // something carried data-cc-change, closing the modal dispatches that
@@ -120,8 +123,31 @@
   // full reload. Any keep-open form without it forces the reload.
   let pendingChange = null;
   let pendingForceReload = false;
+  // openCustom()'s own close hook (2026-10-04, notebook floating-picker ->
+  // real-modal rewrite) -- a caller that opened the overlay with
+  // client-side content (no fetch, nothing for refreshModalContent to
+  // re-GET) registers one function here to run whenever the modal closes,
+  // by whichever path (X, Escape, backdrop click -- closeModal is the one
+  // function all three already funnel through). Typically "if nothing was
+  // picked, undo the in-progress insert" -- the same job the old anchored
+  // popovers' own `cancelIfUnpicked` mousedown-outside listener did, now
+  // for free via this shell's existing close plumbing instead of a
+  // bespoke per-picker listener.
+  let customCloseHandler = null;
 
    function closeModal() {
+     // A modal that owns a buffer record (a new contact's draft) names the
+     // URL that drops it; Save has already turned it into a real record by
+     // the time it closes, so the server leaves a saved record alone.
+     const discard = overlay.querySelector("[data-discard-url]");
+     if (discard) {
+       fetch(discard.getAttribute("data-discard-url"), { method: "POST", keepalive: true });
+     }
+     if (customCloseHandler) {
+       const handler = customCloseHandler;
+       customCloseHandler = null;
+       handler();
+     }
      overlay.classList.remove("is-open");
      // 2026-09-08 bugfix (direct report, confirmed live: the persistent
      // mobile bottom bar -- Menu/Home/Search, base.html's .mobile-tabbar
@@ -136,6 +162,7 @@
      if (header) header.innerHTML = "";
      if (footer) footer.innerHTML = "";
      currentUrl = null;
+     modalStack.length = 0;
      if (pendingReload) {
        pendingReload = false;
        const change = pendingForceReload ? null : pendingChange;
@@ -251,6 +278,12 @@
     // holiday_edit_modal.html's Start/End date auto-sync -- same re-init
     // reasoning.
     if (window.CCHolidayDateSync) window.CCHolidayDateSync.init(body);
+    // notebook_properties_modal.html's Properties add/remove rows -- same
+    // re-init reasoning.
+    if (window.CCNotebookPropertyRows) window.CCNotebookPropertyRows.init(body);
+    // notebook_field_edit_modal.html's Type toggle + Options add/remove
+    // rows -- same re-init reasoning.
+    if (window.CCNotebookFieldOptionRows) window.CCNotebookFieldOptionRows.init(body);
     // Relations cards' add-row picker (1.2 side work, static/
     // command_palette.js) needs no re-init call here -- its entry points
     // are document-level delegated listeners, which already cover content
@@ -468,6 +501,11 @@
        window.location.href = url;
        return;
      }
+     if (wasOpen && currentUrl && url !== currentUrl) {
+       // Returning to the modal below this one pops it; anything else pushes.
+       if (modalStack.length && modalStack[modalStack.length - 1] === url) modalStack.pop();
+       else modalStack.push(currentUrl);
+     }
      currentUrl = url;
      // Navigating inside an already-open modal (e.g. a habit's month
      // arrows) keeps any change made earlier in it pending for close.
@@ -508,6 +546,75 @@
      // data-no-autofocus (habits H3): a view modal's secondary inputs
      // (the habit detail's "Log a day" form) shouldn't grab focus -- and
      // scroll the modal / raise a phone keyboard -- on open.
+     const firstInput = body.querySelector("input:not([data-no-autofocus]), select:not([data-no-autofocus]), textarea:not([data-no-autofocus])");
+     if (firstInput) firstInput.focus();
+   }
+
+   // 2026-10-04 (notebook floating-picker -> real-modal rewrite) -- a
+   // client-side-only sibling of openModal() above, for content that's
+   // already a built DOM node (a search/pick UI backed by a live fetch,
+   // not a server page) rather than something fetched from a URL. Reuses
+   // every piece of the shell openModal() already wires (backdrop click,
+   // Escape, focus trap, mobile drag-to-dismiss, the always-present X
+   // button) instead of each caller re-implementing its own "click
+   // outside closes this" listener -- see notebook_wikilinks.js's
+   // openFloatingPicker and notebook_footnotes.js's openFootnoteEditPicker
+   // for the two callers this replaced, both previously anchored
+   // `position:fixed` popovers with their own `document`-level
+   // `mousedown`-capture listener (a real mechanism, but easy to get a
+   // false "outside" read from if anything about the click sequence
+   // doesn't land exactly where expected -- the shared overlay's own
+   // backdrop-click/Escape handling has already been through that
+   // hardening for every other modal in the app).
+   //
+   // `opts`: `{ title, bodyNode, footerNode, onClose, size }`. `bodyNode`
+   // is required (a real DOM node, appended as-is -- the caller owns its
+   // own event listeners on it, nothing here re-wires them). `onClose` is
+   // the one new piece `openModal()`'s plain pages never needed: run
+   // whenever the modal closes by any path, registered through the same
+   // `customCloseHandler` hook `closeModal()` already calls -- a picker
+   // uses it to undo its own in-progress insert if nothing was picked.
+   function openCustomModal(opts) {
+     if (!opts || !opts.bodyNode) return;
+     // An already-open modal (shouldn't normally happen -- callers open
+     // this for a single focused picker, not stacked on top of another
+     // modal) is closed first so its own onClose still runs rather than
+     // being silently dropped by the overwrite below.
+     if (overlay.classList.contains("is-open")) closeModal();
+     customCloseHandler = opts.onClose || null;
+     if (header) {
+       header.innerHTML = "";
+       if (opts.title) {
+         const h1 = document.createElement("h1");
+         h1.textContent = opts.title;
+         header.appendChild(h1);
+         header.style.display = "";
+       } else {
+         header.style.display = "none";
+       }
+     }
+     body.innerHTML = "";
+     body.appendChild(opts.bodyNode);
+     body.style.display = "";
+     if (footer) {
+       footer.innerHTML = "";
+       if (opts.footerNode) {
+         footer.appendChild(opts.footerNode);
+         footer.style.display = "";
+       } else {
+         footer.style.display = "none";
+       }
+     }
+     currentUrl = null;
+     pendingReload = false;
+     pendingChange = null;
+     pendingForceReload = false;
+     overlay.classList.add("is-open");
+     document.body.classList.add("modal-open");
+     if (dialog) dialog.classList.toggle("is-wide", opts.size === "wide");
+     stabilizeHeight(null);
+     applyHeightTier(null);
+     applyCoverHandle();
      const firstInput = body.querySelector("input:not([data-no-autofocus]), select:not([data-no-autofocus]), textarea:not([data-no-autofocus])");
      if (firstInput) firstInput.focus();
    }
@@ -606,7 +713,10 @@
   }
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && overlay.classList.contains("is-open")) closeModal();
+    if (e.key === "Escape" && overlay.classList.contains("is-open")) {
+      if (modalStack.length) openModal(modalStack[modalStack.length - 1], null);
+      else closeModal();
+    }
     if (e.key === "Tab" && overlay.classList.contains("is-open")) trapTabKey(e);
   });
 
@@ -650,6 +760,12 @@
 
   window.CCModal = {
     open: openModal,
+    // The open modal now lives at `url` (a form whose GET created its own
+    // record, so going back must reopen that record, not make a new one).
+    setUrl: function (url) {
+      currentUrl = url;
+    },
+    openCustom: openCustomModal,
     close: closeModal,
     // markChanged() flags the modal as having unsaved page state so
     // closing (X/Escape/backdrop) reloads the underlying page; refresh()

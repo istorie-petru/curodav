@@ -691,6 +691,48 @@ def _label_color(request: Request, label: str) -> str:
 templates.env.globals["label_color"] = _label_color
 
 
+def _contact_items(request: Request) -> list[dict[str, str]]:
+    """Every contact as a {uid, name} pair, for the Contacts row's dropdown."""
+    try:
+        with db.connect(request.app.state.settings.db_path) as conn:
+            return [{"uid": c["uid"], "name": c["full_name"] or "Unnamed"} for c in db.list_contacts(conn)]
+    except Exception:
+        return []
+
+
+def _object_contact_uids(request: Request, object_type: str, object_id: str) -> list[str]:
+    """The uids of the contacts a task or event already involves."""
+    if not object_id:
+        return []
+    try:
+        with db.connect(request.app.state.settings.db_path) as conn:
+            return [c["uid"] for c in db.list_object_contacts(conn, object_type, object_id)]
+    except Exception:
+        return []
+
+
+def _object_contacts(request: Request, object_type: str, object_id: str) -> list[dict]:
+    try:
+        with db.connect(request.app.state.settings.db_path) as conn:
+            return db.list_object_contacts(conn, object_type, object_id)
+    except Exception:
+        return []
+
+
+def _contact_objects(request: Request, contact_uid: str) -> dict:
+    try:
+        with db.connect(request.app.state.settings.db_path) as conn:
+            return db.list_contact_objects(conn, contact_uid)
+    except Exception:
+        return {"tasks": [], "events": []}
+
+
+templates.env.globals["object_contacts"] = _object_contacts
+templates.env.globals["contact_objects"] = _contact_objects
+templates.env.globals["contact_items"] = _contact_items
+templates.env.globals["object_contact_uids"] = _object_contact_uids
+
+
 def _project_label_names(request: Request) -> frozenset[str]:
     """Every project label's name (2026-09-25, UI audit L18): the task and
     event detail modals show an item's project on its own "Project" row,

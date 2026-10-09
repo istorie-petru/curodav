@@ -11,8 +11,8 @@ it is:
 - `has_dashboard`: the Home-style customizable widget grid, scoped to this
   label (label_detail.html).
 - otherwise: only the sections switched on in the label's settings
-  (`agenda_widget`, `contacts_widget`, and `tasks_widget` for the Kanban
-  board), in label_sections.html.
+  (`agenda_widget`, `contacts_widget`, `notebook_widget`, and
+  `tasks_widget` for the Kanban board), in label_sections.html.
 
 Either way, a label with a deadline (or a project) shows its status and the
 archive / unarchive action under the banner (_label_status.html). That's
@@ -121,6 +121,20 @@ def _label_exists(conn, name: str) -> bool:
     return row is not None
 
 
+def _cover_banner(conn, page_key: str, name: str):
+    """The banner a view modal's cover strip (_detail_cover.html) shows.
+    That macro builds its /banners/image URL from `banner.scope`, a key
+    get_page_banner itself never sets (only banner_for_object injects it),
+    so passing the raw stored banner rendered a broken image -- the
+    "label view modal doesn't show the banner" bug. Resolving through
+    effective_page_banner also gives the modal the same flair default the
+    label's own page already shows."""
+    banner = db.effective_page_banner(conn, page_key, name)
+    if banner:
+        banner = {**banner, "scope": page_key}
+    return banner
+
+
 def _page_common(conn, name: str) -> dict:
     """Context both label page layouts share (2026-09-25 flesh-out): how
     many items carry the label, for the one combined "Nothing tagged X
@@ -195,6 +209,16 @@ def _sections_page(conn, request: Request, name: str, label: dict):
     if label.get("contacts_widget"):
         contacts = [c for c in db.list_contacts(conn) if name in (c.get("tags") or [])][:20]
 
+    notebook_documents = {}
+    if label.get("notebook_widget"):
+        # Reuses dashboard_router._render_notebook_list's own scope/tags/
+        # limit pipeline instead of duplicating it (same reasoning as the
+        # Contacts section just above, which doesn't duplicate
+        # `_render_contact_list` either -- here the widget partial itself,
+        # `_widget_notebook_list.html`, is reused too, so the two surfaces
+        # can never drift out of sync).
+        notebook_documents = dashboard_router._render_notebook_list(conn, {"label_name": name})
+
     ctx = {
         "request": request,
         "active_tab": "label",
@@ -202,6 +226,7 @@ def _sections_page(conn, request: Request, name: str, label: dict):
         "page_label_scope": name if label.get("label_group") else None,
         "agenda_items": agenda_items,
         "contacts": contacts,
+        "notebook_documents": notebook_documents,
         "columns": columns,
         "board_statuses": board_statuses,
         "status_labels": tasks_router.STATUS_LABELS,
@@ -253,7 +278,7 @@ def label_preview(name: str, request: Request, conn=Depends(get_db)):
         "request": request,
         "back_to": back_to,
         "label": label,
-        "banner": db.get_page_banner(conn, name),
+        "banner": _cover_banner(conn, name, name),
         "agenda_items": _agenda_items(conn, name, label, tasks, 5),
         "open_task_count": len([t for t in tasks if t["status"] != "done"]),
         "contact_count": len([c for c in db.list_contacts(conn) if name in (c.get("tags") or [])]),
@@ -388,7 +413,7 @@ def group_view_modal(name: str, request: Request, conn=Depends(get_db)):
             "group": {"name": g["name"], **style},
             "labels": labels,
             "usage": sum(_usage_by_label(conn).get(lbl["name"], 0) for lbl in labels),
-            "banner": db.get_page_banner(conn, db.group_page_key(g["name"])),
+            "banner": _cover_banner(conn, db.group_page_key(g["name"]), g["name"]),
             "group_default_icon": db.GROUP_DEFAULT_ICON,
         },
     )

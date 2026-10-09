@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "_modal_header_back.html" import modal_header_back %}
+{% block title %}Bibliography -- {{ document.title }}{% endblock %}
+{% block content %}
+<!-- Attach/detach citations on one document (2026-10-03) -- a plain
+     select-mode `_widget_list_multiselect.html` picker over the global
+     citation library (routers/notebook.py's document_bibliography_modal),
+     same shape as this same document's own Labels picker on the
+     properties modal. Not a search-as-you-type/quick-add-inline widget
+     (architecture-notes-module-2026-09-29.md §5 calls that "enough", but
+     this core slice keeps citation creation on the separate library page
+     -- see routers/notebook.py's own comment on this route). Saving
+     reloads the document page (routers/notebook.py's `respond()` call),
+     refreshing both the sidebar Bibliography tab and the bottom
+     bibliography section at once, same convention the properties modal
+     already uses. -->
+<div id="modal-target" class="modal-stable-height">
+<div class="modal-header">
+{{ modal_header_back('/notebook/' ~ document.uid, document.title) }}
+<h1>Bibliography</h1>
+</div>
+<div class="modal-body">
+<div class="card">
+<form method="post" id="bibliography-form" action="/notebook/{{ document.uid }}/bibliography">
+    <div class="field-grid">
+        <div class="field field-wide">
+            {% set ms_mode = 'select' %}
+            {% set ms_form_id = 'bibliography-form' %}
+            {% set ms_name = 'citation_uids' %}
+            {% set ms_label = 'Citations' %}
+            {% set ms_items = citation_items %}
+            {% set ms_selected = attached_uids %}
+            {# item I: library is expected to grow large (same reasoning as
+               the Filters modal's Author/Year dropdowns), and this picker
+               had no search at all until now -- verified against ms_search's
+               own docstring rather than assumed present. #}
+            {% include "_widget_list_multiselect.html" %}
+            {# item I: return_to points back at this same bibliography-modal
+               URL so the "new citation" modal's Cancel returns here instead
+               of closing the whole overlay (citation_edit_modal.html's own
+               comment has the full reasoning). #}
+            {% if not citation_items %}
+            <span class="field-hint">No citations in the library yet -- <a href="/notebook/citations/new?return_to=/notebook/{{ document.uid }}/bibliography" data-modal>add one</a> first.</span>
+            {% else %}
+            <span class="field-hint"><a href="/notebook/citations/new?return_to=/notebook/{{ document.uid }}/bibliography" data-modal>+ New citation</a></span>
+            {% endif %}
+        </div>
+    </div>
+</form>
+</div>
+</div>
+{% set footer_back_url = '/notebook/' ~ document.uid %}
+{% set footer_back_mode = 'cancel' %}
+{% set footer_back_label = 'Cancel' %}
+{% set footer_primary_form = 'bibliography-form' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

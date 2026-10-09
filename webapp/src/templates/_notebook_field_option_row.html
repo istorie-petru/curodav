@@ -1,0 +1,66 @@
+{% from "_inputs.html" import text_input %}
+{# Settings > Notebook field edit modal's per-option row (2026-10-02) --
+   a Select/Multi-select field's option list, each row {value, color, icon}.
+   Value posts as a plain array field (`option_value`, parallel to
+   `option_color`/`option_icon`, zipped back together by
+   routers/notebook.py's `_field_option_rows_from_form`), same shape
+   notebook_properties_modal.html's property_key[]/property_value[] rows
+   already establish.
+
+   Color/icon can't just post the same way: each row needs its OWN
+   independent Look picker (one option mustn't fight another for which
+   swatch is "checked"), but all of them need to submit under the SAME two
+   shared array names. Same fix _notebook_property_key_picker.html already
+   established for its own "one shared name, many rows" problem -- a
+   row-scoped radio group (`option_color_radio__{{ row_key }}` /
+   `option_icon_radio__{{ row_key }}`) plus a hidden proxy carrying the
+   real submitted value, kept in sync by static/
+   notebook_field_options_rows.js's delegated `change` listener (which
+   derives the proxy id from the radio's own name, no `data-proxy-target`
+   needed -- see that file's own comment).
+
+   Reuses _look_picker.html's `look_picker` macro completely unchanged for
+   the actual swatch/icon grid markup+CSS (exactly the "Labels already do
+   this" mechanism the plan called for) -- look_picker.js's own trigger-
+   preview sync already works per-id regardless of how many independent
+   instances are on one page, so passing it row-scoped `color_field`/
+   `icon_field` names is enough to make every row's picker fully
+   independent with zero changes to that shared macro.
+
+   row_key -- unique-within-this-field-group token (loop.index for
+              server-rendered rows; the `<template>` row's own "tmpl"
+              placeholder, rewritten by notebook_field_options_rows.js on
+              clone -- same reasoning as the property-key picker's
+              `row_key` docstring).
+   locked -- (2026-10-02 direct request, note_type: "i want to change icon
+              and color" but the value list itself stays STATE.md's fixed
+              canonical set) when true, the value renders as plain text
+              (no `option_value` input at all -- routers/notebook.py's
+              `_rebuild_builtin_options` never reads it for a builtin
+              field anyway) and the remove button is omitted; the Look
+              picker stays fully interactive either way. #}
+{% from "_look_picker.html" import look_picker %}
+{% macro notebook_field_option_row(value, color, icon_name, row_key, form_id, colors, icon_groups, locked=false) %}
+<div class="notebook-field-option-row">
+    {% if locked %}
+    <span class="notebook-field-option-value">{{ value }}</span>
+    {% else %}
+    {{ text_input({'name': 'option_value', 'value': (value or ''), 'form': (form_id)}) }}
+    {% endif %}
+    {{ look_picker('field-option-look-' ~ row_key, form_id, color, icon_name, colors, icon_groups,
+                    color_field='option_color_radio__' ~ row_key, icon_field='option_icon_radio__' ~ row_key,
+                    allow_no_color=true, no_color_label='No color', wide=false, extra_class='notebook-field-option-look') }}
+    {% if not locked %}
+    <input type="hidden" id="field-option-color-proxy-{{ row_key }}" name="option_color" value="{{ color or '' }}" form="{{ form_id }}">
+    <input type="hidden" id="field-option-icon-proxy-{{ row_key }}" name="option_icon" value="{{ icon_name or '' }}" form="{{ form_id }}">
+    <button type="button" class="checklist-delete" data-repeatable-remove title="Remove option" aria-label="Remove option">{{ icon('x') }}</button>
+    {% else %}
+    {# Still needs the shared-array hidden proxies -- routers/notebook.py's
+       update_notebook_field reads `option_color`/`option_icon` positionally
+       for a builtin field the same way it does for a normal one, it just
+       ignores `option_value`. #}
+    <input type="hidden" id="field-option-color-proxy-{{ row_key }}" name="option_color" value="{{ color or '' }}" form="{{ form_id }}">
+    <input type="hidden" id="field-option-icon-proxy-{{ row_key }}" name="option_icon" value="{{ icon_name or '' }}" form="{{ form_id }}">
+    {% endif %}
+</div>
+{% endmacro %}

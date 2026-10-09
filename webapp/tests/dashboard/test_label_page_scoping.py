@@ -33,18 +33,11 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 from starlette.requests import Request
 
-from src import db, deps
+from src import clock, db, deps
 from src.routers import dashboard as dashboard_router
 from src.routers import label_pages
 from src.routers import labels as labels_router
 from src.routers import settings as settings_router
-
-
-@pytest.fixture()
-def conn(tmp_path):
-    db_path = tmp_path / "cache.sqlite"
-    with db.connect(db_path) as c:
-        yield c
 
 
 def _now() -> str:
@@ -86,7 +79,7 @@ class TestScopingBugFix:
 
     def test_today_agenda_scoped_to_project_label(self, conn):
         _make_project(conn, "CS101")
-        today = date.today().isoformat()
+        today = clock.today().isoformat()
         _seed_task(conn, "in_scope", due_at=today, tags=["CS101"])
         _seed_task(conn, "out_of_scope", due_at=today)
         data = dashboard_router._render_agenda(conn, {"label_name": "CS101", "range": "today", "show": ["tasks"]})
@@ -95,7 +88,7 @@ class TestScopingBugFix:
 
     def test_overdue_tasks_scoped_to_project_label(self, conn):
         _make_project(conn, "CS101")
-        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        yesterday = (clock.today() - timedelta(days=1)).isoformat()
         _seed_task(conn, "in_scope", due_at=yesterday, tags=["CS101"])
         _seed_task(conn, "out_of_scope", due_at=yesterday)
         data = dashboard_router._render_agenda(conn, {"label_name": "CS101", "range": "today", "show": ["overdue"]})
@@ -104,7 +97,7 @@ class TestScopingBugFix:
 
     def test_weekly_overview_scoped_to_project_label(self, conn):
         _make_project(conn, "CS101")
-        today = date.today().isoformat()
+        today = clock.today().isoformat()
         _seed_task(conn, "in_scope", due_at=today, tags=["CS101"])
         _seed_task(conn, "out_of_scope", due_at=today)
         data = dashboard_router._render_agenda(conn, {"label_name": "CS101", "range": "next_7_days", "show": ["tasks"]})
@@ -113,7 +106,7 @@ class TestScopingBugFix:
 
     def test_upcoming_events_scoped_to_project_label(self, conn):
         _make_project(conn, "CS101")
-        now = datetime.now(timezone.utc)
+        now = clock.now()
         db.upsert_event(conn, {
             "uid": "in_scope", "title": "in_scope", "description": "", "status": "active",
             "all_day": 0, "start_at": (now + timedelta(days=1)).isoformat(),
@@ -130,7 +123,7 @@ class TestScopingBugFix:
 
     def test_group_page_scoping_pools_member_labels(self, conn):
         db.upsert_label_config(conn, {"name": "CS101", "label_group": "Uni", "created_at": _now()})
-        today = date.today().isoformat()
+        today = clock.today().isoformat()
         _seed_task(conn, "in_scope", due_at=today, tags=["CS101"])
         _seed_task(conn, "out_of_scope", due_at=today)
         data = dashboard_router._render_agenda(conn, {"label_name": "group:Uni", "range": "today", "show": ["tasks"]})
@@ -140,7 +133,7 @@ class TestScopingBugFix:
     def test_home_unaffected_by_the_fix_no_label_name(self, conn):
         # No label_name at all (Home's own widgets) -- effective_tags_filter
         # must resolve to whatever config["tags"] already was, unaffected.
-        today = date.today().isoformat()
+        today = clock.today().isoformat()
         _seed_task(conn, "t1", due_at=today, tags=["personal"])
         _seed_task(conn, "t2", due_at=today)
         data = dashboard_router._render_agenda(conn, {"range": "today", "show": ["tasks"]})
@@ -189,7 +182,7 @@ class TestAtAGlanceWidget:
         assert ("at_a_glance", None) in dashboard_router._TYPE_TO_SELECTION
 
     def test_counts_are_correct(self, conn):
-        today = date.today()
+        today = clock.today()
         _seed_task(conn, "overdue1", due_at=(today - timedelta(days=3)).isoformat())
         _seed_task(conn, "overdue2", due_at=(today - timedelta(days=1)).isoformat())
         _seed_task(conn, "today1", due_at=today.isoformat())
@@ -233,7 +226,7 @@ class TestAtAGlanceWidget:
 
     def test_scoped_to_project_label_excludes_other_tasks(self, conn):
         _make_project(conn, "CS101")
-        today = date.today().isoformat()
+        today = clock.today().isoformat()
         _seed_task(conn, "in_scope", due_at=today, tags=["CS101"])
         _seed_task(conn, "out_of_scope", due_at=today)
         data = dashboard_router._render_at_a_glance(conn, {"label_name": "CS101"})

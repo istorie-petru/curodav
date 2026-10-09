@@ -1,3 +1,4 @@
+{% from "_empty_state.html" import empty_state %}
 {# Habits page body (habits H2) -- also the async-CRUD region fragment
    (GET /habits/regions), re-rendered by static/habit_actions.js after every
    check-in or habit edit so streaks and the To do / On track split stay
@@ -24,11 +25,8 @@
     </section>
     {% endif %}
 {% else %}
-<div class="empty-state empty-state-rich">
-    <div class="empty-state-icon">{{ icon('repeat') }}</div>
-    <div class="empty-state-title">No habits yet</div>
-    <div class="empty-state-text">A habit is something you want to do on a schedule: daily, a few times a week, or on set days.</div>
-    <a class="btn primary" href="/tasks/new?habit=1" data-modal>{{ icon('plus') }} New habit</a>
-</div>
+{% call empty_state('No habits yet', 'repeat', 'A habit is something you want to do on a schedule: daily, a few times a week, or on set days.') %}
+<a class="btn primary" href="/tasks/new?habit=1" data-modal>{{ icon('plus') }} New habit</a>
+{% endcall %}
 {% endif %}
 </div>

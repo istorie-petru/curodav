@@ -1,3 +1,4 @@
+{% from "_inputs.html" import number_input, radio_input, text_input %}
 <!-- Widget configuration fields (Source/View/Range/Title/Limit +
      project/tags/task-list/calendar filters) -- the *body* of the Add-widget
      form, shared by the workspace Add-widget form (_widget_add_form.html)
@@ -51,7 +52,7 @@
      Labels below). -->
 <div class="field">
     <label>Title</label>
-    <input type="text" name="title" class="widget-preview-field" placeholder="Defaults to the view's name">
+    {{ text_input({'name': 'title', 'class': 'widget-preview-field'}) }}
 </div>
 <!-- Source/View/Range -- what data (Source), how it's laid out (View),
      how far out (Range, only shown when the chosen View uses one). All
@@ -76,7 +77,7 @@
     <div class="tile-select widget-source-select">
         {% for key, spec in widget_sources.items() %}
         <label class="tile-option">
-            <input type="radio" name="source" value="{{ key }}" class="tile-radio" {% if loop.first %}checked{% endif %}>
+            {{ radio_input({'name': 'source', 'value': key, 'class': 'tile-radio', 'checked': (true if (loop.first) else false)}) }}
             <span class="tile-icon">{{ icon(spec.icon, 'icon-sm') }}</span>
             <span class="tile-option-label">{{ spec.label }}</span>
         </label>
@@ -135,7 +136,7 @@
         <label>Limit</label>
         <div class="stepper">
             <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease limit">&minus;</button>
-            <input type="number" name="limit" class="widget-preview-field stepper-input" min="0" placeholder="8">
+            {{ number_input({'name': 'limit', 'class': 'widget-preview-field stepper-input', 'min': '0'}) }}
             <button type="button" class="stepper-btn stepper-inc" aria-label="Increase limit">+</button>
         </div>
         <div class="field-hint">0 = up to 8</div>
@@ -201,8 +202,8 @@
     <div class="field widget-style-field">
         <label>Style</label>
         <div class="field-toggle-group">
-            <label class="field-toggle"><input type="radio" name="style" value="list" checked> List</label>
-            <label class="field-toggle"><input type="radio" name="style" value="cards"> Cards</label>
+            <label class="field-toggle">{{ radio_input({'name': 'style', 'value': 'list', 'checked': true}) }} List</label>
+            <label class="field-toggle">{{ radio_input({'name': 'style', 'value': 'cards'}) }} Cards</label>
         </div>
     </div>
     <!-- Scope -- Spaces & Projects-only, and only meaningful on a Space/
@@ -217,8 +218,8 @@
     <div class="field widget-scope-field">
         <label>Scope</label>
         <div class="field-toggle-group">
-            <label class="field-toggle"><input type="radio" name="scope" value="space" checked> This Space</label>
-            <label class="field-toggle"><input type="radio" name="scope" value="everything"> Everything</label>
+            <label class="field-toggle">{{ radio_input({'name': 'scope', 'value': 'space', 'checked': true}) }} This Space</label>
+            <label class="field-toggle">{{ radio_input({'name': 'scope', 'value': 'everything'}) }} Everything</label>
         </div>
     </div>
     {% endif %}

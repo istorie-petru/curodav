@@ -64,6 +64,7 @@
         <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
     </button>
     <div class="multiselect-panel ms-panel">
+        {% if fd_items | length > 7 %}{% set _ms_search_label = fd_label|lower %}{% include "_ms_search_row.html" %}{% endif %}
         {% for it in fd_items %}
         <label class="multiselect-option">
             <input type="{{ 'radio' if _single else 'checkbox' }}" name="{{ fd_name }}" value="{{ it.value }}"

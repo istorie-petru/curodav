@@ -1,3 +1,4 @@
+{% from "_inputs.html" import password_input, text_input %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -32,11 +33,11 @@
                 <input type="hidden" name="next" value="{{ next_url }}">
                 <div class="field">
                     <label for="username">Username</label>
-                    <input id="username" type="text" name="username" autocomplete="username" required autofocus>
+                    {{ text_input({'id': 'username', 'name': 'username', 'autocomplete': 'username', 'required': true, 'autofocus': true}) }}
                 </div>
                 <div class="field">
                     <label for="password">Password</label>
-                    <input id="password" type="password" name="password" autocomplete="current-password" required>
+                    {{ password_input({'id': 'password', 'name': 'password', 'autocomplete': 'current-password', 'required': true}) }}
                 </div>
                 <button type="submit" class="btn primary auth-submit">Log in</button>
             </form>

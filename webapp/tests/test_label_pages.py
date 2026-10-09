@@ -69,23 +69,28 @@ class TestSections:
         db.upsert_task(conn, {"uid": "t1", "title": "Squats", "description": "", "status": "active",
                               "tags": ["Gym"], "created_at": _now(), "due_at": f"{tomorrow}T09:00:00"})
         db.upsert_contact(conn, {"uid": "c1", "full_name": "Coach", "tags": ["Gym"], "created_at": _now()})
+        db.upsert_notebook_document(conn, {"uid": "n1", "title": "Plan", "content_json": "{}",
+                                           "document_type": "full", "note_type": "notes",
+                                           "created_at": _now(), "updated_at": _now(), "tags": ["Gym"]})
 
-    def test_all_three_on_by_default(self, conn):
+    def test_all_four_on_by_default(self, conn):
         self._seed(conn)
         resp = _page(conn, "Gym")
         body = resp.body.decode()
         assert [i["uid"] for i in resp.context["agenda_items"]] == ["t1"]
         assert [c["uid"] for c in resp.context["contacts"]] == ["c1"]
+        assert [d["uid"] for d in resp.context["notebook_documents"]["documents"]] == ["n1"]
         assert [t["uid"] for t in resp.context["columns"]["active"]] == ["t1"]
         assert "kanban-board" in body and 'src="/static/tasks_board.js' in body
-        assert "> Contacts</h2>" in body and "> Agenda</h2>" in body
+        assert "> Contacts</h2>" in body and "> Agenda</h2>" in body and "> Notebook</h2>" in body
 
     def test_switched_off_sections_are_not_rendered(self, conn):
-        self._seed(conn, agenda_widget=0, contacts_widget=0)
+        self._seed(conn, agenda_widget=0, contacts_widget=0, notebook_widget=0)
         resp = _page(conn, "Gym")
         body = resp.body.decode()
         assert resp.context["agenda_items"] == [] and resp.context["contacts"] == []
-        assert "> Agenda</h2>" not in body and "> Contacts</h2>" not in body
+        assert resp.context["notebook_documents"] == {}
+        assert "> Agenda</h2>" not in body and "> Contacts</h2>" not in body and "> Notebook</h2>" not in body
         assert "kanban-board" in body
 
     def test_no_kanban_means_no_board_script(self, conn):
@@ -95,7 +100,7 @@ class TestSections:
         assert 'src="/static/tasks_board.js' not in body
 
     def test_everything_off_says_so(self, conn):
-        self._seed(conn, agenda_widget=0, contacts_widget=0, tasks_widget=0)
+        self._seed(conn, agenda_widget=0, contacts_widget=0, notebook_widget=0, tasks_widget=0)
         assert "Nothing is switched on for this page" in _page(conn, "Gym").body.decode()
 
     def test_deadline_shows_in_the_agenda_for_any_label(self, conn):
@@ -225,11 +230,11 @@ class TestFormFields:
     def test_update_writes_deadline_and_page_fields(self, conn):
         db.upsert_label_config(conn, {"name": "Gym"})
         self._update(conn, page_fields="1", deadline_date="2026-12-01", has_dashboard="1",
-                     agenda_widget="1", tasks_widget="", contacts_widget="1")
+                     agenda_widget="1", tasks_widget="", contacts_widget="1", notebook_widget="1")
         cfg = db.effective_label_config(conn, "Gym")
         assert cfg["has_deadline"] is True and cfg["deadline_date"] == "2026-12-01"
         assert cfg["has_dashboard"] is True
-        assert (cfg["agenda_widget"], cfg["tasks_widget"], cfg["contacts_widget"]) == (True, False, True)
+        assert (cfg["agenda_widget"], cfg["tasks_widget"], cfg["contacts_widget"], cfg["notebook_widget"]) == (True, False, True, True)
 
     def test_empty_deadline_clears_it(self, conn):
         db.upsert_label_config(conn, {"name": "Gym", "has_deadline": 1, "deadline_date": "2026-12-01"})
@@ -265,7 +270,7 @@ class TestFormFields:
                                    page_fields="1", deadline_date="2026-11-30", agenda_widget="1", conn=conn)
         cfg = db.effective_label_config(conn, "Essay")
         assert cfg["deadline_date"] == "2026-11-30" and cfg["has_dashboard"] is False
-        assert (cfg["agenda_widget"], cfg["tasks_widget"], cfg["contacts_widget"]) == (True, False, False)
+        assert (cfg["agenda_widget"], cfg["tasks_widget"], cfg["contacts_widget"], cfg["notebook_widget"]) == (True, False, False, False)
 
     def test_edit_modal_renders_the_new_fields(self, conn):
         db.upsert_label_config(conn, {"name": "Gym", "has_deadline": 1, "deadline_date": "2026-12-01", "has_dashboard": 1})
@@ -286,10 +291,10 @@ class TestFormFields:
 
     def test_new_label_modal_defaults_all_sections_on(self, conn):
         body = labels_router.new_label_modal(_request("/settings/labels/new"), conn=conn).body.decode()
-        for name in ("agenda_widget", "tasks_widget", "contacts_widget"):
+        for name in ("agenda_widget", "tasks_widget", "contacts_widget", "notebook_widget"):
             assert _checked(body, name, "1")
         assert not _checked(body, "has_dashboard", "1") and _checked(body, "has_dashboard", "")
-        assert '<span class="ms-summary">Agenda, Tasks, Contacts</span>' in body
+        assert '<span class="ms-summary">Agenda, Tasks, Contacts, Notebook</span>' in body
 
 
 class TestSettingsLabelsTable:

@@ -1,3 +1,4 @@
+{% from "_inputs.html" import text_input %}
 {% extends "base.html" %}
 {% block title %}Notifications - Settings{% endblock %}
 {% block content %}
@@ -107,7 +108,7 @@
                 <span class="settings-field-hint">Push services (Google, Mozilla, Apple) use it to reach you about delivery problems. Leave blank for the default.</span>
             </label>
             <span class="spacer"></span>
-            <input type="email" id="push-contact-email" name="email" value="{{ push_contact_email }}" maxlength="254" autocomplete="email" placeholder="you@example.com">
+            {{ text_input({'id': 'push-contact-email', 'name': 'email', 'value': (push_contact_email), 'maxlength': '254', 'autocomplete': 'email', 'placeholder': 'you@example.com'}, 'email') }}
         </div>
         <div class="settings-field-row push-prefs-actions">
             <span class="spacer"></span>

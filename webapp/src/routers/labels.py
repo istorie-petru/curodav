@@ -97,7 +97,7 @@ def _clean_description(description) -> str | None:
 
 
 def _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks_widget, contacts_widget,
-                 sidebar_pin="", widget_pin="") -> dict:
+                 notebook_widget="", sidebar_pin="", widget_pin="") -> dict:
     """labels-as-modules slice b (2026-09-25): the label form's Deadline and
     Page fields as label_config columns. Returns {} when the form didn't
     carry them (no `page_fields` marker), so an older caller that posts
@@ -127,6 +127,7 @@ def _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks
         "agenda_widget": on(agenda_widget),
         "tasks_widget": on(tasks_widget),
         "contacts_widget": on(contacts_widget),
+        "notebook_widget": on(notebook_widget),
         "sidebar_pin": on(sidebar_pin),
         "widget_pin": on(widget_pin),
     }
@@ -491,6 +492,7 @@ def update_label(
     agenda_widget: str = Form(""),
     tasks_widget: str = Form(""),
     contacts_widget: str = Form(""),
+    notebook_widget: str = Form(""),
     sidebar_pin: str = Form(""),
     widget_pin: str = Form(""),
     request: Request = None,
@@ -520,7 +522,7 @@ def update_label(
     new_name = (new_name or "").strip() or name
     icon = (icon or "").strip() or None
     page = _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks_widget, contacts_widget,
-                        sidebar_pin, widget_pin)
+                        notebook_widget, sidebar_pin, widget_pin)
     # 2026-09-26: the edit form no longer sends a Role -- a label stays a
     # label and a project a project (Convert to project is its own
     # action). A caller that still posts `role` keeps working.
@@ -593,11 +595,26 @@ def clear_label(name: str, conn=Depends(get_db)):
 
 
 @router.get("/new")
-def new_label_modal(request: Request, project: bool = False, conn=Depends(get_db)):
+def new_label_modal(request: Request, project: bool = False, return_to: str = "", conn=Depends(get_db)):
     """The "+ New Label" entry point -- opens the same label_form_modal.html
     the Edit buttons open, empty. Opens via data-modal, posts to create_label below.
     `project` (2026-09-26): Settings > Projects' "Add project" -- the same
-    form in project mode, creating an is_project label."""
+    form in project mode, creating an is_project label.
+
+    `return_to` (modal-stack Cancel fix, same family as
+    routers/notebook.py's `_safe_return_to` -- see that function's own
+    comment): when this modal is opened from inside another modal that has
+    no label to pick yet (published_list_create_modal.html's "Create one"
+    link, shown when `all_labels` is empty), Cancel should swap back into
+    that picker instead of closing the whole overlay back to
+    /settings/labels. Same same-origin-relative-only guard as every other
+    return_to/back_to/next param in this app (routers/label_pages.py's
+    `back_to`, this module's own `set_label`'s `return_to`, routers/
+    auth.py's `next`) -- an unvalidated value becomes an href fetched by
+    modal.js's openModal(), which would happily fetch an absolute/
+    off-origin URL if allowed through."""
+    if not isinstance(return_to, str) or not return_to.startswith("/") or return_to.startswith("//"):
+        return_to = ""
     return templates.TemplateResponse(
         "label_form_modal.html",
         {
@@ -608,6 +625,7 @@ def new_label_modal(request: Request, project: bool = False, conn=Depends(get_db
             "role": "project" if project else "none",
             "is_project_form": bool(project),
             "group_options": [g["name"] for g in db.list_groups(conn)],
+            "return_to": return_to,
         },
     )
 
@@ -626,6 +644,7 @@ def create_label(
     agenda_widget: str = Form(""),
     tasks_widget: str = Form(""),
     contacts_widget: str = Form(""),
+    notebook_widget: str = Form(""),
     sidebar_pin: str = Form(""),
     widget_pin: str = Form(""),
     conn=Depends(get_db),
@@ -646,7 +665,7 @@ def create_label(
 
     icon = (icon or "").strip() or None
     page = _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks_widget, contacts_widget,
-                        sidebar_pin, widget_pin)
+                        notebook_widget, sidebar_pin, widget_pin)
 
     row = {
         "name": new_name,
