@@ -50,7 +50,7 @@ class TestSettingsHolidaysPage:
     def test_renders_with_breadcrumb_and_active_tab(self, conn):
         resp = settings_router.settings_holidays(_request(), conn=conn)
         assert resp.status_code == 200
-        assert resp.context["active_tab"] == "settings_holidays"
+        assert resp.context["view"] == "holidays"
         assert resp.context["crumbs"] == [{"url": "/settings", "name": "Settings"}]
         body = resp.body.decode()
         assert 'href="/settings"' in body
@@ -59,14 +59,14 @@ class TestSettingsHolidaysPage:
         resp = settings_router.settings_holidays(_request(), conn=conn)
         body = resp.body.decode()
         assert "No holidays configured yet" in body
-        assert 'id="holidays-table"' in body
+        assert 'id="taxonomy-table" data-view="holidays"' in body
         assert 'href="/settings/holidays/new"' in body
 
     def test_lists_existing_holidays_as_rows_with_edit_buttons(self, conn):
         db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "University", "label": "Winter break", "date_from": "2026-12-20", "date_to": "2027-01-05"})
         resp = settings_router.settings_holidays(_request(), conn=conn)
         body = resp.body.decode()
-        assert 'id="holidays-table"' in body
+        assert 'id="taxonomy-table" data-view="holidays"' in body
         assert "Winter break" in body
         assert "University" in body
         assert "20 Dec" in body
@@ -89,8 +89,8 @@ class TestSettingsHolidaysPage:
     def test_hub_links_to_holidays(self, conn):
         resp = settings_router.settings_index(_request("/settings"), conn=conn)
         body = resp.body.decode()
-        assert 'href="/settings/holidays"' in body
-        assert "Holidays" in body
+        assert 'href="/settings/taxonomy"' in body
+        assert "Taxonomy &amp; Data" in body
 
 
 class TestHolidayDateRangeDisplay:

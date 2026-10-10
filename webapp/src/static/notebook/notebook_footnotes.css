@@ -178,15 +178,6 @@
 .cdx-footnote-modal-picker {
   width: auto;
 }
-.cdx-footnote-picker-input {
-  display: block;
-  width: 100%;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  font-family: inherit;
-  font-size: 14px;
-}
 .cdx-footnote-picker-results {
   list-style: none;
   margin: 4px 0 0;
@@ -230,14 +221,4 @@
   border-radius: var(--radius-control);
   font-family: inherit;
   font-size: 14px;
-}
-.cdx-footnote-picker-insert-btn {
-  flex: none;
-  padding: 6px 10px;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-control);
-  background: var(--accent);
-  color: var(--fg-on-accent);
-  font-size: 14px;
-  cursor: pointer;
 }

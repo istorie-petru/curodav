@@ -23,13 +23,13 @@ available to any label rather than only projects.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from .. import clock, db, habit_view
+from .. import clock, db, habit_view, recurrence_expand
 from ..deps import EDIT_MODE_KEY, get_db, templates
 from . import dashboard as dashboard_router
 from . import secretariat_page
@@ -177,10 +177,16 @@ def _agenda_items(conn, scope: set[str] | None, label: dict, tasks: list[dict], 
     and capped at `limit`, led by at most MAX_AGENDA_HABITS of the label's
     habits due today. Shared by the sections page and the preview modal."""
     today_iso = clock.today().isoformat()
+    horizon = clock.today() + timedelta(days=364)
     events = [
-        e for e in db.list_events(conn, start=clock.now().isoformat())
+        e for e in recurrence_expand.expand_events(
+            db.list_events(conn, start=clock.now().isoformat()), clock.today(), horizon,
+            db.list_holidays_by_calendar(conn), db.list_event_occurrence_overrides_by_master(conn),
+        )
         if dashboard_router._passes_scope(e.get("tags"), scope) and e.get("start_at") and e["start_at"][:10] >= today_iso
     ]
+    events.sort(key=lambda e: e["start_at"])
+    events = recurrence_expand.collapse_recurring(events)
     db.annotate_item_colors(conn, events)
     deadline = label.get("deadline_date") if label.get("has_deadline") else None
     if deadline and deadline >= today_iso and not label.get("archived_at"):
@@ -329,7 +335,7 @@ def label_preview(name: str, request: Request, conn=Depends(get_db)):
 
 
 @router.post("/{name}/archive")
-def archive_label(name: str, conn=Depends(get_db)):
+def archive_label(name: str, x_requested_with: str | None = Header(None), conn=Depends(get_db)):
     """The explicit "this is finished" confirmation. It's never automatic;
     see db.project_status for how Pending Archiving is computed.
     2026-09-25: every label page offers Archive in its header now, and a
@@ -338,12 +344,16 @@ def archive_label(name: str, conn=Depends(get_db)):
     if not db.get_label_config(conn, name):
         db.upsert_label_config(conn, {"name": name, "created_at": clock.now().isoformat()})
     db.archive_project(conn, name)
+    if x_requested_with == "fetch":
+        return Response(status_code=204)
     return RedirectResponse(url=label_url(name), status_code=303)
 
 
 @router.post("/{name}/unarchive")
-def unarchive_label(name: str, conn=Depends(get_db)):
+def unarchive_label(name: str, x_requested_with: str | None = Header(None), conn=Depends(get_db)):
     db.unarchive_label(conn, name)
+    if x_requested_with == "fetch":
+        return Response(status_code=204)
     return RedirectResponse(url=label_url(name), status_code=303)
 
 
@@ -374,8 +384,10 @@ def _group_or_404(conn, name: str) -> dict:
     return g
 
 
-def _group_form_context(conn, request: Request, group: dict | None) -> dict:
-    """Context for group_form_modal.html -- create (group None) or edit."""
+def _group_form_context(conn, request: Request, group: dict | None, copy_of: dict | None = None) -> dict:
+    """Context for group_form_modal.html -- create (group None) or edit.
+    `copy_of` (Duplicate): a group whose look and page type fill the empty
+    create form; its labels are not copied (a label has one group)."""
     from .labels import COLORS, icon_groups_for
 
     name = group["name"] if group else ""
@@ -392,16 +404,19 @@ def _group_form_context(conn, request: Request, group: dict | None) -> dict:
         if not db.effective_label_config(conn, n).get("is_archived")
     ]
     style = db.get_group_style(conn, name) if group else {"icon": None, "color": "gray"}
+    if copy_of:
+        style = db.get_group_style(conn, copy_of["name"])
     return {
         "request": request,
         "group": {"name": name, **style} if group else None,
+        "prefill": {"name": copy_of["name"] + " copy", **style} if copy_of else None,
         "candidates": candidates,
         "colors": COLORS,
         "icon_groups": icon_groups_for(style["icon"]),
         "group_default_icon": db.GROUP_DEFAULT_ICON,
         "banner": db.get_page_banner(conn, db.group_page_key(name)) if group else None,
         "page_types": [(k, db.PAGE_TYPE_LABELS[k]) for k in db.PAGE_TYPES],
-        "page_type": db.get_group_page_type(conn, name) if group else "dashboard",
+        "page_type": db.get_group_page_type(conn, (group or copy_of)["name"]) if (group or copy_of) else "dashboard",
     }
 
 
@@ -412,8 +427,9 @@ def _group_form_context(conn, request: Request, group: dict | None) -> dict:
 
 
 @group_router.get("/new")
-def new_group_modal(request: Request, conn=Depends(get_db)):
-    return templates.TemplateResponse("group_form_modal.html", _group_form_context(conn, request, None))
+def new_group_modal(request: Request, copy: str = "", conn=Depends(get_db)):
+    copy_of = db.get_group(conn, copy) if copy else None
+    return templates.TemplateResponse("group_form_modal.html", _group_form_context(conn, request, None, copy_of))
 
 
 @group_router.post("/create")
@@ -613,11 +629,6 @@ def _groups_context(conn, request: Request) -> dict:
 
 @groups_settings_router.get("")
 def manage_groups(request: Request, conn=Depends(get_db)):
-    return templates.TemplateResponse("groups_manage.html", _groups_context(conn, request))
+    from .taxonomy import page_response
 
-
-@groups_settings_router.get("/regions")
-def groups_regions(region: str, request: Request, conn=Depends(get_db)):
-    if region == "list":
-        return templates.TemplateResponse("_groups_table_body.html", _groups_context(conn, request))
-    return JSONResponse({"error": f"unknown groups region: {region}"}, status_code=400)
+    return page_response(conn, request, "groups")

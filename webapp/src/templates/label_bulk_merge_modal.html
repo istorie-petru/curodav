@@ -1,4 +1,3 @@
-{% from "_inputs.html" import select_input %}
 {% extends "base.html" %}
 {% block title %}Merge labels{% endblock %}
 {% block content %}
@@ -26,15 +25,14 @@
     {% for n in selected_names %}
     <input type="hidden" name="uids" value="{{ n }}">
     {% endfor %}
-    <div class="field">
-        <label>Merge into</label>
-        {% call select_input({'name': 'dest_name', 'required': true, 'autofocus': true}) %}
-            <option value="" disabled selected>Choose a label&hellip;</option>
-            {% for other_name in all_label_names %}
-            <option value="{{ other_name }}">{{ other_name }}</option>
-            {% endfor %}
-        {% endcall %}
-    </div>
+    {% set ms_name = 'dest_name' %}
+    {% set ms_mode = 'single' %}
+    {% set ms_label = 'Merge into' %}
+    {% set ms_selected = '' %}
+    {% set ms_form_id = 'label-bulk-merge-form' %}
+    {% set ms_items = [{'uid': '', 'name': 'None'}] %}
+    {% for n in all_label_names %}{% set _ = ms_items.append({'uid': n, 'name': n}) %}{% endfor %}
+    {% include "_widget_list_multiselect.html" %}
 </form>
 </div>
 </div>

@@ -318,7 +318,7 @@ def create_app() -> FastAPI:
     # today_redirect and routers/calendar.py::week_redirect for the
     # bookmark-preserving redirects that replaced them, same precedent as
     # the earlier /calendar/timetable retirement).
-    from .routers import auth, banners, calendar, contacts, dashboard, export, flairs as flairs_router, habits, label_pages, labels, notebook, projects, public_lists, published_lists, push, pwa, quick_capture, search, secretariat_page, settings, spaces, sync_api, tasks, timeline
+    from .routers import auth, banners, calendar, contacts, dashboard, export, flairs as flairs_router, habits, label_pages, labels, notebook, projects, public_lists, published_lists, push, pwa, quick_capture, search, secretariat_page, settings, spaces, sync_api, tasks, taxonomy, timeline
 
     # Health check (design-system unification pass, 2026-09-17, deploy
     # alignment with sibling app Pineart's own GET /api/health) -- exempted
@@ -370,6 +370,7 @@ def create_app() -> FastAPI:
     # (routers/search.py) already owns the /api/ namespace's other endpoint
     # and this is a distinct concern (parsing + create, not query).
     app.include_router(quick_capture.router)
+    app.include_router(taxonomy.router)
     app.include_router(labels.router)
     # 2026-09-26: Settings > Projects and Settings > Groups, their own pages.
     app.include_router(labels.projects_settings_router)

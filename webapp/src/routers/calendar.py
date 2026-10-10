@@ -183,15 +183,15 @@ def _tags_list(tags: str) -> list[str]:
 
 
 
-def _apply_event_label_filter(events: list[dict], label: str | None) -> list[dict]:
+def _apply_event_label_filter(events: list[dict], label: str | None, conn=None) -> list[dict]:
     """Phase 9b toolbar rework -- Calendar's new event label filter,
     replacing the dead Space/Project dropdowns (see _calendar_nav.html's
     former project_groups/projects form). Same case-insensitive
     single-label match every other label filter in this app uses."""
     if not label:
         return events
-    wanted = label.lower()
-    return [e for e in events if any((tg or "").lower() == wanted for tg in e.get("tags") or [])]
+    wanted = db.expand_label_filter(conn, [label]) if conn is not None else {label.lower()}
+    return [e for e in events if any((tg or "").lower() in wanted for tg in e.get("tags") or [])]
 
 
 _DEFAULT_EVENT_COLOR = "blue"
@@ -229,13 +229,13 @@ def _annotate_calendar_colors(conn, events: list[dict]) -> list[dict]:
     return events
 
 
-def _apply_task_label_filter(tasks: list[dict], label: str | None) -> list[dict]:
+def _apply_task_label_filter(tasks: list[dict], label: str | None, conn=None) -> list[dict]:
     """Same as _apply_event_label_filter, for the task chips Day/Week/
     Month/Agenda also show alongside events (object_type='task' labels)."""
     if not label:
         return tasks
-    wanted = label.lower()
-    return [t for t in tasks if any((tg or "").lower() == wanted for tg in t.get("tags") or [])]
+    wanted = db.expand_label_filter(conn, [label]) if conn is not None else {label.lower()}
+    return [t for t in tasks if any((tg or "").lower() in wanted for tg in t.get("tags") or [])]
 
 
 def _is_bar_worthy(e: dict) -> bool:
@@ -562,7 +562,7 @@ def _month_view_context(conn, request: Request, year: int | None, month: int | N
     grid_end = date(year, month, 28) + timedelta(days=13)
     events = db.list_events(conn, start=grid_start.isoformat(), end=grid_end.isoformat() + "T23:59:59")
     events = recurrence_expand.expand_events(events, grid_start, grid_end, db.list_holidays_by_calendar(conn), db.list_event_occurrence_overrides_by_master(conn))
-    events = _apply_event_label_filter(events, label)
+    events = _apply_event_label_filter(events, label, conn)
     events = _annotate_calendar_colors(conn, events)
 
     # Timetabled tasks (work-allocation events, scheduled from a project's
@@ -580,7 +580,7 @@ def _month_view_context(conn, request: Request, year: int | None, month: int | N
     # also shows (see db.py's Phase 1 comments for why there's only ever
     # one universal pool of each to filter in the first place).
     tasks = db.list_tasks(conn)
-    tasks = _apply_task_label_filter(tasks, label)
+    tasks = _apply_task_label_filter(tasks, label, conn)
 
     weeks = _month_grid(year, month, events, tasks, week_start)
 
@@ -609,6 +609,7 @@ def _month_view_context(conn, request: Request, year: int | None, month: int | N
         "next_year": next_year,
         "next_month": next_month,
         "event_label_names": db.list_event_label_names(conn),
+        "event_label_items": db.label_filter_items(conn, db.list_event_label_names(conn)),
         "active_label": label or "",
     }
 
@@ -735,11 +736,11 @@ def _four_week_view_context(conn, request, date_, label):
     # would silently exclude every timed event on the window's last day.
     events = db.list_events(conn, start=view_start.isoformat(), end=view_end.isoformat() + "T23:59:59")
     events = recurrence_expand.expand_events(events, view_start, view_end, db.list_holidays_by_calendar(conn), db.list_event_occurrence_overrides_by_master(conn))
-    events = _apply_event_label_filter(events, label)
+    events = _apply_event_label_filter(events, label, conn)
     events = _annotate_calendar_colors(conn, events)
 
     tasks = db.list_tasks(conn)
-    tasks = _apply_task_label_filter(tasks, label)
+    tasks = _apply_task_label_filter(tasks, label, conn)
 
     weeks = _four_week_grid(view_start, events, tasks, week_start)
 
@@ -771,6 +772,7 @@ def _four_week_view_context(conn, request, date_, label):
         "next_start": (view_start + timedelta(days=7)).isoformat(),
         "label_text": label_text,
         "event_label_names": db.list_event_label_names(conn),
+        "event_label_items": db.label_filter_items(conn, db.list_event_label_names(conn)),
         "active_label": label or "",
     }
 
@@ -820,7 +822,7 @@ def _week_view_context(conn, request, date_, label):
     # silently exclude every timed event on the range's last calendar day.
     events = db.list_events(conn, start=week_start_date.isoformat(), end=week_end_date.isoformat() + "T23:59:59")
     events = recurrence_expand.expand_events(events, week_start_date, week_end_date, db.list_holidays_by_calendar(conn), db.list_event_occurrence_overrides_by_master(conn))
-    events = _apply_event_label_filter(events, label)
+    events = _apply_event_label_filter(events, label, conn)
     events = _annotate_calendar_colors(conn, events)
 
     # Every work-allocation event is schedulable-work-made-visible, prominent
@@ -832,7 +834,7 @@ def _week_view_context(conn, request, date_, label):
         e["task_uid"] = task_uid
 
     tasks = db.list_tasks(conn)
-    tasks = _apply_task_label_filter(tasks, label)
+    tasks = _apply_task_label_filter(tasks, label, conn)
     open_tasks = [t for t in db.list_tasks(conn) if t.get("status") not in ("done", "archived")]
 
     # Sleep/Leisure Time hatching (1.9 side work) -- fetched once for the
@@ -1006,6 +1008,7 @@ def _week_view_context(conn, request, date_, label):
         "unscheduled_tasks": unscheduled_tasks,
         "unscheduled_next": f"/calendar/week?date_={week_start_date.isoformat()}",
         "event_label_names": db.list_event_label_names(conn),
+        "event_label_items": db.label_filter_items(conn, db.list_event_label_names(conn)),
         "active_label": label or "",
         "time_blocks_json": _time_blocks_client_payload(time_blocks),
     }
@@ -1167,12 +1170,12 @@ def _day_view_context(conn, request, day, label):
     d = date.fromisoformat(day)
     events = db.list_events(conn, start=day, end=day + "T23:59:59")
     events = recurrence_expand.expand_events(events, d, d, db.list_holidays_by_calendar(conn), db.list_event_occurrence_overrides_by_master(conn))
-    events = _apply_event_label_filter(events, label)
+    events = _apply_event_label_filter(events, label, conn)
     events = _annotate_calendar_colors(conn, events)
 
     all_tasks = db.list_tasks(conn)
     tasks = [t for t in all_tasks if (t.get("due_at") or "").startswith(day)]
-    tasks = _apply_task_label_filter(tasks, label)
+    tasks = _apply_task_label_filter(tasks, label, conn)
 
     # All-day events repeat on every day they span (same as _month_grid) --
     # a multi-day all-day event that started yesterday must still fill
@@ -1212,6 +1215,7 @@ def _day_view_context(conn, request, day, label):
         "hours": list(range(grid_layout.GRID_HOURS)),
         "px_per_hour": grid_layout.PX_PER_HOUR,
         "event_label_names": db.list_event_label_names(conn),
+        "event_label_items": db.label_filter_items(conn, db.list_event_label_names(conn)),
         "active_label": label or "",
         "time_blocks_json": _time_blocks_client_payload(day_time_blocks),
     }

@@ -11,7 +11,7 @@ TEMPLATES = Path(__file__).resolve().parent / "templates"
 # upload zone, the multiselect and its filter variant, the look picker and the
 # date and time fields). Their markup is the component, so it is not counted.
 COMPONENTS = {
-    "_inputs.html", "_form_rows.html", "_upload_zone.html", "_ms_search_row.html",
+    "_inputs.html", "_form_rows.html", "_upload_zone.html",
     "_widget_list_multiselect.html", "_filter_dropdown.html", "_look_picker.html",
     "_date_time_fields.html",
 }

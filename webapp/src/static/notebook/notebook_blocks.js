@@ -252,20 +252,19 @@
   };
   NotebookDelimiter.prototype.renderSettings = function () {
     var self = this;
-    var select = document.createElement("select");
-    select.className = "cdx-nb-delimiter-select";
-    Object.keys(DELIMITER_STYLES).forEach(function (key) {
-      var opt = document.createElement("option");
-      opt.value = key;
-      opt.textContent = DELIMITER_STYLES[key].label;
-      if (key === self.data.style) opt.selected = true;
-      select.appendChild(opt);
+    var ICONS = { stars: "star", line: "minus", dots: "more" };
+    return Object.keys(DELIMITER_STYLES).map(function (key) {
+      return {
+        icon: icon(ICONS[key]),
+        title: DELIMITER_STYLES[key].label,
+        isActive: self.data.style === key,
+        closeOnActivate: true,
+        onActivate: function () {
+          self.data.style = key;
+          self.wrapper.setAttribute("data-style", key);
+        },
+      };
     });
-    select.addEventListener("change", function () {
-      self.data.style = select.value;
-      self.wrapper.setAttribute("data-style", select.value);
-    });
-    return select;
   };
 
   window.NotebookQuote = NotebookQuote;

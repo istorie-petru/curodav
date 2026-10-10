@@ -1,4 +1,5 @@
-{% from "_inputs.html" import select_input, text_input %}
+{% from "_inputs.html" import text_input %}
+{% from "_date_time_fields.html" import date_field with context %}
 {% extends "base.html" %}
 {% block title %}Edit {{ uids|length }} {{ noun }}{{ '' if uids|length == 1 else 's' }}{% endblock %}
 {% block content %}
@@ -15,17 +16,23 @@
     {% for uid in uids %}<input type="hidden" name="uids" value="{{ uid }}">{% endfor %}
     <div class="field-grid">
     {% for f in fields %}
+    {% if f.kind == 'select' %}
+    {% set ms_name = f.name %}
+    {% set ms_mode = 'single' %}
+    {% set ms_label = f.label %}
+    {% set ms_selected = '' %}
+    {% set ms_wide = false %}
+    {% set ms_form_id = 'bulk-edit-form' %}
+    {% set ms_items = [{'uid': '', 'name': 'No change'}] %}
+    {% for value, text in f.options %}{% set _ = ms_items.append({'uid': value, 'name': text}) %}{% endfor %}
+    {% include "_widget_list_multiselect.html" %}
+    {% else %}
     <div class="field">
         <label>{{ f.label }}</label>
-        {% if f.kind == 'select' %}
-        {% call select_input({'name': f.name}) %}
-            <option value="" selected>No change</option>
-            {% for value, text in f.options %}<option value="{{ value }}">{{ text }}</option>{% endfor %}
-        {% endcall %}
-        {% else %}
-        {{ text_input({'name': f.name, 'autocomplete': 'off'}, type=('date' if f.kind == 'date' else 'text')) }}
-        {% endif %}
+        {% if f.kind == 'date' %}{{ date_field(f.name, '', label=f.label) }}
+        {% else %}{{ text_input({'name': f.name, 'autocomplete': 'off'}) }}{% endif %}
     </div>
+    {% endif %}
     {% endfor %}
     </div>
 </form>

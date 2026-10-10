@@ -135,11 +135,11 @@
     this.wrap.className = "cdx-wikilink-picker";
     this.input = document.createElement("input");
     this.input.type = "text";
-    this.input.placeholder = "Search documents...";
+    this.input.setAttribute("aria-label", "Search documents");
     this.input.className = "cdx-wikilink-picker-input";
     this.results = document.createElement("ul");
     this.results.className = "cdx-wikilink-picker-results";
-    this.wrap.appendChild(this.input);
+    this.wrap.appendChild(window.CCSearchField.wrap(this.input));
     this.wrap.appendChild(this.results);
     var runSearch = debounce(function () {
       self.search(self.input.value);
@@ -249,11 +249,11 @@
     wrap.className = "cdx-wikilink-picker cdx-wikilink-modal-picker";
     var input = document.createElement("input");
     input.type = "text";
-    input.placeholder = "Search documents...";
+    input.setAttribute("aria-label", "Search documents");
     input.className = "cdx-wikilink-picker-input";
     var results = document.createElement("ul");
     results.className = "cdx-wikilink-picker-results";
-    wrap.appendChild(input);
+    wrap.appendChild(window.CCSearchField.wrap(input));
     wrap.appendChild(results);
 
     function runSearch() {
@@ -269,6 +269,7 @@
     window.CCModal.openCustom({
       title: "Insert wikilink",
       bodyNode: wrap,
+      footerNode: window.CCModal.footer(),
       onClose: function () {
         if (!marker.getAttribute("data-target-uid")) marker.remove();
       },
@@ -339,11 +340,11 @@
     this.wrap.className = "cdx-wikilink-picker";
     this.input = document.createElement("input");
     this.input.type = "text";
-    this.input.placeholder = "Link to a document... (Esc to cancel)";
+    this.input.setAttribute("aria-label", "Link to a document");
     this.input.className = "cdx-wikilink-picker-input";
     this.results = document.createElement("ul");
     this.results.className = "cdx-wikilink-picker-results";
-    this.wrap.appendChild(this.input);
+    this.wrap.appendChild(window.CCSearchField.wrap(this.input));
     this.wrap.appendChild(this.results);
     this.input.addEventListener(
       "input",

@@ -235,8 +235,10 @@ def _contacts_list_context(
     # from "no `tag=` params because the user deliberately unchecked
     # everything" (respect that literally, an empty visible set).
     all_tags = db.list_contact_tag_names(conn)
+    filter_items = db.label_filter_items(conn, all_tags, lowercase_values=True)
     if filtered:
         selected = {t.lower() for t in tags}
+        wanted = db.expand_label_filter(conn, selected)
         # Explicit pick -- OR-inclusion, same as the old single-select
         # filter generalized to multiple values: show a contact carrying
         # at least one checked label. An empty selection (every checkbox
@@ -244,13 +246,13 @@ def _contacts_list_context(
         # matches, not "no filter."
         contacts = [
             c for c in contacts
-            if selected & {t.lower() for t in (c.get("tags") or [])}
+            if wanted & {t.lower() for t in (c.get("tags") or [])}
         ]
     else:
         # Untouched page load -- every real label counts as implicitly
         # checked (no more Archived-name suppression needed here, see
         # above), same as every other page's own label-filter default.
-        selected = {t.lower() for t in all_tags}
+        selected = {i["value"] for i in filter_items}
     return {
         "request": request,
         "active_tab": "contacts",
@@ -258,6 +260,7 @@ def _contacts_list_context(
         "contact_groups": _group_contacts_by_label(contacts),
         "q": q or "",
         "contact_tags": all_tags,
+        "contact_filter_items": filter_items,
         "active_tags": selected,
         "show_archived": show_archived,
         # Whether the list actually got narrowed down right now -- true

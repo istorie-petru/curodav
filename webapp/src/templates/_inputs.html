@@ -16,4 +16,8 @@
 {% macro checkbox_input(attrs) -%}<input type="checkbox"{{ _attrs(attrs) }}>{%- endmacro %}
 {% macro radio_input(attrs) -%}<input type="radio"{{ _attrs(attrs) }}>{%- endmacro %}
 {% macro textarea_input(attrs, content='') -%}<textarea{{ _attrs(attrs) }}>{{ content }}</textarea>{%- endmacro %}
-{% macro select_input(attrs) -%}<select{{ _attrs(attrs) }}>{{ caller() }}</select>{%- endmacro %}
+{# The one search / add-new box: a magnifier (or plus) icon inside a text
+   input, an aria-label instead of placeholder text. Every search bar and
+   every in-dropdown search or add box goes through this (or its JS twin,
+   CCSearchField in static/search_field.js). #}
+{% macro search_input(attrs, icon_name='search') -%}<span class="search-field">{{ icon(icon_name, 'icon-sm') }}<input type="text"{{ _attrs(attrs) }}></span>{%- endmacro %}

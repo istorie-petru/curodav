@@ -38,10 +38,6 @@
      surface for adding widgets. -->
 {% endif %}
 
-<datalist id="tag-names-datalist">
-    {% for name in tag_names %}<option value="{{ name }}">{% endfor %}
-</datalist>
-
 {# The widget_inner macro lives in its own partial (2026-08-16, async-CRUD)
    so the single-widget region fragment (_widget_card.html) can render a
    plain widget's card standalone without re-rendering the whole grid. #}

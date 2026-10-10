@@ -65,7 +65,10 @@
     </button>
     <div class="multiselect-panel ms-panel">
         {% if fd_items | length > 7 %}{% set _ms_search_label = fd_label|lower %}{% include "_ms_search_row.html" %}{% endif %}
+        {% set _prev = namespace(section=none) %}
         {% for it in fd_items %}
+        {% if _prev.section is not none and (it.section or '') != _prev.section %}<div class="multiselect-divider" role="separator"></div>{% endif %}
+        {% set _prev.section = it.section or '' %}
         <label class="multiselect-option">
             <input type="{{ 'radio' if _single else 'checkbox' }}" name="{{ fd_name }}" value="{{ it.value }}"
                    form="{{ fd_form_id }}" data-change-submit

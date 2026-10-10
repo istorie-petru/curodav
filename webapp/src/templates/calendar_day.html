@@ -36,7 +36,7 @@
 <a class="icon-btn" href="/calendar/day/{{ prev_day }}{{ _lq }}" title="Previous day" aria-label="Previous day">{{ icon('chevron-left', 'icon-sm') }}</a>
 <span class="cal-nav-label">{{ day_label }}</span>
 <a class="icon-btn" href="/calendar/day/{{ next_day }}{{ _lq }}" title="Next day" aria-label="Next day">{{ icon('chevron-right', 'icon-sm') }}</a>
-{{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
+{{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names, event_label_items) }}
 {% endcall %}
 <!-- 2026-08-08: Day is now the same single-pane, fit-the-page scrollable
      layout as Week (direct feedback: make the day view's scrollable

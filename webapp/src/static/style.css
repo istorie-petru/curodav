@@ -2137,10 +2137,6 @@ tbody td{padding:10px 8px; vertical-align:middle;}
    icon) and sitting in its own row above the option list, not an option
    row itself. */
 .multiselect-search{padding:2px 4px 4px;}
-.multiselect-search-input{
-  width:100%; border:1px solid var(--border); border-radius:var(--radius-sm);
-  padding:4px 8px; font-size:var(--text-base); background:var(--bg-elevated); color:var(--fg-primary);
-}
 .multiselect-manage{
   display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:var(--radius-sm);
   font-size:var(--text-sm); color:var(--fg-secondary); text-decoration:none;
@@ -3995,9 +3991,9 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    rule on the container wouldn't render a "..." at all, just silently
    fail to clip anything before the pill got cut off mid-shape. A plain
    clip at the row's edge is the honest version of the same idea. */
-.unscheduled-task-main{flex:1; min-width:0; display:flex; align-items:center; gap:8px;}
-.unscheduled-task-title{flex:0 1 auto; max-width:55%; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:var(--font-weight-bold); font-size:var(--text-sm);}
-.unscheduled-task-meta{display:flex; align-items:center; gap:6px; font-size:var(--text-sm); color:var(--fg-secondary); flex:1; min-width:0; overflow:hidden;}
+.unscheduled-task-main{flex:1; min-width:0; display:flex; flex-wrap:wrap; align-items:center; column-gap:8px; row-gap:1px;}
+.unscheduled-task-title{flex:0 1 auto; max-width:100%; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:var(--font-weight-bold); font-size:var(--text-sm);}
+.unscheduled-task-meta{display:flex; align-items:center; gap:6px; font-size:var(--text-sm); color:var(--fg-secondary); flex:1 1 auto; min-width:0; max-width:100%; overflow:hidden; white-space:nowrap;}
 /* A daily habit's "Needs N more this period" gains a 7-dot week strip
    (one dot per day `db.habit_work_sessions_status`'s `required` counts
    toward) -- a weekly/monthly habit's `required` is 1, where a single dot
@@ -4023,7 +4019,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    there, so its contrast was never the problem. */
 [data-theme="dark"] .unscheduled-dot-progress span{background:var(--border-strong);}
 .unscheduled-project-pill{
-  flex:none; display:inline-flex; align-items:center; gap:3px; max-width:110px;
+  flex:0 1 auto; min-width:34px; display:inline-flex; align-items:center; gap:3px; max-width:110px;
   padding:1px 6px; border-radius:999px; background:var(--accent-neutral-subtle);
   color:var(--fg-primary); font-size:10px; font-weight:var(--font-weight-bold); white-space:nowrap;
   overflow:hidden; text-overflow:ellipsis;
@@ -5410,7 +5406,7 @@ main.main-shell > .toolbar.top-app-bar{
 .detail-header-inner .detail-cover::after{content:""; position:absolute; inset:0; background:rgba(0,0,0,.28);}
 .detail-header-inner .detail-cover:has(.detail-cover-img)::after{background:rgba(0,0,0,.45);}
 .detail-header-inner .detail-cover-icon{
-   top:50%; bottom:auto; transform:translateY(-50%); z-index:1;
+   top:50%; bottom:auto; transform:translateY(-50%); z-index:2;
    width:32px; height:32px; border-radius:var(--radius-sm);
 }
 .detail-header-inner .detail-cover-icon .icon{width:16px; height:16px;}
@@ -5504,19 +5500,6 @@ body.command-palette-open{overflow:hidden;}
   border-bottom:1px solid var(--separator);
   flex:none;
 }
-.command-palette-input-row > .icon{color:var(--fg-tertiary); flex:none;}
-.command-palette-input{
-  flex:1; min-width:0; border:none; background:transparent; font-size:var(--text-lg);
-  color:var(--fg-primary); padding:var(--space-2) var(--space-1); box-sizing:border-box;
-}
-/* The base form-control rule (input:focus{box-shadow:0 0 0 3px ...})
-   still applies here at lower specificity -- a class+pseudo selector
-   beats a type+pseudo one, but only for properties this rule actually
-   sets, so box-shadow needs an explicit override too, not just outline.
-   Left unset, the palette auto-focuses this field the instant it opens
-   (see command_palette.js's open()), so that ring is always visible and
-   reads as a stray boxed border around otherwise-borderless text. */
-.command-palette-input:focus{outline:none; box-shadow:none;}
 
 /* The kebab menu's own .action-menu-panel needs a higher z-index than
    .action-menu-panel's own default (--z-overlay-panel, 150) -- it opens
@@ -5657,12 +5640,8 @@ body.command-palette-open{overflow:hidden;}
 /* 2026-09-25 (UI audit F1): the input box spans the banner's full width and
    its typed text starts at --page-inset, the banner's own inner edge; the
    result rows below sit on that same edge. */
-.search-page-form{margin-bottom:var(--space-4);}
+.search-page-form{margin-bottom:var(--space-4); padding-inline:var(--page-inset);}
 .search-page-results{padding-inline:var(--page-inset);}
-.search-page-input{
-  width:100%; padding:var(--space-3) var(--page-inset); border-radius:var(--radius-control);
-  border:1px solid var(--border); background:var(--bg-secondary); color:var(--fg-primary); font-size:var(--text-base);
-}
 /* One line, not two (2026-09-29 direct request, same change as the Ctrl-K
    overlay's .command-palette-row-subtitle above) -- the subtitle used to
    be `display:block`, forcing its own line under the title. Inline now,
@@ -8008,8 +7987,6 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    server renders the default phrase; data_maintenance.js keeps it
    current on every selection change). */
 .dm-export-form{display:flex; flex-direction:column; align-items:stretch; gap:var(--space-4);}
-.dm-field{display:flex; flex-direction:column; gap:4px; font-size:var(--text-sm); color:var(--fg-secondary);}
-.dm-field select{width:100%;}
 .dm-count-hint{margin:0; font-size:var(--text-sm); font-style:italic; color:var(--fg-tertiary);}
 
 .dm-dropzone{
@@ -8581,19 +8558,18 @@ button.allday-habit{
 #push-settings.is-push-inactive .push-prefs-form .settings-field-row:focus-within{opacity:1;}
 .push-inactive-hint[hidden]{display:none;}
 /* Habit day amount popup (static/habit_day.js, 2026-09-25) -- deliberately
-   tiny: a date line, one number box (placeholder = the daily target),
-   Cancel/Save. Native <dialog>, so it sits above the view modal. */
-.habit-amount-dialog{width:min(260px, calc(100vw - 32px)); padding:var(--space-3); border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--bg-elevated); color:var(--fg-primary); box-shadow:var(--elevation-2, 0 8px 24px rgba(0,0,0,.18));}
+   tiny: a date line, one number box, Cancel/Save in the shared
+   header/body/footer layout. Native <dialog>, so it sits above the view modal. */
+.habit-amount-dialog{width:min(300px, calc(100vw - 32px)); padding:0; overflow:hidden; border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--bg-elevated); color:var(--fg-primary); box-shadow:var(--elevation-2, 0 8px 24px rgba(0,0,0,.18));}
 .habit-amount-dialog::backdrop{background:rgba(0,0,0,.25);}
 /* UI audit H-17: placed next to the tapped day (habit_day.js sets
    top/left); a light backdrop since the page stays the context. */
 .habit-amount-dialog.is-anchored{position:fixed; margin:0;}
 .habit-amount-dialog.is-anchored::backdrop{background:rgba(0,0,0,.08);}
-.habit-amount-form{display:flex; flex-direction:column; gap:var(--space-2); margin:0;}
-.habit-amount-label{font-size:var(--text-sm); color:var(--fg-secondary);}
+.habit-amount-form{display:flex; flex-direction:column; margin:0;}
+.habit-amount-dialog .modal-header{padding-right:var(--space-5);}
+.habit-amount-dialog .modal-header h1{font-size:var(--text-base);}
 .habit-amount-form input{width:100%; font-size:var(--text-lg); font-variant-numeric:tabular-nums;}
-.habit-amount-form input::placeholder{color:var(--fg-tertiary);}
-.habit-amount-actions{display:flex; justify-content:flex-end; gap:var(--space-2);}
 .habit-amount-trigger{cursor:pointer;}
 button.heatmap-cell{border:none; padding:0;}
 
@@ -8868,18 +8844,7 @@ html[data-notebook-sidebar-collapsed] .notebook-sidebar{display:none;}
    searchbar to the headerbar") -- a fixed, compact width so it sits
    naturally alongside the Add term button instead of stretching to the
    input's unconstrained default. */
-.notebook-glossary-search-form input{width:220px;}
-/* 2026-10-03 (backlog item E): this input is the only plain `<input>`
-   ever placed directly in a `.page-header-narrow-actions` row -- every
-   other item there is a `.btn`/`.icon-btn`, both pinned to `height:30px`
-   by the rule above (search this file for "same height" -- "most of the
-   time the same width... the ask was same height"). Nothing targeted a
-   bare `<input>` for that same rule, so it kept the generic form-control
-   default (`padding:10px 14px`, style.css's own `input{...}` base,
-   ~44px tall) and visibly didn't match its header neighbors. Matches the
-   30px box exactly, tighter padding to keep the placeholder text from
-   looking cramped at that height. */
-.page-header-narrow-actions .notebook-glossary-search-form input{height:30px; padding:4px 10px;}
+.notebook-glossary-search-form .search-field{width:220px; flex:none;}
 
 /* Editor page's Relationships tab (2026-10-03, roadmap's "Wikilinks &
    relationships" section) -- "Links to" (live, grouped by the target's
@@ -8933,10 +8898,6 @@ html[data-notebook-sidebar-collapsed] .notebook-sidebar{display:none;}
    used standalone (no modifier class) by the inline-toolbar `renderActions`
    path and the slash-command block, both unchanged by this rewrite. */
 .cdx-wikilink-modal-picker{width:auto; margin:0;}
-.cdx-wikilink-picker-input{
-  display:block; width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:var(--radius-control);
-  font-family:inherit; font-size:14px;
-}
 .cdx-wikilink-picker-results{list-style:none; margin:4px 0 0; padding:0; max-height:220px; overflow-y:auto;}
 .cdx-wikilink-picker-result{
   display:flex; align-items:center; gap:var(--space-2); padding:6px 8px; border-radius:var(--radius-sm);
@@ -9051,7 +9012,12 @@ details[open] > summary.notebook-rail-heading .filter-caret{transform:rotate(180
 /* Search box cue: a magnifier icon inside the field instead of placeholder text. */
 .search-field{position:relative; display:flex; align-items:center; flex:1; min-width:0;}
 .search-field > .icon{position:absolute; left:8px; color:var(--fg-tertiary); pointer-events:none;}
-.search-field > input{padding-left:30px;}
+/* The one look of every search and add box, in a dropdown or on a page. */
+.search-field > input{
+  border:1px solid var(--border); border-radius:var(--radius-sm); padding:4px 8px;
+  font-size:var(--text-base); background:var(--bg-elevated); color:var(--fg-primary); min-width:0;
+}
+.search-field > input{width:100%; padding-left:30px;}
 /* Merged search-and-add box at the top of a long, add-able dropdown. */
 .multiselect-new-option.ms-merged{padding:2px 4px 4px;}
 .multiselect-new-option.ms-merged > .icon{color:var(--fg-tertiary);}
@@ -9096,7 +9062,7 @@ button.avatar-upload{background:none; border:none; padding:0; cursor:pointer;}
 .sec-col{display:flex; flex-direction:column; gap:var(--space-4); min-width:0;}
 .sec-col:nth-child(2){grid-column:2;}
 .sec-section{display:flex; flex-direction:column; gap:2px;}
-.sec-heading{display:flex; align-items:center; gap:6px; margin:0 0 var(--space-1); font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary);}
+.sec-heading{margin:0 0 var(--space-2); font-size:calc(var(--text-xl) + 6px); font-weight:var(--font-weight-bold); color:var(--fg-primary); letter-spacing:-0.3px;}
 .sec-row{display:flex; align-items:center; gap:var(--space-2); min-height:32px;}
 .sec-lead{flex:none; display:flex; align-items:center; color:var(--fg-tertiary);}
 .sec-title{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
@@ -9117,7 +9083,6 @@ main.notebook-browse-page, main.notebook-browse-page *, main.notebook-browse-pag
 .notebook-stacked-actions{display:flex; gap:var(--space-1);}
 .notebook-field-checks{display:flex; flex-wrap:wrap; gap:var(--space-3);}
 .notebook-find-options{display:flex; gap:var(--space-4);}
-.notebook-find-actions{display:flex; gap:var(--space-2); margin-top:var(--space-3);}
 .notebook-find-hits{list-style:none; margin:var(--space-3) 0 0; padding:0; display:flex; flex-direction:column; gap:var(--space-2);}
 .notebook-find-title{font-weight:500;}
 .notebook-find-snippet{margin-left:var(--space-5);}
@@ -9127,3 +9092,5 @@ main.notebook-browse-page, main.notebook-browse-page *, main.notebook-browse-pag
   .col-select, td:has(> .row-select), .contact-row-wrap > .row-select{display:none;}
   body.touch-selecting :is(tr, .contact-row-wrap){-webkit-user-select:none; user-select:none; -webkit-touch-callout:none;}
 }
+
+.agenda-recurring{display:inline-flex; align-items:center; margin-right:var(--space-1); color:var(--fg-tertiary);}

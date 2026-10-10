@@ -337,19 +337,9 @@ def manage_labels(request: Request, conn=Depends(get_db)):
 
     2026-09-26 (Peter): plain labels only -- projects have their own
     Settings > Projects page (projects_settings_router below)."""
-    return templates.TemplateResponse("labels_manage.html", _labels_context(conn, request))
+    from .taxonomy import page_response
 
-
-@router.get("/regions")
-def labels_regions(region: str, request: Request, kind: str = "labels", conn=Depends(get_db)):
-    """async-CRUD region fragment (features/async-crud.md): re-renders the
-    labels list body after a label edit/merge instead of a full reload.
-    `kind=projects` renders the Projects page's list (2026-09-26)."""
-    if region == "list":
-        return templates.TemplateResponse(
-            "_labels_table_body.html", _labels_context(conn, request, "projects" if kind == "projects" else "labels")
-        )
-    return JSONResponse({"error": f"unknown labels region: {region}"}, status_code=400)
+    return page_response(conn, request, "labels")
 
 
 def _labels_context(conn, request: Request, kind: str = "labels") -> dict:
@@ -595,7 +585,7 @@ def clear_label(name: str, conn=Depends(get_db)):
 
 
 @router.get("/new")
-def new_label_modal(request: Request, project: bool = False, return_to: str = "", conn=Depends(get_db)):
+def new_label_modal(request: Request, project: bool = False, return_to: str = "", copy: str = "", conn=Depends(get_db)):
     """The "+ New Label" entry point -- opens the same label_form_modal.html
     the Edit buttons open, empty. Opens via data-modal, posts to create_label below.
     `project` (2026-09-26): Settings > Projects' "Add project" -- the same
@@ -615,13 +605,17 @@ def new_label_modal(request: Request, project: bool = False, return_to: str = ""
     off-origin URL if allowed through."""
     if not isinstance(return_to, str) or not return_to.startswith("/") or return_to.startswith("//"):
         return_to = ""
+    prefill = db.effective_label_config(conn, copy) if copy else None
+    if prefill:
+        project = bool(prefill.get("is_project"))
     return templates.TemplateResponse(
         "label_form_modal.html",
         {
             "request": request,
             "l": None,
+            "prefill": prefill,
             "colors": COLORS,
-            "icon_groups": LABEL_ICON_GROUPS,
+            "icon_groups": icon_groups_for(prefill.get("icon")) if prefill else LABEL_ICON_GROUPS,
             "role": "project" if project else "none",
             "is_project_form": bool(project),
             "group_options": [g["name"] for g in db.list_groups(conn)],
@@ -841,9 +835,11 @@ projects_settings_router = APIRouter(prefix="/settings/projects", tags=["project
 
 @projects_settings_router.get("")
 def manage_projects(request: Request, conn=Depends(get_db)):
-    return templates.TemplateResponse("labels_manage.html", _labels_context(conn, request, "projects"))
+    from .taxonomy import page_response
+
+    return page_response(conn, request, "projects")
 
 
 @projects_settings_router.get("/new")
-def new_project_modal(request: Request, conn=Depends(get_db)):
-    return new_label_modal(request, project=True, conn=conn)
+def new_project_modal(request: Request, copy: str = "", conn=Depends(get_db)):
+    return new_label_modal(request, project=True, copy=copy, conn=conn)

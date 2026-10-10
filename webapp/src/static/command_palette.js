@@ -237,9 +237,9 @@
     typeFilter = "";
     setActivePill("");
     input.value = "";
-    input.placeholder = mode === "relation"
-      ? "Add a related " + (opts.label || "item") + "…"
-      : "Search tasks, events, contacts… (or !t/!e/!c/!n to capture)";
+    input.setAttribute("aria-label", mode === "relation"
+      ? "Add a related " + (opts.label || "item")
+      : "Search tasks, events, contacts");
     activeIndex = -1;
     overlay.classList.add("is-open");
     document.body.classList.add("command-palette-open");

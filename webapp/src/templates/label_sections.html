@@ -50,10 +50,15 @@
    empty state above instead of an empty Agenda, an empty Contacts list
    and four empty Kanban columns. #}
 {% if label_usage_count != 0 %}
+{# Sections with nothing in them are hidden. #}
+{% set show_agenda = label.agenda_widget and agenda_items %}
+{% set show_contacts = label.contacts_widget and contacts %}
+{% set show_notebook = label.notebook_widget and notebook_documents.documents %}
+{% set show_tasks = label.tasks_widget and (columns.values() | map('length') | sum) %}
 
 <!-- Agenda: future events tagged with this label, its own deadline, and
      open due-dated tasks, in one chronological list. -->
-{% if label.agenda_widget %}
+{% if show_agenda %}
 <div class="card widget-card-static">
     <div class="card-title widget-header"><h2>{{ icon('calendar', 'icon-sm') }} Agenda</h2></div>
     <div class="card-body widget-content">
@@ -72,7 +77,7 @@
 
 <!-- Contacts: every contact tagged with this label (up to 20), reusing
      the Dashboard's Contact List widget partial. -->
-{% if label.contacts_widget %}
+{% if show_contacts %}
 <div class="card widget-card-static">
     <div class="card-title widget-header"><h2>{{ icon('user', 'icon-sm') }} Contacts</h2></div>
     <div class="card-body widget-content">
@@ -86,11 +91,12 @@
 
 <!-- Notebook: documents tagged with this label, reusing the Dashboard's
      Notebook List widget partial (same reuse pattern as Contacts above). -->
-{% if label.notebook_widget %}
+{% if show_notebook %}
 <div class="card widget-card-static">
     <div class="card-title widget-header"><h2>{{ icon('file-text', 'icon-sm') }} Notebook</h2></div>
     <div class="card-body widget-content">
     {% set data = notebook_documents %}
+    {% set notebook_hide_create = true %}
     {% include "_widget_notebook_list.html" %}
     </div>
 </div>
@@ -99,7 +105,7 @@
 
 <!-- Tasks: every non-archived task carrying this label on a Kanban board
      grouped by status (drag and drop via static/tasks_board.js). -->
-{% if label.tasks_widget %}
+{% if show_tasks %}
 {# 2026-09-25 (UI audit L12): the board had no heading, unlike the Agenda
    and Contacts sections above it. #}
 <div class="card-title widget-header label-section-heading"><h2>{{ icon('check-square', 'icon-sm') }} Tasks</h2></div>
@@ -136,8 +142,12 @@
 </div>
 </div>
 {% endif %}
-{% if not (label.agenda_widget or label.contacts_widget or label.notebook_widget or label.tasks_widget) %}
+{% if not (show_agenda or show_contacts or show_notebook or show_tasks) %}
+{% if label.agenda_widget or label.contacts_widget or label.notebook_widget or label.tasks_widget %}
+{{ empty_state('Nothing here yet', size='compact') }}
+{% else %}
 {{ empty_state('Nothing is switched on for this page', text='Turn on Agenda, Contacts, Notebook or Tasks in this label\'s settings.', size='compact') }}
+{% endif %}
 {% endif %}
 {% endif %}
 {% endblock %}

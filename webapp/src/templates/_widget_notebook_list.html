@@ -41,7 +41,7 @@
 {% else %}
 {{ widget_empty('No documents match this filter.') }}
 {% endif %}
-{% if data.create_label %}
+{% if data.create_label and not notebook_hide_create %}
 {# Plain form, no data-cc-change -- same "real redirect into the new
    document's Editor page" mechanism as notebook_list.html's own "New"
    button (routers/notebook.py's create_document docstring); there's no

@@ -10,6 +10,7 @@
    The surrounding <form> (with its own action/id) lives in the parent
    template; this partial just fills it in. Parent must provide:
      l            -- the label being edited, or None for a new label
+     prefill      -- optional: a label's config to copy into a new form (Duplicate)
      colors       -- COLORS list for the color swatch picker
      icon_groups  -- ICON_GROUPS for the icon swatch picker
      role         -- 'none'/'project', the label's current role
@@ -21,10 +22,11 @@
                      (l is None) don't need to pass this at all.
    cp_form_id/ip_form_id are set inside the partial (always this form's
    own id), same as _task_form_fields.html's ms_form_id convention. #}
-<div class="field-grid label-form-grid" data-page="{{ l.page_type if l else 'sections' }}">
+{% set p = l or prefill|default(none) %}
+<div class="field-grid label-form-grid" data-page="{{ p.page_type if p else 'sections' }}">
     <div class="field field-wide">
         <label>Name</label>
-        {{ text_input({'name': 'new_name', 'value': l.name if l else '', 'required': true, 'autofocus': (true if (not l) else false)}) }}
+        {{ text_input({'name': 'new_name', 'value': (l.name if l else (prefill.name ~ ' copy' if prefill else '')), 'required': true, 'autofocus': (true if (not l) else false)}) }}
     </div>
     {# 2026-09-26 (Peter): colour and icon are one "Look" dropdown
        (_look_picker.html) here, in the edit modal and quick add alike --
@@ -34,7 +36,7 @@
     {# 2026-09-26 (Peter): the banner button is a square upload button at
        the end of the Look row (it used to be a round header button).
        Edit only: a new label has no name yet to key a banner off. #}
-    {% call look_picker('look-label-form', 'label-form', l.color if l else 'blue', l.icon if l else none, colors, icon_groups,
+    {% call look_picker('look-label-form', 'label-form', p.color if p else 'blue', p.icon if p else none, colors, icon_groups,
                         no_icon_label='No icon', default_icon='tag') %}
     {% if l %}<a href="/banners/editor?scope={{ l.name|urlencode }}&amp;page_url={{ ('/settings/labels/' ~ l.name ~ '/edit')|urlencode }}&amp;from_modal=1" data-modal class="look-side-btn" title="{{ 'Change banner' if banner else 'Add banner' }}" aria-label="{{ 'Change banner' if banner else 'Add banner' }}">{{ icon('upload') }}</a>{% endif %}
     {% endcall %}
@@ -46,7 +48,7 @@
     {% set ms_label = 'Group' %}
     {% set ms_items = [{'uid': '', 'name': 'No group'}] %}
     {% for g in group_options | default([]) %}{% set _ = ms_items.append({'uid': g, 'name': g}) %}{% endfor %}
-    {% set ms_selected = (l.label_group or '') if l else '' %}
+    {% set ms_selected = (p.label_group or '') if p else '' %}
     {% set ms_wide = true %}
     {% set ms_form_id = 'label-form' %}
     {% set ms_extra_class = 'label-group-field' %}
@@ -65,18 +67,18 @@
      lost). `page_fields` tells the server this form carried these
      fields, so a caller that doesn't send them can't blank them. #}
     <input type="hidden" name="page_fields" value="1">
-    {% if is_project_form or (l and l.has_deadline) %}
+    {% if is_project_form or (p and p.has_deadline) %}
     {% from "_date_time_fields.html" import date_field with context %}
     <div class="field field-wide">
         <label>Deadline</label>
-        {{ date_field('deadline_date', l.deadline_date if (l and l.has_deadline) else '', label='Deadline') }}
+        {{ date_field('deadline_date', p.deadline_date if (p and p.has_deadline) else '', label='Deadline') }}
     </div>
     {% endif %}
     {% set ms_name = 'page_type' %}
     {% set ms_mode = 'single' %}
     {% set ms_label = 'Page' %}
     {% set ms_items = [{'uid': 'sections', 'name': 'Sections'}, {'uid': 'dashboard', 'name': 'Widget dashboard'}, {'uid': 'secretariat', 'name': 'Secretariat'}] %}
-    {% set ms_selected = l.page_type if l else 'sections' %}
+    {% set ms_selected = p.page_type if p else 'sections' %}
     {% set ms_extra_class = 'label-page-field' %}
     {% include "_widget_list_multiselect.html" %}
     {% set ms_name = 'sections' %}
@@ -84,10 +86,10 @@
     {% set ms_label = 'Sections' %}
     {% set ms_placeholder = 'None' %}
     {% set ms_items = [
-        {'uid': '1', 'field': 'agenda_widget', 'name': 'Agenda', 'checked': (not l or l.agenda_widget)},
-        {'uid': '1', 'field': 'tasks_widget', 'name': 'Tasks', 'checked': (not l or l.tasks_widget)},
-        {'uid': '1', 'field': 'contacts_widget', 'name': 'Contacts', 'checked': (not l or l.contacts_widget)},
-        {'uid': '1', 'field': 'notebook_widget', 'name': 'Notebook', 'checked': (not l or l.notebook_widget)}] %}
+        {'uid': '1', 'field': 'agenda_widget', 'name': 'Agenda', 'checked': (not p or p.agenda_widget)},
+        {'uid': '1', 'field': 'tasks_widget', 'name': 'Tasks', 'checked': (not p or p.tasks_widget)},
+        {'uid': '1', 'field': 'contacts_widget', 'name': 'Contacts', 'checked': (not p or p.contacts_widget)},
+        {'uid': '1', 'field': 'notebook_widget', 'name': 'Notebook', 'checked': (not p or p.notebook_widget)}] %}
     {% set ms_wide = false %}
     {% set ms_extra_class = 'label-sections-field' %}
     {% include "_widget_list_multiselect.html" %}
@@ -95,8 +97,8 @@
     {% set ms_label = 'Show in' %}
     {% set ms_placeholder = 'Nowhere' %}
     {% set ms_items = [
-        {'uid': '1', 'field': 'sidebar_pin', 'name': 'Sidebar', 'checked': (l and l.sidebar_pin)},
-        {'uid': '1', 'field': 'widget_pin', 'name': 'Groups & Labels widget', 'checked': (l and l.widget_pin)}] %}
+        {'uid': '1', 'field': 'sidebar_pin', 'name': 'Sidebar', 'checked': (p and p.sidebar_pin)},
+        {'uid': '1', 'field': 'widget_pin', 'name': 'Groups & Labels widget', 'checked': (p and p.widget_pin)}] %}
     {% set ms_wide = true %}
     {% set ms_extra_class = '' %}
     {% include "_widget_list_multiselect.html" %}
@@ -104,6 +106,6 @@
        bottom, like every other form. #}
     <div class="field field-wide">
         <label for="label-description-input">Description</label>
-        {{ textarea_input({'id': 'label-description-input', 'name': 'description', 'rows': '2', 'maxlength': '500'}, l.description or '' if l else '') }}
+        {{ textarea_input({'id': 'label-description-input', 'name': 'description', 'rows': '2', 'maxlength': '500'}, p.description or '' if p else '') }}
     </div>
 </div>

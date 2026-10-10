@@ -120,6 +120,9 @@
 </div>
 </div>
 </div>
+{% set footer_back_url = '/settings' %}
+{% set footer_back_label = 'Done' %}
+{% include "_modal_footer.html" %}
 </div>
 {% endblock %}
 {% block extra_scripts %}<script defer src="{{ static_url('push_settings.js') }}"></script>{% endblock %}

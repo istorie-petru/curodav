@@ -194,14 +194,3 @@
   width: 100%;
   border-top: 1px solid var(--border-strong);
 }
-
-.cdx-nb-delimiter-select {
-  margin: 4px;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background: var(--control-bg);
-  color: var(--fg-primary);
-  font-family: inherit;
-  font-size: 14px;
-}

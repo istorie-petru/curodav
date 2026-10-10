@@ -196,8 +196,8 @@ class TestKanbanResponsiveColumns:
     def test_board_is_wrapped_in_a_container_query_container(self, conn):
         _promote(conn, "Trip")
         # A label nothing carries shows the one empty state instead of the
-        # board (2026-09-25 flesh-out), so give it a tagged event.
-        _event(conn, "e1", ["Trip"], (datetime.now(timezone.utc) + timedelta(days=1)).isoformat())
+        # board, and an empty board is hidden, so give it a tagged task.
+        _task(conn, "t1", ["Trip"])
         body = label_pages.label_page("Trip", _request(), conn=conn).body.decode()
         assert '<div class="kanban-board-wrap">' in body
         # The wrapper must actually contain the board, not just sit

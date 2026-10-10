@@ -57,7 +57,7 @@
 {% set fd_name = 'tag' %}
 {% set fd_label = 'Label' %}
 {% set fd_items = [] %}
-{% for _t in contact_tags %}{% set _ = fd_items.append({'value': _t|lower, 'name': _t}) %}{% endfor %}
+{% for _it in contact_filter_items %}{% set _ = fd_items.append(_it) %}{% endfor %}
 {% set fd_selected = active_tags %}
 {% set fd_mode = 'multi' %}
 {% set fd_form_id = 'contacts-filters-form' %}

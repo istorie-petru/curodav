@@ -22,12 +22,15 @@
             <label class="checkbox-row">{{ checkbox_input({'name': 'whole'}) }} Whole word</label>
         </div>
     </div>
-    <div class="notebook-find-actions">
-        <button type="button" class="btn" data-find-preview>Preview</button>
-        <button type="button" class="btn btn-primary" data-find-apply disabled>Replace in selected</button>
-    </div>
     <div class="notebook-find-results" data-find-results></div>
 </div>
 </div>
+{% set footer_back_url = '/notebook' %}
+{% set footer_back_label = 'Done' %}
+{% set footer_extra_html %}
+<button type="button" class="btn tonal" data-find-preview>{{ icon('search', 'icon-sm') }} Preview</button>
+<button type="button" class="btn primary" data-find-apply disabled>{{ icon('check-square', 'icon-sm') }} Replace</button>
+{% endset %}
+{% include "_modal_footer.html" %}
 </div>
 {% endblock %}

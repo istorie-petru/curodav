@@ -24,7 +24,7 @@
      project_detail.html's own Agenda card (same fix applied there for the
      same reason). -->
 
-{% from "_widget_items.html" import widget_empty, widget_section_label, widget_pill, widget_link_row, widget_complete_button, widget_event_icon %}
+{% from "_widget_items.html" import widget_empty, widget_section_label, widget_pill, widget_link_row, widget_complete_button, widget_event_icon, widget_recurring_badge %}
 {% from "_habit_page_row.html" import habit_check_control %}
 {# Habits H7 (2026-09-24): today's still-to-do habits, each a one-tap
    check (form.habit-action -> static/habit_actions.js re-renders this
@@ -142,7 +142,8 @@
     {% if data.range == 'today' %}
     {{ widget_link_row('/events/' ~ e.uid, e.title, leading=widget_event_icon(e.calendar_color, icon_name=_icon_name), leading_class='widget-row-icon', right=widget_pill(('All day' if e.all_day or not e.start_at else (e.start_at | fmt_time)), 'blue')) }}
     {% else %}
-    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=widget_event_icon(e.calendar_color, icon_name=_icon_name), leading_class='widget-row-icon', right=widget_pill(((e.start_at[:10] | relative_date) ~ (' ' ~ (e.start_at | fmt_time) if not e.all_day else '')), 'blue')) }}
+    {% set _right %}{{ widget_recurring_badge(e, data.recurring_window) }}{{ widget_pill(((e.start_at[:10] | relative_date) ~ (' ' ~ (e.start_at | fmt_time) if not e.all_day else '')), 'blue') }}{% endset %}
+    {{ widget_link_row('/events/' ~ e.uid, e.title, leading=widget_event_icon(e.calendar_color, icon_name=_icon_name), leading_class='widget-row-icon', right=_right) }}
     {% endif %}
     {% endfor %}
 </table>

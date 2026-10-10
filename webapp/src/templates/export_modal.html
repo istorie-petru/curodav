@@ -1,4 +1,3 @@
-{% from "_inputs.html" import select_input %}
 {% extends "base.html" %}
 {% block title %}Export data{% endblock %}
 {% block content %}
@@ -18,21 +17,25 @@
 <div class="modal-body">
 <p class="settings-hint">Download a piece of your data in a format any other app can open. Published lists keep syncing via Radicale separately.</p>
 <form id="export-form" method="get" action="/export/download" class="dm-export-form" data-dm-export-root data-modal-get>
-    <label class="dm-field">Data
-        {% call select_input({'name': 'data_type', 'data-dm-type': true}) %}
-            <option value="all" data-dm-preview="Includes: {{ event_count }} Events, {{ task_count }} Tasks, {{ contact_count }} Contacts">All data</option>
-            <option value="events" data-dm-preview="Includes: {{ event_count }} Events">Calendar</option>
-            <option value="tasks" data-dm-preview="Includes: {{ task_count }} Tasks">Tasks</option>
-            <option value="contacts" data-dm-preview="Includes: {{ contact_count }} Contacts">Address book</option>
-            <option value="labels" data-dm-preview="Includes: every label and its settings">Labels</option>
-        {% endcall %}
-    </label>
-    <label class="dm-field">Format
-        {% call select_input({'name': 'format', 'data-dm-format': true}) %}
-            <option value="standard">Standard (.ics/.vcf)</option>
-            <option value="csv">Spreadsheet (.csv)</option>
-        {% endcall %}
-    </label>
+    {% set ms_name = 'data_type' %}
+    {% set ms_mode = 'single' %}
+    {% set ms_label = 'Data' %}
+    {% set ms_selected = 'all' %}
+    {% set ms_root_class = 'dm-type-select' %}
+    {% set ms_form_id = 'export-form' %}
+    {% set ms_items = [
+        {'uid': 'all', 'name': 'All data', 'data': {'dm-preview': 'Includes: ' ~ event_count ~ ' Events, ' ~ task_count ~ ' Tasks, ' ~ contact_count ~ ' Contacts'}},
+        {'uid': 'events', 'name': 'Calendar', 'data': {'dm-preview': 'Includes: ' ~ event_count ~ ' Events'}},
+        {'uid': 'tasks', 'name': 'Tasks', 'data': {'dm-preview': 'Includes: ' ~ task_count ~ ' Tasks'}},
+        {'uid': 'contacts', 'name': 'Address book', 'data': {'dm-preview': 'Includes: ' ~ contact_count ~ ' Contacts'}},
+        {'uid': 'labels', 'name': 'Labels', 'data': {'dm-preview': 'Includes: every label and its settings'}}] %}
+    {% include "_widget_list_multiselect.html" %}
+    {% set ms_name = 'format' %}
+    {% set ms_label = 'Format' %}
+    {% set ms_selected = 'standard' %}
+    {% set ms_root_class = 'dm-format-select' %}
+    {% set ms_items = [{'uid': 'standard', 'name': 'Standard (.ics/.vcf)'}, {'uid': 'csv', 'name': 'Spreadsheet (.csv)'}] %}
+    {% include "_widget_list_multiselect.html" %}
     <p class="dm-count-hint" data-dm-hint>Includes: {{ event_count }} Events, {{ task_count }} Tasks, {{ contact_count }} Contacts &middot; All data downloads as one .zip bundle (.ics/.vcf).</p>
 </form>
 </div>

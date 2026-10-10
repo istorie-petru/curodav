@@ -578,6 +578,11 @@
    // backdrop-click/Escape handling has already been through that
    // hardening for every other modal in the app).
    //
+   // A script-built modal still has the header/body/footer layout:
+   // `CCModal.footer(primary)` builds the shared footer (Cancel on the left,
+   // an optional `{ label, icon, onClick }` primary on the right) for
+   // `footerNode`.
+   //
    // `opts`: `{ title, bodyNode, footerNode, onClose, size }`. `bodyNode`
    // is required (a real DOM node, appended as-is -- the caller owns its
    // own event listeners on it, nothing here re-wires them). `onClose` is
@@ -585,6 +590,25 @@
    // whenever the modal closes by any path, registered through the same
    // `customCloseHandler` hook `closeModal()` already calls -- a picker
    // uses it to undo its own in-progress insert if nothing was picked.
+   function buildFooter(primary) {
+     const frag = document.createDocumentFragment();
+     function button(cls, icon, label, onClick) {
+       const b = document.createElement("button");
+       b.type = "button";
+       b.className = "btn " + cls;
+       b.innerHTML = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-' + icon + '"></use></svg> ';
+       b.appendChild(document.createTextNode(label));
+       b.addEventListener("click", onClick);
+       return b;
+     }
+     frag.appendChild(button("ghost", "chevron-left", "Cancel", closeModal));
+     const spacer = document.createElement("span");
+     spacer.className = "spacer";
+     frag.appendChild(spacer);
+     if (primary) frag.appendChild(button("primary", primary.icon || "check-square", primary.label, primary.onClick));
+     return frag;
+   }
+
    function openCustomModal(opts) {
      if (!opts || !opts.bodyNode) return;
      // An already-open modal (shouldn't normally happen -- callers open
@@ -777,6 +801,7 @@
       currentUrl = url;
     },
     openCustom: openCustomModal,
+    footer: buildFooter,
     close: closeModal,
     // markChanged() flags the modal as having unsaved page state so
     // closing (X/Escape/backdrop) reloads the underlying page; refresh()

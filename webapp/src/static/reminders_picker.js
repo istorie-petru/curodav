@@ -106,7 +106,7 @@
     const customInput = document.createElement("input");
     customInput.type = "text";
     customInput.className = "multiselect-new-input reminders-custom-input";
-    customInput.placeholder = "Other minutes before (comma-separated)";
+    customInput.setAttribute("aria-label", "Other minutes before, comma-separated");
     customInput.value = customValues.join(", ");
     customRow.appendChild(customInput);
     panel.appendChild(customRow);

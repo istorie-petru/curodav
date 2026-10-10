@@ -165,11 +165,7 @@ HUB_CATEGORIES = [
     # above, written before Web Push existed.
     {"url": "/settings/notifications", "modal": True, "icon": "bell", "name": "Notifications", "desc": "Push notifications, reminder types, morning digest"},
     {"url": "/settings/appearance", "modal": True, "icon": "sun", "name": "Appearance", "desc": "Theme"},
-    {"url": "/settings/labels", "icon": "tag", "name": "Labels", "desc": "Rename, recolor, organize"},
-    # 2026-09-26 (Peter): groups and projects get their own pages.
-    {"url": "/settings/groups", "icon": "layers", "name": "Groups", "desc": "Collections of labels, with their own page"},
-    {"url": "/settings/projects", "icon": "folder", "name": "Projects", "desc": "Deadlines, dashboards, archiving"},
-    {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Named holiday calendars non-working recurrence respects"},
+    {"url": "/settings/taxonomy", "icon": "layers", "name": "Taxonomy & Data", "desc": "Labels, groups, projects and holidays in one table"},
     # 2026-10-02 (STATE.md's "custom frontmatter field schema" decision):
     # routes live in routers/notebook.py's own notebook_field_settings_router
     # (same "feature's own router hosts its /settings/* routes" precedent as
@@ -1206,16 +1202,9 @@ def _parse_holiday_date_field(value: str, year_agnostic: bool) -> str:
 
 @router.get("/settings/holidays")
 def settings_holidays(request: Request, conn=Depends(get_db)):
-    return templates.TemplateResponse(
-        "settings_holidays.html",
-        {
-            "request": request,
-            "active_tab": "settings_holidays",
-            "crumbs": _HOLIDAYS_CRUMB,
-            "title": "Holidays",
-            "holidays": db.list_holidays(conn),
-        },
-    )
+    from .taxonomy import page_response
+
+    return page_response(conn, request, "holidays")
 
 
 @router.get("/settings/holidays/new")

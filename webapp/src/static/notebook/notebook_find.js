@@ -1,7 +1,13 @@
 // Search contents: preview what a replace would touch, then replace only in the ticked documents.
 (function () {
-  function root(from) {
-    return from.closest("[data-notebook-find]");
+  // The Preview and Replace buttons sit in the modal footer, outside the
+  // card that holds the fields, so the card is looked up on the document.
+  function root() {
+    return document.querySelector("[data-notebook-find]");
+  }
+
+  function applyButton() {
+    return document.querySelector("[data-find-apply]");
   }
 
   function params(scope, extra) {
@@ -17,7 +23,7 @@
   async function preview(scope) {
     var resp = await fetch("/notebook/find/preview?" + params(scope).toString());
     scope.querySelector("[data-find-results]").innerHTML = await resp.text();
-    scope.querySelector("[data-find-apply]").disabled = !scope.querySelector("[data-find-hits]");
+    applyButton().disabled = !scope.querySelector("[data-find-hits]");
   }
 
   async function apply(scope) {
@@ -44,19 +50,19 @@
 
   document.addEventListener("click", function (e) {
     var previewBtn = e.target.closest("[data-find-preview]");
-    if (previewBtn) preview(root(previewBtn));
+    if (previewBtn) preview(root());
     var applyBtn = e.target.closest("[data-find-apply]");
-    if (applyBtn && !applyBtn.disabled) apply(root(applyBtn));
+    if (applyBtn && !applyBtn.disabled) apply(root());
   });
 
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Enter" || !e.target.matches("[data-notebook-find] input[type=text]")) return;
     e.preventDefault();
-    preview(root(e.target));
+    preview(root());
   });
 
   document.addEventListener("input", function (e) {
     var scope = e.target.closest && e.target.closest("[data-notebook-find]");
-    if (scope) scope.querySelector("[data-find-apply]").disabled = true;
+    if (scope) applyButton().disabled = true;
   });
 })();

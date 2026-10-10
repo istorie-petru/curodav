@@ -1,4 +1,3 @@
-{% from "_inputs.html" import select_input %}
 {% extends "base.html" %}
 {% block title %}Pauses{% endblock %}
 {% block content %}
@@ -29,13 +28,18 @@
 {% else %}
 <p class="text-muted habit-pauses-empty">No pauses planned.</p>
 {% endif %}
-<form method="post" action="/habits/pauses" class="habit-pause-form" {{ _keep|safe }}>
-    <label class="habit-log-field habit-pause-which"><span>Habit</span>
-        {% call select_input({'name': 'task_uid', 'data-no-autofocus': true}) %}
-            <option value="">All habits</option>
-            {% for h in habits %}<option value="{{ h.uid }}">{{ h.title }}</option>{% endfor %}
-        {% endcall %}
-    </label>
+<form method="post" action="/habits/pauses" class="habit-pause-form" id="habit-pause-form" {{ _keep|safe }}>
+    <div class="habit-log-field habit-pause-which"><span>Habit</span>
+        {% set ms_name = 'task_uid' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Habit' %}
+        {% set ms_selected = '' %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'habit-pause-form' %}
+        {% set ms_items = [{'uid': '', 'name': 'All habits'}] %}
+        {% for h in habits %}{% set _ = ms_items.append({'uid': h.uid, 'name': h.title}) %}{% endfor %}
+        {% include "_widget_list_multiselect.html" %}
+    </div>
     {# UI audit H-15: Until starts empty (both dates defaulting to today
        set a one-day pause by accident). #}
     {# 2026-09-26: the shared date fields instead of native date inputs. #}

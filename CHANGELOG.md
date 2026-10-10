@@ -4,6 +4,18 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.8.0]
+
+- Settings > Taxonomy & Data: labels, groups, projects and holidays in one table with a view dropdown in the header; switching swaps only the rows.
+- Labels, projects and groups can be duplicated into a pre-filled create modal, and labels and projects can be archived and restored from the row.
+- UI rules audit: one search component, custom dropdowns replace native selects, modal footers, core tests.
+- Contact photo: the avatar in the contact modal opens the upload modal.
+- Sections pages hide empty sections and no longer show New document; unscheduled work rows fit two lines.
+- Secretariat section headings are larger and have no icon.
+- Calendar and contacts label filters offer groups first, then labels; picking a group filters by all its labels.
+- Agendas show a recurring event once, at its nearest date, with a repeat icon and a tooltip counting the remaining occurrences.
+- The phone status and navigation bar colors match the page background in both themes.
+
 ## [3.7.0]
 
 - Notebook Browse is a table with load more, bulk edit and bulk delete, and filters that toggle on and off.

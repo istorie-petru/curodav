@@ -20,9 +20,9 @@
     <div class="field-grid">
         <div class="field field-wide">
             <label for="group-new-name">Name</label>
-            {{ text_input({'id': 'group-new-name', 'name': 'new_name', 'value': group.name if group else '', 'required': true, 'maxlength': '60', 'autocomplete': 'off', 'autofocus': (true if (not group) else false)}) }}
+            {{ text_input({'id': 'group-new-name', 'name': 'new_name', 'value': group.name if group else (prefill.name if prefill else ''), 'required': true, 'maxlength': '60', 'autocomplete': 'off', 'autofocus': (true if (not group) else false)}) }}
         </div>
-        {% call look_picker('look-group-form', 'group-form', group.color if group else 'gray', group.icon if group else none, colors, icon_groups,
+        {% call look_picker('look-group-form', 'group-form', (group or prefill).color if (group or prefill) else 'gray', (group or prefill).icon if (group or prefill) else none, colors, icon_groups,
                             no_icon_label='Default icon', default_icon=group_default_icon) %}
         {% if group %}{% set _scope = 'group:' ~ group.name %}<a href="/banners/editor?scope={{ _scope|urlencode }}&amp;page_url={{ ('/groups/' ~ group.name ~ '/edit')|urlencode }}&amp;from_modal=1" data-modal class="look-side-btn" title="{{ 'Change banner' if banner else 'Add banner' }}" aria-label="{{ 'Change banner' if banner else 'Add banner' }}">{{ icon('upload') }}</a>{% endif %}
         {% endcall %}

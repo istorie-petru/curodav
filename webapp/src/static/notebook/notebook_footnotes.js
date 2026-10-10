@@ -537,7 +537,7 @@
     input.value = initialDisplay || "";
     var results = document.createElement("ul");
     results.className = "cdx-footnote-picker-results";
-    field.appendChild(input);
+    field.appendChild(window.CCSearchField.wrap(input));
     field.appendChild(results);
     function runSearch() {
       searchCitations(input.value, function (items) {
@@ -588,10 +588,7 @@
     wrap.appendChild(kinds);
     wrap.appendChild(fields);
 
-    var saveBtn = document.createElement("button");
-    saveBtn.type = "button";
-    saveBtn.className = "cdx-footnote-picker-insert-btn";
-    saveBtn.textContent = current ? "Regenerate" : "Generate";
+    var saveAction = function () {};
 
     function finish(data) {
       mark.setAttribute("data-note", formatFootnoteText(kind, data));
@@ -674,8 +671,7 @@
           return kind === "passim" ? { citation: citation } : { citation: citation, page: pageField.input.value.trim() };
         };
       }
-      fields.appendChild(saveBtn);
-      saveBtn.onclick = function () {
+      saveAction = function () {
         var data = collect();
         if (data) finish(data);
       };
@@ -683,7 +679,15 @@
     }
 
     renderKind();
-    window.CCModal.openCustom({ title: current ? "Regenerate citation" : "Generate citation", bodyNode: wrap });
+    window.CCModal.openCustom({
+      title: current ? "Regenerate citation" : "Generate citation",
+      bodyNode: wrap,
+      footerNode: window.CCModal.footer({
+        label: current ? "Regenerate" : "Generate",
+        icon: "check-square",
+        onClick: function () { saveAction(); },
+      }),
+    });
   }
 
   window.NotebookFootnote = NotebookFootnote;

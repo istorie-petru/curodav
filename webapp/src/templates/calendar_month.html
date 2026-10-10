@@ -31,7 +31,7 @@
 </div>
 <a class="icon-btn" href="/calendar?year={{ prev_year }}&month={{ prev_month }}{{ _lq }}" title="Previous month" aria-label="Previous month">{{ icon('chevron-left', 'icon-sm') }}</a>
 <a class="icon-btn" href="/calendar?year={{ next_year }}&month={{ next_month }}{{ _lq }}" title="Next month" aria-label="Next month">{{ icon('chevron-right', 'icon-sm') }}</a>
-{{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names) }}
+{{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names, event_label_items) }}
 {% endcall %}
 
 <!-- 2026-08-08: fits the viewport instead of pushing the page taller and

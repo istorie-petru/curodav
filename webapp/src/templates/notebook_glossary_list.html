@@ -1,4 +1,4 @@
-{% from "_inputs.html" import text_input %}
+{% from "_inputs.html" import search_input %}
 {% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
 {% block title %}Glossary{% endblock %}
@@ -20,7 +20,7 @@
        "real navigation, no client-side filtering" convention the rest of
        this app's list pages use. #}
     <form method="get" action="/notebook/glossary" class="form-inline notebook-glossary-search-form">
-        <span class="search-field">{{ icon('search') }}{{ text_input({'name': 'q', 'value': (q), 'aria-label': 'Search terms'}, 'search') }}</span>
+        {{ search_input({'name': 'q', 'value': (q), 'aria-label': 'Search terms', 'autocomplete': 'off'}) }}
     </form>
     <a href="/notebook/glossary/new" data-modal class="btn primary" title="Add term">{{ icon('plus', 'icon-sm') }} Add term</a>
 {% endcall %}

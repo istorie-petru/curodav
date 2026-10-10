@@ -38,6 +38,15 @@
 <span class="pill-static pill-{{ color }}">{% if icon_name %}{{ icon(icon_name, 'icon-sm') }} {% endif %}{{ text }}</span>
 {%- endmacro %}
 
+{# Recurring marker for a collapsed agenda row (recurrence_expand.
+   collapse_recurring): a repeat icon whose tooltip says how many more times
+   the event happens in the list's window. #}
+{% macro widget_recurring_badge(e, window='in the next year') -%}
+{% if e.recurring_more is defined and e.recurring_more is not none -%}
+<span class="agenda-recurring" title="Recurring &middot; {% if e.recurring_more %}{{ e.recurring_more }} more time{{ 's' if e.recurring_more != 1 }} {{ window }}{% else %}no more {{ window }}{% endif %}" aria-label="Recurring">{{ icon('repeat', 'icon-sm') }}</span>
+{%- endif %}
+{%- endmacro %}
+
 {# At-a-glance stat block: a big number with its small caption, optionally
    itself a link (the At-a-glance widget's counts all link out to the
    matching filtered Tasks view). number_class adds e.g. is-overdue. #}

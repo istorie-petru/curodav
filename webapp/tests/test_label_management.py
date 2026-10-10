@@ -820,8 +820,12 @@ class TestSettingsLabelsTableIconInsteadOfDot:
 
     def test_async_region_fragment_matches_the_same_treatment(self, conn):
         self._label(conn, "Focus", color="purple", icon_name="target")
-        resp = labels_router.labels_regions("list", _request("/settings/labels/regions"), conn=conn)
-        body = resp.body.decode()
+        import json
+
+        from src.routers import taxonomy
+
+        resp = taxonomy.taxonomy_rows(_request("/settings/taxonomy/rows"), view="labels", conn=conn)
+        body = json.loads(resp.body)["rows"]
         assert "color-dot" not in body
         assert "#icon-target" in body
         # 2026-09-25 (UI audit L5): the text-safe --cal-text-* tone.

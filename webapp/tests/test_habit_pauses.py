@@ -124,7 +124,7 @@ class TestRendering:
         # in the habit's view modal (single-habit pauses are added there).
         body = habits_router.pauses_modal(_req("/habits/pauses"), conn=conn).body.decode()
         assert "<strong>All habits</strong>" in body and 'action="/habits/pauses/g1/delete"' in body
-        assert '<option value="h1">' in body
+        assert 'name="task_uid" value="h1"' in body
         detail = tasks_router.task_detail("h1", _req("/tasks/h1"), conn=conn).body.decode()
         assert "Pause this habit" not in detail
 

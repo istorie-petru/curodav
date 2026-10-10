@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Taxonomy &amp; Data{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_bulk_actions_bar.html" import bulk_actions_bar, bulk_count %}
+{% set _count %}{{ bulk_count("labels") }}{{ bulk_count("holidays") }}{% endset %}
+{% call page_header_narrow("Taxonomy & Data", "layers", title_extra=_count) %}
+{{ bulk_actions_bar("labels", merge_label="Merge", edit=true) }}
+{{ bulk_actions_bar("holidays") }}
+<form method="get" action="/settings/taxonomy" class="filter-bar" id="taxonomy-view-form"></form>
+{% set fd_name = 'view' %}
+{% set fd_label = 'View' %}
+{% set fd_items = views %}
+{% set fd_selected = view %}
+{% set fd_mode = 'single' %}
+{% set fd_form_id = 'taxonomy-view-form' %}
+{% include '_filter_dropdown.html' %}
+{% endcall %}
+<div id="modal-target">
+<div class="card table-scroll table-responsive" id="taxonomy-table-wrapper">
+    <div id="taxonomy-table" data-view="{{ view }}">
+        <table class="entity-table labels-table">
+            <thead>
+                <tr>
+                    <th class="col-select"><span class="sr-only">Select</span></th>
+                    <th class="col-name" id="taxonomy-th-0">{{ spec.cols[0] }}</th>
+                    <th class="col-meta col-opt-2" id="taxonomy-th-1">{{ spec.cols[1] }}</th>
+                    <th class="col-meta col-opt-1" id="taxonomy-th-2">{{ spec.cols[2] }}</th>
+                    <th class="col-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="taxonomy-body">{% include "_taxonomy_rows.html" %}</tbody>
+        </table>
+    </div>
+</div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script defer src="{{ static_url('bulk_select.js') }}"></script>
+<script defer src="{{ static_url('taxonomy.js') }}"></script>
+{% endblock %}

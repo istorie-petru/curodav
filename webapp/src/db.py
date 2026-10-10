@@ -6227,6 +6227,34 @@ def list_groups(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return list(groups.values())
 
 
+def label_filter_items(conn: sqlite3.Connection, label_names: list[str], *, lowercase_values: bool = False) -> list[dict[str, str]]:
+    """Options for a label filter dropdown: the groups that have a member
+    among `label_names` first (value `group:<name>`), then the labels. Each
+    carries a `section` so the dropdown can draw a divider between them."""
+    present = {n.lower() for n in label_names}
+    items = []
+    for g in list_groups(conn):
+        if any(lbl["name"].lower() in present for lbl in g["labels"]):
+            items.append({"value": f"{GROUP_KEY_PREFIX}{g['name']}".lower() if lowercase_values else f"{GROUP_KEY_PREFIX}{g['name']}",
+                          "name": g["name"], "section": "group"})
+    items += [{"value": n.lower() if lowercase_values else n, "name": n, "section": "label"} for n in label_names]
+    return items
+
+
+def expand_label_filter(conn: sqlite3.Connection, values) -> set[str]:
+    """Lowercase label names a filter selection stands for: a `group:<name>`
+    value stands for every label in that group, anything else for itself."""
+    out: set[str] = set()
+    for v in values:
+        v = (v or "").strip()
+        if v.lower().startswith(GROUP_KEY_PREFIX):
+            g = get_group(conn, v[len(GROUP_KEY_PREFIX):])
+            out |= {n.lower() for n in group_member_names(conn, g["name"])} if g else set()
+        elif v:
+            out.add(v.lower())
+    return out
+
+
 def get_group(conn: sqlite3.Connection, name: str) -> dict[str, Any] | None:
     """One group's row (case-insensitive name), or None."""
     r = conn.execute("SELECT * FROM label_groups WHERE name = ?", ((name or "").strip(),)).fetchone()

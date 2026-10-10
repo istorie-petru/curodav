@@ -148,22 +148,26 @@
   };
   NotebookCode.prototype.renderSettings = function () {
     var self = this;
-    var select = document.createElement("select");
-    select.className = "cdx-nb-code-lang-select";
-    Object.keys(LANGUAGES).forEach(function (key) {
-      var opt = document.createElement("option");
-      opt.value = key;
-      opt.textContent = LANGUAGES[key];
-      if (key === self.data.language) opt.selected = true;
-      select.appendChild(opt);
-    });
-    select.addEventListener("change", function () {
-      self.data.language = select.value;
-      self.codeEl.className =
-        "cdx-nb-code__highlight-code language-" + select.value;
-      self.highlight();
-    });
-    return select;
+    return [
+      {
+        icon: icon("code"),
+        title: "Language: " + LANGUAGES[this.data.language],
+        children: {
+          items: Object.keys(LANGUAGES).map(function (key) {
+            return {
+              title: LANGUAGES[key],
+              isActive: self.data.language === key,
+              closeOnActivate: true,
+              onActivate: function () {
+                self.data.language = key;
+                self.codeEl.className = "cdx-nb-code__highlight-code language-" + key;
+                self.highlight();
+              },
+            };
+          }),
+        },
+      },
+    ];
   };
 
   window.NotebookCode = NotebookCode;

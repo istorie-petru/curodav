@@ -1,4 +1,3 @@
-{% from "_inputs.html" import select_input %}
 {% extends "base.html" %}
 {% block title %}Notebook - Settings{% endblock %}
 {% block content %}
@@ -8,19 +7,27 @@
 <div data-keep-open>
 <div class="settings-group">
 <div class="card">
-    <form class="settings-field-row" method="post" action="/settings/notebook/layout">
+    <form class="settings-field-row" method="post" action="/settings/notebook/layout" id="notebook-layout-form">
         <span class="settings-field-label">Document sidebar layout
-            <span class="settings-field-hint">How Outline/Bibliography/Glossary/Relationships are arranged on a document page</span>
+            <span class="settings-field-hint">Stacked is one column everywhere; Sidebar is desktop only, and mobile shows just the document</span>
         </span>
         <span class="spacer"></span>
-        {% call select_input({'name': 'sidebar_layout', 'data-change-submit': true}) %}
-            <option value="stacked" {% if sidebar_layout == 'stacked' %}selected{% endif %}>Stacked (one column, same on desktop and mobile)</option>
-            <option value="sidebar" {% if sidebar_layout == 'sidebar' %}selected{% endif %}>Sidebar (desktop only -- mobile shows just the document)</option>
-        {% endcall %}
+        {% set ms_name = 'sidebar_layout' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Document sidebar layout' %}
+        {% set ms_items = [{'uid': 'stacked', 'name': 'Stacked'}, {'uid': 'sidebar', 'name': 'Sidebar'}] %}
+        {% set ms_selected = sidebar_layout %}
+        {% set ms_autosubmit = true %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'notebook-layout-form' %}
+        {% include "_widget_list_multiselect.html" %}
     </form>
 </div>
 </div>
 </div>
 </div>
+{% set footer_back_url = '/settings' %}
+{% set footer_back_label = 'Done' %}
+{% include "_modal_footer.html" %}
 </div>
 {% endblock %}

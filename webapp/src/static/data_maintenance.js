@@ -68,34 +68,39 @@
 
   // ---- Export dialog: live "Includes: N Events, N Tasks, N Contacts" ----
   //
-  // Each <option> carries its own server-rendered phrase in
+  // Each type radio carries its own server-rendered phrase in
   // data-dm-preview; this composes it with the format's packaging note, so
   // the wording lives in one place (the template).
 
+  // A dropdown's panel is portaled out of its wrapper while open, so its
+  // inputs are reached through CCMultiselect.panelFor, not querySelector.
+  function dropdownInputs(root) {
+    var panel = root && window.CCMultiselect.panelFor(root);
+    return panel ? Array.from(panel.querySelectorAll("input")) : [];
+  }
+
   function refreshExportHint(scope) {
-    var typeSelect = scope.querySelector("[data-dm-type]");
-    var formatSelect = scope.querySelector("[data-dm-format]");
+    var typeRoot = scope.querySelector(".dm-type-select");
+    var formatRoot = scope.querySelector(".dm-format-select");
+    var typeInput = dropdownInputs(typeRoot).find(function (i) { return i.checked; });
+    var formatInput = dropdownInputs(formatRoot).find(function (i) { return i.checked; });
     var hint = scope.querySelector("[data-dm-hint]");
-    if (!typeSelect || !hint) return;
-    var opt = typeSelect.selectedOptions[0];
-    if (!opt) return;
-    var parts = [opt.dataset.dmPreview || ""];
-    if (typeSelect.value === "labels") {
+    if (!typeInput || !hint) return;
+    var type = typeInput.value;
+    var csv = !!formatInput && formatInput.value === "csv";
+    var parts = [typeInput.dataset.dmPreview || ""];
+    if (type === "labels") {
       parts.push("labels always export as .json.");
-    } else if (typeSelect.value === "all") {
-      parts.push(formatSelect && formatSelect.value === "csv"
-        ? "one .zip of spreadsheets."
-        : "one .zip bundle (.ics/.vcf).");
+    } else if (type === "all") {
+      parts.push(csv ? "one .zip of spreadsheets." : "one .zip bundle (.ics/.vcf).");
     } else {
-      parts.push(formatSelect && formatSelect.value === "csv"
-        ? "opens in any spreadsheet app."
-        : "opens in any calendar or contacts app.");
+      parts.push(csv ? "opens in any spreadsheet app." : "opens in any calendar or contacts app.");
     }
     hint.textContent = parts.filter(Boolean).join(" \u00b7 ");
-    if (formatSelect) {
-      var labelsPicked = typeSelect.value === "labels";
-      formatSelect.disabled = labelsPicked;
-      formatSelect.title = labelsPicked ? "Labels always export as .json" : "";
+    if (formatRoot) {
+      var labelsPicked = type === "labels";
+      dropdownInputs(formatRoot).concat(Array.from(formatRoot.querySelectorAll(".ms-trigger"))).forEach(function (el) { el.disabled = labelsPicked; });
+      formatRoot.title = labelsPicked ? "Labels always export as .json" : "";
     }
   }
 
@@ -197,9 +202,9 @@
   document.addEventListener("change", function (e) {
     var t = e.target;
     if (!t.matches) return;
-    if (t.matches("[data-dm-type],[data-dm-format]")) {
-      var root = closest(t, "[data-dm-export-root]") || document;
-      refreshExportHint(root);
+    var exportRoot = document.querySelector("[data-dm-export-root]");
+    if (exportRoot && t.matches("input") && closest(t, ".multiselect-panel")) {
+      refreshExportHint(exportRoot);
     } else if (t.matches("[data-dm-file]")) {
       previewFile(t);
     }

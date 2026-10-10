@@ -128,7 +128,7 @@ class TestLabelsVsProjects:
         db.upsert_label_config(conn, {"name": "Gym", "created_at": _now()})
         body = labels_router.manage_projects(_req("/settings/projects"), conn=conn).body.decode()
         assert 'data-label-name="Thesis"' in body and 'data-label-name="Gym"' not in body
-        assert 'href="/settings/projects/new"' in body and 'data-kind="projects"' in body
+        assert 'href="/settings/projects/new"' in body and 'data-view="projects"' in body
         form = labels_router.new_project_modal(_req("/settings/projects/new"), conn=conn).body.decode()
         assert "New project" in form and '<input type="hidden" name="role" value="project">' in form
         assert 'name="deadline_date"' in form
@@ -183,3 +183,44 @@ class TestModuleDropdowns:
         assert 'class="field-toggle"' not in body
         assert re.search(r'name="sidebar_pin" value="1"[^>]*\bchecked', body)
         assert not re.search(r'name="widget_pin" value="1"[^>]*\bchecked', body)
+
+
+class TestDuplicate:
+    """Duplicate opens the new-item modal already filled with an existing
+    item's settings; nothing is created until the user saves."""
+
+    def test_label_copy_prefills_the_new_form_and_creates_nothing(self, conn):
+        db.upsert_label_config(conn, {"name": "Gym", "color": "red", "icon": "heart", "description": "Lifting", "created_at": _now()})
+        body = labels_router.new_label_modal(_req("/settings/labels/new"), copy="Gym", conn=conn).body.decode()
+        assert 'value="Gym copy"' in body and "Lifting" in body
+        assert [c["name"] for c in db.list_labels(conn)] == ["Gym"]
+
+    def test_project_copy_opens_in_project_mode(self, conn):
+        db.upsert_label_config(conn, {"name": "Thesis", "is_project": 1, "created_at": _now()})
+        body = labels_router.new_project_modal(_req("/settings/projects/new"), copy="Thesis", conn=conn).body.decode()
+        assert 'value="Thesis copy"' in body and 'name="role" value="project"' in body
+
+    def test_group_copy_keeps_the_look_but_not_the_labels(self, conn):
+        db.create_group(conn, "Uni", "heart", "red")
+        db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni", "created_at": _now()})
+        body = label_pages.new_group_modal(_req("/groups/new"), copy="Uni", conn=conn).body.decode()
+        assert 'value="Uni copy"' in body
+        assert [g["name"] for g in db.list_groups(conn)] == ["Uni"]
+        assert not re.search(r'name="members"[^>]*value="Maths"[^>]*checked', body)
+
+
+class TestRowActions:
+    def test_rows_offer_duplicate_and_archive(self, conn):
+        from src.routers import taxonomy
+
+        db.upsert_label_config(conn, {"name": "Gym", "created_at": _now()})
+        rows = json.loads(taxonomy.taxonomy_rows(_req("/"), view="labels", conn=conn).body)["rows"]
+        assert 'href="/settings/labels/new?copy=Gym"' in rows
+        assert 'action="/labels/Gym/archive"' in rows
+
+    def test_fetch_archive_returns_no_content(self, conn):
+        db.upsert_label_config(conn, {"name": "Gym", "created_at": _now()})
+        assert label_pages.archive_label("Gym", x_requested_with="fetch", conn=conn).status_code == 204
+        assert db.get_label_config(conn, "Gym")["archived_at"]
+        assert label_pages.unarchive_label("Gym", x_requested_with="fetch", conn=conn).status_code == 204
+        assert not db.get_label_config(conn, "Gym")["archived_at"]

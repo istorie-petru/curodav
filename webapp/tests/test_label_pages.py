@@ -218,7 +218,6 @@ class TestOldUrls:
     def test_literal_settings_routes_still_win(self):
         paths = [r.path for r in labels_router.router.routes]
         assert paths.index("/settings/labels/new") < paths.index("/settings/labels/{name}")
-        assert paths.index("/settings/labels/regions") < paths.index("/settings/labels/{name}")
 
 
 class TestFormFields:

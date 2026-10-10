@@ -10,6 +10,8 @@ Select-options against a document's actual notebook_properties.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from starlette.requests import Request
 
@@ -122,7 +124,7 @@ class TestNotebookSidebarLayoutSetting:
     def test_settings_page_reflects_the_saved_value(self, conn):
         db.save_notebook_settings(conn, "sidebar")
         body = notebook_router.settings_notebook(_request(), conn=conn).body.decode()
-        assert 'value="sidebar" selected' in body
+        assert re.search(r'value="sidebar"[^>]*\bchecked', body)
 
     def test_save_route_redirects_to_settings_notebook(self, conn):
         resp = notebook_router.save_notebook_layout(sidebar_layout="sidebar", conn=conn)

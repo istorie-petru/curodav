@@ -18,7 +18,7 @@
 
      Uses _filter_dropdown.html underneath (same .multiselect component
      as the widget builder's View/Range, single-select mode). -->
-{% macro calendar_filters(active_label, base_url, event_label_names) %}
+{% macro calendar_filters(active_label, base_url, event_label_names, event_label_items=none) %}
 {% if event_label_names %}
 {% set _fd_action = base_url.split('?')[0] %}
 {% set _fd_qs = base_url.split('?')[1] if '?' in base_url else '' %}
@@ -31,9 +31,13 @@
     {% endfor %}{% endif %}
 </form>
 {% set _fd_items = [{'value': '', 'name': 'All labels'}] %}
+{% if event_label_items %}
+{% for _it in event_label_items %}{% set _ = _fd_items.append({'value': _it.value, 'name': _it.name, 'section': _it.section}) %}{% endfor %}
+{% else %}
 {% for _name in event_label_names %}
 {% set _ = _fd_items.append({'value': _name, 'name': _name}) %}
 {% endfor %}
+{% endif %}
 {% set fd_name = 'label' %}
 {% set fd_label = 'Label' %}
 {% set fd_items = _fd_items %}

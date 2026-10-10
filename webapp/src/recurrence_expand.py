@@ -123,6 +123,27 @@ def _build_override_component(master: dict[str, Any], override: dict[str, Any]) 
     return Event.from_ical(event_row_to_ical(override_row))
 
 
+def collapse_recurring(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keeps one row per recurring series in a start-sorted agenda list: its
+    first (closest-to-today) occurrence, tagged with `recurring_more`, the
+    number of further occurrences the list held. Non-recurring rows pass
+    through unchanged."""
+    counts: dict[str, int] = {}
+    for e in events:
+        if e.get("recurrence"):
+            counts[e["uid"]] = counts.get(e["uid"], 0) + 1
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for e in events:
+        if e.get("recurrence"):
+            if e["uid"] in seen:
+                continue
+            seen.add(e["uid"])
+            e = {**e, "recurring_more": counts[e["uid"]] - 1}
+        out.append(e)
+    return out
+
+
 def expand_events(
     rows: list[dict[str, Any]],
     window_start: date,

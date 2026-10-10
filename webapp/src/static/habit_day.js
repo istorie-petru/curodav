@@ -6,7 +6,7 @@
 // Any `.habit-amount-trigger` (a day cell in the habit view modal's year
 // heatmap / month calendar, or the Habits page / widget 7-day strip, for
 // an amount habit) opens one small native <dialog> with a single number
-// box -- the placeholder is the habit's daily target, and Enter on an
+// box -- the box starts at the habit's daily target, and Enter on an
 // empty box logs exactly that. 0 clears the day. Posts to the habit's
 // explicit-value endpoint (/tasks/<uid>/completions), then refreshes:
 // inside the view modal, the modal re-renders in place (and the page
@@ -20,16 +20,17 @@
     dialog.className = "habit-amount-dialog";
     dialog.innerHTML =
       '<form class="habit-amount-form" method="dialog">' +
-      '<label class="habit-amount-label" for="habit-amount-input"></label>' +
-      '<input id="habit-amount-input" type="number" name="value" min="0" max="999999" step="1" inputmode="numeric">' +
-      '<div class="habit-amount-actions">' +
-      '<button type="button" class="btn ghost btn-sm" data-habit-amount-cancel>Cancel</button>' +
-      '<button type="submit" class="btn primary btn-sm">Save</button>' +
+      '<div class="modal-header"><h1 class="habit-amount-label"></h1></div>' +
+      '<div class="modal-body"><input id="habit-amount-input" type="number" name="value" min="0" max="999999" step="1" inputmode="numeric" aria-label="Amount"></div>' +
+      '<div class="modal-footer">' +
+      '<button type="button" class="btn ghost" data-habit-amount-cancel><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-chevron-left"></use></svg> Cancel</button>' +
+      '<span class="spacer"></span>' +
+      '<button type="submit" class="btn primary"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-check-square"></use></svg> Save</button>' +
       "</div></form>";
     document.body.appendChild(dialog);
     form = dialog.querySelector("form");
     input = dialog.querySelector("input");
-    label = dialog.querySelector("label");
+    label = dialog.querySelector(".habit-amount-label");
     dialog.querySelector("[data-habit-amount-cancel]").addEventListener("click", () => dialog.close());
     // Escape closes just this popup, never the modal underneath
     // (modal.js listens for Escape on the document).
@@ -70,8 +71,7 @@
     current = trigger;
     const unit = trigger.dataset.unit || "";
     label.textContent = prettyDate(trigger.dataset.date) + (unit ? " \u00b7 " + unit : "");
-    input.placeholder = trigger.dataset.target || "1";
-    input.value = trigger.dataset.value || "";
+    input.value = trigger.dataset.value || trigger.dataset.target || "";
     dialog.showModal();
     place(trigger);
     input.focus();

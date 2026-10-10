@@ -254,7 +254,7 @@ class TestPausesModal:
         body = habits_router.pauses_modal(_request("/habits/pauses"), conn=conn).body.decode()
         assert "<strong>All habits</strong>" in body and "<strong>Read</strong>" in body
         assert "/habits/pauses/old/delete" not in body  # ended pauses aren't listed
-        assert '<option value="h1">Read</option>' in body
+        assert 'name="task_uid" value="h1"' in body
         assert "No soda" not in body  # avoid habits can't be paused (UI audit H-12)
 
 

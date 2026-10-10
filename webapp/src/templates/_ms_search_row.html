@@ -1,7 +1,6 @@
 {# Search row shared by the dropdown components (_widget_list_multiselect.html,
    _filter_dropdown.html). Include it when the option count is above 7;
    needs `_ms_search_label` set by the caller. #}
-<div class="multiselect-search"><span class="search-field">{{ icon('search') }}
-    <input type="text" class="multiselect-search-input" autocomplete="off" aria-label="Search {{ _ms_search_label }}"></span>
-</div>
+{% from "_inputs.html" import search_input %}
+<div class="multiselect-search">{{ search_input({'class': 'multiselect-search-input', 'autocomplete': 'off', 'aria-label': 'Search ' ~ _ms_search_label}) }}</div>
 <div class="multiselect-divider"></div>

@@ -167,10 +167,10 @@ class TestEmptyState:
         body = _page(conn, "Gym").body.decode()
         assert "Nothing tagged" not in body
         assert "kanban-board" in body
-        # L12: the board has a heading, and Contacts' empty text names the label.
+        # L12: the board has a heading; sections with nothing in them (here
+        # Contacts) are hidden.
         assert "label-section-heading" in body
-        assert "No contacts tagged Gym yet." in body
-        assert "No contacts match this filter." not in body
+        assert "No contacts" not in body
 
 
 class TestQuickAddPrefill:

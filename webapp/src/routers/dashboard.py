@@ -559,9 +559,11 @@ def _render_agenda(conn, config: dict, nav: dict | None = None) -> dict:
             if e.get("start_at") and today_iso <= e["start_at"][:10] <= event_window_end_iso
         ]
         events.sort(key=lambda e: e.get("start_at") or "")
+        events = recurrence_expand.collapse_recurring(events)
         if limit:
             events = events[:limit]
-    return {"mode": "flat", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "tasks": tasks, "events": events, "today": today_iso}
+    return {"mode": "flat", "range": range_, "show": show, "overdue_tasks": overdue_tasks, "tasks": tasks, "events": events, "today": today_iso,
+            "recurring_window": "in the next year" if range_ == "all_upcoming" else "in the next 30 days"}
 
 
 def _render_at_a_glance(conn, config: dict, nav: dict | None = None) -> dict:

@@ -190,7 +190,7 @@
     untilField.dataset.dtf = "date";
     untilField.dataset.dtfWeekStart = document.body.dataset.weekStart || "monday";
     untilField.innerHTML =
-      '<input type="text" class="dtf-input" placeholder="dd/mm/yyyy" autocomplete="off" spellcheck="false" aria-label="Ends on">' +
+      '<input type="text" class="dtf-input" autocomplete="off" spellcheck="false" aria-label="Ends on">' +
       '<button type="button" class="dtf-btn" tabindex="-1" aria-label="Choose end date"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-chevron-down"></use></svg></button>' +
       '<input type="hidden" class="dtf-value" value="">';
     const untilInput = untilField.querySelector(".dtf-value");
@@ -201,7 +201,7 @@
     countInput.min = "1";
     countInput.step = "1";
     countInput.className = "multiselect-new-input recurrence-ends-count";
-    countInput.placeholder = "10";
+    countInput.setAttribute("aria-label", "Occurrences");
 
     const neverRadio = endsOption("never", "Never");
     const untilRadio = endsOption("until", "On date", untilField);

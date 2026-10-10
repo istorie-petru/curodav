@@ -135,11 +135,11 @@ class TestPageHeaderNarrowRollout:
 
     def test_labels_manage(self, conn):
         resp = labels_router.manage_labels(_bare_request("/settings/labels"), conn=conn)
-        _assert_narrow_header(resp.body.decode(), "Labels", "tag")
+        _assert_narrow_header(resp.body.decode(), "Taxonomy &amp; Data", "layers")
 
     def test_settings_holidays(self, conn):
         resp = settings_router.settings_holidays(_bare_request("/settings/holidays"), conn=conn)
-        _assert_narrow_header(resp.body.decode(), "Holidays", "calendar")
+        _assert_narrow_header(resp.body.decode(), "Taxonomy &amp; Data", "layers")
 
     def test_settings_time_blocks(self, conn):
         resp = settings_router.settings_time_blocks(_bare_request("/settings/time-blocks"), conn=conn)

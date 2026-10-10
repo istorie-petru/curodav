@@ -1,4 +1,4 @@
-{% from "_inputs.html" import text_input %}
+{% from "_inputs.html" import search_input %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -30,7 +30,7 @@
        pwa.py's own header comment) -- this manifest link never had
        anything to do with that removed feature. #}
     <link rel="manifest" href="{{ static_url('manifest.webmanifest') }}">
-    <meta name="theme-color" content="#f2f4f7">
+    <meta name="theme-color" content="#ffffff">
     <link rel="stylesheet" href="{{ static_url('style.css') }}">
     {# Per-page extra stylesheets (2026-10-01) -- mirrors {% block
        extra_scripts %} at the end of <body>, just for <head>. First (only)
@@ -65,7 +65,7 @@
         // System chrome (phone status bar, browser toolbar) follows the page background, in either theme.
         var chrome = document.querySelector('meta[name="theme-color"]');
         function syncChrome() {
-          if (chrome) chrome.setAttribute("content", document.documentElement.getAttribute("data-theme") === "dark" ? "#363636" : "#f2f4f7");
+          if (chrome) chrome.setAttribute("content", document.documentElement.getAttribute("data-theme") === "dark" ? "#3e3e3e" : "#ffffff");
         }
         syncChrome();
         new MutationObserver(syncChrome).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
@@ -527,8 +527,7 @@
 <div class="command-palette-overlay" id="command-palette-overlay">
     <div class="command-palette" id="command-palette" role="dialog" aria-modal="true" aria-label="Search">
         <div class="command-palette-input-row">
-            {{ icon('search') }}
-            {{ text_input({'id': 'command-palette-input', 'class': 'command-palette-input', 'aria-label': 'Search tasks, events, contacts', 'autocomplete': 'off'}) }}
+            {{ search_input({'id': 'command-palette-input', 'class': 'command-palette-input', 'aria-label': 'Search tasks, events, contacts', 'autocomplete': 'off'}) }}
             <!-- Search window simplification (2026-09-24 direct request):
                  explicit menu actions beyond search itself -- Edit mode
                  toggle, Import/Export/Backup -- reachable from the palette
@@ -619,6 +618,7 @@
      per-request-computed style all route through this one file instead
      of a `style="..."` attribute. -->
 <script defer src="{{ static_url('dynamic_styles.js') }}"></script>
+<script defer src="{{ static_url('search_field.js') }}"></script>
 <script defer src="{{ static_url('modal.js') }}"></script>
 {# Habit day amount popup + work-sessions disclosure (2026-09-25). #}
 <script defer src="{{ static_url('habit_day.js') }}"></script>

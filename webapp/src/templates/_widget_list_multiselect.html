@@ -241,6 +241,7 @@ ms_hidden    -- when true, the outer `.field` starts with the
      of ms_name) and `checked` (explicit state instead of ms_selected), so
      one dropdown can hold several independent boolean fields (the label
      form's Sections / Show in). #}
+{% from "_inputs.html" import search_input %}
 {% set _mode = ms_mode | default('filter') %}
 {% set _single = _mode == 'single' %}
 {% set _sel = ([ms_selected] if ms_selected else []) if _single else (ms_selected | default([])) %}
@@ -266,13 +267,11 @@ ms_hidden    -- when true, the outer `.field` starts with the
             {% set _merged = _allow_new and ms_items | length > 7 %}
             {% set _new_row %}
             <label class="multiselect-option multiselect-new-option{% if _merged %} ms-merged{% endif %}">
-                {{ icon('search' if _merged else 'plus', 'icon-sm') }}
                 {# Single mode: distinct name from the radios above --
                    see this partial's own ms_allow_new docstring for why
                    sharing one name with a single-select's radios silently
                    lost whichever radio the user actually picked. #}
-                <input type="text" name="{{ (ms_name ~ '_new') if _single else ms_name }}" class="multiselect-new-input" aria-label="{{ 'Search or add' if _merged else 'New' }} {{ ms_label|lower|replace('labels', 'label') }}"
-                       {% if ms_form_id %}form="{{ ms_form_id }}"{% endif %}>
+                {{ search_input({'name': (ms_name ~ '_new') if _single else ms_name, 'class': 'multiselect-new-input', 'aria-label': ('Search or add' if _merged else 'New') ~ ' ' ~ ms_label|lower|replace('labels', 'label'), 'form': ms_form_id or none}, 'search' if _merged else 'plus') }}
             </label>
             {% endset %}
             {% if _merged %}{{ _new_row }}<div class="multiselect-divider"></div>{% elif ms_items | length > 7 %}{% set _ms_search_label = ms_label|lower %}{% include "_ms_search_row.html" %}{% endif %}

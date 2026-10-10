@@ -585,7 +585,9 @@
 // reverses) -- _icons_sprite.html's 190 symbols all replaced, style.css's
 // `.icon` flipped fill<->stroke again plus two new sizing rules (a
 // minimum size floor, and an icon matching its adjacent text's size).
-const CACHE_NAME = "cc-shell-v138";
+// v139 (2026-10-10): one search-box component (search_input macro, search_field.js),
+// native selects replaced by the custom dropdown; style.css, app.js and the notebook scripts changed.
+const CACHE_NAME = "cc-shell-v139";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",
@@ -599,6 +601,7 @@ const SHELL_ASSETS = [
   "/static/modal.js",
   "/static/habit_day.js",
   "/static/look_picker.js",
+  "/static/search_field.js",
   "/static/tag_input.js",
   "/static/recurrence_picker.js",
   "/static/reminders_picker.js",

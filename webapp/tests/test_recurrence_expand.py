@@ -324,3 +324,18 @@ class TestExpandTasks:
     def test_non_recurring_task_passes_through(self):
         row = {"uid": "t2", "title": "One-off", "due_at": "2026-09-05"}
         assert expand_tasks([row], date(2026, 9, 1), date(2026, 9, 30)) == [row]
+
+
+class TestCollapseRecurring:
+    def test_one_row_per_series_with_remaining_count(self):
+        from src.recurrence_expand import collapse_recurring
+
+        rows = [
+            {"uid": "a", "recurrence": "FREQ=WEEKLY", "start_at": "2026-10-11T09:00:00"},
+            {"uid": "b", "recurrence": None, "start_at": "2026-10-12T09:00:00"},
+            {"uid": "a", "recurrence": "FREQ=WEEKLY", "start_at": "2026-10-18T09:00:00"},
+            {"uid": "a", "recurrence": "FREQ=WEEKLY", "start_at": "2026-10-25T09:00:00"},
+        ]
+        out = collapse_recurring(rows)
+        assert [(r["uid"], r["start_at"][:10]) for r in out] == [("a", "2026-10-11"), ("b", "2026-10-12")]
+        assert out[0]["recurring_more"] == 2 and "recurring_more" not in out[1]
