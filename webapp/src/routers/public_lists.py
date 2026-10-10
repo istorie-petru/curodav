@@ -77,7 +77,7 @@ def _vcf_feed(conn, row: dict) -> Response:
         contact = db.get_contact(conn, object_id)
         if contact is None:
             continue
-        parts.append(vcard_rows.contact_row_to_vcard(contact).strip())
+        parts.append(vcard_rows.contact_row_to_vcard(contact, row.get("contact_name_field") or "full_name").strip())
     body = ("\r\n".join(parts) + "\r\n") if parts else ""
     return Response(body.encode("utf-8"), media_type="text/vcard")
 

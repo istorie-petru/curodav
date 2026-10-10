@@ -795,8 +795,7 @@ def week_view(
     now; calendar.js's own `.time-event` selector explicitly excludes
     `.work-allocation` so the two scripts never double-attach a pointerdown
     handler to the same block (see calendar.js's own comment). The sidebar is
-    collapsible via a header button (static/unscheduled_panel_toggle.js,
-    per-device localStorage, no server state).
+    the shared right sidebar shell (static/notebook_sidebar.js collapses it).
 
     This reuses what the old timetable_view (folded in here) computed: the
     per-event `is_allocation`/`task_uid` annotation and the unscheduled-work

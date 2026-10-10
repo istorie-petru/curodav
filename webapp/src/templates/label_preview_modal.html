@@ -65,18 +65,7 @@
 <div class="card-title widget-header"><h2>{{ icon('calendar', 'icon-sm') }} Coming up</h2></div>
 {% if agenda_items %}
 <table>
-    {% for item in agenda_items %}
-    {% if item.kind == 'task' %}
-    {{ widget_link_row('/tasks/' ~ item.uid, item.title, leading=icon('check-square', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill((item.start_at | relative_date), 'gray')) }}
-    {% elif item.is_deadline %}
-    {{ widget_link_row(none, item.title, leading=icon('flag', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill(label_deadline.text if label_deadline else ('Deadline · ' ~ (item.start_at | relative_date)), label_deadline.color if label_deadline else 'gray')) }}
-    {% else %}
-    {# 2026-09-28 direct follow-up ("the label's icon should be used
-       when it's available") -- same pattern as the Agenda widget's
-       Events section (_widget_agenda.html). #}
-    {{ widget_link_row('/events/' ~ item.uid, item.title, leading=widget_event_icon(item.calendar_color, icon_name=(label_icon(request, item.tags | first | default('')) | default('calendar', true))), leading_class='widget-row-icon', right=widget_pill(((item.start_at | relative_date) ~ (' ' ~ (item.start_at | fmt_time) if not item.all_day else '')), 'blue')) }}
-    {% endif %}
-    {% endfor %}
+    {% include "_label_agenda_rows.html" %}
 </table>
 {% else %}
 {{ widget_empty('Nothing coming up for this label.') }}
@@ -94,7 +83,12 @@
 {% set footer_back_url = '/labels/' ~ label.name %}
 {% set footer_back_label = 'Done' %}
 {% endif %}
-{% set footer_extra_html %}<a class="btn ghost" href="/labels/{{ label.name|urlencode }}">{{ icon('external-link', 'icon-sm') }} Open page</a>{% endset %}
+{% set footer_extra_html %}<a class="btn ghost" href="/labels/{{ label.name|urlencode }}">{{ icon('external-link', 'icon-sm') }} Open page</a>
+{% if label.archived_at %}
+<form method="post" action="/labels/{{ label.name|urlencode }}/unarchive" class="form-inline"><button type="submit" class="btn ghost">{{ icon('archive', 'icon-sm') }} Unarchive</button></form>
+{% else %}
+<form method="post" action="/labels/{{ label.name|urlencode }}/archive" class="form-inline"{% if label_status != 'Pending Archiving' %} data-confirm-sheet="Archive {{ label.name }}?{% if label_status %} It still has open tasks or its deadline hasn't passed yet.{% else %} Everything tagged with it keeps the label.{% endif %}"{% endif %}><button type="submit" class="btn ghost">{{ icon('archive', 'icon-sm') }} Archive</button></form>
+{% endif %}{% endset %}
 {% set footer_primary_href = '/settings/labels/' ~ label.name ~ '/edit' %}
 {% set footer_primary_label = 'Edit' %}
 {% set footer_primary_icon = 'edit' %}

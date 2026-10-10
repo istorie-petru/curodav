@@ -20,6 +20,9 @@ from src.routers import habits as habits_router
 from src.routers import tasks as tasks_router
 
 
+pytestmark = pytest.mark.usefixtures("local_today")
+
+
 @pytest.fixture()
 def conn(tmp_path):
     with db.connect(tmp_path / "cache.sqlite") as c:

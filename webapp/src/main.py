@@ -318,7 +318,7 @@ def create_app() -> FastAPI:
     # today_redirect and routers/calendar.py::week_redirect for the
     # bookmark-preserving redirects that replaced them, same precedent as
     # the earlier /calendar/timetable retirement).
-    from .routers import auth, banners, calendar, contacts, dashboard, export, flairs as flairs_router, habits, label_pages, labels, notebook, projects, public_lists, published_lists, push, pwa, quick_capture, search, settings, spaces, sync_api, tasks, timeline
+    from .routers import auth, banners, calendar, contacts, dashboard, export, flairs as flairs_router, habits, label_pages, labels, notebook, projects, public_lists, published_lists, push, pwa, quick_capture, search, secretariat_page, settings, spaces, sync_api, tasks, timeline
 
     # Health check (design-system unification pass, 2026-09-17, deploy
     # alignment with sibling app Pineart's own GET /api/health) -- exempted
@@ -340,6 +340,7 @@ def create_app() -> FastAPI:
     # genuinely public-without-a-session routes.
     app.include_router(public_lists.router)
     app.include_router(dashboard.router)
+    app.include_router(secretariat_page.home_router)
     app.include_router(search.router)
     # 1.8 slice 1 -- the sync API skeleton (routers/sync_api.py,
     # src/offline_sync.py). No PWA client calls this yet (§11 slices 3+);

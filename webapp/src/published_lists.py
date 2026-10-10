@@ -187,6 +187,8 @@ def materialize(conn: sqlite3.Connection, bridge: Any, list_row: dict[str, Any])
             continue
         push_row = dict(row)
         push_row[path_field] = collection_path
+        if entity_type == "contact":
+            push_row["name_field"] = list_row.get("contact_name_field") or "full_name"
         _SAVE_ROW[entity_type](bridge, push_row)
         if object_id in existing_uids:
             updated += 1

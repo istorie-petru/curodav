@@ -102,7 +102,7 @@
         {% if task.recurrence %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Recurrence</span>
-            <span class="detail-meta-value">{{ task.recurrence }}</span>
+            <span class="detail-meta-value">{{ task.recurrence | recurrence_text }}</span>
         </div>
         {% endif %}
         {# 2026-09-25 (UI audit L18): the project gets its own row, like

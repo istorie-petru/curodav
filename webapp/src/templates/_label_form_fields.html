@@ -21,7 +21,7 @@
                      (l is None) don't need to pass this at all.
    cp_form_id/ip_form_id are set inside the partial (always this form's
    own id), same as _task_form_fields.html's ms_form_id convention. #}
-<div class="field-grid label-form-grid" data-page="{{ 'dashboard' if (l and l.has_dashboard) else 'sections' }}">
+<div class="field-grid label-form-grid" data-page="{{ l.page_type if l else 'sections' }}">
     <div class="field field-wide">
         <label>Name</label>
         {{ text_input({'name': 'new_name', 'value': l.name if l else '', 'required': true, 'autofocus': (true if (not l) else false)}) }}
@@ -72,11 +72,11 @@
         {{ date_field('deadline_date', l.deadline_date if (l and l.has_deadline) else '', label='Deadline') }}
     </div>
     {% endif %}
-    {% set ms_name = 'has_dashboard' %}
+    {% set ms_name = 'page_type' %}
     {% set ms_mode = 'single' %}
     {% set ms_label = 'Page' %}
-    {% set ms_items = [{'uid': '', 'name': 'Sections'}, {'uid': '1', 'name': 'Widget dashboard'}] %}
-    {% set ms_selected = '1' if (l and l.has_dashboard) else '' %}
+    {% set ms_items = [{'uid': 'sections', 'name': 'Sections'}, {'uid': 'dashboard', 'name': 'Widget dashboard'}, {'uid': 'secretariat', 'name': 'Secretariat'}] %}
+    {% set ms_selected = l.page_type if l else 'sections' %}
     {% set ms_extra_class = 'label-page-field' %}
     {% include "_widget_list_multiselect.html" %}
     {% set ms_name = 'sections' %}

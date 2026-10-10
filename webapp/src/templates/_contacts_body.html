@@ -68,12 +68,11 @@
                      no separate "primary" flag needed, "first" is simply
                      whichever entry was entered/synced first. -->
                 <span class="contact-row-sub">
-                    {% if c.title and c.org %}{{ c.title }} at {{ c.org }}
-                    {%- elif c.title %}{{ c.title }}
-                    {%- elif c.org %}{{ c.org }}{% endif %}
-                    {% if (c.title or c.org) and c.phones %}&middot;{% endif %}
+                    {% set _work = [c.role, c.org] | select | join(' at ') %}
+                    {{ [c.title, _work] | select | join(' · ') }}
+                    {% if (c.title or _work) and c.phones %}&middot;{% endif %}
                     {% if c.phones %}{{ c.phones[0].value }}{% endif %}
-                    {% if not c.title and not c.org and not c.phones and c.emails %}{{ c.emails[0].value }}{% endif %}
+                    {% if not c.title and not _work and not c.phones and c.emails %}{{ c.emails[0].value }}{% endif %}
                 </span>
             </span>
         </a>

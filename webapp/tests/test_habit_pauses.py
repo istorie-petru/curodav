@@ -17,6 +17,9 @@ T = date(2026, 9, 24)
 TODAY = date.today()
 
 
+pytestmark = pytest.mark.usefixtures("local_today")
+
+
 @pytest.fixture()
 def conn(tmp_path):
     with db.connect(tmp_path / "cache.sqlite") as c:

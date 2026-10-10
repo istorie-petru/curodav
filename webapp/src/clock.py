@@ -24,3 +24,9 @@ def now() -> datetime:
 
 def today() -> date:
     return now().date()
+
+
+def local_hour() -> int:
+    if _override is not None:
+        return _override.hour
+    return now().astimezone().hour

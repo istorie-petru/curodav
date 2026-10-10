@@ -343,19 +343,18 @@ class TestTaskDetailRouter:
         # when-area now the shared datetime picker (client-rendered trigger
         # label) posting to the session's own set-times endpoint; the hidden
         # start/end inputs carry the current values.
-        assert "Session 1" in body
+        assert f"/tasks/t1/work-allocations/{event_uid}/details" in body
         assert f"/tasks/t1/work-allocations/{event_uid}/set-times" in body
         assert 'value="2026-08-17T16:00:00"' in body
         assert 'value="2026-08-17T18:00:00"' in body
         assert "datetime-local" not in body
 
-    def test_work_sessions_card_numbers_sessions_in_creation_order(self, conn):
+    def test_work_sessions_card_keeps_sessions_in_creation_order(self, conn):
         _seed_task(conn, "t1", title="Research")
         db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
         db.create_work_allocation(conn, "t1")  # undated placeholder, added second
-        body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
-        assert "Session 1" in body
-        assert "Session 2" in body
+        ctx = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).context
+        assert [a["start_at"] is None for a in ctx["work_allocations"]] == [False, True]
 
     def test_task_form_renders_work_sessions_card_on_edit(self, conn):
         _seed_task(conn, "t1", title="Research")

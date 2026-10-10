@@ -17,7 +17,7 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from src import db, deps
+from src import clock, db, deps
 from src.routers import dashboard as dashboard_router
 from src.routers import label_pages
 from src.routers import labels as labels_router
@@ -93,7 +93,7 @@ class TestDeadlineInfo:
     def test_project_page_with_agenda_does_not_repeat_the_deadline_pill(self, conn):
         # The Agenda section already shows the deadline, so the page's
         # status row leaves the pill out (the preview modal still shows it).
-        db.upsert_label_config(conn, {"name": "Old", "is_project": 1, "has_dashboard": 0,
+        db.upsert_label_config(conn, {"name": "Old", "is_project": 1, "page_type": "sections",
                                       "has_deadline": 1, "deadline_date": "2020-01-01"})
         _task(conn, "t1", ["Old"])
         body = _page(conn, "Old").body.decode()
@@ -116,7 +116,7 @@ class TestLabelPageActions:
         assert 'action="/labels/Gym/archive"' in body
 
     def test_dashboard_page_header_has_them_too(self, conn):
-        db.upsert_label_config(conn, {"name": "Gym", "has_dashboard": 1})
+        db.upsert_label_config(conn, {"name": "Gym", "page_type": "dashboard"})
         body = _page(conn, "Gym").body.decode()
         assert 'title="Edit label"' in body and 'action="/labels/Gym/archive"' in body
 
@@ -125,7 +125,7 @@ class TestLabelPageActions:
         _task(conn, "t1", ["Gym"])
         label_pages.archive_label("Gym", conn=conn)
         body = _page(conn, "Gym").body.decode()
-        today = date.today()
+        today = clock.today()
         assert f"Archived on {today.day} {today.strftime('%b')} {today.year}" in body
         assert 'action="/labels/Gym/unarchive"' in body
         assert 'action="/labels/Gym/archive"' not in body

@@ -117,7 +117,7 @@ class TestVcardRoundTrip:
 class TestCreateEditFlow:
     def test_create_contact_stores_title(self, conn):
         asyncio.run(contacts_router.create_contact(
-            full_name="Grace Hopper", title="Rear Admiral", org="Navy",
+            full_name="Grace Hopper", pseudonym="", title="Rear Admiral", role="", org="Navy",
             phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
             birthday="", tags="", notes="",
             photo=None, conn=conn,
@@ -127,7 +127,7 @@ class TestCreateEditFlow:
 
     def test_create_contact_blank_title_stores_none(self, conn):
         asyncio.run(contacts_router.create_contact(
-            full_name="No Title", title="", org="",
+            full_name="No Title", pseudonym="", title="", role="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
             birthday="", tags="", notes="", photo=None, conn=conn,
         ))
@@ -137,7 +137,7 @@ class TestCreateEditFlow:
     def test_update_contact_changes_title(self, conn):
         uid = _make_contact(conn, title="Intern")
         asyncio.run(contacts_router.update_contact(
-            uid=uid, full_name="Ada Lovelace", title="Senior Engineer",
+            uid=uid, full_name="Ada Lovelace", pseudonym="", title="Senior Engineer", role="",
             org="", phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
             birthday="", tags="", notes="",
             photo=None, remove_photo="", conn=conn,
@@ -148,7 +148,7 @@ class TestCreateEditFlow:
     def test_update_contact_can_clear_title(self, conn):
         uid = _make_contact(conn, title="Intern")
         asyncio.run(contacts_router.update_contact(
-            uid=uid, full_name="Ada Lovelace", title="", org="",
+            uid=uid, full_name="Ada Lovelace", pseudonym="", title="", role="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
             birthday="", tags="", notes="", photo=None,
             remove_photo="", conn=conn,
@@ -194,7 +194,7 @@ class TestRenderedMarkup:
         uid = _make_contact(conn, title="Chief Engineer", org="Acme")
         resp = contacts_router.contact_detail(uid, _fake_request(f"/contacts/{uid}"), conn=conn)
         body = resp.body.decode()
-        assert "Chief Engineer at Acme" in body
+        assert "Chief Engineer · Acme" in body
 
     def test_detail_shows_title_alone_when_no_org(self, conn):
         uid = _make_contact(conn, title="Freelancer", org=None)
@@ -206,4 +206,4 @@ class TestRenderedMarkup:
         _make_contact(conn, uid="c1", title="Chief Engineer", org="Acme")
         resp = contacts_router.list_contacts(request=_fake_request(), q=None, tag=None, conn=conn)
         body = resp.body.decode()
-        assert "Chief Engineer at Acme" in body
+        assert "Chief Engineer · Acme" in body

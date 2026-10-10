@@ -331,7 +331,7 @@ class TestBannerForTask:
         assert banner["image_url"] == "https://cdn.example.com/label.jpg"
 
     def test_falls_back_to_the_project_labels_banner(self, conn):
-        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "has_dashboard": 0, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "page_type": "sections", "created_at": _now()})
         _set_remote(conn, cached=True, scope="Garden", image_url="https://cdn.example.com/project.jpg")
         db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
         task = db.get_task(conn, "t1")
@@ -360,7 +360,7 @@ class TestBannerForTask:
         assert banner["image_url"] == "https://cdn.example.com/label.jpg"
 
     def test_project_with_no_parent_space_and_no_own_banner_resolves_to_none(self, conn):
-        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "has_dashboard": 0, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "page_type": "sections", "created_at": _now()})
         db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
         task = db.get_task(conn, "t1")
         assert db.banner_for_task(conn, task) is None
@@ -729,7 +729,7 @@ class TestBannerRendersOnTaskDetailAndKanban:
         assert f"--cover-accent:var(--cal-accent-{deps._stable_color('c1')})" in body
 
     def test_kanban_card_carries_the_resolved_project_banner(self, conn):
-        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "has_dashboard": 0, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "page_type": "sections", "created_at": _now()})
         _set_remote(conn, scope="Garden", image_url="https://cdn.example.com/project.jpg")
         db.upsert_task(conn, {"uid": "t1", "title": "Water the plants", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
         resp = label_pages.label_page("Garden", _request("/labels/Garden"), conn=conn)
@@ -740,7 +740,7 @@ class TestBannerRendersOnTaskDetailAndKanban:
         assert 'src="https://cdn.example.com/project.jpg"' in body
 
     def test_kanban_card_has_no_banner_markup_when_none_resolves(self, conn):
-        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "has_dashboard": 0, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "page_type": "sections", "created_at": _now()})
         db.upsert_task(conn, {"uid": "t1", "title": "Water the plants", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
         resp = label_pages.label_page("Garden", _request("/labels/Garden"), conn=conn)
         assert "kanban-card-banner" not in resp.body.decode()

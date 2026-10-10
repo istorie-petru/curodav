@@ -44,7 +44,7 @@ def _page(conn, name):
 
 class TestWhichPage:
     def test_label_with_a_dashboard_gets_the_widget_grid(self, conn):
-        db.upsert_label_config(conn, {"name": "Gym", "has_dashboard": 1})
+        db.upsert_label_config(conn, {"name": "Gym", "page_type": "dashboard"})
         resp = _page(conn, "Gym")
         assert resp.template.name == "label_detail.html"
         assert resp.context["active_tab"] == "label"
@@ -229,11 +229,11 @@ class TestFormFields:
 
     def test_update_writes_deadline_and_page_fields(self, conn):
         db.upsert_label_config(conn, {"name": "Gym"})
-        self._update(conn, page_fields="1", deadline_date="2026-12-01", has_dashboard="1",
+        self._update(conn, page_fields="1", deadline_date="2026-12-01", page_type="dashboard",
                      agenda_widget="1", tasks_widget="", contacts_widget="1", notebook_widget="1")
         cfg = db.effective_label_config(conn, "Gym")
         assert cfg["has_deadline"] is True and cfg["deadline_date"] == "2026-12-01"
-        assert cfg["has_dashboard"] is True
+        assert cfg["page_type"] == "dashboard"
         assert (cfg["agenda_widget"], cfg["tasks_widget"], cfg["contacts_widget"], cfg["notebook_widget"]) == (True, False, True, True)
 
     def test_empty_deadline_clears_it(self, conn):
@@ -243,10 +243,10 @@ class TestFormFields:
         assert cfg["has_deadline"] is False and cfg["deadline_date"] is None
 
     def test_without_the_marker_page_fields_are_left_alone(self, conn):
-        db.upsert_label_config(conn, {"name": "Gym", "has_dashboard": 1, "has_deadline": 1, "deadline_date": "2026-12-01"})
+        db.upsert_label_config(conn, {"name": "Gym", "page_type": "dashboard", "has_deadline": 1, "deadline_date": "2026-12-01"})
         self._update(conn)
         cfg = db.effective_label_config(conn, "Gym")
-        assert cfg["has_dashboard"] is True and cfg["deadline_date"] == "2026-12-01"
+        assert cfg["page_type"] == "dashboard" and cfg["deadline_date"] == "2026-12-01"
         assert cfg["agenda_widget"] is True and cfg["tasks_widget"] is True
 
     def test_bad_deadline_is_rejected(self, conn):
@@ -269,16 +269,16 @@ class TestFormFields:
         labels_router.create_label(new_name="Essay", color="blue", icon="", label_group="", role="none",
                                    page_fields="1", deadline_date="2026-11-30", agenda_widget="1", conn=conn)
         cfg = db.effective_label_config(conn, "Essay")
-        assert cfg["deadline_date"] == "2026-11-30" and cfg["has_dashboard"] is False
+        assert cfg["deadline_date"] == "2026-11-30" and cfg["page_type"] == "sections"
         assert (cfg["agenda_widget"], cfg["tasks_widget"], cfg["contacts_widget"], cfg["notebook_widget"]) == (True, False, False, False)
 
     def test_edit_modal_renders_the_new_fields(self, conn):
-        db.upsert_label_config(conn, {"name": "Gym", "has_deadline": 1, "deadline_date": "2026-12-01", "has_dashboard": 1})
+        db.upsert_label_config(conn, {"name": "Gym", "has_deadline": 1, "deadline_date": "2026-12-01", "page_type": "dashboard"})
         body = labels_router.edit_label_modal("Gym", _request("/settings/labels/Gym/edit"), conn=conn).body.decode()
         assert 'name="page_fields" value="1"' in body
         assert 'name="deadline_date"' in body and "2026-12-01" in body
         # 2026-09-26: Page is a dropdown; Sections hide (CSS) with a dashboard.
-        assert _checked(body, "has_dashboard", "1")
+        assert _checked(body, "page_type", "dashboard")
         assert 'data-page="dashboard"' in body
         assert 'name="start_date"' not in body and 'name="end_date"' not in body
 
@@ -293,7 +293,7 @@ class TestFormFields:
         body = labels_router.new_label_modal(_request("/settings/labels/new"), conn=conn).body.decode()
         for name in ("agenda_widget", "tasks_widget", "contacts_widget", "notebook_widget"):
             assert _checked(body, name, "1")
-        assert not _checked(body, "has_dashboard", "1") and _checked(body, "has_dashboard", "")
+        assert _checked(body, "page_type", "sections")
         assert '<span class="ms-summary">Agenda, Tasks, Contacts, Notebook</span>' in body
 
 
@@ -389,6 +389,33 @@ class TestLabelPillLinks:
         # Open page leaves the modal; Edit swaps the form in.
         assert '<a class="btn ghost" href="/labels/Essay">' in body
         assert 'href="/settings/labels/Essay/edit" data-modal' in body
+
+    def test_preview_agenda_leads_with_at_most_two_habits(self, conn):
+        db.save_task_habit_settings(conn, "Habit")
+        for n in range(3):
+            db.upsert_task(conn, {"uid": f"h{n}", "title": f"Habit {n}", "description": "", "status": "active",
+                                  "tags": ["Habit", "Essay"], "recurrence": "FREQ=DAILY", "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t1", "title": "Draft", "description": "", "status": "active",
+                              "tags": ["Essay"], "due_at": "2099-01-01T00:00:00", "created_at": _now()})
+        resp = label_pages.label_preview("Essay", _request("/labels/Essay/preview"), conn=conn)
+        items = resp.context["agenda_items"]
+        assert [i["kind"] for i in items] == ["habit", "habit", "task"]
+        assert "Habit 0" in resp.body.decode()
+
+    def test_preview_agenda_is_capped_at_eight(self, conn):
+        for n in range(10):
+            db.upsert_task(conn, {"uid": f"t{n}", "title": f"Task {n}", "description": "", "status": "active",
+                                  "tags": ["Essay"], "due_at": f"2099-01-{n + 1:02d}T00:00:00", "created_at": _now()})
+        resp = label_pages.label_preview("Essay", _request("/labels/Essay/preview"), conn=conn)
+        assert len(resp.context["agenda_items"]) == 8
+
+    def test_preview_footer_archives_and_unarchives(self, conn):
+        db.upsert_label_config(conn, {"name": "Essay"})
+        body = label_pages.label_preview("Essay", _request("/labels/Essay/preview"), conn=conn).body.decode()
+        assert 'action="/labels/Essay/archive"' in body
+        label_pages.archive_label("Essay", conn=conn)
+        body = label_pages.label_preview("Essay", _request("/labels/Essay/preview"), conn=conn).body.decode()
+        assert 'action="/labels/Essay/unarchive"' in body
 
     def test_detail_modal_pills_open_the_preview(self, conn):
         from src.routers import tasks as tasks_router

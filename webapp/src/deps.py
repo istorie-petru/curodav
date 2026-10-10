@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 from markupsafe import Markup, escape
 
-from . import db, habit_heatmap, habit_view
+from . import db, habit_heatmap, habit_view, recurrence_text
 from .caldav_bridge import CalDavBridge
 
 # app_meta keys for the two general-purpose display preferences added
@@ -606,6 +606,7 @@ def _recurrence_label(rrule) -> str:
 
 
 templates.env.globals["recurrence_label"] = _recurrence_label
+templates.env.filters["recurrence_text"] = recurrence_text.describe
 
 
 def _habit_cadence_label(task) -> str:

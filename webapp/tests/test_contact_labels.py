@@ -93,7 +93,7 @@ class TestCreateEditFlowHasNoCategory:
         # its first entry now, same as the real single-select Label field
         # does; "Professor, CS" used to keep both.
         asyncio.run(contacts_router.create_contact(
-            full_name="Grace Hopper", title="", org="Navy",
+            full_name="Grace Hopper", pseudonym="", title="", role="", org="Navy",
             phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
             birthday="", tags="Professor, CS", notes="", photo=None, conn=conn,
         ))
@@ -104,7 +104,7 @@ class TestCreateEditFlowHasNoCategory:
     def test_update_contact_flow_never_touches_category(self, conn):
         uid = _make_contact(conn, tags=["Old"])
         asyncio.run(contacts_router.update_contact(
-            uid=uid, full_name="Ada Lovelace", title="", org="",
+            uid=uid, full_name="Ada Lovelace", pseudonym="", title="", role="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
             birthday="", tags="Mathematician", notes="", photo=None,
             remove_photo="", conn=conn,

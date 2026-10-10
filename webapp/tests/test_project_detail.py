@@ -60,7 +60,7 @@ def _promote(conn, name="Trip", start="2026-01-01", end="2026-12-31"):
     # 2026-09-25 (no start date any more), kept so call sites don't change.
     db.upsert_label_config(
         conn, {"name": name, "is_project": 1, "has_deadline": 1 if end else 0, "deadline_date": end,
-               "has_dashboard": 0, "created_at": _now()}
+               "page_type": "sections", "created_at": _now()}
     )
 
 
@@ -271,7 +271,7 @@ class TestAgendaCard:
         macro, renamed widget_event_icon() -- `icon('calendar', 'cal-
         purple')` renders `class="icon cal-purple"` (deps.py's `_icon`)."""
         _promote(conn, "Trip", end=None)
-        db.upsert_label_config(conn, {"name": "Trip", "is_project": 1, "has_dashboard": 0, "color": "purple", "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Trip", "is_project": 1, "page_type": "sections", "color": "purple", "created_at": _now()})
         future = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
         _event(conn, "e_future", ["Trip"], future)
         resp = label_pages.label_page("Trip", _request(), conn=conn)
@@ -503,7 +503,7 @@ class TestLabelSelectorScope:
     def test_project_grouped_under_a_space_sets_page_label_scope(self, conn):
         db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
         db.upsert_label_config(
-            conn, {"name": "Trip", "is_project": 1, "has_dashboard": 0, "parent_name": "University", "created_at": _now()}
+            conn, {"name": "Trip", "is_project": 1, "page_type": "sections", "parent_name": "University", "created_at": _now()}
         )
         resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert resp.context["page_label_scope"] == "Trip"

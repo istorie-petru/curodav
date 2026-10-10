@@ -42,6 +42,7 @@
     // one "a task-flavoured thing changed" fan-out for the whole dashboard
     // rather than two separate, narrower refresh paths that only agree by
     // coincidence.
+    if (form.closest("#sec-region")) return { dispatch: true, id: "sec-region" };
     const card = form.closest(".widget-card[data-uid]");
     if (card && card.id) return { dispatch: true, id: card.id };
     return null;

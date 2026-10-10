@@ -4,7 +4,7 @@
 // (labels and projects are separate; a label becomes a project only via
 // the edit modal's Convert action), and the page modules are dropdowns.
 // Page = Sections shows the Sections checkbox dropdown half width next
-// to it; Page = Widget dashboard hides it (style.css
+// to it; Page = Widget dashboard or Secretariat hides it (style.css
 // .label-form-grid[data-page]). The Page radios are portaled out of the
 // form while their panel is open (static/app.js), so the form is found
 // through each radio's form="" attribute. Delegated on the document: the
@@ -12,9 +12,9 @@
 (function () {
   document.addEventListener("change", (e) => {
     const el = e.target;
-    if (!el || el.name !== "has_dashboard" || !el.form) return;
+    if (!el || el.name !== "page_type" || !el.form) return;
     const grid = el.form.querySelector(".label-form-grid");
-    if (grid) grid.dataset.page = el.value === "1" ? "dashboard" : "sections";
+    if (grid) grid.dataset.page = el.value;
   });
 
   // Kept for modal.js's wireContent() call; nothing to wire per render.

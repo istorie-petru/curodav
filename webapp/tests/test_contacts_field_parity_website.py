@@ -173,7 +173,7 @@ class TestVcardRoundTrip:
 class TestCreateEditFlow:
     def test_create_contact_stores_multiple_websites(self, conn):
         asyncio.run(contacts_router.create_contact(
-            full_name="Grace Hopper", title="", org="",
+            full_name="Grace Hopper", pseudonym="", title="", role="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[],
             website_type=["Home", "Work"], website_url=["https://home.example.com", "https://work.example.com"], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
             birthday="", tags="", notes="", photo=None, conn=conn,
@@ -183,7 +183,7 @@ class TestCreateEditFlow:
 
     def test_create_contact_with_no_website_stores_empty_list(self, conn):
         asyncio.run(contacts_router.create_contact(
-            full_name="No Website", title="", org="",
+            full_name="No Website", pseudonym="", title="", role="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[],
             website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
             birthday="", tags="", notes="", photo=None, conn=conn,
@@ -193,7 +193,7 @@ class TestCreateEditFlow:
 
     def test_create_contact_blank_url_row_is_dropped(self, conn):
         asyncio.run(contacts_router.create_contact(
-            full_name="Blank Row", title="", org="",
+            full_name="Blank Row", pseudonym="", title="", role="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[],
             website_type=["Home"], website_url=[""], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
             birthday="", tags="", notes="", photo=None, conn=conn,
@@ -205,7 +205,7 @@ class TestCreateEditFlow:
         uid = _make_contact(conn)
         db.set_contact_websites(conn, uid, [{"type": "Home", "url": "https://old.example.com"}])
         asyncio.run(contacts_router.update_contact(
-            uid=uid, full_name="Ada Lovelace", title="", org="",
+            uid=uid, full_name="Ada Lovelace", pseudonym="", title="", role="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[],
             website_type=["Work"], website_url=["https://new.example.com"], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
             birthday="", tags="", notes="", photo=None, remove_photo="", conn=conn,
@@ -217,7 +217,7 @@ class TestCreateEditFlow:
         uid = _make_contact(conn)
         db.set_contact_websites(conn, uid, [{"type": "Home", "url": "https://old.example.com"}])
         asyncio.run(contacts_router.update_contact(
-            uid=uid, full_name="Ada Lovelace", title="", org="",
+            uid=uid, full_name="Ada Lovelace", pseudonym="", title="", role="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[],
             website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],
             birthday="", tags="", notes="", photo=None, remove_photo="", conn=conn,

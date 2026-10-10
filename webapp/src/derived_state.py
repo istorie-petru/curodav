@@ -27,6 +27,8 @@ from __future__ import annotations
 
 from datetime import date
 
+from . import clock
+
 
 def _due_date(task: dict) -> date | None:
     raw = task.get("due_at")
@@ -52,7 +54,7 @@ def virtual_states(task: dict, today: date | None = None) -> set[str]:
     purely from its due date -- never stored, never labels. State names
     match the filter values in routers/tasks.py's DATE_FILTERS."""
     if today is None:
-        today = date.today()
+        today = clock.today()
     states = set()
     due = _due_date(task)
     if due is not None:
@@ -79,7 +81,7 @@ def count_by_state(tasks: list[dict], today: date | None = None) -> dict[str, in
     to (overdue *and* this_week etc.), matching how the filters
     independently project rather than partition."""
     if today is None:
-        today = date.today()
+        today = clock.today()
     counts = {name: 0 for name in ("overdue", "today", "tomorrow", "this_week", "this_month")}
     for task in tasks:
         for name in virtual_states(task, today):

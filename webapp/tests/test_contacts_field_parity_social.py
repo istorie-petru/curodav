@@ -83,7 +83,7 @@ def _fake_request(path="/contacts"):
 # test_contacts_field_parity_address.py -- create_contact/update_contact
 # called directly bypass FastAPI's own Form(...) default resolution.
 _BASE_KWARGS = dict(
-    title="", org="",
+    pseudonym="", title="", role="", org="",
     phone_type=[], phone_value=[], email_type=[], email_value=[],
     website_type=[], website_url=[],
     address_type=[], address_po_box=[], address_extended=[], address_street=[],

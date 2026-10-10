@@ -3569,7 +3569,6 @@ main.main-calendar > .project-calendar-layout{flex:1 1 auto; min-height:0;}
 main.main-calendar .calendar-viewport{
   display:flex; flex-direction:column; overflow-y:auto;
 }
-main.main-calendar .project-calendar-unscheduled{flex:none;}
 /* Week/Day: the time grid is a real fixed height (24 * one hour's own
    pixel height, the same spacing every other time-grid view in the app
    uses) -- almost always taller than the viewport budget, so this
@@ -3902,7 +3901,6 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    margin-bottom itself -- that default still does real work in every
    plain document-flow context .card is used in elsewhere. */
 .project-calendar-layout > .card{margin-bottom:0;}
-.project-calendar-unscheduled{width:100%; flex:none;}
 /* min-height:0 (added alongside the pre-existing min-width:0) -- without
    it, this flex:1 child of the column-direction .project-calendar-layout
    defaults to min-height:auto, which floors it at its own content height
@@ -3926,9 +3924,6 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 .unscheduled-panel-head{display:flex; align-items:center; gap:8px;}
 .unscheduled-panel-head h2{margin:0; display:flex; align-items:baseline; gap:6px;}
 .unscheduled-panel-count{font-weight:var(--font-weight-regular); color:var(--fg-secondary); font-size:var(--text-sm);}
-.unscheduled-panel-toggle-btn{margin-left:auto;}
-.project-calendar-unscheduled.collapsed #unscheduled-panel-body{display:none;}
-.project-calendar-unscheduled.collapsed .unscheduled-panel-toggle-btn svg{transform:rotate(180deg);}
 /* 2026-09-28 (direct feedback, "add max height for the unscheduled work to
    about 3.5 items tall"): caps the row list instead of letting it grow to
    fit every row (2026-09-26's change, made when the panel moved below the
@@ -4056,7 +4051,16 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 @media (hover:none){
   .unscheduled-row-actions{opacity:.55;}
 }
-main.main-calendar .project-calendar-unscheduled{padding-bottom:0;}
+/* Planner: Unscheduled work is the shared right sidebar shell
+   (.notebook-sidebar); only the narrow-screen fallback differs. */
+.unscheduled-panel-head .notebook-sidebar-select-trigger{cursor:default;}
+.project-calendar-unscheduled .unscheduled-task-list{max-height:none; overflow:visible;}
+.project-calendar-unscheduled .unscheduled-task-main{flex-direction:column; align-items:flex-start; gap:2px;}
+.project-calendar-unscheduled .unscheduled-task-title{max-width:100%;}
+.project-calendar-unscheduled .unscheduled-task-meta{flex:none; max-width:100%;}
+@media (max-width:860px){
+  main.main-calendar .notebook-sidebar.project-calendar-unscheduled{display:flex;}
+}
 main.main-calendar .project-calendar-layout > .project-calendar-grid{padding-top:0;}
 /* Drag-onto-the-grid ghost (project_calendar.js interaction 1): a fixed,
    pointer-following copy of the source item while dragging -- hidden until
@@ -8379,8 +8383,8 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 /* Label form (_label_form_fields.html, 2026-09-26): Page = Sections puts
    the Sections checkbox dropdown half width next to Page; Page = Widget
    dashboard hides it and Page takes the full row. */
-.label-form-grid[data-page="dashboard"] .label-sections-field{display:none;}
-.label-form-grid[data-page="dashboard"] .label-page-field{grid-column:1 / -1;}
+.label-form-grid:not([data-page="sections"]) .label-sections-field{display:none;}
+.label-form-grid:not([data-page="sections"]) .label-page-field{grid-column:1 / -1;}
 .label-form-grid[data-page="sections"] .label-page-field{grid-column:span 1;}
 /* The dropdown's row: the dropdown fills it; an optional square button
    (the label modal's banner upload) sits at its end, as tall as the
@@ -8668,6 +8672,11 @@ td .dtf--compact:hover .dtf-input, td .dtf--compact .dtf-input:focus, td .dtf--c
 .session-when-form{display:flex; align-items:center; gap:var(--space-2); flex:1; min-width:0;}
 .session-when-form .dtr{flex:1; min-width:0;}
 .session-save-btn{flex:none; color:var(--accent);}
+.work-session-row{flex-wrap:wrap;}
+.session-details-form{display:flex; align-items:center; gap:var(--space-2); flex:1 1 100%; min-width:0;}
+.session-details-form input[type=text]{flex:1; min-width:0;}
+.session-details-form input[type=number]{flex:none; width:5.5rem;}
+.session-details-form .multiselect{flex:none; width:10rem;}
 
 /* Notebook's right sidebar (notebook_list.html's Filters tab,
    notebook_document.html's Outline tab, 2026-10-03 direct request) -- one
@@ -9077,3 +9086,23 @@ input:disabled:not([type="checkbox"], [type="radio"]), select:disabled, textarea
 .upload-preview-img{max-width:160px; max-height:160px; border-radius:var(--radius-control); object-fit:cover;}
 .avatar-upload-static{display:inline-flex;}
 button.avatar-upload{background:none; border:none; padding:0; cursor:pointer;}
+
+/* Secretariat page type: its own light layout, no cards or dividers. */
+.sec-hero{display:flex; align-items:center; gap:var(--space-4); margin-bottom:var(--space-4);}
+.sec-hero-text{min-width:0;}
+.sec-greeting{color:var(--fg-secondary); font-size:var(--text-sm);}
+.sec-name{margin:0;}
+.sec-grid{display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:var(--space-6); align-items:start;}
+.sec-col{display:flex; flex-direction:column; gap:var(--space-4); min-width:0;}
+.sec-col:nth-child(2){grid-column:2;}
+.sec-section{display:flex; flex-direction:column; gap:2px;}
+.sec-heading{display:flex; align-items:center; gap:6px; margin:0 0 var(--space-1); font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary);}
+.sec-row{display:flex; align-items:center; gap:var(--space-2); min-height:32px;}
+.sec-lead{flex:none; display:flex; align-items:center; color:var(--fg-tertiary);}
+.sec-title{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.sec-pills{flex:none; display:flex; align-items:center; gap:var(--space-1);}
+.sec-row.is-done .sec-title{text-decoration:line-through; color:var(--fg-tertiary);}
+@media (max-width:900px){
+  .sec-grid{grid-template-columns:minmax(0, 1fr);}
+  .sec-col:nth-child(2){grid-column:1;}
+}

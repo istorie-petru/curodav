@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 ENTITY_TYPES = ["task", "event", "contact"]
 ENTITY_LABELS = {"task": "Tasks", "event": "Events", "contact": "Contacts"}
 VISIBILITIES = ["private", "public", "archived"]
+CONTACT_NAME_FIELDS = ("full_name", "pseudonym")
 _PUBLIC_FEED_EXT = {"task": "ics", "event": "ics", "contact": "vcf"}
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -243,6 +244,7 @@ def create_list(
     labels: list[str] = Form([]),
     exclude_labels: list[str] = Form([]),
     visibility: str = Form("private"),
+    contact_name_field: str = Form("full_name"),
     conn=Depends(get_db),
     bridge=Depends(get_bridge),
     background_tasks: BackgroundTasks = None,
@@ -264,6 +266,7 @@ def create_list(
         "created_at": _now(),
         "visibility": visibility if visibility != "archived" else "private",
         "public_token": new_public_token() if visibility == "public" else None,
+        "contact_name_field": contact_name_field if contact_name_field in CONTACT_NAME_FIELDS else "full_name",
     }
     db.upsert_published_list(conn, row)
     # Radicale is optional (module docstring) -- a List is saved and
@@ -310,6 +313,7 @@ def update_list(
     labels: list[str] = Form([]),
     exclude_labels: list[str] = Form([]),
     visibility: str = Form("private"),
+    contact_name_field: str = Form("full_name"),
     conn=Depends(get_db),
     bridge=Depends(get_bridge),
     background_tasks: BackgroundTasks = None,
@@ -354,6 +358,8 @@ def update_list(
     row["name"] = name
     row["label_filter"] = _filter_from_form(labels, exclude_labels)
     row["radicale_collection_path"] = new_collection_path
+    if contact_name_field in CONTACT_NAME_FIELDS:
+        row["contact_name_field"] = contact_name_field
     db.upsert_published_list(conn, row)
 
     if not was_archived:

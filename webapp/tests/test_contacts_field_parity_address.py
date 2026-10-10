@@ -86,7 +86,7 @@ def _fake_request(path="/contacts"):
 # the ones this file doesn't care about so each test only spells out the
 # address_*/social_* fields it's actually exercising.
 _BASE_KWARGS = dict(
-    title="", org="",
+    pseudonym="", title="", role="", org="",
     phone_type=[], phone_value=[], email_type=[], email_value=[],
     website_type=[], website_url=[],
     social_type=[], social_value=[],

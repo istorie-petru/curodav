@@ -454,6 +454,18 @@ def _is_loopback_host(host: str | None) -> bool:
     return host in ("127.0.0.1", "::1", "localhost")
 
 
+def skip_auth_applies(settings, scope: dict) -> bool:
+    """True when the dev-only CC_SKIP_AUTH switch waives login for this request.
+
+    Honoured only in local deploy mode and only when both the listening
+    address and the client are loopback, so a production run or a request
+    from another machine can never use it."""
+    if not settings or not getattr(settings, "skip_auth", False) or settings.deploy_mode != "local":
+        return False
+    server, client = scope.get("server"), scope.get("client")
+    return bool(server and client and _is_loopback_host(server[0]) and _is_loopback_host(client[0]))
+
+
 def _settings_from_scope(scope: dict):
     """The app's Settings, read off `scope["app"].state.settings` -- the
     lifespan sets them there (main.py). A bare/no-lifespan app (this
@@ -490,6 +502,9 @@ class AuthMiddleware:
             # outside the household must keep working while the operator
             # is mid-setup, same as /static already does for the login
             # page's own CSS.
+            return await self.app(scope, receive, send)
+
+        if skip_auth_applies(settings, scope):
             return await self.app(scope, receive, send)
 
         # Forced first-run setup (2026-08-29): a production deploy

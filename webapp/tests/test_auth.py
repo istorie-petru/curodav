@@ -1238,3 +1238,45 @@ class TestPurgeAllInvalidatesSession:
         with db.connect(settings.db_path) as conn:
             new_secret = db.get_app_meta(conn, auth.AUTH_SECRET_KEY)
         assert new_secret and new_secret != old_secret
+
+class TestSkipAuthSwitch:
+    """CC_SKIP_AUTH (`./run.sh skipauth`) waives login only for loopback requests in local mode."""
+
+    @staticmethod
+    def _scope(client, server="127.0.0.1"):
+        return {"server": (server, 8000), "client": (client, 5000)}
+
+    def test_loopback_request_in_local_mode_skips(self):
+        assert auth.skip_auth_applies(_settings(skip_auth=True), self._scope("127.0.0.1"))
+
+    def test_off_by_default(self):
+        assert not auth.skip_auth_applies(_settings(), self._scope("127.0.0.1"))
+
+    def test_remote_client_never_skips(self):
+        assert not auth.skip_auth_applies(_settings(skip_auth=True), self._scope("192.168.1.20"))
+
+    def test_non_loopback_listener_never_skips(self):
+        assert not auth.skip_auth_applies(_settings(skip_auth=True), self._scope("127.0.0.1", server="192.168.1.5"))
+
+    def test_production_never_skips(self):
+        assert not auth.skip_auth_applies(_settings(skip_auth=True, deploy_mode="production"), self._scope("127.0.0.1"))
+
+    def test_middleware_lets_loopback_through_a_configured_login(self):
+        import asyncio
+
+        reached = []
+
+        async def inner(scope, receive, send):
+            reached.append(scope["path"])
+
+        mw = auth.AuthMiddleware(inner, get_settings=lambda scope: _settings(skip_auth=True))
+        scope = {"type": "http", "path": "/hello", "headers": [], "query_string": b"", **self._scope("127.0.0.1")}
+        asyncio.run(mw(scope, None, None))
+        assert reached == ["/hello"]
+
+    def test_login_page_redirects_away_when_skipped(self, conn):
+        request = _request(_settings(skip_auth=True), client_host="127.0.0.1")
+        request.scope["server"] = ("127.0.0.1", 8000)
+        resp = auth_router.login_page(request, next="/tasks", conn=conn)
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/tasks"

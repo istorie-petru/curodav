@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Week of {{ monday.isoformat() }} - Calendar{% endblock %}
-{% block main_class %}main-full-width main-calendar{% endblock %}
+{% block main_class %}main-full-width main-calendar notebook-main{% endblock %}
 {% block content %}
 {# Planner (Week view) -- own title/icon matching its own tabbar identity
    (base.html: icon('clock'), label "Planner"), not "Calendar"/'calendar' --
@@ -25,7 +25,7 @@
      this page's old toolbar row was the only h1 carrying the specific
      week's date range, so it's restored standalone here. -->
 <h1 class="sr-only">{{ label_text }}</h1>
-{% call page_header_narrow("Planner", "clock") %}
+{% call page_header_narrow("Planner", "clock", sidebar_toggle=true) %}
 <!-- 2026-09-09, slice 6 of the "FullCalendar-parity interactions" arc:
      prev/next now navigate via AJAX (async_calendar.js's new bindCalNav)
      instead of a full page reload -- the plain <a href> stays as the
@@ -81,7 +81,7 @@
 <script defer src="{{ static_url('calendar.js') }}"></script>
 <script defer src="{{ static_url('project_calendar.js') }}"></script>
 <script defer src="{{ static_url('calendar_week_allday_drag.js') }}"></script>
-<script defer src="{{ static_url('unscheduled_panel_toggle.js') }}"></script>
+<script defer src="{{ static_url('notebook_sidebar.js') }}"></script>
 <!-- 2026-09-25 (UI audit C-7): auto-scroll to the first event/now and the
      today now-line, see calendar_now.js's own header. -->
 <script defer src="{{ static_url('calendar_now.js') }}"></script>

@@ -59,6 +59,22 @@
             </div>
         </div>
     </div>
+    <div class="field">
+        <label>Pseudonym</label>
+        {{ text_input({'name': 'pseudonym', 'value': (contact.pseudonym if contact else '')}) }}
+    </div>
+    <div class="field">
+        <label>Honorary title</label>
+        {{ text_input({'name': 'title', 'value': (contact.title if contact else '')}) }}
+    </div>
+    <div class="field">
+        <label>Organization</label>
+        {{ text_input({'name': 'org', 'value': (contact.org if contact else '')}) }}
+    </div>
+    <div class="field">
+        <label>Role</label>
+        {{ text_input({'name': 'role', 'value': (contact.role if contact else '')}) }}
+    </div>
     <!-- Contacts field parity slice 2 of 6 (plans/open.md): phone/email
          are multi-value now (contact_phones/contact_emails, db.py), each
          row typed from the vCard/Nextcloud vocabulary
@@ -175,14 +191,6 @@
          Archive/Restore button already established, kept off this form
          too. Category field removed (Phase 5, label-space rework) --
          grouping is now purely via the Tags field below. -->
-    <div class="field">
-        <label>Title</label>
-        {{ text_input({'name': 'title', 'value': (contact.title if contact else '')}) }}
-    </div>
-    <div class="field">
-        <label>Organization</label>
-        {{ text_input({'name': 'org', 'value': (contact.org if contact else '')}) }}
-    </div>
     <!-- Contacts field parity slice 5 of 6 (plans/open.md): Address is
          now the full structured, multi-value vCard ADR (db.
          CONTACT_ADDRESS_TYPES -- Home/Work/Other, same vocabulary as
@@ -237,6 +245,22 @@
             </div>
         </template>
     </div>
+    <!-- Contacts field parity slice 4 of 6 (plans/open.md): Birthday,
+         single-value (unlike Phone/Email/Website above -- a contact has
+         at most one, no add/remove rows). Plain text input rather than
+         a native `<input type="date">`, since a year-less birthday
+         (green-lit, AskUserQuestion, 2026-08-15) has no HTML date-input
+         equivalent -- a `<input type="date">` always requires a year.
+         `pattern` is a client-side hint only; routers/contacts.py's
+         `_parse_birthday_field` (db.parse_contact_birthday) is the real
+         validation, same "plain form, server validates" convention as
+         every other field on this form (see e.g. the phone/email type
+         pickers falling back to "Other" server-side rather than a
+         stricter client-only guard). -->
+    <div class="field field-wide">
+        <label>Birthday (YYYY-MM-DD, or --MM-DD without a year)</label>
+        {{ text_input({'name': 'birthday', 'value': contact.birthday or '', 'pattern': '\\d{4}-\\d{2}-\\d{2}|--\\d{2}-\\d{2}'}) }}
+    </div>
     <!-- Contacts field parity slice 6 of 6 (plans/open.md): Social
          network, round-tripped through the standard X-SOCIALPROFILE
          vCard property. Same one-line multi-row shape as Phone/Email/
@@ -263,22 +287,6 @@
                 <button type="button" class="checklist-delete" data-repeatable-remove title="Remove social profile" aria-label="Remove social profile">{{ icon('x') }}</button>
             </div>
         </template>
-    </div>
-    <!-- Contacts field parity slice 4 of 6 (plans/open.md): Birthday,
-         single-value (unlike Phone/Email/Website above -- a contact has
-         at most one, no add/remove rows). Plain text input rather than
-         a native `<input type="date">`, since a year-less birthday
-         (green-lit, AskUserQuestion, 2026-08-15) has no HTML date-input
-         equivalent -- a `<input type="date">` always requires a year.
-         `pattern` is a client-side hint only; routers/contacts.py's
-         `_parse_birthday_field` (db.parse_contact_birthday) is the real
-         validation, same "plain form, server validates" convention as
-         every other field on this form (see e.g. the phone/email type
-         pickers falling back to "Other" server-side rather than a
-         stricter client-only guard). -->
-    <div class="field field-wide">
-        <label>Birthday (YYYY-MM-DD, or --MM-DD without a year)</label>
-        {{ text_input({'name': 'birthday', 'value': contact.birthday or '', 'pattern': '\\d{4}-\\d{2}-\\d{2}|--\\d{2}-\\d{2}'}) }}
     </div>
     <!-- Label -- 2026-09-26 (Peter: "Contacts should only allow one
          label"): a single-select dropdown (ms_mode="single") instead of

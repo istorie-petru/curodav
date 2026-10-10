@@ -211,14 +211,11 @@ class TestWeekViewRoute:
         assert "Blue meeting" in body
         assert "Personal thing" not in body
 
-    def test_unscheduled_panel_has_collapse_toggle_button(self, conn):
-        """Direct feedback: "make the Unscheduled work block collapsible via
-        a sidebar button." -- static/unscheduled_panel_toggle.js drives it,
-        state is per-device (localStorage), no server involvement."""
+    def test_unscheduled_panel_is_the_collapsible_right_sidebar(self, conn):
         body = calendar_router.week_view(_request(), conn=conn).body.decode()
-        assert 'id="unscheduled-panel-toggle"' in body
+        assert '<aside class="notebook-sidebar project-calendar-unscheduled" id="unscheduled-panel">' in body
         assert 'id="unscheduled-panel-body"' in body
-        assert "unscheduled_panel_toggle.js" in body
+        assert 'id="notebook-sidebar-toggle"' in body
 
     def test_no_separate_timetable_link_in_subnav(self, conn):
         body = calendar_router.week_view(_request(), conn=conn).body.decode()
@@ -240,12 +237,9 @@ class TestPlannerHeaderButtons:
         body = calendar_router.week_view(_request(), conn=conn).body.decode()
         assert "New Task" not in body
 
-    def test_no_second_panel_toggle_in_header(self, conn):
-        """Only the panel's own toggle (`#unscheduled-panel-toggle`) remains
-        -- `.unscheduled-panel-toggle-btn` matches exactly one element."""
+    def test_panel_has_no_toggle_of_its_own(self, conn):
         body = calendar_router.week_view(_request(), conn=conn).body.decode()
-        assert 'id="unscheduled-panel-toggle-header"' not in body
-        assert body.count('class="icon-btn unscheduled-panel-toggle-btn"') == 1
+        assert "unscheduled-panel-toggle" not in body
 
 
 class TestUnscheduledPanelHeaderCountAndSearch:

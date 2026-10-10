@@ -53,16 +53,10 @@
         <div class="detail-heading-row">
             <div class="detail-heading-text">
                 <h1 class="detail-title">{{ contact.full_name }}</h1>
-                {% if contact.title or contact.org %}
-                <div class="detail-heading-sub">
-                    {%- if contact.title and contact.org -%}
-                    {{ contact.title }} at {{ contact.org }}
-                    {%- elif contact.title -%}
-                    {{ contact.title }}
-                    {%- else -%}
-                    {{ contact.org }}
-                    {%- endif -%}
-                </div>
+                {% if contact.pseudonym %}<div class="detail-heading-sub">&ldquo;{{ contact.pseudonym }}&rdquo;</div>{% endif %}
+                {% set _work = [contact.role, contact.org] | select | join(' at ') %}
+                {% if contact.title or _work %}
+                <div class="detail-heading-sub">{{ [contact.title, _work] | select | join(' · ') }}</div>
                 {% endif %}
             </div>
         </div>

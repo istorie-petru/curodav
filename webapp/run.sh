@@ -7,6 +7,22 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# `./run.sh skipauth` waives the login for this local run only (loopback
+# requests); the saved account and password are untouched.
+for arg in "$@"; do
+  case "$arg" in
+    skipauth|--skipauth|--skip-auth) export CC_SKIP_AUTH=1; echo "==> Login skipped for this run (loopback only)." ;;
+    *) echo "Unknown option: $arg (supported: skipauth)" >&2; exit 2 ;;
+  esac
+done
+
+# A leftover server on :8000 would keep answering (with its old login
+# setting) while the new one fails to bind, so refuse to start instead.
+if (exec 3<>/dev/tcp/127.0.0.1/8000) 2>/dev/null; then
+  echo "!!> Port 8000 is already in use (an earlier run still going?). Stop it and retry." >&2
+  exit 1
+fi
+
 echo "==> Syncing dependencies (uv sync)..."
 uv sync
 

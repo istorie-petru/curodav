@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from .. import db, derived_state, habit_heatmap, habit_view
+from .. import db, derived_state, habit_heatmap, habit_view, work_sessions
 from ..deps import get_db, respond, templates
 from . import dashboard as dashboard_router
 from . import calendar as calendar_router  # _annotate_calendar_colors, for related events' identity dots
@@ -151,6 +151,9 @@ def _work_allocation_context(conn, task: dict) -> dict:
     return {
         "work_allocations": allocations,
         "work_hours": db.task_work_hours(conn, task["uid"]),
+        "work_difficulty": work_sessions.average_difficulty([a.get("difficulty") for a in allocations]),
+        "work_estimate_hours": work_sessions.estimated_hours(allocations),
+        "work_difficulties": work_sessions.DIFFICULTIES,
     }
 
 
@@ -1479,6 +1482,20 @@ def remove_work_allocation(uid: str, event_uid: str = Form(...), conn=Depends(ge
     the task." db.delete_work_allocation is delete_event under a name that
     states that at the call site; `uid` (the task) isn't touched."""
     db.delete_work_allocation(conn, event_uid)
+    return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
+
+
+@router.post("/{uid}/work-allocations/{event_uid}/details")
+def set_work_session_details(
+    uid: str,
+    event_uid: str,
+    title: str = Form(""),
+    hours_estimate: str = Form(""),
+    difficulty: str = Form(""),
+    conn=Depends(get_db),
+):
+    """Save one work session's own title, hours estimate and difficulty (the card's per-row check button)."""
+    db.update_work_session(conn, uid, event_uid, title=title, hours_estimate=hours_estimate, difficulty=difficulty)
     return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
 
 

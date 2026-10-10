@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import pytest
+
 from dashboard_seed import now_iso
 
 from src import db, deps
 from src.routers import dashboard as dashboard_router
+
+
+pytestmark = pytest.mark.usefixtures("home_is_dashboard")
 
 
 class TestWidgetHeightRemoved:

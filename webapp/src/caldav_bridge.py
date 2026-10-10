@@ -308,7 +308,7 @@ class CalDavBridge:
     def save_contact_row(self, row: dict[str, Any]) -> dict[str, Any]:
         addressbook_path = row.get("addressbook_path") or "contacts"
         client = self._addressbook(addressbook_path)
-        vcard_text = contact_row_to_vcard(row)
+        vcard_text = contact_row_to_vcard(row, row.get("name_field") or "full_name")
         href = client.put(row["uid"], vcard_text, etag=row.get("etag"))
         row = dict(row)
         row["href"] = href

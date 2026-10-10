@@ -69,6 +69,9 @@ class Settings:
     # deploy paths an operator is likely to expose beyond localhost, so
     # "fully open by default" is no longer an acceptable default there.
     deploy_mode: str = "local"
+    # Dev-only switch (`./run.sh skipauth`, CC_SKIP_AUTH=1): login is waived for
+    # requests that both arrive on and come from loopback in a local-mode run.
+    skip_auth: bool = False
     # 2026-08-29 -- true when CC_RADICALE_URL was actually present in the
     # environment (the installer's --with-radicale writes all three
     # CC_RADICALE_* vars together, see deploy/*/install.sh, so URL's
@@ -141,6 +144,7 @@ def load_settings() -> Settings:
         auth_password=os.environ.get("CC_AUTH_PASSWORD") or None,
         auth_session_secret=os.environ.get("CC_AUTH_SECRET") or None,
         deploy_mode=os.environ.get("CC_DEPLOY_MODE", "local"),
+        skip_auth=os.environ.get("CC_SKIP_AUTH") == "1",
         radicale_env_configured=bool(os.environ.get("CC_RADICALE_URL")),
         env_file_path=os.environ.get("CC_ENV_FILE") or None,
         radicale_public_base_url=os.environ.get("CC_RADICALE_PUBLIC_URL") or None,

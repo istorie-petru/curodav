@@ -40,6 +40,9 @@ from src.routers import labels as labels_router
 from src.routers import settings as settings_router
 
 
+pytestmark = pytest.mark.usefixtures("home_is_dashboard")
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 

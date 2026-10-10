@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import pytest
+
 from src import db
 from src.routers import dashboard as dashboard_router
+
+
+pytestmark = pytest.mark.usefixtures("home_is_dashboard")
 
 
 class TestWidgetStacking:

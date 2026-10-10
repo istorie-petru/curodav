@@ -506,6 +506,7 @@ CREATE TABLE IF NOT EXISTS label_config (
     has_deadline INTEGER NOT NULL DEFAULT 0,
     deadline_date TEXT,
     has_dashboard INTEGER NOT NULL DEFAULT 0,
+    page_type TEXT NOT NULL DEFAULT 'sections',
     agenda_widget INTEGER NOT NULL DEFAULT 1,
     tasks_widget INTEGER NOT NULL DEFAULT 1,
     contacts_widget INTEGER NOT NULL DEFAULT 1,
@@ -703,7 +704,8 @@ CREATE TABLE IF NOT EXISTS label_groups (
     name TEXT PRIMARY KEY COLLATE NOCASE,
     icon TEXT,
     color TEXT NOT NULL DEFAULT 'gray',
-    created_at TEXT
+    created_at TEXT,
+    page_type TEXT NOT NULL DEFAULT 'dashboard'
 );
 
 -- 2026-08-08 ("add habits page as a view on tasks") -- app-wide setting
@@ -1241,7 +1243,7 @@ _LABEL_MODULE_COLUMNS = (
     ("widget_pin", "INTEGER NOT NULL DEFAULT 0"),
     ("has_deadline", "INTEGER NOT NULL DEFAULT 0"),
     ("deadline_date", "TEXT"),
-    ("has_dashboard", "INTEGER NOT NULL DEFAULT 0"),
+    ("page_type", "TEXT NOT NULL DEFAULT 'sections'"),
     ("agenda_widget", "INTEGER NOT NULL DEFAULT 1"),
     ("tasks_widget", "INTEGER NOT NULL DEFAULT 1"),
     ("contacts_widget", "INTEGER NOT NULL DEFAULT 1"),
@@ -1500,6 +1502,8 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # "column added after the table already existed on disk" situation as
     # photo_b64/photo_type immediately above.
     _ensure_column(conn, "contacts", "title", "TEXT")
+    _ensure_column(conn, "contacts", "pseudonym", "TEXT")
+    _ensure_column(conn, "contacts", "role", "TEXT")
     # Contacts field parity slice 2 of 6 -- Phone/Email. contact_phones/
     # contact_emails (SCHEMA_SQL above) are brand-new tables, so `CREATE
     # TABLE IF NOT EXISTS` already handles a pre-slice-2 database (unlike a
@@ -1681,6 +1685,9 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # 1.4 (Work allocations) -- see the event_task_relations CREATE TABLE
     # comment above for the model.
     _ensure_column(conn, "event_task_relations", "is_work_allocation", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "event_task_relations", "hours_estimate", "REAL")
+    _ensure_column(conn, "event_task_relations", "difficulty", "TEXT")
+    _ensure_column(conn, "event_task_relations", "own_title", "INTEGER NOT NULL DEFAULT 0")
     # 2026-08-08: self-heal contacts already corrupted by the vcard_rows.py
     # bug fixed the same day -- a CardDAV-synced contact with an empty
     # ORG/TEL/EMAIL line got the literal string "None" stored instead of a
@@ -1747,6 +1754,8 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # toggles so a re-shared link keeps working.
     _ensure_column(conn, "published_lists", "visibility", "TEXT NOT NULL DEFAULT 'private'")
     _ensure_column(conn, "published_lists", "public_token", "TEXT")
+    _ensure_column(conn, "label_groups", "page_type", "TEXT NOT NULL DEFAULT 'dashboard'")
+    _ensure_column(conn, "published_lists", "contact_name_field", "TEXT NOT NULL DEFAULT 'full_name'")
     # 2026-08-18 -- one-time backfill of pre-existing rows into the sync
     # shadow store (see backfill_server_sync_writes). Runs last, after
     # every _ensure_column migration above, so the whitelist columns it
@@ -1761,6 +1770,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # 2026-09-25 -- one-time backfill of the labels-as-modules fields from
     # generate_space/is_project/parent_name/end_date (see the function).
     backfill_label_modules(conn)
+    migrate_label_page_type(conn)
     # 2026-09-25 -- one-time: Spaces become text groups (see the function).
     migrate_spaces_to_groups(conn)
     # 2026-09-26 -- every group named by a label has a label_groups row.
@@ -2536,6 +2546,18 @@ def list_event_task_relations(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return [dict(r) for r in conn.execute("SELECT * FROM event_task_relations ORDER BY created_at").fetchall()]
 
 
+def restore_work_session_fields(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
+    """Re-apply a backed-up relation row's work session fields (hours, difficulty, own title)."""
+    if not row.get("is_work_allocation"):
+        return
+    conn.execute(
+        "UPDATE event_task_relations SET hours_estimate = ?, difficulty = ?, own_title = ? "
+        "WHERE event_uid = ? AND task_uid = ?",
+        (row.get("hours_estimate"), row.get("difficulty"), int(row.get("own_title") or 0), row["event_uid"], row["task_uid"]),
+    )
+    conn.commit()
+
+
 def related_tasks_for_event(conn: sqlite3.Connection, event_uid: str) -> list[dict[str, Any]]:
     """Every task currently linked to `event_uid`, ordered the same way
     list_tasks orders (undated last, then due date -- importance/urgency
@@ -2638,11 +2660,43 @@ def list_work_allocations_for_task(conn: sqlite3.Connection, task_uid: str) -> l
     order sessions were added in and an undated session (start_at NULL, a
     "+"-added placeholder) keeps its position once it's placed later."""
     rows = conn.execute(
-        "SELECT events.* FROM events JOIN event_task_relations r ON r.event_uid = events.uid "
+        "SELECT events.*, r.hours_estimate AS hours_estimate, r.difficulty AS difficulty, r.own_title AS own_title "
+        "FROM events JOIN event_task_relations r ON r.event_uid = events.uid "
         "WHERE r.task_uid = ? AND r.is_work_allocation = 1 ORDER BY events.created_at ASC, events.uid ASC",
         (task_uid,),
     ).fetchall()
     return _attach_tags_bulk(conn, "event", [_row_to_dict(r, _EVENT_JSON_FIELDS) for r in rows])
+
+
+def update_work_session(
+    conn: sqlite3.Connection, task_uid: str, event_uid: str, *, title: str, hours_estimate, difficulty: str | None
+) -> bool:
+    """Save a session's own title, hours estimate and difficulty.
+
+    A blank title hands the title back to the task (it follows task renames
+    again); any other title is the session's own and survives them. Returns
+    False when `event_uid` is not one of this task's work sessions."""
+    from . import work_sessions
+
+    if work_allocation_task_uid(conn, event_uid) != task_uid:
+        return False
+    task = get_task(conn, task_uid)
+    event = get_event(conn, event_uid)
+    if task is None or event is None:
+        return False
+    title = (title or "").strip()
+    own = int(bool(title) and title != task["title"])
+    event = dict(event)
+    event["title"] = title if own else task["title"]
+    event["updated_at"] = datetime.now(timezone.utc).isoformat()
+    upsert_event(conn, event)
+    conn.execute(
+        "UPDATE event_task_relations SET hours_estimate = ?, difficulty = ?, own_title = ? "
+        "WHERE event_uid = ? AND task_uid = ?",
+        (work_sessions.parse_hours(hours_estimate), work_sessions.normalize_difficulty(difficulty), own, event_uid, task_uid),
+    )
+    conn.commit()
+    return True
 
 
 def work_allocation_task_uid(conn: sqlite3.Connection, event_uid: str) -> str | None:
@@ -2910,7 +2964,7 @@ def sync_work_allocation_titles(conn: sqlite3.Connection, task_uid: str, title: 
     only a work allocation's title is owned by its task."""
     conn.execute(
         "UPDATE events SET title = ?, updated_at = ? WHERE uid IN ("
-        "SELECT event_uid FROM event_task_relations WHERE task_uid = ? AND is_work_allocation = 1)",
+        "SELECT event_uid FROM event_task_relations WHERE task_uid = ? AND is_work_allocation = 1 AND own_title = 0)",
         (title, datetime.now(timezone.utc).isoformat(), task_uid),
     )
 
@@ -3486,7 +3540,7 @@ def upsert_contact(
         existing_row = conn.execute("SELECT archived_at FROM contacts WHERE uid = ?", (data.get("uid"),)).fetchone()
         data["archived_at"] = existing_row["archived_at"] if existing_row else None
     cols = [
-        "uid", "full_name", "title", "org",
+        "uid", "full_name", "pseudonym", "title", "role", "org",
         "phone", "email", "address", "birthday", "notes",
         "photo_b64", "photo_type", "photo_version", "archived_at", "created_at", "updated_at",
     ]
@@ -5755,7 +5809,7 @@ _LABEL_CONFIG_DEFAULTS: dict[str, Any] = {
     "widget_pin": 0,
     "has_deadline": 0,
     "deadline_date": None,
-    "has_dashboard": 0,
+    "page_type": "sections",
     "agenda_widget": 1,
     "tasks_widget": 1,
     "contacts_widget": 1,
@@ -5765,7 +5819,7 @@ _LABEL_CONFIG_DEFAULTS: dict[str, Any] = {
 # The labels-as-modules boolean flags -- normalized to 0/1 on write and to
 # bool on read, same as generate_space/is_project.
 _LABEL_MODULE_FLAGS = (
-    "sidebar_pin", "widget_pin", "has_deadline", "has_dashboard",
+    "sidebar_pin", "widget_pin", "has_deadline",
     "agenda_widget", "tasks_widget", "contacts_widget", "notebook_widget",
 )
 
@@ -5859,6 +5913,10 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     for key, default in _LABEL_CONFIG_DEFAULTS.items():
         data.setdefault(key, existing.get(key, default))
     _mirror_legacy_module_fields(row, existing, data)
+    if "has_dashboard" in row and "page_type" not in row:
+        data["page_type"] = "dashboard" if row["has_dashboard"] else "sections"
+    if data.get("page_type") not in PAGE_TYPES:
+        data["page_type"] = "sections"
     data["label_group"] = ensure_group(conn, data.get("label_group"))
     conn.execute(
         f"INSERT INTO label_config ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)}) "
@@ -5885,13 +5943,13 @@ def _mirror_legacy_module_fields(row: dict[str, Any], existing: dict[str, Any], 
     if row.get("generate_space"):
         put("sidebar_pin", 1)
         put("widget_pin", 1)
-        put("has_dashboard", 1)
+        put("page_type", "dashboard")
         if not data.get("label_group"):
             put("label_group", data["name"])
     if row.get("is_project"):
         put("sidebar_pin", 1)
         put("widget_pin", 1)
-        put("has_dashboard", 1)
+        put("page_type", "dashboard")
     if "parent_name" in row:
         if row["parent_name"]:
             put("label_group", row["parent_name"])
@@ -5979,11 +6037,48 @@ def migrate_spaces_to_groups(conn: sqlite3.Connection) -> None:
         if banner and not get_app_meta(conn, _page_banner_key(key)):
             set_app_meta(conn, _page_banner_key(key), banner)
         conn.execute(
-            "UPDATE label_config SET generate_space = 0, has_dashboard = 0, label_group = ? WHERE name = ?",
+            "UPDATE label_config SET generate_space = 0, page_type = 'sections', label_group = ? WHERE name = ?",
             (group, name),
         )
     conn.execute("UPDATE label_config SET parent_name = NULL WHERE parent_name IS NOT NULL")
     set_app_meta(conn, _SPACES_TO_GROUPS_KEY, "1")
+
+
+PAGE_TYPES = ("sections", "dashboard", "secretariat")
+PAGE_TYPE_LABELS = {"sections": "Sections", "dashboard": "Widget dashboard", "secretariat": "Secretariat"}
+_LABEL_PAGE_TYPE_MIGRATED_KEY = "label_page_type_migrated_v1"
+HOME_PAGE_TYPE_KEY = "home_page_type"
+
+
+def migrate_label_page_type(conn: sqlite3.Connection) -> None:
+    """Replaces the old has_dashboard flag with page_type, once. The old
+    column stays on disk, unused."""
+    if get_app_meta(conn, _LABEL_PAGE_TYPE_MIGRATED_KEY):
+        return
+    conn.execute("UPDATE label_config SET page_type = 'dashboard' WHERE has_dashboard = 1")
+    set_app_meta(conn, _LABEL_PAGE_TYPE_MIGRATED_KEY, "1")
+
+
+def get_home_page_type(conn: sqlite3.Connection) -> str:
+    value = get_app_meta(conn, HOME_PAGE_TYPE_KEY)
+    return value if value in PAGE_TYPES else "secretariat"
+
+
+def set_home_page_type(conn: sqlite3.Connection, page_type: str) -> None:
+    if page_type in PAGE_TYPES:
+        set_app_meta(conn, HOME_PAGE_TYPE_KEY, page_type)
+
+
+def get_group_page_type(conn: sqlite3.Connection, group: str) -> str:
+    row = get_group(conn, group) or {}
+    return row.get("page_type") if row.get("page_type") in PAGE_TYPES else "dashboard"
+
+
+def set_group_page_type(conn: sqlite3.Connection, group: str, page_type: str) -> None:
+    if page_type in PAGE_TYPES:
+        ensure_group(conn, group)
+        conn.execute("UPDATE label_groups SET page_type = ? WHERE name = ?", (page_type, group.strip()))
+        conn.commit()
 
 
 def backfill_label_modules(conn: sqlite3.Connection) -> None:
@@ -5997,7 +6092,7 @@ def backfill_label_modules(conn: sqlite3.Connection) -> None:
     - sidebar_pin: everything the sidebar shows today, which is Spaces,
       the children of real Spaces, and projects.
     - widget_pin: Spaces and projects (the "Spaces & Projects" widget).
-    - has_dashboard: Spaces, projects, and any label whose page already has
+    - page_type: Spaces, projects, and any label whose page already has
       its own widgets.
     - has_deadline/deadline_date: a project's end_date.
     - agenda/tasks/contacts_widget: all on, matching the plain label page
@@ -6021,12 +6116,12 @@ def backfill_label_modules(conn: sqlite3.Connection) -> None:
         has_deadline = is_project and bool(r.get("end_date"))
         conn.execute(
             "UPDATE label_config SET label_group = ?, sidebar_pin = ?, widget_pin = ?, "
-            "has_dashboard = ?, has_deadline = ?, deadline_date = ? WHERE name = ?",
+            "page_type = ?, has_deadline = ?, deadline_date = ? WHERE name = ?",
             (
                 group,
                 1 if (is_space or is_project or parent) else 0,
                 1 if (is_space or is_project) else 0,
-                1 if (is_space or is_project or r["name"] in with_widgets) else 0,
+                "dashboard" if (is_space or is_project or r["name"] in with_widgets) else "sections",
                 1 if has_deadline else 0,
                 r.get("end_date") if has_deadline else None,
                 r["name"],
@@ -6776,8 +6871,9 @@ def upsert_published_list(conn: sqlite3.Connection, row: dict[str, Any]) -> None
         "last_materialized_at", "created_at",
         # 2026-08-29 -- see the _ensure_column migration's comment above
         # for what these mean.
-        "visibility", "public_token",
+        "visibility", "public_token", "contact_name_field",
     ]
+    data.setdefault("contact_name_field", "full_name")
     data.setdefault("sync_direction", "read_only")
     data.setdefault("visibility", "private")
     values = [data.get(c) for c in cols]
@@ -7463,7 +7559,7 @@ ENTITY_SYNC_FIELDS: dict[str, set[str]] = {
         "created_at", "updated_at", "deleted_at",
     },
     "contact": {
-        "full_name", "title", "org", "phone", "email", "address", "notes",
+        "full_name", "pseudonym", "title", "role", "org", "phone", "email", "address", "notes",
         "photo_b64", "photo_type", "created_at", "updated_at", "deleted_at",
     },
 }

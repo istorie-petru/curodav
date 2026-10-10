@@ -2372,6 +2372,19 @@ def dashboard_view(
     cal_month: int | None = None,
     conn=Depends(get_db),
 ):
+    page_type = db.get_home_page_type(conn)
+    if page_type != "dashboard":
+        from . import label_pages, secretariat_page
+
+        banner_ctx = _page_banner_context(conn, "")
+        if page_type == "secretariat":
+            return secretariat_page.render(
+                conn, request, scope_key=None, title="Home", icon_name="home", icon_color=None,
+                banner_ctx=banner_ctx, page_url="/", header_edit_url="/home/page",
+            )
+        return label_pages._pooled_sections_page(
+            conn, request, None, "Home", "home", "blue", "/", banner_ctx, "/home/page"
+        )
     _ensure_default_widgets(conn)
     _backfill_mini_calendar_widget(conn)
     # Month nav (cal_year/cal_month) is a plain query param on this same
@@ -2389,7 +2402,7 @@ def dashboard_view(
         {
             "request": request,
             "active_tab": "dashboard",
-            "greeting": _greeting_for_hour(datetime.now().hour, display_name),
+            "greeting": _greeting_for_hour(clock.local_hour(), display_name),
             # Dashboard Header (Expanded) avatar (2026-08-29, sidebar
             # redesign follow-up, direct request, plans/sidebar-redesign
             # .md § "The Standard Header") -- the large circular avatar

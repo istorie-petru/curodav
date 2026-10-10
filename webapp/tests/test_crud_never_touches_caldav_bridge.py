@@ -108,7 +108,7 @@ class TestContactCrudNeverTouchesBridge:
         from src.routers import contacts as contacts_router
 
         asyncio.run(contacts_router.create_contact(
-            full_name="Ada Lovelace", title="", org="",
+            full_name="Ada Lovelace", pseudonym="", title="", role="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[], birthday="",
             tags="", notes="", photo=None, conn=conn,
         ))

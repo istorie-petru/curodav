@@ -43,6 +43,7 @@
    of .detail-plain-section's own top border above the whole section --
    two hairlines where the merged single heading now needs none. #}
 {% from "_date_time_fields.html" import datetime_range with context %}
+{% from "_inputs.html" import text_input, number_input %}
 {% macro task_work_allocations_section(task, work_allocations, work_hours, show_header=true) %}
 {% if show_header %}
 <h2 class="work-sessions-head">
@@ -51,6 +52,8 @@
     {% if work_hours and work_hours.scheduled %}
     <span class="checklist-progress">{{ "%.1f"|format(work_hours.completed) }}h / {{ "%.1f"|format(work_hours.scheduled) }}h</span>
     {% endif %}
+    {% if work_estimate_hours %}<span class="checklist-progress">{{ "%g"|format(work_estimate_hours) }}h estimated</span>{% endif %}
+    {% if work_difficulty %}{% set _d = work_difficulties[work_difficulty] %}<span class="cell-tag cal-{{ _d.color }}" title="Average difficulty">{{ icon(_d.icon, 'icon-sm') }} {{ _d.name }}</span>{% endif %}
     <form class="work-session-add" method="post" action="/tasks/{{ task.uid }}/work-allocations" data-modal-keep-open>
         <button type="submit" class="icon-btn" title="Add a work session (date it later in the Timetable)" aria-label="Add a work session">{{ icon('plus', 'icon-sm') }}</button>
     </form>
@@ -60,7 +63,17 @@
 <div class="checklist">
     {% for wa in work_allocations %}
     <div class="checklist-row work-session-row">
-        <span class="checklist-text">{{ icon('clock', 'icon-sm') }} Session {{ loop.index }}</span>
+        {% set _form_id = 'session-details-' ~ wa.uid %}
+        <form class="form-inline session-details-form" id="{{ _form_id }}" method="post" action="/tasks/{{ task.uid }}/work-allocations/{{ wa.uid }}/details" data-modal-keep-open>
+            {{ text_input({'name': 'title', 'value': wa.title, 'aria-label': 'Session title'}) }}
+            {{ number_input({'name': 'hours_estimate', 'value': (wa.hours_estimate if wa.hours_estimate is not none else ''), 'min': '0', 'step': '0.25', 'aria-label': 'Estimated hours'}) }}
+            {% set ms_name = 'difficulty' %}{% set ms_label = 'Difficulty' %}{% set ms_mode = 'single' %}
+            {% set ms_items = [] %}
+            {% for key, d in work_difficulties.items() %}{% set _ = ms_items.append({'uid': key, 'name': d.name, 'color': d.color, 'icon': d.icon}) %}{% endfor %}
+            {% set ms_selected = wa.difficulty or 'moderate' %}{% set ms_form_id = _form_id %}{% set ms_bare = true %}
+            {% include "_widget_list_multiselect.html" %}
+            <button type="submit" class="icon-btn session-save-btn" title="Save session details" aria-label="Save session details">{{ icon('check-circle', 'icon-sm') }}</button>
+        </form>
         <form class="form-inline session-when-form" method="post" action="/tasks/{{ task.uid }}/work-allocations/{{ wa.uid }}/set-times" data-modal-keep-open>
             {# The shared date/time range dates this session; the check
                button posts start_at/end_at to the set-times endpoint and

@@ -4,7 +4,7 @@ from datetime import date, datetime, time, timezone
 
 import pytest
 
-from src import clock
+from src import clock, db
 
 
 def pytest_collection_modifyitems(items):
@@ -20,4 +20,18 @@ def frozen_today():
         clock.set_override(datetime.combine(day, time(12, 0), tzinfo=timezone.utc))
 
     yield freeze
+    clock.set_override(None)
+
+
+@pytest.fixture
+def home_is_dashboard(monkeypatch):
+    """Home defaults to the Secretariat; tests of the widget dashboard ask for it explicitly."""
+    monkeypatch.setattr(db, "get_home_page_type", lambda conn: "dashboard")
+
+
+@pytest.fixture
+def local_today():
+    """Pin src.clock to the machine's own calendar day, for tests that seed data with date.today()."""
+    clock.set_override(datetime.combine(date.today(), time(12, 0), tzinfo=timezone.utc))
+    yield
     clock.set_override(None)

@@ -317,7 +317,6 @@ def bulk_edit_modal(uids: str, request: Request, conn=Depends(get_db)):
         {"name": "remove_tag", "label": "Remove label", "kind": "select", "options": labels},
         {"name": "add_tag", "label": "Set label", "kind": "select", "options": labels},
         {"name": "org", "label": "Organization", "kind": "text"},
-        {"name": "title", "label": "Title", "kind": "text"},
     ]
     return templates.TemplateResponse(
         "bulk_edit_modal.html",
@@ -332,7 +331,6 @@ def bulk_edit(
     add_tag: str = Form(""),
     remove_tag: str = Form(""),
     org: str = Form(""),
-    title: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -342,8 +340,6 @@ def bulk_edit(
             continue
         if org.strip():
             row["org"] = org.strip()
-        if title.strip():
-            row["title"] = title.strip()
         tags = set(row.get("tags") or [])
         if remove_tag:
             tags.discard(remove_tag)
@@ -440,10 +436,17 @@ def new_contact_form(request: Request, conn=Depends(get_db)):
     )
 
 
+def _clean_optional(value: str) -> str | None:
+    """Blank and the literal "None"/"Nothing" a form can echo back become no value."""
+    return value if value and value.strip().lower() not in ("none", "nothing") else None
+
+
 @router.post("")
 async def create_contact(
     full_name: str = Form(...),
+    pseudonym: str = Form(""),
     title: str = Form(""),
+    role: str = Form(""),
     org: str = Form(""),
     phone_type: list[str] = Form([]),
     phone_value: list[str] = Form([]),
@@ -489,7 +492,9 @@ async def create_contact(
     row = {
         "uid": uid,
         "full_name": full_name,
-        "title": title if title and title.strip().lower() not in ("none", "nothing") else None,
+        "pseudonym": _clean_optional(pseudonym),
+        "title": _clean_optional(title),
+        "role": _clean_optional(role),
         "org": org if org and org.strip().lower() not in ("none", "nothing") else None,
         # Contacts field parity slice 2 of 6 -- phone/email are multi-value
         # now (contact_phones/contact_emails), submitted as parallel
@@ -653,7 +658,9 @@ def edit_contact_form(uid: str, request: Request, conn=Depends(get_db)):
 async def update_contact(
     uid: str,
     full_name: str = Form(...),
+    pseudonym: str = Form(""),
     title: str = Form(""),
+    role: str = Form(""),
     org: str = Form(""),
     phone_type: list[str] = Form([]),
     phone_value: list[str] = Form([]),
@@ -690,7 +697,9 @@ async def update_contact(
         {
             "uid": uid,
             "full_name": full_name,
-            "title": title if title and title.strip().lower() not in ("none", "nothing") else None,
+            "pseudonym": _clean_optional(pseudonym),
+            "title": _clean_optional(title),
+            "role": _clean_optional(role),
             "org": org if org and org.strip().lower() not in ("none", "nothing") else None,
             # Same multi-value replace-on-save as create_contact above --
             # the submitted arrays are the full, ordered set, so this

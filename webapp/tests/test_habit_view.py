@@ -16,6 +16,9 @@ from src import db, habit_view
 from src.routers import dashboard as dashboard_router
 
 
+pytestmark = pytest.mark.usefixtures("local_today")
+
+
 @pytest.fixture()
 def conn(tmp_path):
     with db.connect(tmp_path / "cache.sqlite") as c:

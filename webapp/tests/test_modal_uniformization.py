@@ -45,6 +45,9 @@ from src.routers import labels as labels_router
 from src.routers import tasks as tasks_router
 
 
+pytestmark = pytest.mark.usefixtures("home_is_dashboard")
+
+
 @pytest.fixture()
 def conn(tmp_path):
     db_path = tmp_path / "cache.sqlite"

@@ -4,6 +4,16 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.6.0]
+
+- Home, groups and labels can each show as the Secretariat, Sections or a dashboard. Home defaults to the Secretariat, which hides empty sections, lists events today, tasks due today and this week on the left and other reminders on the right, shows label pills, and keeps completed tasks until the day ends.
+- Work sessions have a title, an hours estimate and a difficulty. The Planner has an Unscheduled work sidebar.
+- Contacts have a pseudonym, a role and an honorary title, and each published contact list chooses which name it syncs.
+- Task and event details describe repeats in plain words instead of the raw rule.
+- Label views list habits due today in the agenda, show eight items, and have an Archive button.
+- `./run.sh skipauth` skips the login for a local run only, and refuses to start over a stale server.
+- Date-dependent tests read the injected clock.
+
 ## [3.5.0]
 
 - Settings: General, Your Profile, Notifications, Appearance, Data & Maintenance and Notebook open as modals that stay open while a setting saves. The Database, Backup and Sync status cards now sit on the main Settings page. Notebook settings split into Notebook (sidebar layout) and Frontmatter (custom fields).

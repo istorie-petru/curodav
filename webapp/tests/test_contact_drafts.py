@@ -20,7 +20,7 @@ def conn(tmp_path):
 
 def _create(conn, draft_uid="", photo=None):
     return asyncio.run(contacts_router.create_contact(
-        full_name="Dana Scully", title="", org="",
+        full_name="Dana Scully", pseudonym="", title="", role="", org="",
         phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[],
         address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[],
         address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[],

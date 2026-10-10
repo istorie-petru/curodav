@@ -101,7 +101,7 @@
         {% if event.recurrence %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Recurrence</span>
-            <span class="detail-meta-value">{{ event.recurrence }}</span>
+            <span class="detail-meta-value">{{ event.recurrence | recurrence_text }}</span>
         </div>
         {% endif %}
         {% if event.reminders %}

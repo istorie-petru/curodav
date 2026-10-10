@@ -33,6 +33,9 @@ from src.routers import contacts as contacts_router
 from src.routers import tasks as tasks_router
 
 
+pytestmark = pytest.mark.usefixtures("local_today")
+
+
 @pytest.fixture()
 def conn(tmp_path):
     db_path = tmp_path / "cache.sqlite"

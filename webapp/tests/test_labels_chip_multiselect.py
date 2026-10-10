@@ -142,7 +142,7 @@ class TestCreateWithTwoLabelsStoresBoth:
         # the Label field is a single-select dropdown, so a well-behaved
         # client can't post two anyway -- this is the defensive backstop.
         asyncio.run(contacts_router.create_contact(
-            full_name="Grace Hopper", title="", org="",
+            full_name="Grace Hopper", pseudonym="", title="", role="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[], birthday="",
             tags="", tags_labels=["Professor", "CS"], notes="", photo=None, conn=conn,
         ))
@@ -171,7 +171,7 @@ class TestEditAddOrRemoveLabel:
     def test_update_contact_adds_and_removes_labels(self, conn):
         _seed_contact(conn, "c1", tags=["Old"])
         asyncio.run(contacts_router.update_contact(
-            uid="c1", full_name="c1", title="", org="",
+            uid="c1", full_name="c1", pseudonym="", title="", role="", org="",
             phone_type=[], phone_value=[], email_type=[], email_value=[], website_type=[], website_url=[], address_type=[], address_po_box=[], address_extended=[], address_street=[], address_city=[], address_region=[], address_postal_code=[], address_country=[], social_type=[], social_value=[], birthday="",
             tags="", tags_labels=["New"], notes="", photo=None, remove_photo="", conn=conn,
         ))

@@ -845,6 +845,7 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
         db.add_event_task_relation(
             conn, row["event_uid"], row["task_uid"], row.get("is_work_allocation", 0)
         )
+        db.restore_work_session_fields(conn, row)
     # Notebook (2026-10-01) -- upsert_notebook_document already pops
     # "tags" (and, since 2026-10-02, "properties") and re-applies them via
     # set_object_labels/set_notebook_properties, same contract every other

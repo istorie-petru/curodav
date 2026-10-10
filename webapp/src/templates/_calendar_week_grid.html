@@ -9,56 +9,23 @@
      to schedule it. Grid columns carry BOTH `.calendar-create-col`
      (calendar.js) and `.project-calendar-col` (project_calendar.js) --
      see style.css's own comment on why the old "planning surface -> cursor:
-     default" override no longer applies here. The panel is collapsible
-     (static/unscheduled_panel_toggle.js, per-device localStorage).
+     default" override no longer applies here.
 
      id="week-grid": the week view's async-CRUD region
      (features/async-crud.md) -- async_calendar.js refreshes this element
      from GET /calendar/regions?region=week after a work-allocation
      create/move/delete or an event change on the week page, then re-runs
-     the drag/create/panel bindings (calendar.js, project_calendar.js,
-     unscheduled_panel_toggle.js) instead of a full page reload.
+     the drag/create/panel bindings (calendar.js, project_calendar.js)
+     instead of a full page reload.
 
      2026-09-09, slice 6 ("FullCalendar-parity interactions"): data-label-
      text/data-prev/data-next added alongside the existing data-date/
      data-label -- calendar_nav.js reads these off the freshly-swapped
      element after a prev/next AJAX nav to update the visible label and
      the two <a> hrefs for the *next* click, without a second round-trip.
-
-     2026-09-26 (item 11, "redesign Unscheduled Work along this mockup"):
-     the panel moved from ABOVE the grid to BELOW it (`.project-calendar-
-     layout` is still a plain flex column -- only the two children's order
-     changed), matching the mockup's week-grid-on-top/panel-underneath
-     layout. This incidentally retires the old "fixed small height so a
-     schedule/unschedule drag doesn't reflow the grid" hack (see git
-     history on this file's previous `#unscheduled-panel-body` CSS) -- the
-     grid is now the FIRST child, so a later sibling's height changing
-     never moves it; the panel is free to size to its (now much taller,
-     two-line-per-row) content. The header also gained an item-count badge
-     and a search box (`unscheduled_panel_search.js`, client-side
-     title/tag substring filter, no server round-trip) alongside the
-     existing collapse toggle.
-
-     2026-09-27 (direct feedback): the page-header duplicate of this
-     toggle (id ending `-header`) and the header's redundant quick-add-task
-     button are gone again -- back to the single in-panel toggle below,
-     `.unscheduled-panel-toggle-btn` now matches exactly one element. Its
-     icon changed from a generic sidebar glyph to a plain up-chevron
-     (points up = "collapse"; style.css's existing `.collapsed
-     .unscheduled-panel-toggle-btn svg{transform:rotate(180deg)}` flips it
-     to point down once collapsed, no CSS change needed).
-
-     2026-09-28 (direct feedback, "remove unscheduled-search"): the search
-     box from the 2026-09-26 redesign above is gone -- `unscheduled_panel_
-     search.js` deleted outright (its only job was wiring that one input),
-     the header is back to just title+count and the collapse toggle. Also
-     from that same feedback: the panel body now caps at ~3.5 rows tall
-     (`.unscheduled-task-list`'s own `max-height`+`overflow-y:auto` in
-     style.css) instead of growing to fit every row, so a long list
-     scrolls in place rather than pushing the grid below it further down
-     the page; the partial 4th row peeking over the edge is the "there's
-     more, scroll" affordance, same idea a native picker's clipped last
-     row already gives for free. -->
+     The Unscheduled work panel is the right sidebar shell shared with the
+     notebook (features/work-sessions-planner.md); the header toggle and
+     notebook_sidebar.js collapse it. -->
 {% from "_unscheduled_task_item.html" import unscheduled_task_item with context %}
 <div class="project-calendar-layout" id="week-grid" data-date="{{ monday.isoformat() }}" data-label="{{ active_label | default('') }}" data-label-text="{{ label_text }}" data-prev="{{ prev_week }}" data-next="{{ next_week }}">
     <div class="card calendar-viewport project-calendar-grid">
@@ -179,10 +146,14 @@
     </div>
     </div>
 
-    <aside class="card project-calendar-unscheduled" id="unscheduled-panel">
-        <div class="unscheduled-panel-head">
-            <h2>Unscheduled work <span class="unscheduled-panel-count">({{ unscheduled_tasks|length }})</span></h2>
-            <button type="button" class="icon-btn unscheduled-panel-toggle-btn" id="unscheduled-panel-toggle" title="Collapse Unscheduled work" aria-label="Collapse Unscheduled work" aria-expanded="true" aria-controls="unscheduled-panel-body">{{ icon('chevron-up', 'icon-sm') }}</button>
+    <aside class="notebook-sidebar project-calendar-unscheduled" id="unscheduled-panel">
+        <div class="notebook-sidebar-head unscheduled-panel-head">
+            <div class="notebook-sidebar-select">
+                <div class="notebook-sidebar-select-trigger">
+                    <span class="notebook-sidebar-select-icon">{{ icon('clock', 'icon-sm') }}</span>
+                    <span class="notebook-sidebar-select-label">Unscheduled work <span class="unscheduled-panel-count">({{ unscheduled_tasks|length }})</span></span>
+                </div>
+            </div>
         </div>
         <div id="unscheduled-panel-body">
         {% if unscheduled_tasks %}

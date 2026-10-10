@@ -152,6 +152,13 @@
                 {% set st_selected = _editing.visibility if _editing else 'private' %}{% set st_form_id = _form_id %}
                 {% include "_status_type_row.html" %}
 
+                {% if not _editing or _editing.entity_type == 'contact' %}
+                {% set st_name = 'contact_name_field' %}{% set st_label = 'Contact name (contact lists)' %}
+                {% set st_items = [{'uid': 'full_name', 'name': 'Full name'}, {'uid': 'pseudonym', 'name': 'Pseudonym'}] %}
+                {% set st_selected = _editing.contact_name_field if _editing else 'full_name' %}{% set st_form_id = _form_id %}
+                {% include "_status_type_row.html" %}
+                {% endif %}
+
                 {% if all_labels %}
                 {% set ms_name = 'labels' %}
                 {% set ms_mode = 'filter' %}

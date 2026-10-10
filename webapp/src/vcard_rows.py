@@ -100,16 +100,21 @@ _SOCIAL_TYPE_TO_VCARD: dict[str, str] = {
 _VCARD_TO_SOCIAL_TYPE: dict[str, str] = {v: k for k, v in _SOCIAL_TYPE_TO_VCARD.items()}
 
 
-def contact_row_to_vcard(row: dict[str, Any]) -> str:
+def contact_row_to_vcard(row: dict[str, Any], name_field: str = "full_name") -> str:
+    """`name_field` picks what FN carries: "full_name", or "pseudonym" when the contact has one."""
     card = vobject.vCard()
     card.add("version").value = "3.0"
     card.add("uid").value = row["uid"]
-    card.add("fn").value = row.get("full_name") or ""
+    card.add("fn").value = (row.get("pseudonym") if name_field == "pseudonym" else None) or row.get("full_name") or ""
     name = card.add("n")
     name.value = vobject.vcard.Name(given=row.get("full_name") or "")
 
+    if row.get("pseudonym"):
+        card.add("nickname").value = row["pseudonym"]
     if row.get("title"):
         card.add("title").value = row["title"]
+    if row.get("role"):
+        card.add("role").value = row["role"]
     if row.get("org"):
         card.add("org").value = [row["org"]]
     # Multi-value phone/email (Contacts field parity slice 2 of 6) -- see
@@ -243,8 +248,12 @@ def vcard_to_contact_row(card: vobject.base.Component) -> dict[str, Any]:
     # branch below now checks the actual value is truthy before storing it,
     # same as every other optional field here (adr/categories/note already
     # did this implicitly via `or`/isinstance guards).
+    if hasattr(card, "nickname") and card.nickname.value:
+        row["pseudonym"] = str(card.nickname.value)
     if hasattr(card, "title") and card.title.value:
         row["title"] = str(card.title.value)
+    if hasattr(card, "role") and card.role.value:
+        row["role"] = str(card.role.value)
     if hasattr(card, "org") and card.org.value:
         org_val = card.org.value
         row["org"] = org_val[0] if isinstance(org_val, list) else str(org_val)

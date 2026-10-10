@@ -8,8 +8,9 @@ dashboard (`/spaces/{name}`), the Project Kanban+Agenda page
 page shows depends on the label's module fields, not on what kind of label
 it is:
 
-- `has_dashboard`: the Home-style customizable widget grid, scoped to this
+- `page_type` dashboard: the Home-style customizable widget grid, scoped to this
   label (label_detail.html).
+- `page_type` secretariat: the agenda-style Secretariat (secretariat.html).
 - otherwise: only the sections switched on in the label's settings
   (`agenda_widget`, `contacts_widget`, `notebook_widget`, and
   `tasks_widget` for the Kanban board), in label_sections.html.
@@ -23,14 +24,18 @@ available to any label rather than only projects.
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import db
+from .. import clock, db, habit_view
 from ..deps import EDIT_MODE_KEY, get_db, templates
 from . import dashboard as dashboard_router
+from . import secretariat_page
 from . import tasks as tasks_router
+
+MAX_AGENDA_HABITS = 2
 
 router = APIRouter(prefix="/labels", tags=["label-pages"])
 
@@ -66,7 +71,7 @@ def deadline_info(label: dict, today: date | None = None) -> dict | None:
         d = date.fromisoformat(str(label["deadline_date"])[:10])
     except ValueError:
         return None
-    today = today or date.today()
+    today = today or clock.today()
     when = _short_date(d, today)
     days = (d - today).days
     if label.get("archived_at"):
@@ -166,15 +171,15 @@ def _dashboard_page(conn, request: Request, name: str, label: dict):
     return templates.TemplateResponse("label_detail.html", ctx)
 
 
-def _agenda_items(conn, name: str, label: dict, tasks: list[dict], limit: int) -> list[dict]:
+def _agenda_items(conn, scope: set[str] | None, label: dict, tasks: list[dict], limit: int) -> list[dict]:
     """Future events tagged with this label, the label's own deadline, and
     open due-dated tasks (from `tasks`), merged into one chronological list
-    and capped at `limit`. Same recipe the retired project/plain-label
-    pages both used; shared by the sections page and the preview modal."""
-    today_iso = date.today().isoformat()
+    and capped at `limit`, led by at most MAX_AGENDA_HABITS of the label's
+    habits due today. Shared by the sections page and the preview modal."""
+    today_iso = clock.today().isoformat()
     events = [
-        e for e in db.list_events(conn, start=datetime.now(timezone.utc).isoformat())
-        if name in (e.get("tags") or []) and e.get("start_at") and e["start_at"][:10] >= today_iso
+        e for e in db.list_events(conn, start=clock.now().isoformat())
+        if dashboard_router._passes_scope(e.get("tags"), scope) and e.get("start_at") and e["start_at"][:10] >= today_iso
     ]
     db.annotate_item_colors(conn, events)
     deadline = label.get("deadline_date") if label.get("has_deadline") else None
@@ -191,11 +196,51 @@ def _agenda_items(conn, name: str, label: dict, tasks: list[dict], limit: int) -
             continue
         events.append({"uid": t["uid"], "title": t["title"], "start_at": t["due_at"], "kind": "task"})
     events.sort(key=lambda e: e["start_at"])
-    return events[:limit]
+    habits = [
+        {"kind": "habit", "uid": h["uid"], "title": h["title"], "detail_url": h["detail_url"],
+         "recurrence_label": h["recurrence_label"]}
+        for h in habit_view.habit_items(conn)
+        if h["due_today"] and not h["is_avoid"] and dashboard_router._passes_scope(h.get("tags"), scope)
+    ][:MAX_AGENDA_HABITS]
+    return (habits + events)[:limit]
 
 
 def _sections_page(conn, request: Request, name: str, label: dict):
     tasks = [t for t in db.list_tasks_sharing_labels(conn, [name]) if t["status"] != "archived"]
+    ctx = _sections_context(conn, request, {name}, name, label, tasks)
+    ctx.update(
+        {
+            "page_label_scope": name if label.get("label_group") else None,
+            "page_url": label_url(name),
+        }
+    )
+    ctx.update(_status_context(conn, label))
+    ctx.update(_page_common(conn, name))
+    ctx.update(dashboard_router._page_banner_context(conn, name, name=name))
+    return templates.TemplateResponse("label_sections.html", ctx)
+
+
+def _pooled_sections_page(conn, request: Request, scope_key: str | None, title: str, icon: str, color: str,
+                          page_url: str, banner_ctx: dict, header_edit_url: str):
+    """The Sections page type for Home (scope_key None) and groups: the same
+    sections as a label's page, over every item in scope."""
+    tasks = [
+        t for t in dashboard_router._filtered_tasks(conn, {"label_name": scope_key}, open_only=False)
+        if t["status"] != "archived"
+    ]
+    label = {
+        "name": title, "icon": icon, "color": color, "description": None, "agenda_widget": 1, "tasks_widget": 1,
+        "contacts_widget": 1, "notebook_widget": 1, "pooled": True,
+    }
+    scope = dashboard_router._scope_child_names(conn, scope_key)
+    ctx = _sections_context(conn, request, scope, scope_key, label, tasks)
+    ctx.update({"page_url": page_url, "label_usage_count": 1, "header_edit_url": header_edit_url})
+    ctx.update(banner_ctx)
+    return templates.TemplateResponse("label_sections.html", ctx)
+
+
+def _sections_context(conn, request: Request, scope: set[str] | None, scope_key: str | None, label: dict,
+                      tasks: list[dict]) -> dict:
     board_statuses = [s for s in tasks_router.STATUSES if s != "archived"]
     columns: dict[str, list] = {s: [] for s in board_statuses}
     if label.get("tasks_widget"):
@@ -203,27 +248,22 @@ def _sections_page(conn, request: Request, name: str, label: dict):
             t["banner"] = db.banner_for_task(conn, t)
             columns.setdefault(t["status"], []).append(t)
 
-    agenda_items = _agenda_items(conn, name, label, tasks, 8) if label.get("agenda_widget") else []
+    agenda_items = _agenda_items(conn, scope, label, tasks, 8) if label.get("agenda_widget") else []
 
     contacts = []
     if label.get("contacts_widget"):
-        contacts = [c for c in db.list_contacts(conn) if name in (c.get("tags") or [])][:20]
+        contacts = [c for c in db.list_contacts(conn) if dashboard_router._passes_scope(c.get("tags"), scope)][:20]
 
     notebook_documents = {}
     if label.get("notebook_widget"):
-        # Reuses dashboard_router._render_notebook_list's own scope/tags/
-        # limit pipeline instead of duplicating it (same reasoning as the
-        # Contacts section just above, which doesn't duplicate
-        # `_render_contact_list` either -- here the widget partial itself,
-        # `_widget_notebook_list.html`, is reused too, so the two surfaces
-        # can never drift out of sync).
-        notebook_documents = dashboard_router._render_notebook_list(conn, {"label_name": name})
+        # Reuses the Dashboard's own scope/tags/limit pipeline so this
+        # section and the Notebook List widget cannot drift apart.
+        notebook_documents = dashboard_router._render_notebook_list(conn, {"label_name": scope_key})
 
-    ctx = {
+    return {
         "request": request,
-        "active_tab": "label",
+        "active_tab": "label" if scope_key else "dashboard",
         "label": label,
-        "page_label_scope": name if label.get("label_group") else None,
         "agenda_items": agenda_items,
         "contacts": contacts,
         "notebook_documents": notebook_documents,
@@ -234,12 +274,7 @@ def _sections_page(conn, request: Request, name: str, label: dict):
         "edit_mode": db.get_app_meta(conn, EDIT_MODE_KEY) == "1",
         "profile_photo": db.get_profile_photo(conn),
         "display_name": db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY),
-        "page_url": label_url(name),
     }
-    ctx.update(_status_context(conn, label))
-    ctx.update(_page_common(conn, name))
-    ctx.update(dashboard_router._page_banner_context(conn, name, name=name))
-    return templates.TemplateResponse("label_sections.html", ctx)
 
 
 @router.get("/{name}")
@@ -250,7 +285,12 @@ def label_page(name: str, request: Request, conn=Depends(get_db)):
     if not _label_exists(conn, name):
         return RedirectResponse(url="/settings/labels", status_code=303)
     label = db.effective_label_config(conn, name)
-    if label.get("has_dashboard"):
+    if label.get("page_type") == "secretariat":
+        return secretariat_page.render(
+            conn, request, scope_key=name, title=name, icon_name=label.get("icon") or "tag", icon_color=label.get("color"),
+            banner_ctx=dashboard_router._page_banner_context(conn, name, name=name), page_url=label_url(name), label=label,
+        )
+    if label.get("page_type") == "dashboard":
         return _dashboard_page(conn, request, name, label)
     return _sections_page(conn, request, name, label)
 
@@ -279,7 +319,7 @@ def label_preview(name: str, request: Request, conn=Depends(get_db)):
         "back_to": back_to,
         "label": label,
         "banner": _cover_banner(conn, name, name),
-        "agenda_items": _agenda_items(conn, name, label, tasks, 5),
+        "agenda_items": _agenda_items(conn, {name}, label, tasks, 8),
         "open_task_count": len([t for t in tasks if t["status"] != "done"]),
         "contact_count": len([c for c in db.list_contacts(conn) if name in (c.get("tags") or [])]),
     }
@@ -296,7 +336,7 @@ def archive_label(name: str, conn=Depends(get_db)):
     label that only exists through usage has no config row for
     db.archive_project's UPDATE to hit, so one is created first."""
     if not db.get_label_config(conn, name):
-        db.upsert_label_config(conn, {"name": name, "created_at": datetime.now(timezone.utc).isoformat()})
+        db.upsert_label_config(conn, {"name": name, "created_at": clock.now().isoformat()})
     db.archive_project(conn, name)
     return RedirectResponse(url=label_url(name), status_code=303)
 
@@ -360,6 +400,8 @@ def _group_form_context(conn, request: Request, group: dict | None) -> dict:
         "icon_groups": icon_groups_for(style["icon"]),
         "group_default_icon": db.GROUP_DEFAULT_ICON,
         "banner": db.get_page_banner(conn, db.group_page_key(name)) if group else None,
+        "page_types": [(k, db.PAGE_TYPE_LABELS[k]) for k in db.PAGE_TYPES],
+        "page_type": db.get_group_page_type(conn, name) if group else "dashboard",
     }
 
 
@@ -380,6 +422,7 @@ def create_group(
     color: str = Form("gray"),
     icon: str = Form(""),
     members: list[str] = Form([]),
+    page_type: str = Form("dashboard"),
     conn=Depends(get_db),
 ):
     from .labels import COLORS
@@ -396,6 +439,7 @@ def create_group(
     members = members if isinstance(members, list) else []
     if members:
         db.set_group_members(conn, name, members)
+    db.set_group_page_type(conn, name, page_type if isinstance(page_type, str) else "dashboard")
     return RedirectResponse(url="/settings/groups", status_code=303)
 
 
@@ -437,6 +481,19 @@ def group_page(name: str, request: Request, conn=Depends(get_db)):
     members = db.group_member_names(conn, name)
     key = db.group_page_key(name)
     style = db.get_group_style(conn, name)
+    page_type = db.get_group_page_type(conn, name)
+    if page_type != "dashboard":
+        banner_ctx = dashboard_router._page_banner_context(conn, key, name=name)
+        icon_name = style["icon"] or db.GROUP_DEFAULT_ICON
+        edit_url = f"/groups/{quote(name)}/edit"
+        if page_type == "secretariat":
+            return secretariat_page.render(
+                conn, request, scope_key=key, title=name, icon_name=icon_name, icon_color=style["color"],
+                banner_ctx=banner_ctx, page_url=group_url(name), header_edit_url=edit_url,
+            )
+        return _pooled_sections_page(
+            conn, request, key, name, icon_name, style["color"], group_url(name), banner_ctx, edit_url
+        )
     dashboard_router._ensure_default_label_widgets(conn, key)
     # Item 20 (2026-09-26): label_detail.html's old always-visible
     # "group-labels" toolbar is gone. It was first replaced by an always-
@@ -498,6 +555,7 @@ def update_group(
     new_name: str = Form(""),
     members: list[str] = Form([]),
     members_submitted: str = Form(""),
+    page_type: str = Form(""),
     request: Request = None,
     conn=Depends(get_db),
 ):
@@ -519,6 +577,8 @@ def update_group(
     if members_submitted:
         db.set_group_members(conn, name, members)
     db.set_group_style(conn, name, icon or None, color)
+    if isinstance(page_type, str) and page_type:
+        db.set_group_page_type(conn, name, page_type)
     final = db.rename_group(conn, name, new_name) if new_name else name
     # 2026-09-26: saved from Settings > Groups -> stay there (the list
     # refreshes in place); from the group's own page -> its (maybe

@@ -655,18 +655,18 @@ class TestContactsAreExcluded:
 class TestLabelPageOwnBanner:
     def test_label_page_shows_its_flair_by_default(self, conn, flairs_dir):
         _put(flairs_dir, "yoga")
-        db.upsert_label_config(conn, {"name": "Yoga", "has_dashboard": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Yoga", "page_type": "dashboard", "created_at": _now()})
         body = label_pages.label_page("Yoga", _request("/labels/Yoga"), conn=conn).body.decode()
         assert "/flairs/yoga" in body
 
     def test_has_own_banner_is_true_for_a_flair_default_too(self, conn, flairs_dir):
         _put(flairs_dir, "yoga")
-        db.upsert_label_config(conn, {"name": "Yoga", "has_dashboard": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Yoga", "page_type": "dashboard", "created_at": _now()})
         resp = label_pages.label_page("Yoga", _request("/labels/Yoga"), conn=conn)
         assert resp.context["has_own_banner"] is True
 
     def test_label_with_no_match_has_no_own_banner(self, conn):
-        db.upsert_label_config(conn, {"name": "Quarterly Sync", "has_dashboard": 1, "created_at": _now()})
+        db.upsert_label_config(conn, {"name": "Quarterly Sync", "page_type": "dashboard", "created_at": _now()})
         resp = label_pages.label_page("Quarterly Sync", _request("/labels/Quarterly Sync"), conn=conn)
         assert resp.context["has_own_banner"] is False
 

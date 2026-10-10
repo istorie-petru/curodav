@@ -45,7 +45,7 @@ def _edit_tasks(conn, uids, **fields):
 
 
 def _edit_contacts(conn, uids, **fields):
-    args = {"add_tag": "", "remove_tag": "", "org": "", "title": ""} | fields
+    args = {"add_tag": "", "remove_tag": "", "org": ""} | fields
     return contacts_router.bulk_edit(uids=uids, x_requested_with=None, conn=conn, **args)
 
 
@@ -106,7 +106,7 @@ class TestContactsBulkEdit:
     def test_modal_lists_the_fields(self, conn):
         body = contacts_router.bulk_edit_modal("c1", _request("/contacts/bulk-edit-modal"), conn=conn).body.decode()
         assert "Edit 1 contact" in body
-        for name in ("add_tag", "remove_tag", "org", "title"):
+        for name in ("add_tag", "remove_tag", "org"):
             assert f'name="{name}"' in body
 
 

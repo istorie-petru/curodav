@@ -71,8 +71,8 @@ def _safe_next(next_url: str) -> str | None:
 @router.get("/login")
 def login_page(request: Request, next: str = "", conn=Depends(get_db)):
     settings = request.app.state.settings
-    if not auth.auth_enabled(settings, conn):
-        return RedirectResponse(url="/", status_code=302)
+    if not auth.auth_enabled(settings, conn) or auth.skip_auth_applies(settings, request.scope):
+        return RedirectResponse(url=_safe_next(next) or "/", status_code=302)
     # Already logged in -- skip the form and go straight to where they
     # were headed.
     token = request.cookies.get(auth.SESSION_COOKIE)

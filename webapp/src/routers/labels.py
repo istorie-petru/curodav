@@ -96,7 +96,7 @@ def _clean_description(description) -> str | None:
     return description.strip()[:500] or None
 
 
-def _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks_widget, contacts_widget,
+def _page_fields(page_fields, deadline_date, page_type, agenda_widget, tasks_widget, contacts_widget,
                  notebook_widget="", sidebar_pin="", widget_pin="") -> dict:
     """labels-as-modules slice b (2026-09-25): the label form's Deadline and
     Page fields as label_config columns. Returns {} when the form didn't
@@ -123,7 +123,7 @@ def _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks
     return {
         "has_deadline": 1 if deadline else 0,
         "deadline_date": deadline,
-        "has_dashboard": on(has_dashboard),
+        "page_type": s(page_type) if s(page_type) in db.PAGE_TYPES else "sections",
         "agenda_widget": on(agenda_widget),
         "tasks_widget": on(tasks_widget),
         "contacts_widget": on(contacts_widget),
@@ -488,7 +488,7 @@ def update_label(
     role: str | None = Form(None),
     page_fields: str = Form(""),
     deadline_date: str = Form(""),
-    has_dashboard: str = Form(""),
+    page_type: str = Form(""),
     agenda_widget: str = Form(""),
     tasks_widget: str = Form(""),
     contacts_widget: str = Form(""),
@@ -521,7 +521,7 @@ def update_label(
     or None` pattern; mirrored here."""
     new_name = (new_name or "").strip() or name
     icon = (icon or "").strip() or None
-    page = _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks_widget, contacts_widget,
+    page = _page_fields(page_fields, deadline_date, page_type, agenda_widget, tasks_widget, contacts_widget,
                         notebook_widget, sidebar_pin, widget_pin)
     # 2026-09-26: the edit form no longer sends a Role -- a label stays a
     # label and a project a project (Convert to project is its own
@@ -640,7 +640,7 @@ def create_label(
     role: str = Form("none"),
     page_fields: str = Form(""),
     deadline_date: str = Form(""),
-    has_dashboard: str = Form(""),
+    page_type: str = Form(""),
     agenda_widget: str = Form(""),
     tasks_widget: str = Form(""),
     contacts_widget: str = Form(""),
@@ -664,7 +664,7 @@ def create_label(
     _reject_reserved_label_name(new_name)
 
     icon = (icon or "").strip() or None
-    page = _page_fields(page_fields, deadline_date, has_dashboard, agenda_widget, tasks_widget, contacts_widget,
+    page = _page_fields(page_fields, deadline_date, page_type, agenda_widget, tasks_widget, contacts_widget,
                         notebook_widget, sidebar_pin, widget_pin)
 
     row = {

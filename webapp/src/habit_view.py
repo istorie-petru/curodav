@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from . import db, habit_heatmap, habit_schedule
+from . import clock, db, habit_heatmap, habit_schedule
 
 # A done/archived habit task stops being tracked -- same pair
 # routers/tasks.py's DONE_STATUSES names.
@@ -365,7 +365,7 @@ WEEK_START_KEY = "calendar_week_start"  # deps.WEEK_START_KEY (no import cycle)
 
 def habit_items(conn, today: date | None = None) -> list[dict]:
     """Every active habit, alphabetical (list_habit_tasks' own order)."""
-    today = today or date.today()
+    today = today or clock.today()
     pauses = db.list_habit_pauses(conn)
     week_start = db.get_app_meta(conn, WEEK_START_KEY) or "monday"
     return [
@@ -394,7 +394,7 @@ def habits_for_day(conn, d: date, today: date | None = None) -> list[dict]:
     `habit-c-*` accent colour instead of a third bespoke shape -- `date`
     stays its own key (not `today`) since `d` here can be a future day,
     unlike `habit_item`'s always-today `today`."""
-    today = today or date.today()
+    today = today or clock.today()
     iso = d.isoformat()
     pauses = db.list_habit_pauses(conn)
     out = []
@@ -474,7 +474,7 @@ def history(conn, task: dict, today: date | None = None, week_start: str = "mond
     row, the view modal): the year heatmap for a daily / fixed-days /
     avoid habit, or the week / month grid for a period habit, plus
     insights (2026-09-26: moved here from the view modal)."""
-    today = today or date.today()
+    today = today or clock.today()
     rows = db.list_task_completions(conn, task["uid"])
     entries = {r["due_date"]: r.get("value") or 0 for r in rows}
     out = {"heatmap": None, "periods": None, "insights": insights(rows, today)}
@@ -499,7 +499,7 @@ def insights(completions: list[dict], today: date | None = None, months: int = 1
     when the habit was done) and reads `completed_at` in the server's
     local time zone -- there's no per-user zone setting. Hidden (None)
     until at least 5 such check-ins exist."""
-    today = today or date.today()
+    today = today or clock.today()
     first = _shift_month(today.replace(day=1), -(months - 1))
     counts: dict[str, int] = {}
     hours = [0] * 24

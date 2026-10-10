@@ -316,24 +316,14 @@ class TestContactFormAvatarUploadAndFieldOrder:
         modal = contacts_router.contact_photo_modal("c1", _request("/contacts/c1/photo/modal"), conn=conn).body.decode()
         assert "/contacts/c1/photo/remove" in modal
 
-    def test_email_and_phone_come_right_after_the_photo_name_row(self, conn):
-        resp = contacts_router.new_contact_form(_request("/contacts/new"), conn=conn)
-        body = resp.body.decode()
-        row_pos = _index(body, 'class="photo-field-row"')
-        email_pos = _index(body, "<label>Email</label>")
-        phone_pos = _index(body, "<label>Phone</label>")
-        org_pos = _index(body, "<label>Organization</label>")
-        # Email/Phone sit directly after the photo+name row, before
-        # Organization and everything else.
-        assert row_pos < email_pos < org_pos
-        assert row_pos < phone_pos < org_pos
-
-
-
-
-
-
-
+    def test_contact_form_fields_follow_the_approved_order(self, conn):
+        body = contacts_router.new_contact_form(_request("/contacts/new"), conn=conn).body.decode()
+        order = ["photo-field-row", "<label>Pseudonym</label>", "<label>Honorary title</label>",
+                 "<label>Organization</label>", "<label>Role</label>", "<label>Phone</label>",
+                 "<label>Email</label>", "<label>Website</label>", "<label>Address</label>",
+                 "<label>Birthday", "<label>Social network</label>", "<label>Notes</label>"]
+        positions = [_index(body, marker) for marker in order]
+        assert positions == sorted(positions)
 
 
 class TestSubmissionUnaffectedByPickerUI:

@@ -42,7 +42,7 @@ class TestDefaults:
         assert cfg["widget_pin"] is False
         assert cfg["has_deadline"] is False
         assert cfg["deadline_date"] is None
-        assert cfg["has_dashboard"] is False
+        assert cfg["page_type"] == "sections"
         assert cfg["agenda_widget"] is True
         assert cfg["tasks_widget"] is True
         assert cfg["contacts_widget"] is True
@@ -52,7 +52,7 @@ class TestDefaults:
     def test_upsert_round_trips_module_fields(self, conn):
         db.upsert_label_config(conn, {
             "name": "Gym", "sidebar_pin": True, "widget_pin": 1, "has_deadline": 1,
-            "deadline_date": "2026-12-01", "has_dashboard": 0, "contacts_widget": "on",
+            "deadline_date": "2026-12-01", "page_type": "sections", "contacts_widget": "on",
             "agenda_widget": 0,
         })
         row = db.get_label_config(conn, "Gym")
@@ -82,7 +82,7 @@ class TestBackfill:
         assert [cfg[n]["label_group"] for n in cfg] == ["School", "School", "School", None, None]
         assert [cfg[n]["sidebar_pin"] for n in cfg] == [True, True, True, True, False]
         assert [cfg[n]["widget_pin"] for n in cfg] == [True, False, True, True, False]
-        assert [cfg[n]["has_dashboard"] for n in cfg] == [True, False, True, True, False]
+        assert [cfg[n]["page_type"] == "dashboard" for n in cfg] == [True, False, True, True, False]
         assert cfg["Thesis"]["has_deadline"] is True
         assert cfg["Thesis"]["deadline_date"] == "2027-06-30"
         # A project with no end date has no deadline.
@@ -110,7 +110,7 @@ class TestBackfill:
             "INSERT INTO dashboard_widgets (uid, type, label_name) VALUES ('w1', 'tasks', 'Reading')"
         )
         _rerun_backfill(conn)
-        assert db.effective_label_config(conn, "Reading")["has_dashboard"] is True
+        assert db.effective_label_config(conn, "Reading")["page_type"] == "dashboard"
 
     def test_runs_once(self, conn):
         _legacy(conn, "School", generate_space=1)
@@ -145,7 +145,7 @@ class TestLegacyWriteMirror:
     def test_making_a_space(self, conn):
         db.upsert_label_config(conn, {"name": "Home", "generate_space": 1})
         cfg = db.effective_label_config(conn, "Home")
-        assert (cfg["sidebar_pin"], cfg["widget_pin"], cfg["has_dashboard"]) == (True, True, True)
+        assert (cfg["sidebar_pin"], cfg["widget_pin"], cfg["page_type"] == "dashboard") == (True, True, True)
         assert cfg["label_group"] == "Home"
 
     def test_joining_and_leaving_a_space(self, conn):
@@ -167,7 +167,7 @@ class TestLegacyWriteMirror:
         db.upsert_label_config(conn, {"name": "Move", "is_project": 1, "start_date": "2026-10-01", "end_date": "2026-11-01"})
         cfg = db.effective_label_config(conn, "Move")
         assert cfg["has_deadline"] is True and cfg["deadline_date"] == "2026-11-01"
-        assert cfg["has_dashboard"] is True and cfg["widget_pin"] is True
+        assert cfg["page_type"] == "dashboard" and cfg["widget_pin"] is True
 
     def test_switching_project_off_keeps_the_deadline(self, conn):
         # Slice b: a deadline is a plain label field now, not project-only.
@@ -258,7 +258,7 @@ class TestSpacesToGroupsMigration:
         assert db.get_page_banner(conn, "group:Uni")["image_url"] == "https://example.com/u.jpg"
         assert db.get_page_banner(conn, "Uni") is not None  # the label keeps its copy
         uni = db.effective_label_config(conn, "Uni")
-        assert uni["generate_space"] is False and uni["has_dashboard"] is False
+        assert uni["generate_space"] is False and uni["page_type"] == "sections"
         assert uni["label_group"] == "Uni"
         assert db.effective_label_config(conn, "Maths")["parent_name"] is None
         # The group page won't re-seed default widgets on top of the moved ones.
