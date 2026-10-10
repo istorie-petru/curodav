@@ -118,3 +118,22 @@ def test_script_built_modals_have_a_footer():
         if builds_modal and "modal-footer" not in text and "CCModal.footer(" not in text:
             offenders.append(name)
     assert not offenders, f"A script-built modal needs a footer (CCModal.footer): {offenders}"
+
+
+def test_modal_input_rows_never_wrap():
+    css = re.sub(r"/\*.*?\*/", "", (STATIC_DIR / "style.css").read_text(encoding="utf-8"), flags=re.S)
+    rules = re.findall(r"([^{}]+)\{([^{}]*)\}", css)
+    wrapping = [sel.strip() for sel, body in rules if "flex-wrap:wrap" in body.replace(" ", "") and ".modal-body" in sel]
+    assert not wrapping, f"Modal rows must not wrap: {wrapping}"
+    nowrap = [sel for sel, body in rules if ".modal-body" in sel and "flex-wrap:nowrap" in body.replace(" ", "")]
+    assert nowrap and all(row in nowrap[0] for row in (".contact-multi-row", ".work-session-edit-fields", ".task-start-due-row"))
+
+
+def test_archive_button_lives_only_in_the_edit_footer():
+    offenders = []
+    for name, text in _templates():
+        if name in {"_modal_footer.html", "_icons_sprite.html"}:
+            continue
+        if re.search(r"""action="[^"]*/(un)?archive\b[^"]*"[^>]*>\s*<button[^>]*class="btn""", text):
+            offenders.append(name)
+    assert not offenders, f"Archive is an icon-only footer button (footer_archive_url): {offenders}"

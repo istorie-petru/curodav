@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_detail_cover.html" import detail_cover with context %}
 {% from "_label_pill.html" import label_pill with context %}
+{% from "_detail_section.html" import detail_section %}
 {% block title %}{{ group.name }}{% endblock %}
 {% block content %}
 {# A group's view modal (2026-09-26, Peter: groups get view + edit modals
@@ -19,7 +20,7 @@
     </div>
 </div>
 <div class="modal-body">
-<div class="detail-meta-panel">
+{% call detail_section('Details') %}
     <div class="detail-meta-grid">
         <div class="detail-meta-item">
             <span class="detail-meta-label">Labels</span>
@@ -36,7 +37,7 @@
         </div>
         {% endif %}
     </div>
-</div>
+{% endcall %}
 </div>
 {% set footer_back_label = 'Done' %}
 {% set footer_back_url = '/settings/groups' %}

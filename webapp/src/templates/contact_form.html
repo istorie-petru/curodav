@@ -47,6 +47,7 @@
 {% set footer_back_url = '/contacts' %}
 {% endif %}
 {% set footer_back_label = 'Cancel' %}
+{% if contact %}{% set footer_archive_url = '/contacts/' ~ contact.uid ~ '/archive' %}{% set footer_unarchive_url = '/contacts/' ~ contact.uid ~ '/unarchive' %}{% set footer_archived = contact.archived_at %}{% set footer_archive_change = 'contact' %}{% endif %}
 {% set footer_primary_form = 'contact-form' %}
 {% set footer_primary_label = 'Save' %}
 {% set footer_primary_icon = 'check-square' %}

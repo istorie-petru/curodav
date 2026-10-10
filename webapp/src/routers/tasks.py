@@ -1026,6 +1026,13 @@ def update_task(
     exclude_sunday: str = Form(""),
     contacts: list[str] = Form([]),
     contacts_present: str = Form(""),
+    work_sessions_present: str = Form(""),
+    ws_uid: list[str] = Form([]),
+    ws_title: list[str] = Form([]),
+    ws_hours: list[str] = Form([]),
+    ws_difficulty: list[str] = Form([]),
+    ws_start: list[str] = Form([]),
+    ws_end: list[str] = Form([]),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -1108,7 +1115,20 @@ def update_task(
         _save_habit_look(conn, row["uid"], habit_icon, habit_color)
     if contacts_present == "1" and isinstance(contacts, list):
         db.set_object_contacts(conn, "task", row["uid"], db.resolve_contact_entries(conn, contacts))
+    if work_sessions_present == "1":
+        db.sync_work_sessions(conn, row["uid"], _work_session_rows(ws_uid, ws_title, ws_hours, ws_difficulty, ws_start, ws_end))
     return respond(x_requested_with, "/tasks")
+
+
+def _work_session_rows(uids, titles, hours, difficulties, starts, ends) -> list[dict]:
+    """Zip the edit form's parallel ws_* arrays back into one dict per session row."""
+    columns = [list(c) for c in (uids, titles, hours, difficulties, starts, ends)]
+    rows = []
+    for uid, title, hrs, difficulty, start, end in zip(*columns):
+        rows.append(
+            {"uid": uid, "title": title, "hours": hrs, "difficulty": difficulty.lower(), "start": start, "end": end}
+        )
+    return rows
 
 
 _UPDATABLE_FIELDS = {"status", "due_at", "title"}
@@ -1474,44 +1494,6 @@ def remove_latest_work_allocation(
     row's "Remove latest session" kebab item posts through ccApi.post too."""
     db.remove_latest_work_allocation(conn, uid)
     return respond(x_requested_with, _safe_next(next) or f"/tasks/{uid}")
-
-
-@router.post("/{uid}/work-allocations/remove")
-def remove_work_allocation(uid: str, event_uid: str = Form(...), conn=Depends(get_db)):
-    """"Deleting a work allocation removes only that scheduled block -- not
-    the task." db.delete_work_allocation is delete_event under a name that
-    states that at the call site; `uid` (the task) isn't touched."""
-    db.delete_work_allocation(conn, event_uid)
-    return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
-
-
-@router.post("/{uid}/work-allocations/{event_uid}/details")
-def set_work_session_details(
-    uid: str,
-    event_uid: str,
-    title: str = Form(""),
-    hours_estimate: str = Form(""),
-    difficulty: str = Form(""),
-    conn=Depends(get_db),
-):
-    """Save one work session's own title, hours estimate and difficulty (the card's per-row check button)."""
-    db.update_work_session(conn, uid, event_uid, title=title, hours_estimate=hours_estimate, difficulty=difficulty)
-    return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
-
-
-@router.post("/{uid}/work-allocations/{event_uid}/set-times")
-def set_work_allocation_times(uid: str, event_uid: str, start_at: str = Form(""), end_at: str = Form(""), conn=Depends(get_db)):
-    """The Work sessions card's per-session picker (2026-08-17): give one
-    session its scheduled start/end right from the card instead of only by
-    drag. The shared datetime picker's hidden start_at/end_at inputs post
-    here (data-modal-keep-open refreshes the card in place). db.
-    set_work_allocation_times guards the same contract the drag endpoints
-    use -- the event must actually be one of this task's work allocations
-    and end_at must follow start_at -- and returns False (no-op) otherwise,
-    never an error page, so a cancelled/invalid Apply just leaves the
-    session untouched."""
-    db.set_work_allocation_times(conn, event_uid, start_at, end_at)
-    return RedirectResponse(url=f"/tasks/{uid}", status_code=303)
 
 
 # --------------------------------------------------------------------- #

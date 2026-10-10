@@ -589,7 +589,7 @@
 // native selects replaced by the custom dropdown; style.css, app.js and the notebook scripts changed.
 // v140 (2026-10-10): pill icons 1.2em, sidebar add-button fix, color panel shared by the block menu
 // and the inline tool, ":" icon picker; style.css, app.js and the notebook scripts changed.
-const CACHE_NAME = "cc-shell-v140";
+const CACHE_NAME = "cc-shell-v143";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

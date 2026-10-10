@@ -2,6 +2,7 @@
 {% extends "base.html" %}
 {% from "_label_pill.html" import label_pill with context %}
 {% from "_detail_cover.html" import detail_cover with context %}
+{% from "_detail_section.html" import detail_section %}
 {% block title %}{{ contact.full_name if contact else "Contact" }}{% endblock %}
 {% block content %}
 <!-- see event_form.html/task_detail.html for why this is wrapped -- opens
@@ -77,7 +78,7 @@
 </div>
 {% endif %}
 
-<div class="detail-meta-panel">
+{% call detail_section('Details') %}
     <div class="detail-meta-grid">
         {% for p in contact.phones %}
         <div class="detail-meta-item">
@@ -161,16 +162,13 @@
         </div>
         {% endif %}
     </div>
-    {% if contact.notes %}
-    <div class="detail-meta-description">
-        <span class="detail-meta-label">Notes</span>
-        <p>{{ contact.notes }}</p>
-    </div>
-    {% endif %}
     {% if not (contact.phones or contact.emails or contact.websites or contact.addresses or contact.social_profiles or contact.birthday or contact.tags or contact.notes) %}
     {% call empty_state('No other details yet', size='compact') %}<a href="/contacts/{{ contact.uid }}/edit" data-modal>Add some</a>{% endcall %}
     {% endif %}
-</div>
+{% endcall %}
+{% if contact.notes %}
+{% call detail_section('Notes') %}<p class="detail-text">{{ contact.notes }}</p>{% endcall %}
+{% endif %}
 </div>
 
 {% set footer_back_url = '/contacts' %}

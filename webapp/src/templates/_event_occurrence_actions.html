@@ -1,0 +1,31 @@
+{# Edit modal only: cancel, move or restore one occurrence of a recurring event. Needs event, occurrence_date, occurrence_override. #}
+{% from "_date_time_fields.html" import datetime_range with context %}
+<div class="field field-wide occurrence-actions">
+    <label>This occurrence</label>
+    <div class="occurrence-state">
+        <span class="detail-meta-label">{{ occurrence_date | relative_date }}</span>
+        {% if occurrence_override and occurrence_override.cancelled %}<span class="cell-tag tag-orange">Cancelled</span>
+        {% elif occurrence_override %}<span class="cell-tag tag-blue">Moved to {{ occurrence_override.start_at | relative_date }} {{ occurrence_override.start_at | fmt_time }}</span>{% endif %}
+    </div>
+    {% if occurrence_override %}
+    <form method="post" action="/events/{{ event.uid }}/occurrences/restore" data-cc-change="event" data-cc-action="restore">
+        <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
+        <button type="submit" class="btn ghost btn-sm">{{ icon('rotate-ccw', 'icon-sm') }} Restore to series</button>
+    </form>
+    {% else %}
+    <form method="post" action="/events/{{ event.uid }}/occurrences/cancel" class="form-inline" data-cc-change="event" data-cc-action="cancel">
+        <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
+        <button type="submit" class="btn ghost btn-sm">{{ icon('x-circle', 'icon-sm') }} Cancel this occurrence</button>
+    </form>
+    <details class="occurrence-move-details">
+        <summary class="btn ghost btn-sm occurrence-move-summary">{{ icon('move', 'icon-sm') }} Move this occurrence</summary>
+        <form method="post" action="/events/{{ event.uid }}/occurrences/move" class="field-grid occurrence-move-form" data-cc-change="event" data-cc-action="move">
+            <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
+            <div class="field field-wide">
+                {{ datetime_range('start_at', 'end_at', occurrence_date[:16], '', title='New start & end', required=true) }}
+            </div>
+            <button type="submit" class="btn primary btn-sm">Move</button>
+        </form>
+    </details>
+    {% endif %}
+</div>

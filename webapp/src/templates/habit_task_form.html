@@ -4,7 +4,7 @@
 {% block title %}{% if task %}Edit habit{% else %}New habit{% endif %}{% endblock %}
 {% block content %}
 {% from "_look_picker.html" import look_picker %}
-{% from "_task_work_allocations.html" import task_work_allocations_section with context %}
+{% from "_task_work_allocations.html" import work_sessions_edit with context %}
 <!-- Tasks > Habits' own create form (2026-08-08 direct feedback) -- a
      stripped-down, dedicated form, not task_form.html with fields
      pre-filled. A habit-labeled task doesn't have a due date, a start
@@ -166,22 +166,9 @@
             {{ textarea_input({'name': 'description', 'rows': '2'}, task.description if task else '') }}
         </div>
     </div>
-    {# 2026-09-26 (Peter, same day, reversed: "should be able to be work
-       scheduled -- return it to the edit modal") -- Work sessions was
-       removed from both habit modals earlier this same day, then asked
-       back for the edit modal specifically (not the view modal --
-       habit_task_detail.html's own "gone from a habit's view and edit
-       modals entirely" note is now half-stale; left as historical
-       context there rather than rewritten, since the view modal really
-       is still unchanged). Same task_work_allocations_section macro/
-       _work_allocation_context (routers/tasks.py) every other task's
-       edit form already uses -- a habit is still just a task underneath,
-       nothing here is habit-specific. #}
+    {% if task %}{{ work_sessions_edit(work_allocations, 'habit-task-form') }}{% endif %}
 </form>
 {% if task %}
-<div class="relations-section">
-    {{ task_work_allocations_section(task, work_allocations, work_hours) }}
-</div>
 {# Item 19 (2026-09-26, "Habits must be archivable") -- a DEDICATED
    button, not a Status field (this form deliberately has none, see this
    file's own top comment): posts straight to /tasks/{uid}/archive or
@@ -198,18 +185,6 @@
    routers/habits.py's Archived modal (see that route's own docstring),
    since an archived habit is gone from the page this edit form itself
    would normally be opened from. #}
-<div class="relations-section habit-archive-section">
-    {% if task.status == 'archived' %}
-    <p class="text-muted">This habit is archived -- it no longer appears on the Habits page.</p>
-    <form method="post" action="/tasks/{{ task.uid }}/unarchive" data-cc-change="task">
-        <button type="submit" class="btn ghost">{{ icon('archive', 'icon-sm') }} Restore habit</button>
-    </form>
-    {% else %}
-    <form method="post" action="/tasks/{{ task.uid }}/archive" data-cc-change="task">
-        <button type="submit" class="btn ghost">{{ icon('archive', 'icon-sm') }} Archive habit</button>
-    </form>
-    {% endif %}
-</div>
 {% endif %}
 </div>
 </div>
@@ -228,6 +203,10 @@
 {% set footer_delete_label = task.title %}
 {% set footer_delete_redirect = '/tasks' %}
 {% set footer_delete_cc_change = 'task' %}
+{% set footer_archive_url = '/tasks/' ~ task.uid ~ '/archive' %}
+{% set footer_unarchive_url = '/tasks/' ~ task.uid ~ '/unarchive' %}
+{% set footer_archived = task.status == 'archived' %}
+{% set footer_archive_change = 'task' %}
 {% endif %}
 {% set footer_primary_form = 'habit-task-form' %}
 {% set footer_primary_label = 'Save' %}

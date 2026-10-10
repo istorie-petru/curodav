@@ -428,7 +428,7 @@
       open(f);
       return;
     }
-    if (panel && !panel.hidden && !panel.contains(e.target) && !(openFor && openFor.contains(e.target))) close(false);
+    if (panel && !panel.hidden && e.target.isConnected && !panel.contains(e.target) && !(openFor && openFor.contains(e.target))) close(false);
   });
   document.addEventListener("focusin", (e) => {
     const f = e.target.closest && e.target.closest(".dtf");

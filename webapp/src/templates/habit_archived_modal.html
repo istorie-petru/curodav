@@ -25,7 +25,7 @@
     <li class="habit-pause-row">
         <span><strong>{{ h.title }}</strong></span>
         <form method="post" action="/tasks/{{ h.uid }}/unarchive" class="form-inline" data-cc-change="task">
-            <button type="submit" class="btn ghost btn-sm" aria-label="Restore habit: {{ h.title }}">{{ icon('archive', 'icon-sm') }} Restore</button>
+            <button type="submit" class="icon-btn" title="Restore" aria-label="Restore habit: {{ h.title }}">{{ icon('rotate-ccw', 'icon-sm') }}</button>
         </form>
     </li>
     {% endfor %}

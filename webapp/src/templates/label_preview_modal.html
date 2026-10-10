@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_detail_section.html" import detail_section %}
 {% from "_detail_cover.html" import detail_cover with context %}
 {% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill, widget_event_icon %}
 {% block title %}{{ label.name }}{% endblock %}
@@ -23,7 +24,7 @@
 </div>
 
 <div class="modal-body">
-<div class="detail-meta-panel">
+{% call detail_section('Details') %}
     <div class="detail-meta-grid">
         {% if label.label_group %}
         <div class="detail-meta-item">
@@ -55,14 +56,11 @@
             <span class="detail-meta-value">{{ contact_count }}</span>
         </div>
     </div>
-    {% if label.description %}
-    <div class="detail-meta-description">
-        <span class="detail-meta-label">Description</span>
-        <p>{{ label.description }}</p>
-    </div>
-    {% endif %}
-</div>
-<div class="card-title widget-header"><h2>{{ icon('calendar', 'icon-sm') }} Coming up</h2></div>
+{% endcall %}
+{% if label.description %}
+{% call detail_section('Description') %}<p class="detail-text">{{ label.description }}</p>{% endcall %}
+{% endif %}
+{% call detail_section('Coming up') %}
 {% if agenda_items %}
 <table>
     {% include "_label_agenda_rows.html" %}
@@ -70,6 +68,7 @@
 {% else %}
 {{ widget_empty('Nothing coming up for this label.') }}
 {% endif %}
+{% endcall %}
 </div>
 
 {# 2026-09-25 (UI audit L11): opened from a pill inside a task/event
@@ -84,11 +83,7 @@
 {% set footer_back_label = 'Done' %}
 {% endif %}
 {% set footer_extra_html %}<a class="btn ghost" href="/labels/{{ label.name|urlencode }}">{{ icon('external-link', 'icon-sm') }} Open page</a>
-{% if label.archived_at %}
-<form method="post" action="/labels/{{ label.name|urlencode }}/unarchive" class="form-inline"><button type="submit" class="btn ghost">{{ icon('archive', 'icon-sm') }} Unarchive</button></form>
-{% else %}
-<form method="post" action="/labels/{{ label.name|urlencode }}/archive" class="form-inline"{% if label_status != 'Pending Archiving' %} data-confirm-sheet="Archive {{ label.name }}?{% if label_status %} It still has open tasks or its deadline hasn't passed yet.{% else %} Everything tagged with it keeps the label.{% endif %}"{% endif %}><button type="submit" class="btn ghost">{{ icon('archive', 'icon-sm') }} Archive</button></form>
-{% endif %}{% endset %}
+{% endset %}
 {% set footer_primary_href = '/settings/labels/' ~ label.name ~ '/edit' %}
 {% set footer_primary_label = 'Edit' %}
 {% set footer_primary_icon = 'edit' %}

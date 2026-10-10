@@ -85,7 +85,7 @@
       const removeBtn = e.target.closest("[data-repeatable-remove]");
       if (removeBtn) {
         e.preventDefault();
-        const row = removeBtn.closest(".contact-multi-row");
+        const row = removeBtn.closest(".contact-multi-row, [data-repeatable-row]");
         if (row) row.remove();
       }
     });

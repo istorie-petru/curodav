@@ -149,10 +149,20 @@ class TestEventDetailOccurrenceCard:
         resp = calendar_router.event_detail(uid, _request(f"/events/{uid}"), conn=conn)
         assert "This occurrence" not in resp.body.decode()
 
+    def test_view_only_shows_the_occurrence_state(self, conn):
+        uid = _seed_recurring_event(conn)
+        calendar_router.cancel_occurrence(uid, occurrence_date="2026-09-08T10:00:00", conn=conn)
+        body = calendar_router.event_detail(
+            uid, _request(f"/events/{uid}"), occurrence_date="2026-09-08T10:00:00", conn=conn,
+        ).body.decode()
+        assert "This occurrence" in body and "Cancelled" in body
+        assert "Cancel this occurrence" not in body and "Restore to series" not in body
+        assert "/edit?occurrence_date=2026-09-08T10:00:00" in body
+
     def test_occurrence_date_on_a_non_overridden_slot_offers_cancel_and_move(self, conn):
         uid = _seed_recurring_event(conn)
-        resp = calendar_router.event_detail(
-            uid, _request(f"/events/{uid}"), occurrence_date="2026-09-08T10:00:00", conn=conn,
+        resp = calendar_router.edit_event_form(
+            uid, _request(f"/events/{uid}/edit"), occurrence_date="2026-09-08T10:00:00", conn=conn,
         )
         body = resp.body.decode()
         assert "This occurrence" in body
@@ -163,8 +173,8 @@ class TestEventDetailOccurrenceCard:
     def test_occurrence_date_on_a_cancelled_slot_offers_restore(self, conn):
         uid = _seed_recurring_event(conn)
         calendar_router.cancel_occurrence(uid, occurrence_date="2026-09-08T10:00:00", conn=conn)
-        resp = calendar_router.event_detail(
-            uid, _request(f"/events/{uid}"), occurrence_date="2026-09-08T10:00:00", conn=conn,
+        resp = calendar_router.edit_event_form(
+            uid, _request(f"/events/{uid}/edit"), occurrence_date="2026-09-08T10:00:00", conn=conn,
         )
         body = resp.body.decode()
         assert "Restore to series" in body

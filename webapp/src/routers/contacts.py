@@ -136,6 +136,15 @@ def _resolve_contact_label(tags: str, tags_labels: list[str], tags_labels_new: s
     return _tags_list(tags)
 
 
+def _with_contact_project(conn, tags: list[str], project, project_field) -> list[str]:
+    """A contact carries one label and one project. The Project dropdown is the only authority
+    over the project, so a project name typed or picked as the label is dropped."""
+    if not (isinstance(project_field, str) and project_field == "1"):
+        return tags
+    project = project if isinstance(project, str) else ""
+    return db.apply_project_choice(conn, tags, project)
+
+
 def _parse_birthday_field(birthday: str) -> str | None:
     """Contacts field parity slice 4 of 6 -- validates a create/edit form's
     raw `birthday` text against db.parse_contact_birthday's two accepted
@@ -257,7 +266,7 @@ def _contacts_list_context(
         "request": request,
         "active_tab": "contacts",
         "contacts": contacts,
-        "contact_groups": _group_contacts_by_label(contacts),
+        "contact_groups": _group_contacts_by_label(contacts, {cfg["name"] for cfg in db.list_project_labels(conn)}),
         "q": q or "",
         "contact_tags": all_tags,
         "contact_filter_items": filter_items,
@@ -271,7 +280,7 @@ def _contacts_list_context(
     }
 
 
-def _group_contacts_by_label(contacts: list[dict]) -> list[dict]:
+def _group_contacts_by_label(contacts: list[dict], project_names: set[str] | None = None) -> list[dict]:
     """2026-09-26 (Peter, confirmed via AskUserQuestion: "section headers
     per label... same pattern Settings > Projects already uses for its
     label groups") -- one `{"name": label, "contacts": [...]}` per label
@@ -283,10 +292,11 @@ def _group_contacts_by_label(contacts: list[dict]) -> list[dict]:
     not a fan-out; within a group/the ungrouped bucket, contacts keep
     whatever order `db.list_contacts` already returned them in (no new
     sort -- out of this slice's scope)."""
+    project_names = project_names or set()
     by_label: dict[str, list[dict]] = {}
     unlabeled: list[dict] = []
     for c in contacts:
-        tag = next(iter(c.get("tags") or []), None)
+        tag = next((t for t in (c.get("tags") or []) if t not in project_names), None)
         if tag:
             by_label.setdefault(tag, []).append(c)
         else:
@@ -337,6 +347,7 @@ def bulk_edit(
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
+    project_names = {cfg["name"] for cfg in db.list_project_labels(conn)}
     for uid in uids:
         row = db.get_contact(conn, uid)
         if row is None:
@@ -347,7 +358,9 @@ def bulk_edit(
         if remove_tag:
             tags.discard(remove_tag)
         if add_tag:
-            tags = {add_tag}  # a contact carries at most one label
+            # one label and one project: the new tag replaces the same kind
+            kind = add_tag in project_names
+            tags = {t for t in tags if (t in project_names) != kind} | {add_tag}
         row["tags"] = sorted(tags)
         row["updated_at"] = datetime.now(timezone.utc).isoformat()
         db.upsert_contact(conn, row)
@@ -430,6 +443,7 @@ def new_contact_form(request: Request, conn=Depends(get_db)):
             "draft_uid": draft_uid,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            **db.project_picker_context(conn),
             "phone_types": db.CONTACT_PHONE_TYPES,
             "email_types": db.CONTACT_EMAIL_TYPES,
             "website_types": db.CONTACT_WEBSITE_TYPES,
@@ -471,13 +485,15 @@ async def create_contact(
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     tags_labels_new: str = Form(""),
+    project: str = Form(""),
+    project_field: str = Form(""),
     notes: str = Form(""),
     photo: UploadFile | None = File(None),
     draft_uid: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
-    resolved_tags = _resolve_contact_label(tags, tags_labels, tags_labels_new)
+    resolved_tags = _with_contact_project(conn, _resolve_contact_label(tags, tags_labels, tags_labels_new), project, project_field)
     birthday_value = _parse_birthday_field(birthday)
     photo_result = await _read_photo(photo)
     photo_b64, photo_type = photo_result if photo_result else (None, None)
@@ -648,6 +664,7 @@ def edit_contact_form(uid: str, request: Request, conn=Depends(get_db)):
             "draft_uid": uid if contact and contact.get("is_draft") else "",
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            **db.project_picker_context(conn),
             "phone_types": db.CONTACT_PHONE_TYPES,
             "email_types": db.CONTACT_EMAIL_TYPES,
             "website_types": db.CONTACT_WEBSITE_TYPES,
@@ -685,13 +702,15 @@ async def update_contact(
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     tags_labels_new: str = Form(""),
+    project: str = Form(""),
+    project_field: str = Form(""),
     notes: str = Form(""),
     photo: UploadFile | None = File(None),
     remove_photo: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
-    resolved_tags = _resolve_contact_label(tags, tags_labels, tags_labels_new)
+    resolved_tags = _with_contact_project(conn, _resolve_contact_label(tags, tags_labels, tags_labels_new), project, project_field)
     birthday_value = _parse_birthday_field(birthday)
     existing = db.get_contact(conn, uid) or {}
     is_draft = bool(existing.get("is_draft"))

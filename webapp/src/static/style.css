@@ -1494,7 +1494,6 @@ label.seg-btn[hidden]{display:none;}
    first card) but this two-card layout does. margin-top isn't touched by
    that override, so putting the gap there instead survives both
    contexts. */
-.detail-section-gap{margin-top:var(--space-4);}
 @media (max-width:720px){
   .detail-meta-grid{grid-template-columns:1fr;}
 }
@@ -1526,16 +1525,6 @@ label.seg-btn[hidden]{display:none;}
    status color) via `--detail-accent`. Deliberately NOT .card: inside a
    modal .modal-body .card is flattened to borderless/chromeless on
    purpose, and these panels exist to carry exactly that chrome. */
-.detail-card{
-  --detail-accent:var(--border-strong);
-  background:var(--surface-container);
-  border:1px solid var(--separator);
-  border-left:4px solid var(--detail-accent);
-  border-radius:var(--radius-lg);
-  padding:var(--space-5);
-  box-shadow:var(--elevation-1);
-  margin-bottom:var(--space-4);
-}
 /* 2026-09-25 (UI audit F3): the hover lift (elevation-2 + translateY(-1px))
    and its transition are gone -- the 2026-09-24 card-model removal dropped
    hover on every surface with no exceptions, and this panel isn't
@@ -1543,7 +1532,6 @@ label.seg-btn[hidden]{display:none;}
 /* A card's own heading (the Subtasks card's h2) never wants the section-
    level h2 top margin -- same "first heading inside a card" rule .card
    already has. */
-.detail-card > h2{margin-top:0;}
 
 /* Meta panel (2026-09-03, direct feedback: "restyle the view modal to not
    use the colored bg card div to view the meta") -- replaces .detail-card
@@ -1579,9 +1567,6 @@ label.seg-btn[hidden]{display:none;}
    rules a `margin-top` gap apart, reading as a doubled/messy divider
    instead of one clean line -- border-top removed, margin-top alone
    provides the spacing. */
-.detail-plain-section{
-  margin-top:var(--space-4);
-}
 /* Crisp value typography -- the label stays the small gray caption above
    (.detail-meta-label); the value gets the larger, heavier, primary-color
    treatment so it reads as the answer to that label. inline-flex so a
@@ -2954,9 +2939,6 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    (margin-left:auto inside a flex header), and each session row's date+hour
    sits at the row's end (the .checklist-text's flex:1 pushes it right,
    before the remove button). */
-.work-sessions-head{display:flex; align-items:center; gap:6px;}
-.work-sessions-head .work-session-add{margin-left:auto;}
-.session-when{color:var(--fg-secondary); font-size:var(--text-sm); white-space:nowrap;}
 /* 2026-09-03 direct follow-up ("could we also rework the work sessions")
    -- a .work-session-row modifier (not a change to the shared
    .checklist-row itself, which contact_form.html/search.html/etc. also
@@ -2967,10 +2949,6 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    (they're not individually orderable/actionable the way sessions are).
    Extra gap before the delete X keeps it from reading glued to the
    time-picker trigger. */
-.work-session-row{padding:9px 0; gap:var(--space-3);}
-.work-session-row .checklist-text{display:flex; align-items:center; gap:6px; color:var(--fg-secondary); font-weight:var(--font-weight-bold);}
-.work-session-row .checklist-text .icon{color:var(--fg-tertiary); flex:none;}
-.work-session-row .checklist-delete{margin-left:2px;}
 
 /* contact_form.html's Phone/Email rows (Contacts field parity slice 2 of 6)
    -- a type picker + value input per row, reusing .checklist-delete for
@@ -8671,14 +8649,6 @@ td .dtf--compact:hover .dtf-input, td .dtf--compact .dtf-input:focus, td .dtf--c
 .habit-pause-form .dtf{width:190px;}
 /* Work sessions (_task_work_allocations.html, 2026-09-26): the session's
    Start/End date+time fields fill the row, the save button sits beside. */
-.session-when-form{display:flex; align-items:center; gap:var(--space-2); flex:1; min-width:0;}
-.session-when-form .dtr{flex:1; min-width:0;}
-.session-save-btn{flex:none; color:var(--accent);}
-.work-session-row{flex-wrap:wrap;}
-.session-details-form{display:flex; align-items:center; gap:var(--space-2); flex:1 1 100%; min-width:0;}
-.session-details-form input[type=text]{flex:1; min-width:0;}
-.session-details-form input[type=number]{flex:none; width:5.5rem;}
-.session-details-form .multiselect{flex:none; width:10rem;}
 
 /* Notebook's right sidebar (notebook_list.html's Filters tab,
    notebook_document.html's Outline tab, 2026-10-03 direct request) -- one
@@ -9121,3 +9091,31 @@ main.notebook-browse-page, main.notebook-browse-page *, main.notebook-browse-pag
 }
 
 .agenda-recurring{display:inline-flex; align-items:center; margin-right:var(--space-1); color:var(--fg-tertiary);}
+
+/* View modals: each part is a section with a small header and a body, separated by a hairline. */
+.detail-section + .detail-section{margin-top:var(--space-4); padding-top:var(--space-4); border-top:1px solid var(--separator);}
+.detail-section-head{display:flex; align-items:center; gap:var(--space-2); margin:0 0 var(--space-3); font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-tertiary);}
+.detail-text{margin:0; white-space:pre-wrap; color:var(--fg-primary); font-size:var(--text-base);}
+.detail-section-summary{display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap;}
+.detail-section-summary:not(:empty){margin-bottom:var(--space-3);}
+.work-session-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column;}
+.work-session-item{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:var(--space-2) var(--space-4); padding:var(--space-2) 0; border-top:1px solid var(--separator);}
+.work-session-item:first-child{border-top:none; padding-top:0;}
+.work-session-name{font-weight:var(--font-weight-bold); color:var(--fg-primary);}
+.work-session-meta{display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2) var(--space-3); color:var(--fg-secondary); font-size:var(--text-sm);}
+
+/* Edit modal: one framed block per work session, numbered by CSS. */
+.work-session-rows{display:flex; flex-direction:column; gap:var(--space-3); counter-reset:work-session;}
+.work-session-edit{counter-increment:work-session; display:flex; flex-direction:column; gap:var(--space-2); padding:var(--space-3); border:1px solid var(--border); border-radius:var(--radius-md);}
+.work-session-edit-head{display:flex; align-items:center; justify-content:space-between;}
+.work-session-edit-name::before{content:"Session " counter(work-session); font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary);}
+.work-session-edit-fields{display:flex; align-items:center; gap:var(--space-2);}
+.work-session-edit-fields input[type=text]{flex:1; min-width:0;}
+.work-session-edit-fields input[type=number]{flex:none; width:5.5rem;}
+.work-session-edit-fields .multiselect{flex:none; width:10rem;}
+.occurrence-actions{display:flex; flex-direction:column; align-items:flex-start; gap:var(--space-2); margin-top:var(--space-4);}
+.occurrence-state{display:flex; align-items:center; gap:var(--space-2);}
+
+/* Modal rows never wrap: boxes that share a row stay on it and shrink instead. */
+.modal-body :is(.contact-multi-row, .task-start-due-row, .work-session-edit-fields, .habit-pause-form, .calendar-new-form, .dtr-row, .field-label-row){flex-wrap:nowrap;}
+.modal-body :is(.contact-multi-row, .task-start-due-row, .work-session-edit-fields, .habit-pause-form, .calendar-new-form) > *{min-width:0;}

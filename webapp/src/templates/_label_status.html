@@ -31,10 +31,6 @@
     {% endif %}
     {% if label_archived_on %}
     <span class="label-archived-line">{{ icon('archive', 'icon-sm') }} Archived on {{ label_archived_on }}</span>
-    <span class="label-archived-sep" aria-hidden="true">&middot;</span>
-    <form method="post" action="/labels/{{ label.name|urlencode }}/unarchive" class="form-inline">
-        <button type="submit" class="btn ghost btn-sm">Unarchive</button>
-    </form>
     {% endif %}
 </div>
 {% endif %}

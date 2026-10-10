@@ -106,19 +106,19 @@ class TestDeadlineInfo:
 
 
 class TestLabelPageActions:
-    def test_header_has_edit_and_archive(self, conn):
+    def test_header_has_edit_and_no_archive_button(self, conn):
         db.upsert_label_config(conn, {"name": "Gym"})
         _task(conn, "t1", ["Gym"])
         body = _page(conn, "Gym").body.decode()
         # 2026-09-28 (direct request): Edit is icon-only now (no visible
         # "Edit label" text) -- title/aria-label carry the name instead.
         assert 'href="/settings/labels/Gym/edit" data-modal' in body and 'title="Edit label"' in body
-        assert 'action="/labels/Gym/archive"' in body
+        assert 'action="/labels/Gym/archive"' not in body
 
     def test_dashboard_page_header_has_them_too(self, conn):
         db.upsert_label_config(conn, {"name": "Gym", "page_type": "dashboard"})
         body = _page(conn, "Gym").body.decode()
-        assert 'title="Edit label"' in body and 'action="/labels/Gym/archive"' in body
+        assert 'title="Edit label"' in body and 'action="/labels/Gym/archive"' not in body
 
     def test_archived_plain_label_shows_archived_on_line(self, conn):
         db.upsert_label_config(conn, {"name": "Gym"})
@@ -127,7 +127,7 @@ class TestLabelPageActions:
         body = _page(conn, "Gym").body.decode()
         today = clock.today()
         assert f"Archived on {today.day} {today.strftime('%b')} {today.year}" in body
-        assert 'action="/labels/Gym/unarchive"' in body
+        assert "/unarchive" not in body
         assert 'action="/labels/Gym/archive"' not in body
 
     def test_archiving_a_usage_only_label_creates_its_config(self, conn):
@@ -392,21 +392,33 @@ class TestGroupsAndLabelsWidget:
     """2026-09-25 (audit flesh-out item 5): the Groups & Labels widget shows
     each pinned label's deadline state; group cards use the group's look."""
 
-    def test_list_rows_carry_deadline_state(self, conn):
-        soon = (date.today().toordinal() + 3)
-        db.upsert_label_config(conn, {"name": "Health", "widget_pin": 1, "has_deadline": 1,
-                                      "deadline_date": date.fromordinal(soon).isoformat(), "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Work", "widget_pin": 1, "created_at": _now()})
+    def test_list_rows_flag_tasks_due_this_month(self, conn):
+        today = clock.today()
+        for name in ("Health", "Work"):
+            db.upsert_label_config(conn, {"name": name, "widget_pin": 1, "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Health"],
+                              "due_at": today.isoformat(), "created_at": _now()})
+        db.upsert_task(conn, {"uid": "t2", "title": "t2", "description": "", "status": "active", "tags": ["Work"],
+                              "due_at": "2099-01-01", "created_at": _now()})
         data = dashboard_router._render_spaces_projects(conn, {"style": "list"})
-        by_name = {p["project"]["name"]: p["deadline"] for p in data["previews"]}
-        assert by_name["Health"]["state"] == "soon" and by_name["Health"]["color"] == "orange"
-        assert by_name["Work"] is None
+        by_name = {p["project"]["name"]: p["attention"] for p in data["previews"]}
+        assert by_name == {"Health": "soon", "Work": None}
 
-    def test_group_cards_use_the_group_style_and_label_cards_the_deadline(self, conn):
+    def test_attention_is_red_when_overdue_this_month(self):
+        today = clock.today()
+        tasks = [{"tags": ["A"], "status": "active", "due_at": today.isoformat()},
+                 {"tags": ["A"], "status": "done", "due_at": today.isoformat()}]
+        assert dashboard_router._label_attention(tasks, "A") == "soon"
+        tasks[0]["due_at"] = today.replace(day=1).isoformat()
+        expected = "overdue" if today.day > 1 else "soon"
+        assert dashboard_router._label_attention(tasks, "A") == expected
+        assert dashboard_router._label_attention(tasks, "B") is None
+
+    def test_group_cards_use_the_group_style(self, conn):
         _grouped(conn, "Family", "People")
         db.set_group_style(conn, "People", "users", "orange")
         db.upsert_label_config(conn, {"name": "Launch", "widget_pin": 1, "is_project": 1, "has_deadline": 1,
                                       "deadline_date": "2020-01-01", "created_at": _now()})
         cards = {c["name"]: c for c in dashboard_router._render_spaces_projects(conn, {"style": "cards"})["cards"]}
         assert (cards["People"]["icon"], cards["People"]["color"]) == ("users", "orange")
-        assert cards["Launch"]["deadline"]["state"] == "overdue"
+        assert "deadline" not in cards["Launch"]

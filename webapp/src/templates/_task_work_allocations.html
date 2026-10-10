@@ -1,94 +1,63 @@
-{# Work sessions card (1.4, plans/open-priority.md § Work allocations, §
-   Task & calendar semantics). A work session is a calendar Event linked to
-   this task (db.create_work_allocation) -- "Research — 6h may become Monday
-   16:00–18:00, Thursday 14:00–16:00, Tuesday 17:00–19:00 without creating
-   multiple tasks." The card's "+" button adds a session with NO date at all
-   (an unscheduled placeholder): the task then still appears on the planning
-   grids' "Unscheduled work" panel (the Timetable sub-view, /week, the
-   project Week Calendar) and that session is placed onto a real slot by
-   dragging it there -- so this card stays a plain-form fallback while the
-   grid stays the drag-and-drop surface for the same underlying operation.
-
-   Rows are the task's sessions in creation order ("Session 1", "Session 2",
-   ...). 2026-09-26: each row's when-area is the shared date/time range
-   (_date_time_fields.html -- Start and End, each a date + a time you can
-   type or pick) plus a check button that posts it to the session's own
-   set-times endpoint, so a session can be dated right here instead of
-   only by drag. The hidden start_at/end_at inputs inside the per-session <form>
-   carry the values. Shared by task_detail.html (header shown) and
-   task_form.html (same spot).
-
-   2026-09-03 direct follow-up ("could we also rework the work sessions...
-   without having the background color card div") -- the elevated
-   .detail-card wrapper task_detail.html/habit_task_detail.html used
-   around this whole section is gone (see .detail-plain-section, style.
-   css, the same "drop the tonal card" treatment the meta grid itself
-   already got); each row also picked up the .work-session-row modifier
-   (a little more vertical padding than the default .checklist-row
-   density, plus a small clock icon ahead of the "Session N" label) purely
-   for visual polish -- no new fields, no new endpoints, same set-times/
-   remove forms as before.
-
-   2026-09-03 immediate follow-up, same day ("merge the Work sessions and
-   the Scheduled work 1.0h / 1.0h, because it's redundant... don't have
-   two dividers between the two - none is enough") -- the separate
-   "Scheduled work" sub-heading (a .relations-group/.relations-group-head
-   pair, a leftover from when this card could hold more than one group --
-   see the old Relations card, removed 2026-08-29) is gone; its hours
-   readout is now just a second .checklist-progress pill on the "Work
-   sessions" heading itself, right after the count pill. That also
-   removes the extra divider: .relations-group's own border-top was
-   rendering (it's the *second* child of this macro's output, after the
-   <h2>, so its :first-child CSS exemption never actually applied) on top
-   of .detail-plain-section's own top border above the whole section --
-   two hairlines where the merged single heading now needs none. #}
+{# Work sessions. View modal: read-only list. Edit modal: rows inside the task form, saved with the form's Save
+   (routers/tasks.py update_task -> db.sync_work_sessions). Rows post as parallel ws_* arrays. #}
 {% from "_date_time_fields.html" import datetime_range with context %}
 {% from "_inputs.html" import text_input, number_input %}
-{% macro task_work_allocations_section(task, work_allocations, work_hours, show_header=true) %}
-{% if show_header %}
-<h2 class="work-sessions-head">
-    <span>Work sessions</span>
-    {% if work_allocations %}<span class="checklist-progress">{{ work_allocations|length }}</span>{% endif %}
-    {% if work_hours and work_hours.scheduled %}
-    <span class="checklist-progress">{{ "%.1f"|format(work_hours.completed) }}h / {{ "%.1f"|format(work_hours.scheduled) }}h</span>
-    {% endif %}
-    {% if work_estimate_hours %}<span class="checklist-progress">{{ "%g"|format(work_estimate_hours) }}h estimated</span>{% endif %}
-    {% if work_difficulty %}{% set _d = work_difficulties[work_difficulty] %}<span class="cell-tag cal-{{ _d.color }}" title="Average difficulty">{{ icon(_d.icon, 'icon-sm') }} {{ _d.name }}</span>{% endif %}
-    <form class="work-session-add" method="post" action="/tasks/{{ task.uid }}/work-allocations" data-modal-keep-open>
-        <button type="submit" class="icon-btn" title="Add a work session (date it later in the Timetable)" aria-label="Add a work session">{{ icon('plus', 'icon-sm') }}</button>
-    </form>
-</h2>
-{% endif %}
+{% from "_contact_type_picker.html" import contact_type_picker with context %}
+
+{% macro work_sessions_summary(work_allocations, work_hours) -%}
+{% if work_hours and work_hours.scheduled %}<span class="checklist-progress">{{ "%.1f"|format(work_hours.completed) }}h / {{ "%.1f"|format(work_hours.scheduled) }}h</span>{% endif %}
+{% if work_estimate_hours %}<span class="checklist-progress">{{ "%g"|format(work_estimate_hours) }}h estimated</span>{% endif %}
+{% if work_difficulty %}{% set _d = work_difficulties[work_difficulty] %}<span class="cell-tag cal-{{ _d.color }}" title="Average difficulty">{{ icon(_d.icon, 'icon-sm') }} {{ _d.name }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro work_sessions_view(work_allocations, work_hours) %}
+<div class="detail-section-summary">{{ work_sessions_summary(work_allocations, work_hours) }}</div>
 {% if work_allocations %}
-<div class="checklist">
+<ol class="work-session-list">
     {% for wa in work_allocations %}
-    <div class="checklist-row work-session-row">
-        {% set _form_id = 'session-details-' ~ wa.uid %}
-        <form class="form-inline session-details-form" id="{{ _form_id }}" method="post" action="/tasks/{{ task.uid }}/work-allocations/{{ wa.uid }}/details" data-modal-keep-open>
-            {{ text_input({'name': 'title', 'value': wa.title, 'aria-label': 'Session title'}) }}
-            {{ number_input({'name': 'hours_estimate', 'value': (wa.hours_estimate if wa.hours_estimate is not none else ''), 'min': '0', 'step': '0.25', 'aria-label': 'Estimated hours'}) }}
-            {% set ms_name = 'difficulty' %}{% set ms_label = 'Difficulty' %}{% set ms_mode = 'single' %}
-            {% set ms_items = [] %}
-            {% for key, d in work_difficulties.items() %}{% set _ = ms_items.append({'uid': key, 'name': d.name, 'color': d.color, 'icon': d.icon}) %}{% endfor %}
-            {% set ms_selected = wa.difficulty or 'moderate' %}{% set ms_form_id = _form_id %}{% set ms_bare = true %}
-            {% include "_widget_list_multiselect.html" %}
-            <button type="submit" class="icon-btn session-save-btn" title="Save session details" aria-label="Save session details">{{ icon('check-circle', 'icon-sm') }}</button>
-        </form>
-        <form class="form-inline session-when-form" method="post" action="/tasks/{{ task.uid }}/work-allocations/{{ wa.uid }}/set-times" data-modal-keep-open>
-            {# The shared date/time range dates this session; the check
-               button posts start_at/end_at to the set-times endpoint and
-               data-modal-keep-open refreshes the card in place. #}
-            {{ datetime_range('start_at', 'end_at', wa.start_at or '', wa.end_at or '', title='', compact=true) }}
-            <button type="submit" class="icon-btn session-save-btn" title="Save session time" aria-label="Save session time">{{ icon('check-circle', 'icon-sm') }}</button>
-        </form>
-        <form class="form-inline" method="post" action="/tasks/{{ task.uid }}/work-allocations/remove" data-modal-keep-open>
-            <input type="hidden" name="event_uid" value="{{ wa.uid }}">
-            <button type="submit" class="checklist-delete" title="Remove work session">{{ icon('x') }}</button>
-        </form>
-    </div>
+    <li class="work-session-item">
+        <span class="work-session-name">{{ wa.title or ('Session ' ~ loop.index) }}</span>
+        <span class="work-session-meta">
+            {% if wa.hours_estimate is not none %}<span>{{ "%g"|format(wa.hours_estimate) }}h</span>{% endif %}
+            {% set _d = work_difficulties[wa.difficulty or 'moderate'] %}<span class="cell-tag cal-{{ _d.color }}">{{ icon(_d.icon, 'icon-sm') }} {{ _d.name }}</span>
+            <span class="work-session-when">{% if wa.start_at %}{{ wa.start_at | relative_date }}, {{ wa.start_at | fmt_time }} to {{ wa.end_at | fmt_time }}{% else %}Unscheduled{% endif %}</span>
+        </span>
+    </li>
     {% endfor %}
-</div>
+</ol>
 {% else %}
-<div class="empty-state empty-state-compact">No work sessions yet. Add one with the + button, then drag it onto a slot in the Planner.</div>
+<div class="empty-state empty-state-compact">No work sessions</div>
 {% endif %}
+{% endmacro %}
+
+{% macro _session_row(wa, form_id, key) %}
+<div class="work-session-edit" data-repeatable-row>
+    <div class="work-session-edit-head">
+        <span class="work-session-edit-name"></span>
+        <button type="button" class="checklist-delete" data-repeatable-remove title="Remove work session" aria-label="Remove work session">{{ icon('x') }}</button>
+    </div>
+    <input type="hidden" name="ws_uid" value="{{ wa.uid if wa else '' }}">
+    <div class="work-session-edit-fields">
+        {{ text_input({'name': 'ws_title', 'value': (wa.title if wa else ''), 'aria-label': 'Session title'}) }}
+        {{ number_input({'name': 'ws_hours', 'value': (wa.hours_estimate if wa and wa.hours_estimate is not none else ''), 'min': '0', 'step': '0.25', 'aria-label': 'Estimated hours'}) }}
+        {% set _names = work_difficulties.values() | map(attribute='name') | list %}
+        {% set _cur = work_difficulties[(wa.difficulty if wa else None) or 'moderate'].name %}
+        {{ contact_type_picker('ws_difficulty', _names, _cur, key, '', form_id) }}
+    </div>
+    {{ datetime_range('ws_start', 'ws_end', (wa.start_at or '') if wa else '', (wa.end_at or '') if wa else '', title='', compact=true) }}
+</div>
+{% endmacro %}
+
+{% macro work_sessions_edit(work_allocations, form_id) %}
+<div class="field field-wide" data-repeatable-rows-scope>
+    <input type="hidden" name="work_sessions_present" value="1">
+    <div class="field-label-row">
+        <label>Work sessions</label>
+        <button type="button" class="icon-btn" data-repeatable-add="work-session-rows" data-repeatable-template="work-session-template" title="Add work session" aria-label="Add work session">{{ icon('plus', 'icon-sm') }}</button>
+    </div>
+    <div id="work-session-rows" class="work-session-rows">
+        {% for wa in work_allocations %}{{ _session_row(wa, form_id, loop.index) }}{% endfor %}
+    </div>
+    <template id="work-session-template">{{ _session_row(none, form_id, 'tmpl') }}</template>
+</div>
 {% endmacro %}

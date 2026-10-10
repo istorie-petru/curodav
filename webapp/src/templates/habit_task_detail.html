@@ -1,4 +1,5 @@
 {% from "_empty_state.html" import empty_state %}
+{% from "_detail_section.html" import detail_section %}
 {% extends "base.html" %}
 {% from "_habit_heatmap.html" import heatmap %}
 {% from "_habit_history.html" import period_grid %}
@@ -52,7 +53,7 @@
 </div>
 
 <div class="modal-body">
-<div class="detail-meta-panel">
+{% call detail_section('Details') %}
     {# 2026-09-25 (UI audit H-11): `habit-stats-grid` keeps these short
        stats three to a row on phones (the generic grid drops to one
        column <=720px, so six stats filled the first screen), and the
@@ -100,13 +101,10 @@
         </div>
         {% endif %}
     </div>
-    {% if task.description %}
-    <div class="detail-meta-description">
-        <span class="detail-meta-label">Description</span>
-        <p>{{ task.description }}</p>
-    </div>
-    {% endif %}
-</div>
+{% endcall %}
+{% if task.description %}
+{% call detail_section('Description') %}<p class="detail-text">{{ task.description }}</p>{% endcall %}
+{% endif %}
 
 {# Habits H3 (2026-09-24): every day control below (month calendar, log
    form) is a keep-open modal form (modal.js re-renders this modal in place; closing it refreshes the
@@ -125,13 +123,15 @@
    12 months as a grid. The month calendar and the insights are gone from
    this modal (insights: Habits page, expandable row). The habit's colour
    paints either (habit-c-*). #}
-<div class="detail-plain-section habit-year-heatmap{% if habit_look.color %} habit-c-{{ habit_look.color }}{% endif %}">
+{% call detail_section('History') %}
+<div class="habit-year-heatmap{% if habit_look.color %} habit-c-{{ habit_look.color }}{% endif %}">
     {% if habit_periods %}
     {{ period_grid(habit_periods) }}
     {% else %}
     {{ heatmap(task.uid, completion_weeks, action_prefix='/tasks/' ~ task.uid ~ '/completion', extra_class='heatmap-wide' ~ (' heatmap-avoid' if task.habit_kind == 'avoid' else ''), interactive=true, form_attrs=_keep, amount=_amount) }}
     {% endif %}
 </div>
+{% endcall %}
 
 {# 2026-09-26 (Peter): pausing (vacation) moved out of this modal into
    the Habits page header's Pauses modal (habit_pauses.html). The
@@ -140,13 +140,13 @@
    logged from the heatmap or the Habits page strip (a phone doesn't log
    past days). Notes already logged still list. #}
 {% if habit_notes %}
-<section class="detail-plain-section habit-notes-section" aria-label="Notes">
-    <ul class="habit-notes">
-        {% for n in habit_notes %}
-        <li><span class="habit-note-date">{{ n.iso|relative_date }}</span> <span class="habit-note-text">{{ n.note }}</span></li>
-        {% endfor %}
-    </ul>
-</section>
+{% call detail_section('Notes') %}
+<ul class="habit-notes">
+    {% for n in habit_notes %}
+    <li><span class="habit-note-date">{{ n.iso|relative_date }}</span> <span class="habit-note-text">{{ n.note }}</span></li>
+    {% endfor %}
+</ul>
+{% endcall %}
 {% endif %}
 
 {# 2026-09-26 (Peter): Work sessions is gone from a habit's VIEW modal

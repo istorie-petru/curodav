@@ -267,13 +267,13 @@ class TestFmtTimeFilterInWorkSessionsCard:
         with db.connect(db_path) as c:
             _make_task(c, "t1", title="Write report")
             db.create_work_allocation(c, "t1", "2026-08-17T14:00:00", "2026-08-17T16:00:00")
-            resp = tasks_router.task_detail("t1", _request_with_app("/tasks/t1", db_path), conn=c)
-        body = resp.body.decode()
-        # 2026-09-26: the date/time fields render the time as text.
-        assert 'data-dtf-12h=""' in body  # 24h is the default, no 12h flag
-        assert 'value="14:00"' in body
-        assert 'value="2026-08-17T14:00:00"' in body
-        assert 'value="2026-08-17T16:00:00"' in body
+            view = tasks_router.task_detail("t1", _request_with_app("/tasks/t1", db_path), conn=c).body.decode()
+            form = tasks_router.edit_task_form("t1", _request_with_app("/tasks/t1/edit", db_path), conn=c).body.decode()
+        assert "14:00 to 16:00" in view
+        assert 'data-dtf-12h=""' in form  # 24h is the default, no 12h flag
+        assert 'value="14:00"' in form
+        assert 'value="2026-08-17T14:00:00"' in form
+        assert 'value="2026-08-17T16:00:00"' in form
 
     def test_session_respects_12h_when_set(self, tmp_path):
         db_path = tmp_path / "cache.sqlite"
@@ -281,11 +281,11 @@ class TestFmtTimeFilterInWorkSessionsCard:
             db.set_app_meta(c, deps.TIME_FORMAT_KEY, "12h")
             _make_task(c, "t1", title="Write report")
             db.create_work_allocation(c, "t1", "2026-08-17T14:00:00", "2026-08-17T16:00:00")
-            resp = tasks_router.task_detail("t1", _request_with_app("/tasks/t1", db_path), conn=c)
-        body = resp.body.decode()
-        assert 'data-dtf-12h="1"' in body
-        assert 'value="2:00 PM"' in body
-        assert 'value="2026-08-17T14:00:00"' in body
+            view = tasks_router.task_detail("t1", _request_with_app("/tasks/t1", db_path), conn=c).body.decode()
+            form = tasks_router.edit_task_form("t1", _request_with_app("/tasks/t1/edit", db_path), conn=c).body.decode()
+        assert "2:00 PM to 4:00 PM" in view
+        assert 'data-dtf-12h="1"' in form
+        assert 'value="2:00 PM"' in form
 
     def test_task_edit_form_also_respects_12h(self, tmp_path):
         db_path = tmp_path / "cache.sqlite"

@@ -1,0 +1,7 @@
+{# View-modal section: a small header that says what the body tells, then the body. View modals only show information. #}
+{% macro detail_section(title, count=none) -%}
+<section class="detail-section">
+    <h2 class="detail-section-head"><span>{{ title }}</span>{% if count is not none %}<span class="checklist-progress">{{ count }}</span>{% endif %}</h2>
+    <div class="detail-section-body">{{ caller() }}</div>
+</section>
+{%- endmacro %}

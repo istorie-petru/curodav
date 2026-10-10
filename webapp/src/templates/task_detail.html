@@ -1,6 +1,7 @@
 {% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
-{% from "_task_work_allocations.html" import task_work_allocations_section with context %}
+{% from "_task_work_allocations.html" import work_sessions_view with context %}
+{% from "_detail_section.html" import detail_section %}
 {% from "_label_pill.html" import label_pill with context %}
 {% from "_detail_cover.html" import detail_cover with context %}
 {% block title %}{{ task.title if task else "Task" }}{% endblock %}
@@ -75,7 +76,7 @@
 </div>
 
 <div class="modal-body">
-<div class="detail-meta-panel">
+{% call detail_section('Details') %}
     <div class="detail-meta-grid">
         <div class="detail-meta-item">
             <span class="detail-meta-label">Status</span>
@@ -131,30 +132,11 @@
         </div>
         {% endif %}
     </div>
-    {% if task.description %}
-    <div class="detail-meta-description">
-        <span class="detail-meta-label">Description</span>
-        <p>{{ task.description }}</p>
-    </div>
-    {% endif %}
-</div>
-
-     <!-- 2026-08-29 (STATE.md backlog item 4, direct request): the
-          Relations card (event<->task associative links, "Related
-          events") that used to render here is fully removed -- not just
-          hidden behind the old Settings > Appearance toggle. Work
-          allocations (event_task_relations rows with is_work_allocation=1)
-          are a distinct feature and are untouched -- see
-          _task_work_allocations.html. -->
-     <!-- 2026-09-03 direct follow-up ("could we also rework the work
-          sessions... without having the background color card div") --
-          was `.detail-card detail-section-gap` (the elevated tonal card);
-          now `.detail-plain-section` (style.css), the same "no background
-          card" treatment the meta grid got earlier the same day. -->
-     <div class="detail-plain-section">
-    {{ task_work_allocations_section(task, work_allocations, work_hours) }}
-</div>
-
+{% endcall %}
+{% if task.description %}
+{% call detail_section('Description') %}<p class="detail-text">{{ task.description }}</p>{% endcall %}
+{% endif %}
+{% call detail_section('Work sessions', work_allocations|length) %}{{ work_sessions_view(work_allocations, work_hours) }}{% endcall %}
 </div>
 
 {% set footer_back_url = '/tasks' %}

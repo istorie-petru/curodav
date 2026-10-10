@@ -4,6 +4,16 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.9.2]
+
+- View modals are read-only: every part is a header with its information below it, no card styling and no editing. Event occurrences are cancelled, moved or restored from the event's edit modal.
+- Work sessions are rows in the edit modal (title, hours, difficulty, start and end), saved with the form's Save; the view modal only lists them.
+- Archive and Restore are one icon-only button in the edit modal's footer, and nowhere else.
+- A contact carries one label and one project; contacts are grouped by label.
+- Groups & Labels widget: no deadline, no progress bar; one "Attention needed" pill when a task is due this month.
+- Boxes that share a row in a modal never wrap.
+- The date picker stays open when you change month.
+
 ## [3.9.1]
 
 - The event form's Format dropdown (In person, Online, None) is visible again, with Location or Meeting URL beside it.

@@ -207,13 +207,13 @@ class TestDetailCardAndMetaGrid:
     def test_event_card_has_calendar_accent(self, conn):
         _seed_event(conn, "e1")
         body = calendar_router.event_detail("e1", _request("/events/e1"), conn=conn).body.decode()
-        assert 'class="detail-meta-panel"' in body
+        assert 'class="detail-section"' in body
         assert 'class="detail-meta-value"' in body
 
     def test_task_card_has_status_accent(self, conn):
         _seed_task(conn, "t1", status="in_progress")
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
-        assert 'class="detail-meta-panel"' in body
+        assert 'class="detail-section"' in body
         assert 'class="detail-meta-value"' in body
 
     def test_contact_uses_the_shared_meta_grid_not_the_old_table(self, conn):
@@ -229,27 +229,25 @@ class TestDetailCardAndMetaGrid:
             addresses=[{"type": "Other", "street": "1 St"}],
         )
         body = contacts_router.contact_detail("c1", _request("/contacts/c1"), conn=conn).body.decode()
-        assert 'class="detail-meta-panel"' in body
+        assert 'class="detail-section"' in body
         assert 'class="detail-meta-grid"' in body
         assert 'class="detail-meta-value"' in body
         assert '<table class="detail-kv">' not in body
 
-    def test_task_page_has_no_detail_card_left(self, conn):
-        # 2026-08-29 (STATE.md backlog item 4, direct request): the
-        # Relations card is fully removed -- this test used to assert
-        # meta + Relations + Work sessions (three detail cards), then just
-        # meta + Work sessions after that (1.4, plans/open-priority.md §
-        # Work allocations). 2026-09-03: the meta grid moved off
-        # .detail-card onto .detail-meta-panel, and the same day Work
-        # sessions moved onto .detail-plain-section ("could we also rework
-        # the work sessions... without having the background color card
-        # div") -- so the task detail page now has zero real .detail-cards
-        # left at all.
+    def test_task_page_is_header_and_body_sections_only(self, conn):
         _seed_task(conn, "t1", tags=["Work"])
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
-        assert 'class="detail-meta-panel"' in body
-        assert 'class="detail-plain-section"' in body
-        assert body.count('class="detail-card') == 0
+        assert 'class="detail-section-head"' in body
+        assert 'class="detail-section-body"' in body
+        assert 'class="detail-card' not in body
+
+    def test_task_view_work_sessions_are_read_only(self, conn):
+        _seed_task(conn, "t1")
+        db.create_work_allocation(conn, "t1", "2026-08-17T16:00:00", "2026-08-17T18:00:00")
+        body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
+        modal = body[body.index('class="modal-body"'):body.index('class="modal-footer"')]
+        assert "Work sessions" in modal
+        assert "<input" not in modal and "<form" not in modal and "<button" not in modal
 
 
 class TestFooterActions:

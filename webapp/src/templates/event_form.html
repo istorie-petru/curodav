@@ -38,6 +38,7 @@
 <form method="post" id="event-form" action="{% if event %}/events/{{ event.uid }}{% else %}/events{% endif %}" data-cc-change="event" data-cc-action="{% if event %}edit{% else %}create{% endif %}">
     {% include "_event_form_fields.html" %}
 </form>
+{% if event and occurrence_date and event.recurrence %}{% include "_event_occurrence_actions.html" %}{% endif %}
 </div>
 <!-- 2026-08-29 (STATE.md backlog item 4, direct request): the Relations
      card/picker that used to render here (event_relations_section) is
@@ -51,7 +52,7 @@
      the modal's X is the way to fully close. A brand-new event has no
      view to return to, so its Cancel is still a plain data-modal-cancel
      close. -->
-{% set footer_back_url = '/events/' ~ event.uid %}
+{% set footer_back_url = '/events/' ~ event.uid ~ ('?occurrence_date=' ~ occurrence_date if occurrence_date and event.recurrence else '') %}
 {% set footer_back_mode = 'modal' %}
 {% else %}
 {% set footer_back_url = '/calendar' %}

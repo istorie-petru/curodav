@@ -2705,6 +2705,33 @@ def update_work_session(
     return True
 
 
+def sync_work_sessions(conn: sqlite3.Connection, task_uid: str, rows: list[dict[str, Any]]) -> None:
+    """Make the task's work sessions match the edit form's rows.
+
+    Each row is {uid, title, hours, difficulty, start, end}. A blank uid is a
+    new session; a stored session missing from `rows` is deleted. A blank
+    start and end leaves the session undated; a half-filled or inverted pair
+    leaves its current times alone."""
+    kept = {r["uid"] for r in rows if r.get("uid")}
+    stored = {wa["uid"]: wa for wa in list_work_allocations_for_task(conn, task_uid)}
+    for uid in stored:
+        if uid not in kept:
+            delete_work_allocation(conn, uid)
+    for row in rows:
+        uid = row.get("uid") or ""
+        if uid not in stored:
+            uid = create_work_allocation(conn, task_uid)
+            stored[uid] = {"start_at": None}
+        update_work_session(
+            conn, task_uid, uid, title=row.get("title", ""), hours_estimate=row.get("hours", ""), difficulty=row.get("difficulty")
+        )
+        start, end = row.get("start") or "", row.get("end") or ""
+        if start and end:
+            set_work_allocation_times(conn, uid, start, end)
+        elif not start and not end and stored[uid].get("start_at"):
+            unschedule_work_allocation(conn, uid)
+
+
 def work_allocation_task_uid(conn: sqlite3.Connection, event_uid: str) -> str | None:
     """If `event_uid` is a work-allocation event, its task's uid; otherwise
     None. Used to redirect a title edit on the event back onto the task --

@@ -69,7 +69,8 @@
                     reaches the Address rows' wider trigger via ancestry
                     alone, same as `.field-wide .contact-multi-row
                     .contact-type-select` does for every other row). #}
-{% macro contact_type_picker(field_name, options, selected, row_key, extra_class='') %}
+{% macro contact_type_picker(field_name, options, selected, row_key, extra_class='', form_id='') %}
+{% set _form = form_id or ms_form_id %}
 {% set proxy_id = field_name ~ '-proxy-' ~ row_key %}
 <div class="multiselect widget-list-multiselect contact-type-select {{ extra_class }}" data-ms data-ms-mode="single" data-ms-label="{{ field_name | replace('_', ' ') }}">
     <button type="button" class="multiselect-trigger ms-trigger" aria-haspopup="true" aria-expanded="false">
@@ -79,11 +80,11 @@
     <div class="multiselect-panel ms-panel">
         {% for t in options %}
         <label class="multiselect-option">
-            {{ radio_input({'name': (field_name) ~ '__' ~ (row_key), 'value': t, 'class': 'contact-type-radio', 'data-proxy-name': field_name, 'data-proxy-target': proxy_id, 'form': ms_form_id, 'checked': (true if (t == selected) else false)}) }}
+            {{ radio_input({'name': (field_name) ~ '__' ~ (row_key), 'value': t, 'class': 'contact-type-radio', 'data-proxy-name': field_name, 'data-proxy-target': proxy_id, 'form': _form, 'checked': (true if (t == selected) else false)}) }}
             <span>{{ t }}</span>
         </label>
         {% endfor %}
     </div>
 </div>
-<input type="hidden" id="{{ proxy_id }}" name="{{ field_name }}" value="{{ selected }}" class="contact-type-proxy" form="{{ ms_form_id }}">
+<input type="hidden" id="{{ proxy_id }}" name="{{ field_name }}" value="{{ selected }}" class="contact-type-proxy" form="{{ _form }}">
 {% endmacro %}

@@ -317,14 +317,17 @@
         {% set ms_name = 'tags_labels' %}
         {% set ms_icon = 'tag' %}
         {% set ms_label = 'Label' %}
-        {% set ms_items = [{'uid': '__no_label__', 'name': 'No label'}] + tag_name_items %}
+        {% set ms_items = [{'uid': '__no_label__', 'name': 'No label'}] + (tag_name_items | rejectattr('uid', 'in', project_names | default([])) | list) %}
         {# 2026-09-25 (UI audit L1): prefill_tags = the label page quick-add was opened from. #}
-        {% set ms_selected = (contact.tags[0] if contact.tags else '__no_label__') if contact else ((prefill_tags or []) | first | default('__no_label__')) %}
+        {% set _labels = (contact.tags or []) | reject('in', project_names | default([])) | list if contact else [] %}
+        {% set ms_selected = (_labels[0] if _labels else '__no_label__') if contact else ((prefill_tags or []) | first | default('__no_label__')) %}
         {% set ms_mode = 'single' %}
         {% set ms_allow_new = true %}
         {% set ms_pill = true %}
         {% include "_widget_list_multiselect.html" %}
     </div>
+    {% set pf_tags = contact.tags if contact else (prefill_tags or []) %}{% set pf_form_id = 'contact-form' %}
+    {% include "_project_field.html" %}
     <div class="field field-wide">
         <label>Notes</label>
         {{ textarea_input({'name': 'notes', 'rows': '3'}, contact.notes if contact else '') }}

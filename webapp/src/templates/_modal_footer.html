@@ -30,6 +30,14 @@
      footer_delete_mode     -- "undo" (data-delete-undo) or "confirm"
                                (data-confirm-sheet); default "undo"
      footer_delete_label    -- undo label / confirm-sheet message
+     footer_archive_url     -- POST target of the edit modal's icon-only Archive
+                               button (the only place Archive lives in a modal);
+                               set footer_archived to swap it for Restore, with
+                               footer_unarchive_url as its target
+     footer_archived        -- true when the object is archived now
+     footer_unarchive_url   -- POST target of Restore
+     footer_archive_confirm -- optional confirm-sheet message before archiving
+     footer_archive_change  -- optional data-cc-change entity for the form
 footer_delete_redirect -- data-delete-undo-redirect (undo mode only)
       footer_delete_cc_change -- when set (e.g. "task"), the delete form
                                 (both modes) opts into the async-CRUD
@@ -120,6 +128,11 @@ footer_delete_redirect -- data-delete-undo-redirect (undo mode only)
     <button type="submit" class="detail-delete-link">{{ icon('trash', 'icon-sm') }} Delete</button>
 </form>
 {% endif %}
+{% endif %}
+{% if footer_archive_url %}
+<form method="post" action="{{ footer_unarchive_url if footer_archived else footer_archive_url }}"{% if footer_archive_confirm and not footer_archived %} data-confirm-sheet="{{ footer_archive_confirm }}"{% endif %}{% if footer_archive_change %} data-cc-change="{{ footer_archive_change }}"{% endif %}>
+    <button type="submit" class="icon-btn" title="{{ 'Restore' if footer_archived else 'Archive' }}" aria-label="{{ 'Restore' if footer_archived else 'Archive' }}">{{ icon('rotate-ccw' if footer_archived else 'archive', 'icon-sm') }}</button>
+</form>
 {% endif %}
 {% if footer_extra_html %}{{ footer_extra_html|safe }}{% endif %}
 {% if footer_primary_label %}

@@ -123,7 +123,7 @@ class TestHabitTaskEditModal:
         _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
         resp = tasks_router.edit_task_form("h1", _request("/tasks/h1/edit"), conn=conn)
         body = resp.body.decode()
-        assert "/tasks/h1/work-allocations" in body
+        assert "work_sessions_present" in body
         assert "Work sessions" in body
 
     def test_plain_task_still_uses_generic_form(self, conn):

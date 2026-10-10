@@ -795,19 +795,28 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
                 "color": lbl.get("color") or "blue",
                 "description": lbl.get("description") or "",
                 "meta": "Project" if lbl.get("is_project") else "Label",
-                "deadline": deadline_info(lbl),
             })
         return {"style": "cards", "cards": cards, "scoped": group is not None}
 
     previews = []
+    all_tasks = db.list_tasks(conn)
     for lbl in labels:
-        tasks = [t for t in db.list_tasks(conn) if lbl["name"] in (t.get("tags") or [])]
-        total = len(tasks)
-        done = len([t for t in tasks if t["status"] in ("done", "archived")])
-        progress = round(100 * done / total) if total else None
-        previews.append({"project": lbl, "progress": progress, "tasks_done": done, "tasks_total": total,
-                         "deadline": deadline_info(lbl)})
+        previews.append({"project": lbl, "attention": _label_attention(all_tasks, lbl["name"])})
     return {"style": "list", "previews": previews, "scoped": group is not None}
+
+
+def _label_attention(tasks: list[dict], name: str) -> str | None:
+    """"overdue" (red) or "soon" (yellow) when an open task under the label is due this month, else None."""
+    today = clock.today().isoformat()
+    state = None
+    for t in tasks:
+        due = (t.get("due_at") or "")[:10]
+        if name not in (t.get("tags") or []) or t.get("status") in ("done", "archived") or due[:7] != today[:7]:
+            continue
+        if due < today:
+            return "overdue"
+        state = "soon"
+    return state
 
 
 def _render_group_members(conn, config: dict, nav: dict | None = None) -> dict:

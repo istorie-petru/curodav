@@ -1386,8 +1386,14 @@ def event_detail(uid: str, request: Request, occurrence_date: str | None = None,
 
 
 @events_router.get("/events/{uid}/edit")
-def edit_event_form(uid: str, request: Request, conn=Depends(get_db)):
+def edit_event_form(uid: str, request: Request, occurrence_date: str | None = None, conn=Depends(get_db)):
     event = db.get_event(conn, uid)
+    occurrence_override = None
+    if occurrence_date and event and event.get("recurrence"):
+        occurrence_override = next(
+            (o for o in db.list_event_occurrence_overrides(conn, uid) if o["occurrence_date"] == occurrence_date),
+            None,
+        )
     tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
         "event_form.html",
@@ -1395,6 +1401,8 @@ def edit_event_form(uid: str, request: Request, conn=Depends(get_db)):
             "request": request,
             "active_tab": "calendar",
             "event": event,
+            "occurrence_date": occurrence_date,
+            "occurrence_override": occurrence_override,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
             **db.project_picker_context(conn),

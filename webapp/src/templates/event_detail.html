@@ -2,6 +2,7 @@
 {% extends "base.html" %}
 {% from "_label_pill.html" import label_pill with context %}
 {% from "_detail_cover.html" import detail_cover with context %}
+{% from "_detail_section.html" import detail_section %}
 {% block title %}{{ event.title if event else "Event" }}{% endblock %}
 {% block content %}
 <!-- 2026-08-08 direct feedback ("add for events a way like for tasks to
@@ -74,7 +75,7 @@
 </div>
 
 <div class="modal-body">
-<div class="detail-meta-panel">
+{% call detail_section('Details') %}
     <div class="detail-meta-grid">
         <div class="detail-meta-item">
             <span class="detail-meta-label">Start</span>
@@ -136,68 +137,26 @@
         </div>
         {% endif %}
     </div>
-    {% if event.description %}
-    <div class="detail-meta-description">
-        <span class="detail-meta-label">Description</span>
-        <p>{{ event.description }}</p>
-    </div>
-    {% endif %}
-</div>
+{% endcall %}
+{% if event.description %}
+{% call detail_section('Description') %}<p class="detail-text">{{ event.description }}</p>{% endcall %}
+{% endif %}
 
 <!-- 2026-08-29 (STATE.md backlog item 4, direct request): the Relations
      card (related tasks) that used to render here is fully removed --
      not just hidden behind the old Settings > Appearance toggle. -->
 
-<!-- 1.6 ("Manual recurrence exceptions") -- only rendered when this page
-     was opened for a specific occurrence (?occurrence_date=..., appended
-     by calendar_month/week/day.html to every recurring occurrence's own
-     link) and the event is actually recurring. The recurrence rule itself
-     (event.recurrence, shown in the meta grid above) is never touched by
-     any of these three actions -- see db.py's event_occurrence_overrides
-     CREATE TABLE comment for the model. -->
 {% if occurrence_date and event.recurrence %}
-<div class="detail-card detail-section-gap">
-    <h2 class="card-title">{{ icon('calendar', 'icon-sm') }} This occurrence</h2>
-    <div class="card-body">
-    <p class="text-muted-secondary text-caption">
-        {{ occurrence_date | relative_date }} — changes here affect only this one
-        occurrence, not the whole recurring series.
-    </p>
-    {% if occurrence_override %}
-        {% if occurrence_override.cancelled %}
-        <p class="cell-tag tag-orange">Cancelled</p>
-        {% else %}
-        <p class="cell-tag tag-blue">
-            Moved to {{ occurrence_override.start_at | relative_date }} {{ occurrence_override.start_at | fmt_time }}
-        </p>
-        {% endif %}
-    </div>
-    <div class="card-footer">
-        <form method="post" action="/events/{{ event.uid }}/occurrences/restore" data-cc-change="event" data-cc-action="restore">
-            <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
-            <button type="submit" class="btn ghost btn-sm">{{ icon('rotate-ccw', 'icon-sm') }} Restore to series</button>
-        </form>
-    {% else %}
-    </div>
-    <div class="card-footer">
-        <form method="post" action="/events/{{ event.uid }}/occurrences/cancel" class="form-inline" data-cc-change="event" data-cc-action="cancel">
-            <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
-            <button type="submit" class="btn ghost btn-sm">{{ icon('x-circle', 'icon-sm') }} Cancel this occurrence</button>
-        </form>
-        <details class="occurrence-move-details">
-            <summary class="btn ghost btn-sm occurrence-move-summary">{{ icon('move', 'icon-sm') }} Move this occurrence</summary>
-            <form method="post" action="/events/{{ event.uid }}/occurrences/move" class="field-grid occurrence-move-form" data-cc-change="event" data-cc-action="move">
-                <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
-                {% from "_date_time_fields.html" import datetime_range with context %}
-                <div class="field field-wide">
-                    {{ datetime_range('start_at', 'end_at', occurrence_date[:16], '', title='New start & end', required=true) }}
-                </div>
-                <button type="submit" class="btn primary btn-sm">Move</button>
-            </form>
-        </details>
-    {% endif %}
-    </div>
+{% call detail_section('This occurrence') %}
+<div class="detail-meta-item">
+    <span class="detail-meta-label">{{ occurrence_date | relative_date }}</span>
+    <span class="detail-meta-value">
+        {% if occurrence_override and occurrence_override.cancelled %}<span class="cell-tag tag-orange">Cancelled</span>
+        {% elif occurrence_override %}<span class="cell-tag tag-blue">Moved to {{ occurrence_override.start_at | relative_date }} {{ occurrence_override.start_at | fmt_time }}</span>
+        {% else %}Follows the series{% endif %}
+    </span>
 </div>
+{% endcall %}
 {% endif %}
 </div>
 
@@ -208,7 +167,7 @@
 {% set footer_delete_label = event.title %}
 {% set footer_delete_redirect = '/calendar' %}
 {% set footer_delete_cc_change = 'event' %}
-{% set footer_primary_href = '/events/' ~ event.uid ~ '/edit' %}
+{% set footer_primary_href = '/events/' ~ event.uid ~ '/edit' ~ ('?occurrence_date=' ~ occurrence_date if occurrence_date and event.recurrence else '') %}
 {% set footer_primary_label = 'Edit' %}
 {% set footer_primary_icon = 'edit' %}
 {% include "_modal_footer.html" %}

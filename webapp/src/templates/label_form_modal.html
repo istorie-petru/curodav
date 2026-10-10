@@ -63,6 +63,7 @@
 {% set footer_delete_url = '/settings/labels/' ~ l.name ~ '/delete' if l else '' %}
 {% set footer_delete_mode = 'confirm' %}
 {% set footer_delete_label = 'Remove "' ~ l.name ~ '" from every object that carries it? This doesn\'t delete anything else.' if l else '' %}
+{% if l %}{% set footer_archive_url = '/labels/' ~ (l.name|urlencode) ~ '/archive' %}{% set footer_unarchive_url = '/labels/' ~ (l.name|urlencode) ~ '/unarchive' %}{% set footer_archived = l.archived_at %}{% set footer_archive_confirm = 'Archive ' ~ l.name ~ '? Everything tagged with it keeps the label.' %}{% endif %}
 {% set footer_primary_form = 'label-form' %}
 {% set footer_primary_label = 'Save' if l else 'Create ' ~ _noun %}
 {% set footer_primary_icon = 'check-square' %}

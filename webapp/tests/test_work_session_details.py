@@ -49,12 +49,6 @@ def test_another_tasks_event_is_refused(conn):
     assert not db.update_work_session(conn, "other", uid, title="x", hours_estimate="", difficulty="easy")
 
 
-def test_details_route_redirects_to_the_task(conn):
-    uid = _task_with_session(conn)
-    resp = tasks_router.set_work_session_details("t1", uid, title="A", hours_estimate="2", difficulty="easy", conn=conn)
-    assert resp.status_code == 303 and resp.headers["location"] == "/tasks/t1"
-
-
 @pytest.mark.parametrize("difficulties, expected", [
     ([], None),
     (["easy"], "easy"),

@@ -181,23 +181,14 @@ class TestStatusRow:
         resp = _page(conn, "Essay")
         body = resp.body.decode()
         assert resp.context["label_status"] == "Pending Archiving"
-        assert 'action="/labels/Essay/archive"' in body
-        # Ready to archive: no "are you sure" sheet.
-        assert "It still has open tasks" not in body
-
-    def test_archiving_early_asks_first(self, conn):
-        db.upsert_label_config(conn, {"name": "Essay", "has_deadline": 1, "deadline_date": "2099-01-01"})
-        db.upsert_task(conn, {"uid": "t1", "title": "Draft", "description": "", "status": "active",
-                              "tags": ["Essay"], "created_at": _now()})
-        body = _page(conn, "Essay").body.decode()
-        assert "It still has open tasks" in body
+        assert 'action="/labels/Essay/archive"' not in body
 
     def test_archived_label_offers_unarchive(self, conn):
         db.upsert_label_config(conn, {"name": "Trip", "is_project": 1})
         db.archive_project(conn, "Trip")
         body = _page(conn, "Trip").body.decode()
-        assert 'action="/labels/Trip/unarchive"' in body
-        assert 'action="/labels/Trip/archive"' not in body
+        assert "Archived on" in body
+        assert "/archive" not in body
 
     def test_status_row_is_on_the_dashboard_page_too(self, conn):
         db.upsert_label_config(conn, {"name": "Trip", "is_project": 1})
@@ -408,12 +399,16 @@ class TestLabelPillLinks:
         resp = label_pages.label_preview("Essay", _request("/labels/Essay/preview"), conn=conn)
         assert len(resp.context["agenda_items"]) == 8
 
-    def test_preview_footer_archives_and_unarchives(self, conn):
+    def test_edit_modal_footer_archives_and_unarchives(self, conn):
+        from src.routers import labels as labels_router
         db.upsert_label_config(conn, {"name": "Essay"})
-        body = label_pages.label_preview("Essay", _request("/labels/Essay/preview"), conn=conn).body.decode()
-        assert 'action="/labels/Essay/archive"' in body
+        preview = label_pages.label_preview("Essay", _request("/labels/Essay/preview"), conn=conn).body.decode()
+        assert "/archive" not in preview
+        body = labels_router.edit_label_modal("Essay", _request("/settings/labels/Essay/edit"), conn=conn).body.decode()
+        footer = body[body.index('class="modal-footer"'):]
+        assert 'action="/labels/Essay/archive"' in footer and 'aria-label="Archive"' in footer
         label_pages.archive_label("Essay", conn=conn)
-        body = label_pages.label_preview("Essay", _request("/labels/Essay/preview"), conn=conn).body.decode()
+        body = labels_router.edit_label_modal("Essay", _request("/settings/labels/Essay/edit"), conn=conn).body.decode()
         assert 'action="/labels/Essay/unarchive"' in body
 
     def test_detail_modal_pills_open_the_preview(self, conn):
