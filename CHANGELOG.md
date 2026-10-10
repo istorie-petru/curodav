@@ -4,6 +4,20 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.7.0]
+
+- Notebook Browse is a table with load more, bulk edit and bulk delete, and filters that toggle on and off.
+- Editor: inline tools, text and background color, a More menu, markdown paste and block color and duplicate. Undo loads the saved document first, updates in place and keeps its history between sessions.
+- Endnotes are created from the inline toolbar, are rich text, and each has a menu to generate a citation.
+- Tables are a first-party spreadsheet-like block: merged cells, header row and column, sorting, cell colors, simple formulas (text, joining with &, comparisons, IF, AND, OR, NOT, ranges) and markdown, TSV and CSV paste and export.
+- Mentions: `@` for contacts, `$` for tasks and events and `:` for icons, in text, tables and formulas.
+- Glossary: an Auto-fill button attaches every term found in the document.
+- Properties: each Settings > Notebook field gets an input for its type and is validated when saved.
+- Search contents: find and replace across notes with a preview first, a per-note choice and a warning toast when more than five notes change.
+- One rule for floating menus and bars: they close on an outside click, Escape, or when another opens.
+- Password recovery: the recovery token is no longer shown in Settings. `curodav-ctl token` prints it (`--new` replaces it) and `curodav-ctl password-reset` uses it; a new password needs at least 8 characters.
+- Touch devices: long-press a row to select it instead of using checkboxes, and the phone status bar follows the light and dark theme.
+
 ## [3.6.0]
 
 - Home, groups and labels can each show as the Secretariat, Sections or a dashboard. Home defaults to the Secretariat, which hides empty sections, lists events today, tasks due today and this week on the left and other reminders on the right, shows label pills, and keeps completed tasks until the day ends.

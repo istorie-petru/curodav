@@ -1,4 +1,4 @@
-{% from "_inputs.html" import text_input %}
+{% from "_inputs.html" import text_input, select_input, checkbox_input %}
 {# Notebook's document-properties modal (2026-10-02, direct request) --
    replaces the Editor page's old inline title textbox + bare header
    delete button with the app's standard "edit a record via modal"
@@ -76,6 +76,29 @@
             {% set ms_pill = true %}
             {% include "_widget_list_multiselect.html" %}
         </div>
+        {% for f in typed_fields %}
+        <div class="field{% if f.type in ('multi-select',) %} field-wide{% endif %}">
+            <label for="{{ f.input_name }}">{{ f.label }}{% if f.required %} *{% endif %}</label>
+            {% if f.type == 'select' %}
+            {% call select_input({'id': f.input_name, 'name': f.input_name}) %}
+                <option value="">None</option>
+                {% for o in f.options %}<option value="{{ o.value }}"{% if o.value == f.value %} selected{% endif %}>{{ o.value }}</option>{% endfor %}
+            {% endcall %}
+            {% elif f.type == 'multi-select' %}
+            <div class="notebook-field-checks">
+                {% for o in f.options %}<label class="checkbox-row">{{ checkbox_input({'name': f.input_name, 'value': o.value, 'checked': o.value in f.values}) }} {{ o.value }}</label>{% endfor %}
+            </div>
+            {% elif f.type == 'boolean' %}
+            {% call select_input({'id': f.input_name, 'name': f.input_name}) %}
+                <option value="">Not set</option>
+                <option value="true"{% if f.value == 'true' %} selected{% endif %}>Yes</option>
+                <option value="false"{% if f.value == 'false' %} selected{% endif %}>No</option>
+            {% endcall %}
+            {% else %}
+            {{ text_input({'name': f.input_name, 'id': f.input_name, 'value': f.value, 'step': 'any' if f.type == 'number' else none, 'inputmode': 'decimal' if f.type == 'number' else none}, type={'date': 'date', 'url': 'url'}.get(f.type, 'text')) }}
+            {% endif %}
+        </div>
+        {% endfor %}
         {# `data-notebook-properties-scope`, not the generic
            `data-repeatable-rows-scope` contacts' rows use -- both scripts
            query DOMContentLoaded-wide for their own scope attribute and
@@ -93,7 +116,7 @@
                 <button type="button" class="icon-btn" data-repeatable-add="notebook-property-rows" data-repeatable-template="notebook-property-row-template" title="Add property" aria-label="Add property">{{ icon('plus', 'icon-sm') }}</button>
             </div>
             <div id="notebook-property-rows" class="notebook-property-rows">
-                {% for p in document.properties %}
+                {% for p in free_properties %}
                 <div class="notebook-property-row">
                     {{ notebook_property_key_picker(property_key_items, p.key, loop.index, 'notebook-properties-form') }}
                     {{ text_input({'name': 'property_value', 'value': (p.value)}) }}

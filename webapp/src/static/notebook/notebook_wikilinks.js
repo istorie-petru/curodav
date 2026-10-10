@@ -372,7 +372,7 @@
   // focus bookkeeping, which a block picked via mouse click through the
   // toolbox doesn't reliably update -- confirmed live (2026-10-03, while
   // building the footnote action menu's own identical block-tool shape,
-  // see notebook_footnotes.js's `NotebookFootnoteBlock.prototype.ownIndex`
+  // see the slash-command block's own `ownIndex` below
   // and [[curodav-webapp-footnote-action-menu]]): a freshly-inserted
   // placeholder block stayed marked "selected" in the DOM, yet
   // `getCurrentBlockIndex()`-based deletion silently missed it entirely --

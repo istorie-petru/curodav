@@ -25,7 +25,8 @@
 <link rel="stylesheet" href="{{ static_url('notebook/vendor/editorjs.css') }}">
 <link rel="stylesheet" href="{{ static_url('notebook/vendor/header.css') }}">
 <link rel="stylesheet" href="{{ static_url('notebook/vendor/list.css') }}">
-<link rel="stylesheet" href="{{ static_url('notebook/vendor/table.css') }}">
+<link rel="stylesheet" href="{{ static_url('notebook/notebook_table.css') }}">
+<link rel="stylesheet" href="{{ static_url('notebook/notebook_mentions.css') }}">
 <link rel="stylesheet" href="{{ static_url('notebook/vendor/simpleimage.css') }}">
 <link rel="stylesheet" href="{{ static_url('notebook/vendor/inlinecode.css') }}">
 {# Notebook's own dark-theme + focus-outline patches on top of the vendor
@@ -42,6 +43,7 @@
    plain CSS classes (.token.*), not scoped under a vendor/ stylesheet,
    so this loads alongside the other first-party block CSS above. #}
 <link rel="stylesheet" href="{{ static_url('notebook/notebook_code.css') }}">
+<link rel="stylesheet" href="{{ static_url('notebook/notebook_inline.css') }}">
 {% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
@@ -70,7 +72,6 @@
      style.css's `.notebook-sidebar`/`#notebook-sidebar-toggle` mobile
      rule for the CSS half of that. #}
 {% call page_header_narrow(document.title, 'notebook', sidebar_toggle=(sidebar_layout == 'sidebar')) %}
-    <span id="notebook-save-status" class="search-result-subtitle" data-state="idle"></span>
     <a href="/notebook/{{ document.uid }}/properties" data-modal class="icon-btn" title="Edit document properties" aria-label="Edit document properties">{{ icon('edit', 'icon-sm') }}</a>
 {% endcall %}
 
@@ -124,12 +125,6 @@
                 </button>
                 <div class="notebook-sidebar-select-panel" role="listbox" aria-label="Sidebar views">
                     <button type="button" class="notebook-sidebar-select-option active" role="option" aria-selected="true" data-notebook-sidebar-tab="outline">{{ icon('list', 'icon-sm') }} Outline</button>
-                    {# Endnotes tab (2026-10-04, "sidebar" layout option) --
-                       the live footer notebook_footnotes.js already builds
-                       just gets appended into this panel's own slot div
-                       instead of inside #notebook-editor, see that file's
-                       `footerFor`. Same hash icon the old inline tool uses. #}
-                    <button type="button" class="notebook-sidebar-select-option" role="option" aria-selected="false" data-notebook-sidebar-tab="endnotes">{{ icon('hash', 'icon-sm') }} Endnotes</button>
                     {# Closed-book icon (item D: "Bibliography sidebar/nav
                        icon -> closed book icon" -- was icon-book-open). #}
                     <button type="button" class="notebook-sidebar-select-option" role="option" aria-selected="false" data-notebook-sidebar-tab="bibliography">{{ icon('book', 'icon-sm') }} Bibliography</button>
@@ -154,20 +149,13 @@
                 </div>
             </div>
             <a href="/notebook/{{ document.uid }}/bibliography" data-modal class="icon-btn notebook-sidebar-add" data-notebook-sidebar-add="bibliography" hidden title="Add citation" aria-label="Add citation">{{ icon('plus', 'icon-sm') }}</a>
+            <button type="button" class="icon-btn notebook-sidebar-add" data-glossary-autofill="{{ document.uid }}" data-notebook-sidebar-add="glossary" hidden title="Auto-fill terms from this document" aria-label="Auto-fill terms">{{ icon('sparkles', 'icon-sm') }}</button>
             <a href="/notebook/{{ document.uid }}/glossary" data-modal class="icon-btn notebook-sidebar-add" data-notebook-sidebar-add="glossary" hidden title="Add glossary term" aria-label="Add glossary term">{{ icon('plus', 'icon-sm') }}</a>
         </div>
         <div class="notebook-sidebar-panel is-active" data-notebook-sidebar-panel="outline" role="tabpanel">
             <nav id="notebook-toc" class="notebook-toc" aria-label="Table of contents">
                 <p class="notebook-toc-empty">No headings yet</p>
             </nav>
-        </div>
-        {# Empty slot only -- notebook_footnotes.js's footerFor() builds and
-           appends the real #notebook-footnotes element here itself (same
-           element, same classes/behavior as the 'stacked' layout's, just a
-           different parent), so this file doesn't need to duplicate that
-           markup or its "hidden with nothing to show" rule. #}
-        <div class="notebook-sidebar-panel" data-notebook-sidebar-panel="endnotes" role="tabpanel">
-            <div id="notebook-footnotes-sidebar-slot"></div>
         </div>
         {# The Edit-icon header row that used to live inside this panel
            moved up into the shared `.notebook-sidebar-head` row above as a
@@ -183,13 +171,7 @@
             {% endif %}
         </div>
         <div class="notebook-sidebar-panel" data-notebook-sidebar-panel="glossary" role="tabpanel">
-            {% if glossary_terms %}
-            <ul class="notebook-bibliography-sidebar-list">
-                {% for t in glossary_terms %}<li><strong>{{ t.term }}</strong>{% if t.definition %} -- {{ t.definition }}{% endif %}</li>{% endfor %}
-            </ul>
-            {% else %}
-            <p class="notebook-toc-empty">No terms attached yet</p>
-            {% endif %}
+            {% include "_notebook_glossary_list.html" %}
         </div>
         {# Minimalist empty state (2026-10-03, item A: "Relationships tab's
            empty-state placeholder should be more minimalist -- currently
@@ -282,15 +264,12 @@
         <div class="card notebook-stacked-section">
             <div class="cdx-footnote-footer__heading-row">
                 <div class="cdx-footnote-footer__heading">Glossary</div>
-                <a href="/notebook/{{ document.uid }}/glossary" data-modal class="icon-btn" title="Add glossary term" aria-label="Add glossary term">{{ icon('plus', 'icon-sm') }}</a>
+                <span class="notebook-stacked-actions">
+                    <button type="button" class="icon-btn" data-glossary-autofill="{{ document.uid }}" title="Auto-fill terms from this document" aria-label="Auto-fill terms">{{ icon('sparkles', 'icon-sm') }}</button>
+                    <a href="/notebook/{{ document.uid }}/glossary" data-modal class="icon-btn" title="Add glossary term" aria-label="Add glossary term">{{ icon('plus', 'icon-sm') }}</a>
+                </span>
             </div>
-            {% if glossary_terms %}
-            <ul class="notebook-bibliography-sidebar-list">
-                {% for t in glossary_terms %}<li><strong>{{ t.term }}</strong>{% if t.definition %} -- {{ t.definition }}{% endif %}</li>{% endfor %}
-            </ul>
-            {% else %}
-            <p class="notebook-toc-empty">No terms attached yet</p>
-            {% endif %}
+            {% include "_notebook_glossary_list.html" %}
         </div>
         <div class="card notebook-stacked-section">
             <div class="cdx-footnote-footer__heading">Relationships</div>
@@ -319,7 +298,11 @@
 <script defer src="{{ static_url('notebook/vendor/editorjs.umd.js') }}"></script>
 <script defer src="{{ static_url('notebook/vendor/header.umd.js') }}"></script>
 <script defer src="{{ static_url('notebook/vendor/list.umd.js') }}"></script>
-<script defer src="{{ static_url('notebook/vendor/table.umd.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_floating.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_glossary_autofill.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_mentions.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_table_model.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_table.js') }}"></script>
 <script defer src="{{ static_url('notebook/vendor/dragdrop.umd.js') }}"></script>
 <script defer src="{{ static_url('notebook/vendor/simpleimage.umd.js') }}"></script>
 <script defer src="{{ static_url('notebook/vendor/inlinecode.umd.js') }}"></script>
@@ -330,6 +313,10 @@
 <script defer src="{{ static_url('notebook/notebook_footnotes.js') }}"></script>
 <script defer src="{{ static_url('notebook/notebook_toc.js') }}"></script>
 <script defer src="{{ static_url('notebook/notebook_wikilinks.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_inline.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_block_tunes.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_markdown.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_undo.js') }}"></script>
 <script defer src="{{ static_url('notebook/notebook_editor.js') }}"></script>
 <script defer src="{{ static_url('notebook_sidebar.js') }}"></script>
 {% endblock %}

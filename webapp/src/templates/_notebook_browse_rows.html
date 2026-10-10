@@ -1,0 +1,23 @@
+{# Rows of the Browse table, shared by the page and the Load more fetch. #}
+{% from "_inputs.html" import checkbox_input %}
+{% from "_widget_items.html" import widget_pill %}
+{% from "_label_pill.html" import label_pill with context %}
+{% for d in documents %}
+<tr class="entity-row notebook-browse-row" data-row-href="/notebook/{{ d.uid }}">
+    <td class="col-select">
+        {{ checkbox_input({'class': 'row-select', 'data-uid': d.uid, 'aria-label': 'Select ' ~ d.title, 'autocomplete': 'off'}) }}
+    </td>
+    <td class="col-name">
+        <div class="label-cell">
+            <span class="label-cell-icon">{{ icon(d.type_icon, 'icon-sm cal-' ~ d.type_color) }}</span>
+            <a class="label-name" href="/notebook/{{ d.uid }}">{{ d.title }}</a>
+        </div>
+    </td>
+    <td class="col-meta col-opt-2">{% if d.note_type %}<span class="cell-tag cal-{{ d.type_color }} notebook-type-pill">{{ d.note_type|upper }}</span>{% endif %}</td>
+    <td class="col-meta col-opt-2 notebook-browse-labels">{% for tag in d.tags %}{{ label_pill(tag) }}{% endfor %}</td>
+    <td class="col-meta col-opt-1">{{ widget_pill(d.updated_at | relative_date, 'gray') }}</td>
+    <td class="col-actions">
+        <a href="/notebook/{{ d.uid }}/properties" data-modal class="icon-btn" title="Edit properties" aria-label="Edit properties">{{ icon('edit', 'icon-sm') }}</a>
+    </td>
+</tr>
+{% endfor %}

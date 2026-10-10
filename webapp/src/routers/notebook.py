@@ -18,21 +18,35 @@ present below) for that widget to work."""
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, Form, Header, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import db
+from .. import db, notebook_fields, notebook_find, notebook_mentions
 from ..deps import get_db, respond, templates, wants_json
 from .labels import COLORS, icon_groups_for
 
 router = APIRouter(prefix="/notebook", tags=["notebook"])
 
+BROWSE_PAGE_SIZE = 30
+
+
+def _browse_href(note_type: str, label: str, group: str, sort: str, limit: int | None = None) -> str:
+    params = {k: v for k, v in (("note_type", note_type), ("label", label), ("group", group)) if v}
+    if sort == "title":
+        params["sort"] = "title"
+    if limit and limit > BROWSE_PAGE_SIZE:
+        params["limit"] = limit
+    return "/notebook" + (f"?{urlencode(params)}" if params else "")
+
 
 def _notebook_browse_context(
-    conn, request: Request, note_type: str, label: str, group: str, sort: str
+    conn, request: Request, note_type: str, label: str, group: str, sort: str,
+    limit: int = BROWSE_PAGE_SIZE, offset: int = 0,
 ) -> dict:
     """Browse page (`/notebook`, curodav-notes/documentation/plans
     notebook-browse-page-widget-plans.md's "filing rail" redesign,
@@ -115,10 +129,26 @@ def _notebook_browse_context(
         d["type_icon"] = look["icon"]
         d["type_color"] = look["color"]
 
+    def facet_href(dimension: str, value: str) -> str:
+        """Picking a facet adds it; picking the active one again removes it."""
+        current = {"note_type": note_type, "label": label, "group": group}
+        current[dimension] = "" if current[dimension] == value else value
+        return _browse_href(current["note_type"], current["label"], current["group"], sort)
+
+    matching = len(documents)
+    shown = documents[offset: offset + limit]
+
     return {
         "request": request,
         "active_tab": "notebook",
-        "documents": documents,
+        "documents": shown,
+        "matching_documents": matching,
+        "has_more": offset + limit < matching,
+        "next_offset": offset + limit,
+        "page_limit": limit,
+        "more_href": _browse_href(note_type, label, group, sort, limit + BROWSE_PAGE_SIZE),
+        "everything_href": _browse_href("", "", "", sort),
+        "facet_href": facet_href,
         "total_documents": total,
         "type_rows": [
             {"name": t, "count": c, **type_looks.get(t, db.NOTEBOOK_TYPE_LOOK_FALLBACK)}
@@ -164,12 +194,90 @@ def list_documents(
     label: str = "",
     group: str = "",
     sort: str = "updated",
+    limit: int = BROWSE_PAGE_SIZE,
     conn=Depends(get_db),
 ):
     return templates.TemplateResponse(
         "notebook_list.html",
-        _notebook_browse_context(conn, request, note_type.strip(), label.strip(), group.strip(), sort.strip()),
+        _notebook_browse_context(
+            conn, request, note_type.strip(), label.strip(), group.strip(), sort.strip(),
+            limit=max(BROWSE_PAGE_SIZE, min(limit, 1000)),
+        ),
     )
+
+
+@router.get("/rows")
+def browse_rows(
+    request: Request,
+    note_type: str = "",
+    label: str = "",
+    group: str = "",
+    sort: str = "updated",
+    offset: int = 0,
+    conn=Depends(get_db),
+):
+    """The next page of Browse rows, for the Load more button."""
+    ctx = _notebook_browse_context(
+        conn, request, note_type.strip(), label.strip(), group.strip(), sort.strip(),
+        limit=BROWSE_PAGE_SIZE, offset=max(offset, 0),
+    )
+    html = templates.get_template("_notebook_browse_rows.html").render(ctx)
+    return JSONResponse({"html": html, "has_more": ctx["has_more"], "next_offset": ctx["next_offset"]})
+
+
+@router.get("/bulk-edit-modal")
+def bulk_edit_modal(uids: str, request: Request, conn=Depends(get_db)):
+    """Bulk-select "Edit": sets the same label and Type on every selected document."""
+    labels = [(n, n) for n in sorted(db.list_all_known_label_names(conn), key=str.lower)]
+    types = [(t, t.capitalize()) for t in db.list_notebook_note_types_in_use(conn)]
+    fields = [
+        {"name": "add_tag", "label": "Add label", "kind": "select", "options": labels},
+        {"name": "remove_tag", "label": "Remove label", "kind": "select", "options": labels},
+        {"name": "note_type", "label": "Type", "kind": "select", "options": types},
+    ]
+    return templates.TemplateResponse(
+        "bulk_edit_modal.html",
+        {"request": request, "uids": [u for u in uids.split(",") if u], "noun": "document", "fields": fields,
+         "post_url": "/notebook/bulk-edit", "change_type": "notebook", "back_url": "/notebook"},
+    )
+
+
+@router.post("/bulk-edit")
+def bulk_edit(
+    uids: list[str] = Form([]),
+    add_tag: str = Form(""),
+    remove_tag: str = Form(""),
+    note_type: str = Form(""),
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
+    now = datetime.now(timezone.utc).isoformat()
+    for uid in uids:
+        row = db.get_notebook_document(conn, uid)
+        if row is None:
+            continue
+        tags = list(row.get("tags") or [])
+        if remove_tag:
+            tags = [t for t in tags if t != remove_tag]
+        if add_tag and add_tag not in tags:
+            tags.append(add_tag)
+        row["tags"] = tags
+        if note_type.strip():
+            row["note_type"] = note_type.strip()
+        row["updated_at"] = now
+        db.upsert_notebook_document(conn, row)
+    return respond(x_requested_with, "/notebook", count=len(uids))
+
+
+@router.post("/bulk-delete")
+async def bulk_delete(request: Request, conn=Depends(get_db)):
+    payload = await request.json()
+    uids = payload.get("uids") or []
+    if not uids:
+        return JSONResponse({"error": "no documents selected"}, status_code=400)
+    for uid in uids:
+        db.delete_notebook_document(conn, uid)
+    return JSONResponse({"ok": True, "count": len(uids)})
 
 
 @router.post("")
@@ -214,6 +322,72 @@ def create_document(
     return respond(x_requested_with, f"/notebook/{uid}", status_code=201, uid=uid)
 
 
+FIND_TOAST_THRESHOLD = 5
+
+
+def _find_hits(conn, q: str, case: bool, whole: bool) -> list[dict]:
+    hits = []
+    for row in conn.execute("SELECT uid, title, content_json FROM notebook_documents ORDER BY title COLLATE NOCASE").fetchall():
+        try:
+            blocks = json.loads(row["content_json"] or "{}").get("blocks", [])
+        except (ValueError, AttributeError):
+            continue
+        report = notebook_find.find(blocks, q, case=case, whole=whole)
+        if report.count:
+            hits.append({"uid": row["uid"], "title": row["title"], "count": report.count, "snippets": report.snippets})
+    return hits
+
+
+@router.get("/find")
+def find_modal(request: Request):
+    return templates.TemplateResponse("notebook_find_modal.html", {"request": request})
+
+
+@router.get("/find/preview")
+def find_preview(request: Request, q: str = "", case: bool = False, whole: bool = False, conn=Depends(get_db)):
+    """What a replace would touch, per document. Nothing is changed here."""
+    hits = _find_hits(conn, q, case, whole) if q.strip() else []
+    return templates.TemplateResponse(
+        "_notebook_find_results.html",
+        {"request": request, "hits": hits, "q": q, "total": sum(h["count"] for h in hits),
+         "toast_threshold": FIND_TOAST_THRESHOLD},
+    )
+
+
+@router.post("/find/replace")
+def find_replace(
+    q: str = Form(""),
+    replacement: str = Form(""),
+    case: bool = Form(False),
+    whole: bool = Form(False),
+    uids: list[str] = Form([]),
+    conn=Depends(get_db),
+):
+    """Replaces only in the documents the preview listed and the user left ticked."""
+    if not q.strip():
+        return JSONResponse({"error": "nothing to find"}, status_code=400)
+    documents = replacements = 0
+    for uid in uids:
+        document = db.get_notebook_document(conn, uid)
+        if document is None:
+            continue
+        try:
+            content = json.loads(document["content_json"] or "{}")
+        except ValueError:
+            continue
+        blocks, count = notebook_find.replace(content.get("blocks", []), q, replacement, case=case, whole=whole)
+        if not count:
+            continue
+        content["blocks"] = blocks
+        document["content_json"] = json.dumps(content)
+        document["updated_at"] = datetime.now(timezone.utc).isoformat()
+        db.upsert_notebook_document(conn, document)
+        documents += 1
+        replacements += count
+    return JSONResponse({"ok": True, "documents": documents, "replacements": replacements,
+                         "warn": documents > FIND_TOAST_THRESHOLD})
+
+
 @router.get("/search")
 def search_documents(
     request: Request, q: str = "", exclude: str = "", limit: int = 20, conn=Depends(get_db)
@@ -232,6 +406,23 @@ def search_documents(
             for d in docs
         ]
     )
+
+
+@router.get("/mentions")
+def mention_candidates(kind: str = "", q: str = "", conn=Depends(get_db)):
+    """Matches for the editor's `@` (contact), `$` (task or event) and `:` (icon) pickers."""
+    from ..deps import _sprite_icon_names
+
+    q = q.strip()
+    if kind == "contact":
+        rows = notebook_mentions.contacts(conn, q)
+    elif kind == "item":
+        rows = notebook_mentions.items(conn, q)
+    elif kind == "icon":
+        rows = notebook_mentions.icons(sorted(_sprite_icon_names()), q)
+    else:
+        return JSONResponse({"error": "unknown kind"}, status_code=400)
+    return JSONResponse(rows)
 
 
 _NOTEBOOK_HOME_CRUMB = [{"url": "/notebook", "name": "Notebook"}]
@@ -332,11 +523,22 @@ def document_properties_modal(uid: str, request: Request, conn=Depends(get_db)):
     # this is the first caller that needs a colored option NOT sourced
     # from a label).
     type_looks = db.notebook_note_type_looks(conn)
+    schema = notebook_fields.schema_fields(db.list_notebook_field_config(conn))
+    schema_keys = {f["key"].lower() for f in schema}
+    stored = {p["key"].lower(): p["value"] for p in document["properties"]}
+    typed_fields = [
+        {**f, "input_name": notebook_fields.input_name(f), "value": stored.get(f["key"].lower(), ""),
+         "values": notebook_fields.stored_list(stored.get(f["key"].lower(), "")) if f["type"] == "multi-select" else []}
+        for f in schema
+    ]
+    free_properties = [p for p in document["properties"] if p["key"].lower() not in schema_keys]
     return templates.TemplateResponse(
         "notebook_properties_modal.html",
         {
             "request": request,
             "document": document,
+            "typed_fields": typed_fields,
+            "free_properties": free_properties,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
             "property_key_items": property_keys,
             # A real leading "No type" item, not just an empty `ms_selected`
@@ -381,6 +583,12 @@ def _resolve_note_type(note_type: str, note_type_new: str) -> str:
     return (note_type or "").strip()
 
 
+async def _typed_field_values(request: Request) -> dict:
+    """The properties modal's typed schema inputs (`field__<key>`); a multi-select posts several values."""
+    form = await request.form()
+    return {k: form.getlist(k) for k in form.keys() if k.startswith("field__")}
+
+
 @router.post("/{uid}")
 def update_document_properties(
     uid: str,
@@ -390,6 +598,7 @@ def update_document_properties(
     tags_labels: list[str] = Form([]),
     property_key: list[str] = Form([]),
     property_value: list[str] = Form([]),
+    typed=Depends(_typed_field_values),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -412,7 +621,16 @@ def update_document_properties(
     row["title"] = title.strip() or "Untitled"
     row["note_type"] = _resolve_note_type(note_type, note_type_new)
     row["tags"] = tags_labels
-    row["properties"] = [{"key": k, "value": v} for k, v in zip(property_key, property_value)]
+    free = [{"key": k, "value": v} for k, v in zip(property_key, property_value)]
+    items, errors = notebook_fields.build_properties(
+        db.list_notebook_field_config(conn), typed if isinstance(typed, dict) else {}, free)
+    if errors:
+        if wants_json(x_requested_with):
+            detail = [{"loc": ["body", name], "msg": msg} for name, msg in errors.items()]
+            return JSONResponse({"detail": detail}, status_code=422)
+        return RedirectResponse(
+            url=f"/notebook/{uid}/properties?error={quote(next(iter(errors.values())))}", status_code=303)
+    row["properties"] = items
     row["updated_at"] = datetime.now(timezone.utc).isoformat()
     db.upsert_notebook_document(conn, row)
     return respond(x_requested_with, f"/notebook/{uid}")
@@ -498,6 +716,22 @@ def document_glossary_modal(uid: str, request: Request, conn=Depends(get_db)):
             "attached_uids": [t["uid"] for t in attached],
             "term_items": [{"uid": t["uid"], "name": t["term"]} for t in db.list_glossary_terms(conn)],
         },
+    )
+
+
+@router.post("/{uid}/glossary/autofill")
+def autofill_document_glossary(uid: str, conn=Depends(get_db)):
+    """Attach every glossary term found in the saved document (the sidebar's Auto-fill button)."""
+    if db.get_notebook_document(conn, uid) is None:
+        return JSONResponse({"error": "document not found"}, status_code=404)
+    return JSONResponse(db.autofill_notebook_glossary_terms(conn, uid))
+
+
+@router.get("/{uid}/glossary/list")
+def document_glossary_list(uid: str, request: Request, conn=Depends(get_db)):
+    return templates.TemplateResponse(
+        "_notebook_glossary_list.html",
+        {"request": request, "glossary_terms": db.list_notebook_glossary_terms(conn, uid)},
     )
 
 

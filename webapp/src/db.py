@@ -5172,6 +5172,43 @@ def _detect_glossary_term_uids(conn: sqlite3.Connection, content: dict[str, Any]
     return detected
 
 
+def autofill_notebook_glossary_terms(conn: sqlite3.Connection, notebook_uid: str) -> dict[str, Any]:
+    """The sidebar's Auto-fill button: attaches every glossary term found in the saved document.
+
+    Unlike the pass on each save, an explicit Auto-fill also brings back terms the user removed
+    earlier (and clears their exclusion), since pressing it asks for the full list. Returns the
+    names added and how many of those were restored."""
+    content = get_notebook_document_content(conn, notebook_uid)
+    if content is None:
+        return {"added": [], "restored": 0}
+    attached = {
+        row["term_uid"]
+        for row in conn.execute("SELECT term_uid FROM notebook_glossary_terms WHERE notebook_uid = ?", (notebook_uid,))
+    }
+    excluded = {
+        row["term_uid"]
+        for row in conn.execute("SELECT term_uid FROM notebook_glossary_excluded_terms WHERE notebook_uid = ?", (notebook_uid,))
+    }
+    names = {row["uid"]: row["term"] for row in conn.execute("SELECT uid, term FROM glossary_terms")}
+    now = datetime.now(timezone.utc).isoformat()
+    row = conn.execute("SELECT MAX(position) AS mx FROM notebook_glossary_terms WHERE notebook_uid = ?", (notebook_uid,)).fetchone()
+    position = (row["mx"] if row and row["mx"] is not None else -1) + 1
+    added, restored = [], 0
+    for term_uid in _detect_glossary_term_uids(conn, content):
+        if term_uid in attached:
+            continue
+        conn.execute(
+            "INSERT INTO notebook_glossary_terms (notebook_uid, term_uid, position, created_at, auto) VALUES (?, ?, ?, ?, 1)",
+            (notebook_uid, term_uid, position, now),
+        )
+        conn.execute("DELETE FROM notebook_glossary_excluded_terms WHERE notebook_uid = ? AND term_uid = ?", (notebook_uid, term_uid))
+        position += 1
+        restored += term_uid in excluded
+        added.append(names.get(term_uid, ""))
+    conn.commit()
+    return {"added": added, "restored": restored}
+
+
 def _rebuild_notebook_glossary_terms(conn: sqlite3.Connection, notebook_uid: str, content: dict[str, Any]) -> None:
     """Auto-attach/auto-remove pass run on every content save (roadmap item
     H, session 7) -- mirrors `_rebuild_notebook_links`'s own "recomputed on

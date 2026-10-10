@@ -41,15 +41,15 @@ def test_a_matching_token_sets_the_new_login_and_rotates_the_token(conn):
 def test_a_wrong_token_changes_nothing(conn):
     auth.ensure_recovery_token(conn)
     with pytest.raises(ValueError):
-        auth.reset_credentials_with_token(SETTINGS, conn, "WRONG-TOKEN-0000-0000", "alice", "pw")
+        auth.reset_credentials_with_token(SETTINGS, conn, "WRONG-TOKEN-0000-0000", "alice", "pw-long-enough")
     assert auth.get_persisted_credentials(conn) is None
 
 
 def test_the_old_token_stops_working_after_a_reset(conn):
     token = auth.ensure_recovery_token(conn)
-    auth.reset_credentials_with_token(SETTINGS, conn, token, "alice", "pw-one")
+    auth.reset_credentials_with_token(SETTINGS, conn, token, "alice", "pw-one-long")
     with pytest.raises(ValueError):
-        auth.reset_credentials_with_token(SETTINGS, conn, token, "bob", "pw-two")
+        auth.reset_credentials_with_token(SETTINGS, conn, token, "bob", "pw-two-long")
 
 
 def _run_cli(monkeypatch, tmp_path, answers, passwords, *args):
@@ -80,7 +80,7 @@ def test_the_command_line_tool_resets_the_login_with_the_token(monkeypatch, tmp_
 def test_the_command_line_tool_refuses_a_wrong_token(monkeypatch, tmp_path, capsys):
     with db.connect(tmp_path / "cli.sqlite") as c:
         auth.ensure_recovery_token(c)
-    assert _run_cli(monkeypatch, tmp_path, ["NOPE", "alice"], ["pw", "pw"]) == 1
+    assert _run_cli(monkeypatch, tmp_path, ["NOPE", "alice"], ["pw-long-enough", "pw-long-enough"]) == 1
     assert "not correct" in capsys.readouterr().err
 
 
@@ -90,3 +90,25 @@ def test_dev_clear_deletes_the_stored_login(monkeypatch, tmp_path):
     assert _run_cli(monkeypatch, tmp_path, [], [], "--dev-clear") == 0
     with db.connect(tmp_path / "cli.sqlite") as c:
         assert auth.get_persisted_credentials(c) is None
+
+
+def test_a_short_password_is_refused_and_changes_nothing(conn):
+    token = auth.ensure_recovery_token(conn)
+    with pytest.raises(ValueError, match="at least 8"):
+        auth.reset_credentials_with_token(SETTINGS, conn, token, "alice", "short")
+    assert auth.get_persisted_credentials(conn) is None and auth.get_recovery_token(conn) == token
+
+
+def test_the_command_line_tool_shows_and_replaces_the_token(monkeypatch, tmp_path, capsys):
+    assert _run_cli(monkeypatch, tmp_path, [], [], "--show-token") == 0
+    shown = capsys.readouterr().out.strip()
+    assert len(shown) == 19
+    assert _run_cli(monkeypatch, tmp_path, [], [], "--show-token") == 0 and capsys.readouterr().out.strip() == shown
+    assert _run_cli(monkeypatch, tmp_path, [], [], "--new-token") == 0
+    assert capsys.readouterr().out.strip() != shown
+
+
+def test_the_token_is_not_exposed_in_the_browser():
+    from src.main import app
+
+    assert not any("recovery" in getattr(route, "path", "") for route in app.routes)

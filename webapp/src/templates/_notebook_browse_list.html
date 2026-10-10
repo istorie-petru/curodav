@@ -20,28 +20,28 @@
 {% from "_label_pill.html" import label_pill with context %}
 <div class="notebook-browse-main">
     {% if documents %}
-    <div class="card checklist notebook-browse-rows">
-        {% for d in documents %}
-        <div class="checklist-row notebook-browse-row" data-row-href="/notebook/{{ d.uid }}">
-            {# Same icon+color the TYPE rail shows for this note_type
-               (db.notebook_note_type_looks, Settings > Notebook's note_type
-               row) -- plain default size (2026-10-02 direct follow-up:
-               "a bit smaller" than the earlier icon-lg pass), style.css's
-               `.notebook-browse-row .checklist-text` shrinks the title to
-               match. #}
-            {{ icon(d.type_icon, 'cal-' ~ d.type_color) }}
-            <a class="checklist-text" href="/notebook/{{ d.uid }}">
-                {{ d.title }}
-                <span class="notebook-browse-pills">
-                    {% if d.note_type %}<span class="cell-tag cal-{{ d.type_color }} notebook-type-pill">{{ d.note_type|upper }}</span>{% endif %}
-                    {% for tag in d.tags %}{{ label_pill(tag) }}{% endfor %}
-                </span>
-            </a>
-            {{ widget_pill(d.updated_at | relative_date, 'gray') }}
-            <a href="/notebook/{{ d.uid }}/properties" data-modal class="icon-btn" title="Edit properties" aria-label="Edit properties">{{ icon('edit', 'icon-sm') }}</a>
-        </div>
-        {% endfor %}
+    <div class="card table-scroll table-responsive">
+    <table class="entity-table notebook-browse-table" id="notebook-list">
+        <thead>
+            <tr>
+                <th class="col-select"><span class="sr-only">Select</span></th>
+                <th class="col-name">Title</th>
+                <th class="col-meta col-opt-2">Type</th>
+                <th class="col-meta col-opt-2">Labels</th>
+                <th class="col-meta col-opt-1">Edited</th>
+                <th class="col-actions"><span class="sr-only">Actions</span></th>
+            </tr>
+        </thead>
+        <tbody id="notebook-rows">
+            {% include "_notebook_browse_rows.html" %}
+        </tbody>
+    </table>
     </div>
+    {% if has_more %}
+    <div class="notebook-load-more">
+        <a class="btn ghost" id="notebook-load-more" href="{{ more_href }}" data-next-offset="{{ next_offset }}">{{ icon('chevron-down', 'icon-sm') }} Load more</a>
+    </div>
+    {% endif %}
     {% elif notebook_filter_active %}
     <div class="empty-state empty-state-rich">
         <div class="empty-state-icon">{{ icon('filter') }}</div>

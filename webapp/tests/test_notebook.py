@@ -316,7 +316,7 @@ class TestDocumentPageSidebarLayout:
         assert "notebook-sidebar-toggle" not in body
         assert "cdx-footnote-footer__heading\">Outline" in body
 
-    def test_sidebar_layout_renders_the_sidebar_shell_with_an_endnotes_tab(self, conn):
+    def test_sidebar_layout_renders_the_sidebar_shell_without_an_endnotes_tab(self, conn):
         db.save_notebook_settings(conn, "sidebar")
         _document(conn, uid="d1", title="Thesis Notes")
         resp = notebook_router.document_page(uid="d1", request=_bare_request("/notebook/d1"), conn=conn)
@@ -324,8 +324,8 @@ class TestDocumentPageSidebarLayout:
         body = resp.body.decode()
         assert 'class="notebook-sidebar"' in body
         assert "notebook-sidebar-toggle" in body
-        assert 'data-notebook-sidebar-tab="endnotes"' in body
-        assert 'id="notebook-footnotes-sidebar-slot"' in body
+        assert 'data-notebook-sidebar-tab="endnotes"' not in body
+        assert 'id="notebook-footnotes-sidebar-slot"' not in body
         # The bottom-of-page Bibliography card is dropped in this branch
         # (it lives only in the sidebar tab now) -- confirmed by checking
         # for the specific bottom-card wrapper class, not just the word

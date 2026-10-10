@@ -393,7 +393,6 @@ def settings_your_profile(request: Request, conn=Depends(get_db)):
             ),
             "radicale_env_configured": getattr(settings, "radicale_env_configured", False),
             "env_file_available": bool(getattr(settings, "env_file_path", None)),
-            "recovery_token": auth.get_recovery_token(conn),
             "has_account": auth.has_persisted_credentials(settings, conn)
             or bool(getattr(settings, "auth_username", None) and getattr(settings, "auth_password", None)),
             "account_username": (
@@ -589,12 +588,6 @@ def account_settings(
         path="/",
     )
     return response
-
-
-@router.post("/settings/recovery-token/regenerate")
-def regenerate_recovery_token(conn=Depends(get_db)):
-    auth.regenerate_recovery_token(conn)
-    return RedirectResponse(url="/settings/your-profile?note=New+recovery+token+created.", status_code=303)
 
 
 @router.post("/settings/restart")

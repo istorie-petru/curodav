@@ -1,0 +1,20 @@
+{% from "_inputs.html" import checkbox_input %}
+{% if not q.strip() %}
+<p class="hint">Type what to find, then preview.</p>
+{% elif not hits %}
+<p class="hint">No matches in any document.</p>
+{% else %}
+<p class="hint" data-find-summary>{{ total }} match{{ '' if total == 1 else 'es' }} in {{ hits|length }} document{{ '' if hits|length == 1 else 's' }}. Untick any document to leave it alone.</p>
+<ul class="notebook-find-hits" data-find-hits data-warn-after="{{ toast_threshold }}">
+    {% for h in hits %}
+    <li class="notebook-find-hit">
+        <label class="checkbox-row">
+            {{ checkbox_input({'name': 'uids', 'value': h.uid, 'checked': true}) }}
+            <span class="notebook-find-title">{{ h.title }}</span>
+            <span class="hint">{{ h.count }}</span>
+        </label>
+        {% for s in h.snippets %}<div class="notebook-find-snippet hint">{{ s }}</div>{% endfor %}
+    </li>
+    {% endfor %}
+</ul>
+{% endif %}

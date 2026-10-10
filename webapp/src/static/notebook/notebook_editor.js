@@ -21,21 +21,17 @@
   var mount = document.getElementById("notebook-editor");
   if (!mount || !window.EditorJS) return;
 
-  var status = document.getElementById("notebook-save-status");
   var contentUrl = mount.getAttribute("data-content-url");
   var saveTimer = null;
+  var failedSaves = 0;
 
-  function setStatus(state, text) {
-    if (!status) return;
-    status.setAttribute("data-state", state);
-    status.textContent = text;
-  }
-
+  // No save-status text: a failed save raises one error toast (and again
+  // only after a later save succeeds and fails anew), so a normal save is
+  // silent.
   function save(editor) {
     editor
       .save()
       .then(function (data) {
-        setStatus("saving", "Saving...");
         return fetch(contentUrl, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -44,15 +40,16 @@
       })
       .then(function (resp) {
         if (!resp.ok) throw new Error("save failed");
-        setStatus("saved", "Saved");
+        failedSaves = 0;
       })
       .catch(function () {
-        setStatus("error", "Could not save");
+        if (failedSaves++ === 0) {
+          window.ccToast({ message: "Could not save this document. Your last changes are not stored yet.", variant: "error" });
+        }
       });
   }
 
   function scheduleSave(editor) {
-    setStatus("pending", "Unsaved changes...");
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(function () {
       save(editor);
@@ -170,6 +167,68 @@
     });
   }
 
+  // Pasting markdown text (no rich HTML on the clipboard) into a paragraph
+  // turns it into real blocks; a single line with inline markers is
+  // inserted as formatted text instead.
+  function wireMarkdownPaste(editor, mount) {
+    mount.addEventListener(
+      "paste",
+      function (e) {
+        var md = window.NotebookMarkdown;
+        var data = e.clipboardData;
+        if (!md || !data || Array.prototype.indexOf.call(data.types, "text/html") !== -1) return;
+        var text = data.getData("text/plain");
+        if (!text || !md.looksLikeMarkdown(text)) return;
+        var editable = e.target.closest && e.target.closest("[contenteditable=true]");
+        var block = editable && editor.blocks.getBlockByElement(editable);
+        if (!block || block.name !== "paragraph") return;
+        var blocks = md.toBlocks(text);
+        if (!blocks.length) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (blocks.length === 1 && blocks[0].type === "paragraph") {
+          document.execCommand("insertHTML", false, blocks[0].data.text);
+          return;
+        }
+        var index = editor.blocks.getBlockIndex(block.id);
+        var replaceEmpty = editable.textContent.trim() === "";
+        var at = replaceEmpty ? index : index + 1;
+        blocks.forEach(function (b, n) {
+          editor.blocks.insert(b.type, b.data, {}, at + n, n === blocks.length - 1);
+        });
+        if (replaceEmpty) editor.blocks.delete(at + blocks.length);
+      },
+      true
+    );
+  }
+
+  // Each toolbar action, and each word or line typed, closes the previous
+  // history step before it and records its own right after, so one action is
+  // one undo step instead of merging with what was typed beside it.
+  function wireUndoCheckpoints(mount, undo) {
+    function around() {
+      undo.checkpoint();
+      setTimeout(function () {
+        undo.checkpoint();
+      }, 80);
+    }
+    document.addEventListener(
+      "click",
+      function (e) {
+        if (e.target.closest && e.target.closest(".ce-inline-toolbar, .ce-popover, .ce-toolbar, .cdx-settings-button, .cdx-mention-popup")) around();
+      },
+      true
+    );
+    mount.addEventListener(
+      "keydown",
+      function (e) {
+        if (e.key === " " || e.key === "Enter") undo.checkpoint();
+      },
+      true
+    );
+    mount.addEventListener("paste", around, true);
+  }
+
   fetch(contentUrl, { headers: { Accept: "application/json" } })
     .then(function (resp) {
       if (!resp.ok) throw new Error("load failed");
@@ -196,6 +255,7 @@
         // only appear after the user's first click into the body, which
         // isn't "there should be default text" (visible immediately).
         placeholder: "Start writing...",
+        tunes: ["align", "blockColor", "duplicate"],
         autofocus: true,
         tools: {
           header: {
@@ -205,13 +265,20 @@
           list: { class: window.EditorjsList, inlineToolbar: true },
           quote: { class: window.NotebookQuote, inlineToolbar: true },
           code: window.NotebookCode,
-          table: { class: window.Table, inlineToolbar: true },
+          table: { class: window.NotebookTable, inlineToolbar: true },
           delimiter: window.NotebookDelimiter,
           callout: { class: window.NotebookCallout, inlineToolbar: true },
           image: { class: window.SimpleImage, inlineToolbar: true },
-          inlineCode: window.InlineCode,
+          inlineCode: window.NotebookInlineCode,
+          strike: window.NotebookStrike,
+          color: window.NotebookColor,
+          more: window.NotebookMore,
+          clearFormat: window.NotebookClearFormat,
+          mention: window.NotebookMention,
+          align: window.NotebookAlignTune,
+          blockColor: window.NotebookBlockColor,
+          duplicate: window.NotebookDuplicate,
           footnote: window.NotebookFootnote,
-          footnoteInsert: window.NotebookFootnoteBlock,
           wikilink: window.NotebookWikiLink,
           wikilinkInsert: window.NotebookWikilinkBlock,
         },
@@ -228,7 +295,10 @@
           scheduleSave(editor);
         },
       });
+      window.notebookEditor = editor;
+      if (window.notebookWireMentions) window.notebookWireMentions(mount);
       wireMarkdownShortcuts(editor, mount);
+      wireMarkdownPaste(editor, mount);
       mount.addEventListener(
         "blur",
         function () {
@@ -245,9 +315,15 @@
           new window.DragDrop(editor);
         });
       }
-      if (window.Undo) {
+      if (window.NotebookUndo) {
         editor.isReady.then(function () {
-          new window.Undo({ editor: editor });
+          var undo = new window.NotebookUndo({ editor: editor, mount: mount, uid: mount.getAttribute("data-uid") });
+          window.notebookUndo = undo;
+          undo.start();
+          wireUndoCheckpoints(mount, undo);
+          window.addEventListener("pagehide", function () {
+            undo.persist();
+          });
         });
       }
       if (window.notebookRenderFootnoteList) {
@@ -265,42 +341,5 @@
           window.notebookRenderRelationships(mount);
         });
       }
-      // Table row/column popover can render partly below the visible
-      // scroll area (2026-10-03, direct report -- "the delete row button
-      // for the last row ... only the top of the button is clickable").
-      // @editorjs/table's own mini-popover (table.css's .tc-popover,
-      // opened from .tc-toolbox__toggler) has no viewport/scroll-
-      // boundary awareness at all -- for a table near the bottom of
-      // #notebook-editor's own scrollable area, the popover just extends
-      // past it uncorrected, so "Delete row" et al. are only partially
-      // inside the clickable scrolled viewport. Not patching the tool's
-      // internals (minified, private, see table.umd.js) -- a plain
-      // `scrollIntoView` after it opens is a public, standard browser API
-      // that nudges the editor's own scroll just enough to bring the
-      // whole popover into view, a no-op if it's already fully visible.
-      // Targets the LAST item specifically, not the popover container --
-      // scrolling the container into view still left the last item's own
-      // few px of padding poking out past the edge (confirmed live: ~6px
-      // of "Delete row" still clipped), since the container's own bottom
-      // padding sits below it.
-      mount.addEventListener(
-        "click",
-        function (e) {
-          var toggler = e.target.closest(".tc-toolbox__toggler");
-          if (!toggler) return;
-          requestAnimationFrame(function () {
-            var toolbox = toggler.closest(".tc-toolbox");
-            var popover =
-              toolbox && toolbox.querySelector(".tc-popover--opened");
-            if (!popover) return;
-            var items = popover.querySelectorAll(".tc-popover__item");
-            var target = items.length
-              ? items[items.length - 1]
-              : popover;
-            target.scrollIntoView({ block: "nearest" });
-          });
-        },
-        true
-      );
     });
 })();

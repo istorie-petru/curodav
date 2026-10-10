@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "_inputs.html" import text_input, checkbox_input %}
+{% block title %}Search contents{% endblock %}
+{% block content %}
+<div id="modal-target" class="modal-stable-height">
+<div class="modal-header">
+<h1>Search contents</h1>
+</div>
+<div class="modal-body">
+<div class="card" data-notebook-find>
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label for="find-q">Find</label>
+            {{ text_input({'id': 'find-q', 'name': 'q', 'autocomplete': 'off', 'data-find-input': true}) }}
+        </div>
+        <div class="field field-wide">
+            <label for="find-replacement">Replace with</label>
+            {{ text_input({'id': 'find-replacement', 'name': 'replacement', 'autocomplete': 'off'}) }}
+        </div>
+        <div class="field field-wide notebook-find-options">
+            <label class="checkbox-row">{{ checkbox_input({'name': 'case'}) }} Match case</label>
+            <label class="checkbox-row">{{ checkbox_input({'name': 'whole'}) }} Whole word</label>
+        </div>
+    </div>
+    <div class="notebook-find-actions">
+        <button type="button" class="btn" data-find-preview>Preview</button>
+        <button type="button" class="btn btn-primary" data-find-apply disabled>Replace in selected</button>
+    </div>
+    <div class="notebook-find-results" data-find-results></div>
+</div>
+</div>
+</div>
+{% endblock %}

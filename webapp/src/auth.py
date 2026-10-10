@@ -125,6 +125,7 @@ AUTH_SECRET_KEY = "auth_session_secret"
 AUTH_USERNAME_KEY = "auth_username"
 AUTH_PASSWORD_HASH_KEY = "auth_password_hash"
 AUTH_RECOVERY_TOKEN_KEY = "auth_recovery_token"
+MIN_PASSWORD_LENGTH = 8
 
 # The route the forced first-run flow lives at. Public only conditionally
 # (see setup_required) -- unlike PUBLIC_PATHS below, which is unconditional.
@@ -254,6 +255,8 @@ def reset_credentials_with_token(settings, conn, token: str, username: str, pass
         raise ValueError("That recovery token is not correct.")
     if not username.strip() or not password:
         raise ValueError("Username and password are required.")
+    if len(password) < MIN_PASSWORD_LENGTH:
+        raise ValueError(f"The password must be at least {MIN_PASSWORD_LENGTH} characters.")
     set_persisted_credentials(conn, username.strip(), password)
     rotate_session_secret(settings, conn)
     return regenerate_recovery_token(conn)

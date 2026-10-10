@@ -11,6 +11,8 @@
 #                                                     # --reconfigure re-prompts for DOMAIN_APP/TUNNEL_NAME/RADICALE_USER
 #                                                     # and rotates the Radicale password; without it, a re-run of
 #                                                     # 'install --dav' reuses whatever was set last time, no re-prompting
+#   sudo curodav-ctl password-reset                  # reset the login with the recovery token, then restart
+#   sudo curodav-ctl token [--new]                   # print the recovery token, or replace it
 #       curodav-ctl status                            # just the reachability/consistency checks below, no deploy
 #   sudo curodav-ctl revert                          # swap current -> previous locally, restart, health-check
 #   sudo curodav-ctl remove                          # tear down (destructive, confirms)
@@ -820,7 +822,7 @@ cmd_password_reset() {
   fi
   # Runs webapp/scripts/password_reset.py as the app user with the app's own
   # environment, so it opens the same database. It asks for the recovery
-  # token (Settings > Your Profile), a new username and a new password.
+  # token (`curodav-ctl token` prints it), a new username and a new password.
   if runuser -u "$APP_USER" -- bash -c 'set -a; . "$1"; set +a; cd "$2/webapp" && exec "$2/.venv/bin/python" scripts/password_reset.py' _ "$ENV_FILE" "$CURRENT_LINK"; then
     log "Restarting ${APP_NAME} so the new login applies..."
     systemctl restart "$APP_NAME"
@@ -828,6 +830,19 @@ cmd_password_reset() {
     err "Password reset did not complete; nothing was restarted."
     exit 1
   fi
+}
+
+cmd_token() {
+  require_root
+  if [ ! -f "$ENV_FILE" ] || [ ! -d "$CURRENT_LINK" ]; then
+    err "No deployment found -- has 'install' been run yet?"
+    exit 1
+  fi
+  # Prints the recovery token (the app never shows it in the browser).
+  # `token --new` replaces it; the old one stops working.
+  local flag="--show-token"
+  [ "${1:-}" = "--new" ] && flag="--new-token"
+  runuser -u "$APP_USER" -- bash -c 'set -a; . "$1"; set +a; cd "$2/webapp" && exec "$2/.venv/bin/python" scripts/password_reset.py "$3"' _ "$ENV_FILE" "$CURRENT_LINK" "$flag"
 }
 
 case "${1:-}" in
@@ -870,8 +885,9 @@ case "${1:-}" in
   remove)  cmd_remove ;;
   flairs)  cmd_flairs ;;
   password-reset)  cmd_password_reset ;;
+  token)  cmd_token "${2:-}" ;;
   *)
-    echo "Usage: curodav-ctl {install [--dav [--proxy=cloudflare|manual] [--reconfigure]]|update|status|revert|remove|flairs|password-reset}" >&2
+    echo "Usage: curodav-ctl {install [--dav [--proxy=cloudflare|manual] [--reconfigure]]|update|status|revert|remove|flairs|password-reset|token [--new]}" >&2
     exit 2
     ;;
 esac

@@ -1,0 +1,9 @@
+<div class="notebook-glossary-list" data-glossary-list>
+{% if glossary_terms %}
+<ul class="notebook-bibliography-sidebar-list">
+    {% for t in glossary_terms %}<li><strong>{{ t.term }}</strong>{% if t.definition %} -- {{ t.definition }}{% endif %}</li>{% endfor %}
+</ul>
+{% else %}
+<p class="notebook-toc-empty">No terms attached yet</p>
+{% endif %}
+</div>

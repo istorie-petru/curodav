@@ -30,7 +30,7 @@
        pwa.py's own header comment) -- this manifest link never had
        anything to do with that removed feature. #}
     <link rel="manifest" href="{{ static_url('manifest.webmanifest') }}">
-    <meta name="theme-color" content="#007aff">
+    <meta name="theme-color" content="#f2f4f7">
     <link rel="stylesheet" href="{{ static_url('style.css') }}">
     {# Per-page extra stylesheets (2026-10-01) -- mirrors {% block
        extra_scripts %} at the end of <body>, just for <head>. First (only)
@@ -62,6 +62,13 @@
         var stored = localStorage.getItem(KEY);
         var theme = stored || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
         if (theme === "dark") document.documentElement.setAttribute("data-theme", "dark");
+        // System chrome (phone status bar, browser toolbar) follows the page background, in either theme.
+        var chrome = document.querySelector('meta[name="theme-color"]');
+        function syncChrome() {
+          if (chrome) chrome.setAttribute("content", document.documentElement.getAttribute("data-theme") === "dark" ? "#363636" : "#f2f4f7");
+        }
+        syncChrome();
+        new MutationObserver(syncChrome).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
       })();
       // Sidebar expanded/collapsed state (2026-08-29, sidebar redesign
       // slice 13a) -- same "apply before first paint" reasoning as the
@@ -587,6 +594,7 @@
 
 <script defer src="{{ static_url('toast.js') }}"></script>
 <script defer src="{{ static_url('app.js') }}"></script>
+<script defer src="{{ static_url('touch_select.js') }}"></script>
 <script defer src="{{ static_url('sidebar_tree.js') }}"></script>
 <!-- Mobile nav drawer (2026-09-04, plans/STATE.md mobile-nav decision) --
      toggles the .mobile-tabbar Sidebar button / .tabbar bottom-sheet

@@ -70,35 +70,16 @@
   color: var(--fg-secondary);
 }
 .cdx-footnote-list li {
-  cursor: text;
-  /* A contentEditable <li> with an empty textContent has no child nodes at
-     all, so it collapses to zero height (no line box without a text node
-     or <br>) -- two consecutive empty footnotes then look squashed
-     together since their margin-bottoms collapse against each other's
-     zero-height boxes. min-height pinned to the list's own line-height
-     keeps every <li> occupying one line's worth of space whether or not
-     it has text, which is exactly what makes the gap "disappear" the
-     moment the first one gets typed into (it already had implicit height
-     from its own text). */
   min-height: 1.4em;
   margin-bottom: 0.3em;
-  outline: none;
 }
 .cdx-footnote-list li:hover,
-.cdx-footnote-list li:focus {
+.cdx-footnote-list li:focus-within {
   color: var(--fg-primary);
 }
 
-/* A structured entry (built via the slash-menu action flow, item J
-   session 9a) isn't contentEditable -- its text + "Edit" button sit
-   side by side instead of the plain-text li's single text node. The flex
-   row lives on `.cdx-footnote-structured-row`, an inner wrapper, not on
-   the <li> itself -- `display:flex` directly on an <ol> item suppresses
-   its own numbered ::marker (confirmed live: the structured entry's
-   number disappeared while its plain-text siblings kept theirs). */
-.cdx-footnote-list-item-structured {
-  cursor: default;
-}
+/* An entry is a row: the body (editable rich text, or generated text) and its action menu button.
+   The flex lives on an inner row so the <li> keeps its number. */
 .cdx-footnote-structured-row {
   display: flex;
   align-items: baseline;
@@ -106,77 +87,84 @@
 }
 .cdx-footnote-text {
   flex: 1;
+  min-height: 1.4em;
+  outline: none;
+  cursor: text;
 }
-.cdx-footnote-edit-btn {
+.cdx-footnote-list-item-structured .cdx-footnote-text {
+  cursor: default;
+}
+.cdx-footnote-text a {
+  color: var(--cal-text-blue);
+}
+.cdx-footnote-menu-btn {
   flex: none;
+  display: flex;
+  align-items: center;
   border: none;
   background: none;
-  padding: 0;
-  font-size: 0.85em;
-  color: var(--tag-blue-fg);
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  color: var(--fg-tertiary);
   cursor: pointer;
   opacity: 0;
 }
-.cdx-footnote-list-item-structured:hover .cdx-footnote-edit-btn,
-.cdx-footnote-edit-btn:focus {
+.cdx-footnote-list li:hover .cdx-footnote-menu-btn,
+.cdx-footnote-menu-btn:focus {
   opacity: 1;
 }
-
-/* The "Footnote" slash-command block (NotebookFootnoteBlock) -- its
-   placeholder render() cycles through an action menu, then a citation
-   picker, then a page-number step, all inside the one block wrap below.
-   Visual sizing mirrors `.cdx-wikilink-picker`/-input/-results in
-   style.css (same picker shape, different source/target data), kept as
-   its own footnote-scoped classes rather than sharing those exact
-   classnames across files -- these are also reused by the footer "Edit"
-   floating popover above. */
-.cdx-footnote-action-block {
-  padding: 4px 0;
+.cdx-footnote-menu-btn:hover {
+  background: var(--accent-neutral-hover);
 }
-.cdx-footnote-action-menu {
+.cdx-footnote-menu {
+  z-index: var(--z-popover, 1000);
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-.cdx-footnote-action-btn {
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
+  flex-direction: column;
+  min-width: 180px;
+  padding: var(--space-1);
   background: var(--bg-elevated);
-  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elevation-2);
+}
+.cdx-footnote-menu button {
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--fg-primary);
   cursor: pointer;
 }
-.cdx-footnote-action-btn:hover:not(:disabled) {
-  background: var(--bg-secondary);
+.cdx-footnote-menu button:hover {
+  background: var(--accent-neutral-hover);
 }
-.cdx-footnote-action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.cdx-footnote-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
 }
-.cdx-footnote-action-hint {
-  margin-top: 4px;
-  font-size: 0.8em;
-  color: var(--fg-tertiary);
+.cdx-footnote-kind-btn {
+  border: 1px solid var(--border);
+  background: none;
+  padding: 4px 10px;
+  border-radius: var(--radius-control);
+  color: var(--fg-primary);
+  cursor: pointer;
+}
+.cdx-footnote-kind-btn.is-active {
+  background: var(--accent-neutral-subtle-strong);
+  border-color: var(--border-strong);
+}
+.cdx-footnote-kind-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 .cdx-footnote-picker {
   display: block;
   width: 320px;
-}
-/* "Custom note" step (direct clarification, 2026-10-03) -- a plain
-   textarea + Insert button, same width as the citation picker steps but
-   stacked vertically (a free-text aside needs room to wrap, unlike the
-   single-line search/page inputs). */
-.cdx-footnote-custom-note {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  width: 320px;
-}
-.cdx-footnote-custom-note .cdx-footnote-input {
-  width: 100%;
-}
-.cdx-footnote-custom-note .cdx-footnote-picker-insert-btn {
-  align-self: flex-end;
 }
 /* 2026-10-04 (floating-popover -> real-modal rewrite,
    notebook_footnotes.js's openFootnoteEditPicker) -- this used to be

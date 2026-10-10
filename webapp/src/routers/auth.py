@@ -196,7 +196,7 @@ def setup_submit(
         error = "Choose a username."
     elif not password:
         error = "Choose a password."
-    elif len(password) < 8:
+    elif len(password) < auth.MIN_PASSWORD_LENGTH:
         error = "Password must be at least 8 characters."
     elif password != password_confirm:
         error = "Passwords do not match."

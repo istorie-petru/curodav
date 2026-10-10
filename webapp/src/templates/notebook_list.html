@@ -12,14 +12,15 @@
    dropdown. #}
 {% extends "base.html" %}
 {% block title %}Notebook{% endblock %}
-{% block main_class %}main-full-width notebook-main{% endblock %}
+{% block main_class %}main-full-width notebook-main notebook-browse-page{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_bulk_actions_bar.html" import bulk_actions_bar, bulk_count %}
 {# Plain form, no data-cc-change -- create_document redirects straight
    into the new document's own Editor page, a real server-rendered
    navigation, not an in-place list refresh (see routers/notebook.py's
    create_document docstring for why). Works with no JS. #}
-{% set _doc_count_extra %}<span class="notebook-browse-doc-count">{{ total_documents }} document{{ 's' if total_documents != 1 else '' }}</span>{% endset %}
+{% set _doc_count_extra %}<span class="notebook-browse-doc-count">{{ total_documents }} document{{ 's' if total_documents != 1 else '' }}</span>{{ bulk_count("notebook") }}{% endset %}
 {# Sidebar collapse toggle (2026-10-03 direct request) -- shared with
    notebook_document.html, rendered by page_header_narrow's own
    `sidebar_toggle=true` param now (2026-10-03 follow-up, backlog item A.4)
@@ -37,6 +38,8 @@
     {# Citations library (2026-10-03) -- a secondary, cross-document view
        reached via a plain link, same "generated pages are reached via
        links, not extra tabs" rule the rest of Notebook already follows. #}
+    {{ bulk_actions_bar("notebook", edit=true) }}
+    <a href="/notebook/find" data-modal class="icon-btn" title="Search contents" aria-label="Search contents">{{ icon('search', 'icon-sm') }}</a>
     <a href="/notebook/citations" class="icon-btn" title="Citations library" aria-label="Citations library">{{ icon('book-open', 'icon-sm') }}</a>
     {# Glossary library (2026-10-03) -- same "secondary, cross-document
        view reached via a plain link" treatment as Citations above. #}
@@ -102,4 +105,24 @@
 {% block extra_scripts %}
 <script defer src="{{ static_url('notebook_browse_rows.js') }}"></script>
 <script defer src="{{ static_url('notebook_sidebar.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_find.js') }}"></script>
+<script defer src="{{ static_url('notebook_browse_more.js') }}"></script>
+<script defer src="{{ static_url('bulk_select.js') }}"></script>
+<script nonce="{{ csp_nonce() }}">
+document.addEventListener("DOMContentLoaded", function () {
+    window.CCBulkSelect.init({
+        tableId: "notebook-list",
+        rowSelector: "tr",
+        barId: "notebook-bulk-bar",
+        countId: "notebook-bulk-count",
+        clearId: "notebook-bulk-clear",
+        deleteButtonId: "notebook-bulk-delete",
+        deleteUrl: "/notebook/bulk-delete",
+        editButtonId: "notebook-bulk-edit",
+        editModalUrl: "/notebook/bulk-edit-modal",
+        itemLabel: "document",
+        changeType: "notebook",
+    });
+});
+</script>
 {% endblock %}

@@ -9106,3 +9106,24 @@ button.avatar-upload{background:none; border:none; padding:0; cursor:pointer;}
   .sec-grid{grid-template-columns:minmax(0, 1fr);}
   .sec-col:nth-child(2){grid-column:1;}
 }
+
+/* Notebook Browse: the table view carries no bold text anywhere on the page. */
+main.notebook-browse-page, main.notebook-browse-page *, main.notebook-browse-page .btn, main.notebook-browse-page .active, main.notebook-browse-page .is-active{font-weight:var(--font-weight-regular);}
+.notebook-browse-table{width:100%;}
+.notebook-browse-table .col-meta{width:auto; min-width:0;}
+.notebook-browse-table .col-actions{width:48px; min-width:48px;}
+.notebook-browse-labels{white-space:normal;}
+.notebook-load-more{display:flex; justify-content:center; padding:var(--space-4) 0;}
+.notebook-stacked-actions{display:flex; gap:var(--space-1);}
+.notebook-field-checks{display:flex; flex-wrap:wrap; gap:var(--space-3);}
+.notebook-find-options{display:flex; gap:var(--space-4);}
+.notebook-find-actions{display:flex; gap:var(--space-2); margin-top:var(--space-3);}
+.notebook-find-hits{list-style:none; margin:var(--space-3) 0 0; padding:0; display:flex; flex-direction:column; gap:var(--space-2);}
+.notebook-find-title{font-weight:500;}
+.notebook-find-snippet{margin-left:var(--space-5);}
+
+/* Touch: selection is by long press (touch_select.js), so the checkbox column is hidden. */
+@media (hover:none) and (pointer:coarse){
+  .col-select, td:has(> .row-select), .contact-row-wrap > .row-select{display:none;}
+  body.touch-selecting :is(tr, .contact-row-wrap){-webkit-user-select:none; user-select:none; -webkit-touch-callout:none;}
+}

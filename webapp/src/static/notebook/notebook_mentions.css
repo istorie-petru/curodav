@@ -1,0 +1,18 @@
+/* Mention chips and the picker (notebook_mentions.js). */
+#notebook-editor data.cdx-mention{display:inline-flex; align-items:center; gap:4px; padding:0 6px; border-radius:var(--radius-sm);
+  background:var(--accent-neutral-subtle-strong); color:var(--fg-primary); cursor:pointer; white-space:nowrap; vertical-align:baseline; line-height:1.5;}
+#notebook-editor data.cdx-mention[data-kind="contact"]::before{content:"@"; color:var(--fg-tertiary);}
+#notebook-editor data.cdx-mention[data-kind="task"]::before, #notebook-editor data.cdx-mention[data-kind="event"]::before{content:"$"; color:var(--fg-tertiary);}
+#notebook-editor data.cdx-mention-icon{padding:0 2px; background:transparent; cursor:default;}
+#notebook-editor data.cdx-mention-icon::before{content:none;}
+#notebook-editor data.cdx-mention .icon{width:1.1em; height:1.1em;}
+.cdx-mention-popup{position:fixed; z-index:10050; display:flex; flex-direction:column; min-width:240px; max-width:360px; max-height:50vh; overflow-y:auto;
+  padding:var(--space-1); background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md); box-shadow:var(--elevation-2);}
+.cdx-mention-row{display:flex; align-items:center; gap:10px; width:100%; border:0; background:none; text-align:left; padding:7px 10px; border-radius:var(--radius-sm);
+  color:var(--fg-primary); cursor:pointer;}
+.cdx-mention-row:hover, .cdx-mention-row.is-active{background:var(--accent-neutral-hover);}
+.cdx-mention-row-icon{display:flex; flex:none; width:16px; height:16px; color:var(--fg-secondary);}
+.cdx-mention-row-icon .icon{width:16px; height:16px;}
+.cdx-mention-row-label{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.cdx-mention-row-sub{flex:none; color:var(--fg-tertiary); font-size:var(--text-sm);}
+.cdx-mention-empty{padding:8px 10px; color:var(--fg-tertiary);}

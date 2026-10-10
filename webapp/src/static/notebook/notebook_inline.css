@@ -1,0 +1,98 @@
+/* Inline text tools (notebook_inline.js): colors, strikethrough, sub and
+   superscript, alignment, and the toolbar polish that goes with them. */
+
+#notebook-editor mark{background:transparent; color:inherit; border-radius:var(--radius-xs, 4px); padding:0 2px;}
+#notebook-editor s{text-decoration:line-through;}
+#notebook-editor sup:not(.cdx-footnote-ref){font-size:.75em; vertical-align:super;}
+#notebook-editor sub{font-size:.75em; vertical-align:sub;}
+#notebook-editor .nb-align[data-align="center"]{text-align:center;}
+#notebook-editor .nb-align[data-align="right"]{text-align:right;}
+
+/* Text and highlight colors reuse the app's tag color pairs. */
+#notebook-editor mark.nb-tc-red{color:var(--tag-red-fg);}
+#notebook-editor mark.nb-hl-red{background:var(--tag-red-bg);}
+#notebook-editor mark.nb-tc-orange{color:var(--tag-orange-fg);}
+#notebook-editor mark.nb-hl-orange{background:var(--tag-orange-bg);}
+#notebook-editor mark.nb-tc-yellow{color:var(--tag-yellow-fg);}
+#notebook-editor mark.nb-hl-yellow{background:var(--tag-yellow-bg);}
+#notebook-editor mark.nb-tc-green{color:var(--tag-green-fg);}
+#notebook-editor mark.nb-hl-green{background:var(--tag-green-bg);}
+#notebook-editor mark.nb-tc-teal{color:var(--tag-teal-fg);}
+#notebook-editor mark.nb-hl-teal{background:var(--tag-teal-bg);}
+#notebook-editor mark.nb-tc-blue{color:var(--tag-blue-fg);}
+#notebook-editor mark.nb-hl-blue{background:var(--tag-blue-bg);}
+#notebook-editor mark.nb-tc-purple{color:var(--tag-purple-fg);}
+#notebook-editor mark.nb-hl-purple{background:var(--tag-purple-bg);}
+#notebook-editor mark.nb-tc-pink{color:var(--tag-pink-fg);}
+#notebook-editor mark.nb-hl-pink{background:var(--tag-pink-bg);}
+#notebook-editor mark.nb-tc-gray{color:var(--tag-gray-fg);}
+#notebook-editor mark.nb-hl-gray{background:var(--tag-gray-bg);}
+
+/* Swatch panel under the inline toolbar. */
+.nb-color-panel, .nb-more-panel{display:flex; flex-direction:column; gap:6px; padding:8px;}
+.nb-more-panel{flex-direction:row; gap:4px;}
+.nb-color-row{display:flex; flex-wrap:wrap; align-items:center; gap:3px;}
+.nb-color-label{width:100%; font-size:var(--text-sm); color:var(--fg-secondary);}
+.nb-swatch{width:18px; height:18px; border-radius:50%; border:1px solid var(--border); padding:0; cursor:pointer; font-size:10px; line-height:1; background:var(--bg-elevated); color:var(--fg-primary);}
+.nb-swatch.is-active{outline:2px solid var(--accent); outline-offset:1px;}
+.nb-swatch.is-none{background:transparent;}
+.nb-swatch.nb-tc-red{color:var(--tag-red-fg);}
+.nb-swatch.nb-hl-red{background:var(--tag-red-bg);}
+.nb-swatch.nb-tc-orange{color:var(--tag-orange-fg);}
+.nb-swatch.nb-hl-orange{background:var(--tag-orange-bg);}
+.nb-swatch.nb-tc-yellow{color:var(--tag-yellow-fg);}
+.nb-swatch.nb-hl-yellow{background:var(--tag-yellow-bg);}
+.nb-swatch.nb-tc-green{color:var(--tag-green-fg);}
+.nb-swatch.nb-hl-green{background:var(--tag-green-bg);}
+.nb-swatch.nb-tc-teal{color:var(--tag-teal-fg);}
+.nb-swatch.nb-hl-teal{background:var(--tag-teal-bg);}
+.nb-swatch.nb-tc-blue{color:var(--tag-blue-fg);}
+.nb-swatch.nb-hl-blue{background:var(--tag-blue-bg);}
+.nb-swatch.nb-tc-purple{color:var(--tag-purple-fg);}
+.nb-swatch.nb-hl-purple{background:var(--tag-purple-bg);}
+.nb-swatch.nb-tc-pink{color:var(--tag-pink-fg);}
+.nb-swatch.nb-hl-pink{background:var(--tag-pink-bg);}
+.nb-swatch.nb-tc-gray{color:var(--tag-gray-fg);}
+.nb-swatch.nb-hl-gray{background:var(--tag-gray-bg);}
+
+.nb-more-item{display:flex; align-items:center; justify-content:center; width:28px; height:28px; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--fg-primary); cursor:pointer;}
+.nb-more-item:hover{background:var(--bg-hover, var(--bg-secondary));}
+.nb-more-item.is-active{background:var(--accent-neutral-subtle); color:var(--accent);}
+
+/* Inline code in the accent blue (the text-safe tone), in both themes. */
+#notebook-editor code.inline-code, [data-theme="dark"] #notebook-editor code.inline-code{
+  background:var(--accent-neutral-subtle); color:var(--cal-text-blue); border-radius:var(--radius-xs, 4px);
+  padding:1px 4px; font-family:var(--font-mono, monospace); font-size:.92em;
+}
+
+/* Toolbars: one icon size and a solid hover, in both themes. */
+html .ce-inline-toolbar .ce-inline-tool svg, html .ce-inline-toolbar .ce-popover-item__icon svg{width:18px; height:18px;}
+html .ce-inline-toolbar .ce-inline-tool{min-width:32px; height:32px;}
+@media (hover:hover){
+  html .ce-inline-toolbar .ce-inline-tool:hover,
+  html .ce-popover-item:hover:not(.ce-popover-item--disabled),
+  html .ce-toolbar__plus:hover,
+  html .ce-toolbar__settings-btn:hover{background-color:var(--accent-neutral-hover);}
+  html .nb-more-item:hover{background:var(--accent-neutral-hover);}
+}
+
+/* Block text and background colors, from the app's tag color pairs. */
+.nb-block-color[data-bg]{border-radius:var(--radius-sm);}
+.nb-block-color[data-text="red"]{color:var(--tag-red-fg);}
+.nb-block-color[data-bg="red"]{background:var(--tag-red-bg);}
+.nb-block-color[data-text="orange"]{color:var(--tag-orange-fg);}
+.nb-block-color[data-bg="orange"]{background:var(--tag-orange-bg);}
+.nb-block-color[data-text="yellow"]{color:var(--tag-yellow-fg);}
+.nb-block-color[data-bg="yellow"]{background:var(--tag-yellow-bg);}
+.nb-block-color[data-text="green"]{color:var(--tag-green-fg);}
+.nb-block-color[data-bg="green"]{background:var(--tag-green-bg);}
+.nb-block-color[data-text="teal"]{color:var(--tag-teal-fg);}
+.nb-block-color[data-bg="teal"]{background:var(--tag-teal-bg);}
+.nb-block-color[data-text="blue"]{color:var(--tag-blue-fg);}
+.nb-block-color[data-bg="blue"]{background:var(--tag-blue-bg);}
+.nb-block-color[data-text="purple"]{color:var(--tag-purple-fg);}
+.nb-block-color[data-bg="purple"]{background:var(--tag-purple-bg);}
+.nb-block-color[data-text="pink"]{color:var(--tag-pink-fg);}
+.nb-block-color[data-bg="pink"]{background:var(--tag-pink-bg);}
+.nb-block-color[data-text="gray"]{color:var(--tag-gray-fg);}
+.nb-block-color[data-bg="gray"]{background:var(--tag-gray-bg);}
