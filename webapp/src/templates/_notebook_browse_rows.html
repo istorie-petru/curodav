@@ -13,7 +13,7 @@
             <a class="label-name" href="/notebook/{{ d.uid }}">{{ d.title }}</a>
         </div>
     </td>
-    <td class="col-meta col-opt-2">{% if d.note_type %}<span class="cell-tag cal-{{ d.type_color }} notebook-type-pill">{{ d.note_type|upper }}</span>{% endif %}</td>
+    <td class="col-meta col-opt-2">{% if d.note_type %}<span class="cell-tag cal-{{ d.type_color }}">{{ icon(d.type_icon, 'icon-sm') }} {{ d.note_type }}</span>{% endif %}</td>
     <td class="col-meta col-opt-2 notebook-browse-labels">{% for tag in d.tags %}{{ label_pill(tag) }}{% endfor %}</td>
     <td class="col-meta col-opt-1">{{ widget_pill(d.updated_at | relative_date, 'gray') }}</td>
     <td class="col-actions">

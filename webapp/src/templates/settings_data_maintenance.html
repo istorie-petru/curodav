@@ -1,10 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Data & Maintenance - Settings{% endblock %}
 {% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("Data & Maintenance", "database") }}
 <div id="modal-target">
-<div class="modal-header"><h1>Data &amp; Maintenance</h1></div>
-<div class="modal-body">
-<div data-keep-open>
 
 {# 2026-09-09 direct request: every action below still redirects back here
    with ?note=/?error= (progressive enhancement -- the routes work as plain
@@ -22,6 +21,7 @@
 <div class="settings-hint settings-hint-error" data-dm-flash="error">{{ request.query_params.get('error') }}</div>
 {% endif %}
 
+{% include "_settings_status_cards.html" %}
 
 <!-- 2b. CalDAV / Radicale sync -- 2026-09-08: read-only display now. The
      credentials this card used to collect independently (URL/username/
@@ -136,11 +136,6 @@
     </div>
 </div>
 
-</div>
-</div>
-{% set footer_back_url = '/settings' %}
-{% set footer_back_label = 'Done' %}
-{% include "_modal_footer.html" %}
 </div>
 {% endblock %}
 {% block extra_scripts %}

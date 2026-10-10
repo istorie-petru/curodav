@@ -34,7 +34,7 @@
 {# note_type is blank on a freshly-created document (2026-10-02) -- no
    pill at all when there's no type picked yet, just the plain date. #}
 {% set edit_link %}<a href="/notebook/{{ d.uid }}/properties" data-modal class="icon-btn" title="Edit properties" aria-label="Edit properties">{{ icon('edit', 'icon-sm') }}</a>{% endset %}
-{% set right_content %}{% if d.note_type %}<span class="cell-tag cal-{{ d.type_color }} notebook-type-pill">{{ d.note_type|upper }}</span> {% endif %}{{ d.updated_at | relative_date }}{% endset %}
+{% set right_content %}{% if d.note_type %}<span class="cell-tag cal-{{ d.type_color }}">{{ icon(d.type_icon, 'icon-sm') }} {{ d.note_type }}</span> {% endif %}{{ d.updated_at | relative_date }}{% endset %}
 {{ widget_link_row('/notebook/' ~ d.uid ~ _back_qs, d.title, leading=icon(d.type_icon, 'icon-sm cal-' ~ d.type_color), leading_class='widget-row-icon', right=right_content, actions=edit_link) }}
 {% endfor %}
 </table>

@@ -4,8 +4,8 @@
 
 A self-hosted **personal organizer** for one person, which you run on your
 own server and open in any browser. It has a home dashboard with widgets, a
-calendar, tasks and projects, habit tracking, contacts and notes, all
-organized by one shared label system. You can install it on your phone as an
+calendar, tasks and projects, habit tracking, contacts and a Notebook for
+longer writing, all organized by one shared label system. You can install it on your phone as an
 app (a PWA), and it keeps working offline.
 
 No cloud account, no subscription, no telemetry. Your data stays in one file
@@ -17,6 +17,7 @@ on a machine you control.
 | ![Tasks](./.github/assets/screenshots/tasks.png)         | ![Habits](./.github/assets/screenshots/habits.png)       |
 
 **Contents:** [Is this for you?](#is-this-for-you) ·
+[What's inside](#whats-inside) ·
 [Try it in 2 minutes](#try-it-in-2-minutes) ·
 [Install it on a server](#install-it-on-a-server) ·
 [Before you expose it to a network](#before-you-expose-it-to-a-network) ·
@@ -28,8 +29,8 @@ on a machine you control.
 
 A good fit if:
 
-- You want **one private place** for your calendar, to-dos, habits and
-  contacts, and you're the only user. There are no shared accounts and no
+- You want **one private place** for your calendar, to-dos, habits,
+  contacts and notes, and you're the only user. There are no shared accounts and no
   team features, by design.
 - You're comfortable **running a few commands over SSH** on a Linux box (a
   spare PC, a Raspberry Pi, a small VPS, or a Proxmox VM/LXC) and reading a
@@ -42,6 +43,17 @@ Probably not a fit if:
   things. The app is browser-first. Phone calendar sync exists, but it only
   goes one way (see [Phone sync](#phone-sync-what-it-does-and-doesnt-do)).
 - You'd rather not run a server at all. There's no hosted version.
+
+## What's inside
+
+- Home, labels and groups can each show as the Secretariat (what is due
+  today and this week, with empty sections hidden), as sections, or as a
+  dashboard of widgets.
+- The Planner schedules work sessions for tasks, with an hours estimate and
+  a difficulty for each.
+- The Notebook is a block editor with tables and simple formulas, mentions of
+  contacts, tasks and events, footnotes, a bibliography, a glossary, links
+  between notes, undo, and find and replace across all notes.
 
 ## Try it in 2 minutes
 
@@ -61,7 +73,8 @@ cd curodav/webapp
 ```
 
 Open <http://127.0.0.1:8000> in a browser, and press `Ctrl+C` in the
-terminal to stop it. To remove it completely, delete the `curodav` folder.
+terminal to stop it. If you reach it from the same computer, `./run.sh
+skipauth` also skips the login screen. To remove it completely, delete the `curodav` folder.
 
 ## Install it on a server
 
@@ -171,7 +184,10 @@ For the `curodav-ctl` install:
 For Docker: `git pull && docker compose up -d --build` updates it, and
 `docker compose logs -f app` shows the logs.
 
-Forgot your password, or something's broken? See
+Forgot your password? Run `sudo curodav-ctl token` now and keep the
+recovery token somewhere safe. If you are ever locked out,
+`sudo curodav-ctl password-reset` asks for that token and sets a new login.
+Anything else broken? See
 [Maintenance & Troubleshooting](../../wiki/Maintenance-and-Troubleshooting).
 
 ## Documentation

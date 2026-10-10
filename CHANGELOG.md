@@ -4,6 +4,15 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.9.0]
+
+- Settings: every subsection is a page again (Taxonomy & Data stays), Notebook and Frontmatter are one page, the Database, Backup and Sync cards live in Data & Maintenance, and the top of Settings shows the app banner with its version and release title.
+- Release commits and GitHub releases carry a short, catchy title; the Settings banner shows it.
+- Icons inside pills are 1.2em.
+- Notebook: the sidebar shows only the add button for its current view; the inline toolbar icons match in size; `:` opens the icon picker at once and the icons sit level with the text; block Color on text blocks colors all its text like the inline tool, with the same swatch grid; the Type column shows the type's icon, color and case.
+- A dropdown with one pick shows that item's name instead of "1 selected".
+- README and SECURITY brought up to date for the Notebook, Secretariat and password recovery.
+
 ## [3.8.0]
 
 - Settings > Taxonomy & Data: labels, groups, projects and holidays in one table with a view dropdown in the header; switching swaps only the rows.

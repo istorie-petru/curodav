@@ -68,6 +68,11 @@
 /* Toolbars: one icon size and a solid hover, in both themes. */
 html .ce-inline-toolbar .ce-inline-tool svg, html .ce-inline-toolbar .ce-popover-item__icon svg{width:18px; height:18px;}
 html .ce-inline-toolbar .ce-inline-tool{min-width:32px; height:32px;}
+/* Editor.js's own convert/bold/italic/link glyphs fill about 10px of their 24px box; ours fill 16px. Scale them to match. */
+html .ce-inline-toolbar .ce-inline-tool--link svg,
+html .ce-inline-toolbar .ce-inline-tool--italic svg,
+html .ce-inline-toolbar .ce-popover-item[data-item-name="bold"] .ce-popover-item__icon--tool svg,
+html .ce-inline-toolbar .ce-popover-item[data-item-name="convert-to"] .ce-popover-item__icon--tool svg{transform:scale(1.5);}
 @media (hover:hover){
   html .ce-inline-toolbar .ce-inline-tool:hover,
   html .ce-popover-item:hover:not(.ce-popover-item--disabled),

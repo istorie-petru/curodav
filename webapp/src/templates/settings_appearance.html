@@ -1,10 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Appearance - Settings{% endblock %}
 {% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("Appearance", "sun") }}
 <div id="modal-target">
-<div class="modal-header"><h1>Appearance</h1></div>
-<div class="modal-body">
-<div data-keep-open>
 
 <!-- One .card stacking every Appearance preference as a
      .settings-field-row, exactly the shape settings_general.html uses for
@@ -181,11 +180,6 @@
         <a href="/settings/flairs" data-modal class="look-side-btn" title="Manage flairs" aria-label="Manage flairs">{{ icon('image') }}</a>
     </div>
 </div>
-</div>
-</div>
-{% set footer_back_url = '/settings' %}
-{% set footer_back_label = 'Done' %}
-{% include "_modal_footer.html" %}
 </div>
 {% endblock %}
 {% block extra_scripts %}

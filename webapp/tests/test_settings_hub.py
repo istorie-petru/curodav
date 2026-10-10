@@ -136,7 +136,6 @@ class TestSettingsHub:
             "/settings/appearance",
             "/settings/taxonomy",  # labels, groups, projects, holidays
             "/settings/notebook",  # 2026-10-02
-            "/settings/frontmatter",
             "/settings/time-blocks",
             "/settings/data-maintenance",
             # "/settings/flairs" was a hub category briefly (2026-09-29) --
@@ -319,7 +318,7 @@ class TestDataAndBackupCategoryRemoved:
         # file…", a verbatim duplicate of this same Import dialog, was
         # removed -- Import now has exactly one entry point (the Sync
         # menu), not two.
-        resp = settings_router.settings_index(_request_with_radicale("/settings", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
+        resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         body = resp.body.decode()
         assert 'href="/export/modal" data-modal' in body
         # 2 now, not 1: the Sync menu's own entry (this page's content) plus
@@ -398,7 +397,7 @@ class TestSettingsAdvanced:
     "Reset layout" button already does the exact same thing."""
 
     def test_purge_completed_in_database_menu_and_purge_all_behind_the_confirm_toast(self, conn, tmp_path):
-        resp = settings_router.settings_index(_request_with_radicale("/settings", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
+        resp = settings_router.settings_data_maintenance(_request_with_radicale("/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         body = resp.body.decode()
         # Housekeeping purge is a plain form, now inside the Database
         # card's context menu...
@@ -438,7 +437,7 @@ class TestSettingsAdvanced:
         _make_task(conn, "t1", status="done")
         resp = settings_router.purge_completed(conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings"
+        assert resp.headers["location"] == "/settings/data-maintenance"
         assert db.list_tasks(conn) == []
 
     def test_purge_completed_cascades_object_labels(self, conn):
@@ -483,7 +482,7 @@ class TestSettingsAdvanced:
         )
         resp = settings_router.purge_all(req, conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings"
+        assert resp.headers["location"] == "/settings/data-maintenance"
         assert db.list_tasks(conn) == []
 
     def test_purge_all_lets_home_reseed_fresh(self, conn):
@@ -510,3 +509,19 @@ def _make_task(conn, uid, status="active", **overrides):
     row.update(overrides)
     db.upsert_task(conn, row)
     return uid
+
+
+class TestReleaseBanner:
+    def test_banner_shows_version_and_title_from_release_module(self, conn):
+        from src import release
+
+        body = settings_router.settings_index(_request(), conn=conn).body.decode()
+        assert release.TITLE in body and f"v{release.VERSION}" in body
+
+    def test_release_module_matches_the_version_file(self):
+        from pathlib import Path
+
+        from src import release
+
+        root = Path(__file__).resolve().parents[2]
+        assert release.VERSION == (root / "VERSION").read_text().strip()

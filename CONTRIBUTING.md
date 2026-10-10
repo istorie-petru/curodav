@@ -43,13 +43,15 @@ The short version: comment the current reason something is built a certain way, 
 Every change that lands on `main` ships as part of a version bump -- there
 is no "merge now, release later." The commit that lands the change (or,
 if that commit is already pushed, the very next one before anything else
-lands) is itself titled `Release vX.Y.Z: <short summary>` and updates, in
+lands) is itself titled `Release vX.Y.Z: <title>` (a short, catchy name for the release, not a list of changes) and updates, in
 that same commit:
 
 - [`VERSION`](VERSION) (the authoritative source of truth -- see the root
   `README.md`'s [Versioning](README.md#versioning-and-license) section)
 - `version` in both [`pyproject.toml`](pyproject.toml) (root) and
   [`webapp/pyproject.toml`](webapp/pyproject.toml)
+- `VERSION` and `TITLE` in [`webapp/src/release.py`](webapp/src/release.py),
+  which the Settings banner shows
 - [`CHANGELOG.md`](CHANGELOG.md), a new `## [X.Y.Z]` entry above the
   previous one, in the same terse bullet style as existing entries
 - `uv.lock`, re-run `uv lock` (from the repo root) after bumping the

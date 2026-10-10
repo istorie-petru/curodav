@@ -1,18 +1,45 @@
 // Block menu tunes for the Notebook editor: block text and background color, and Duplicate.
 // Feature notes: curodav-notes/documentation/features/notebook-editor.md.
 (function () {
-  var COLORS = ["red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "gray"];
-
-  function dot(color, filled) {
-    if (!color) return NONE_ICON;
-    var fill = "var(--tag-" + color + (filled ? "-bg" : "-fg") + ")";
-    return '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="' + fill + '" stroke="currentColor" stroke-width="1.2"/></svg>';
-  }
-  var NONE_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>';
   var COPY_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
   var PALETTE_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22a10 10 0 1 1 10-10c0 3-2 4-4.5 4H15a2 2 0 0 0-1.5 3.3c.6.7.5 2.7-1.5 2.7z"/><circle cx="7.5" cy="11" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="16.5" cy="11" r="1"/></svg>';
 
-  // ---- Block color: one wrapper carrying a text color and a background color ----
+  // ---- Block color ----
+  // In a rich text block (paragraph, heading, quote, callout, list) it does what selecting all the text and
+  // using the inline Color tool does: one <mark> around each editable's content. Other blocks (table, code,
+  // image) keep a wrapper carrying a text and a background color. Both use the inline tool's swatch grid.
+  var TEXT_BLOCKS = ["paragraph", "header", "quote", "callout", "list"];
+  var KIND_OF = { tc: "text", hl: "bg" };
+
+  function editablesOf(holder) {
+    return Array.prototype.slice.call(holder.querySelectorAll('[contenteditable="true"]'));
+  }
+
+  function wholeMark(el) {
+    var only = el.childNodes.length === 1 ? el.firstChild : null;
+    return only && only.nodeType === Node.ELEMENT_NODE && only.tagName === "MARK" ? only : null;
+  }
+
+  function colorElement(el, kind, color) {
+    var prefix = "nb-" + kind + "-";
+    el.querySelectorAll("mark").forEach(function (mark) {
+      mark.className = mark.className.split(/\s+/).filter(function (c) { return c && c.indexOf(prefix) !== 0; }).join(" ");
+      if (!/\bnb-(tc|hl)-/.test(mark.className)) {
+        while (mark.firstChild) mark.parentNode.insertBefore(mark.firstChild, mark);
+        mark.remove();
+      }
+    });
+    el.normalize();
+    if (!color || !el.firstChild) return;
+    var mark = wholeMark(el);
+    if (!mark) {
+      mark = document.createElement("mark");
+      while (el.firstChild) mark.appendChild(el.firstChild);
+      el.appendChild(mark);
+    }
+    mark.classList.add(prefix + color);
+  }
+
   function NotebookBlockColor(params) {
     this.data = params.data || {};
     this.block = params.block;
@@ -34,32 +61,44 @@
       else this.wrapper.removeAttribute(attr);
     }, this);
   };
+  NotebookBlockColor.prototype.isText = function () {
+    return !!(this.block && TEXT_BLOCKS.indexOf(this.block.name) !== -1 && this.block.holder);
+  };
+  NotebookBlockColor.prototype.isActive = function (kind, color) {
+    if (!this.isText()) return color ? this.data[KIND_OF[kind]] === color : !this.data[KIND_OF[kind]];
+    var first = editablesOf(this.block.holder)[0];
+    var mark = first && wholeMark(first);
+    if (!color) return !mark || !new RegExp("\\bnb-" + kind + "-").test(mark.className);
+    return !!mark && mark.classList.contains("nb-" + kind + "-" + color);
+  };
   NotebookBlockColor.prototype.set = function (kind, color) {
-    if (color) this.data[kind] = color;
-    else delete this.data[kind];
-    this.apply();
+    var undo = window.notebookUndo;
+    if (undo) undo.checkpoint();
+    if (this.isText()) {
+      delete this.data[KIND_OF[kind]];
+      this.apply();
+      editablesOf(this.block.holder).forEach(function (el) { colorElement(el, kind, color); });
+      var mount = document.getElementById("notebook-editor");
+      if (mount) mount.dispatchEvent(new Event("input", { bubbles: true }));
+    } else {
+      if (color) this.data[KIND_OF[kind]] = color;
+      else delete this.data[KIND_OF[kind]];
+      this.apply();
+    }
     if (this.block && this.block.dispatchChange) this.block.dispatchChange();
+    if (undo) setTimeout(function () { undo.checkpoint(); }, 80);
   };
   NotebookBlockColor.prototype.render = function () {
     var self = this;
-    function items(kind) {
-      return [{ title: "None", icon: dot("", false), onActivate: function () { self.set(kind, ""); } }].concat(
-        COLORS.map(function (color) {
-          return {
-            title: color.charAt(0).toUpperCase() + color.slice(1),
-            icon: dot(color, kind === "bg"),
-            onActivate: function () { self.set(kind, color); },
-          };
-        })
-      );
-    }
+    var panel = window.NotebookColorPanel(
+      function (kind, color) { self.set(kind, color); },
+      function (kind, color) { return self.isActive(kind, color); }
+    );
     return {
       icon: PALETTE_ICON,
       title: "Color",
       toggle: "nb-block-color",
-      children: {
-        items: [{ title: "Text color", children: { items: items("text") } }, { title: "Background", children: { items: items("bg") } }],
-      },
+      children: { items: [{ type: "html", element: panel }] },
     };
   };
   NotebookBlockColor.prototype.save = function () {

@@ -1,10 +1,9 @@
 {% extends "base.html" %}
 {% block title %}General - Settings{% endblock %}
 {% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("General", "user") }}
 <div id="modal-target">
-<div class="modal-header"><h1>General</h1></div>
-<div class="modal-body">
-<div data-keep-open>
 
 {% if request.query_params.get('note') %}
 <div class="settings-hint settings-hint-accent">{{ request.query_params.get('note') }}</div>
@@ -226,10 +225,5 @@
         {% include "_widget_list_multiselect.html" %}
     </form>
 </div>
-</div>
-</div>
-{% set footer_back_url = '/settings' %}
-{% set footer_back_label = 'Done' %}
-{% include "_modal_footer.html" %}
 </div>
 {% endblock %}

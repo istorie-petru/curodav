@@ -255,18 +255,18 @@ class TestSettingsDataMaintenancePage:
     unchanged -- only the page this one renders moved."""
 
     def test_renders_empty_state(self, conn, tmp_path):
-        resp = settings_router.settings_index(
+        resp = settings_router.settings_data_maintenance(
             _request(path="/settings", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn
         )
         assert resp.status_code == 200
-        assert resp.context["active_tab"] == "settings"
+        assert resp.context["active_tab"] == "settings_data_maintenance"
         body = resp.body.decode()
         assert "No backups yet" in body
 
     def test_shows_sync_cleanup_controls(self, conn, tmp_path):
         req = _request(path="/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
         assert "sync-retention" in settings_router.settings_data_maintenance(req, conn=conn).body.decode()
-        assert "sync-gc" in settings_router.settings_index(req, conn=conn).body.decode()
+        assert "sync-gc" in settings_router.settings_data_maintenance(req, conn=conn).body.decode()
 
     def test_old_data_health_url_redirects_to_the_merged_page(self, conn, tmp_path):
         resp = settings_router.settings_data_health(
@@ -283,19 +283,19 @@ class TestSettingsDataMaintenancePage:
         # assert on the rendered markers instead.
         warning_card = 'class="card card-danger"'
         # Healthy database, no conflicts -> no "Needs attention" section.
-        body = settings_router.settings_index(req, conn=conn).body.decode()
+        body = settings_router.settings_data_maintenance(req, conn=conn).body.decode()
         assert warning_card not in body
         assert "unresolved sync conflict" not in body
         # An unresolved sync conflict -> the section appears at the top.
         db.create_sync_conflict(conn, "event", "e1", "start_at", "2026-08-10T11:00:00", (1000, 0, "device-b"), (2000, 0, "device-a"))
-        body = settings_router.settings_index(req, conn=conn).body.decode()
+        body = settings_router.settings_data_maintenance(req, conn=conn).body.decode()
         assert warning_card in body
         assert "1 unresolved sync conflict" in body
         assert 'action="/settings/sync-conflicts/' in body
 
     def test_health_status_uses_status_pills_not_plain_text(self, conn, tmp_path):
         req = _request(path="/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
-        body = settings_router.settings_index(req, conn=conn).body.decode()
+        body = settings_router.settings_data_maintenance(req, conn=conn).body.decode()
         # New System Status cards replace the old Health status section.
         # Database card: healthy (integrity OK) -> status-card healthy
         assert 'status-card healthy' in body
@@ -368,8 +368,7 @@ class TestDataMaintenanceRedesign2026_08_26:
 
     def _page(self, conn, tmp_path):
         req = _request(path="/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
-        return (settings_router.settings_index(req, conn=conn).body.decode()
-                + settings_router.settings_data_maintenance(req, conn=conn).body.decode())
+        return settings_router.settings_data_maintenance(req, conn=conn).body.decode()
 
     def test_purge_completed_is_housekeeping_and_danger_zone_is_gone(self, conn, tmp_path):
         db.upsert_task(conn, {"uid": "done1", "title": "Old done task", "description": "",

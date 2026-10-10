@@ -5,7 +5,20 @@
 {{ page_header_narrow("Settings", "settings") }}
 {% if request.query_params.get('note') %}<div class="settings-hint settings-hint-accent" data-dm-flash="note">{{ request.query_params.get('note') }}</div>{% endif %}
 {% if request.query_params.get('error') %}<div class="settings-hint settings-hint-error" data-dm-flash="error">{{ request.query_params.get('error') }}</div>{% endif %}
-{% include "_settings_status_cards.html" %}
+<div class="card settings-banner">
+    <img class="settings-banner-logo" src="{{ static_url('icons/icon-512.png') }}" alt="" width="128" height="128">
+    <div class="settings-banner-main">
+        <div class="settings-banner-head">
+            <span class="settings-banner-title">Curodav</span>
+        </div>
+        <p class="settings-banner-desc">A self-hosted personal organizer for one person. Calendar, tasks and projects, habits, contacts and notes live in one place, tied together by a single shared label system. Your data stays in one file on a machine you control, with no cloud account and no telemetry.</p>
+        <dl class="settings-banner-facts">
+            <dt>Version</dt><dd>v{{ release_version }}</dd>
+            <dt>Release</dt><dd>{{ release_title }}</dd>
+            <dt>Edition</dt><dd>Self-hosted, single user</dd>
+        </dl>
+    </div>
+</div>
 
 <div class="card">
 {% for c in categories %}
@@ -29,8 +42,4 @@
 {% endfor %}
 </div>
 {% endblock %}
-{% block extra_scripts %}
-<script defer src="{{ static_url('data_maintenance.js') }}"></script>
-<script defer src="{{ static_url('push_settings.js') }}"></script>
-<script defer src="{{ static_url('settings_flairs.js') }}"></script>
-{% endblock %}
+

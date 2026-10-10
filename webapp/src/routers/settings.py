@@ -108,7 +108,7 @@ import httpx
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from .. import auth, config, data_health, db, env_file, flairs, offline_sync, push, reminders
+from .. import auth, config, data_health, db, env_file, flairs, offline_sync, push, release, reminders
 from ..image_sniff import sniff_image_type
 from ..deps import (
     ACCENT_COLOR_KEY,
@@ -153,8 +153,8 @@ logger = logging.getLogger(__name__)
 # unresolved conflict visible from the hub itself lives on this one row
 # (settings_index.html reads `conflict_count`).
 HUB_CATEGORIES = [
-    {"url": "/settings/general", "modal": True, "icon": "user", "name": "General", "desc": "Week start, time format, and other display preferences"},
-    {"url": "/settings/your-profile", "modal": True, "icon": "user-check", "name": "Your Profile", "desc": "Profile picture, nickname, login & security"},
+    {"url": "/settings/general", "icon": "user", "name": "General", "desc": "Week start, time format, and other display preferences"},
+    {"url": "/settings/your-profile", "icon": "user-check", "name": "Your Profile", "desc": "Profile picture, nickname, login & security"},
     # 2026-09-27 (direct feedback): Notifications split out of General
     # into its own hub category -- Web Push (2026-09-24) grew it from one
     # unrelated field into a real settings surface (on-device push status,
@@ -163,18 +163,17 @@ HUB_CATEGORIES = [
     # reasoning Your Profile split out for 2026-09-11. Supersedes this
     # file's own former "Notifications -- explicitly not created" note
     # above, written before Web Push existed.
-    {"url": "/settings/notifications", "modal": True, "icon": "bell", "name": "Notifications", "desc": "Push notifications, reminder types, morning digest"},
-    {"url": "/settings/appearance", "modal": True, "icon": "sun", "name": "Appearance", "desc": "Theme"},
+    {"url": "/settings/notifications", "icon": "bell", "name": "Notifications", "desc": "Push notifications, reminder types, morning digest"},
+    {"url": "/settings/appearance", "icon": "sun", "name": "Appearance", "desc": "Theme"},
     {"url": "/settings/taxonomy", "icon": "layers", "name": "Taxonomy & Data", "desc": "Labels, groups, projects and holidays in one table"},
     # 2026-10-02 (STATE.md's "custom frontmatter field schema" decision):
     # routes live in routers/notebook.py's own notebook_field_settings_router
     # (same "feature's own router hosts its /settings/* routes" precedent as
     # Groups -- see label_pages.py's groups_settings_router), only the hub
     # tile itself lives here.
-    {"url": "/settings/notebook", "modal": True, "icon": "file-text", "name": "Notebook", "desc": "How a document page lays out its sidebar"},
-    {"url": "/settings/frontmatter", "icon": "list", "name": "Frontmatter", "desc": "Custom fields for Notebook documents"},
+    {"url": "/settings/notebook", "icon": "file-text", "name": "Notebook", "desc": "Document sidebar layout and custom frontmatter fields"},
     {"url": "/settings/time-blocks", "icon": "moon", "name": "Sleep & Leisure Time", "desc": "Weekly hours the Week/Day grid highlights and warns about"},
-    {"url": "/settings/data-maintenance", "modal": True, "icon": "database", "name": "Data & Maintenance", "desc": "Backups, integrity, sync conflicts, export, purge"},
+    {"url": "/settings/data-maintenance", "icon": "database", "name": "Data & Maintenance", "desc": "Backups, integrity, sync conflicts, export, purge"},
     # Flairs was briefly its own hub category (2026-09-29, same day: "a UI
     # for the flairs feature's own photo folder, instead of an operator
     # needing filesystem access") -- direct follow-up the same day moved it
@@ -222,10 +221,9 @@ def settings_index(request: Request, conn=Depends(get_db)):
         "active_tab": "settings",
         "categories": HUB_CATEGORIES,
         "conflict_count": len(status["conflicts"]),
-        "conflicts": status["conflicts"],
-        "completed_task_count": status["completed_task_count"],
+        "release_version": release.VERSION,
+        "release_title": release.TITLE,
     }
-    ctx.update(status["summary"])
     return templates.TemplateResponse("settings_index.html", ctx)
 
 
@@ -1829,7 +1827,7 @@ def settings_data_health(request: Request, conn=Depends(get_db)):
 @router.post("/settings/data-health/backup")
 def data_health_backup(request: Request, conn=Depends(get_db)):
     path = data_health.create_backup(conn, _backups_dir(request))
-    return RedirectResponse(url=f"/settings?note=Backup+created+({path.name}).", status_code=303)
+    return RedirectResponse(url=f"/settings/data-maintenance?note=Backup+created+({path.name}).", status_code=303)
 
 
 @router.post("/settings/data-health/verify")
@@ -1840,10 +1838,10 @@ def data_health_verify(request: Request, filename: str = Form(""), conn=Depends(
         latest = data_health.latest_backup(backups_dir)
         target = Path(latest["path"]) if latest else None
     if target is None:
-        return RedirectResponse(url="/settings?error=No+backup+to+verify+yet.", status_code=303)
+        return RedirectResponse(url="/settings/data-maintenance?error=No+backup+to+verify+yet.", status_code=303)
     result = data_health.verify_backup(target)
     note = "Backup+verified+OK." if result.ok else f"Verification+found+{len(result.errors)}+problem(s)."
-    return RedirectResponse(url=f"/settings?{'note' if result.ok else 'error'}={note}", status_code=303)
+    return RedirectResponse(url=f"/settings/data-maintenance?{'note' if result.ok else 'error'}={note}", status_code=303)
 
 
 @router.post("/settings/data-health/restore")
@@ -1859,7 +1857,7 @@ def data_health_restore(request: Request, filename: str = Form(...), conn=Depend
         raise HTTPException(400, "Invalid backup filename.")
     result = data_health.restore_backup(conn, target, backups_dir=backups_dir)
     if not result["ok"]:
-        return RedirectResponse(url="/settings?error=Restore+aborted%3A+backup+failed+verification.", status_code=303)
+        return RedirectResponse(url="/settings/data-maintenance?error=Restore+aborted%3A+backup+failed+verification.", status_code=303)
     return RedirectResponse(
         url=f"/settings?note=Restored+{result['restored']}+row(s).+A+safety+backup+of+the+prior+state+was+made+first.",
         status_code=303,
@@ -1870,13 +1868,13 @@ def data_health_restore(request: Request, filename: str = Form(...), conn=Depend
 def data_health_integrity_check(conn=Depends(get_db)):
     result = data_health.check_integrity(conn)
     note = "Database+integrity%3A+OK." if result["ok"] else "Database+integrity+check+found+problems+-+see+detail."
-    return RedirectResponse(url=f"/settings?{'note' if result['ok'] else 'error'}={note}", status_code=303)
+    return RedirectResponse(url=f"/settings/data-maintenance?{'note' if result['ok'] else 'error'}={note}", status_code=303)
 
 
 @router.post("/settings/data-health/repair")
 def data_health_repair(request: Request, conn=Depends(get_db)):
     result = data_health.compact_and_reindex(conn, request.app.state.settings.db_path)
-    return RedirectResponse(url="/settings?note=Compacted+and+reindexed+the+database.", status_code=303)
+    return RedirectResponse(url="/settings/data-maintenance?note=Compacted+and+reindexed+the+database.", status_code=303)
 
 
 @router.post("/settings/data-health/sync-retention")
@@ -1904,7 +1902,7 @@ def data_health_run_sync_gc(conn=Depends(get_db)):
     purged_entities = result["purged_entities"]
     purged_total = sum(purged_entities.values()) + result["purged_applied_ops"]
     note = f"Sync+cleanup+ran%3A+{purged_total}+row(s)+purged." if purged_total else "Sync+cleanup+ran%3A+nothing+to+purge."
-    return RedirectResponse(url=f"/settings?note={note}", status_code=303)
+    return RedirectResponse(url=f"/settings/data-maintenance?note={note}", status_code=303)
 
 
 # --------------------------------------------------------------------- #
@@ -1955,7 +1953,7 @@ def set_task_auto_archive(days: str = Form("0"), conn=Depends(get_db)):
 @router.post("/settings/purge-completed")
 def purge_completed(conn=Depends(get_db)):
     db.delete_completed_tasks(conn)
-    return RedirectResponse(url="/settings", status_code=303)
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
 @router.post("/settings/purge-all")
@@ -1982,7 +1980,7 @@ def purge_all(request: Request, conn=Depends(get_db)):
     if state is not None:
         state._cc_auth_secret = None
         state._cc_auth_configured = False
-    response = RedirectResponse(url="/settings", status_code=303)
+    response = RedirectResponse(url="/settings/data-maintenance", status_code=303)
     response.delete_cookie(
         auth.SESSION_COOKIE, path="/", samesite="lax", secure=auth.is_secure_request(request)
     )
@@ -2021,7 +2019,7 @@ def restore_sync_conflict(conflict_id: str, conn=Depends(get_db)):
     conflict is then dismissed -- the restore itself is the resolution."""
     conflict = db.get_sync_conflict(conn, conflict_id)
     if conflict is None:
-        return RedirectResponse(url="/settings", status_code=303)
+        return RedirectResponse(url="/settings/data-maintenance", status_code=303)
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     restore_hlc = {"physical": now_ms, "logical": 0, "device_id": "settings-restore"}
     if conflict["field_name"] == "project_label":
@@ -2048,10 +2046,10 @@ def restore_sync_conflict(conflict_id: str, conn=Depends(get_db)):
             "fields": {conflict["field_name"]: {"value": conflict["losing_value"], "hlc": restore_hlc}},
         })
     db.resolve_sync_conflict(conn, conflict_id)
-    return RedirectResponse(url="/settings", status_code=303)
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
 @router.post("/settings/sync-conflicts/{conflict_id}/dismiss")
 def dismiss_sync_conflict(conflict_id: str, conn=Depends(get_db)):
     db.resolve_sync_conflict(conn, conflict_id)
-    return RedirectResponse(url="/settings", status_code=303)
+    return RedirectResponse(url="/settings/data-maintenance", status_code=303)

@@ -16,7 +16,7 @@ Curodav is designed to be self-hosted on a trusted network (like [Tailscale](htt
 
 - **No TLS of its own.** The app speaks plain HTTP. Put it behind a VPN, a reverse proxy, or a tunnel (like Cloudflare Tunnel — see the deploy documentation) that adds TLS before it's reachable from anywhere you don't fully trust.
 - **Login is opt-in for local/manual runs, required for production deploys.** See the Wiki's [Configuration → Login](../../wiki/Configuration#login) section for exactly when it's enforced. Login rate-limiting is a simple in-memory per-IP window, not account lockout or CAPTCHA.
-- **Single account, no password reset flow.** There's one login for the whole app, by design — this isn't a multi-tenant system. See the troubleshooting section of the [README](README.md) for recovering a forgotten password (it requires direct database access; there's no self-service reset).
+- **Single account, recovery needs the server.** There's one login for the whole app, by design — this isn't a multi-tenant system. A forgotten password is reset on the server with a recovery token (`curodav-ctl token` prints it, `curodav-ctl password-reset` uses it). The token is never shown in the browser, so there's no way to reset a password remotely.
 - **A Published List's public link is intentionally unauthenticated** once you turn it on — that's the point of the feature (sharing a filtered calendar/contact feed with someone else), not an oversight. See the Wiki's [Getting Started](../../wiki/Getting-Started#how-the-pieces-fit-together) page.
 
 If you're deploying this publicly (not just on a home network or VPN), read the deploy documentation's security notes before doing so.

@@ -125,13 +125,13 @@ class TestPageHeaderNarrowRollout:
         resp = settings_router.settings_index(_request_with_app("/settings", st.db_path, backup_dir=st.backup_dir), conn=conn)
         _assert_narrow_header(resp.body.decode(), "Settings", "settings")
 
-    def test_settings_general_is_a_modal(self, conn):
+    def test_settings_general(self, conn):
         body = settings_router.settings_general(_bare_request("/settings/general"), conn=conn).body.decode()
-        assert 'id="modal-target"' in body and "<h1>General</h1>" in body
+        _assert_narrow_header(body, "General", "user")
 
-    def test_settings_appearance_is_a_modal(self, conn):
+    def test_settings_appearance(self, conn):
         body = settings_router.settings_appearance(_bare_request("/settings/appearance"), conn=conn).body.decode()
-        assert 'id="modal-target"' in body and "<h1>Appearance</h1>" in body
+        _assert_narrow_header(body, "Appearance", "sun")
 
     def test_labels_manage(self, conn):
         resp = labels_router.manage_labels(_bare_request("/settings/labels"), conn=conn)
@@ -145,10 +145,10 @@ class TestPageHeaderNarrowRollout:
         resp = settings_router.settings_time_blocks(_bare_request("/settings/time-blocks"), conn=conn)
         _assert_narrow_header(resp.body.decode(), "Sleep &amp; Leisure Time", "moon")
 
-    def test_settings_data_maintenance_is_a_modal(self, conn, tmp_path):
+    def test_settings_data_maintenance(self, conn, tmp_path):
         req = _request_with_app("/settings/data-maintenance", tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
         body = settings_router.settings_data_maintenance(req, conn=conn).body.decode()
-        assert 'id="modal-target"' in body and "<h1>Data &amp; Maintenance</h1>" in body
+        _assert_narrow_header(body, "Data &amp; Maintenance", "database")
 
     def test_published_lists(self, conn, tmp_path):
         resp = published_lists_router.list_index(_request_with_app("/published-lists", tmp_path / "cache.sqlite"), conn=conn)

@@ -615,7 +615,7 @@ class TestSyncConflictsSettingsPage:
             )
         )
         req = Request({"type": "http", "method": "GET", "path": "/settings/data-maintenance", "query_string": b"", "headers": [], "app": fake_app})
-        resp = settings_router.settings_index(req, conn=conn)
+        resp = settings_router.settings_data_maintenance(req, conn=conn)
         body = resp.body.decode()
         assert "2026-08-10T11:00:00" in body
         assert "Restore" in body and "Dismiss" in body

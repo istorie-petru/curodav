@@ -73,7 +73,6 @@
     var before = node.textContent.slice(0, sel.anchorOffset);
     var m = TRIGGER.exec(before);
     if (!m) return null;
-    if (m[2] === ":" && !m[3]) return null;
     return { editable: editable, node: node, trigger: m[2], query: m[3], start: before.length - m[3].length - 1 };
   }
 

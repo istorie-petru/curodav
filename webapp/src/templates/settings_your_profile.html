@@ -2,10 +2,9 @@
 {% extends "base.html" %}
 {% block title %}Your Profile - Settings{% endblock %}
 {% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("Your Profile", "user-check") }}
 <div id="modal-target">
-<div class="modal-header"><h1>Your Profile</h1></div>
-<div class="modal-body">
-<div data-keep-open>
 
 {% if request.query_params.get('note') %}
 <div class="settings-hint settings-hint-accent">{{ request.query_params.get('note') }}</div>
@@ -133,10 +132,5 @@
          next to the button that applies it. See account_settings' own
          docstring in routers/settings.py. -->
 </div>
-</div>
-</div>
-{% set footer_back_url = '/settings' %}
-{% set footer_back_label = 'Done' %}
-{% include "_modal_footer.html" %}
 </div>
 {% endblock %}

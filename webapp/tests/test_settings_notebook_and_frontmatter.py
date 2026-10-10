@@ -135,9 +135,9 @@ class TestNotebookSidebarLayoutSetting:
 
 class TestSettingsNotebookPage:
     def test_renders_with_breadcrumb_and_active_tab(self, conn):
-        resp = notebook_router.settings_frontmatter(_request(), conn=conn)
+        resp = notebook_router.settings_notebook(_request(), conn=conn)
         assert resp.status_code == 200
-        assert resp.context["active_tab"] == "settings_frontmatter"
+        assert resp.context["active_tab"] == "settings_notebook"
         assert resp.context["crumbs"] == [{"url": "/settings", "name": "Settings"}]
         assert 'href="/settings"' in resp.body.decode()
 
@@ -146,7 +146,7 @@ class TestSettingsNotebookPage:
         # in the settings" -- title/author/note_type are seeded by
         # seed_builtin_notebook_fields, so the "no fields at all" empty
         # state this page used to have is no longer reachable.
-        body = notebook_router.settings_frontmatter(_request(), conn=conn).body.decode()
+        body = notebook_router.settings_notebook(_request(), conn=conn).body.decode()
         assert "No frontmatter fields defined yet" not in body
         assert 'id="notebook-fields-table"' in body
         assert 'href="/settings/notebook/new"' in body
@@ -154,9 +154,15 @@ class TestSettingsNotebookPage:
 
     def test_lists_existing_fields_as_rows_with_edit_buttons(self, conn):
         db.upsert_notebook_field_config(conn, {"key": "institution", "label": "Institution", "type": "text", "default_value": "UBB"})
-        body = notebook_router.settings_frontmatter(_request(), conn=conn).body.decode()
+        body = notebook_router.settings_notebook(_request(), conn=conn).body.decode()
         assert "Institution" in body and "text" in body and "UBB" in body
         assert "Edit field" in body and "Delete field" in body
+
+
+class TestOldFrontmatterUrl:
+    def test_redirects_to_the_notebook_page(self):
+        resp = notebook_router.settings_frontmatter()
+        assert resp.status_code == 303 and resp.headers["location"] == "/settings/notebook"
 
 
 class TestFieldModal:
@@ -177,7 +183,7 @@ class TestFieldModal:
 
     def test_unknown_uid_redirects_to_the_list(self, conn):
         resp = notebook_router.edit_notebook_field_modal("nope", _request(), conn=conn)
-        assert resp.status_code == 303 and resp.headers["location"] == "/settings/frontmatter"
+        assert resp.status_code == 303 and resp.headers["location"] == "/settings/notebook"
 
 
 def _custom_fields(conn):
@@ -190,7 +196,7 @@ def _custom_fields(conn):
 class TestCreateUpdateDelete:
     def test_create_a_text_field(self, conn):
         resp = notebook_router.create_notebook_field(key="institution", label="Institution", type="text", default_value="UBB", required="1", conn=conn)
-        assert resp.status_code == 303 and resp.headers["location"] == "/settings/frontmatter"
+        assert resp.status_code == 303 and resp.headers["location"] == "/settings/notebook"
         fields = _custom_fields(conn)
         assert len(fields) == 1
         assert fields[0]["key"] == "institution" and fields[0]["default_value"] == "UBB" and fields[0]["required"] == 1
@@ -295,7 +301,7 @@ class TestBuiltinFields:
         assert db.get_notebook_field_config(conn, uid) is not None
 
     def test_settings_table_has_no_delete_button_for_builtins(self, conn):
-        body = notebook_router.settings_frontmatter(_request(), conn=conn).body.decode()
+        body = notebook_router.settings_notebook(_request(), conn=conn).body.decode()
         assert "/settings/notebook/builtin-title/delete" not in body
         assert "/settings/notebook/builtin-title/edit" in body
 
@@ -321,4 +327,4 @@ class TestHubCategory:
     def test_notebook_is_a_settings_hub_category(self):
         from src.routers import settings as settings_router
         urls = {c["url"] for c in settings_router.HUB_CATEGORIES}
-        assert {"/settings/notebook", "/settings/frontmatter"} <= urls
+        assert "/settings/notebook" in urls and "/settings/frontmatter" not in urls

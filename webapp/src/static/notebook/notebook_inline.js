@@ -129,10 +129,11 @@
     this.button = button(this.api, ICONS.color, "Text and highlight color");
     return this.button;
   };
-  NotebookColor.prototype.renderActions = function () {
-    var self = this;
-    this.panel = document.createElement("div");
-    this.panel.className = "nb-color-panel";
+  // The swatch grid, shared with the block menu's Color item (notebook_block_tunes.js) so both look the same.
+  // isActive(kind, color) says which swatch is on; the returned panel has refresh() to re-check it.
+  function colorPanel(onPick, isActive) {
+    var panel = document.createElement("div");
+    panel.className = "nb-color-panel";
     [["tc", "Text color"], ["hl", "Background"]].forEach(function (row) {
       var wrap = document.createElement("div");
       wrap.className = "nb-color-row";
@@ -153,12 +154,34 @@
           e.preventDefault();
         });
         sw.addEventListener("click", function () {
-          self.pick(row[0], color);
+          onPick(row[0], color);
+          panel.refresh();
         });
         wrap.appendChild(sw);
       });
-      self.panel.appendChild(wrap);
+      panel.appendChild(wrap);
     });
+    panel.refresh = function () {
+      panel.querySelectorAll(".nb-swatch").forEach(function (sw) {
+        sw.classList.toggle("is-active", !!isActive(sw.getAttribute("data-kind"), sw.getAttribute("data-color")));
+      });
+    };
+    panel.refresh();
+    return panel;
+  }
+  window.NotebookColorPanel = colorPanel;
+
+  NotebookColor.prototype.renderActions = function () {
+    var self = this;
+    this.panel = colorPanel(
+      function (kind, color) { self.pick(kind, color); },
+      function (kind, color) {
+        var mark = self.current;
+        return color
+          ? !!mark && mark.classList.contains("nb-" + kind + "-" + color)
+          : !mark || !new RegExp("\\bnb-" + kind + "-").test(mark.className);
+      }
+    );
     return this.panel;
   };
   NotebookColor.prototype.pick = function (kind, color) {
@@ -185,16 +208,7 @@
     if (mount) mount.dispatchEvent(new Event("input", { bubbles: true }));
   };
   NotebookColor.prototype.refresh = function () {
-    var mark = this.current;
-    if (!this.panel) return;
-    this.panel.querySelectorAll(".nb-swatch").forEach(function (sw) {
-      var kind = sw.getAttribute("data-kind");
-      var color = sw.getAttribute("data-color");
-      var has = color
-        ? !!mark && mark.classList.contains("nb-" + kind + "-" + color)
-        : !mark || !new RegExp("\\bnb-" + kind + "-").test(mark.className);
-      sw.classList.toggle("is-active", has);
-    });
+    if (this.panel) this.panel.refresh();
   };
   // Editor.js opens and closes the nested panel itself when the button is
   // clicked; it is open from the start when the selection is already colored.

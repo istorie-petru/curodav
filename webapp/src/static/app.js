@@ -584,11 +584,18 @@ document.addEventListener("submit", (event) => {
       summary.textContent = names.length ? names.join(", ") : ms.dataset.msEmpty || "None";
       return;
     }
-    const checked = Array.from(boxes).filter((b) => b.checked).length;
+    const on = Array.from(boxes).filter((b) => b.checked);
+    const checked = on.length;
+    // One pick reads as its own name; two or more as a count.
+    const oneName = () => {
+      const row = on[0].closest(".multiselect-option");
+      const span = row ? row.querySelector("span:last-child") : null;
+      return span ? span.textContent.trim() : "";
+    };
     if (mode === "select") {
-      summary.textContent = checked === 0 ? "No " + (ms.dataset.msLabel || "selection") : checked + " selected";
+      summary.textContent = checked === 0 ? "No " + (ms.dataset.msLabel || "selection") : checked === 1 ? oneName() || "1 selected" : checked + " selected";
     } else {
-      summary.textContent = checked === 0 || checked === boxes.length ? "All" : checked + " selected";
+      summary.textContent = checked === 0 || checked === boxes.length ? "All" : checked === 1 ? oneName() || "1 selected" : checked + " selected";
     }
   }
   // Resolves the `.widget-list-multiselect` wrapper an input belongs to --

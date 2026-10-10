@@ -1891,6 +1891,9 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 /* One pill look: .cell-tag, .pill-static and the pill dropdown trigger all
    read these tokens. */
 :root{--pill-padding:3px 8px; --pill-radius:var(--radius-sm); --pill-font-size:var(--text-sm); --pill-font-weight:var(--font-weight-bold); --pill-gap:5px;}
+/* Icons inside any pill are 1.2em (they were 0.85em, which read too small next to the pill text). */
+.cell-tag .icon, .pill-static .icon, .pill-select-trigger .icon, .credit-pill .icon, .unscheduled-project-pill .icon,
+.notebook-rail-pill .icon, .command-palette-pill .icon{width:1.2em; height:1.2em;}
 .cell-tag{
   display:inline-flex; align-items:center; gap:var(--pill-gap); padding:var(--pill-padding); border-radius:var(--pill-radius);
   font-size:var(--pill-font-size); font-weight:var(--pill-font-weight); white-space:nowrap; flex-shrink:0;
@@ -7105,6 +7108,17 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    several in a card -- plus a trailing chevron for the "this navigates
    somewhere" affordance every other disclosure control in this app
    already uses (multiselect triggers, the modal's own nav). */
+.settings-banner{position:relative; width:100%; box-sizing:border-box; display:flex; align-items:center; gap:var(--space-4); padding:var(--space-5, 24px); overflow:hidden;
+  border:0; background:none; box-shadow:none;}
+.settings-banner-logo{position:absolute; right:var(--space-4); top:50%; width:128px; height:128px; transform:translateY(-50%); border-radius:28px; box-shadow:var(--elevation-2);}
+.settings-banner-main{display:flex; flex-direction:column; gap:var(--space-2); min-width:0; padding-right:160px;}
+.settings-banner-head{display:flex; align-items:center; gap:var(--space-2); font-size:var(--text-xl);}
+.settings-banner-title{font-size:var(--text-xl); font-weight:var(--font-weight-bold); color:var(--fg-primary);}
+.settings-banner-desc{margin:0; color:var(--fg-secondary); max-width:60ch;}
+.settings-banner-facts{display:grid; grid-template-columns:max-content 1fr; gap:var(--space-1) var(--space-4); margin:var(--space-2) 0 0; padding-top:var(--space-3); border-top:1px solid var(--border);}
+.settings-banner-facts dt{color:var(--fg-tertiary); font-size:var(--text-sm);}
+.settings-banner-facts dd{margin:0; color:var(--fg-primary); font-size:var(--text-sm);}
+@media (max-width:720px){.settings-banner-logo{display:none;} .settings-banner-main{padding-right:0;}}
 .settings-hub-row{padding:var(--space-3) var(--space-2);}
 .settings-hub-row .settings-row-icon{width:32px; height:32px; border-radius:var(--radius-md); background:var(--bg-secondary); align-items:center; justify-content:center; flex:none;}
 .settings-hub-row .settings-row-text{display:flex; flex-direction:column; gap:2px; min-width:0;}
@@ -8763,6 +8777,8 @@ html[data-notebook-sidebar-collapsed] .notebook-sidebar{display:none;}
    existing square sizing -- only the one matching the active view stays
    visible. */
 .notebook-sidebar-head{display:flex; align-items:center; gap:var(--space-2); align-self:stretch;}
+/* .icon-btn's display:inline-flex outranks the UA [hidden] rule, so every add button showed at once. */
+.notebook-sidebar-add[hidden]{display:none;}
 .notebook-sidebar-select{position:relative; flex:1; min-width:0;}
 .notebook-sidebar-select-trigger{
   display:flex; align-items:center; gap:var(--space-2); width:100%;
@@ -9007,7 +9023,6 @@ details[open] > summary.notebook-rail-heading .filter-caret{transform:rotate(180
 .notebook-browse-row:hover{background:var(--bg-secondary);}
 .notebook-browse-row .checklist-text{font-size:var(--text-base);}
 .notebook-browse-pills{display:inline-flex; align-items:center; gap:var(--space-1); margin-left:var(--space-2); flex-wrap:wrap;}
-.notebook-type-pill{letter-spacing:.03em;}
 
 /* Search box cue: a magnifier icon inside the field instead of placeholder text. */
 .search-field{position:relative; display:flex; align-items:center; flex:1; min-width:0;}

@@ -1,6 +1,5 @@
-{# Needs-attention card and the Database / Backup / Sync status cards (Phase E: moved from
-   the Data & Maintenance page to the main Settings page). Expects the context
-   settings._maintenance_status_context() builds. #}
+{# Needs-attention card and the Database / Backup / Sync status cards at the top of the
+   Data & Maintenance page. Expects the context settings_data_maintenance() builds. #}
 {% set needs_attention = conflicts or not integrity.ok or (latest_verified_backup and not latest_verified_backup.verification.ok) %}
 {% if needs_attention %}
 <div class="settings-group">
