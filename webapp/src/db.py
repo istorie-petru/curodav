@@ -2142,7 +2142,13 @@ def project_picker_context(conn: sqlite3.Connection) -> dict[str, Any]:
     projects = list_project_labels(conn)
     return {
         "project_items": [{"uid": "", "name": "No project"}]
-        + [{"uid": p["name"], "name": p["name"]} for p in projects if not p.get("archived_at")],
+        + [
+            {
+                "uid": p["name"], "name": p["name"],
+                **({"data": {"deadline": p["deadline_date"]}} if p.get("has_deadline") and p.get("deadline_date") else {}),
+            }
+            for p in projects if not p.get("archived_at")
+        ],
         "project_names": [p["name"] for p in projects],
     }
 

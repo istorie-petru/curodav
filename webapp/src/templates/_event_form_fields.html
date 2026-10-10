@@ -164,6 +164,7 @@
              Daily goal fields use (style.css). -->
         {% set _has_location = event and event.location and event.location not in (None, 'None', 'Nothing') %}
         {% set _has_meeting = event and event.meeting_url and event.meeting_url not in (None, 'None', 'Nothing') %}
+        {% set ms_hidden = false %}
         {% set ms_name = 'event_format' %}
         {% set ms_mode = 'single' %}
         {% set ms_label = 'Format' %}

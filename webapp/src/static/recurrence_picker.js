@@ -204,6 +204,14 @@
     countInput.setAttribute("aria-label", "Occurrences");
 
     const neverRadio = endsOption("never", "Never");
+    const deadlineRadio = endsOption("deadline", "At project\u2019s deadline");
+    const deadlineOption = deadlineRadio.parentNode;
+    const form = input.closest("form");
+    const projectRadios = () => (form && form.elements["project"] ? Array.from(form.elements["project"]).filter((r) => r.type === "radio") : []);
+    function projectDeadline() {
+      const checked = projectRadios().find((r) => r.checked);
+      return checked && checked.dataset.deadline ? checked.dataset.deadline : "";
+    }
     const untilRadio = endsOption("until", "On date", untilField);
     const countRadio = endsOption("count", "After", countInput);
     const occLabel = document.createElement("span");
@@ -211,7 +219,9 @@
     countRadio.parentNode.appendChild(occLabel);
 
     if (matched && matched.value) {
-      if (parsedCurrent.until) {
+      if (parsedCurrent.until && parsedCurrent.until === projectDeadline()) {
+        deadlineRadio.checked = true;
+      } else if (parsedCurrent.until) {
         untilRadio.checked = true;
         untilInput.value = parsedCurrent.until;
         if (window.CCDateField) untilText.value = window.CCDateField.fmtDate(parsedCurrent.until);
@@ -263,12 +273,17 @@
     }
 
     function endsSuffix() {
+      if (deadlineRadio.checked && projectDeadline()) return ";UNTIL=" + projectDeadline();
       if (untilRadio.checked && untilInput.value) return ";UNTIL=" + untilInput.value;
       if (countRadio.checked && countInput.value) return ";COUNT=" + countInput.value;
       return "";
     }
 
     function updateEndsSummary() {
+      if (deadlineRadio.checked && projectDeadline()) {
+        endsSummary.textContent = "Ends at project\u2019s deadline";
+        return;
+      }
       if (untilRadio.checked && untilInput.value) {
         endsSummary.textContent = "Ends " + (window.CCDateField ? window.CCDateField.fmtDate(untilInput.value) : untilInput.value);
       } else if (countRadio.checked && countInput.value) {
@@ -290,6 +305,9 @@
     }
 
     function sync() {
+      // The deadline option exists only while the chosen project has one.
+      deadlineOption.hidden = !projectDeadline();
+      if (deadlineRadio.checked && !projectDeadline()) neverRadio.checked = true;
       const checked = checkedPreset();
       if (checked) {
         input.value = checked.value ? checked.value + endsSuffix() : "";
@@ -304,8 +322,9 @@
     }
     sync();
 
+    projectRadios().forEach((r) => r.addEventListener("change", sync));
     radios.forEach((r) => r.addEventListener("change", sync));
-    [neverRadio, untilRadio, countRadio].forEach((r) => r.addEventListener("change", sync));
+    [neverRadio, deadlineRadio, untilRadio, countRadio].forEach((r) => r.addEventListener("change", sync));
     untilText.addEventListener("focus", () => {
       untilRadio.checked = true;
       sync();

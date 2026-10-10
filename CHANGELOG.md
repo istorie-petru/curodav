@@ -4,6 +4,12 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.9.1]
+
+- The event form's Format dropdown (In person, Online, None) is visible again, with Location or Meeting URL beside it.
+- Recurrence Ends has an "At project's deadline" option when the chosen project has a deadline.
+- The contact avatar in the view modal is 70% of the banner height with a 20% top margin.
+
 ## [3.9.0]
 
 - Settings: every subsection is a page again (Taxonomy & Data stays), Notebook and Frontmatter are one page, the Database, Backup and Sync cards live in Data & Maintenance, and the top of Settings shows the app banner with its version and release title.

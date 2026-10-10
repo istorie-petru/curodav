@@ -246,3 +246,21 @@ class TestAllDayKeepsDatePickerVisible:
         resp = calendar_router.new_event_form(_request(), conn=conn)
         body = resp.body.decode()
         assert 'class="field field-wide event-start-end-field"' in body
+
+
+class TestFormatFieldIsVisible:
+    def test_format_field_does_not_inherit_the_holiday_fields_hidden_flag(self, conn):
+        # `ms_hidden` set for the Holiday calendar field leaked into the Format
+        # include and hid it on every form.
+        body = calendar_router.new_event_form(_request("/events/new"), conn=conn).body.decode()
+        opening = body.split('event-format-field"')[1].split(">")[0]
+        assert "hidden" not in opening
+
+
+class TestProjectDeadlineOption:
+    def test_project_items_carry_the_deadline_for_the_recurrence_picker(self, conn):
+        db.upsert_label_config(conn, {"name": "Alpha", "is_project": 1, "has_deadline": 1, "deadline_date": "2026-12-01"})
+        db.upsert_label_config(conn, {"name": "Beta", "is_project": 1})
+        items = {i["uid"]: i for i in db.project_picker_context(conn)["project_items"]}
+        assert items["Alpha"]["data"] == {"deadline": "2026-12-01"}
+        assert "data" not in items["Beta"]
