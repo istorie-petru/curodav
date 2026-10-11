@@ -132,8 +132,8 @@ def _page_fields(page_fields, deadline_date, page_type, agenda_widget, tasks_wid
 
 
 COLORS = [
-    "red", "orange", "yellow", "lime", "green", "mint", "teal", "cyan",
-    "blue", "indigo", "purple", "magenta", "pink", "brown", "gray", "slate",
+    "red", "coral", "orange", "amber", "yellow", "lime", "sage", "green", "mint", "teal", "cyan", "sky",
+    "blue", "indigo", "violet", "purple", "plum", "magenta", "rose", "pink", "sand", "brown", "gray", "slate",
 ]
 
 CAL_COLOR_HEX = {
@@ -141,6 +141,8 @@ CAL_COLOR_HEX = {
     "green": "#398156", "mint": "#278172", "teal": "#2a7f91", "cyan": "#2c7d9f",
     "blue": "#3778bd", "indigo": "#575dcf", "purple": "#8a56c1", "magenta": "#ac4e93",
     "pink": "#be4e77", "brown": "#8b713f", "gray": "#70767d", "slate": "#5b6b7d",
+    "coral": "#fea387", "amber": "#e6b463", "sage": "#a8c7ad", "sky": "#6cc9fd",
+    "violet": "#bcb2fe", "plum": "#eca1db", "rose": "#fd9eb0", "sand": "#cabca1",
 }
 
 # The contrast-picked foreground of each medium swatch above -- white on
@@ -155,6 +157,8 @@ CAL_COLOR_FOREGROUND = {
     "green": "#ffffff", "mint": "#ffffff", "teal": "#ffffff", "cyan": "#ffffff",
     "blue": "#ffffff", "indigo": "#ffffff", "purple": "#ffffff", "magenta": "#ffffff",
     "pink": "#ffffff", "brown": "#ffffff", "gray": "#ffffff", "slate": "#ffffff",
+    "coral": "#1d1d1f", "amber": "#1d1d1f", "sage": "#1d1d1f", "sky": "#1d1d1f",
+    "violet": "#1d1d1f", "plum": "#1d1d1f", "rose": "#1d1d1f", "sand": "#1d1d1f",
 }
 
 ICON_GROUPS: dict[str, list[str]] = {

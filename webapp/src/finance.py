@@ -1,7 +1,7 @@
 """Personal finance storage (features/finance.md): accounts, transactions and transaction tags.
 
 Amounts are integer minor units. A transaction's label is an ordinary object label (object_type
-'transaction'); tags belong to the label's group. Balances are always derived, never stored.
+'transaction'); tags are free-standing, shared by every label. Balances are always derived, never stored.
 """
 
 from __future__ import annotations
@@ -14,11 +14,13 @@ from typing import Any
 from . import db, finance_stats
 
 DEFAULT_CURRENCY_KEY = "finance_default_currency"
+ABBREVIATION_MAX = 8
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS finance_accounts (
     uid TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    abbreviation TEXT NOT NULL DEFAULT '',
     type TEXT NOT NULL DEFAULT 'bank',
     currency TEXT NOT NULL DEFAULT 'USD',
     opening_balance INTEGER NOT NULL DEFAULT 0,
@@ -59,6 +61,8 @@ CREATE TABLE IF NOT EXISTS finance_scheduled_tags (
 CREATE TABLE IF NOT EXISTS finance_tags (
     group_name TEXT NOT NULL DEFAULT '',
     name TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT 'gray',
+    icon TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (group_name, name)
 );
 CREATE TABLE IF NOT EXISTS finance_transaction_tags (
@@ -74,6 +78,14 @@ SORTS = {"date": "t.date", "description": "t.description COLLATE NOCASE", "amoun
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
+
+
+def add_look_columns(conn: sqlite3.Connection) -> None:
+    """Databases from before 4.0.1: an account abbreviation and a tag colour and icon."""
+    for table, column, coldef in (("finance_accounts", "abbreviation", "TEXT NOT NULL DEFAULT ''"),
+                                  ("finance_tags", "color", "TEXT NOT NULL DEFAULT 'gray'"),
+                                  ("finance_tags", "icon", "TEXT NOT NULL DEFAULT ''")):
+        db._ensure_column(conn, table, column, coldef)
 
 
 def default_currency(conn: sqlite3.Connection) -> str:
@@ -103,6 +115,7 @@ def list_accounts(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     txns = [dict(r) for r in conn.execute("SELECT * FROM finance_transactions")]
     for a in accounts:
         mine = [t for t in txns if t["account_uid"] == a["uid"] or t["to_account_uid"] == a["uid"]]
+        a["short"] = a["abbreviation"] or a["name"]
         a["balance"] = finance_stats.balance_on(a, mine)
         a["transaction_count"] = len(mine)
     return accounts
@@ -133,16 +146,18 @@ def validate_account(conn: sqlite3.Connection, data: dict, uid: str | None = Non
         existing = get_account(conn, uid)
         if existing and existing["currency"] != currency and transactions_exist(conn, uid):
             return {}, _error("currency", "The currency cannot change once the account has transactions")
-    return {"name": name, "type": kind, "currency": currency, "opening_balance": opening, "opening_date": opening_date}, None
+    abbreviation = (data.get("abbreviation") or "").strip()[:ABBREVIATION_MAX]
+    return {"name": name, "abbreviation": abbreviation, "type": kind, "currency": currency,
+            "opening_balance": opening, "opening_date": opening_date}, None
 
 
 def save_account(conn: sqlite3.Connection, clean: dict, uid: str | None = None) -> str:
     uid = uid or str(uuid.uuid4())
     conn.execute(
-        "INSERT INTO finance_accounts (uid, name, type, currency, opening_balance, opening_date, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET name=excluded.name, type=excluded.type, "
-        "currency=excluded.currency, opening_balance=excluded.opening_balance, opening_date=excluded.opening_date",
-        (uid, clean["name"], clean["type"], clean["currency"], clean["opening_balance"], clean["opening_date"], _now()),
+        "INSERT INTO finance_accounts (uid, name, abbreviation, type, currency, opening_balance, opening_date, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET name=excluded.name, abbreviation=excluded.abbreviation, "
+        "type=excluded.type, currency=excluded.currency, opening_balance=excluded.opening_balance, opening_date=excluded.opening_date",
+        (uid, clean["name"], clean.get("abbreviation") or "", clean["type"], clean["currency"], clean["opening_balance"], clean["opening_date"], _now()),
     )
     conn.commit()
     return uid
@@ -177,14 +192,14 @@ def delete_transaction(conn: sqlite3.Connection, uid: str) -> None:
     conn.commit()
 
 
-def label_group(conn: sqlite3.Connection, label: str) -> str:
-    config = db.get_label_config(conn, label) if label else None
-    return ((config or {}).get("label_group") or "").strip()
+def tag_names(conn: sqlite3.Connection) -> list[str]:
+    return [r["name"] for r in conn.execute("SELECT name FROM finance_tags ORDER BY name COLLATE NOCASE")]
 
 
-def tags_for_group(conn: sqlite3.Connection, group: str) -> list[str]:
-    rows = conn.execute("SELECT name FROM finance_tags WHERE group_name = ? COLLATE NOCASE ORDER BY name COLLATE NOCASE", (group,))
-    return [r["name"] for r in rows]
+def free_tags(conn: sqlite3.Connection) -> None:
+    """Tags used to belong to a label group; now they stand alone (group_name stays '', part of the key)."""
+    conn.execute("UPDATE OR IGNORE finance_tags SET group_name = '' WHERE group_name != ''")
+    conn.execute("DELETE FROM finance_tags WHERE group_name != ''")
 
 
 def _attach(conn: sqlite3.Connection, rows: list[dict]) -> list[dict]:
@@ -203,8 +218,10 @@ def _attach(conn: sqlite3.Connection, rows: list[dict]) -> list[dict]:
     return rows
 
 
+_ABBR = "COALESCE(NULLIF({x}.abbreviation, ''), {x}.name) AS {n}"
 _SELECT = (
-    "SELECT t.*, a.name AS account_name, a.currency AS currency, b.name AS to_account_name "
+    "SELECT t.*, a.name AS account_name, " + _ABBR.format(x="a", n="account_abbr") + ", a.currency AS currency, b.name AS to_account_name, "
+    + _ABBR.format(x="b", n="to_account_abbr") + " "
     "FROM finance_transactions t JOIN finance_accounts a ON a.uid = t.account_uid "
     "LEFT JOIN finance_accounts b ON b.uid = t.to_account_uid"
 )
@@ -222,10 +239,10 @@ def list_transactions(conn: sqlite3.Connection, filters: dict | None = None, lim
     where: list[str] = []
     params: list[Any] = []
     if f.get("q"):
-        where.append("(t.description LIKE ? OR a.name LIKE ? OR EXISTS (SELECT 1 FROM object_labels o WHERE o.object_type = 'transaction' "
+        where.append("(t.description LIKE ? OR a.name LIKE ? OR a.abbreviation LIKE ? OR EXISTS (SELECT 1 FROM object_labels o WHERE o.object_type = 'transaction' "
                      "AND o.object_id = t.uid AND o.label_name LIKE ?) OR EXISTS (SELECT 1 FROM finance_transaction_tags g "
                      "WHERE g.txn_uid = t.uid AND g.tag LIKE ?))")
-        params += [f"%{f['q']}%"] * 4
+        params += [f"%{f['q']}%"] * 5
     if f.get("account_uid"):
         where.append("(t.account_uid = ? OR t.to_account_uid = ?)")
         params += [f["account_uid"]] * 2
@@ -305,10 +322,9 @@ def save_transaction(conn: sqlite3.Connection, clean: dict, uid: str | None = No
         (uid, clean["date"], clean["description"], clean["account_uid"], clean["to_account_uid"], clean["type"], clean["amount"], _now()),
     )
     db.set_object_labels(conn, "transaction", uid, [clean["label"]] if clean["label"] else [])
-    group = label_group(conn, clean["label"])
     conn.execute("DELETE FROM finance_transaction_tags WHERE txn_uid = ?", (uid,))
     for tag in dict.fromkeys(clean["tags"]):
-        conn.execute("INSERT OR IGNORE INTO finance_tags (group_name, name) VALUES (?, ?)", (group, tag))
+        conn.execute("INSERT OR IGNORE INTO finance_tags (group_name, name) VALUES ('', ?)", (tag,))
         conn.execute("INSERT OR IGNORE INTO finance_transaction_tags (txn_uid, tag) VALUES (?, ?)", (uid, tag))
     conn.commit()
     return uid
@@ -317,40 +333,50 @@ def save_transaction(conn: sqlite3.Connection, clean: dict, uid: str | None = No
 # Tags
 
 def list_tags(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """Every tag with its group and the number of transactions carrying it."""
+    """Every tag with its look and the number of transactions carrying it."""
     usage = {r["tag"]: r["n"] for r in conn.execute("SELECT tag, COUNT(*) AS n FROM finance_transaction_tags GROUP BY tag")}
-    rows = conn.execute("SELECT group_name, name FROM finance_tags ORDER BY name COLLATE NOCASE, group_name COLLATE NOCASE")
-    return [{"group": r["group_name"], "name": r["name"], "usage": usage.get(r["name"], 0)} for r in rows]
+    rows = conn.execute("SELECT name, color, icon FROM finance_tags ORDER BY name COLLATE NOCASE")
+    return [{"name": r["name"], "color": r["color"] or "gray", "icon": r["icon"] or "",
+             "usage": usage.get(r["name"], 0)} for r in rows]
 
 
-def get_tag(conn: sqlite3.Connection, group: str, name: str) -> dict[str, Any] | None:
-    return next((t for t in list_tags(conn) if t["group"] == group and t["name"] == name), None)
+def tag_styles(conn: sqlite3.Connection) -> dict[str, dict[str, str]]:
+    """Colour and icon by tag name, for drawing tag pills (a name shared by two groups shows the first one's look)."""
+    out: dict[str, dict[str, str]] = {}
+    for t in list_tags(conn):
+        out.setdefault(t["name"], {"color": t["color"], "icon": t["icon"]})
+    return out
 
 
-def validate_tag(conn: sqlite3.Connection, name: str, group: str, old: tuple[str, str] | None = None) -> tuple[dict, dict | None]:
-    name, group = (name or "").strip(), (group or "").strip()
+def get_tag(conn: sqlite3.Connection, name: str) -> dict[str, Any] | None:
+    return next((t for t in list_tags(conn) if t["name"] == name), None)
+
+
+def validate_tag(conn: sqlite3.Connection, name: str, old: str | None = None,
+                 color: str = "gray", icon: str = "") -> tuple[dict, dict | None]:
+    name = (name or "").strip()
     if not name:
         return {}, _error("name", "Name is required")
-    taken = conn.execute("SELECT 1 FROM finance_tags WHERE group_name = ? AND name = ? COLLATE NOCASE", (group, name)).fetchone()
-    if taken and (group, name) != old and not (old and old[0] == group and old[1].lower() == name.lower()):
-        return {}, _error("name", "This group already has a tag with that name")
-    return {"name": name, "group": group}, None
+    taken = conn.execute("SELECT 1 FROM finance_tags WHERE name = ? COLLATE NOCASE", (name,)).fetchone()
+    if taken and not (old and old.lower() == name.lower()):
+        return {}, _error("name", "A tag with that name already exists")
+    return {"name": name, "color": (color or "gray").strip(), "icon": (icon or "").strip()}, None
 
 
-def save_tag(conn: sqlite3.Connection, clean: dict, old: tuple[str, str] | None = None) -> None:
-    """Creates a tag, or (with `old` = (group, name)) renames it and moves it to another group."""
+def save_tag(conn: sqlite3.Connection, clean: dict, old: str | None = None) -> None:
+    """Creates a tag, or (with `old` = its current name) renames it everywhere it is used."""
     if old:
-        conn.execute("DELETE FROM finance_tags WHERE group_name = ? AND name = ?", old)
-        if old[1] != clean["name"]:
-            conn.execute("UPDATE OR IGNORE finance_transaction_tags SET tag = ? WHERE tag = ?", (clean["name"], old[1]))
-    conn.execute("INSERT OR IGNORE INTO finance_tags (group_name, name) VALUES (?, ?)", (clean["group"], clean["name"]))
+        conn.execute("DELETE FROM finance_tags WHERE name = ?", (old,))
+        if old != clean["name"]:
+            conn.execute("UPDATE OR IGNORE finance_transaction_tags SET tag = ? WHERE tag = ?", (clean["name"], old))
+    conn.execute("INSERT OR IGNORE INTO finance_tags (group_name, name, color, icon) VALUES ('', ?, ?, ?)",
+                 (clean["name"], clean.get("color") or "gray", clean.get("icon") or ""))
     conn.commit()
 
 
-def delete_tag(conn: sqlite3.Connection, group: str, name: str) -> None:
-    conn.execute("DELETE FROM finance_tags WHERE group_name = ? AND name = ?", (group, name))
-    if not conn.execute("SELECT 1 FROM finance_tags WHERE name = ?", (name,)).fetchone():
-        conn.execute("DELETE FROM finance_transaction_tags WHERE tag = ?", (name,))
+def delete_tag(conn: sqlite3.Connection, name: str) -> None:
+    conn.execute("DELETE FROM finance_tags WHERE name = ?", (name,))
+    conn.execute("DELETE FROM finance_transaction_tags WHERE tag = ?", (name,))
     conn.commit()
 
 
@@ -396,7 +422,7 @@ def backup_rows(conn: sqlite3.Connection) -> dict[str, list[dict]]:
 def restore_rows(conn: sqlite3.Connection, payload: dict) -> int:
     count = 0
     for row in payload.get("finance_accounts", []):
-        clean = {k: row[k] for k in ("name", "type", "currency", "opening_balance", "opening_date")}
+        clean = {k: row[k] for k in ("name", "type", "currency", "opening_balance", "opening_date")} | {"abbreviation": row.get("abbreviation") or ""}
         save_account(conn, clean, row["uid"])
         count += 1
     for row in payload.get("finance_transactions", []):
@@ -409,7 +435,8 @@ def restore_rows(conn: sqlite3.Connection, payload: dict) -> int:
                                                      "recurrence", "task_uid")} | {"label": row.get("label") or "", "tags": row.get("tags") or []}, row["uid"])
         count += 1
     for row in payload.get("finance_tags", []):
-        conn.execute("INSERT OR IGNORE INTO finance_tags (group_name, name) VALUES (?, ?)", (row["group_name"], row["name"]))
+        conn.execute("INSERT OR IGNORE INTO finance_tags (group_name, name, color, icon) VALUES ('', ?, ?, ?)",
+                     (row["name"], row.get("color") or "gray", row.get("icon") or ""))
     conn.commit()
     return count
 
@@ -427,7 +454,8 @@ def task_label(conn: sqlite3.Connection, task_uid: str) -> str:
 
 def _scheduled_select() -> str:
     return (
-        "SELECT s.*, a.name AS account_name, a.currency AS currency, b.name AS to_account_name "
+        "SELECT s.*, a.name AS account_name, " + _ABBR.format(x="a", n="account_abbr") + ", a.currency AS currency, b.name AS to_account_name, "
+        + _ABBR.format(x="b", n="to_account_abbr") + " "
         "FROM finance_scheduled s JOIN finance_accounts a ON a.uid = s.account_uid "
         "LEFT JOIN finance_accounts b ON b.uid = s.to_account_uid"
     )
@@ -521,11 +549,9 @@ def save_scheduled(conn: sqlite3.Connection, clean: dict, uid: str | None = None
          clean["recurrence"], clean["task_uid"], clean["label"], _now()),
     )
     conn.execute("DELETE FROM finance_scheduled_tags WHERE scheduled_uid = ?", (uid,))
-    label = task_label(conn, clean["task_uid"]) if clean["task_uid"] else clean["label"]
-    group = label_group(conn, label)
     for tag in clean.get("tags", []):
         conn.execute("INSERT OR IGNORE INTO finance_scheduled_tags (scheduled_uid, tag) VALUES (?, ?)", (uid, tag))
-        conn.execute("INSERT OR IGNORE INTO finance_tags (group_name, name) VALUES (?, ?)", (group, tag))
+        conn.execute("INSERT OR IGNORE INTO finance_tags (group_name, name) VALUES ('', ?)", (tag,))
     conn.commit()
     return uid
 

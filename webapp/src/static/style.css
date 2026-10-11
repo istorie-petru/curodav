@@ -82,7 +82,7 @@
      sizes in several places (.week-overview-day-label, .heatmap-empty,
      .heatmap-month-label). #737378 clears 4.5:1+ against --bg-elevated
      while staying visibly a step lighter than --fg-secondary (#6e6e73). */
-  --border:rgba(0,0,0,.1);--border-strong:rgba(0,0,0,.18);--separator:rgba(0,0,0,.08);--row-alt:rgba(0,0,0,.025);
+  --border:rgba(0,0,0,.1);--border-strong:rgba(0,0,0,.18);--scrollbar-thumb:rgba(0,0,0,.22);--scrollbar-thumb-hover:rgba(0,0,0,.4);--separator:rgba(0,0,0,.08);--row-alt:rgba(0,0,0,.025);
   /* 2026-09-25 (UI audit F9): list-row hover wash. Rows used --row-alt
      (2.5% black), which measured ~1.05:1 against the now-white page -- no
      visible hover at all once the card surface went away. 5.5% reads as
@@ -117,6 +117,14 @@
   --tag-indigo-fg:#4b49c8; --tag-indigo-bg:#eeeefb;
   --tag-magenta-fg:#c01f8f;--tag-magenta-bg:#fbe9f5;
   --tag-slate-fg:#475569;  --tag-slate-bg:#eef1f4;
+  --tag-coral-fg:#b55334;--tag-coral-bg:#ffebe5;
+  --tag-amber-fg:#9a6a00;--tag-amber-bg:#fceeda;
+  --tag-sage-fg:#5f7964;--tag-sage-bg:#ebf2ec;
+  --tag-sky-fg:#1b7ba7;--tag-sky-bg:#e1f3ff;
+  --tag-violet-fg:#7564bd;--tag-violet-bg:#efeeff;
+  --tag-plum-fg:#9e5890;--tag-plum-bg:#fde9f8;
+  --tag-rose-fg:#b44d65;--tag-rose-bg:#ffeaed;
+  --tag-sand-fg:#7e735d;--tag-sand-bg:#f3f0ea;
 
   /* Calendar/label swatch palette (.cal-* classes, the color picker,
      detail accents, the timeline's inline-painted bars) -- each hue
@@ -138,22 +146,30 @@
      so they were darkened within the same hue until white text clears
      WCAG AA 4.5:1 on all 16 swatches; the pastel `--tag-*` pill pairs are
      separate tokens and unaffected. */
-  --cal-bg-red:#c35045;   --cal-fg-red:#ffffff;
-  --cal-bg-orange:#a1672b;--cal-fg-orange:#ffffff;
-  --cal-bg-yellow:#a38c2e;--cal-fg-yellow:#1d1d1f;
-  --cal-bg-lime:#839436;  --cal-fg-lime:#1d1d1f;
-  --cal-bg-green:#398156; --cal-fg-green:#ffffff;
-  --cal-bg-mint:#278172;  --cal-fg-mint:#ffffff;
-  --cal-bg-teal:#2a7f91;  --cal-fg-teal:#ffffff;
-  --cal-bg-cyan:#2c7d9f;  --cal-fg-cyan:#ffffff;
-  --cal-bg-blue:#3778bd;  --cal-fg-blue:#ffffff;
-  --cal-bg-indigo:#575dcf;--cal-fg-indigo:#ffffff;
-  --cal-bg-purple:#8a56c1;--cal-fg-purple:#ffffff;
-  --cal-bg-magenta:#ac4e93;--cal-fg-magenta:#ffffff;
-  --cal-bg-pink:#be4e77;  --cal-fg-pink:#ffffff;
-  --cal-bg-brown:#8b713f; --cal-fg-brown:#ffffff;
-  --cal-bg-gray:#70767d;  --cal-fg-gray:#ffffff;
-  --cal-bg-slate:#5b6b7d; --cal-fg-slate:#ffffff;
+  --cal-bg-red:#fca397;   --cal-fg-red:#1d1d1f;
+  --cal-bg-orange:#e1b48b;--cal-fg-orange:#1d1d1f;
+  --cal-bg-yellow:#cebe80;--cal-fg-yellow:#1d1d1f;
+  --cal-bg-lime:#b8c686;  --cal-fg-lime:#1d1d1f;
+  --cal-bg-green:#99ccaa; --cal-fg-green:#1d1d1f;
+  --cal-bg-mint:#92cbbf;  --cal-fg-mint:#1d1d1f;
+  --cal-bg-teal:#91c8d6;  --cal-fg-teal:#1d1d1f;
+  --cal-bg-cyan:#91c6e1;  --cal-fg-cyan:#1d1d1f;
+  --cal-bg-blue:#93c2f7;  --cal-fg-blue:#1d1d1f;
+  --cal-bg-indigo:#adb8fe;--cal-fg-indigo:#1d1d1f;
+  --cal-bg-purple:#ceabfa;--cal-fg-purple:#1d1d1f;
+  --cal-bg-magenta:#eca3d5;--cal-fg-magenta:#1d1d1f;
+  --cal-bg-pink:#f7a0bb;  --cal-fg-pink:#1d1d1f;
+  --cal-bg-brown:#cfbb97; --cal-fg-brown:#1d1d1f;
+  --cal-bg-gray:#bbbec1;  --cal-fg-gray:#1d1d1f;
+  --cal-bg-slate:#b8bec6; --cal-fg-slate:#1d1d1f;
+  --cal-bg-coral:#fea387;--cal-fg-coral:#1d1d1f;
+  --cal-bg-amber:#e6b463;--cal-fg-amber:#1d1d1f;
+  --cal-bg-sage:#a8c7ad;--cal-fg-sage:#1d1d1f;
+  --cal-bg-sky:#6cc9fd;--cal-fg-sky:#1d1d1f;
+  --cal-bg-violet:#bcb2fe;--cal-fg-violet:#1d1d1f;
+  --cal-bg-plum:#eca1db;--cal-fg-plum:#1d1d1f;
+  --cal-bg-rose:#fd9eb0;--cal-fg-rose:#1d1d1f;
+  --cal-bg-sand:#cabca1;--cal-fg-sand:#1d1d1f;
 
   /* Detail-view modal accents (event_detail.html/task_detail.html,
      2026-08-08) -- the color a `.detail-card`'s colored left border and
@@ -166,6 +182,7 @@
   --cal-accent-green:var(--cal-bg-green);--cal-accent-mint:var(--cal-bg-mint);--cal-accent-teal:var(--cal-bg-teal);--cal-accent-cyan:var(--cal-bg-cyan);
   --cal-accent-blue:var(--cal-bg-blue);--cal-accent-indigo:var(--cal-bg-indigo);--cal-accent-purple:var(--cal-bg-purple);--cal-accent-magenta:var(--cal-bg-magenta);
   --cal-accent-pink:var(--cal-bg-pink);--cal-accent-brown:var(--cal-bg-brown);--cal-accent-gray:var(--cal-bg-gray);--cal-accent-slate:var(--cal-bg-slate);
+  --cal-accent-coral:var(--cal-bg-coral);--cal-accent-amber:var(--cal-bg-amber);--cal-accent-sage:var(--cal-bg-sage);--cal-accent-sky:var(--cal-bg-sky);--cal-accent-violet:var(--cal-bg-violet);--cal-accent-plum:var(--cal-bg-plum);--cal-accent-rose:var(--cal-bg-rose);--cal-accent-sand:var(--cal-bg-sand);
   /* 2026-09-25 (UI audit L5): a label's color used as TEXT (Settings >
      Labels names, a label page's header icon, group glyphs in the rail).
      --cal-accent-* is a mid-tone meant as a fill, and as text it measured
@@ -178,6 +195,7 @@
   --cal-text-green:#398156;--cal-text-mint:#278172;--cal-text-teal:#297e8f;--cal-text-cyan:#2c7d9f;
   --cal-text-blue:#3675b9;--cal-text-indigo:#575dcf;--cal-text-purple:#8a56c1;--cal-text-magenta:#ac4e93;
   --cal-text-pink:#bd4c75;--cal-text-brown:#8b713f;--cal-text-gray:#6e737a;--cal-text-slate:#5b6b7d;
+  --cal-text-coral:#b55334;--cal-text-amber:#9a6a00;--cal-text-sage:#5f7964;--cal-text-sky:#1b7ba7;--cal-text-violet:#7564bd;--cal-text-plum:#9e5890;--cal-text-rose:#b44d65;--cal-text-sand:#7e735d;
 
   --font-system:"Noto Sans","Segoe UI",Cantarell,Ubuntu,Roboto,"Helvetica Neue",Arial,sans-serif;
   /* Type-scale consolidation (2026-09-24): was 8 sizes (xs 13/sm 14/base
@@ -319,11 +337,20 @@
   --cal-bg-brown:#a3844a;--cal-fg-brown:#1d1d1f;
   --cal-bg-gray:#838990;--cal-fg-gray:#1d1d1f;
   --cal-bg-slate:#788a9d;--cal-fg-slate:#1d1d1f;
+  --cal-bg-coral:#c4735a;--cal-fg-coral:#1d1d1f;
+  --cal-bg-amber:#b08335;--cal-fg-amber:#1d1d1f;
+  --cal-bg-sage:#78957d;--cal-fg-sage:#1d1d1f;
+  --cal-bg-sky:#3d96c5;--cal-fg-sky:#1d1d1f;
+  --cal-bg-violet:#8b80ca;--cal-fg-violet:#1d1d1f;
+  --cal-bg-plum:#b572a6;--cal-fg-plum:#1d1d1f;
+  --cal-bg-rose:#c46f7f;--cal-fg-rose:#1d1d1f;
+  --cal-bg-sand:#978b72;--cal-fg-sand:#1d1d1f;
   /* 2026-09-25 (UI audit L5): label colors as text, see :root's --cal-text-*. */
   --cal-text-red:#dc9a94;--cal-text-orange:#d7a068;--cal-text-yellow:#c5a937;--cal-text-lime:#a0b442;
   --cal-text-green:#68bd8b;--cal-text-mint:#3abfa9;--cal-text-teal:#52b8cd;--cal-text-cyan:#66b4d5;
   --cal-text-blue:#84aedb;--cal-text-indigo:#a2a6e5;--cal-text-purple:#bea1dc;--cal-text-magenta:#d199c2;
   --cal-text-pink:#da9ab1;--cal-text-brown:#c1a775;--cal-text-gray:#a8acb1;--cal-text-slate:#a2aebb;
+  --cal-text-coral:#f2a086;--cal-text-amber:#dab06d;--cal-text-sage:#a8beac;--cal-text-sky:#81c1e6;--cal-text-violet:#b6acf6;--cal-text-plum:#dca2cf;--cal-text-rose:#f19baa;--cal-text-sand:#c0b6a4;
 
   --accent-neutral:#414141;--accent-neutral-hover:#4b4b4b;--accent-neutral-active:#3a3a3a;--accent-neutral-subtle:rgba(255,255,255,.08);--accent-neutral-subtle-strong:rgba(255,255,255,.14);
   --success:#30d158;--warning:#ff9f0a;--danger:#ff453a;--info:#64d2ff;
@@ -335,7 +362,7 @@
      --bg-secondary, 5.22:1 on --bg-base). The audit's suggested #b3b3b8
      (5.12:1) would have been *lighter* than --fg-secondary (#b0b0b6,
      4.96:1) and inverted the secondary/tertiary hierarchy. */
-  --border:rgba(255,255,255,.13);--border-strong:rgba(255,255,255,.22);--separator:rgba(255,255,255,.09);--row-alt:rgba(255,255,255,.03);
+  --border:rgba(255,255,255,.13);--border-strong:rgba(255,255,255,.22);--scrollbar-thumb:rgba(255,255,255,.24);--scrollbar-thumb-hover:rgba(255,255,255,.42);--separator:rgba(255,255,255,.09);--row-alt:rgba(255,255,255,.03);
   --row-hover:rgba(255,255,255,.07); /* UI audit F9, see :root */
   --control-bg:#414141;--control-bg-hover:#494949;--control-border:rgba(255,255,255,.14);
   --overlay-scrim:rgba(0,0,0,.55);
@@ -366,6 +393,14 @@
   --tag-indigo-fg:#a5a3ff;  --tag-indigo-bg:rgba(94,92,230,.24);
   --tag-magenta-fg:#ff8fdb; --tag-magenta-bg:rgba(214,36,159,.24);
   --tag-slate-fg:#b6c2d1;   --tag-slate-bg:rgba(100,116,139,.28);
+  --tag-coral-fg:#fcae96;--tag-coral-bg:rgba(208,96,61,0.24);
+  --tag-amber-fg:#e5bd80;--tag-amber-bg:rgba(174,124,27,0.24);
+  --tag-sage-fg:#b6cab9;--tag-sage-bg:rgba(113,143,118,0.24);
+  --tag-sky-fg:#92cdf0;--tag-sky-bg:rgba(37,145,196,0.24);
+  --tag-violet-fg:#c3bbfb;--tag-violet-bg:rgba(134,115,217,0.24);
+  --tag-plum-fg:#e7b0da;--tag-plum-bg:rgba(181,102,165,0.24);
+  --tag-rose-fg:#fbaab8;--tag-rose-bg:rgba(207,89,117,0.24);
+  --tag-sand-fg:#ccc3b2;--tag-sand-bg:rgba(145,133,107,0.24);
 
   /* Calendar swatch palette: no dark overrides -- 2026-08-09 the two
      theme packs (deep tints for light, pale pastels for dark) were
@@ -391,6 +426,13 @@
   *{transition-duration:0.001ms !important; animation-duration:0.001ms !important; scroll-behavior:auto !important;}
 }
 html, body{height:100%;}
+/* Minimalist scrollbars everywhere: thin, no track, a thumb tinted by the theme. */
+@supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin; scrollbar-color:var(--scrollbar-thumb) transparent;}}
+::-webkit-scrollbar{width:8px; height:8px;}
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--scrollbar-thumb); border-radius:8px; border:2px solid transparent; background-clip:padding-box;}
+::-webkit-scrollbar-thumb:hover{background:var(--scrollbar-thumb-hover); background-clip:padding-box;}
+::-webkit-scrollbar-button{display:none;}
 /* 2026-09-24 direct request ("I want the background white/dark depending
    on the theme, not that gray") -- the page canvas now uses the same
    token `.card` used to (--bg-elevated, this file's § 6 comment), not
@@ -1907,6 +1949,14 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .tag-indigo{background:var(--tag-indigo-bg); color:var(--tag-indigo-fg);}
 .tag-magenta{background:var(--tag-magenta-bg); color:var(--tag-magenta-fg);}
 .tag-slate{background:var(--tag-slate-bg); color:var(--tag-slate-fg);}
+.tag-coral{background:var(--tag-coral-bg); color:var(--tag-coral-fg);}
+.tag-amber{background:var(--tag-amber-bg); color:var(--tag-amber-fg);}
+.tag-sage{background:var(--tag-sage-bg); color:var(--tag-sage-fg);}
+.tag-sky{background:var(--tag-sky-bg); color:var(--tag-sky-fg);}
+.tag-violet{background:var(--tag-violet-bg); color:var(--tag-violet-fg);}
+.tag-plum{background:var(--tag-plum-bg); color:var(--tag-plum-fg);}
+.tag-rose{background:var(--tag-rose-bg); color:var(--tag-rose-fg);}
+.tag-sand{background:var(--tag-sand-bg); color:var(--tag-sand-fg);}
 
 /* 2026-09-03 (direct request: "labels' colors should be lighter/pastel,
    based on the chosen color"). `label_pill` (_label_pill.html) paints a
@@ -1941,6 +1991,14 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .cell-tag.cal-brown{background:var(--tag-brown-bg); color:var(--tag-brown-fg);}
 .cell-tag.cal-gray{background:var(--tag-gray-bg); color:var(--tag-gray-fg);}
 .cell-tag.cal-slate{background:var(--tag-slate-bg); color:var(--tag-slate-fg);}
+.cell-tag.cal-coral{background:var(--tag-coral-bg); color:var(--tag-coral-fg);}
+.cell-tag.cal-amber{background:var(--tag-amber-bg); color:var(--tag-amber-fg);}
+.cell-tag.cal-sage{background:var(--tag-sage-bg); color:var(--tag-sage-fg);}
+.cell-tag.cal-sky{background:var(--tag-sky-bg); color:var(--tag-sky-fg);}
+.cell-tag.cal-violet{background:var(--tag-violet-bg); color:var(--tag-violet-fg);}
+.cell-tag.cal-plum{background:var(--tag-plum-bg); color:var(--tag-plum-fg);}
+.cell-tag.cal-rose{background:var(--tag-rose-bg); color:var(--tag-rose-fg);}
+.cell-tag.cal-sand{background:var(--tag-sand-bg); color:var(--tag-sand-fg);}
 
 .warnings-strip{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0;}
 .credit-pill{
@@ -2769,6 +2827,14 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 .pill-indigo{background-color:var(--tag-indigo-bg); color:var(--tag-indigo-fg);}
 .pill-magenta{background-color:var(--tag-magenta-bg); color:var(--tag-magenta-fg);}
 .pill-slate{background-color:var(--tag-slate-bg); color:var(--tag-slate-fg);}
+.pill-coral{background-color:var(--tag-coral-bg); color:var(--tag-coral-fg);}
+.pill-amber{background-color:var(--tag-amber-bg); color:var(--tag-amber-fg);}
+.pill-sage{background-color:var(--tag-sage-bg); color:var(--tag-sage-fg);}
+.pill-sky{background-color:var(--tag-sky-bg); color:var(--tag-sky-fg);}
+.pill-violet{background-color:var(--tag-violet-bg); color:var(--tag-violet-fg);}
+.pill-plum{background-color:var(--tag-plum-bg); color:var(--tag-plum-fg);}
+.pill-rose{background-color:var(--tag-rose-bg); color:var(--tag-rose-fg);}
+.pill-sand{background-color:var(--tag-sand-bg); color:var(--tag-sand-fg);}
 .inline-date{border-color:transparent; padding:3px 6px; font-size:var(--text-sm); width:128px;}
 .inline-date:hover{border-color:var(--control-border);}
 /* Holidays table (settings_holidays.html) -- title cell, same idea as
@@ -4093,6 +4159,14 @@ main.main-calendar .project-calendar-layout > .project-calendar-grid{padding-top
 .cal-brown{background:var(--cal-bg-brown); color:var(--cal-fg-brown);}
 .cal-gray{background:var(--cal-bg-gray); color:var(--cal-fg-gray);}
 .cal-slate{background:var(--cal-bg-slate); color:var(--cal-fg-slate);}
+.cal-coral{background:var(--cal-bg-coral); color:var(--cal-fg-coral);}
+.cal-amber{background:var(--cal-bg-amber); color:var(--cal-fg-amber);}
+.cal-sage{background:var(--cal-bg-sage); color:var(--cal-fg-sage);}
+.cal-sky{background:var(--cal-bg-sky); color:var(--cal-fg-sky);}
+.cal-violet{background:var(--cal-bg-violet); color:var(--cal-fg-violet);}
+.cal-plum{background:var(--cal-bg-plum); color:var(--cal-fg-plum);}
+.cal-rose{background:var(--cal-bg-rose); color:var(--cal-fg-rose);}
+.cal-sand{background:var(--cal-bg-sand); color:var(--cal-fg-sand);}
 
 /* Work-allocation blocks (1.9 side work, direct feedback: "timetable tasks
    time allocation should never be colored, only a thick colored border") --
@@ -4132,6 +4206,14 @@ main.main-calendar .project-calendar-layout > .project-calendar-grid{padding-top
 [data-theme="light"] .filled-card.cal-indigo{background:#5856d6;}
 [data-theme="light"] .filled-card.cal-magenta{background:#d6249f;}
 [data-theme="light"] .filled-card.cal-slate{background:#64748b;}
+[data-theme="light"] .filled-card.cal-coral{background:#f27f5c;}
+[data-theme="light"] .filled-card.cal-amber{background:#d49824;}
+[data-theme="light"] .filled-card.cal-sage{background:#8fae94;}
+[data-theme="light"] .filled-card.cal-sky{background:#4cb0e5;}
+[data-theme="light"] .filled-card.cal-violet{background:#a492fb;}
+[data-theme="light"] .filled-card.cal-plum{background:#d684c5;}
+[data-theme="light"] .filled-card.cal-rose{background:#f17993;}
+[data-theme="light"] .filled-card.cal-sand{background:#b0a389;}
 [data-theme="light"] .filled-card.cal-lime{background:#a4d100; color:#1d1d1f !important;}
 [data-theme="dark"] .filled-card.cal-blue{background:#0a84ff;}
 [data-theme="dark"] .filled-card.cal-green{background:#30d158;}
@@ -4148,6 +4230,14 @@ main.main-calendar .project-calendar-layout > .project-calendar-grid{padding-top
 [data-theme="dark"] .filled-card.cal-indigo{background:#5e5ce6;}
 [data-theme="dark"] .filled-card.cal-magenta{background:#f74dd6;}
 [data-theme="dark"] .filled-card.cal-slate{background:#94a3b8;}
+[data-theme="dark"] .filled-card.cal-coral{background:#f9a68c;}
+[data-theme="dark"] .filled-card.cal-amber{background:#e1b673;}
+[data-theme="dark"] .filled-card.cal-sage{background:#afc4b2;}
+[data-theme="dark"] .filled-card.cal-sky{background:#87c7ec;}
+[data-theme="dark"] .filled-card.cal-violet{background:#bcb2fd;}
+[data-theme="dark"] .filled-card.cal-plum{background:#e3a8d5;}
+[data-theme="dark"] .filled-card.cal-rose{background:#f8a1b1;}
+[data-theme="dark"] .filled-card.cal-sand{background:#c6bdaa;}
 [data-theme="dark"] .filled-card.cal-lime{background:#c2f542; color:#1d1d1f !important;}
 
 /* A plain round color dot -- e.g. an event's calendar color in Month/Agenda
@@ -6728,6 +6818,14 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .icon.cal-brown{color:var(--tag-brown-fg);}
 .icon.cal-gray{color:var(--tag-gray-fg);}
 .icon.cal-slate{color:var(--tag-slate-fg);}
+.icon.cal-coral{color:var(--tag-coral-fg);}
+.icon.cal-amber{color:var(--tag-amber-fg);}
+.icon.cal-sage{color:var(--tag-sage-fg);}
+.icon.cal-sky{color:var(--tag-sky-fg);}
+.icon.cal-violet{color:var(--tag-violet-fg);}
+.icon.cal-plum{color:var(--tag-plum-fg);}
+.icon.cal-rose{color:var(--tag-rose-fg);}
+.icon.cal-sand{color:var(--tag-sand-fg);}
 .widget-config{margin-top:12px; border-top:1px solid var(--separator); padding-top:8px;}
 .widget-config summary{cursor:pointer; font-size:var(--text-sm); color:var(--fg-tertiary); display:flex; align-items:center; gap:4px;}
 .widget-checkbox-row{display:flex; flex-wrap:wrap; gap:4px 14px;}
@@ -8375,17 +8473,27 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    field-row) needs its own small rule instead of inheriting one. */
 .settings-look-hint{margin:2px 0 var(--space-3); font-size:var(--text-sm); color:var(--fg-tertiary);}
 .look-trigger{display:flex; align-items:center; gap:var(--space-2); width:100%;}
+.look-trigger[data-dot-var-prefix="cal-accent-"] .look-preview{color:var(--cal-fg-gray);}
 .look-name{flex:1; text-align:left; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .look-preview{--habit-accent:var(--accent); display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; background:var(--habit-accent); color:var(--fg-on-accent); flex:none;}
 .multiselect-panel.look-panel{padding:var(--space-2); container-type:inline-size; overflow:hidden; max-height:none;}
-.look-panel-inner{display:flex; flex-direction:column; gap:var(--space-2); max-height:min(60vh, 420px);}
-.look-colors{padding-bottom:var(--space-2); border-bottom:1px solid var(--separator); flex:none;}
-.look-icons{overflow-y:auto; min-height:0;}
+.look-panel-inner{display:flex; flex-direction:column; gap:var(--space-2);}
 .look-group{display:grid; grid-template-columns:repeat(auto-fill, minmax(36px, 1fr)); gap:var(--space-1);}
-@container (min-width: 480px){
-  .look-panel-inner{display:grid; grid-template-columns:calc(4 * 36px + 3 * var(--space-1)) minmax(0,1fr); align-items:start; gap:var(--space-3);}
-  .look-colors{padding:0 var(--space-3) 0 0; border-bottom:none; border-right:1px solid var(--separator); align-self:stretch; align-content:start;}
-  .look-icons{max-height:min(60vh, 420px);}
+.look-colors{padding-bottom:var(--space-2); border-bottom:1px solid var(--separator); flex:none; grid-template-columns:repeat(auto-fill, minmax(32px, 1fr));}
+.look-icons-pane{display:grid; grid-template-columns:150px minmax(0,1fr); gap:var(--space-2); height:min(46vh, 340px);}
+.look-cats{display:flex; flex-direction:column; gap:2px; overflow-y:auto; min-height:0; padding-right:var(--space-1); border-right:1px solid var(--separator);}
+.look-cat{text-align:left; padding:6px var(--space-2); border-radius:var(--radius-sm); font-size:var(--text-sm); color:var(--fg-secondary); background:transparent; border:0; cursor:pointer; flex:none;}
+.look-cat:hover{background:var(--row-hover);}
+.look-cat.is-active{background:var(--accent); color:var(--fg-on-accent);}
+.look-icon-side{display:flex; flex-direction:column; gap:var(--space-2); min-height:0; min-width:0;}
+.look-icon-side > .search-field{flex:none; width:100%;}
+.look-icon-grid{flex:1 1 auto;}
+.look-icon-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(36px, 1fr)); gap:var(--space-1); overflow-y:auto; min-height:0; align-content:start;}
+button.look-icon{border:0; background:transparent; color:var(--fg-secondary); padding:0;}
+button.look-icon.is-selected{background:var(--accent); color:var(--fg-on-accent);}
+@media (max-width:520px){
+  .look-icons-pane{grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); height:min(56vh, 380px);}
+  .look-cats{flex-direction:row; overflow-x:auto; overflow-y:hidden; border-right:0; border-bottom:1px solid var(--separator); padding:0 0 var(--space-1);}
 }
 .look-swatch, .look-icon{position:relative; display:flex; align-items:center; justify-content:center; height:36px; border-radius:var(--radius-sm); cursor:pointer;}
 .look-icon .icon{width:18px; height:18px;}
@@ -8395,7 +8503,6 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .look-icon span{display:flex; align-items:center; justify-content:center; width:100%; height:100%; border-radius:var(--radius-sm); color:var(--fg-secondary);}
 .look-swatch:hover, .look-icon:hover span{background:var(--row-hover);}
 .look-swatch input:checked + .look-dot{box-shadow:0 0 0 2px var(--bg-elevated), 0 0 0 4px var(--fg-primary);}
-.look-icon input:checked + span{background:var(--accent); color:var(--fg-on-accent);}
 .look-swatch input:focus-visible + span, .look-icon input:focus-visible + span{outline:2px solid var(--accent); outline-offset:2px;}
 /* 2026-09-26: a habit's own colour (tasks.habit_color). */
 .habit-c-red{--habit-accent:var(--cal-accent-red);}
@@ -8414,6 +8521,14 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .habit-c-brown{--habit-accent:var(--cal-accent-brown);}
 .habit-c-gray{--habit-accent:var(--cal-accent-gray);}
 .habit-c-slate{--habit-accent:var(--cal-accent-slate);}
+.habit-c-coral{--habit-accent:var(--cal-accent-coral);}
+.habit-c-amber{--habit-accent:var(--cal-accent-amber);}
+.habit-c-sage{--habit-accent:var(--cal-accent-sage);}
+.habit-c-sky{--habit-accent:var(--cal-accent-sky);}
+.habit-c-violet{--habit-accent:var(--cal-accent-violet);}
+.habit-c-plum{--habit-accent:var(--cal-accent-plum);}
+.habit-c-rose{--habit-accent:var(--cal-accent-rose);}
+.habit-c-sand{--habit-accent:var(--cal-accent-sand);}
 /* Habit form (habit_task_form.html), 2026-09-26 -- Peter's approved
    mockup: every control full width; a choice that needs a follow-up
    (certain days, times a week/month, an amount) drops to half width and
@@ -9112,12 +9227,25 @@ main.notebook-browse-page .notebook-page-layout, main.notebook-browse-page .note
 .finance-card{display:flex;flex-direction:column;gap:var(--space-1);padding:var(--space-3);}
 .finance-card strong{font-size:var(--text-lg);font-weight:var(--font-weight-bold);}
 .finance-card-label{color:var(--fg-secondary);font-size:var(--text-sm);}
-.finance-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:var(--space-3);margin-bottom:var(--space-4);}
+.finance-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3);margin-bottom:var(--space-4);align-items:start;}
+.finance-col{display:flex;flex-direction:column;gap:var(--space-3);min-width:0;}
+@media (max-width:760px){.finance-charts{grid-template-columns:minmax(0,1fr);}}
 .finance-chart{padding:var(--space-3);}
 .finance-chart h4{margin:0 0 var(--space-2);}
 .finance-line{width:100%;height:auto;}
-.finance-line-path{fill:none;stroke:var(--cal-accent-blue);stroke-width:2;}
-.finance-line-dot{fill:var(--cal-accent-blue);}
+.finance-line-path{fill:none;stroke-width:2;}
+.finance-line-path.cal-line-blue{stroke:var(--cal-text-blue);}
+.finance-line-path.cal-line-green{stroke:var(--success);}
+.finance-line-path.cal-line-red{stroke:var(--danger);}
+.finance-line-path.cal-line-orange{stroke:var(--cal-text-orange);}
+.finance-line-dot.cal-line-blue,.finance-swatch.cal-line-blue{fill:var(--cal-text-blue);background:var(--cal-text-blue);}
+.finance-line-dot.cal-line-green,.finance-swatch.cal-line-green{fill:var(--success);background:var(--success);}
+.finance-line-dot.cal-line-red,.finance-swatch.cal-line-red{fill:var(--danger);background:var(--danger);}
+.finance-line-dot.cal-line-orange,.finance-swatch.cal-line-orange{fill:var(--cal-text-orange);background:var(--cal-text-orange);}
+.finance-axis-savings{fill:var(--cal-accent-blue);}
+.finance-grid{stroke:var(--border);stroke-width:1;opacity:.5;}
+.finance-grid.is-zero{opacity:1;}
+.finance-legend.finance-legend-row{flex-direction:row;flex-wrap:wrap;gap:var(--space-3);margin-top:var(--space-2);}
 .finance-axis{font-size:var(--text-2xs);fill:var(--fg-secondary);}
 .finance-range{display:flex;justify-content:space-between;font-size:var(--text-xs);color:var(--fg-secondary);}
 .finance-doughnut-row{display:flex;flex-wrap:wrap;gap:var(--space-4);align-items:center;}
@@ -9126,6 +9254,11 @@ main.notebook-browse-page .notebook-page-layout, main.notebook-browse-page .note
 .finance-legend{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-1);min-width:0;}
 .finance-swatch{display:inline-block;width:var(--space-2);height:var(--space-2);border-radius:50%;background:var(--habit-accent);margin-right:var(--space-2);}
 .finance-num{text-align:right;white-space:nowrap;}
+.finance-type-icon.is-income{color:var(--success);}
+.finance-type-icon.is-expense{color:var(--danger);}
+.finance-type-icon.is-transfer{color:var(--fg-secondary);}
+.finance-num.is-income{color:var(--success);}
+.finance-num.is-expense{color:var(--danger);}
 .finance-currency{margin:var(--space-4) 0 var(--space-2);}
 .finance-txn-grid[data-txn-type="transfer"] .finance-plain-only{display:none;}
 .finance-txn-grid:not([data-txn-type="transfer"]) .finance-transfer-only{display:none;}

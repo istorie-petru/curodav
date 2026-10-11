@@ -284,7 +284,7 @@ def test_tags_typed_on_a_scheduled_row_are_offered_next_time(conn):
     a = account(conn)
     db.upsert_label_config(conn, {"name": "Transport", "label_group": "Myself"})
     schedule(conn, a, label="Transport", tags=["commute"])
-    assert finance.tags_for_group(conn, "Myself") == ["commute"]
+    assert finance.tag_names(conn) == ["commute"]
 
 
 def test_the_task_form_rows_ask_for_a_description_and_offer_tags_and_type_dependent_accounts(conn):

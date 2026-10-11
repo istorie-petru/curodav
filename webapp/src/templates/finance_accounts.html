@@ -11,6 +11,7 @@
         <thead>
             <tr>
                 <th>Account</th>
+                <th class="col-opt-1">Abbr.</th>
                 <th class="col-opt-2">Type</th>
                 <th class="col-opt-1">Currency</th>
                 <th class="col-opt-2 finance-num">Balance</th>
@@ -21,6 +22,7 @@
             {% for a in accounts %}
             <tr data-uid="{{ a.uid }}">
                 <td><a class="label-name" href="/finance/transactions?account={{ a.uid }}&range=all">{{ a.name }}</a></td>
+                <td class="col-opt-1">{{ a.abbreviation or '—' }}</td>
                 <td class="col-opt-2">{{ type_names.get(a.type, a.type) }}</td>
                 <td class="col-opt-1">{{ a.currency }}</td>
                 <td class="col-opt-2 finance-num">{{ money(a.balance, a.currency) }}</td>
@@ -28,9 +30,9 @@
                     'Delete "' ~ a.name ~ '"?' ~ (' Its ' ~ a.transaction_count ~ ' transactions are deleted with it.' if a.transaction_count else '')) }}</td>
             </tr>
             {% else %}
-            {{ empty_state_row(5, "No accounts yet") }}
+            {{ empty_state_row(6, "No accounts yet") }}
             {% endfor %}
-            <tr class="task-add-row"><td colspan="5"><a href="/settings/finance-accounts/new" data-modal>{{ icon('plus', 'icon-sm') }} New account</a></td></tr>
+            <tr class="task-add-row"><td colspan="6"><a href="/settings/finance-accounts/new" data-modal>{{ icon('plus', 'icon-sm') }} New account</a></td></tr>
         </tbody>
     </table>
 </div>

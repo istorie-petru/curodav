@@ -71,10 +71,10 @@ def test_month_helpers_cross_year_boundaries():
 
 
 def test_chart_geometry_handles_empty_flat_and_single_point_series():
-    assert fs.line_chart([])["dots"] == []
-    flat = fs.line_chart([{"balance": 5, "month": "a"}, {"balance": 5, "month": "b"}])
-    assert len(flat["dots"]) == 2 and flat["dots"][0]["y"] == flat["dots"][1]["y"]
-    assert len(fs.line_chart([{"balance": 1, "month": "a"}])["dots"]) == 1
+    assert fs.line_chart({}, [])["lines"] == []
+    flat = fs.line_chart({"savings": [500, 500]}, ["2026-01", "2026-02"])["lines"][0]["dots"]
+    assert len(flat) == 2 and flat[0]["y"] == flat[1]["y"]
+    assert len(fs.line_chart({"savings": [100]}, ["2026-01"])["lines"][0]["dots"]) == 1
     arcs = fs.doughnut([{"share": 1.0}])
     assert len(arcs) == 1 and arcs[0]["path"].startswith("M ")
 
@@ -100,3 +100,23 @@ def test_csv_without_the_required_columns_is_refused():
 def test_csv_import_infers_the_type_from_the_sign_when_missing():
     rows, _ = fs.parse_csv("date,account,amount\n2026-02-01,Cash,-5\n2026-02-02,Cash,5\n")
     assert [(r["type"], r["amount"]) for r in rows] == [("expense", 500), ("income", 500)]
+
+
+def test_spending_only_months_give_a_runway():
+    txns = [{"date": "2026-09-05", "type": "expense", "amount": 100000},
+            {"date": "2026-10-05", "type": "expense", "amount": 300000},
+            {"date": "2026-10-06", "type": "transfer", "amount": 999}]
+    flow = fs.monthly_flow(txns, ["2026-09", "2026-10"])
+    assert [r["expenses"] for r in flow] == [100000, 300000]
+    assert fs.runway(1000000, flow) == {"average": 200000, "months": 5.0}
+    assert fs.runway(1000000, [{"month": "2026-10", "income": 500000, "expenses": 100000}])["months"] is None
+
+
+def test_the_trend_chart_hides_lines_without_data_and_shares_one_axis():
+    months = ["2026-09", "2026-10"]
+    chart = fs.line_chart({"savings": [500000, 400000], "income": [0, 0], "expenses": [100000, 150000], "profit": [-100000, -150000]}, months)
+    assert [line["key"] for line in chart["lines"]] == ["savings", "expenses", "profit"]
+    assert chart["ticks"][0]["label"].startswith("-") and any(t["zero"] for t in chart["ticks"])
+    assert chart["ticks_right"][-1]["label"] == "5k" or chart["ticks_right"][-1]["label"].endswith("k")
+    assert [m["name"] for m in chart["months"]] == ["Sep", "Oct"]
+    assert fs.line_chart({"savings": [0, 0]}, months)["lines"] == []

@@ -34,7 +34,7 @@
         </div>
         {% if status_fixed %}
         <input type="hidden" name="status" value="scheduled">
-        {% elif not t %}
+        {% elif not t or copy %}
         <div class="field">
             {% set st_name = 'status' %}{% set st_label = 'Status' %}{% set st_items = status_items %}{% set st_selected = status %}{% set st_form_id = 'finance-transaction-form' %}
             {% include "_status_type_row.html" %}

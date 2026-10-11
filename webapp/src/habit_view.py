@@ -46,8 +46,8 @@ HABIT_ICONS = (
     "award", "shield", "x-circle",
 )
 HABIT_COLORS = (
-    "red", "orange", "yellow", "lime", "green", "mint", "teal", "cyan",
-    "blue", "indigo", "purple", "magenta", "pink", "brown", "gray", "slate",
+    "red", "coral", "orange", "amber", "yellow", "lime", "sage", "green", "mint", "teal", "cyan", "sky",
+    "blue", "indigo", "violet", "purple", "plum", "magenta", "rose", "pink", "sand", "brown", "gray", "slate",
 )
 
 

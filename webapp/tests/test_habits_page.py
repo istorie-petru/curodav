@@ -331,7 +331,8 @@ class TestSecondPass20260926:
         form = tasks_router.edit_task_form("h1", _request("/tasks/h1/edit"), conn=conn).body.decode()
         assert "habit-choice-row" not in form and "habit-days-hint" not in form and "field-hint" not in form
         assert 'data-ms-label="kind"' in form and 'id="look-habit-task-form"' in form
-        assert 'name="habit_color" value="purple"' in form and 'name="habit_icon" value="moon"' in form
+        assert 'name="habit_color" value="purple"' in form and 'name="habit_icon" value=""' in form
+        assert "moon" in re.search(r'data-curated="([^"]*)"', form).group(1).split(",")
 
     def test_backup_restore_keeps_look_and_reminder(self, conn):
         from src.routers import export as export_router

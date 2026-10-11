@@ -1,4 +1,5 @@
 {% from "_inputs.html" import text_input %}
+{% from "_look_picker.html" import look_picker %}
 {% extends "base.html" %}
 {% block title %}{{ "Edit tag" if tag else "New tag" }}{% endblock %}
 {% block content %}
@@ -7,16 +8,13 @@
 <div class="modal-body">
 <div class="card">
 <form method="post" id="finance-tag-form" action="{{ form_action }}">
-    {% if tag %}<input type="hidden" name="old_name" value="{{ tag.name }}"><input type="hidden" name="old_group" value="{{ tag.group }}">{% endif %}
+    {% if tag %}<input type="hidden" name="old_name" value="{{ tag.name }}">{% endif %}
     <div class="field-grid">
         <div class="field">
             <label>Name</label>
             {{ text_input({'name': 'name', 'value': tag.name if tag else '', 'required': true, 'autofocus': true}) }}
         </div>
-        <div class="field">
-            {% set st_name = 'group' %}{% set st_label = 'Group' %}{% set st_items = group_items %}{% set st_selected = tag.group if tag else '' %}{% set st_form_id = 'finance-tag-form' %}
-            {% include "_status_type_row.html" %}
-        </div>
+        {{ look_picker('look-finance-tag', 'finance-tag-form', tag.color if tag else 'gray', tag.icon if tag else none, colors, icon_groups, no_icon_label='No icon', default_icon='tag') }}
     </div>
 </form>
 </div>
@@ -25,7 +23,7 @@
 {% set footer_back_mode = 'cancel' %}
 {% set footer_back_label = 'Cancel' %}
 {% if tag %}
-{% set footer_delete_url = '/finance/tags/delete?' ~ ({'group': tag.group, 'name': tag.name} | urlencode) %}
+{% set footer_delete_url = '/finance/tags/delete?' ~ ({'name': tag.name} | urlencode) %}
 {% set footer_delete_mode = 'confirm' %}
 {% set footer_delete_label = 'Delete "' ~ tag.name ~ '"? It is removed from every transaction that carries it.' %}
 {% endif %}

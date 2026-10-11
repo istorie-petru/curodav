@@ -137,7 +137,7 @@ def _pending_transaction_context(conn, task: dict | None) -> dict:
     """What the task edit form's Pending transactions rows need: the task's scheduled rows and the account names."""
     accounts = finance.list_accounts(conn)
     rows = finance.list_scheduled(conn, task_uid=task["uid"]) if task else []
-    known = finance.tags_for_group(conn, finance.label_group(conn, finance.task_label(conn, task["uid"]) if task else ""))
+    known = finance.tag_names(conn)
     names = list(dict.fromkeys(known + [t for r in rows for t in r["tags"]]))
     return {
         "pending_tag_items": [{"uid": n, "name": n} for n in names],

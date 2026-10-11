@@ -9,7 +9,7 @@
     var doc = new DOMParser().parseFromString(text, "image/svg+xml");
     var host = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     host.setAttribute("aria-hidden", "true");
-    host.setAttribute("style", "display:none");
+    host.setAttribute("class", "svg-sprite");
     doc.querySelectorAll("symbol").forEach(function (symbol) {
       var id = "icon-" + symbol.getAttribute("id");
       if (document.getElementById(id)) return;

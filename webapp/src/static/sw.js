@@ -589,7 +589,9 @@
 // native selects replaced by the custom dropdown; style.css, app.js and the notebook scripts changed.
 // v140 (2026-10-10): pill icons 1.2em, sidebar add-button fix, color panel shared by the block menu
 // and the inline tool, ":" icon picker; style.css, app.js and the notebook scripts changed.
-const CACHE_NAME = "cc-shell-v143";
+// v144 (2026-10-11): the Look picker is a color row above an icon sidebar and grid; look_picker.js and style.css changed.
+// v145 (2026-10-11): soft label colors on the light theme, themed minimalist scrollbars; style.css changed.
+const CACHE_NAME = "cc-shell-v145";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

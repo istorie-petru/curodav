@@ -66,6 +66,7 @@
                       caller (habit/label/group forms) has a real Save
                       button and deliberately does NOT want a pick to
                       submit early, hence default `false`. #}
+{% from "_inputs.html" import search_input %}
 {% macro look_picker(id, form_id, color, icon_name, colors, icon_groups, color_field='color', icon_field='icon', allow_no_color=false, no_color_label='Default colour', no_icon_label='No icon', default_icon='tag', label='Look', wide=true, extra_class='', show_icon=true, dot_var_prefix='cal-accent-', autosubmit=false) %}
 <div class="field{% if wide %} field-wide{% endif %}{% if extra_class %} {{ extra_class }}{% endif %}">
     <label id="{{ id }}-label">{{ label }}</label>
@@ -88,15 +89,17 @@
                     {% endfor %}
                 </div>
                 {% if show_icon %}
-                {# 2026-09-26 (Peter): one flat icon grid, no section
-                   headings; the "no icon" choice first. #}
-                <div class="look-icons" role="radiogroup" aria-label="Icon">
-                    <div class="look-group">
-                        <label class="look-icon" title="{{ no_icon_label }}"><input type="radio" name="{{ icon_field }}" value="" form="{{ form_id }}" data-look-for="{{ id }}" data-look-part="icon"{% if autosubmit %} data-change-submit{% endif %}{% if not icon_name %} checked{% endif %}><span>{{ icon(default_icon) }}</span></label>
-                        {% set _seen = [] %}
-                        {% for names in icon_groups.values() %}{% for ic in names if ic not in _seen %}{% set _ = _seen.append(ic) %}
-                        <label class="look-icon" title="{{ ic|replace('-', ' ')|capitalize }}"><input type="radio" name="{{ icon_field }}" value="{{ ic }}" form="{{ form_id }}" data-look-for="{{ id }}" data-look-part="icon"{% if autosubmit %} data-change-submit{% endif %}{% if icon_name == ic %} checked{% endif %}><span>{{ icon(ic) }}</span></label>
-                        {% endfor %}{% endfor %}
+                {# 2026-10-11: the icon half is a category sidebar (Lucide's own categories, plus "Suggested" = the
+                   curated list passed in as `icon_groups`) beside a grid that static/look_picker.js fills on
+                   first open from /static/icons/lucide-categories.json. The picked icon is one hidden input
+                   (no per-icon radios: the full library is 1,877 icons). #}
+                {% set _seen = [] %}{% for names in icon_groups.values() %}{% for ic in names if ic not in _seen %}{% set _ = _seen.append(ic) %}{% endfor %}{% endfor %}
+                <input type="hidden" name="{{ icon_field }}" value="{{ icon_name or '' }}" form="{{ form_id }}" data-look-for="{{ id }}" data-look-part="icon"{% if autosubmit %} data-change-submit{% endif %}>
+                <div class="look-icons-pane" data-look-panel-for="{{ id }}" data-curated="{{ _seen|join(',') }}" data-default-icon="{{ default_icon }}" data-no-icon="{{ no_icon_label }}">
+                    <nav class="look-cats" aria-label="Icon categories"></nav>
+                    <div class="look-icon-side">
+                        {{ search_input({'class': 'look-icon-search', 'aria-label': 'Search icons', 'autocomplete': 'off'}) }}
+                        <div class="look-icon-grid" role="listbox" aria-label="Icon"></div>
                     </div>
                 </div>
                 {% endif %}

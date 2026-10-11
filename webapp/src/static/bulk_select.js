@@ -207,7 +207,7 @@
     // sole source of truth for `cb.checked` in both the plain-click and
     // drag cases, and this handler only needs to run the shift-range logic
     // off of whatever state pointerdown already established.
-    table.addEventListener("click", (e) => {
+    function onTableClick(e) {
       const cb = e.target.closest && e.target.closest(".row-select");
       if (!cb) return;
       e.preventDefault();
@@ -225,7 +225,8 @@
       // do for the single-checkbox case.
       lastClickedIdx = idx;
       updateBar();
-    });
+    }
+    table.addEventListener("click", onTableClick);
 
     // Drag-paint across the checkbox column -- pointermove is document-
     // level (a fast drag can outrun the table's own bounds for a frame),
@@ -233,7 +234,7 @@
     // can never paint another instance's rows.
     let painting = false;
     let paintValue = true;
-    table.addEventListener("pointerdown", (e) => {
+    function onTablePointerDown(e) {
       const cb = e.target.closest && e.target.closest(".row-select");
       if (!cb) return;
       painting = true;
@@ -241,7 +242,8 @@
       setSelected(cb, paintValue);
       lastClickedIdx = checkboxes().indexOf(cb);
       updateBar();
-    });
+    }
+    table.addEventListener("pointerdown", onTablePointerDown);
     // Named (not inline) so teardown() below can remove exactly these two
     // document-level listeners on re-init, instead of leaking one more
     // pair of orphaned listeners (closed over the previous, now-detached
@@ -270,6 +272,9 @@
       unbinders.push(() => el.removeEventListener("click", handler));
     }
     instances[cfg.tableId] = function teardown() {
+      // The table itself can outlive a re-init (Taxonomy & Data swaps only its rows), so its own listeners go too.
+      table.removeEventListener("click", onTableClick);
+      table.removeEventListener("pointerdown", onTablePointerDown);
       document.removeEventListener("pointermove", onDocPointerMove);
       document.removeEventListener("pointerup", onDocPointerUp);
       unbinders.forEach((off) => off());

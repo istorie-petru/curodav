@@ -4,6 +4,15 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.0.1]
+
+- Finance: Duplicate on every transaction row; amounts colored; dates as "05 Apr"; the type shown as an icon left of the description; accounts as pills with a short abbreviation set in the account form, used throughout.
+- Finance overview in two columns: one 6-month line chart (savings on its own right axis, income, expenses, profit; empty lines hidden), a spending pie, and an income pie when there is more than one income label. Average spending and cash runway shown when there is no income.
+- Transaction tags are free-standing (no group) and carry a color and icon, chosen in the Look picker and shown as pills.
+- The Look picker is a color row above a scrollable category sidebar and icon grid, covering the full Lucide library with search.
+- Light theme uses soft pastel label colors; eight new colors (coral, amber, sage, sky, violet, plum, rose, sand); thin themed scrollbars everywhere.
+- Fixed: the page scrollbar that came back on pages that scroll inside themselves (the icon library sheet was visible), bulk select in Taxonomy & Data, and scroll position lost on partial region refreshes.
+
 ## [4.0.0]
 
 - Notebook templates: frontmatter cleanup, a Templates page, and a New note modal with a template picker (type, labels, project and frontmatter set at creation; also a Note tab in the sidebar New modal).

@@ -14,6 +14,8 @@ from pathlib import Path
 
 STYLE_CSS = Path(__file__).resolve().parent / "static" / "style.css"
 STAND_OUT = 3.0
+# 2026-10-11: the light theme uses soft pastel fills with dark ink (chosen over the 3:1 rule), so its floor is lower.
+STAND_OUT_BY_THEME = {"light": 1.5, "dark": 3.0}
 TEXT = 4.5
 DARK_TEXT = "#1d1d1f"
 LIGHT_TEXT = "#ffffff"
@@ -53,7 +55,7 @@ def index(fill: str, theme: str) -> tuple[float, float]:
 
 def meets(fill: str, theme: str) -> bool:
     out, txt = index(fill, theme)
-    return out >= STAND_OUT and txt >= TEXT
+    return out >= STAND_OUT_BY_THEME[theme] and txt >= TEXT
 
 
 def nudge(fill: str, theme: str) -> str:
@@ -99,6 +101,6 @@ def failures() -> list[str]:
     bad = []
     for name, themes in report().items():
         for theme, (out, txt) in themes.items():
-            if out < STAND_OUT or txt < TEXT:
+            if out < STAND_OUT_BY_THEME[theme] or txt < TEXT:
                 bad.append(f"{name} on {theme}: stands out {out:.2f}, text {txt:.2f}")
     return bad

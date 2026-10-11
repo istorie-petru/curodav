@@ -47,3 +47,9 @@ def test_every_label_icon_exists_in_the_sprite():
     sprite_ids = set(re.findall(r'id="icon-([a-z0-9-]+)"', sprite))
     missing = set(labels.LABEL_ICONS) - sprite_ids
     assert not missing, f"icons referenced but not in the sprite: {missing}"
+
+
+def test_scripts_never_set_a_style_attribute():
+    """The CSP blocks style attributes; a hidden <svg> given one by script showed up 150px tall and brought back the page scrollbar."""
+    offenders = [p.name for p in STATIC_DIR.glob("*.js") if re.search(r"setAttribute\(\s*[\"']style[\"']", p.read_text())]
+    assert offenders == []

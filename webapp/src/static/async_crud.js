@@ -87,6 +87,46 @@
       });
   }
 
+  // A swapped region must not move the page: scroll positions (the window, the region's scrollable
+  // ancestors and any scrolled element inside it) are put back, and the fragment keeps the old
+  // region's height until its images have loaded, so a shorter first layout cannot clamp the scroll.
+  function keepScroll(current, fragment) {
+    var saved = [{ el: window, x: window.scrollX, y: window.scrollY }];
+    for (var a = current.parentElement; a; a = a.parentElement) {
+      if (a.scrollTop || a.scrollLeft) saved.push({ el: a, x: a.scrollLeft, y: a.scrollTop });
+    }
+    var inner = [];
+    Array.prototype.forEach.call(current.querySelectorAll("*"), function (el, i) {
+      if (el.scrollTop || el.scrollLeft) inner.push({ i: i, x: el.scrollLeft, y: el.scrollTop });
+    });
+    if (current.scrollTop || current.scrollLeft) inner.push({ i: -1, x: current.scrollLeft, y: current.scrollTop });
+    fragment.style.minHeight = current.offsetHeight + "px";
+    function restore() {
+      saved.forEach(function (s) {
+        if (s.el === window) window.scrollTo(s.x, s.y);
+        else { s.el.scrollLeft = s.x; s.el.scrollTop = s.y; }
+      });
+      var all = fragment.querySelectorAll("*");
+      inner.forEach(function (s) {
+        var el = s.i === -1 ? fragment : all[s.i];
+        if (el) { el.scrollLeft = s.x; el.scrollTop = s.y; }
+      });
+    }
+    return function () {
+      restore();
+      var pending = Array.prototype.filter.call(fragment.querySelectorAll("img"), function (img) { return !img.complete; });
+      var release = function () {
+        fragment.style.minHeight = "";
+        restore();
+      };
+      if (!pending.length) return release();
+      var timer = setTimeout(release, 2000);
+      Promise.all(pending.map(function (img) {
+        return new Promise(function (done) { img.addEventListener("load", done); img.addEventListener("error", done); });
+      })).then(function () { clearTimeout(timer); release(); });
+    };
+  }
+
   // Re-fetch a region fragment and swap it into its container (matched by
   // id, which the fragment itself carries). Safe no-op when the container
   // isn't on this page -- e.g. a task change while the dashboard is showing
@@ -105,7 +145,9 @@
         var doc = new DOMParser().parseFromString(html, "text/html");
         var fragment = doc.body.firstElementChild;
         if (!fragment) throw new Error("empty region fragment");
+        var keep = keepScroll(current, fragment);
         current.replaceWith(fragment);
+        keep();
         document.dispatchEvent(new CustomEvent("cc-region-swapped", { detail: { id: id } }));
       })
       .finally(function () {

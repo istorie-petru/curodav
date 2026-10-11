@@ -12,5 +12,5 @@ def test_every_accent_is_readable_in_both_themes():
 def test_nudge_moves_an_unreadable_fill_in_the_right_direction():
     dark = readability.nudge("#575dcf", "dark")
     assert readability.luminance(dark) > readability.luminance("#575dcf")
-    light = readability.nudge("#b59b33", "light")
-    assert readability.luminance(light) < readability.luminance("#b59b33")
+    light = readability.nudge("#f5f5f5", "light")
+    assert readability.luminance(light) < readability.luminance("#f5f5f5")

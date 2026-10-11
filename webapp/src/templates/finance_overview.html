@@ -26,36 +26,53 @@
         <div class="card finance-card"><span class="finance-card-label">Expenses</span><strong>{{ money(s.totals.expenses, s.currency) }}</strong></div>
         <div class="card finance-card"><span class="finance-card-label">Net cash flow</span><strong>{{ money(s.totals.net, s.currency, true) }}</strong></div>
     </div>
+    {% if s.runway.average and not s.totals.income %}
+    <div class="finance-cards">
+        <div class="card finance-card"><span class="finance-card-label">Average monthly spending</span><strong>{{ money(s.runway.average, s.currency) }}</strong></div>
+        {% if s.runway.months is not none %}<div class="card finance-card"><span class="finance-card-label">Cash lasts about</span><strong>{{ s.runway.months }} months</strong></div>{% endif %}
+    </div>
+    {% endif %}
     <div class="finance-charts">
         <div class="card finance-chart">
-            <h4>Balance trend</h4>
-            {% if s.chart.dots %}
-            <svg viewBox="0 0 {{ s.chart.width }} {{ s.chart.height }}" class="finance-line" role="img" aria-label="Balance trend in {{ s.currency }}">
-                <polyline points="{{ s.chart.path }}" class="finance-line-path"/>
-                {% for d in s.chart.dots %}
-                <circle cx="{{ d.x }}" cy="{{ d.y }}" r="3.5" class="finance-line-dot"><title>{{ d.month }}: {{ money(d.balance, s.currency) }}</title></circle>
-                <text x="{{ d.x }}" y="{{ s.chart.height - 6 }}" text-anchor="middle" class="finance-axis">{{ d.month[5:] }}</text>
+            <h4>Last 6 months</h4>
+            {% if s.chart.lines %}
+            <svg viewBox="0 0 {{ s.chart.width }} {{ s.chart.height }}" class="finance-line" role="img" aria-label="Savings, income, expenses and profit in {{ s.currency }}">
+                {% for t in s.chart.ticks %}
+                <line x1="{{ s.chart.left }}" x2="{{ s.chart.right }}" y1="{{ t.y }}" y2="{{ t.y }}" class="finance-grid{% if t.zero %} is-zero{% endif %}"/>
+                <text x="{{ s.chart.left - 8 }}" y="{{ t.y + 4 }}" text-anchor="end" class="finance-axis">{{ t.label }}</text>
+                {% endfor %}
+                {% for t in s.chart.ticks_right %}<text x="{{ s.chart.right + 8 }}" y="{{ t.y + 4 }}" text-anchor="start" class="finance-axis finance-axis-savings">{{ t.label }}</text>{% endfor %}
+                {% for m in s.chart.months %}<text x="{{ m.x }}" y="{{ s.chart.height - 8 }}" text-anchor="middle" class="finance-axis">{{ m.name }}</text>{% endfor %}
+                {% for l in s.chart.lines %}
+                <polyline points="{{ l.path }}" class="finance-line-path cal-line-{{ l.color }}"/>
+                {% for d in l.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="3.5" class="finance-line-dot cal-line-{{ l.color }}"><title>{{ l.label }}, {{ d.month }}: {{ money(d.value, s.currency) }}</title></circle>{% endfor %}
                 {% endfor %}
             </svg>
-            <div class="finance-range"><span>Low {{ money(s.chart.min, s.currency) }}</span><span>High {{ money(s.chart.max, s.currency) }}</span></div>
+            <ul class="finance-legend finance-legend-row">
+                {% for l in s.chart.lines %}<li><span class="finance-swatch cal-line-{{ l.color }}"></span>{{ l.label }}{% if l.key == 'savings' and s.chart.ticks_right %} <span class="settings-hint">(right axis)</span>{% endif %}</li>{% endfor %}
+            </ul>
             {% else %}
-            {% call empty_state('No balance data', size='compact') %}{% endcall %}
+            {% call empty_state('No data in the last 6 months', size='compact') %}{% endcall %}
             {% endif %}
         </div>
-        <div class="card finance-chart">
-            <h4>Spending by label</h4>
-            {% if s.breakdown %}
-            <div class="finance-doughnut-row">
-                <svg viewBox="0 0 200 200" class="finance-doughnut" role="img" aria-label="Spending by label in {{ s.currency }}">
-                    {% for p in s.breakdown %}<path d="{{ p.path }}" class="finance-slice habit-c-{{ p.color }}"><title>{{ p.label or 'Unlabelled' }}: {{ money(p.amount, s.currency) }}</title></path>{% endfor %}
-                </svg>
-                <ul class="finance-legend">
-                    {% for p in s.breakdown %}<li><span class="finance-swatch habit-c-{{ p.color }}"></span>{{ p.label or 'Unlabelled' }} <span class="settings-hint">{{ money(p.amount, s.currency) }} ({{ (p.share * 100) | round | int }}%)</span></li>{% endfor %}
-                </ul>
+        <div class="finance-col">
+            {% for pie in s.pies %}
+            <div class="card finance-chart">
+                <h4>{{ pie.title }}</h4>
+                {% if pie.slices %}
+                <div class="finance-doughnut-row">
+                    <svg viewBox="0 0 200 200" class="finance-doughnut" role="img" aria-label="{{ pie.title }} in {{ s.currency }}">
+                        {% for p in pie.slices %}<path d="{{ p.path }}" class="finance-slice habit-c-{{ p.color }}"><title>{{ p.label or 'Unlabelled' }}: {{ money(p.amount, s.currency) }}</title></path>{% endfor %}
+                    </svg>
+                    <ul class="finance-legend">
+                        {% for p in pie.slices %}<li><span class="finance-swatch habit-c-{{ p.color }}"></span>{{ p.label or 'Unlabelled' }} <span class="settings-hint">{{ money(p.amount, s.currency) }} ({{ (p.share * 100) | round | int }}%)</span></li>{% endfor %}
+                    </ul>
+                </div>
+                {% else %}
+                {% call empty_state('No ' ~ ('spending' if pie.kind == 'expense' else 'income') ~ ' in this period', size='compact') %}{% endcall %}
+                {% endif %}
             </div>
-            {% else %}
-            {% call empty_state('No spending in this period', size='compact') %}{% endcall %}
-            {% endif %}
+            {% endfor %}
         </div>
     </div>
 </section>

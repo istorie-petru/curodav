@@ -17,7 +17,7 @@ VIEWS = {
     "labels": {"name": "Labels", "noun": "label", "url": "/settings/labels", "new_url": "/settings/labels/new", "cols": ["Label", "Group", "Usage"]},
     "groups": {"name": "Groups", "noun": "group", "url": "/settings/groups", "new_url": "/groups/new", "cols": ["Group", "Labels", "Usage"]},
     "projects": {"name": "Projects", "noun": "project", "url": "/settings/projects", "new_url": "/settings/projects/new", "cols": ["Project", "Due", "Usage"]},
-    "tags": {"name": "Transaction tags", "noun": "tag", "url": "/settings/taxonomy?view=tags", "new_url": "/finance/tags/new", "cols": ["Tag", "Group", "Usage"]},
+    "tags": {"name": "Transaction tags", "noun": "tag", "url": "/settings/taxonomy?view=tags", "new_url": "/finance/tags/new", "cols": ["Tag", "Look", "Usage"]},
     "frontmatter": {"name": "Frontmatter", "noun": "field", "url": "/settings/taxonomy?view=frontmatter", "new_url": "/settings/notebook/new", "cols": ["Field", "Type", "Default"]},
     "holidays": {"name": "Holidays", "noun": "holiday", "url": "/settings/holidays", "new_url": "/settings/holidays/new", "cols": ["Holiday", "Calendar", "Date range"]},
 }

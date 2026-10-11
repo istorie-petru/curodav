@@ -1,4 +1,5 @@
 {% from "_row_action_buttons.html" import row_action_buttons %}
+{% macro type_icon(kind) %}<span class="finance-type-icon is-{{ kind }}" title="{{ kind | capitalize }}">{{ icon({'income': 'trending-up', 'expense': 'trending-down', 'transfer': 'repeat'}[kind], 'icon-sm') }}</span> {% endmacro %}
 {% from "_empty_state_row.html" import empty_state_row %}
 {% from "_inputs.html" import search_input %}
 {% from "_date_time_fields.html" import date_field with context %}
@@ -50,7 +51,6 @@
                 {% for key, title in (('date', 'Date'), ('description', 'Description'), ('account', 'Account')) %}
                 <th><a data-smart-link href="?{{ query }}&sort={{ key }}&dir={{ 'asc' if (sort == key and dir == 'desc') else 'desc' }}">{{ title }}{% if sort == key %} {{ icon('chevron-up' if dir == 'asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
                 {% endfor %}
-                <th class="col-opt-1">Type</th>
                 <th class="col-opt-2">Label</th>
                 <th class="finance-num"><a data-smart-link href="?{{ query }}&sort=amount&dir={{ 'asc' if (sort == 'amount' and dir == 'desc') else 'desc' }}">Amount{% if sort == 'amount' %} {{ icon('chevron-up' if dir == 'asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
                 <th class="col-actions-narrow">Actions</th>
@@ -59,12 +59,11 @@
         <tbody>
             {% for p in pending %}
             <tr class="entity-row finance-pending" data-uid="{{ p.uid }}">
-                <td>{{ p.date or '—' }}</td>
-                <td>{{ icon('clock', 'icon-sm') }} {{ p.description or '—' }}{% if p.recurrence %} {{ icon('repeat', 'icon-sm') }}{% endif %}</td>
-                <td>{{ p.account_name }}{% if p.type == 'transfer' %} &rarr; {{ p.to_account_name }}{% endif %}</td>
-                <td class="col-opt-1"><span class="cell-tag cal-gray">{{ p.type | capitalize }}</span></td>
+                <td>{{ short_date(p.date) if p.date else '—' }}</td>
+                <td>{{ type_icon(p.type) }}{{ icon('clock', 'icon-sm') }} {{ p.description or '—' }}{% if p.recurrence %} {{ icon('repeat', 'icon-sm') }}{% endif %}</td>
+                <td><span class="cell-tag cal-gray" title="{{ p.account_name }}">{{ p.account_abbr }}</span>{% if p.type == 'transfer' %} &rarr; <span class="cell-tag cal-gray" title="{{ p.to_account_name }}">{{ p.to_account_abbr }}</span>{% endif %}</td>
                 <td class="col-opt-2">{% if p.type != 'transfer' and p.effective_label %}{{ label_pill(p.effective_label) }}{% endif %}{% if p.task_uid %} <a href="/tasks/{{ p.task_uid }}" data-modal>{{ icon('check-square', 'icon-sm') }} {{ p.task_title }}</a>{% elif p.type == 'transfer' or not p.effective_label %}—{% endif %}</td>
-                <td class="finance-num">{{ money(p.amount if p.type == 'income' else -p.amount, p.currency, p.type == 'income') if p.type != 'transfer' else money(p.amount, p.currency) }}</td>
+                <td class="finance-num{% if p.type != 'transfer' %} is-{{ p.type }}{% endif %}">{{ money(p.amount if p.type == 'income' else -p.amount, p.currency, p.type == 'income') if p.type != 'transfer' else money(p.amount, p.currency) }}</td>
                 <td>
                     {% call row_action_buttons("/finance/scheduled/" ~ p.uid ~ "/edit", "/finance/scheduled/" ~ p.uid ~ "/delete", "scheduled transaction", 'Delete this scheduled transaction?') %}
                     <form method="post" action="/finance/scheduled/{{ p.uid }}/post" class="form-inline">
@@ -76,16 +75,15 @@
             {% endfor %}
             {% for t in rows %}
             <tr class="entity-row" data-uid="{{ t.uid }}">
-                <td>{{ t.date }}</td>
-                <td>{{ t.description or '—' }}</td>
-                <td>{{ t.account_name }}{% if t.type == 'transfer' %} &rarr; {{ t.to_account_name }}{% endif %}</td>
-                <td class="col-opt-1"><span class="cell-tag cal-{{ {'income': 'green', 'expense': 'red', 'transfer': 'gray'}[t.type] }}">{{ t.type | capitalize }}</span></td>
-                <td class="col-opt-2">{% if t.type == 'transfer' %}—{% elif t.label %}{{ label_pill(t.label) }}{% for tag in t.tags %} <span class="cell-tag">{{ tag }}</span>{% endfor %}{% else %}—{% endif %}</td>
-                <td class="finance-num">{{ money(t.amount if t.type != 'expense' else -t.amount, t.currency, t.type == 'income') }}</td>
-                <td>{{ row_action_buttons("/finance/transactions/" ~ t.uid ~ "/edit", "/finance/transactions/" ~ t.uid ~ "/delete", "transaction", 'Delete this transaction?') }}</td>
+                <td title="{{ t.date }}">{{ short_date(t.date) }}</td>
+                <td>{{ type_icon(t.type) }}{{ t.description or '—' }}</td>
+                <td><span class="cell-tag cal-gray" title="{{ t.account_name }}">{{ t.account_abbr }}</span>{% if t.type == 'transfer' %} &rarr; <span class="cell-tag cal-gray" title="{{ t.to_account_name }}">{{ t.to_account_abbr }}</span>{% endif %}</td>
+                <td class="col-opt-2">{% if t.type == 'transfer' or not (t.label or t.tags) %}—{% else %}{% if t.label %}{{ label_pill(t.label) }}{% endif %}{% for tag in t.tags %} {% set ts = tag_styles.get(tag, {}) %}<span class="cell-tag cal-{{ ts.get('color', 'gray') }}">{% if ts.get('icon') %}{{ icon(ts.icon, 'icon-sm') }} {% endif %}{{ tag }}</span>{% endfor %}{% endif %}</td>
+                <td class="finance-num{% if t.type != 'transfer' %} is-{{ t.type }}{% endif %}">{{ money(t.amount if t.type != 'expense' else -t.amount, t.currency, t.type == 'income') }}</td>
+                <td>{{ row_action_buttons("/finance/transactions/" ~ t.uid ~ "/edit", "/finance/transactions/" ~ t.uid ~ "/delete", "transaction", 'Delete this transaction?', duplicate_url="/finance/transactions/new?copy=" ~ t.uid) }}</td>
             </tr>
             {% else %}
-            {% if not pending %}{{ empty_state_row(7, "No transactions match the filters" if (q or account or type or label or group or range != "all") else ("No transactions yet" if has_accounts else "No accounts yet")) }}{% endif %}
+            {% if not pending %}{{ empty_state_row(6, "No transactions match the filters" if (q or account or type or label or group or range != "all") else ("No transactions yet" if has_accounts else "No accounts yet")) }}{% endif %}
             {% endfor %}
         </tbody>
     </table>

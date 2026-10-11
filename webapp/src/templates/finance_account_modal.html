@@ -13,7 +13,11 @@
             <label>Name</label>
             {{ text_input({'name': 'name', 'value': a.name if a else '', 'required': true, 'autofocus': true}) }}
         </div>
-<div class="field">
+        <div class="field">
+            <label>Abbreviation</label>
+            {{ text_input({'name': 'abbreviation', 'value': a.abbreviation if a else '', 'required': true, 'maxlength': '8', 'autocomplete': 'off', 'placeholder': 'e.g. SAV'}) }}
+        </div>
+        <div class="field">
             {% set st_name = 'type' %}{% set st_label = 'Type' %}{% set st_items = type_items %}{% set st_selected = a.type if a else '' %}{% set st_form_id = 'finance-account-form' %}
             {% include "_status_type_row.html" %}
         </div>

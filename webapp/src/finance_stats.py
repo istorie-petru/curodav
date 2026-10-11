@@ -37,6 +37,15 @@ def format_money(minor: int, currency: str = "", signed: bool = False) -> str:
     return f"{text} {currency}".strip()
 
 
+TYPE_ABBREVIATIONS = {"expense": "Exp", "income": "Inc", "transfer": "Trf"}
+
+
+def short_date(day: str) -> str:
+    """'2026-04-05' as '05 Apr'."""
+    d = datetime.strptime(day, "%Y-%m-%d")
+    return d.strftime("%d %b")
+
+
 def amount_input(minor: int) -> str:
     whole, cents = divmod(abs(minor), 100)
     return f"{'-' if minor < 0 else ''}{whole}.{cents:02d}"
@@ -110,6 +119,25 @@ def balance_trend(accounts: list[dict], txns: list[dict], months: list[str]) -> 
     ]
 
 
+def monthly_flow(txns: list[dict], months: list[str]) -> list[dict]:
+    """Income and expenses per month; transfers never count."""
+    flow = {m: {"month": m, "income": 0, "expenses": 0} for m in months}
+    for t in txns:
+        row = flow.get(month_key(t["date"]))
+        if row and t["type"] in ("income", "expense"):
+            row["income" if t["type"] == "income" else "expenses"] += t["amount"]
+    return list(flow.values())
+
+
+def runway(cash: int, flow: list[dict]) -> dict:
+    """Average monthly spending over the months so far and how many months the cash covers at that pace."""
+    spent = [r["expenses"] for r in flow if r["expenses"]]
+    average = round(sum(spent) / len(spent)) if spent else 0
+    net = sum(r["income"] - r["expenses"] for r in flow) / max(len(flow), 1)
+    months = round(cash / average, 1) if average and cash > 0 and net < 0 else None
+    return {"average": average, "months": months}
+
+
 def spending_by_label(expenses: list[dict]) -> list[dict]:
     sums: dict[str, int] = defaultdict(int)
     for t in expenses:
@@ -119,21 +147,72 @@ def spending_by_label(expenses: list[dict]) -> list[dict]:
     return sorted(rows, key=lambda r: -r["amount"])
 
 
-def line_chart(points: list[dict], width: int = 640, height: int = 220, pad: int = 28) -> dict:
-    """SVG geometry for the balance trend: polyline points, dots and the vertical range."""
-    if not points:
-        return {"path": "", "dots": [], "min": 0, "max": 0}
-    values = [p["balance"] for p in points]
-    low, high = min(values), max(values)
-    span = (high - low) or 1
-    step = (width - 2 * pad) / max(len(points) - 1, 1)
-    dots = []
-    for i, p in enumerate(points):
-        x = pad + (i * step if len(points) > 1 else (width - 2 * pad) / 2)
-        y = height - pad - (p["balance"] - low) / span * (height - 2 * pad)
-        dots.append({"x": round(x, 1), "y": round(y, 1), **p})
-    return {"path": " ".join(f"{d['x']},{d['y']}" for d in dots), "dots": dots, "min": low, "max": high,
-            "width": width, "height": height}
+def _nice_ticks(low: int, high: int, count: int = 5) -> list[int]:
+    span = max(high - low, 1)
+    raw = span / count
+    magnitude = 10 ** math.floor(math.log10(raw))
+    step = next(m * magnitude for m in (1, 2, 2.5, 5, 10) if m * magnitude >= raw)
+    step = max(int(step), 1)
+    first = math.floor(low / step) * step
+    ticks = [first]
+    while ticks[-1] < high:
+        ticks.append(ticks[-1] + step)
+    return ticks
+
+
+def short_amount(minor: int) -> str:
+    """Axis label for an amount in minor units: 1.5k, -20k, 800."""
+    whole = minor / 100
+    if abs(whole) >= 1_000_000:
+        return f"{whole / 1_000_000:g}M"
+    if abs(whole) >= 1000:
+        return f"{whole / 1000:g}k"
+    return f"{whole:g}"
+
+
+LINE_STYLES = {"savings": ("Savings", "blue"), "income": ("Income", "green"),
+               "expenses": ("Expenses", "red"), "profit": ("Profit", "orange")}
+
+
+def line_chart(series: dict[str, list[int]], months: list[str], width: int = 640, height: int = 280,
+               left: int = 52, right: int = 52, pad: int = 28) -> dict:
+    """SVG geometry for the trend chart: one line per series that has any non-zero value. Income, expenses and
+    profit share the left axis; savings is on the right axis, since its size would flatten the other three."""
+    shown = {k: v for k, v in series.items() if any(v)}
+    flows = {k: v for k, v in shown.items() if k != "savings"}
+    axes = {}
+    if flows:
+        axes["left"] = _nice_ticks(min(x for v in flows.values() for x in v), max(x for v in flows.values() for x in v))
+    if "savings" in shown:
+        axes["right"] = _nice_ticks(min(shown["savings"]), max(shown["savings"]))
+    if not axes:
+        return {"lines": [], "ticks": [], "months": [], "width": width, "height": height}
+    if "left" not in axes:
+        axes["left"], axes["right"] = axes["right"], None
+    left_pad = left
+    right_pad = right if axes.get("right") else pad
+    step = (width - left_pad - right_pad) / max(len(months) - 1, 1)
+    inner = height - 2 * pad
+
+    def x_at(i: int) -> float:
+        return round(left_pad + (i * step if len(months) > 1 else (width - left_pad - right_pad) / 2), 1)
+
+    def y_at(ticks: list[int], value: int) -> float:
+        low, high = ticks[0], ticks[-1]
+        return round(height - pad - (value - low) / ((high - low) or 1) * inner, 1)
+
+    lines = []
+    for key, vals in shown.items():
+        label, color = LINE_STYLES[key]
+        ticks = axes["right"] if key == "savings" and axes.get("right") else axes["left"]
+        dots = [{"x": x_at(i), "y": y_at(ticks, v), "month": months[i], "value": v} for i, v in enumerate(vals)]
+        lines.append({"key": key, "label": label, "color": color, "dots": dots,
+                      "path": " ".join(f"{d['x']},{d['y']}" for d in dots)})
+    only_savings = list(shown) == ["savings"]
+    return {"lines": lines, "width": width, "height": height, "left": left_pad, "right": width - right_pad,
+            "ticks": [{"y": y_at(axes["left"], t), "label": short_amount(t), "zero": t == 0, "color": "blue" if only_savings else ""} for t in axes["left"]],
+            "ticks_right": [{"y": y_at(axes["right"], t), "label": short_amount(t)} for t in axes["right"]] if axes.get("right") else [],
+            "months": [{"x": x_at(i), "name": datetime.strptime(m + "-01", "%Y-%m-%d").strftime("%b")} for i, m in enumerate(months)]}
 
 
 def doughnut(parts: list[dict], radius: float = 80, inner: float = 50, center: float = 100) -> list[dict]:

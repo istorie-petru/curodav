@@ -624,7 +624,7 @@
 <script defer src="{{ static_url('modal.js') }}"></script>
 {# Habit day amount popup + work-sessions disclosure (2026-09-25). #}
 <script defer src="{{ static_url('habit_day.js') }}"></script>
-<script defer src="{{ static_url('look_picker.js') }}"></script>
+<script defer src="{{ static_url('look_picker.js') }}" data-categories-src="{{ static_url('icons/lucide-categories.json') }}"></script>
 <!-- async-CRUD (features/async-crud.md) -- ccApi.post/refreshRegion + the
      cc-entity-changed event bus + the generic data-cc-complete handler.
      Loaded before every page/extra script so modal.js, app.js and each

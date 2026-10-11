@@ -61,6 +61,16 @@ def test_the_transaction_modal_imposes_no_values(conn):
     assert ctx["kind"] == "" and ctx["amount_text"] == "" and "today" not in ctx
 
 
+def test_duplicating_a_transaction_opens_a_prefilled_create_form(conn):
+    a = account(conn)
+    uid = txn(conn, a, amount="42.00", description="Rent")
+    resp = router.new_transaction_modal(_request(), copy=uid, conn=conn)
+    ctx = resp.context
+    assert ctx["form_action"] == "/finance/transactions" and ctx["copy"] and ctx["t"]["description"] == "Rent"
+    assert ctx["status"] == "posted" and finance.get_transaction(conn, uid)["description"] == "Rent"
+    assert len(finance.all_transactions(conn)) == 1
+
+
 @pytest.mark.parametrize("data,field", [
     (dict(name=" ", opening_date="2026-01-01"), "name"),
     (dict(name="A", type="cash", currency="RON", opening_balance="abc", opening_date="2026-01-01"), "opening_balance"),
@@ -107,14 +117,13 @@ def test_invalid_transactions_report_the_field(conn, extra, field):
     assert finance.validate_transaction(conn, data)[1]["field"] == field
 
 
-def test_a_label_and_group_tags_are_stored_with_the_transaction(conn):
+def test_a_label_and_tags_are_stored_with_the_transaction(conn):
     a = account(conn)
     db.upsert_label_config(conn, {"name": "Personal", "label_group": "Myself"})
     uid = txn(conn, a, label="Personal", tags=["transport", "bus"])
     row = finance.get_transaction(conn, uid)
     assert row["label"] == "Personal" and row["tags"] == ["bus", "transport"]
-    assert finance.label_group(conn, "Personal") == "Myself"
-    assert finance.tags_for_group(conn, "Myself") == ["bus", "transport"] and finance.tags_for_group(conn, "") == []
+    assert finance.tag_names(conn) == ["bus", "transport"]
 
 
 def test_filters_narrow_by_search_account_type_label_and_dates(conn):
@@ -186,7 +195,7 @@ def test_overview_counts_transfers_in_neither_income_nor_spending(conn):
     txn(conn, a, kind="transfer", amount="40", to_account_uid=b)
     [section] = router._overview_sections(conn, "2026-10-01", "2026-10-31", "")
     assert section["totals"] == {"income": 10000, "expenses": 3000, "net": 7000}
-    assert section["cash"] == 7000 and [p["label"] for p in section["breakdown"]] == ["Food"]
+    assert section["cash"] == 7000 and [p["label"] for p in section["pies"][0]["slices"]] == ["Food"] and len(section["pies"]) == 1
 
 
 def test_overview_keeps_currencies_apart(conn):
@@ -250,34 +259,71 @@ def test_tags_are_listed_with_group_and_usage(conn):
     a = account(conn)
     txn(conn, a, label="Personal", tags=["transport"])
     txn(conn, a, label="Personal", tags=["transport", "food"])
-    assert finance.list_tags(conn) == [{"group": "Myself", "name": "food", "usage": 1}, {"group": "Myself", "name": "transport", "usage": 2}]
+    assert finance.list_tags(conn) == [{"name": "food", "color": "gray", "icon": "", "usage": 1},
+                                       {"name": "transport", "color": "gray", "icon": "", "usage": 2}]
+
+
+def test_a_tag_keeps_the_colour_and_icon_chosen_for_it(conn):
+    clean, error = finance.validate_tag(conn, "food", None, "green", "tag")
+    assert error is None
+    finance.save_tag(conn, clean)
+    assert finance.tag_styles(conn) == {"food": {"color": "green", "icon": "tag"}}
+    finance.save_tag(conn, finance.validate_tag(conn, "meals", "food", "red", "")[0], "food")
+    assert finance.tag_styles(conn) == {"meals": {"color": "red", "icon": ""}}
+
+
+def test_an_account_shows_its_abbreviation_and_falls_back_to_its_name(conn):
+    clean, _ = finance.validate_account(conn, dict(name="Savings", abbreviation=" SAV ", type="savings", currency="RON", opening_balance="0", opening_date="2026-01-01"))
+    uid = finance.save_account(conn, clean)
+    other = account(conn, "Cash")
+    txn(conn, uid, kind="transfer", to_account_uid=other)
+    row = finance.list_transactions(conn)[0]
+    assert (row["account_abbr"], row["to_account_abbr"]) == ("SAV", "Cash")
+    assert {a["name"]: a["short"] for a in finance.list_accounts(conn)} == {"Savings": "SAV", "Cash": "Cash"}
+
+
+def test_dates_and_types_are_shortened_for_the_table():
+    assert finance_stats.short_date("2026-04-05") == "05 Apr"
+    assert finance_stats.TYPE_ABBREVIATIONS["transfer"] == "Trf"
 
 
 def test_renaming_a_tag_renames_it_on_every_transaction(conn):
     a = account(conn)
     uid = txn(conn, a, tags=["trnsport"])
-    clean, error = finance.validate_tag(conn, "transport", "", ("", "trnsport"))
+    clean, error = finance.validate_tag(conn, "transport", "trnsport")
     assert error is None
-    finance.save_tag(conn, clean, ("", "trnsport"))
+    finance.save_tag(conn, clean, "trnsport")
     assert finance.get_transaction(conn, uid)["tags"] == ["transport"] and [t["name"] for t in finance.list_tags(conn)] == ["transport"]
 
 
 def test_deleting_a_tag_removes_it_from_transactions(conn):
     a = account(conn)
     uid = txn(conn, a, tags=["old"])
-    finance.delete_tag(conn, "", "old")
+    finance.delete_tag(conn, "old")
     assert finance.get_transaction(conn, uid)["tags"] == [] and finance.list_tags(conn) == []
 
 
-def test_a_group_cannot_have_two_tags_with_the_same_name(conn):
-    finance.save_tag(conn, {"name": "bus", "group": "Myself"})
-    assert finance.validate_tag(conn, "Bus", "Myself")[1]["field"] == "name"
-    assert finance.validate_tag(conn, "bus", "")[1] is None
+def test_tags_are_free_standing_and_unique_by_name(conn):
+    finance.save_tag(conn, {"name": "bus"})
+    assert finance.validate_tag(conn, "Bus")[1]["field"] == "name"
+    assert finance.validate_tag(conn, "Bus", "bus")[1] is None
+
+
+def test_every_label_offers_every_tag(conn):
+    db.upsert_label_config(conn, {"name": "Personal", "label_group": "Myself"})
+    finance.save_tag(conn, {"name": "bus"})
+    assert router._tag_context(conn, "Personal", [])["tag_items"] == router._tag_context(conn, "", [])["tag_items"] == [{"uid": "bus", "name": "bus"}]
+
+
+def test_tags_that_belonged_to_a_group_become_free_standing(conn):
+    conn.execute("INSERT INTO finance_tags (group_name, name) VALUES ('Myself', 'bus'), ('Work', 'bus'), ('Work', 'taxi')")
+    finance.free_tags(conn)
+    assert sorted(t["name"] for t in finance.list_tags(conn)) == ["bus", "taxi"]
 
 
 def test_the_taxonomy_page_lists_transaction_tags(conn):
     from src.routers import taxonomy
-    finance.save_tag(conn, {"name": "bus", "group": ""})
+    finance.save_tag(conn, {"name": "bus"})
     body = taxonomy.page_response(conn, _request("/settings/taxonomy"), "tags").body.decode()
     assert "bus" in body and "Transaction tags" in body
 

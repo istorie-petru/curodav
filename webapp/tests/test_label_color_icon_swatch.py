@@ -18,6 +18,7 @@ store whichever value was picked.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 
 import pytest
@@ -127,9 +128,9 @@ class TestExpandedPaletteAndGroupedIcons:
     shape; habits.py imports the same COLORS/ICON_GROUPS rather than
     keeping its own separate copies."""
 
-    def test_colors_has_sixteen_entries_no_duplicates(self):
-        assert len(labels_router.COLORS) == 16
-        assert len(set(labels_router.COLORS)) == 16
+    def test_colors_has_twenty_four_entries_no_duplicates(self):
+        assert len(labels_router.COLORS) == 24
+        assert len(set(labels_router.COLORS)) == 24
 
     def test_icon_groups_flatten_to_label_icons_with_no_duplicates_or_gaps(self):
         flattened = [name for group in labels_router.ICON_GROUPS.values() for name in group]
@@ -137,7 +138,7 @@ class TestExpandedPaletteAndGroupedIcons:
         assert len(labels_router.LABEL_ICONS) == len(set(labels_router.LABEL_ICONS))
         assert len(labels_router.LABEL_ICONS) > 130
 
-    def test_label_edit_modal_shows_all_sixteen_colors_with_names(self, conn):
+    def test_label_edit_modal_shows_all_twenty_four_colors_with_names(self, conn):
         # Moved off the manage-list page onto the edit modal, 2026-08-15
         # side work -- see TestLabelsManageRowRendersSwatchGridNotSelect's
         # own class docstring above.
@@ -145,7 +146,7 @@ class TestExpandedPaletteAndGroupedIcons:
         resp = labels_router.edit_label_modal("Uni", _request("/labels/Uni/edit"), conn=conn)
         body = resp.body.decode()
         # 2026-09-26: Look dropdown swatches, named by their title.
-        assert body.count('class="look-swatch"') == 16
+        assert body.count('class="look-swatch') == 24
         for name in ("Red", "Lime", "Mint", "Teal", "Cyan", "Indigo", "Magenta", "Brown", "Slate"):
             assert f'class="look-swatch" title="{name}"' in body
 
@@ -156,7 +157,8 @@ class TestExpandedPaletteAndGroupedIcons:
         # 2026-09-26 (Peter): one flat grid -- no section headings, but
         # every offered icon is still there.
         assert "look-group-label" not in body
+        offered = re.search(r'data-curated="([^"]*)"', body).group(1).split(",")
         for names in labels_router.LABEL_ICON_GROUPS.values():
             for name in names:
-                assert f'name="icon" value="{name}"' in body
+                assert name in offered
 

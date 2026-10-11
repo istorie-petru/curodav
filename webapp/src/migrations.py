@@ -43,12 +43,26 @@ def _finance_tables(conn: sqlite3.Connection) -> None:
     finance.ensure_schema(conn)
 
 
+def _finance_looks(conn: sqlite3.Connection) -> None:
+    from . import finance
+
+    finance.add_look_columns(conn)
+
+
+def _free_finance_tags(conn: sqlite3.Connection) -> None:
+    from . import finance
+
+    finance.free_tags(conn)
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "notebook documents get an is_template flag", _note_templates),
     Migration(2, "frontmatter fields lose the required column", _field_config_without_required, destructive=True),
     Migration(3, "finance accounts, transactions and tags", _finance_tables),
     Migration(4, "finance scheduled transactions", _finance_tables),
     Migration(5, "finance scheduled transaction tags", _finance_tables),
+    Migration(6, "finance account abbreviations and tag looks", _finance_looks),
+    Migration(7, "finance tags no longer belong to a label group", _free_finance_tags),
 ]
 
 

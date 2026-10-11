@@ -87,24 +87,35 @@ def _overview_sections(conn, start: str, end: str, group: str) -> list[dict]:
     in_range = finance.list_transactions(conn, {"date_from": start, "date_to": end, "group": group})
     today = clock.today().isoformat()
     last_month = (end or today)[:7]
-    first_month = min(start[:7] if start else last_month, finance_stats.month_add(last_month, -(TREND_MONTHS - 1)))
-    months = finance_stats.months_between(first_month, last_month)
+    months = finance_stats.months_between(finance_stats.month_add(last_month, -(TREND_MONTHS - 1)), last_month)
     sections = []
     for currency in dict.fromkeys(a["currency"] for a in accounts):
         mine = [a for a in accounts if a["currency"] == currency]
         mine_uids = {a["uid"] for a in mine}
-        spent = [t for t in in_range if t["currency"] == currency and t["type"] == "expense"]
         counted = [t for t in in_range if t["currency"] == currency]
-        trend = finance_stats.balance_trend(mine, [t for t in everything if t["account_uid"] in mine_uids], months)
+        mine_txns = [t for t in everything if t["account_uid"] in mine_uids]
+        trend = finance_stats.balance_trend(mine, mine_txns, months)
         cash_on = end or today
-        breakdown = finance_stats.spending_by_label(spent)
-        _assign_colors(conn, breakdown)
+        cash = sum(finance_stats.balance_on(a, [t for t in everything if a["uid"] in (t["account_uid"], t["to_account_uid"])], cash_on) for a in mine)
+        flow = finance_stats.monthly_flow(mine_txns, months)
+        pies = []
+        for title, kind in (("Spending by label", "expense"), ("Income by label", "income")):
+            rows = finance_stats.spending_by_label([t for t in counted if t["type"] == kind])
+            if kind == "expense" or len(rows) > 1:
+                _assign_colors(conn, rows)
+                pies.append({"title": title, "kind": kind, "slices": finance_stats.doughnut(rows)})
         sections.append({
             "currency": currency,
-            "cash": sum(finance_stats.balance_on(a, [t for t in everything if a["uid"] in (t["account_uid"], t["to_account_uid"])], cash_on) for a in mine),
+            "cash": cash,
             "totals": finance_stats.totals(counted),
-            "chart": finance_stats.line_chart(trend),
-            "breakdown": finance_stats.doughnut(breakdown),
+            "runway": finance_stats.runway(cash, [r for r in flow if r["month"] <= cash_on[:7]]),
+            "chart": finance_stats.line_chart({
+                "savings": [r["balance"] for r in trend],
+                "income": [r["income"] for r in flow],
+                "expenses": [r["expenses"] for r in flow],
+                "profit": [r["income"] - r["expenses"] for r in flow],
+            }, months),
+            "pies": pies,
         })
     return sections
 
@@ -150,11 +161,13 @@ def transactions(request: Request, q: str = "", account: str = "", type: str = "
         "rows": rows[:limit], "pending": pending, "total": len(rows), "has_more": len(rows) > limit, "limit": limit, "summary": summary,
         "q": q, "account": account, "type": type, "label": label, "group": group, "range": range, "sort": sort, "dir": dir, "date_from": date_from, "date_to": date_to,
         "range_items": [{"value": k, "name": n} for k, n in RANGES],
-        "account_items": [{"value": "", "name": "All accounts"}] + [{"value": a["uid"], "name": a["name"]} for a in accounts],
+        "account_items": [{"value": "", "name": "All accounts"}] + [{"value": a["uid"], "name": a["short"]} for a in accounts],
         "type_items": [{"value": "", "name": "All types"}] + [{"value": k, "name": n} for k, n in finance_stats.TRANSACTION_TYPES],
         "label_items": [{"value": "", "name": "All labels"}] + [{"value": c["uid"], "name": c["name"]} for c in _label_choices(conn)],
         "group_items": _group_choices(conn), "has_accounts": bool(accounts),
         "query": urlencode({k: v for k, v in query.items() if v}), "money": finance_stats.format_money,
+        "short_date": finance_stats.short_date, "type_short": finance_stats.TYPE_ABBREVIATIONS,
+        "tag_styles": finance.tag_styles(conn),
     })
 
 
@@ -165,14 +178,15 @@ def _task_items(conn) -> list[dict]:
     return [_NONE] + [{"uid": t["uid"], "name": t["title"]} for t in db.list_tasks(conn) if t.get("status") not in ("done", "archived")]
 
 
-def transaction_form_context(request: Request, conn, txn: dict | None, action: str, scheduled: bool = False) -> dict:
+def transaction_form_context(request: Request, conn, txn: dict | None, action: str, scheduled: bool = False,
+                             copy: bool = False) -> dict:
     accounts = finance.list_accounts(conn)
     label = (txn or {}).get("effective_label" if scheduled else "label", "")
     return {
-        "request": request, "t": txn, "form_action": action, "kind": (txn or {}).get("type", ""),
-        "status": "scheduled" if scheduled else "", "status_items": [_NONE] + STATUS_ITEMS, "status_fixed": scheduled,
+        "request": request, "t": txn, "copy": copy, "form_action": action, "kind": (txn or {}).get("type", ""),
+        "status": "scheduled" if scheduled else ("posted" if copy else ""), "status_items": [_NONE] + STATUS_ITEMS, "status_fixed": scheduled,
         "task_items": _task_items(conn), "recurrence": (txn or {}).get("recurrence") or "",
-        "account_items": [_NONE] + [{"uid": a["uid"], "name": f"{a['name']} ({a['currency']})"} for a in accounts],
+        "account_items": [_NONE] + [{"uid": a["uid"], "name": f"{a['short']} ({a['currency']})"} for a in accounts],
         "type_items": [_NONE] + [{"uid": k, "name": n} for k, n in finance_stats.TRANSACTION_TYPES],
         "label_items": [_NONE] + _label_choices(conn),
         "amount_text": finance_stats.amount_input((txn or {}).get("amount", 0)) if txn else "",
@@ -181,15 +195,17 @@ def transaction_form_context(request: Request, conn, txn: dict | None, action: s
 
 
 def _tag_context(conn, label: str, selected: list[str]) -> dict:
-    known = finance.tags_for_group(conn, finance.label_group(conn, label))
+    known = finance.tag_names(conn)
     names = list(dict.fromkeys(known + list(selected)))
     return {"tag_items": [{"uid": n, "name": n} for n in names], "tag_selected": selected}
 
 
 @router.get("/transactions/new")
-def new_transaction_modal(request: Request, conn=Depends(get_db)):
+def new_transaction_modal(request: Request, copy: str = "", conn=Depends(get_db)):
+    """`copy` (Duplicate): a transaction whose values fill the create form; nothing is saved until Save."""
+    source = finance.get_transaction(conn, copy) if copy else None
     return templates.TemplateResponse("finance_transaction_modal.html",
-                                      transaction_form_context(request, conn, None, "/finance/transactions"))
+                                      transaction_form_context(request, conn, source, "/finance/transactions", copy=bool(source)))
 
 
 @router.get("/transactions/tag-field")
@@ -330,19 +346,19 @@ def _save_account(conn, form: dict, x_requested_with, uid: str | None):
 
 
 @settings_router.post("")
-def create_account(name: str = Form(""), type: str = Form(""), currency: str = Form(""), opening_balance: str = Form(""),
+def create_account(name: str = Form(""), abbreviation: str = Form(""), type: str = Form(""), currency: str = Form(""), opening_balance: str = Form(""),
                    opening_date: str = Form(""), x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
-    form = dict(name=name, type=type, currency=currency, opening_balance=opening_balance, opening_date=opening_date)
+    form = dict(name=name, abbreviation=abbreviation, type=type, currency=currency, opening_balance=opening_balance, opening_date=opening_date)
     return _save_account(conn, form, x_requested_with, None)
 
 
 @settings_router.post("/{uid}/update")
-def update_account(uid: str, name: str = Form(""), type: str = Form(""), currency: str = Form(""),
+def update_account(uid: str, name: str = Form(""), abbreviation: str = Form(""), type: str = Form(""), currency: str = Form(""),
                    opening_balance: str = Form(""), opening_date: str = Form(""),
                    x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     if finance.get_account(conn, uid) is None:
         return RedirectResponse(url="/settings/finance-accounts", status_code=303)
-    form = dict(name=name, type=type, currency=currency, opening_balance=opening_balance, opening_date=opening_date)
+    form = dict(name=name, abbreviation=abbreviation, type=type, currency=currency, opening_balance=opening_balance, opening_date=opening_date)
     return _save_account(conn, form, x_requested_with, uid)
 
 
@@ -355,9 +371,11 @@ def delete_account(uid: str, x_requested_with: str | None = Header(default=None)
 # Transaction tags (listed in Settings > Taxonomy & Data)
 
 def _tag_context_modal(request: Request, conn, tag: dict | None) -> dict:
-    groups = [{"uid": "", "name": "None"}] + [{"uid": g["name"], "name": g["name"]} for g in db.list_groups(conn)]
     action = "/finance/tags/update" if tag else "/finance/tags"
-    return {"request": request, "tag": tag, "group_items": groups, "form_action": action}
+    from .labels import icon_groups_for
+
+    return {"request": request, "tag": tag, "form_action": action, "colors": COLORS,
+            "icon_groups": icon_groups_for((tag or {}).get("icon") or None)}
 
 
 @router.get("/tags/new")
@@ -366,15 +384,15 @@ def new_tag_modal(request: Request, conn=Depends(get_db)):
 
 
 @router.get("/tags/edit")
-def edit_tag_modal(request: Request, group: str = "", name: str = "", conn=Depends(get_db)):
-    tag = finance.get_tag(conn, group, name)
+def edit_tag_modal(request: Request, name: str = "", conn=Depends(get_db)):
+    tag = finance.get_tag(conn, name)
     if tag is None:
         return RedirectResponse(url="/settings/taxonomy?view=tags", status_code=303)
     return templates.TemplateResponse("finance_tag_modal.html", _tag_context_modal(request, conn, tag))
 
 
-def _save_tag(conn, name: str, group: str, x_requested_with, old: tuple[str, str] | None):
-    clean, error = finance.validate_tag(conn, name, group, old)
+def _save_tag(conn, name: str, x_requested_with, old: str | None, color: str = "gray", icon: str = ""):
+    clean, error = finance.validate_tag(conn, name, old, color if color in COLORS else "gray", icon)
     if error:
         return _error_response(error, x_requested_with, "/settings/taxonomy")
     finance.save_tag(conn, clean, old)
@@ -382,19 +400,20 @@ def _save_tag(conn, name: str, group: str, x_requested_with, old: tuple[str, str
 
 
 @router.post("/tags")
-def create_tag(name: str = Form(""), group: str = Form(""), x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
-    return _save_tag(conn, name, group, x_requested_with, None)
+def create_tag(name: str = Form(""), color: str = Form("gray"), icon: str = Form(""),
+               x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    return _save_tag(conn, name, x_requested_with, None, color, icon)
 
 
 @router.post("/tags/update")
-def update_tag(name: str = Form(""), group: str = Form(""), old_name: str = Form(""), old_group: str = Form(""),
-               x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
-    if finance.get_tag(conn, old_group, old_name) is None:
+def update_tag(name: str = Form(""), old_name: str = Form(""),
+               color: str = Form("gray"), icon: str = Form(""), x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    if finance.get_tag(conn, old_name) is None:
         return RedirectResponse(url="/settings/taxonomy?view=tags", status_code=303)
-    return _save_tag(conn, name, group, x_requested_with, (old_group, old_name))
+    return _save_tag(conn, name, x_requested_with, old_name, color, icon)
 
 
 @router.post("/tags/delete")
-def delete_tag(group: str = "", name: str = "", x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
-    finance.delete_tag(conn, group, name)
+def delete_tag(name: str = "", x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    finance.delete_tag(conn, name)
     return respond(x_requested_with, "/settings/taxonomy?view=tags")
