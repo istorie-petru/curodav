@@ -77,6 +77,47 @@
 </tr>
 {% endfor %}
 {% if not groups %}{{ empty_state_row(5, "No groups yet.", css_class='empty-state') }}{% endif %}
+{% elif view == 'frontmatter' %}
+{% for f in fields %}
+<tr class="entity-row" data-uid="{{ f.uid }}">
+    <td class="col-select"></td>
+    <td class="col-name"><div class="label-cell"><span class="label-name">{{ f.label or f.key }}</span></div></td>
+    <td class="col-meta col-opt-2"><span class="cell-tag">{{ f.type }}</span></td>
+    <td class="col-meta col-opt-1">{{ f.default_value or '—' }}</td>
+    <td class="col-actions">
+        {% if f.builtin %}
+        <div class="action-buttons">
+            <a href="/settings/notebook/{{ f.uid }}/edit" class="icon-btn" data-modal title="Edit field" aria-label="Edit field">{{ icon('edit', 'icon-sm') }}</a>
+        </div>
+        {% else %}
+        {{ row_action_buttons(
+            "/settings/notebook/" ~ f.uid ~ "/edit",
+            "/settings/notebook/" ~ f.uid ~ "/delete",
+            "field",
+            'Delete "' ~ (f.label or f.key) ~ '"? Notes keep any values already stored under it.' ~ (' It is also removed from these templates: ' ~ (f.templates | map(attribute='title') | join(', ')) ~ '.' if f.templates else '')
+        ) }}
+        {% endif %}
+    </td>
+</tr>
+{% endfor %}
+{% elif view == 'tags' %}
+{% for t in tags %}
+<tr class="entity-row" data-tag-name="{{ t.name }}">
+    <td class="col-select"></td>
+    <td class="col-name"><div class="label-cell"><span class="label-name">{{ t.name }}</span></div></td>
+    <td class="col-meta col-opt-2">{% if t.group %}<span class="cell-tag">{{ t.group }}</span>{% else %}<span class="text-muted">No group</span>{% endif %}</td>
+    <td class="col-meta col-opt-1">{% if t.usage %}Used in {{ t.usage }} transaction{{ 's' if t.usage != 1 }}{% else %}<span class="text-muted">Not used</span>{% endif %}</td>
+    <td class="col-actions">
+        {{ row_action_buttons(
+            "/finance/tags/edit?" ~ ({'group': t.group, 'name': t.name} | urlencode),
+            "/finance/tags/delete?" ~ ({'group': t.group, 'name': t.name} | urlencode),
+            "tag",
+            'Delete the tag "' ~ t.name ~ '"? It is removed from every transaction that carries it.'
+        ) }}
+    </td>
+</tr>
+{% endfor %}
+{% if not tags %}{{ empty_state_row(5, "No tags yet.", css_class='empty-state') }}{% endif %}
 {% else %}
 {% for h in holidays %}
 <tr class="entity-row" data-uid="{{ h.uid }}">

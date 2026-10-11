@@ -37,10 +37,10 @@ class TestDbAccessors:
         uid = db.upsert_notebook_field_config(conn, {"key": "institution", "label": "Institution", "type": "text"})
         field = db.get_notebook_field_config(conn, uid)
         assert field["key"] == "institution" and field["label"] == "Institution" and field["type"] == "text"
-        assert field["required"] == 0 and field["options"] == []
+        assert field["options"] == []
 
-        db.upsert_notebook_field_config(conn, {"uid": uid, "key": "institution", "label": "Institution", "type": "text", "required": 1})
-        assert db.get_notebook_field_config(conn, uid)["required"] == 1
+        db.upsert_notebook_field_config(conn, {"uid": uid, "key": "institution", "label": "Place", "type": "text"})
+        assert db.get_notebook_field_config(conn, uid)["label"] == "Place"
 
         db.delete_notebook_field_config(conn, uid)
         assert db.get_notebook_field_config(conn, uid) is None
@@ -147,14 +147,16 @@ class TestSettingsNotebookPage:
         # seed_builtin_notebook_fields, so the "no fields at all" empty
         # state this page used to have is no longer reachable.
         body = notebook_router.settings_notebook(_request(), conn=conn).body.decode()
+        from src.routers import taxonomy
+        body = taxonomy.page_response(conn, _request("/settings/taxonomy"), "frontmatter").body.decode()
         assert "No frontmatter fields defined yet" not in body
-        assert 'id="notebook-fields-table"' in body
         assert 'href="/settings/notebook/new"' in body
         assert "Title" in body and "Author" in body and "Type" in body
 
     def test_lists_existing_fields_as_rows_with_edit_buttons(self, conn):
         db.upsert_notebook_field_config(conn, {"key": "institution", "label": "Institution", "type": "text", "default_value": "UBB"})
-        body = notebook_router.settings_notebook(_request(), conn=conn).body.decode()
+        from src.routers import taxonomy
+        body = taxonomy.page_response(conn, _request("/settings/taxonomy"), "frontmatter").body.decode()
         assert "Institution" in body and "text" in body and "UBB" in body
         assert "Edit field" in body and "Delete field" in body
 
@@ -162,7 +164,7 @@ class TestSettingsNotebookPage:
 class TestOldFrontmatterUrl:
     def test_redirects_to_the_notebook_page(self):
         resp = notebook_router.settings_frontmatter()
-        assert resp.status_code == 303 and resp.headers["location"] == "/settings/notebook"
+        assert resp.status_code == 303 and resp.headers["location"] == "/settings/taxonomy?view=frontmatter"
 
 
 class TestFieldModal:
@@ -183,7 +185,7 @@ class TestFieldModal:
 
     def test_unknown_uid_redirects_to_the_list(self, conn):
         resp = notebook_router.edit_notebook_field_modal("nope", _request(), conn=conn)
-        assert resp.status_code == 303 and resp.headers["location"] == "/settings/notebook"
+        assert resp.status_code == 303 and resp.headers["location"] == "/settings/taxonomy?view=frontmatter"
 
 
 def _custom_fields(conn):
@@ -193,21 +195,44 @@ def _custom_fields(conn):
     return [f for f in db.list_notebook_field_config(conn) if not f["builtin"]]
 
 
+def _with_types(conn, *types):
+    for i, t in enumerate(types):
+        db.upsert_notebook_document(conn, {"uid": f"t{i}", "title": t, "content_json": "{}", "document_type": "full",
+                                           "note_type": t, "created_at": "x", "updated_at": "x"})
+
+
 class TestCreateUpdateDelete:
     def test_create_a_text_field(self, conn):
-        resp = notebook_router.create_notebook_field(key="institution", label="Institution", type="text", default_value="UBB", required="1", conn=conn)
-        assert resp.status_code == 303 and resp.headers["location"] == "/settings/notebook"
+        resp = notebook_router.create_notebook_field(label="Institution", type="text", default_value="UBB", conn=conn)
+        assert resp.status_code == 303 and resp.headers["location"] == "/settings/taxonomy?view=frontmatter"
         fields = _custom_fields(conn)
         assert len(fields) == 1
-        assert fields[0]["key"] == "institution" and fields[0]["default_value"] == "UBB" and fields[0]["required"] == 1
+        assert re.fullmatch(r"institution_[a-z0-9]{4}", fields[0]["key"]) and fields[0]["default_value"] == "UBB"
 
-    def test_blank_key_is_rejected_without_creating_a_row(self, conn):
-        notebook_router.create_notebook_field(key="   ", type="text", conn=conn)
+    def test_blank_label_is_rejected_without_creating_a_row(self, conn):
+        notebook_router.create_notebook_field(label="   ", type="text", conn=conn)
         assert _custom_fields(conn) == []
+
+    def test_generated_names_are_unique_for_the_same_label(self, conn):
+        for _ in range(3):
+            notebook_router.create_notebook_field(label="Birth date", type="date", conn=conn)
+        keys = [f["key"] for f in _custom_fields(conn)]
+        assert len(set(keys)) == 3 and all(k.startswith("birth_date_") for k in keys)
+
+    def test_renaming_a_field_keeps_its_stored_name(self, conn):
+        notebook_router.create_notebook_field(label="Birth date", type="date", conn=conn)
+        field = _custom_fields(conn)[0]
+        notebook_router.update_notebook_field(field["uid"], label="Born", type="date", conn=conn)
+        renamed = db.get_notebook_field_config(conn, field["uid"])
+        assert renamed["label"] == "Born" and renamed["key"] == field["key"]
+
+    def test_field_modal_has_no_stored_name_or_required_checkbox(self, conn):
+        body = notebook_router.new_notebook_field_modal(_request("/settings/notebook/new"), conn=conn).body.decode()
+        assert 'name="key"' not in body and 'name="required"' not in body
 
     def test_create_a_select_field_with_options(self, conn):
         notebook_router.create_notebook_field(
-            key="status", type="select",
+            label="Status", type="select",
             option_value=["Draft", "Final"], option_color=["gray", "green"], option_icon=["edit", "check-square"],
             conn=conn,
         )
@@ -219,7 +244,7 @@ class TestCreateUpdateDelete:
         uid = db.upsert_notebook_field_config(conn, {"key": "status", "type": "select"})
         db.set_notebook_field_options(conn, uid, [{"value": "Draft"}])
         notebook_router.update_notebook_field(
-            uid, key="status", type="select",
+            uid, label="Status", type="select",
             option_value=["Final"], option_color=["green"], option_icon=[""],
             conn=conn,
         )
@@ -229,7 +254,7 @@ class TestCreateUpdateDelete:
     def test_switching_away_from_select_clears_its_options(self, conn):
         uid = db.upsert_notebook_field_config(conn, {"key": "status", "type": "select"})
         db.set_notebook_field_options(conn, uid, [{"value": "Draft"}])
-        notebook_router.update_notebook_field(uid, key="status", type="text", conn=conn)
+        notebook_router.update_notebook_field(uid, label="Status", type="text", conn=conn)
         assert db.get_notebook_field_config(conn, uid)["options"] == []
 
     def test_delete_removes_the_field(self, conn):
@@ -253,13 +278,20 @@ class TestBuiltinFields:
         assert fields["title"]["builtin"] == 1 and fields["title"]["type"] == "text"
         assert fields["author"]["builtin"] == 1 and fields["author"]["type"] == "text"
         assert fields["note_type"]["builtin"] == 1 and fields["note_type"]["type"] == "select"
-        assert len(fields["note_type"]["options"]) == len(db.NOTEBOOK_NOTE_TYPE_DEFAULTS)
+        assert fields["note_type"]["options"] == []
+
+    def test_a_note_type_typed_on_a_note_becomes_a_user_type(self, conn):
+        db.upsert_notebook_document(conn, {"uid": "d", "title": "T", "content_json": "{}", "document_type": "full",
+                                           "note_type": "person", "created_at": "x", "updated_at": "x"})
+        options = db.get_notebook_field_config(conn, db.BUILTIN_NOTEBOOK_FIELD_UIDS["note_type"])["options"]
+        assert [o["value"] for o in options] == ["person"]
 
     def test_reconnecting_does_not_reseed_over_user_edits(self, conn, tmp_path):
         # Re-running seed_builtin_notebook_fields (e.g. a second db.connect()
         # against the same file) must not clobber a color the user already
         # picked -- the whole reason this is app_meta-guarded.
         uid = db.BUILTIN_NOTEBOOK_FIELD_UIDS["note_type"]
+        _with_types(conn, "person")
         field = db.get_notebook_field_config(conn, uid)
         opts = [{"value": o["value"], "color": "pink" if o["value"] == "person" else o["color"], "icon": o["icon"]} for o in field["options"]]
         db.set_notebook_field_options(conn, uid, opts)
@@ -269,15 +301,16 @@ class TestBuiltinFields:
     def test_update_only_changes_the_label_for_title(self, conn):
         uid = db.BUILTIN_NOTEBOOK_FIELD_UIDS["title"]
         notebook_router.update_notebook_field(
-            uid, key="hacked", label="Document Title", type="number", default_value="x", required="1", conn=conn,
+            uid, label="Document Title", type="number", default_value="x", conn=conn,
         )
         field = db.get_notebook_field_config(conn, uid)
         assert field["label"] == "Document Title"
         assert field["key"] == "title" and field["type"] == "text"
-        assert field["default_value"] is None and field["required"] == 0
+        assert field["default_value"] is None
 
     def test_update_note_type_only_repaints_existing_options(self, conn):
         uid = db.BUILTIN_NOTEBOOK_FIELD_UIDS["note_type"]
+        _with_types(conn, "person", "city")
         before = db.get_notebook_field_config(conn, uid)["options"]
         values_before = [o["value"] for o in before]
         # Submit a tampered value list (fewer rows, different values,
@@ -286,7 +319,7 @@ class TestBuiltinFields:
         new_colors = ["magenta"] * len(before)
         new_icons = [o["icon"] for o in before]
         notebook_router.update_notebook_field(
-            uid, key="note_type", label="Type", type="select",
+            uid, label="Type", type="select",
             option_value=["not", "a", "real", "list"], option_color=new_colors, option_icon=new_icons,
             conn=conn,
         )
@@ -301,21 +334,21 @@ class TestBuiltinFields:
         assert db.get_notebook_field_config(conn, uid) is not None
 
     def test_settings_table_has_no_delete_button_for_builtins(self, conn):
-        body = notebook_router.settings_notebook(_request(), conn=conn).body.decode()
+        from src.routers import taxonomy
+        body = taxonomy.page_response(conn, _request("/settings/taxonomy"), "frontmatter").body.decode()
         assert "/settings/notebook/builtin-title/delete" not in body
         assert "/settings/notebook/builtin-title/edit" in body
 
-    def test_edit_modal_locks_key_type_default_required(self, conn):
+    def test_edit_modal_locks_type_and_default(self, conn):
         uid = db.BUILTIN_NOTEBOOK_FIELD_UIDS["author"]
         body = notebook_router.edit_notebook_field_modal(uid, _request(f"/settings/notebook/{uid}/edit"), conn=conn).body.decode()
-        assert 'input type="text" value="author" readonly' in body
         assert 'name="default_value"' in body and "readonly" in body
-        assert "disabled" in body  # the Required checkbox
         # No Delete button for a builtin field's own modal footer.
         assert "/settings/notebook/builtin-author/delete" not in body
 
     def test_note_type_edit_modal_has_locked_values_and_live_look_pickers(self, conn):
         uid = db.BUILTIN_NOTEBOOK_FIELD_UIDS["note_type"]
+        _with_types(conn, "person")
         body = notebook_router.edit_notebook_field_modal(uid, _request(f"/settings/notebook/{uid}/edit"), conn=conn).body.decode()
         assert "notebook-field-option-value" in body  # locked value span, not an input
         assert 'name="option_value"' not in body

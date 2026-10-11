@@ -17,10 +17,6 @@
 </div>
 <div class="modal-body">
 <div class="card">
-<p class="settings-hint">
-    Merging: {% for n in selected_names %}<span class="group-badge">{{ n }}</span>{% if not loop.last %} {% endif %}{% endfor %}
-</p>
-<p class="settings-hint">Every object tagged with any of these moves to the label you pick below, and the others are removed. This can't be undone.</p>
 <form method="post" id="label-bulk-merge-form" action="/settings/labels/bulk-merge" data-confirm-sheet="Merge {{ selected_names|length }} selected label{{ '' if selected_names|length == 1 else 's' }} into one? Every object tagged with any of them moves to the destination, and the rest are removed." data-cc-change="label" data-cc-action="merge">
     {% for n in selected_names %}
     <input type="hidden" name="uids" value="{{ n }}">

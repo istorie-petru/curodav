@@ -2,25 +2,25 @@
    their own markup (frontend-conventions.md, Canonical rows). #}
 
 {# Title: one required text input on a full row. #}
-{% macro title_row(value='', label='Title', autofocus=false) %}
-<div class="field field-wide">
+{% macro title_row(value='', label='Title', autofocus=false, name='title', required=true, wide=true) %}
+<div class="field{% if wide %} field-wide{% endif %}">
     <label>{{ label }}</label>
-    <input type="text" name="title" required{% if autofocus %} autofocus{% endif %} value="{{ value }}">
+    <input type="text" name="{{ name }}"{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %} value="{{ value }}">
 </div>
 {% endmacro %}
 
 {# Title + date: the title followed directly by the date selector the caller
    supplies (date, time and all-day, or a start and due pair), so the two
    always sit together as one row group. #}
-{% macro title_date_row(value='', label='Title') %}
-{{ title_row(value, label) }}
+{% macro title_date_row(value='', label='Title', name='title', required=true, wide=true) %}
+{{ title_row(value, label, false, name, required, wide) }}
 {{ caller() }}
 {% endmacro %}
 
 {# Recurrence: the plain input static/recurrence_picker.js upgrades to the
    friendly picker. `value` is the stored rule or ''. #}
-{% macro recurrence_row(value='') %}
-<div class="field">
+{% macro recurrence_row(value='', wide=false) %}
+<div class="field{% if wide %} field-wide{% endif %}">
     <label>Recurrence</label>
     <input type="text" name="recurrence" class="recurrence-input" value="{{ value }}">
 </div>
@@ -28,8 +28,8 @@
 
 {# Reminder: the plain input static/reminders_picker.js upgrades to the
    offset picker. `value` is the comma-separated minutes or ''. #}
-{% macro reminder_row(value='') %}
-<div class="field">
+{% macro reminder_row(value='', wide=false) %}
+<div class="field{% if wide %} field-wide{% endif %}">
     <label>Reminders</label>
     <input type="text" name="reminders" class="reminders-input" value="{{ value }}">
 </div>

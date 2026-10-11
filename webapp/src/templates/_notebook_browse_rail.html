@@ -20,7 +20,7 @@
 <nav class="notebook-browse-rail" aria-label="Browse filters">
     <div class="notebook-rail-section">
         <div class="notebook-rail-heading">All documents</div>
-        <a class="notebook-rail-row{% if not active_note_type and not active_label and not active_group %} is-active{% endif %}" href="{{ everything_href }}">
+        <a data-smart-link class="notebook-rail-row{% if not active_note_type and not active_label and not active_group %} is-active{% endif %}" href="{{ everything_href }}">
             <span class="notebook-rail-row-name">Everything</span>
             <span class="notebook-rail-row-count">{{ total_documents }}</span>
         </a>
@@ -31,7 +31,7 @@
         <summary class="notebook-rail-heading">Type{{ icon('chevron-down', 'icon-sm filter-caret') }}</summary>
         <div class="notebook-rail-pills">
             {% for t in type_rows %}
-            <a class="cell-tag cal-{{ t.color }} notebook-rail-pill{% if active_note_type == t.name %} is-active{% endif %}" href="{{ facet_href('note_type', t.name) }}">
+            <a data-smart-link class="cell-tag cal-{{ t.color }} notebook-rail-pill{% if active_note_type == t.name %} is-active{% endif %}" href="{{ facet_href('note_type', t.name) }}">
                 {{ icon(t.icon, 'icon-sm') }}
                 {{ t.name|capitalize }}
                 <span class="notebook-rail-pill-count">{{ t.count }}</span>
@@ -52,7 +52,7 @@
                app's other label-pill renderer) already follows; Type/
                Group below always show one since those always have a
                resolved fallback. #}
-            <a class="cell-tag cal-{{ l.color }} notebook-rail-pill{% if active_label == l.name %} is-active{% endif %}" href="{{ facet_href('label', l.name) }}">
+            <a data-smart-link class="cell-tag cal-{{ l.color }} notebook-rail-pill{% if active_label == l.name %} is-active{% endif %}" href="{{ facet_href('label', l.name) }}">
                 {% if l.icon %}{{ icon(l.icon, 'icon-sm') }}{% endif %}
                 {{ l.name }}
                 <span class="notebook-rail-pill-count">{{ l.count }}</span>
@@ -67,7 +67,7 @@
         <summary class="notebook-rail-heading">Groups{{ icon('chevron-down', 'icon-sm filter-caret') }}</summary>
         <div class="notebook-rail-pills">
             {% for g in group_rows %}
-            <a class="cell-tag cal-{{ g.color }} notebook-rail-pill{% if active_group == g.name %} is-active{% endif %}" href="{{ facet_href('group', g.name) }}">
+            <a data-smart-link class="cell-tag cal-{{ g.color }} notebook-rail-pill{% if active_group == g.name %} is-active{% endif %}" href="{{ facet_href('group', g.name) }}">
                 {{ icon(g.icon, 'icon-sm') }}
                 {{ g.name }}
                 <span class="notebook-rail-pill-count">{{ g.count }}</span>

@@ -64,6 +64,13 @@ def _document(conn, uid="d1", title="My Document", **overrides):
     return db.get_notebook_document(conn, uid)
 
 
+def _paint_type(conn, value, color, icon):
+    uid = db.BUILTIN_NOTEBOOK_FIELD_UIDS["note_type"]
+    options = [{**o, "color": color, "icon": icon} if o["value"] == value else o
+               for o in db.get_notebook_field_config(conn, uid)["options"]]
+    db.set_notebook_field_options(conn, uid, options)
+
+
 class TestDb:
     def test_upsert_and_get_round_trips(self, conn):
         doc = _document(conn, tags=["University"])
@@ -545,6 +552,7 @@ class TestCreateDocument:
         # 2026-10-02 direct request: note_type's look should be consistent
         # everywhere it renders, including the Type picker itself.
         _document(conn, uid="d1", note_type="person")
+        _paint_type(conn, "person", "orange", "user")
         body = notebook_router.document_properties_modal("d1", _bare_request("/notebook/d1/properties"), conn=conn).body.decode()
         assert 'class="cell-tag cal-orange"' in body
         assert '#icon-user' in body
@@ -683,6 +691,7 @@ class TestDashboardWidget:
         # everywhere it renders, not just the Browse page -- same
         # db.notebook_note_type_looks source.
         _document(conn, uid="d1", note_type="person", tags=["University"])
+        _paint_type(conn, "person", "orange", "user")
         data = dashboard_router._render_notebook_list(conn, {"label_name": "University"})
         assert data["documents"][0]["type_icon"] == db.notebook_note_type_looks(conn)["person"]["icon"] == "user"
         assert data["documents"][0]["type_color"] == "orange"

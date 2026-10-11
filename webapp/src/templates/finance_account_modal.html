@@ -1,0 +1,55 @@
+{% from "_inputs.html" import text_input %}
+{% from "_date_time_fields.html" import date_field with context %}
+{% extends "base.html" %}
+{% block title %}{{ "Edit account" if a else "New account" }}{% endblock %}
+{% block content %}
+<div id="modal-target" class="modal-stable-height">
+<div class="modal-header"><h1>{{ "Edit account" if a else "New account" }}</h1></div>
+<div class="modal-body">
+<div class="card">
+<form method="post" id="finance-account-form" action="{{ form_action }}">
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label>Name</label>
+            {{ text_input({'name': 'name', 'value': a.name if a else '', 'required': true, 'autofocus': true}) }}
+        </div>
+<div class="field">
+            {% set st_name = 'type' %}{% set st_label = 'Type' %}{% set st_items = type_items %}{% set st_selected = a.type if a else '' %}{% set st_form_id = 'finance-account-form' %}
+            {% include "_status_type_row.html" %}
+        </div>
+        <div class="field">
+            {% if locked_currency %}
+            <label>Currency</label>
+            {{ text_input({'value': currency, 'readonly': true}) }}
+            <input type="hidden" name="currency" value="{{ currency }}">
+            {% else %}
+            {% set st_name = 'currency' %}{% set st_label = 'Currency' %}{% set st_items = currency_items %}{% set st_selected = currency %}{% set st_form_id = 'finance-account-form' %}
+            {% include "_status_type_row.html" %}
+            {% endif %}
+        </div>
+        <div class="field">
+            <label>Opening balance</label>
+            {{ text_input({'name': 'opening_balance', 'value': opening_text, 'inputmode': 'decimal', 'required': true}) }}
+        </div>
+        <div class="field">
+            <label>Opening date</label>
+            {{ date_field('opening_date', opening_date, required=true, label='Opening date') }}
+        </div>
+    </div>
+</form>
+</div>
+</div>
+{% set footer_back_url = '/settings/finance-accounts' %}
+{% set footer_back_mode = 'cancel' %}
+{% set footer_back_label = 'Cancel' %}
+{% if a %}
+{% set footer_delete_url = '/settings/finance-accounts/' ~ a.uid ~ '/delete' %}
+{% set footer_delete_mode = 'confirm' %}
+{% set footer_delete_label = 'Delete "' ~ a.name ~ '"? Its transactions are deleted with it.' %}
+{% endif %}
+{% set footer_primary_form = 'finance-account-form' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

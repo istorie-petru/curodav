@@ -12,6 +12,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
+from src.deps import templates as deps_templates
 from src import db, habit_view
 from src.routers import dashboard as dashboard_router
 
@@ -75,7 +76,7 @@ class TestCheckinWidget:
     def test_widget_renders_task_completion_endpoints(self, conn):
         _habit(conn, "h1", "Read")
         _habit(conn, "h2", "Water", target=8)
-        tpl = dashboard_router.templates.env.get_template("_widget_habit_checkin.html")
+        tpl = deps_templates.env.get_template("_widget_habit_checkin.html")
         from starlette.requests import Request
 
         req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})

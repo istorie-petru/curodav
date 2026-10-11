@@ -8,7 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from .. import db
+from .. import db, finance
 from ..deps import get_db, templates
 
 router = APIRouter(prefix="/settings/taxonomy", tags=["taxonomy"])
@@ -17,6 +17,8 @@ VIEWS = {
     "labels": {"name": "Labels", "noun": "label", "url": "/settings/labels", "new_url": "/settings/labels/new", "cols": ["Label", "Group", "Usage"]},
     "groups": {"name": "Groups", "noun": "group", "url": "/settings/groups", "new_url": "/groups/new", "cols": ["Group", "Labels", "Usage"]},
     "projects": {"name": "Projects", "noun": "project", "url": "/settings/projects", "new_url": "/settings/projects/new", "cols": ["Project", "Due", "Usage"]},
+    "tags": {"name": "Transaction tags", "noun": "tag", "url": "/settings/taxonomy?view=tags", "new_url": "/finance/tags/new", "cols": ["Tag", "Group", "Usage"]},
+    "frontmatter": {"name": "Frontmatter", "noun": "field", "url": "/settings/taxonomy?view=frontmatter", "new_url": "/settings/notebook/new", "cols": ["Field", "Type", "Default"]},
     "holidays": {"name": "Holidays", "noun": "holiday", "url": "/settings/holidays", "new_url": "/settings/holidays/new", "cols": ["Holiday", "Calendar", "Date range"]},
 }
 
@@ -33,6 +35,11 @@ def rows_context(conn, request: Request, view: str) -> dict:
         ctx = labels._labels_context(conn, request, view)
     elif view == "groups":
         ctx = label_pages._groups_context(conn, request)
+    elif view == "frontmatter":
+        ctx = {"request": request, "fields": [{**f, "templates": db.list_templates_using_field(conn, f["key"])}
+                                              for f in db.list_notebook_field_config(conn)]}
+    elif view == "tags":
+        ctx = {"request": request, "tags": finance.list_tags(conn)}
     else:
         ctx = {"request": request, "holidays": db.list_holidays(conn)}
     ctx.update({"view": view, "spec": VIEWS[view], "noun": VIEWS[view]["noun"], "new_url": VIEWS[view]["new_url"]})

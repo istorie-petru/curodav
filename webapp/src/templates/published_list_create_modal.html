@@ -1,3 +1,4 @@
+{% from "_empty_state.html" import empty_state %}
 {% from "_inputs.html" import text_input %}
 <!-- 2026-08-29 (STATE.md backlog item 8, direct request): brought in line
      with the rest of the app's modal styling (features/design-system.md §
@@ -208,7 +209,7 @@
                        carries this same modal's own URL, so the nested "new
                        label" modal's Cancel returns here instead of closing
                        the whole flow back to /settings/labels. #}
-                    <p class="settings-hint settings-hint-flush">No labels yet, so everything is included. <a href="/settings/labels/new?return_to={{ (('/published-lists/' ~ _editing.id ~ '/edit') if _editing else '/published-lists/new') | urlencode }}" data-modal data-modal-size="wide">Create one</a> to narrow it down later.</p>
+                    {% call empty_state('No labels yet', size='compact') %}<a href="/settings/labels/new?return_to={{ (('/published-lists/' ~ _editing.id ~ '/edit') if _editing else '/published-lists/new') | urlencode }}" data-modal data-modal-size="wide">Create label</a>{% endcall %}
                 </div>
                 {% endif %}
             </div>

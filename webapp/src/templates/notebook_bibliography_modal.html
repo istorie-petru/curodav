@@ -1,3 +1,4 @@
+{% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
 {% from "_modal_header_back.html" import modal_header_back %}
 {% block title %}Bibliography -- {{ document.title }}{% endblock %}
@@ -40,9 +41,9 @@
                of closing the whole overlay (citation_edit_modal.html's own
                comment has the full reasoning). #}
             {% if not citation_items %}
-            <span class="field-hint">No citations in the library yet -- <a href="/notebook/citations/new?return_to=/notebook/{{ document.uid }}/bibliography" data-modal>add one</a> first.</span>
+            {% call empty_state('No citations yet', size='compact') %}<a href="/notebook/citations/new?return_to=/notebook/{{ document.uid }}/bibliography" data-modal>Add citation</a>{% endcall %}
             {% else %}
-            <span class="field-hint"><a href="/notebook/citations/new?return_to=/notebook/{{ document.uid }}/bibliography" data-modal>+ New citation</a></span>
+            <span><a href="/notebook/citations/new?return_to=/notebook/{{ document.uid }}/bibliography" data-modal>+ New citation</a></span>
             {% endif %}
         </div>
     </div>

@@ -36,16 +36,6 @@ from typing import Any
 from . import db
 
 
-# 2026-09-08 (direct request, "make published lists more permissive and
-# easier to set up even if no labels present"): what `evaluate_label_filter`
-# falls back to when neither `all` nor `any` is given -- see that
-# function's own docstring for the reasoning behind the change. `task`
-# goes through `db.list_tasks` (not a raw table scan) specifically so a
-# labelless "everything" List stays consistent with the rest of the app's
-# own habit-task exclusion (list_tasks' `include_habit_tasks=False`
-# default) -- a habit-tagged task is meant to live only on Tasks > Habits,
-# not any other view, and an unfiltered published list is still "a view,"
-# not an escape hatch around that rule.
 _ALL_OBJECT_IDS = {
     "task": lambda conn: db.list_tasks(conn),
     "event": lambda conn: db.list_events(conn),
@@ -106,16 +96,6 @@ def evaluate_label_filter(
         result -= exclude_ids
 
     if entity_type == "contact":
-        # Item 19 (2026-09-26): "archived contacts don't sync." The
-        # `all_names`/`any_names` branch above reads candidate uids
-        # straight from `object_labels` (`db.list_object_ids_for_label`),
-        # which has no concept of archived at all -- so without this, an
-        # archived contact that still carries a matching label would
-        # reach a Published List's membership regardless of the
-        # unfiltered "everything" branch's own `_ALL_OBJECT_IDS["contact"]`
-        # (`db.list_contacts`' `include_archived=False` default) already
-        # excluding it in THAT branch only. Applied unconditionally, after
-        # both branches, so every path is covered the same way.
         archived_uids = {c["uid"] for c in db.list_contacts(conn, include_archived=True) if c.get("archived_at")}
         result -= archived_uids
 

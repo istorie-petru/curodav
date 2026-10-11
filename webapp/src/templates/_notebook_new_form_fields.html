@@ -1,0 +1,19 @@
+{% from "_form_rows.html" import title_row %}
+{# New-note form fields, shared by the New note modal and the sidebar's New modal. Expects `nn` (routers/notebook.py's new_note_context). #}
+<input type="hidden" name="open_note" value="1">
+{% if nn.label %}<input type="hidden" name="label" value="{{ nn.label }}">{% endif %}
+<div class="field-grid">
+    {{ title_row('', 'Title', true, 'title', false, false) }}
+    <div class="field">
+        {% set st_name = 'template_uid' %}{% set st_label = 'Template' %}{% set st_items = nn.template_items %}{% set st_selected = nn.template_uid %}{% set st_form_id = 'notebook-new-form' %}
+        {% include "_status_type_row.html" %}
+    </div>
+    <div id="notebook-new-fields" class="field-grid field-wide">
+        {% include "_notebook_new_fields.html" %}
+    </div>
+    {% set labels_selected = nn.labels_selected %}{% set tag_name_items = nn.tag_name_items %}{% set ms_form_id = 'notebook-new-form' %}
+    {% include "_labels_row.html" %}
+    {% set pf_tags = nn.pf_tags %}{% set pf_form_id = 'notebook-new-form' %}
+    {% set project_items = nn.project_items %}{% set project_names = nn.project_names %}
+    {% include "_project_field.html" %}
+</div>

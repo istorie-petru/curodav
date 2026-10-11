@@ -25,18 +25,6 @@ from ..image_sniff import sniff_image_type
 
 router = APIRouter(tags=["flairs"])
 
-# Every real flair id (src/flairs.py's FLAIR_KEYWORDS keys) is already
-# lowercase-kebab-case, but this route reads `flair_id` straight off the
-# URL path -- validated against that exact shape before it's ever used to
-# build a filesystem path, so a request for a bogus/hostile id (path
-# traversal, an unexpected extension smuggled into the segment, ...)
-# 404s before any `Path` construction happens, rather than relying on
-# `FLAIR_KEYWORDS` containment alone (an operator could legitimately drop
-# a file under an id this app doesn't know about yet, e.g. testing a
-# future keyword addition, so this checks *shape*, not *membership*).
-# 2026-09-29: moved to flairs.py itself as `ID_SHAPE`, reused verbatim by
-# `flairs.ingest_uploaded_photos` (the bulk-upload feature) for the exact
-# same reason -- one definition of "what a safe flair id looks like".
 _SAFE_ID = flairs.ID_SHAPE
 
 

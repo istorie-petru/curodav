@@ -8,29 +8,12 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import db, grid_layout, habit_heatmap, habit_view, recurrence_expand
+from .. import clock, db, grid_layout, habit_heatmap, habit_view, recurrence_expand
 from ..deps import HIDE_SLEEP_HOURS_KEY, _four_week_position, _week_start, get_db, respond, templates, wants_json
 from . import dashboard as dashboard_router
 
-# Month-view per-day list: how many rows (all-day colored rows + timed
-# events + tasks, all in ONE flat list per day cell -- no more separate
-# bar lanes, see _month_grid) to show before the rest collapse into a
-# "+N more" overflow link to the day view. 2026-08-08 direct feedback
-# ("reduce the number of events/tasks shown in a cell", then "maximum of
-# four before adding a label") -- this list was previously unbounded and
-# could run a cell's content well past its own border, especially now
-# that the month grid can shrink to fit the viewport (see style.css's
-# .month-viewport height rule) instead of always having a full 90px+ of
-# vertical room to spill into.
 MONTH_MAX_VISIBLE_ITEMS = 4
 
-# Free-text fields (Location / Meeting URL / Recurrence) once got the
-# literal string "None" saved into them by a pre-2026-08-08 str(None) sync
-# bug (see db.py's init_schema self-heal) -- `"" or None` treats a truly
-# empty submission as empty, but "None" is a *truthy* string, so it sailed
-# straight through `location or None` and kept persisting. Normalize those
-# placeholder-ish values to a real None on the way in so they can't round-
-# trip any more, same for the task/contact forms' recurrence/org/etc.
 _NONE_LIKE = ("None", "Nothing", "none", "nothing")
 
 
@@ -40,7 +23,7 @@ def _clean_field(value: str) -> str | None:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return clock.now().isoformat()
 
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
@@ -180,7 +163,6 @@ def _time_blocks_client_payload(blocks: list[dict]) -> str:
 
 def _tags_list(tags: str) -> list[str]:
     return [t.strip() for t in tags.split(",") if t.strip()]
-
 
 
 def _apply_event_label_filter(events: list[dict], label: str | None, conn=None) -> list[dict]:
@@ -377,13 +359,7 @@ def _week_bars(week_dates: list[date], all_day_events: list[dict]) -> tuple[list
                 "event": e,
                 "col_start": col_start,
                 "col_span": col_end - col_start + 1,
-                # 2026-09-26 (Peter: past-dimming must cover all-day events
-                # too, not just timed ones) -- this bar SEGMENT's own last
-                # occupied day is before today, same "fully in the past, not
-                # just started" rule every other .is-past dims by (a bar
-                # still touching today or later stays full-opacity, e.g. a
-                # multi-day trip that's still ongoing).
-                "is_past": clip_end < date.today(),
+                "is_past": clip_end < clock.today(),
                 # FullCalendar-parity interactions, slice 2 (drag-move +
                 # edge-resize): whether this bar SEGMENT's left/right edge
                 # is the event's own real start/end, vs. a clip introduced
@@ -475,20 +451,12 @@ def _month_day_cells(
 
 
 def _month_grid(year: int, month: int, events: list[dict], tasks: list[dict], week_start: str = "monday") -> list[dict]:
-    # 2026-09-08 rework: all-day (bar-worthy) events are lane-packed into
-    # continuous spanning bars per week row (_week_bars), reversing the
-    # 2026-08-08 "flat per-day list" design for exactly that item type --
-    # timed events and tasks stay a flat per-day list (_month_day_cells),
-    # capped at MONTH_MAX_VISIBLE_ITEMS with a "+N more" overflow link to
-    # the day view, same as before. The per-day cell work lives in
-    # _bucket_month_items/_month_day_cells so the 4-Week view
-    # (_four_week_grid) can reuse it over a continuous 28-day window.
     all_day_events, timed_by_date, tasks_by_date = _bucket_month_items(events, tasks)
 
     # Python's calendar module: firstweekday=0 is Monday, 6 is Sunday --
     # same "Week starts on" preference _week_bounds above reads.
     cal = py_calendar.Calendar(firstweekday=6 if week_start == "sunday" else 0)
-    today = date.today()
+    today = clock.today()
     weeks = []
     for week in cal.monthdatescalendar(year, month):
         bars, lane_count = _week_bars(week, all_day_events)
@@ -531,7 +499,7 @@ def _four_week_grid(view_start: date, events: list[dict], tasks: list[dict], wee
     order feed static/calendar_month.js's click-and-hold drag-to-create
     unchanged."""
     all_day_events, timed_by_date, tasks_by_date = _bucket_month_items(events, tasks)
-    today = date.today()
+    today = clock.today()
     weeks = []
     for week_index in range(4):
         dates = [view_start + timedelta(days=week_index * 7 + i) for i in range(7)]
@@ -550,7 +518,7 @@ def _month_view_context(conn, request: Request, year: int | None, month: int | N
     """Shared computation for the Month view (calendar_month.html) and its
     async-CRUD region fragment (_calendar_month_grid.html) -- one source of
     truth so a region refresh can never drift from a fresh full render."""
-    today = date.today()
+    today = clock.today()
     year = year or today.year
     month = month or today.month
     week_start = _week_start(request)
@@ -587,11 +555,6 @@ def _month_view_context(conn, request: Request, year: int | None, month: int | N
     prev_month, prev_year = (12, year - 1) if month == 1 else (month - 1, year)
     next_month, next_year = (1, year + 1) if month == 12 else (month + 1, year)
 
-    # Weekday header row (calendar_month.html) -- 2026-08-08: was
-    # hardcoded Mon..Sun; now rotated to start on whichever day "Week
-    # starts on" (Settings > General) preference names, so the header always
-    # matches the actual column order _month_grid just built above. Shared
-    # with the 4-Week view via _weekday_names (2026-08-11).
     weekday_names = _weekday_names(week_start)
 
     return {
@@ -681,7 +644,7 @@ def calendar_regions(
     if region == "day":
         return templates.TemplateResponse(
             "_calendar_day_grid.html",
-            _day_view_context(conn, request, date_ or date.today().isoformat(), label),
+            _day_view_context(conn, request, date_ or clock.today().isoformat(), label),
         )
     return JSONResponse({"error": f"unknown calendar region: {region}"}, status_code=400)
 
@@ -725,7 +688,7 @@ def _four_week_view_context(conn, request, date_, label):
     screen ever reflected it -- same silent-no-op shape as a `cc-entity-
     changed` event nobody claims (see async_calendar.js's own comment on
     the claimed protocol)."""
-    today = date.today()
+    today = clock.today()
     anchor = date.fromisoformat(date_) if date_ else today
     week_start = _week_start(request)
     position = _four_week_position(request)
@@ -744,15 +707,6 @@ def _four_week_view_context(conn, request, date_, label):
 
     weeks = _four_week_grid(view_start, events, tasks, week_start)
 
-    # Live label (slice 6, "FullCalendar-parity interactions" arc): a date
-    # range, matching FullCalendar's own default and Week's own choice below
-    # (confirmed via AskUserQuestion, 2026-09-08) rather than inventing a
-    # separate "4-Week" convention -- computed once here so the sr-only
-    # <h1> and the visible nav label (calendar_fourweek.html) and the async
-    # region fragment's own data-label-text (_calendar_fourweek_grid.html,
-    # read by async_calendar.js after a prev/next AJAX swap) can never drift
-    # apart, same "one source of truth" reasoning this function's own
-    # docstring already gives for the rest of its output.
     label_text = f"{view_start.strftime('%b %d')} – {view_end.strftime('%b %d, %Y')}"
 
     return {
@@ -813,13 +767,9 @@ def _week_view_context(conn, request, date_, label):
     (full page) and the async `#week-grid` region (features/async-crud.md),
     which re-renders just the `.project-calendar-layout` grid after a
     work-allocation create/move/delete or an event change on the week page."""
-    anchor = date.fromisoformat(date_) if date_ else date.today()
+    anchor = date.fromisoformat(date_) if date_ else clock.today()
     week_start_date, week_end_date = _week_bounds(anchor, _week_start(request))
 
-    # `end` must be an end-of-day timestamp, not a bare date -- db.list_events
-    # compares these as plain strings, and "2026-09-02T09:00:00" sorts
-    # *after* "2026-09-02" lexicographically, so a bare end-date would
-    # silently exclude every timed event on the range's last calendar day.
     events = db.list_events(conn, start=week_start_date.isoformat(), end=week_end_date.isoformat() + "T23:59:59")
     events = recurrence_expand.expand_events(events, week_start_date, week_end_date, db.list_holidays_by_calendar(conn), db.list_event_occurrence_overrides_by_master(conn))
     events = _apply_event_label_filter(events, label, conn)
@@ -843,13 +793,6 @@ def _week_view_context(conn, request, date_, label):
     # already uses.
     time_blocks = db.list_time_blocks(conn)
 
-    # "Hide sleep hours in Planner" (2026-09-09, Settings > General, off by
-    # default) -- Week view only, per direct decision (Day view is
-    # unaffected, see _day_view_context's own unchanged call sites below).
-    # `_sleep_collapse_window` is None whenever the setting is off, no Sleep
-    # blocks exist, or the configured ones disagree on start/end -- every
-    # collapse-aware call below already treats None as a plain no-op, so
-    # this is the one place that decision gets made.
     collapse = _sleep_collapse_window(time_blocks) if db.get_app_meta(conn, HIDE_SLEEP_HOURS_KEY) == "1" else None
 
     days = []
@@ -876,8 +819,8 @@ def _week_view_context(conn, request, date_, label):
             {
                 "date": d,
                 "iso": key,
-                "is_today": d == date.today(),
-                "is_past": d < date.today(),
+                "is_today": d == clock.today(),
+                "is_past": d < clock.today(),
                 "all_day": day_all_day,
                 "timed": timed,
                 "tasks": day_tasks,
@@ -893,32 +836,12 @@ def _week_view_context(conn, request, date_, label):
     # partial renders.
     unscheduled_tasks = []
     for t in open_tasks:
-        # Unscheduled = at least one session still has no date (a "+"-added
-        # placeholder from the task modal's Work sessions card awaiting
-        # placement on a grid -- see db.create_work_allocation's undated
-        # form). A task with zero sessions at all has nothing to place
-        # either, so it's excluded the same way -- both cases collapse to
-        # "undated_count is 0" (audit-fixes-2.1.md, direct bug report: a
-        # brand-new task with no sessions yet was showing up on this panel
-        # with a "0" pill instead of staying off it entirely; the old
-        # `info["count"] and not info["undated_count"]` check only ever
-        # dropped a task once it had >=1 session and all were dated, never
-        # considering "0 sessions total" a reason to hide).
         info = db.work_allocation_panel_info(conn, t["uid"])
         if not info["undated_count"]:
             continue
         project = db.project_label_config_for(conn, "task", t["uid"])
         unscheduled_tasks.append({"task": t, "project": project, "sessions": info})
 
-    # 2026-08-29 ("habit work sessions" slice, direct feedback): a
-    # habit-tracked task is deliberately excluded from `db.list_tasks`'
-    # default query (it's meant to live only on Tasks > Habits) so
-    # `open_tasks` above never contains one -- fetched separately here so
-    # this week's grid can still offer "schedule this habit's work" the
-    # same way it does for any other task. Follows a different "am I
-    # still unscheduled" rule than the loop above: see
-    # db.habit_work_sessions_status's own docstring for why "every
-    # session has a date" isn't the right test for a recurring habit.
     for t in db.list_habit_tasks(conn):
         if t.get("status") in ("done", "archived") or not t.get("recurrence"):
             continue
@@ -943,21 +866,8 @@ def _week_view_context(conn, request, date_, label):
         )
     unscheduled_tasks.sort(key=lambda item: item["task"].get("due_at") or "9999-99-99")
 
-    # Live label (slice 6, "FullCalendar-parity interactions" arc): a date
-    # range -- confirmed via AskUserQuestion, 2026-09-08, matching
-    # FullCalendar's own default over an ISO week number. Same format the
-    # sr-only <h1> below already used inline; pulled out here so it's one
-    # value shared by the <h1>, the visible nav label
-    # (calendar_week.html), and the async region fragment's own
-    # data-label-text (_calendar_week_grid.html, read by async_calendar.js
-    # after a prev/next AJAX swap) instead of three copies that could drift.
     label_text = f"{week_start_date.strftime('%b %d')} – {week_end_date.strftime('%b %d, %Y')}"
 
-    # 2026-09-25 direct decision (UI audit C-8): the All day strip draws
-    # all-day events as ONE spanning bar per week, lane-packed by the same
-    # _week_bars Month/4-Week use, instead of repeating a row in every day
-    # column. `day.all_day` above stays computed (other callers/tests read
-    # it); the template just stops rendering events from it.
     week_bars, week_lane_count = _week_bars(
         [d["date"] for d in days], [e for e in events if _is_bar_worthy(e)]
     )
@@ -968,7 +878,7 @@ def _week_view_context(conn, request, date_, label):
         "week_bars": week_bars,
         "week_lane_count": week_lane_count,
         "calendar_view": "week",
-        "today_iso": date.today().isoformat(),
+        "today_iso": clock.today().isoformat(),
         "days": days,
         "hours": grid_layout.visible_hours(collapse),
         "px_per_hour": grid_layout.PX_PER_HOUR,
@@ -1196,11 +1106,8 @@ def _day_view_context(conn, request, day, label):
         "request": request,
         "active_tab": "calendar",
         "calendar_view": "day",
-        "today_iso": date.today().isoformat(),
+        "today_iso": clock.today().isoformat(),
         "day": day,
-        # 2026-09-25 (UI audit C-17): readable "Fri, Sep 25, 2026" for the
-        # header nav label/<title>/sr-only h1 instead of the raw ISO date;
-        # `day_date` feeds the grid header's weekday + day-number pill.
         "day_label": f"{d.strftime('%a, %b')} {d.day}, {d.year}",
         "day_date": d,
         "prev_day": (d - timedelta(days=1)).isoformat(),
@@ -1208,8 +1115,6 @@ def _day_view_context(conn, request, day, label):
         "all_day": all_day,
         "timed": timed,
         "tasks": tasks,
-        # Habits H7 (2026-09-24): the habits scheduled on this day, in the
-        # all-day row -- checkable unless the day is in the future.
         "habits": habit_view.habits_for_day(conn, d) if not label else [],
         "time_block_overlays": time_block_overlays,
         "hours": list(range(grid_layout.GRID_HOURS)),
@@ -1230,7 +1135,7 @@ def agenda_view(label: str | None = None):
     redirect (matching the same pattern GET /export uses after Export &
     backup was inlined into Settings > Advanced) so an old bookmark/link
     to /calendar/agenda still lands somewhere real."""
-    today_iso = date.today().isoformat()
+    today_iso = clock.today().isoformat()
     url = f"/calendar/day/{today_iso}"
     if label:
         url += f"?label={label}"
@@ -1307,7 +1212,7 @@ def create_event(
 ):
     tags = dashboard_router._combine_tags(tags, tags_labels)
     tags = dashboard_router._with_project(conn, tags, project, project_field)
-    now = datetime.now(timezone.utc).isoformat()
+    now = clock.now().isoformat()
     row = {
         "uid": str(uuid.uuid4()),
         "title": title,
@@ -1375,14 +1280,43 @@ def event_detail(uid: str, request: Request, occurrence_date: str | None = None,
             "event": event,
             "occurrence_date": occurrence_date,
             "occurrence_override": occurrence_override,
-            # 2026-09-03 (direct request, view-modal cover banner baseline)
-            # -- same resolved label/Project/Space banner db.banner_for_task
-            # already gave tasks, generalized to db.banner_for_object and
-            # wired up here too (STATE.md had flagged this as "generalizes,
-            # just not wired to event_detail.html yet").
             "banner": db.banner_for_object(conn, "event", event) if event else None,
         },
     )
+
+
+def _minute(value: str | None) -> datetime | None:
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None, second=0, microsecond=0) if value else None
+    except ValueError:
+        return None
+
+
+def occurrence_window(event: dict, occurrence_date: str, override: dict | None) -> dict[str, str]:
+    """Start and end shown for one occurrence: the move override when there is one, else the series' own slot."""
+    series_start = _minute(occurrence_date)
+    first, last = _minute(event.get("start_at")), _minute(event.get("end_at"))
+    series_end = series_start + (last - first) if series_start and first and last and last >= first else None
+    moved = override if override and not override.get("cancelled") and override.get("start_at") else None
+    start = _minute(moved["start_at"]) if moved else series_start
+    end = _minute(moved.get("end_at")) if moved else series_end
+    fmt = lambda d: d.strftime("%Y-%m-%dT%H:%M") if d else ""
+    return {"start": fmt(start), "end": fmt(end), "series_start": fmt(series_start), "series_end": fmt(series_end)}
+
+
+def apply_occurrence_times(conn, uid: str, occurrence_date: str, initial: tuple[str, str], chosen: tuple[str, str], series: tuple[str, str]) -> None:
+    """Saves the This occurrence date and time: unchanged fields leave any override alone, the series slot clears it,
+    anything else moves just this occurrence."""
+    if chosen == initial:
+        return
+    now = clock.now().isoformat()
+    if chosen == series:
+        db.delete_event_occurrence_override(conn, uid, occurrence_date)
+        return
+    db.upsert_event_occurrence_override(conn, {
+        "master_uid": uid, "occurrence_date": occurrence_date, "cancelled": False,
+        "start_at": chosen[0], "end_at": chosen[1] or None, "created_at": now, "updated_at": now,
+    })
 
 
 @events_router.get("/events/{uid}/edit")
@@ -1403,6 +1337,7 @@ def edit_event_form(uid: str, request: Request, occurrence_date: str | None = No
             "event": event,
             "occurrence_date": occurrence_date,
             "occurrence_override": occurrence_override,
+            "occurrence": occurrence_window(event, occurrence_date, occurrence_override) if occurrence_override is not None or (occurrence_date and event and event.get("recurrence")) else None,
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
             **db.project_picker_context(conn),
@@ -1432,6 +1367,11 @@ def update_event(
     exclude_sunday: str = Form(""),
     contacts: list[str] = Form([]),
     contacts_present: str = Form(""),
+    occurrence_date: str = Form(""),
+    occ_start_at: str = Form(""),
+    occ_end_at: str = Form(""),
+    occ_initial_start: str = Form(""),
+    occ_initial_end: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -1463,7 +1403,7 @@ def update_event(
             "holiday_calendar": _clean_field(holiday_calendar),
             "exclude_saturday": bool(exclude_saturday),
             "exclude_sunday": bool(exclude_sunday),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": clock.now().isoformat(),
         }
     )
     try:
@@ -1475,10 +1415,16 @@ def update_event(
         if task and task.get("title") != title:
             task_row = dict(task)
             task_row["title"] = title
-            task_row["updated_at"] = datetime.now(timezone.utc).isoformat()
+            task_row["updated_at"] = clock.now().isoformat()
             db.upsert_task(conn, task_row)
     if contacts_present == "1" and isinstance(contacts, list):
         db.set_object_contacts(conn, "event", row["uid"], db.resolve_contact_entries(conn, contacts))
+    if isinstance(occurrence_date, str) and occurrence_date and isinstance(occ_start_at, str) and occ_start_at:
+        series = occurrence_window(row, occurrence_date, None)
+        apply_occurrence_times(
+            conn, uid, occurrence_date, (occ_initial_start, occ_initial_end), (occ_start_at, occ_end_at),
+            (series["series_start"], series["series_end"]),
+        )
     return respond(x_requested_with, "/calendar", ok=True)
 
 
@@ -1506,7 +1452,7 @@ def cancel_occurrence(
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
-    now = datetime.now(timezone.utc).isoformat()
+    now = clock.now().isoformat()
     db.upsert_event_occurrence_override(
         conn,
         {"master_uid": uid, "occurrence_date": occurrence_date, "cancelled": True, "created_at": now, "updated_at": now},
@@ -1525,7 +1471,7 @@ def move_occurrence(
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
-    now = datetime.now(timezone.utc).isoformat()
+    now = clock.now().isoformat()
     db.upsert_event_occurrence_override(
         conn,
         {
@@ -1544,17 +1490,6 @@ def restore_occurrence(uid: str, occurrence_date: str = Form(...), x_requested_w
     the recurrence rule alone generates."""
     db.delete_event_occurrence_override(conn, uid, occurrence_date)
     return respond(x_requested_with, f"/events/{uid}?occurrence_date={occurrence_date}", ok=True)
-
-
-# --------------------------------------------------------------------- #
-# Relations -- fully removed 2026-08-29 (STATE.md backlog item 4, direct
-# request). This used to be the event side of an event<->task associative
-# links feature: POST /events/{uid}/relations and /relations/remove,
-# backed by the Relations card in event_form.html/event_detail.html
-# (_event_relations.html, now unreferenced). See routers/tasks.py's own
-# "Relations -- fully removed" comment for the task side and the same
-# "db.py's CRUD stays, other things still read it" note.
-# --------------------------------------------------------------------- #
 
 
 @events_router.post("/events/{uid}/reschedule")
@@ -1582,7 +1517,7 @@ async def reschedule_event(uid: str, request: Request, conn=Depends(get_db)):
     row["end_at"] = payload.get("end_at")
     if "all_day" in payload:
         row["all_day"] = bool(payload["all_day"])
-    row["updated_at"] = datetime.now(timezone.utc).isoformat()
+    row["updated_at"] = clock.now().isoformat()
     db.upsert_event(conn, row)
     return JSONResponse(
         {"ok": True, "start_at": row.get("start_at"), "end_at": row.get("end_at"), "all_day": bool(row.get("all_day"))}

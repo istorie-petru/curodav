@@ -8,31 +8,13 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
-from .. import db
+from .. import clock, db
 from ..deps import get_db, respond, templates
 from ..image_convert import to_webp, write_cached_webp
 from ..image_sniff import sniff_image_type
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 
-# Phase 1 (label-space rework, 2026-08-06) dropped the two-addressbook
-# model (Active/Archived as real CardDAV collections) along with
-# `addressbooks`/`addressbook_path` entirely, replacing "archived" with a
-# plain `Archived` tag. 2026-08-07: that tag-based split was removed too
-# (Contacts had no special "archived" state at all, only labels). A LATER
-# direct request ("archived labels should not be visible normally")
-# reintroduced archiving anyway, but still as a fake top-level LABEL
-# (`ARCHIVED_LABEL` below, now gone) -- which conflated archiving with
-# categorization once item 16 (2026-09-26) restricted a contact to ONE
-# label total: marking a contact archived silently ate its one real
-# category label. Item 19 (2026-09-26, same day) is the real fix: a
-# genuine `contacts.archived_at` column (db.py's `archive_contact`/
-# `unarchive_contact`), same shape `label_config.archived_at` already
-# established for projects -- separate from the label/tag system
-# entirely, `db.list_contacts`'s own `include_archived` param (default
-# False) is the one place both this page and Published Lists'
-# materialization get the "hidden/excluded unless explicitly shown"
-# behavior from, for free.
 
 # Photo upload -- see db.py's contacts.photo_b64/photo_type columns and
 # vcard_rows.py for how this round-trips through the vCard PHOTO property.
@@ -67,11 +49,6 @@ async def _read_photo(photo: UploadFile | None) -> tuple[str, str] | None:
     data = await photo.read()
     if len(data) > _MAX_PHOTO_BYTES:
         raise HTTPException(400, "Photo is too large (max 5MB).")
-    # 2026-09-07 fix (flagged in an earlier audit): `vcard_type` above only
-    # reflects the browser's own Content-Type claim -- confirm the bytes
-    # actually are a real image before they go anywhere near a vCard,
-    # using whatever the bytes actually are rather than trusting the
-    # (possibly spoofed) header any further.
     sniffed = sniff_image_type(data)
     if sniffed is None:
         raise HTTPException(400, "That file doesn't look like a real JPEG, PNG, GIF, or WEBP image.")
@@ -229,20 +206,6 @@ def _contacts_list_context(
 ) -> dict:
     contacts = [_attach_photo_url(c) for c in db.list_contacts(conn, q=q, include_archived=show_archived)]
     total_before_filtering = len(contacts)
-    # Multi-select Label filter (2026-09-21, direct request: "the label
-    # filter in the narrow header should be refactored as a checkbox drop
-    # down") -- replaces the old single-select `?tag=` radio filter.
-    # `all_tags` is every real label actually in use on a contact --
-    # "archived" is no longer one of them (item 19, 2026-09-26: it's a
-    # real `contacts.archived_at` column now, see `db.list_contacts`'s own
-    # `include_archived` param above, not a label at all anymore, so there
-    # is nothing left for this filter to suppress by name). `filtered` is
-    # true once the user has touched the filter form at all
-    # (contacts_list.html's hidden `contacts_filtered` field, submitted
-    # alongside every checkbox change) -- distinguishes "no `tag=` params
-    # because nothing was ever picked" (every label implicitly checked)
-    # from "no `tag=` params because the user deliberately unchecked
-    # everything" (respect that literally, an empty visible set).
     all_tags = db.list_contact_tag_names(conn)
     filter_items = db.label_filter_items(conn, all_tags, lowercase_values=True)
     if filtered:
@@ -362,7 +325,7 @@ def bulk_edit(
             kind = add_tag in project_names
             tags = {t for t in tags if (t in project_names) != kind} | {add_tag}
         row["tags"] = sorted(tags)
-        row["updated_at"] = datetime.now(timezone.utc).isoformat()
+        row["updated_at"] = clock.now().isoformat()
         db.upsert_contact(conn, row)
     return respond(x_requested_with, "/contacts", count=len(uids))
 
@@ -507,7 +470,7 @@ async def create_contact(
         if not photo_b64:
             photo_b64, photo_type = draft.get("photo_b64"), draft.get("photo_type")
         db.delete_contact(conn, draft_uid, record_server_write=False)
-    now = datetime.now(timezone.utc).isoformat()
+    now = clock.now().isoformat()
     row = {
         "uid": uid,
         "full_name": full_name,
@@ -571,9 +534,6 @@ def contact_detail(uid: str, request: Request, conn=Depends(get_db)):
             "request": request,
             "active_tab": "contacts",
             "contact": contact,
-            # 2026-09-03 (direct request, view-modal cover banner baseline)
-            # -- same resolved label/Project/Space banner db.banner_for_task
-            # already gave tasks, generalized to db.banner_for_object.
             "banner": db.banner_for_object(conn, "contact", contact) if contact else None,
         },
     )
@@ -739,7 +699,7 @@ async def update_contact(
             "birthday": birthday_value,
             "tags": resolved_tags,
             "notes": notes if notes and notes.strip().lower() not in ("none", "nothing") else None,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": clock.now().isoformat(),
         }
     )
     if remove_photo:
@@ -807,7 +767,7 @@ async def set_contact_photo(
     if result:
         row = dict(contact)
         row["photo_b64"], row["photo_type"] = result
-        row["updated_at"] = datetime.now(timezone.utc).isoformat()
+        row["updated_at"] = clock.now().isoformat()
         db.upsert_contact(conn, row, record_server_write=not contact.get("is_draft"))
     return respond(x_requested_with, f"/contacts/{uid}")
 
@@ -824,7 +784,7 @@ def remove_contact_photo(
     row = dict(contact)
     row["photo_b64"] = None
     row["photo_type"] = None
-    row["updated_at"] = datetime.now(timezone.utc).isoformat()
+    row["updated_at"] = clock.now().isoformat()
     db.upsert_contact(conn, row, record_server_write=not contact.get("is_draft"))
     return respond(x_requested_with, f"/contacts/{uid}")
 

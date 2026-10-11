@@ -28,13 +28,6 @@ logger = logging.getLogger(__name__)
 
 _BASE_DIR = Path(__file__).resolve().parent
 
-# 2026-09-07 (direct request) -- first-run defaults, sourced from image
-# files the user dropped in the repo-root `assets/` directory (a sibling
-# of `webapp/`, hence the two `.parent`s off this file's own `src/`
-# directory). Seeded ONCE into app_meta (see _seed_default_media below);
-# after that they're indistinguishable from any other user-set banner/
-# avatar -- editable/removable as normal in Settings > Appearance/General,
-# never re-applied over a value the user has since changed.
 _PICTURES_DIR = _BASE_DIR.parent.parent / "assets"
 _DEFAULT_MEDIA_SEEDED_KEY = "default_media_seeded_v1"
 _DEFAULT_PAGE_BANNER_FILE = "banner_51.jpg"
@@ -129,27 +122,9 @@ class _VersionedStaticFiles(StaticFiles):
 async def lifespan(app: FastAPI):
     settings = load_settings()
 
-    # 2026-08-29 -- a Radicale connection entered through /setup or
-    # Settings (routers/auth.py, routers/settings.py) lives in app_meta,
-    # not the environment; apply it here, before the settings are
-    # published to app.state and before the bridge below is built, so
-    # both see the effective (possibly overridden) connection. A no-op
-    # when CC_RADICALE_URL was set in the environment (env always wins,
-    # see apply_persisted_radicale_overrides's docstring) or when nothing
-    # was ever saved.
     with db.connect(settings.db_path) as _conn:
         settings = apply_persisted_radicale_overrides(settings, _conn)
-        # Timezone (2026-09-30, config.py's apply_persisted_timezone own
-        # docstring has the full story) -- applied before anything below
-        # reads a clock: the background sync/reminder threads started
-        # further down, and the initial sync.full_refresh call, all use
-        # plain datetime.now()/date.today() on the assumption that IS the
-        # user's own local time.
         apply_persisted_timezone(_conn)
-        # First-run default banners/avatar (2026-09-07, direct request) --
-        # see _seed_default_media's own docstring. Must not be allowed to
-        # fail startup over e.g. a missing assets/ directory on a deploy
-        # that never got one; that's just "nothing seeded," not fatal.
         try:
             _seed_default_media(_conn)
         except Exception:
@@ -159,12 +134,6 @@ async def lifespan(app: FastAPI):
         auth_core.ensure_recovery_token(_conn)
     app.state.settings = settings
 
-    # Item 10 follow-up (2026-09-27) -- points src/flairs.py at wherever
-    # the operator's own flair photos actually live (see that module's
-    # own docstring for why this can't just be a static bundled
-    # directory). Module-level, not app.state, since db.py's banner-
-    # resolution functions have no Request/Settings to read it from at
-    # all -- see flairs.py's own comment on `_flairs_dir`.
     from . import flairs
 
     flairs.configure(settings.flairs_dir)
@@ -183,20 +152,6 @@ async def lifespan(app: FastAPI):
         bridge = None
         logger.exception("Radicale unreachable at startup; running without the sync bridge")
     else:
-        # 2026-09-07 audit fix (documentation/reports/
-        # full-app-audit-2026-09-07.md): a production deploy that just
-        # authenticated to a REACHABLE Radicale server using the dev-only
-        # devuser/devpass fallback (config.py's load_settings default) is
-        # refused outright -- unlike the broad except above, this is
-        # deliberately allowed to raise and fail the whole lifespan startup.
-        # Gated on the bridge having actually connected (the `else` branch,
-        # not a bare settings check before the try) so a standalone install
-        # with no Radicale server at all -- which never authenticates
-        # against anything with these credentials -- isn't forced to set
-        # them just to boot; only a deploy where the fallback pair is
-        # genuinely live and reachable is the real exposure the audit
-        # flagged ("only reachable if a real deploy forgets to set
-        # CC_RADICALE_URL/CC_RADICALE_PASSWORD").
         if settings.deploy_mode == "production" and uses_default_radicale_credentials(settings):
             raise RuntimeError(
                 "CC_DEPLOY_MODE=production connected to a live Radicale "
@@ -226,9 +181,6 @@ async def lifespan(app: FastAPI):
     thread, stop_event = sync.start_background_sync(
         bridge, settings.db_path, settings.sync_interval_seconds
     )
-    # Web Push P2 (2026-09-24): reminder scheduler -- wakes each minute,
-    # sends due event/task/habit/sleep-leisure reminders to subscribed
-    # devices (src/reminders.py). Idle when no device is subscribed.
     _reminder_thread, reminder_stop = reminders.start_scheduler(settings.db_path)
     logger.info(
         "Started background Radicale sync every %ss", settings.sync_interval_seconds
@@ -266,78 +218,21 @@ def create_app() -> FastAPI:
     # overhead would net-lose.
     app.add_middleware(GZipMiddleware, minimum_size=1024)
 
-    # CSRF protection (2026-08-29, src/auth.py::CSRFMiddleware) -- added
-    # before AuthMiddleware below so Auth ends up the outer layer (Starlette
-    # runs the most-recently-added middleware first): an unauthenticated
-    # forged request gets Auth's normal 401/redirect, never reaching this
-    # check at all; only a request that already carries a session cookie
-    # goes through the Origin/Referer verification.
     app.add_middleware(CSRFMiddleware)
 
-    # Single-user login (2026-08-16, src/auth.py) -- a no-op gate when no
-    # CC_AUTH_USERNAME/CC_AUTH_PASSWORD are configured, otherwise every
-    # request except /login and /static needs a valid session cookie. The
-    # middleware reads its settings off `app.state.settings` (set by the
-    # lifespan below), so an unset pair keeps the app behaving exactly as
-    # it always has. 2026-08-29: also forces GET/POST /setup on an
-    # unconfigured production deploy (CC_DEPLOY_MODE=production) -- see
-    # auth.py's module docstring.
     app.add_middleware(AuthMiddleware)
 
-    # Security headers (2026-08-29, src/security_headers.py) -- added
-    # LAST (after CSRF and Auth above), so it ends up the OUTERMOST layer
-    # (Starlette runs the most-recently-added middleware first, wrapping
-    # everything registered before it -- see CSRFMiddleware's own comment
-    # on this same ordering rule). Being outermost is the whole point
-    # here: a middleware that short-circuits a request (Auth's 302/401,
-    # CSRF's 403) never calls further into the stack, so anything added
-    # BEFORE it would simply never run for a denied request. Being
-    # outermost means this one still wraps `send` before Auth/CSRF get a
-    # chance to respond, so these headers land on every response,
-    # including denials -- a denied response is still a response a
-    # browser renders/acts on, so it needs the same X-Frame-Options/CSP/
-    # nosniff protection as a normal page.
     app.add_middleware(SecurityHeadersMiddleware)
 
     app.mount("/static", _VersionedStaticFiles(directory=_BASE_DIR / "static"), name="static")
 
-    # Phase 1 (label-space rework, 2026-08-06): routers/calendars.py,
-    # routers/task_lists.py, routers/addressbooks.py are deleted -- those
-    # collection-management concepts are gone (see plans/
-    # label-space-rework.md §3 Phase 1 and db.py's Phase 1 comments).
-    #
-    # 2026-08-07: routers/databases.py and routers/grades.py are deleted
-    # too -- Databases (and Grades, which was built on top of it) is
-    # deactivated and removed entirely, not just unlinked from nav. See
-    # features/architecture.md's Grades/Databases removal note and
-    # db.py's own removal comments on the `databases`/`database_columns`/
-    # `database_rows`/`grades` tables.
-    # routers/today.py and routers/week.py are gone (1.9 side work,
-    # "Today"/"Week" folded into the Dashboard's widget registry and the
-    # merged /calendar/week respectively -- see routers/dashboard.py::
-    # today_redirect and routers/calendar.py::week_redirect for the
-    # bookmark-preserving redirects that replaced them, same precedent as
-    # the earlier /calendar/timetable retirement).
-    from .routers import auth, banners, calendar, contacts, dashboard, export, flairs as flairs_router, habits, label_pages, labels, notebook, projects, public_lists, published_lists, push, pwa, quick_capture, search, secretariat_page, settings, spaces, sync_api, tasks, taxonomy, timeline
+    from .routers import auth, banners, calendar, contacts, dashboard, export, finance, flairs as flairs_router, habits, label_pages, labels, notebook, projects, public_lists, published_lists, push, pwa, quick_capture, search, secretariat_page, settings, spaces, sync_api, tasks, taxonomy, timeline
 
-    # Health check (design-system unification pass, 2026-09-17, deploy
-    # alignment with sibling app Pineart's own GET /api/health) -- exempted
-    # from auth via auth.py's PUBLIC_PATHS, since scripts/curodav-ctl polls
-    # this as a plain unauthenticated curl right after every deploy/
-    # rollback, not from a logged-in browser. Previously curodav-ctl
-    # health-checked plain `/`, which happened to work (any 2xx/3xx counts)
-    # but isn't a real "is the app actually up" signal -- `/` can succeed
-    # off a half-broken app that still renders a page shell.
     @app.get("/health")
     def health():
         return {"status": "ok"}
 
     app.include_router(auth.router)
-    # Published Lists' standalone public feed (2026-08-29) -- no login, no
-    # Radicale account, see routers/public_lists.py's module docstring and
-    # AuthMiddleware's "/public/" exemption in src/auth.py. Registered
-    # early alongside auth.router since both define the app's few
-    # genuinely public-without-a-session routes.
     app.include_router(public_lists.router)
     app.include_router(dashboard.router)
     app.include_router(secretariat_page.home_router)
@@ -372,7 +267,6 @@ def create_app() -> FastAPI:
     app.include_router(quick_capture.router)
     app.include_router(taxonomy.router)
     app.include_router(labels.router)
-    # 2026-09-26: Settings > Projects and Settings > Groups, their own pages.
     app.include_router(labels.projects_settings_router)
     app.include_router(label_pages.groups_settings_router)
     app.include_router(label_pages.router)
@@ -380,21 +274,13 @@ def create_app() -> FastAPI:
     app.include_router(spaces.router)
     app.include_router(projects.router)
     app.include_router(habits.router)
-    # 2026-10-03: citations_router must be registered BEFORE notebook.router
-    # -- its literal "/notebook/citations" path would otherwise be caught
-    # by notebook.router's "/notebook/{uid}" catch-all first (FastAPI
-    # matches routes in registration order, not by specificity), making
-    # GET /notebook/citations 404-redirect as if "citations" were a
-    # document uid. glossary_router has the same literal "/notebook/
-    # glossary" path, so it needs the same ordering.
     app.include_router(notebook.citations_router)
     app.include_router(notebook.glossary_router)
     app.include_router(notebook.router)
-    # 2026-10-02: Settings > Notebook's frontmatter field schema, same
-    # "feature's own router hosts its /settings/* routes" precedent as
-    # Groups/Projects above.
     app.include_router(notebook.field_settings_router)
     app.include_router(notebook.frontmatter_settings_router)
+    app.include_router(finance.router)
+    app.include_router(finance.settings_router)
     app.include_router(push.router)
     app.include_router(banners.router)
     app.include_router(flairs_router.router)

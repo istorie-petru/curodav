@@ -1,4 +1,4 @@
-{% from "_inputs.html" import checkbox_input, text_input %}
+{% from "_inputs.html" import switch_input, text_input %}
 {% extends "base.html" %}
 {% block title %}{{ form_title }}{% endblock %}
 {% block content %}
@@ -68,10 +68,9 @@
             <label>End date</label>
             {{ date_field('date_to', date_to_value, required=true, label='End date') }}
         </div>
-        <div class="field field-toggle field-wide">
-            {{ checkbox_input({'id': 'year_agnostic', 'name': 'year_agnostic', 'value': '1', 'class': 'checkbox', 'checked': (true if (year_agnostic) else false)}) }}
-            <label for="year_agnostic">Repeats every year (ignore year above)</label>
-            <span class="field-hint">For a fixed-date holiday like a national or religious holiday -- only the month and day above are saved, so it applies every year.</span>
+        <div class="field field-wide">
+            <label for="year_agnostic">Repeats every year</label>
+            <div class="switch-row">{{ switch_input({'id': 'year_agnostic', 'name': 'year_agnostic', 'value': '1', 'checked': (true if (year_agnostic) else false)}) }}</div>
         </div>
     </div>
 </form>

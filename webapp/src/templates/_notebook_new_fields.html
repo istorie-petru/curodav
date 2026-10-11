@@ -1,0 +1,10 @@
+{# The part of the new-note form that follows the chosen template: Type and every frontmatter field. Expects `nn`. #}
+<div class="field">
+    {% set ms_form_id = 'notebook-new-form' %}{% set ms_name = 'note_type' %}{% set ms_label = 'Type' %}
+    {% set ms_items = nn.note_type_items %}{% set ms_selected = nn.note_type %}{% set ms_mode = 'single' %}{% set ms_allow_new = true %}
+    {% include "_widget_list_multiselect.html" %}
+</div>
+{% set typed_form_id = nn.typed_form_id %}
+{% for f in nn.typed_fields %}
+{% include "_notebook_typed_field.html" %}
+{% endfor %}

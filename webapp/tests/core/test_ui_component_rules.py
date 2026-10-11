@@ -126,7 +126,7 @@ def test_modal_input_rows_never_wrap():
     wrapping = [sel.strip() for sel, body in rules if "flex-wrap:wrap" in body.replace(" ", "") and ".modal-body" in sel]
     assert not wrapping, f"Modal rows must not wrap: {wrapping}"
     nowrap = [sel for sel, body in rules if ".modal-body" in sel and "flex-wrap:nowrap" in body.replace(" ", "")]
-    assert nowrap and all(row in nowrap[0] for row in (".contact-multi-row", ".work-session-edit-fields", ".task-start-due-row"))
+    assert nowrap and all(row in nowrap[0] for row in (".contact-multi-row", ".work-session-edit-fields"))
 
 
 def test_archive_button_lives_only_in_the_edit_footer():

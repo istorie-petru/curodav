@@ -34,18 +34,13 @@
              direct feedback (still true): Start date defaults to today
              on a brand-new task, same as before this merge. -->
         {% call title_date_row(task.title if task else (prefill_title or '')) %}
-        <div class="field field-wide task-start-due-field">
-            <label>Start &amp; due date</label>
-            <div class="task-start-due-row">
-                <div class="task-start-due-item">
-                    <span class="field-hint">Start</span>
-                    {{ date_field('start_at', task.start_at[:10] if task and task.start_at else today, label='Start date') }}
-                </div>
-                <div class="task-start-due-item">
-                    <span class="field-hint">Due</span>
-                    {{ date_field('due_at', task.due_at[:10] if task and task.due_at else '', label='Due date') }}
-                </div>
-            </div>
+        <div class="field">
+            <label>Start date</label>
+            {{ date_field('start_at', task.start_at[:10] if task and task.start_at else today, label='Start date') }}
+        </div>
+        <div class="field">
+            <label>Due date</label>
+            {{ date_field('due_at', task.due_at[:10] if task and task.due_at else '', label='Due date') }}
         </div>
         {% endcall %}
         <!-- Status -- 2026-08-08 direct feedback ("rework the drop down

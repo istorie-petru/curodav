@@ -1,4 +1,4 @@
-{% from "_inputs.html" import checkbox_input, file_input %}
+{% from "_inputs.html" import switch_input, file_input %}
 {% extends "base.html" %}
 {% block title %}Import data{% endblock %}
 {% block content %}
@@ -16,18 +16,18 @@
 <div class="modal-body">
 <form id="import-form" method="post" action="/export/import/auto" enctype="multipart/form-data" class="dm-import-form">
     <label class="dm-dropzone" data-dm-dropzone>
-        {{ file_input({'name': 'file', 'accept': '.ics,.vcf,.csv,.json,text/calendar,text/vcard,text/csv,application/json', 'class': 'sr-only', 'required': true, 'data-dm-file': true}) }}
+        {{ file_input({'name': 'file', 'accept': '.ics,.vcf,.csv,.md,.markdown,.zip,.json,text/calendar,text/vcard,text/csv,text/markdown,application/zip,application/json', 'class': 'sr-only', 'required': true, 'data-dm-file': true}) }}
         <span class="dm-dropzone-icon" aria-hidden="true">{{ icon('upload') }}</span>
         <span class="dm-dropzone-title" data-dm-dropzone-title>Drop a file here &mdash; auto-detects type</span>
-        <span class="dm-dropzone-formats">.ics calendar &middot; .vcf contacts &middot; .csv spreadsheet &middot; .json backup</span>
+        <span class="dm-dropzone-formats">.ics &middot; .vcf &middot; .csv &middot; .md &middot; .zip &middot; .json</span>
     </label>
     <p class="dm-status" data-dm-status role="status"></p>
-    <label class="dm-merge">
-        {{ checkbox_input({'name': 'merge', 'value': '1', 'class': 'checkbox', 'checked': true}) }}
-        Merge with existing data
-    </label>
-    <p class="dm-merge-hint">Untick to only add items that don't exist yet -- nothing you already have gets overwritten.</p>
+    <div class="field">
+        <label for="import-merge">Merge with existing data</label>
+        <div class="switch-row">{{ switch_input({'id': 'import-merge', 'name': 'merge', 'value': '1', 'checked': true}) }}</div>
+    </div>
 </form>
+{% include "_data_formats_table.html" %}
 </div>
 {# 2026-08-30 (direct feedback, modal-footer-consistency fix): Import used
    to be its own full-width button inside the body, footer below it

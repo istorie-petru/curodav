@@ -65,7 +65,6 @@
             {% set ms_items = author_items %}
             {% set ms_selected = selected_authors %}
             {% include "_widget_list_multiselect.html" %}
-            {% if not author_items %}<span class="field-hint">No authors recorded yet.</span>{% endif %}
         </div>
         {# Year, a from/to interval (2026-10-03 direct request), not a
            dropdown -- plain number inputs, both children of the real

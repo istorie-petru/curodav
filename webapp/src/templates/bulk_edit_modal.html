@@ -11,7 +11,6 @@
 <h1>Edit {{ uids|length }} {{ noun }}{{ '' if uids|length == 1 else 's' }}</h1>
 </div>
 <div class="modal-body">
-<p class="settings-hint">Only the fields you fill in change. Everything else stays as it is.</p>
 <form method="post" id="bulk-edit-form" action="{{ post_url }}" data-cc-change="{{ change_type }}" data-cc-action="update">
     {% for uid in uids %}<input type="hidden" name="uids" value="{{ uid }}">{% endfor %}
     <div class="field-grid">

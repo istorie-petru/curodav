@@ -1,0 +1,4 @@
+{# Header action icons shared by the three finance pages: links to the other pages, then page-specific actions via caller(). #}
+{% macro finance_header_links(links) %}
+{% for l in links %}<a href="{{ l.url }}" class="icon-btn" title="{{ l.title }}" aria-label="{{ l.title }}">{{ icon(l.icon, 'icon-sm') }}</a>{% endfor %}
+{% endmacro %}

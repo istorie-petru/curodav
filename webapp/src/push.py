@@ -35,12 +35,6 @@ from . import db
 log = logging.getLogger(__name__)
 
 _PRIVATE_KEY_META = "push_vapid_private_pem"
-# The VAPID "sub" claim: push services want a contact they can reach
-# about abusive traffic -- a `mailto:` address or a bare `https://` ORIGIN
-# (py_vapid rejects anything with a path, which a first version of this
-# default had: caught by the live scheduler check, 2026-09-24). Set your
-# own email in Settings > General > Notifications (stored in app_meta
-# under CONTACT_KEY, wins over the env var) or CC_PUSH_CONTACT=mailto:...
 DEFAULT_CONTACT = "https://github.com"
 CONTACT_KEY = "push_contact_email"
 # Deliberately stricter than py_vapid's _check_sub, whose mailto branch

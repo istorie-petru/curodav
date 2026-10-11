@@ -11,7 +11,6 @@
 {%- endmacro %}
 
 {% macro work_sessions_view(work_allocations, work_hours) %}
-<div class="detail-section-summary">{{ work_sessions_summary(work_allocations, work_hours) }}</div>
 {% if work_allocations %}
 <ol class="work-session-list">
     {% for wa in work_allocations %}
@@ -38,13 +37,13 @@
     </div>
     <input type="hidden" name="ws_uid" value="{{ wa.uid if wa else '' }}">
     <div class="work-session-edit-fields">
-        {{ text_input({'name': 'ws_title', 'value': (wa.title if wa else ''), 'aria-label': 'Session title'}) }}
-        {{ number_input({'name': 'ws_hours', 'value': (wa.hours_estimate if wa and wa.hours_estimate is not none else ''), 'min': '0', 'step': '0.25', 'aria-label': 'Estimated hours'}) }}
+        <div class="field work-session-title-field"><label>Title</label>{{ text_input({'name': 'ws_title', 'value': (wa.title if wa else '')}) }}</div>
+        <div class="field work-session-hours-field"><label>Hours</label>{{ number_input({'name': 'ws_hours', 'value': (wa.hours_estimate if wa and wa.hours_estimate is not none else ''), 'min': '0', 'step': '0.25'}) }}</div>
         {% set _names = work_difficulties.values() | map(attribute='name') | list %}
         {% set _cur = work_difficulties[(wa.difficulty if wa else None) or 'moderate'].name %}
-        {{ contact_type_picker('ws_difficulty', _names, _cur, key, '', form_id) }}
+        <div class="field work-session-difficulty-field"><label>Difficulty</label>{{ contact_type_picker('ws_difficulty', _names, _cur, key, '', form_id) }}</div>
     </div>
-    {{ datetime_range('ws_start', 'ws_end', (wa.start_at or '') if wa else '', (wa.end_at or '') if wa else '', title='', compact=true) }}
+    {{ datetime_range('ws_start', 'ws_end', (wa.start_at or '') if wa else '', (wa.end_at or '') if wa else '', title='') }}
 </div>
 {% endmacro %}
 

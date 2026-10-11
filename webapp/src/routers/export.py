@@ -34,6 +34,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 import zipfile
 from datetime import datetime, timezone
 from typing import Any
@@ -41,14 +42,14 @@ from typing import Any
 from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 
-from .. import db, ical_rows, vcard_rows
+from .. import clock, data_exchange, db, finance, ical_rows, vcard_rows
 from ..deps import get_db, templates
 
 router = APIRouter(prefix="/export", tags=["export"])
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return clock.now().isoformat()
 
 
 def _attachment(filename: str, body: bytes, media_type: str) -> Response:
@@ -59,13 +60,6 @@ def _attachment(filename: str, body: bytes, media_type: str) -> Response:
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
-
-# Phase 1 (label-space rework, 2026-08-06): the app no longer mirrors a
-# class's VEVENT into a separate "target calendar" to exclude -- there's
-# just one universal `events` pool now (see db.py's Phase 1 comments).
-# Every class's mirrored event is a real row in that pool, uid-stable, and
-# is included in exports like any other event.
 
 
 @router.get("")
@@ -83,11 +77,6 @@ def export_index(request: Request, conn=Depends(get_db)):
     real."""
     return RedirectResponse(url="/settings", status_code=303)
 
-
-# The two export/import dialogs (2026-08-26 third pass: the Data &
-# Maintenance page's standalone Export & import card is gone -- Export…
-# and Import… are menu items on the Sync status card now, each opening one
-# of these modals. Same #modal-target shape as every other utility modal.)
 
 @router.get("/modal")
 def export_modal(request: Request, conn=Depends(get_db)):
@@ -122,14 +111,14 @@ def export_context(conn) -> dict:
     the caller (it needs `request.app.state`, which this function has no
     use for otherwise), keeping this a plain data function."""
     return {
-        # include_archived=True (item 19, 2026-09-26): a real database
-        # total, not "how many are currently visible" -- same reasoning as
-        # list_tasks' own include_habit_tasks=True just below (every count/
-        # export on this page is meant to cover the WHOLE database,
-        # archived contacts included).
         "contact_count": len(db.list_contacts(conn, include_archived=True)),
         "event_count": len(db.list_events(conn)),
         "task_count": len(db.list_tasks(conn, include_habit_tasks=True)),
+        "note_count": len(db.list_notebook_documents(conn, scope="all")),
+        "account_count": len(finance.list_accounts(conn)),
+        "transaction_count": len(finance.all_transactions(conn)),
+        "citation_count": len(db.list_citations(conn)),
+        "glossary_count": len(db.list_glossary_terms(conn)),
     }
 
 
@@ -239,10 +228,6 @@ def export_contacts_csv(conn=Depends(get_db)):
     return _csv_response("contacts.csv", ["UID", "Name", "Organization", "Phone", "Email", "Address", "Tags"], rows)
 
 
-# 2026-08-07: GET /export/grades.csv (export_grades_csv) removed along
-# with the `grades` table -- see this module's docstring.
-
-
 # --------------------------------------------------------------------- #
 # JSON (the app's own local-only data + full backup/restore)
 # --------------------------------------------------------------------- #
@@ -266,62 +251,8 @@ def export_labels_json(conn=Depends(get_db)):
     compatibility layer" rule); there was never a real reason for two URLs."""
     return _json_response(
         "labels.json",
-        {"labels": db.list_labels(conn), "object_labels": _export_object_labels(conn)},
+        {"labels": db.list_labels(conn), "object_labels": data_exchange.object_label_rows(conn)},
     )
-
-
-def _export_object_labels(conn) -> list[dict[str, Any]]:
-    rows = conn.execute("SELECT object_type, object_id, label_name FROM object_labels").fetchall()
-    return [dict(r) for r in rows]
-
-
-def _export_notebook_citations(conn) -> list[dict[str, Any]]:
-    """Flat join rows (notebook_uid, citation_uid, position, created_at) --
-    same "separate flat export key, not nested under one owning parent"
-    treatment as object_labels above, since a citation can be attached to
-    many documents (not a one-document-owns-it relationship like
-    properties/tags)."""
-    rows = conn.execute(
-        "SELECT notebook_uid, citation_uid, position, created_at FROM notebook_citations"
-    ).fetchall()
-    return [dict(r) for r in rows]
-
-
-def _export_notebook_glossary_terms(conn) -> list[dict[str, Any]]:
-    """Flat join rows, same "separate flat export key" treatment as
-    _export_notebook_citations above (2026-10-03 direct follow-up, "add a
-    sidebar tab" -- the per-document attach table). `auto` (roadmap item H,
-    session 7) round-trips too, so a restored document doesn't lose the
-    manual-vs-auto-detected distinction on its attached terms."""
-    rows = conn.execute(
-        "SELECT notebook_uid, term_uid, position, created_at, auto FROM notebook_glossary_terms"
-    ).fetchall()
-    return [dict(r) for r in rows]
-
-
-def _export_notebook_glossary_excluded_terms(conn) -> list[dict[str, Any]]:
-    """Flat rows for the auto-detect override table (roadmap item H,
-    session 7) -- same "separate flat export key" treatment as the other
-    glossary join tables. Without this, a restore would lose every
-    "manually removed this false-positive match" override, and the next
-    content save's auto-detect pass would silently re-attach it."""
-    rows = conn.execute(
-        "SELECT notebook_uid, term_uid, created_at FROM notebook_glossary_excluded_terms"
-    ).fetchall()
-    return [dict(r) for r in rows]
-
-
-def _export_glossary_term_references(conn) -> list[dict[str, Any]]:
-    """Flat join rows (term_uid, ref_type, ref_uid, position, created_at) --
-    same "separate flat export key" treatment as the two functions above
-    (roadmap item F, 2026-10-03). Raw table rows, not
-    db.list_glossary_term_references' resolved-name shape -- a backup
-    should round-trip the actual stored reference, not a name that was
-    only ever a read-time convenience."""
-    rows = conn.execute(
-        "SELECT term_uid, ref_type, ref_uid, position, created_at FROM glossary_term_references"
-    ).fetchall()
-    return [dict(r) for r in rows]
 
 
 def build_backup_payload(conn) -> dict[str, Any]:
@@ -348,59 +279,25 @@ def build_backup_payload(conn) -> dict[str, Any]:
         "exported_at": _now(),
         "events": db.list_events(conn),
         "tasks": db.list_tasks(conn, include_habit_tasks=True),
-        # include_archived=True (item 19, 2026-09-26): a full backup must
-        # never silently drop an archived contact -- restoring it later
-        # has to bring the same data back, archived state included (the
-        # column itself round-trips through import_backup's own
-        # upsert_contact call unchanged, same as any other column).
         "contacts": db.list_contacts(conn, include_archived=True),
         "labels": db.list_labels(conn),
-        "object_labels": _export_object_labels(conn),
+        "object_labels": data_exchange.object_label_rows(conn),
         "schedule_holidays": db.list_holidays(conn),
         "task_completions": db.list_task_completions(conn),
-        # Habits H6 (2026-09-24): vacation / pause ranges.
         "habit_pauses": db.list_habit_pauses(conn),
-        # 2026-08-09 Relations -- deliberate user-made links, same
-        # local-only-data backup treatment as task_completions.
         "event_task_relations": db.list_event_task_relations(conn),
-        # Notebook (2026-10-01, curodav-notes/documentation/plans) -- every
-        # document, content_json included (it's just this table's own text
-        # column, not a separate JSON export concern). Custom properties
-        # (2026-10-02) ride along nested under each document's "properties"
-        # key (list_notebook_documents attaches them, same as "tags") --
-        # no separate "notebook_properties" backup key, same convention as
-        # contacts' phones/emails (no separate "contact_phones" key either;
-        # restore_backup_payload's upsert_notebook_document call below
-        # re-applies "properties" the same way it already does "tags").
-        "notebook_documents": db.list_notebook_documents(conn),
-        # Settings > Notebook's frontmatter field schema (2026-10-02) --
-        # schema config, same "a backup restores how the app is set up,
-        # not just the content" treatment "labels" gets above. A field's
-        # own option list (list_notebook_field_config attaches it, same as
-        # "tags"/"properties" elsewhere) rides along nested, no separate
-        # "notebook_field_options" key.
+        "notebook_documents": db.list_notebook_documents(conn, scope="all"),
         "notebook_field_config": db.list_notebook_field_config(conn),
-        # Citations (2026-10-03) -- the global library, plus the flat
-        # notebook<->citation join table (a citation can be attached to
-        # several documents, so it can't ride along nested under one of
-        # them the way properties/tags do).
         "citations": db.list_citations(conn),
-        "notebook_citations": _export_notebook_citations(conn),
-        # Glossary (2026-10-03, per-document attach added on the same
-        # direct follow-up that added the sidebar tab) -- the global term
-        # library, plus the flat notebook<->term join table, same
-        # "can't ride along nested under one document" treatment as
-        # notebook_citations above.
+        "notebook_citations": data_exchange.notebook_citation_rows(conn),
         "glossary_terms": db.list_glossary_terms(conn),
-        "notebook_glossary_terms": _export_notebook_glossary_terms(conn),
-        # Glossary term references (roadmap item F, 2026-10-03) -- a term's
-        # own "further reading" list, owned by the term (not a document),
-        # same flat-join-table treatment as notebook_glossary_terms above.
-        "glossary_term_references": _export_glossary_term_references(conn),
+        "notebook_glossary_terms": data_exchange.notebook_glossary_term_rows(conn),
+        "glossary_term_references": data_exchange.glossary_reference_rows(conn),
         # Auto-detect override bookkeeping (roadmap item H, session 7) --
         # same "can't ride along nested under one document" treatment as
         # notebook_glossary_terms above.
-        "notebook_glossary_excluded_terms": _export_notebook_glossary_excluded_terms(conn),
+        "notebook_glossary_excluded_terms": data_exchange.notebook_glossary_excluded_rows(conn),
+        **finance.backup_rows(conn),
     }
 
 
@@ -411,19 +308,6 @@ def export_data_json(conn=Depends(get_db)):
     for backing up this app's whole world. See build_backup_payload above
     for the actual payload shape."""
     return _json_response("data.json", build_backup_payload(conn))
-
-
-# --------------------------------------------------------------------- #
-# Selective download (2026-08-26 redesign) -- one endpoint behind Data &
-# Maintenance's two-dropdown "Download" control, replacing the wall of
-# per-type links. Every (type, format) combination resolves to exactly one
-# real file: a single type picks its own format's builder; "all" bundles
-# the three entity exports into one .zip (a mixed ICS+VCF can't be one
-# file, and a zip is still a single one-click download); labels always come
-# out as labels.json regardless of format -- that's the only lossless label
-# export there is. Each cell delegates to the same route function the old
-# individual link used, so there is exactly one definition of every export.
-# --------------------------------------------------------------------- #
 
 
 def _zip_response(filename: str, files: list[tuple[str, bytes]]) -> Response:
@@ -452,6 +336,14 @@ def download_selective(
 ):
     if data_type == "labels":
         return export_labels_json(conn=conn)
+    if data_type == "notes":
+        return _zip_response("notes-markdown.zip", data_exchange.notes_files(conn))
+    if data_type == "finance":
+        return _zip_response("finance.zip", data_exchange.finance_files(conn))
+    if data_type == "citations":
+        return _attachment("citations.csv", data_exchange.citations_csv(conn), "text/csv")
+    if data_type == "glossary":
+        return _attachment("glossary.csv", data_exchange.glossary_csv(conn), "text/csv")
     if data_type == "all":
         if file_format == "csv":
             return _zip_response(
@@ -460,6 +352,10 @@ def download_selective(
                     ("events.csv", export_events_csv(conn=conn).body),
                     ("tasks.csv", export_tasks_csv(conn=conn).body),
                     ("contacts.csv", export_contacts_csv(conn=conn).body),
+                    ("citations.csv", data_exchange.citations_csv(conn)),
+                    ("glossary.csv", data_exchange.glossary_csv(conn)),
+                    *data_exchange.finance_files(conn),
+                    *data_exchange.notes_files(conn),
                 ],
             )
         return _zip_response(
@@ -468,6 +364,10 @@ def download_selective(
                 ("events.ics", export_events_ics(conn=conn).body),
                 ("tasks.ics", export_tasks_ics(conn=conn).body),
                 ("contacts.vcf", export_contacts_vcf(conn=conn).body),
+                ("citations.csv", data_exchange.citations_csv(conn)),
+                ("glossary.csv", data_exchange.glossary_csv(conn)),
+                *data_exchange.finance_files(conn),
+                *data_exchange.notes_files(conn),
             ],
         )
     entry = _SELECTIVE_EXPORTS.get((data_type, "csv" if file_format == "csv" else "standard"))
@@ -479,17 +379,6 @@ def download_selective(
 # --------------------------------------------------------------------- #
 # Import / restore
 # --------------------------------------------------------------------- #
-
-
-# The four historical per-type endpoints below share their real work with
-# the unified /import/auto endpoint (2026-08-26 redesign of Data &
-# Maintenance's Export & import section into one drop zone) through these
-# content-sniffing helpers. Each takes the file *text* (not the upload) and
-# returns how many rows it wrote; `skip_existing=True` is the unified
-# endpoint's "merge" checkbox unchecked -- only rows whose uid isn't in the
-# pool yet are written, so nothing the user already has is overwritten.
-# The old per-type endpoints always merge (their behavior before this
-# refactor, unchanged).
 
 
 def _import_ics_text(conn, text: str, skip_existing: bool = False) -> tuple[int, int]:
@@ -589,21 +478,6 @@ def import_json(file: UploadFile, conn=Depends(get_db)):
     return _redirect_with_note("/settings", "Backup restored.")
 
 
-# The drop zone's .csv acceptance (2026-08-26 page redesign): a CSV is
-# recognized only when its header row is exactly one of this app's own
-# three export shapes (tasks.csv/events.csv/contacts.csv above, compared
-# case-insensitively) -- an arbitrary spreadsheet from anywhere else isn't
-# silently half-imported, it's rejected with the standard unknown-file
-# error. Round-trip scope matches what the CSV exports themselves carry:
-# tasks keep title/status/due/labels; events add start/end/all-day/
-# location/meeting URL; contacts keep name/org/address and land their
-# first phone/email into the real child tables (the flat columns the CSV
-# columns are named after are dead for display -- see export_contacts_csv's
-# own comment). Tasks used to also carry Importance/Urgency columns
-# (accepted-and-ignored on import, computed values on the way out) -- both
-# are gone now along with the rest of that feature, see
-# src/derived_state.py's module docstring.
-
 _CSV_SHAPES: dict[str, list[str]] = {
     "tasks": ["uid", "title", "status", "due", "tags"],
     "events": ["uid", "title", "start", "end", "all day", "location", "meeting url", "tags"],
@@ -648,7 +522,7 @@ def _import_csv_text(conn, text: str, skip_existing: bool = False) -> str:
         actual = keys.get(name)
         return (row.get(actual) or "").strip() if actual else ""
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = clock.now().isoformat()
     added = 0
     skipped = 0
     for row in reader:
@@ -732,35 +606,105 @@ def import_auto(file: UploadFile, merge: str = Form(""), conn=Depends(get_db)):
     unchecked is add-only -- existing uids are left untouched, so a nervous
     first import can't overwrite anything."""
     raw = file.file.read()
+    skip_existing = merge != "1"
+    name = file.filename or ""
+    if zipfile.is_zipfile(io.BytesIO(raw)):
+        notes = []
+        with zipfile.ZipFile(io.BytesIO(raw)) as bundle:
+            for member in bundle.namelist():
+                if member.endswith("/") or not member.lower().endswith(_IMPORTABLE_SUFFIXES):
+                    continue
+                try:
+                    notes.append(_import_one(conn, member, bundle.read(member), skip_existing))
+                except ValueError:
+                    notes.append(f"Skipped {member} (not recognised).")
+        if not notes:
+            return _redirect_with_error("/settings", "That zip holds no importable files (.md, .csv, .ics, .vcf or .json).")
+        return _redirect_with_note("/settings", _merge_notes(notes))
+    try:
+        note = _import_one(conn, name, raw, skip_existing)
+    except ValueError as exc:
+        return _redirect_with_error("/settings", str(exc) or _UNKNOWN_FILE)
+    return _redirect_with_note("/settings", note)
+
+
+def _merge_notes(notes: list[str]) -> str:
+    """Joins per-file notes, adding up the plain "Imported N things." lines (singular and plural nouns alike)."""
+    totals: dict[str, int] = {}
+    others = []
+    for note in notes:
+        m = re.fullmatch(r"Imported (\d+) ([a-z ]+?)(?:s|\(s\))?\.", note)
+        if m:
+            totals[m.group(2)] = totals.get(m.group(2), 0) + int(m.group(1))
+        else:
+            others.append(note)
+    return " ".join([f"Imported {_plural(n, noun)}." for noun, n in totals.items()] + others)
+
+
+_IMPORTABLE_SUFFIXES = (".md", ".markdown", ".csv", ".ics", ".vcf", ".json")
+_UNKNOWN_FILE = (
+    "Couldn't detect the file type -- use an .ics calendar, .vcf contacts, .csv spreadsheet, "
+    ".md note, a .zip of those, or a data.json backup."
+)
+
+
+def _plural(count: int, noun: str) -> str:
+    return f"{count} {noun}{'s' if count != 1 else ''}"
+
+
+def _import_extra_csv(conn, kind: str, text: str, skip_existing: bool) -> str:
+    if kind == "finance accounts":
+        added, problems = data_exchange.import_accounts_csv(conn, text, skip_existing)
+        note = f"Imported {_plural(added, 'account')}."
+    elif kind == "finance transactions":
+        added, problems = data_exchange.import_transactions_csv(conn, text, skip_existing)
+        note = f"Imported {_plural(added, 'transaction')}."
+    elif kind == "citations":
+        note, problems = f"Imported {_plural(data_exchange.import_citations_csv(conn, text, skip_existing), 'citation')}.", []
+    else:
+        note, problems = f"Imported {_plural(data_exchange.import_glossary_csv(conn, text, skip_existing), 'glossary term')}.", []
+    return note + (f" {len(problems)} row(s) skipped: {problems[0]}" if problems else "")
+
+
+def _import_one(conn, name: str, raw: bytes, skip_existing: bool) -> str:
+    """Imports one file by content (Markdown by file name); returns the note to show. Raises ValueError when
+    the file isn't a recognised type."""
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
-        return _redirect_with_error("/settings", "Couldn't read that file as text (.ics/.vcf/.csv/.json expected).")
+        raise ValueError("Couldn't read that file as text (.ics/.vcf/.csv/.md/.json expected).")
     head = text.lstrip("\ufeff \t\r\n")[:64].upper()
-    skip_existing = merge != "1"
+    if name.lower().endswith((".md", ".markdown")):
+        return f"Imported {_plural(int(data_exchange.import_note(conn, text, name, skip_existing)), 'note')}."
+    if head.startswith("BEGIN:VCARD"):
+        return f"Imported {_import_vcf_text(conn, text, skip_existing=skip_existing)} contact(s)."
+    if "BEGIN:VCALENDAR" in head or "BEGIN:VCALENDAR" in text[:4096].upper():
+        events_added, tasks_added = _import_ics_text(conn, text, skip_existing=skip_existing)
+        parts = []
+        if events_added:
+            parts.append(f"{events_added} event(s)")
+        if tasks_added:
+            parts.append(f"{tasks_added} task(s)")
+        return f"Imported {', '.join(parts)}." if parts else "Nothing to import -- no events or tasks found in that file."
+    extra = _extra_csv_kind(text)
+    if extra:
+        return _import_extra_csv(conn, extra, text, skip_existing)
+    if _csv_kind(text) is not None:
+        return _import_csv_text(conn, text, skip_existing=skip_existing)
     try:
-        if head.startswith("BEGIN:VCARD"):
-            added = _import_vcf_text(conn, text, skip_existing=skip_existing)
-            note = f"Imported {added} contact(s)."
-        elif "BEGIN:VCALENDAR" in head or "BEGIN:VCALENDAR" in text[:4096].upper():
-            events_added, tasks_added = _import_ics_text(conn, text, skip_existing=skip_existing)
-            parts = []
-            if events_added:
-                parts.append(f"{events_added} event(s)")
-            if tasks_added:
-                parts.append(f"{tasks_added} task(s)")
-            note = f"Imported {', '.join(parts)}." if parts else "Nothing to import -- no events or tasks found in that file."
-        elif _csv_kind(text) is not None:
-            note = _import_csv_text(conn, text, skip_existing=skip_existing)
-        else:
-            count = _restore_json_text(conn, raw, skip_existing=skip_existing)
-            note = f"Backup restored ({count} item{'s' if count != 1 else ''})."
+        count = _restore_json_text(conn, raw, skip_existing=skip_existing)
     except ValueError:
-        return _redirect_with_error(
-            "/settings",
-            "Couldn't detect the file type -- use an .ics calendar, .vcf contacts, .csv spreadsheet, or a data.json backup.",
-        )
-    return _redirect_with_note("/settings", note)
+        raise ValueError(_UNKNOWN_FILE)
+    return f"Backup restored ({count} item{'s' if count != 1 else ''})."
+
+
+def _extra_csv_kind(text: str) -> str | None:
+    try:
+        first = next(csv.reader(io.StringIO(text.lstrip("\ufeff"))))
+    except (StopIteration, csv.Error):
+        return None
+    cells = [c.strip().lower() for c in first]
+    return next((kind for kind, shape in data_exchange.EXTRA_CSV_SHAPES.items() if cells == shape), None)
 
 
 def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
@@ -784,8 +728,7 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
         # round-trip instead of being silently reset to "now" (or wiped)
         # by the transition-detection logic.
         if row.get("completed_at") is not None:
-            conn.execute("UPDATE tasks SET completed_at = ? WHERE uid = ?", (row["completed_at"], row["uid"]))
-            conn.commit()
+            db.set_task_completed_at(conn, row["uid"], row["completed_at"])
         # Habit-only columns upsert_task never writes (dedicated setters,
         # see db.set_task_reminder_time / set_task_habit_look).
         if row.get("reminder_time"):
@@ -813,19 +756,6 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
     # note below).
     for row in payload.get("schedule_holidays", []):
         db.upsert_holiday(conn, row)
-    # 2026-08-15: no more `payload.get("schedule_settings")` restore step --
-    # the whole Schedule module (and `schedule_settings`) is removed, see
-    # plans/STATE.md's removal entry. A backup file from before this
-    # removal that still carries a "schedule_settings" key simply has it
-    # ignored on restore now, same treatment as "grades" below.
-    #
-    # 2026-08-07: no more `payload.get("grades", [])` restore loop here --
-    # the `grades` table (and db.upsert_grade) is gone. A backup file from
-    # before this removal that still carries a "grades" key simply has
-    # that key ignored on restore now.
-    # 2026-09-24 (habits H3): carry `value` and `note` through too -- the
-    # restore used to drop `value`, so an amount habit's counts (e.g. 5 of
-    # 8 glasses) came back as 1 after a backup round-trip.
     for row in payload.get("task_completions", []):
         db.upsert_task_completion(
             conn, row["task_uid"], row["due_date"], row["completed_at"],
@@ -846,33 +776,17 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
             conn, row["event_uid"], row["task_uid"], row.get("is_work_allocation", 0)
         )
         db.restore_work_session_fields(conn, row)
-    # Notebook (2026-10-01) -- upsert_notebook_document already pops
-    # "tags" (and, since 2026-10-02, "properties") and re-applies them via
-    # set_object_labels/set_notebook_properties, same contract every other
-    # upsert_* restore call above relies on.
     for row in payload.get("notebook_documents", []):
         db.upsert_notebook_document(conn, row)
         count += 1
-    # Settings > Notebook's frontmatter field schema (2026-10-02) --
-    # upsert_notebook_field_config already pops "options" and re-applies it
-    # via set_notebook_field_options, same contract as
-    # upsert_notebook_document above.
     for row in payload.get("notebook_field_config", []):
         db.upsert_notebook_field_config(conn, row)
-    # Citations (2026-10-03) -- the library restores first (documents'
-    # attach rows below reference it), then the flat join rows via the
-    # idempotent single-row attach (set_notebook_citations' whole-list
-    # replace isn't right here -- these rows arrive ungrouped, one at a
-    # time, same as event_task_relations above).
     for row in payload.get("citations", []):
         db.upsert_citation(conn, row)
     for row in payload.get("notebook_citations", []):
         db.attach_notebook_citation(
             conn, row["notebook_uid"], row["citation_uid"], row.get("position", 0), row.get("created_at")
         )
-    # Glossary (2026-10-03) -- same restore order as Citations above: the
-    # library first, then the flat join rows via the idempotent single-row
-    # attach.
     for row in payload.get("glossary_terms", []):
         db.upsert_glossary_term(conn, row)
     for row in payload.get("notebook_glossary_terms", []):
@@ -880,10 +794,6 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
             conn, row["notebook_uid"], row["term_uid"], row.get("position", 0), row.get("created_at"),
             row.get("auto", 0),
         )
-    # Glossary term references (roadmap item F, 2026-10-03) -- restores
-    # last of the three: it points at glossary_terms (just restored above)
-    # and at notebook_documents/citations (both restored earlier still),
-    # so every target it could reference already exists by this point.
     for row in payload.get("glossary_term_references", []):
         db.attach_glossary_term_reference(
             conn, row["term_uid"], row["ref_type"], row["ref_uid"], row.get("position", 0), row.get("created_at")
@@ -895,6 +805,7 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
     # to.
     for row in payload.get("notebook_glossary_excluded_terms", []):
         db.attach_notebook_glossary_excluded_term(conn, row["notebook_uid"], row["term_uid"], row.get("created_at"))
+    count += finance.restore_rows(conn, payload)
     return count
 
 

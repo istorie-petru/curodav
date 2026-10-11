@@ -35,13 +35,6 @@ from PIL import Image
 # rather than a value derived from a specific size/quality requirement).
 _WEBP_QUALITY = 82
 
-# 2026-09-18 (direct report: "contacts page is slow loading all the
-# photos") -- avatars render at 34px/52px (style.css's .avatar-circle/
-# .avatar-large), so this is generous retina headroom (comfortably covers
-# a 4x-density 52px avatar) while still cutting transferred bytes a lot
-# versus serving a full-resolution source. Sibling app Pineart's own
-# thumbnail pipeline (backend/app/services/images.py) uses the same
-# "only downscale, never up" LANCZOS technique for the same reason.
 _MAX_DIMENSION = 256
 
 

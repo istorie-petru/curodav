@@ -1,6 +1,6 @@
 {% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
-{% from "_task_work_allocations.html" import work_sessions_view with context %}
+{% from "_task_work_allocations.html" import work_sessions_view, work_sessions_summary with context %}
 {% from "_detail_section.html" import detail_section %}
 {% from "_label_pill.html" import label_pill with context %}
 {% from "_detail_cover.html" import detail_cover with context %}
@@ -136,7 +136,7 @@
 {% if task.description %}
 {% call detail_section('Description') %}<p class="detail-text">{{ task.description }}</p>{% endcall %}
 {% endif %}
-{% call detail_section('Work sessions', work_allocations|length) %}{{ work_sessions_view(work_allocations, work_hours) }}{% endcall %}
+{% call detail_section('Work sessions', work_allocations|length, work_sessions_summary(work_allocations, work_hours)) %}{{ work_sessions_view(work_allocations, work_hours) }}{% endcall %}
 </div>
 
 {% set footer_back_url = '/tasks' %}

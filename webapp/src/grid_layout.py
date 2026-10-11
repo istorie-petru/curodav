@@ -17,17 +17,6 @@ MIN_BLOCK_HEIGHT_PX = 18
 # ~15px lines) -- see position_event's `is_short`.
 SHORT_BLOCK_PX = 36
 
-# Planner (Week view) "Hide sleep hours" setting (2026-09-09, Settings >
-# General, off by default) -- a `(skip_start_min, skip_end_min)` pair, or
-# None when the setting is off (or on but no single uniform Sleep-kind
-# time-block window exists to collapse -- routers/calendar.py's
-# `_sleep_collapse_window` decides that; this module just does the math
-# once a window is handed to it). Threaded through as the optional
-# `collapse` argument below rather than a module-level flag: this module
-# has no request/db access of its own, and Day view never collapses at all
-# (direct decision -- Week/Planner only), so every caller must opt in
-# explicitly per call instead of a global toggle a Day-view caller could
-# forget to leave off.
 CollapseWindow = tuple[int, int] | None
 
 
@@ -161,9 +150,6 @@ def position_event(event: dict[str, Any], collapse: CollapseWindow = None) -> di
     )
     positioned["left_pct"] = round(lane * width_pct, 2)
     positioned["width_pct"] = round(width_pct, 2)
-    # 2026-09-25 (UI audit C-18): a block shorter than two text lines (a
-    # 30-minute event is 24px) cut its time line in half -- the templates
-    # add `.is-short`, which puts name and time on one line.
     positioned["is_short"] = positioned["height_px"] < SHORT_BLOCK_PX
     return positioned
 
@@ -181,19 +167,6 @@ def layout_day(events: list[dict[str, Any]], collapse: CollapseWindow = None) ->
     return positioned
 
 
-# 2026-09-25 (UI audit C-19): three or more mutually overlapping events
-# split a Week column (~180px) into ~60px lanes that only ever showed
-# "Overl...". When every overlapping pair in a cluster starts at least
-# CASCADE_MIN_START_GAP_MIN apart, the cluster cascades instead (Google
-# Calendar style): each event is indented by its nesting depth and runs to
-# the column's right edge, later-starting events painting on top (DOM order
-# is start order), so every title has the full remaining width and the
-# start-gap guarantees it isn't covered by the next event's block. Clusters
-# with near-simultaneous starts keep the side-by-side lanes (a cascade
-# would hide the earlier event's title under the later one), and 2-lane
-# clusters are unchanged (50% is still readable). Only left_pct/width_pct
-# change -- calendar.js's drag math never reads either (it re-renders the
-# region from the server after a move), so this stays inside the layout.
 CASCADE_MIN_LANES = 3
 CASCADE_MIN_START_GAP_MIN = 30
 CASCADE_MAX_STEP_PCT = 25.0

@@ -38,10 +38,6 @@ def excluded_dates_for_row(conn, row: dict, entries_by_date: dict, today: date) 
 
 
 _DAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-# 2026-09-26 (Peter): per-habit icon + colour. Icons a habit can pick
-# (all in _icons_sprite.html; "no icon" draws the default check glyph, so
-# check-circle itself isn't listed); colours are the label palette
-# (routers/labels.py COLORS, duplicated here to avoid a router import).
 HABIT_ICONS = (
     "activity", "heart", "droplet", "coffee", "book-open", "notebook", "pencil",
     "graduation-cap", "code", "music", "headphones", "camera", "moon", "sun", "sunrise",
@@ -211,7 +207,6 @@ def repeat_choice(task: dict | None, week_start: str = "monday") -> dict:
     out = {
         "mode": "keep", "days": [], "times": int(per or 1),
         "label": cadence_label({**(task or {}), "habit_kind": None}),
-        # 2026-09-26: the Days dropdown, in the configured week order.
         "day_options": [
             {"code": _WEEKDAY_CODES[i], "name": _DAY_FULL[i], "short": _DAY_NAMES[i]} for i in _week_order(week_start)
         ],
@@ -254,21 +249,14 @@ def week_strip(
         days.append(
             {
                 "iso": iso,
-                # 2026-09-25 (UI audit H-16): two letters ("Tu"/"Th",
-                # "Sa"/"Su") -- a 7-day strip of single initials always
-                # repeated T and S.
                 "initial": _DAY_NAMES[d.weekday()][:2],
                 "day_name": _DAY_NAMES[d.weekday()],
                 "value": value,
                 "done": state == "done",
-                # UI audit H-02: an amount habit's day below target.
                 "partial": state == "partial",
                 "is_today": d == today,
                 "is_future": d > today,
                 "excluded": iso in excluded,
-                # UI audit H-16 / flesh-out 9: a day this habit isn't
-                # scheduled on (Tue for a Mon/Wed/Fri habit) -- styled as
-                # an off day, not as a miss.
                 "off_day": bool(schedule) and not habit_schedule.is_due_on(schedule, d),
                 "toggle_url": f"/tasks/{uid}/completion/{iso}/toggle",
             }
@@ -302,15 +290,12 @@ def habit_item(conn, task: dict, today: date, pauses: list[dict] | None = None, 
         "uid": task["uid"],
         "title": task["title"],
         "tags": task.get("tags") or [],
-        # Per-habit reminder time (2026-09-25): "HH:MM" or None.
         "reminder_time": task.get("reminder_time") or None,
         "is_quantity": qty_target is not None,
         "target": target,
         "today": today_iso,
         "today_value": today_value,
         "next_value": today_value + 1,
-        # 2026-09-25 (UI audit H-01): an amount habit is done today only at
-        # its target; below it `partial_today` (display only).
         "done_today": today_state == "done",
         "partial_today": today_state == "partial",
         # Amount still to go today ("7 left"), 0 once the target is met.
@@ -330,10 +315,6 @@ def habit_item(conn, task: dict, today: date, pauses: list[dict] | None = None, 
         "is_avoid": stats["kind"] == "avoid",
         "relapsed_today": stats.get("relapsed_today", False),
         "unit": (task.get("habit_unit") or "").strip(),
-        # Habits H6: vacation / pause.
-        # 2026-09-25 (UI audit H-12): a pause never applies to an avoid
-        # habit (_avoid_stats ignores it -- clean days are clean), so it
-        # isn't shown as paused either.
         "paused_today": pinfo["paused_today"] and task.get("habit_kind") != "avoid",
         "paused_until": pinfo["paused_until"] if task.get("habit_kind") != "avoid" else None,
         # The habit's cadence in words, never the raw RRULE.
@@ -532,8 +513,6 @@ def insights(completions: list[dict], today: date | None = None, months: int = 1
         hmax = max(hours)
         hour_rows = [{"hour": h, "count": n, "height": n / hmax if hmax else 0} for h, n in enumerate(hours)]
         top_hour = max(range(24), key=lambda h: hours[h])
-    # 2026-09-26: the view modal shows insights only past two weeks of
-    # logged days -- a handful of check-ins makes a meaningless chart.
     logged = sum(row["count"] for row in month_rows)
     return {
         "months": month_rows,

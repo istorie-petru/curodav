@@ -1,3 +1,4 @@
+{% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
 {% from "_modal_header_back.html" import modal_header_back %}
 {% block title %}Glossary -- {{ document.title }}{% endblock %}
@@ -30,9 +31,9 @@
                the "new term" modal's Cancel returns here instead of
                closing the whole overlay. #}
             {% if not term_items %}
-            <span class="field-hint">No terms in the glossary yet -- <a href="/notebook/glossary/new?return_to=/notebook/{{ document.uid }}/glossary" data-modal>add one</a> first.</span>
+            {% call empty_state('No terms yet', size='compact') %}<a href="/notebook/glossary/new?return_to=/notebook/{{ document.uid }}/glossary" data-modal>Add term</a>{% endcall %}
             {% else %}
-            <span class="field-hint"><a href="/notebook/glossary/new?return_to=/notebook/{{ document.uid }}/glossary" data-modal>+ New term</a></span>
+            <span><a href="/notebook/glossary/new?return_to=/notebook/{{ document.uid }}/glossary" data-modal>+ New term</a></span>
             {% endif %}
         </div>
     </div>

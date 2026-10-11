@@ -36,30 +36,25 @@
 {% call empty_state('No citations match the current filters', size='compact') %}<a href="/notebook/citations">Clear filters</a>{% endcall %}
 {% else %}
 <div class="card table-scroll table-responsive" id="citations-table-wrapper">
-    <table id="citations-table">
+    <table id="citations-table" class="entity-table notebook-browse-table">
         <thead>
             <tr>
-                <th>Title</th>
-                <th class="col-opt-2">Authors</th>
-                <th class="col-opt-1">Year</th>
-                <th class="col-opt-2">Type</th>
-                <th class="col-actions-narrow">Actions</th>
+                <th class="col-name">Title</th>
+                <th class="col-meta col-opt-2">Authors</th>
+                <th class="col-meta col-opt-1">Year</th>
+                <th class="col-meta col-opt-2">Type</th>
+                <th class="col-actions"><span class="sr-only">Actions</span></th>
             </tr>
         </thead>
         <tbody id="citations-body">
             {% if citations %}
                 {% for c in citations %}
-                <tr data-uid="{{ c.uid }}">
-                    <td>
-                        <div class="label-cell">
-                            <span class="label-name">{{ c.title }}</span>
-                            {% if c.container_title %}<span class="settings-hint">{{ c.container_title }}</span>{% endif %}
-                        </div>
-                    </td>
-                    <td class="col-opt-2"><span class="settings-hint">{{ c.display_authors or '—' }}</span></td>
-                    <td class="col-opt-1">{{ c.year or '—' }}</td>
-                    <td class="col-opt-2"><span class="group-badge">{{ c.type_label }}</span></td>
-                    <td>
+                <tr class="entity-row" data-uid="{{ c.uid }}">
+                    <td class="col-name"><div class="label-cell"><span class="label-name">{{ c.title }}</span></div></td>
+                    <td class="col-meta col-opt-2">{{ c.display_authors or '—' }}</td>
+                    <td class="col-meta col-opt-1">{{ c.year or '—' }}</td>
+                    <td class="col-meta col-opt-2"><span class="cell-tag">{{ c.type_label }}</span></td>
+                    <td class="col-actions">
                         {{ row_action_buttons(
                             "/notebook/citations/" ~ c.uid ~ "/edit",
                             "/notebook/citations/" ~ c.uid ~ "/delete",

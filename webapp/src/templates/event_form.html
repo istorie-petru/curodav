@@ -38,7 +38,6 @@
 <form method="post" id="event-form" action="{% if event %}/events/{{ event.uid }}{% else %}/events{% endif %}" data-cc-change="event" data-cc-action="{% if event %}edit{% else %}create{% endif %}">
     {% include "_event_form_fields.html" %}
 </form>
-{% if event and occurrence_date and event.recurrence %}{% include "_event_occurrence_actions.html" %}{% endif %}
 </div>
 <!-- 2026-08-29 (STATE.md backlog item 4, direct request): the Relations
      card/picker that used to render here (event_relations_section) is

@@ -19,30 +19,9 @@ from markupsafe import Markup, escape
 from . import db, habit_heatmap, habit_view, recurrence_text
 from .caldav_bridge import CalDavBridge
 
-# app_meta keys for the two general-purpose display preferences added
-# 2026-08-08 (Settings > General) -- both read via the memoized helper
-# below rather than routers/settings.py threading them through every
-# single calendar/schedule route's own context dict, same reasoning as
-# sidebar_groups() below: these two affect pages all over the app (Month/
-# Week/Day/Agenda, Schedule, every dashboard widget that shows a time),
-# and "add week_start/time_format to this route's context too" is exactly
-# the kind of easy-to-miss-one-of duplication that would drift the moment
-# one call site is missed.
 WEEK_START_KEY = "calendar_week_start"
 TIME_FORMAT_KEY = "display_time_format"
-# 2026-08-09 -- "Show icons next to labels" (Settings > Appearance) -- a
-# third app-wide display preference, same memoized-read pattern as the
-# two above. Off by default ("", which is exactly an existing install's
-# state: nothing was ever written here), "1" when on.
 SHOW_LABEL_ICONS_KEY = "show_label_icons"
-# 2026-08-11 -- "4-Week view: current week" (Settings > General) -- which
-# row of the Calendar 4-Week view's four week rows the current week (the
-# week containing today, or the anchor date) occupies: "1".."4", default
-# "1" (current week on the first row -- what an existing install that has
-# never touched this sees, and the least surprising "the period I'm in
-# starts at the top" layout). Read by routers/calendar.py's four_week_view
-# via _four_week_position below; written by routers/settings.py's
-# set_four_week_position.
 FOUR_WEEK_POSITION_KEY = "calendar_four_week_position"
 # 1.6 ("Configurable terminology", open-priority.md § Schedule &
 # recurrence rework): "standard" (default) or "playful" -- which set of
@@ -54,38 +33,8 @@ FOUR_WEEK_POSITION_KEY = "calendar_four_week_position"
 # on-screen label does. Same memoized app_meta pattern as every other
 # display preference here.
 RECURRENCE_TERMINOLOGY_KEY = "recurrence_terminology"
-# 2026-08-28 -- "Habit streak terminology" (Settings > General) -- "standard"
-# (default) or "playful" wording for the Habits group's streak readout
-# (Tasks table, _habit_row.html). Same presentation-layer-only pattern as
-# RECURRENCE_TERMINOLOGY_KEY above (1.6): the underlying current_streak
-# integer (habit_heatmap.streaks) never changes, only how it's phrased --
-# see habit_heatmap.streak_text for the actual wording.
 HABIT_STREAK_TERMINOLOGY_KEY = "habit_streak_terminology"
-# 2026-08-29 (sidebar redesign item 13d) -- "Edit mode" (Settings >
-# Appearance): whether the widget grid's edit controls (move/resize/
-# reorder/delete a widget, New widget, Reset layout, Add/Change banner)
-# show on every dashboard/label/Space page. Used to be a per-page
-# `?edit=1` query param with its own "Edit mode"/"Done" toggle buttons on
-# dashboard.html/label_detail.html; replaced by this single persistent,
-# app-wide setting (routers/settings.py's set_edit_mode), read straight
-# off app_meta by routers/dashboard.py::widget_page_context -- no
-# per-request-memoized global registered here, unlike the other keys
-# above: nothing outside the three widget-grid pages needs it.
 EDIT_MODE_KEY = "edit_mode_enabled"
-# 2026-09-17 (design-system unification pass, shared spec with the sibling
-# app Pineart) -- "Accent color" (Settings
-# > Appearance): one of 8 fixed presets (a free color picker was
-# deliberately rejected -- Pineart, the sibling app this pass unifies
-# with, offers the same 8 presets in its own Settings so a user picking
-# "Teal" gets the same color family in both). Stored as the preset's key
-# ("blue", "red", ...), not a raw hex -- validated against ACCENT_PRESETS
-# below on write (routers/settings.py's set_accent_color) so app_meta can
-# never hold a color outside the offered set. Read by base.html, which
-# injects the matching hex as a small inline <style> override for
-# style.css's own --accent (server-side, before first paint -- no FOUC
-# risk the way the client-only theme choice has, since this is plain
-# SSR). Default "blue" -- an existing install that's never touched this
-# gets exactly the accent it already had before this feature existed.
 ACCENT_COLOR_KEY = "accent_color"
 # Same 8 keys/names/hex values as Pineart's own accent picker -- see
 # DESIGN_SYSTEM.md for the shared spec and the contrast-ratio reasoning
@@ -105,33 +54,7 @@ ACCENT_PRESETS = [
     {"key": "indigo", "name": "Indigo", "hex": "#4c51bf"},
 ]
 ACCENT_PRESET_BY_KEY = {p["key"]: p for p in ACCENT_PRESETS}
-# 2026-09-09 (direct request, Settings > General) -- "Hide sleep hours in
-# Planner": off by default ("", an existing install that's never touched
-# this), "1" when on. Only meaningful on the Week view's grid
-# (routers/calendar.py's _week_view_context/_sleep_collapse_window) -- Day
-# view deliberately keeps showing every hour regardless of this setting
-# (direct decision). No per-request-memoized global here, same reasoning
-# as EDIT_MODE_KEY above: only that one route needs it.
 HIDE_SLEEP_HOURS_KEY = "planner_hide_sleep_hours"
-# 2026-08-29 (sidebar redesign item 13e follow-up, direct request) -- the
-# Standard Page Header's own optional banner image, set once in Settings >
-# Appearance and reused as the background on every standard page's narrow
-# header (Tasks/Calendar/Planner/Contacts/Search/Notes/Settings/Labels/
-# Published Lists -- see _page_header_narrow.html). Not a per-page banner
-# like Home/label pages have (db.get_page_banner/set_page_banner's own
-# `page_key` is just a free-form string, "" for Home / the label name for
-# a label page) -- this is one more `page_key`, a fixed sentinel picked to
-# never collide with a real label name. Reuses the *entire* existing
-# banner editor/upload/remove machinery (routers/banners.py) unchanged --
-# `/banners/editor?scope=__page_header__&page_url=/settings/appearance`
-# is a real, working banner scope with no new routes needed.
-#
-# 2026-09-07: the literal now lives in db.py (db.PAGE_HEADER_BANNER_SCOPE)
-# instead of here -- db.banner_for_object needed it for the new task/event
-# season/default banner fallback, and db.py can't import deps.py (deps.py
-# already imports db, so the reverse would be circular). Re-exported under
-# the same name so every existing `from ..deps import
-# PAGE_HEADER_BANNER_SCOPE` call site is unaffected.
 PAGE_HEADER_BANNER_SCOPE = db.PAGE_HEADER_BANNER_SCOPE
 _BASE_DIR = Path(__file__).resolve().parent
 _STATIC_DIR = _BASE_DIR / "static"
@@ -200,15 +123,18 @@ _SPRITE_NAMES: frozenset[str] | None = None
 
 
 def _sprite_icon_names() -> frozenset[str]:
-    """Every `icon-<name>` symbol id in templates/_icons_sprite.html,
-    parsed on first use and cached for the process (the sprite only
+    """Every `icon-<name>` symbol id in templates/_icons_sprite.html plus every
+    id of the full Lucide library (static/icons/lucide-library.svg, loaded in by
+    static/icon_library.js), parsed on first use and cached for the process (the sprite only
     changes with a deploy, which restarts the server)."""
     global _SPRITE_NAMES
     if _SPRITE_NAMES is None:
         import re
 
         text = (_BASE_DIR / "templates" / "_icons_sprite.html").read_text(encoding="utf-8")
-        _SPRITE_NAMES = frozenset(re.findall(r'<symbol id="icon-([a-z0-9-]+)"', text))
+        library = (_BASE_DIR / "static" / "icons" / "lucide-library.svg").read_text(encoding="utf-8")
+        _SPRITE_NAMES = frozenset(re.findall(r'<symbol id="icon-([a-z0-9-]+)"', text)) | frozenset(
+            re.findall(r'<symbol id="([a-z0-9-]+)"', library))
     return _SPRITE_NAMES
 
 
@@ -307,11 +233,6 @@ def _avatar(contact: dict | None, cls: str = "", lazy: bool = False) -> Markup:
     classes = f"avatar-circle {cls}".strip()
     photo_url = contact.get("photo_url")
     photo_b64 = contact.get("photo_b64")
-    # `lazy=True` (2026-09-18, direct report: "contacts page is slow loading
-    # all the photos") -- only the two many-contacts-at-once call sites
-    # (_contacts_body.html, _widget_contact_list.html) pass this; every
-    # single-avatar call site (profile photo, contact detail/form) leaves it
-    # False, since there's nothing off-screen to defer there.
     loading_attrs = ' loading="lazy" decoding="async"' if lazy else ""
     if photo_url:
         return Markup(f'<img class="{classes}" src="{escape(photo_url)}" alt=""{loading_attrs}>')
@@ -327,37 +248,9 @@ def _avatar(contact: dict | None, cls: str = "", lazy: bool = False) -> Markup:
         if photo_type not in ("jpeg", "png", "gif", "webp"):
             photo_type = "jpeg"
         return Markup(f'<img class="{classes}" src="data:image/{photo_type};base64,{escape(photo_b64)}" alt="">')
-    # 2026-09-13 (direct request: "contact's avatar-circle avatar-large
-    # avatar should be colored in backgrounds like for Projects and Spaces
-    # avatars") -- the no-photo initials fallback used to render on
-    # `.avatar-circle`'s own flat neutral-gray background regardless of
-    # who the contact was. Projects/Spaces already solve the exact same
-    # "no real color field" problem for their own icon tile
-    # (`_page_banner.html`'s `.label-icon-tile`, `--tile-swatch:var(--cal-
-    # bg-{color})`) by picking a color explicitly (label_config.color);
-    # contacts have no such field, so this reuses `stable_color()` --
-    # already used one call site over for this same contact's detail-cover
-    # accent -- seeded the same way (contact uid, stable across renames).
-    # Falls back to `full_name` when there's no uid at all (the shared
-    # user-profile-photo call sites in _page_banner.html/
-    # settings_your_profile.html pass a plain dict with no uid), and to a
-    # literal "?" only if neither is present, so this never breaks on a
-    # brand-new not-yet-saved contact. `avatar-colored` is a new class
-    # (style.css), not just the inline var alone, so the photo `<img>`
-    # branches above are untouched -- only the initials span opts into the
-    # colored-background rule.
     seed = contact.get("uid") or contact.get("full_name") or "?"
     color_name = _stable_color(str(seed))
     initial = escape((contact.get("full_name") or "?")[:1].upper())
-    # `data-style`, not a literal `style=` attribute (2026-09-15 fix,
-    # direct bug report -- see _labels_table_body.html's own header
-    # comment for the full story). This function predates that report but
-    # has the exact same bug: CSP's style-src has no 'unsafe-inline' and a
-    # nonce never covers an HTML attribute, so a real browser silently
-    # drops this `style=` and every initials-fallback avatar renders the
-    # flat neutral background instead of its stable color.
-    # dynamic_styles.js applies `data-style` via the CSSOM at runtime,
-    # which style-src doesn't govern.
     return Markup(
         f'<span class="{classes} avatar-colored" data-style="--tile-swatch:var(--cal-bg-{color_name}, var(--cal-bg-blue));">{initial}</span>'
     )

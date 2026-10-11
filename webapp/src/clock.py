@@ -23,7 +23,13 @@ def now() -> datetime:
 
 
 def today() -> date:
-    return now().date()
+    """Today on the user's calendar: the date in the process's configured time zone, not the UTC date."""
+    return now().astimezone().date()
+
+
+def local_now() -> datetime:
+    """A naive datetime in the process's configured time zone."""
+    return now().astimezone().replace(tzinfo=None)
 
 
 def local_hour() -> int:

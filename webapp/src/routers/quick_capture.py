@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from .. import db
+from .. import clock, db
 from ..deps import get_db
 from ..quick_capture import ParsedCapture, QuickCaptureError, parse
 
@@ -61,7 +61,7 @@ def preview(text: str = "", conn=Depends(get_db)):
 
 
 def _create_from_capture(conn, result: ParsedCapture) -> dict:
-    now = datetime.now(timezone.utc).isoformat()
+    now = clock.now().isoformat()
     resolved_labels = [db.resolve_capture_label(conn, name) for name in result.labels]
     uid = str(uuid.uuid4())
 

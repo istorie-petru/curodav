@@ -36,7 +36,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
-from .. import db
+from .. import clock, db
 from ..deps import get_bridge, get_db, templates
 from ..published_lists import collection_url, materialize, new_public_token, teardown_collection
 
@@ -53,7 +53,7 @@ _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return clock.now().isoformat()
 
 
 def _slugify(name: str) -> str:
@@ -140,34 +140,6 @@ def _try_teardown(bridge, entity_type: str, collection_path: str) -> None:
         )
 
 
-# 2026-09-14 (direct bug report: archiving/un-archiving a Published List on
-# the live deploy came back "Something went wrong," but a page refresh
-# showed the change had actually applied) -- every mutating route below
-# used to call _try_materialize/_try_teardown inline, blocking the HTTP
-# response on however many synchronous Radicale round-trips materialize()
-# needs (one PUT/DELETE per member -- caldav_bridge.py has no batch API).
-# Archiving tears the whole collection down and un-archiving rebuilds it
-# from scratch, so a List with many members can take a while. Locally,
-# Radicale is loopback with near-zero latency, so this was never slow
-# enough to notice; in production, behind a reverse proxy with its own
-# read timeout, a slow-enough materialize() got the proxy's timeout
-# response back to the browser before the (still-running) request
-# actually finished committing -- hence "errored, but a refresh shows it
-# worked."
-#
-# Fix: dispatch the Radicale work through FastAPI's BackgroundTasks so
-# the HTTP response goes out immediately after the DB write, and the
-# Radicale sync finishes after -- FastAPI (unlike plain Starlette)
-# guarantees a `Depends(get_db)`-style yield-dependency's cleanup runs
-# *after* background tasks finish, so `conn` stays open and usable
-# inside the deferred call. `background_tasks` defaults to `None` rather
-# than being required: FastAPI recognizes the `BackgroundTasks` type
-# annotation and auto-injects a real instance for actual HTTP requests
-# regardless of the default, but this suite's many pre-existing tests
-# call these route functions directly as plain Python functions (no
-# ASGI/TestClient) and never pass one -- the `None` fallback keeps every
-# one of those synchronous and unchanged, exercising the exact same code
-# path this feature has always been tested against.
 def _dispatch_materialize(background_tasks: BackgroundTasks | None, conn, bridge, list_id: str) -> None:
     if background_tasks is not None:
         background_tasks.add_task(_try_materialize, conn, bridge, list_id)

@@ -1,0 +1,10 @@
+{# Page filter dropdowns: expects `filter_form_id` and `filter_specs` (list of {name, label, items, selected}). #}
+{% for spec in filter_specs %}
+{% set fd_name = spec.name %}
+{% set fd_label = spec.label %}
+{% set fd_items = spec["items"] %}
+{% set fd_selected = spec.selected %}
+{% set fd_mode = 'single' %}
+{% set fd_form_id = filter_form_id %}
+{% include '_filter_dropdown.html' %}
+{% endfor %}

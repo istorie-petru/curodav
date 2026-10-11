@@ -1,4 +1,4 @@
-{% from "_inputs.html" import text_input, checkbox_input %}
+{% from "_inputs.html" import text_input, radio_input %}
 {% from "_date_time_fields.html" import date_field with context %}
 {# Notebook's document-properties modal (2026-10-02, direct request) --
    replaces the Editor page's old inline title textbox + bare header
@@ -66,6 +66,7 @@
             {% set ms_allow_new = true %}
             {% include "_widget_list_multiselect.html" %}
         </div>
+        {% if not document.is_template %}
         <div class="field">
             {% set ms_form_id = 'notebook-properties-form' %}
             {% set ms_name = 'tags_labels' %}
@@ -77,42 +78,18 @@
             {% set ms_pill = true %}
             {% include "_widget_list_multiselect.html" %}
         </div>
-        {% for f in typed_fields %}
-        <div class="field{% if f.type in ('multi-select',) %} field-wide{% endif %}">
-            <label for="{{ f.input_name }}">{{ f.label }}{% if f.required %} *{% endif %}</label>
-            {% if f.type == 'select' %}
-            {% set ms_name = f.input_name %}
-            {% set ms_label = f.label %}
-            {% set ms_mode = 'single' %}
-            {% set ms_selected = f.value %}
-            {% set ms_bare = true %}
-            {% set ms_allow_new = false %}
-            {% set ms_pill = false %}
-            {% set ms_form_id = 'notebook-properties-form' %}
-            {% set ms_items = [{'uid': '', 'name': 'None'}] %}
-            {% for o in f.options %}{% set _ = ms_items.append({'uid': o.value, 'name': o.value}) %}{% endfor %}
-            {% include "_widget_list_multiselect.html" %}
-            {% elif f.type == 'multi-select' %}
-            <div class="notebook-field-checks">
-                {% for o in f.options %}<label class="checkbox-row">{{ checkbox_input({'name': f.input_name, 'value': o.value, 'checked': o.value in f.values}) }} {{ o.value }}</label>{% endfor %}
+        {% endif %}
+        <div class="field">
+            <label>Kind</label>
+            <div class="segmented" role="radiogroup" aria-label="Kind">
+                {% for value, name in (('note', 'Note'), ('template', 'Template')) %}
+                <label class="seg-btn">{{ radio_input({'name': 'kind', 'value': value, 'class': 'seg-radio', 'checked': (value == ('template' if document.is_template else 'note'))}) }} {{ name }}</label>
+                {% endfor %}
             </div>
-            {% elif f.type == 'boolean' %}
-            {% set ms_name = f.input_name %}
-            {% set ms_label = f.label %}
-            {% set ms_mode = 'single' %}
-            {% set ms_selected = f.value %}
-            {% set ms_bare = true %}
-            {% set ms_allow_new = false %}
-            {% set ms_pill = false %}
-            {% set ms_form_id = 'notebook-properties-form' %}
-            {% set ms_items = [{'uid': '', 'name': 'None'}, {'uid': 'true', 'name': 'Yes'}, {'uid': 'false', 'name': 'No'}] %}
-            {% include "_widget_list_multiselect.html" %}
-            {% elif f.type == 'date' %}
-            {{ date_field(f.input_name, f.value, label=f.label) }}
-            {% else %}
-            {{ text_input({'name': f.input_name, 'id': f.input_name, 'value': f.value, 'step': 'any' if f.type == 'number' else none, 'inputmode': 'decimal' if f.type == 'number' else none}, type={'url': 'url'}.get(f.type, 'text')) }}
-            {% endif %}
         </div>
+        {% for f in typed_fields %}
+        {% set typed_form_id = 'notebook-properties-form' %}
+        {% include "_notebook_typed_field.html" %}
         {% endfor %}
         {# `data-notebook-properties-scope`, not the generic
            `data-repeatable-rows-scope` contacts' rows use -- both scripts

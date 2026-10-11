@@ -221,11 +221,6 @@ def setup_submit(
     state = getattr(request.app, "state", None)
     if state is not None:
         state._cc_auth_configured = True
-    # 2026-09-07 audit fix: rotate the session-signing secret whenever
-    # credentials are (re)established, same as change_login_password --
-    # see auth.rotate_session_secret's docstring. A first-run /setup has
-    # no prior session to invalidate, but this keeps one code path for
-    # "credentials just changed" instead of two.
     secret = auth.rotate_session_secret(settings, conn)
     if state is not None:
         state._cc_auth_secret = secret

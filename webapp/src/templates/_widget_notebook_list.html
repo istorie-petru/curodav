@@ -46,8 +46,5 @@
    document's Editor page" mechanism as notebook_list.html's own "New"
    button (routers/notebook.py's create_document docstring); there's no
    sensible region on this page to refresh in place instead. #}
-<form method="post" action="/notebook" class="form-inline">
-    <input type="hidden" name="label" value="{{ data.create_label }}">
-    <button type="submit" class="btn ghost">{{ icon('plus', 'icon-sm') }} New document</button>
-</form>
+<a href="/notebook/new?label={{ data.create_label | urlencode }}" data-modal class="btn ghost">{{ icon('plus', 'icon-sm') }} New document</a>
 {% endif %}

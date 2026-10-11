@@ -1,0 +1,49 @@
+{# Pending transactions. Edit modal only: rows inside the task form, saved with the form's Save
+   (routers/tasks.py update_task -> finance.sync_task_rows). Rows post as parallel pt_* arrays.
+   The layout follows the work sessions editor (_task_work_allocations.html). #}
+{% from "_inputs.html" import text_input %}
+{% from "_date_time_fields.html" import date_field with context %}
+{% from "_contact_type_picker.html" import contact_type_picker with context %}
+
+{% macro _transaction_row(row, form_id, key) %}
+<div class="work-session-edit pending-tx-edit" data-repeatable-row data-type="{{ row.type if row else '' }}">
+    <div class="work-session-edit-head">
+        <span class="pending-tx-edit-name"></span>
+        <button type="button" class="checklist-delete" data-repeatable-remove title="Remove pending transaction" aria-label="Remove pending transaction">{{ icon('x') }}</button>
+    </div>
+    <input type="hidden" name="pt_uid" value="{{ row.uid if row else '' }}">
+    <input type="hidden" name="pt_key" value="{{ key }}">
+    <div class="work-session-edit-fields">
+        <div class="field work-session-title-field"><label>Description</label>{{ text_input({'name': 'pt_description', 'value': (row.description if row else '')}) }}</div>
+        <div class="field work-session-hours-field"><label>Amount</label>{{ text_input({'name': 'pt_amount', 'value': (pending_amount_text(row.amount) if row else ''), 'inputmode': 'decimal'}) }}</div>
+        <div class="field work-session-difficulty-field"><label>Type</label>{{ contact_type_picker('pt_type', pending_type_names, (row.type | capitalize) if row else '', key ~ 't', '', form_id) }}</div>
+    </div>
+    <div class="work-session-edit-fields pending-tx-where">
+        <div class="field work-session-title-field"><label><span class="pending-tx-plain">Account</span><span class="pending-tx-expense">From account</span><span class="pending-tx-income">To account</span><span class="pending-tx-transfer">From account</span></label>{{ contact_type_picker('pt_account', pending_account_names, (row.account_name if row else ''), key ~ 'a', '', form_id) }}</div>
+        <div class="field work-session-title-field pending-tx-to"><label>To account</label>{{ contact_type_picker('pt_to_account', pending_account_names, (row.to_account_name if row and row.to_account_name else ''), key ~ 'b', '', form_id) }}</div>
+        <div class="field work-session-difficulty-field"><label>Date</label>{{ date_field('pt_date', (row.date or '') if row else '', label='Date') }}</div>
+    </div>
+    <div class="work-session-edit-fields pending-tx-tags">
+        <div class="field work-session-title-field">
+            {% set ms_form_id = form_id %}{% set ms_name = 'pt_tags__' ~ key %}{% set ms_label = 'Tags' %}
+            {% set ms_items = pending_tag_items %}{% set ms_selected = (row.tags if row else []) %}{% set ms_mode = 'select' %}
+            {% set ms_allow_new = true %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+{% macro pending_transactions_edit(rows, form_id) %}
+<div class="field field-wide" data-repeatable-rows-scope>
+    <input type="hidden" name="pending_tx_present" value="1">
+    <div class="field-label-row">
+        <label>Pending transactions</label>
+        <button type="button" class="icon-btn" data-repeatable-add="pending-tx-rows" data-repeatable-template="pending-tx-template" title="Add pending transaction" aria-label="Add pending transaction">{{ icon('plus', 'icon-sm') }}</button>
+    </div>
+    <div id="pending-tx-rows" class="work-session-rows">
+        {% for row in rows %}{{ _transaction_row(row, form_id, loop.index) }}{% endfor %}
+    </div>
+    <template id="pending-tx-template">{{ _transaction_row(none, form_id, 'tmpl') }}</template>
+</div>
+{% endmacro %}

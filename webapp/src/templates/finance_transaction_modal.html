@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit transaction" if t else "New transaction" }}{% endblock %}
+{% block content %}
+<div id="modal-target" class="modal-stable-height">
+<div class="modal-header"><h1>{{ "Edit transaction" if t else "New transaction" }}</h1></div>
+<div class="modal-body">
+<div class="card">
+<form method="post" id="finance-transaction-form" action="{{ form_action }}" data-tag-url="/finance/transactions/tag-field">
+    {% include "_finance_transaction_fields.html" %}
+</form>
+</div>
+</div>
+{% set footer_back_url = '/finance/transactions' %}
+{% set footer_back_mode = 'cancel' %}
+{% set footer_back_label = 'Cancel' %}
+{% if t %}
+{% set footer_delete_url = delete_url if delete_url is defined else '/finance/transactions/' ~ t.uid ~ '/delete' %}
+{% set footer_delete_mode = 'confirm' %}
+{% set footer_delete_label = 'Delete this transaction?' %}
+{% endif %}
+{% set footer_primary_form = 'finance-transaction-form' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

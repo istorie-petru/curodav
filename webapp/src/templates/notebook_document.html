@@ -71,7 +71,8 @@
      the sidebar is a deliberately desktop-only affordance here. See
      style.css's `.notebook-sidebar`/`#notebook-sidebar-toggle` mobile
      rule for the CSS half of that. #}
-{% call page_header_narrow(document.title, 'notebook', sidebar_toggle=(sidebar_layout == 'sidebar')) %}
+{% set _template_extra %}{% if document.is_template %}<span class="cell-tag cal-gray">Template</span>{% endif %}{% endset %}
+{% call page_header_narrow(document.title, 'copy' if document.is_template else 'notebook', title_extra=_template_extra, sidebar_toggle=(sidebar_layout == 'sidebar')) %}
     <a href="/notebook/{{ document.uid }}/properties" data-modal class="icon-btn" title="Edit document properties" aria-label="Edit document properties">{{ icon('edit', 'icon-sm') }}</a>
 {% endcall %}
 

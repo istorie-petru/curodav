@@ -122,8 +122,7 @@ def _label_exists(conn, name: str) -> bool:
     """A label exists when it has a config row or anything carries it."""
     if db.get_label_config(conn, name):
         return True
-    row = conn.execute("SELECT 1 FROM object_labels WHERE label_name = ? LIMIT 1", (name,)).fetchone()
-    return row is not None
+    return db.label_is_carried(conn, name)
 
 
 def _cover_banner(conn, page_key: str, name: str):
@@ -144,8 +143,7 @@ def _page_common(conn, name: str) -> dict:
     """Context both label page layouts share (2026-09-25 flesh-out): how
     many items carry the label, for the one combined "Nothing tagged X
     yet" empty state."""
-    count = conn.execute("SELECT COUNT(*) FROM object_labels WHERE label_name = ?", (name,)).fetchone()[0]
-    return {"label_usage_count": count}
+    return {"label_usage_count": db.label_usage_count(conn, name)}
 
 
 def _dashboard_page(conn, request: Request, name: str, label: dict):
@@ -285,9 +283,6 @@ def _sections_context(conn, request: Request, scope: set[str] | None, scope_key:
 
 @router.get("/{name}")
 def label_page(name: str, request: Request, conn=Depends(get_db)):
-    # 2026-09-25 (UI audit L13): an unknown name used to render an empty
-    # 200 page for a label that doesn't exist. Same landing as an emptied
-    # group's old link (group_page below): the labels list.
     if not _label_exists(conn, name):
         return RedirectResponse(url="/settings/labels", status_code=303)
     label = db.effective_label_config(conn, name)
@@ -313,10 +308,6 @@ def label_preview(name: str, request: Request, conn=Depends(get_db)):
         raise HTTPException(404, "No such label")
     label = db.effective_label_config(conn, name)
     tasks = [t for t in db.list_tasks_sharing_labels(conn, [name]) if t["status"] != "archived"]
-    # 2026-09-25 (UI audit L11): a pill inside a task/event modal opens this
-    # preview in the same modal, replacing it. `from` is that modal's URL
-    # (_label_pill.html passes it), so the footer offers "Back" to it
-    # instead of stranding you. Only a same-site path is accepted.
     back_to = request.query_params.get("from") or ""
     if not back_to.startswith("/") or back_to.startswith("//"):
         back_to = ""
@@ -357,15 +348,6 @@ def unarchive_label(name: str, x_requested_with: str | None = Header(None), conn
     return RedirectResponse(url=label_url(name), status_code=303)
 
 
-# --------------------------------------------------------------------- #
-# Group pages -- labels-as-modules slice c (2026-09-25). A group is the
-# plain-text label_group shared by some labels (what used to be a Space).
-# Its page is a widget dashboard scoped to every member label, stored under
-# db.group_page_key(name) ("group:<name>") in the same per-page storage a
-# label's dashboard uses. Every member label is also linked from the page,
-# since the collapsed sidebar has no room to expand a group.
-# --------------------------------------------------------------------- #
-
 group_router = APIRouter(prefix="/groups", tags=["group-pages"])
 
 
@@ -394,10 +376,7 @@ def _group_form_context(conn, request: Request, group: dict | None, copy_of: dic
     members = set(db.group_member_names(conn, name)) if group else set()
     # Every label with its current group, so the Labels dropdown can say
     # "(in People)" for a label that's in another group already.
-    group_of = {
-        r["name"]: (r["label_group"] or "").strip()
-        for r in conn.execute("SELECT name, label_group FROM label_config").fetchall()
-    }
+    group_of = db.label_group_by_name(conn)
     candidates = [
         {"name": n, "member": n in members, "other_group": (group_of.get(n) or "") if n not in members else ""}
         for n in db.list_all_known_label_names(conn)
@@ -418,12 +397,6 @@ def _group_form_context(conn, request: Request, group: dict | None, copy_of: dic
         "page_types": [(k, db.PAGE_TYPE_LABELS[k]) for k in db.PAGE_TYPES],
         "page_type": db.get_group_page_type(conn, (group or copy_of)["name"]) if (group or copy_of) else "dashboard",
     }
-
-
-# 2026-09-26 (Peter): groups are standalone -- created empty from Settings
-# > Groups, with a view modal (like a label's preview) and an edit modal
-# (rename, look, banner, labels). Declared before GET /{name} so "new"
-# isn't read as a group name.
 
 
 @group_router.get("/new")
@@ -511,27 +484,11 @@ def group_page(name: str, request: Request, conn=Depends(get_db)):
             conn, request, key, name, icon_name, style["color"], group_url(name), banner_ctx, edit_url
         )
     dashboard_router._ensure_default_label_widgets(conn, key)
-    # Item 20 (2026-09-26): label_detail.html's old always-visible
-    # "group-labels" toolbar is gone. It was first replaced by an always-
-    # pinned, full-width `group_members` widget seeded separately from the
-    # rest of the page's layout (_ensure_group_members_widget) -- 2026-09-28
-    # direct request ("I don't want Labels in this group to be visible by
-    # default") retired that: `_ensure_default_label_widgets` above now
-    # seeds a group page with the same 25/50/25 row Home gets, the group's
-    # own label list living in the ordinary quarter-width third column
-    # (_seed_agenda_stack_layout) instead of a second, unmissable widget.
-    # `_ensure_group_members_widget` itself is kept only as the shape
-    # `_migrate_group_layout_2026_09_28` (widget_page_context) converts an
-    # existing installation's old pinned widget from.
     ctx = dashboard_router.widget_page_context(conn, project_uid=key)
     ctx.update(
         {
             "request": request,
             "active_tab": "group",
-            # label_detail.html renders a group through the same `label`
-            # shape: title, icon tile, and `uid` as the page key its
-            # New widget / Reset layout controls post back.
-            # 2026-09-25 (UI audit L3): the group's own icon/color when set.
             "label": {"name": name, "uid": key, "icon": style["icon"] or db.GROUP_DEFAULT_ICON, "color": style["color"],
                       "description": None},
             "group_style": style,
@@ -545,16 +502,6 @@ def group_page(name: str, request: Request, conn=Depends(get_db)):
     )
     ctx.update(dashboard_router._page_banner_context(conn, key, name=name))
     return templates.TemplateResponse("label_detail.html", ctx)
-
-
-# 2026-09-25 (UI audit L3, part of flesh-out item 7): a group's own icon
-# and color, so groups stop sharing one `layers` glyph in the rail. Stored
-# by db.set_group_style (app_meta, no schema change). No icon picked = the
-# rail shows the group's first letter. Same day, the rest of item 7: the
-# modal also renames the group (db.rename_group moves its dashboard,
-# banner and look with it) and picks its member labels
-# (db.set_group_members), which used to mean editing each label's Group
-# field one by one.
 
 
 @group_router.get("/{name}/edit")
@@ -587,28 +534,17 @@ def update_group(
     members_submitted = members_submitted if isinstance(members_submitted, str) else ""
     if new_name.startswith(db.GROUP_KEY_PREFIX):
         raise HTTPException(400, "A group name can't start with \"group:\".")
-    # `members_submitted` marks a form that rendered the Labels dropdown,
-    # so an older/partial post without it never empties the group by
-    # accident. Since 2026-09-26 an empty list is allowed: the group stays.
     if members_submitted:
         db.set_group_members(conn, name, members)
     db.set_group_style(conn, name, icon or None, color)
     if isinstance(page_type, str) and page_type:
         db.set_group_page_type(conn, name, page_type)
     final = db.rename_group(conn, name, new_name) if new_name else name
-    # 2026-09-26: saved from Settings > Groups -> stay there (the list
-    # refreshes in place); from the group's own page -> its (maybe
-    # renamed) page, as before.
     ref = urlparse((request.headers.get("referer") if request is not None else "") or "")
     if ref.path.startswith("/settings/groups"):
         return RedirectResponse(url="/settings/groups", status_code=303)
     return RedirectResponse(url=group_url(final), status_code=303)
 
-
-# --------------------------------------------------------------------- #
-# Settings > Groups (2026-09-26, Peter: separate settings pages for
-# labels, groups and projects).
-# --------------------------------------------------------------------- #
 
 groups_settings_router = APIRouter(prefix="/settings/groups", tags=["groups-settings"])
 

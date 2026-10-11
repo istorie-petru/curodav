@@ -23,24 +23,6 @@ from typing import Any
 
 from . import recurrence_expand
 
-# How many weeks a "full history" heatmap shows. Shared by both heatmap
-# call sites that wanted this view (routers/habits.py's standalone habit
-# detail modal, removed 2026-09-24, and routers/tasks.py's habit-tracked-task
-# detail modal)
-# rather than each picking its own week count -- 2026-08-29 direct feedback
-# ("the heatmap graph should not have empty space... prefer to show more
-# months, empty cells, but not empty space"): the task modal used to
-# default to a 12-week window, far narrower than the modal body it sits in.
-# Both call sites now render with `heatmap-wide` (style.css), which
-# stretches each week column to fill the container's width -- so this
-# constant no longer needs to match any one container's pixel width to
-# avoid empty space or overflow, it only controls how many months are
-# visible at once vs. how big each cell renders (fewer weeks -> the same
-# container width divided among fewer columns -> bigger cells). Was 53
-# ("a bit over a year," GitHub's own convention) while heatmap-wide's cells
-# were still fixed-size-ish and small; dropped to 32 (~7.5 months)
-# 2026-08-29, same-day follow-up ("make the cells a bit bigger") trading
-# some of that history for meaningfully larger, easier-to-read cells.
 DETAIL_WEEKS = 32
 
 
@@ -60,8 +42,6 @@ def heatmap_weeks(
     column)."""
     today = today or date.today()
     start = today - timedelta(days=weeks * 7 - 1)
-    # Snap back to the first day of that week -- Monday, or Sunday when
-    # Settings says so (2026-09-26, Peter: habits ignored the setting).
     start -= timedelta(days=(start.weekday() + (1 if week_start == "sunday" else 0)) % 7)
 
     days = []
@@ -200,7 +180,6 @@ def excluded_dates_in_range(
     return result
 
 
-
 def recurrence_frequency(rrule: str | None) -> str:
     """Coarse recurrence bucket ("daily"/"weekly"/"monthly"/"yearly"/
     "custom"/"") for an RRULE string -- looks only at FREQ=, so an
@@ -249,9 +228,6 @@ def streak_text(days: int, playful: bool = False, unit: str = "day") -> str:
     streak", "This Week has been full", "Consistent for 1 Month")."""
     if days <= 0:
         return "Let's get started" if playful else "No streak yet"
-    # Habits H1 (2026-09-24): a weekly/monthly habit's streak counts
-    # periods, not days -- "3 week streak"; the playful escalation below
-    # is day-based, so a non-day unit always gets the plain phrasing.
     if unit != "day":
         return f"{days} {unit}{'s' if days != 1 else ''} streak"
     if not playful:

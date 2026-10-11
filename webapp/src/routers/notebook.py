@@ -26,7 +26,7 @@ from urllib.parse import quote, urlencode
 from fastapi import APIRouter, Depends, Form, Header, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import db, notebook_fields, notebook_find, notebook_mentions
+from .. import clock, db, notebook_fields, notebook_find, notebook_mentions
 from ..deps import get_db, respond, templates, wants_json
 from .labels import COLORS, icon_groups_for
 
@@ -113,16 +113,6 @@ def _notebook_browse_context(
     # re-sort; only the Title alternative actually reorders anything.
     if sort == "title":
         documents = sorted(documents, key=lambda d: (d.get("title") or "").lower())
-    # Each row's own leading glyph+color (the Browse rows reuse the same
-    # look the TYPE rail shows for that note_type) -- computed once here
-    # rather than a separate lookup dict the template would have to thread
-    # through, same "attach it onto the row dict" convention
-    # annotate_item_colors/_attach_notebook_properties already use. Read
-    # from Settings > Notebook's note_type option rows (db.
-    # notebook_note_type_looks), not a hardcoded dict -- 2026-10-02 direct
-    # request: "i want to change icon and color" for note_type, which only
-    # means something if every renderer actually reads the stored value
-    # back instead of a fixed Python mapping.
     type_looks = db.notebook_note_type_looks(conn)
     for d in documents:
         look = type_looks.get(d.get("note_type") or "", db.NOTEBOOK_TYPE_LOOK_FALLBACK)
@@ -155,14 +145,6 @@ def _notebook_browse_context(
             for t, c in sorted(type_counts.items())
         ],
         "label_rows": [
-            # 2026-10-03 (backlog item C): `icon` now comes along with
-            # `color` -- previously dropped here even though
-            # effective_label_config() already returns it, so the rail's
-            # Labels pills never used a label's own configured icon even
-            # when one existed in Settings > Labels. `None` when a label
-            # has no icon configured, same as label_pill()'s own "icon is
-            # optional, just omit it" rendering, not forced to a fallback
-            # the way Type/Group are.
             {
                 "name": n, "count": c,
                 "color": (_cfg := db.effective_label_config(conn, n)).get("color") or "gray",
@@ -174,14 +156,6 @@ def _notebook_browse_context(
         "active_note_type": note_type,
         "active_label": label,
         "active_group": group,
-        # Two distinct empty states (notebook-browse-page-widget-plans.md):
-        # "no documents at all" vs. "filters narrowed it to nothing" --
-        # the same `*_filter_active` shape contacts_list.html already uses.
-        # Direct follow-up, 2026-10-02: the chips row that used to render
-        # `active_filters` is gone (not useful -- the rail's own
-        # `.is-active` row already shows what's filtered), so this is
-        # computed straight from the three filter params now instead of
-        # that list's own truthiness.
         "notebook_filter_active": bool(note_type or label or group),
         "sort": sort if sort == "title" else "updated",
     }
@@ -251,7 +225,7 @@ def bulk_edit(
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
-    now = datetime.now(timezone.utc).isoformat()
+    now = clock.now().isoformat()
     for uid in uids:
         row = db.get_notebook_document(conn, uid)
         if row is None:
@@ -280,45 +254,68 @@ async def bulk_delete(request: Request, conn=Depends(get_db)):
     return JSONResponse({"ok": True, "count": len(uids)})
 
 
+def _s(v) -> str:
+    """Same isinstance guard as routers/labels.py's `_page_fields.s` --
+    covers a direct (non-request) call from a test, where an unset Form
+    param is still FastAPI's own `Form` marker object, not a real str."""
+    return v.strip() if isinstance(v, str) else ""
+
+
+async def _typed_field_values(request: Request) -> dict:
+    """The properties modal's typed schema inputs (`field__<key>`); a multi-select posts several values."""
+    form = await request.form()
+    return {k: form.getlist(k) for k in form.keys() if k.startswith("field__")}
+
+
 @router.post("")
 def create_document(
     label: str = Form(""),
+    template_uid: str = Form(""),
+    title: str = Form(""),
+    open_note: str = Form(""),
+    note_type: str | None = Form(None),
+    note_type_new: str = Form(""),
+    tags_labels: list[str] = Form([]),
+    project: str = Form(""),
+    project_field: str = Form(""),
+    typed=Depends(_typed_field_values),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
-    """A document starts blank -- there's no form to fill in first (unlike
-    a task/contact/note, a Notebook document's actual content is written in
-    the Editor, not at creation time). `label` is optional, pre-attaching
-    this document to whichever label/group page it was created from (Phase
-    3's "New note" widget action); the All Documents view's own "New"
-    button omits it, same as how a document with no label at all is
-    exactly what that view exists to still surface.
+    """Creates a note: blank, or from a template's body, type and frontmatter. The New note form can also set the
+    title, type, labels, project and every frontmatter field up front; without those fields (the label-page
+    widget, tests) the note starts as bare as before. `label` pre-attaches the label page it was created from.
+    With open_note the answer is a redirect into the editor."""
+    from . import dashboard as dashboard_router
 
-    Redirects straight into the new document's own Editor page, not back to
-    a list -- standard "New" behavior for a note-taking app (Notion/Apple
-    Notes/Google Docs all open the new, still-empty document immediately),
-    and the only choice that makes sense from every caller of this route:
-    the All Documents page, and (Phase 3) a label/group page's widget, which
-    has nowhere sensible to "refresh in place" to. A plain form with no
-    data-cc-change needed anywhere this route is posted from -- the real
-    redirect is the whole mechanism, same as every other plain-form POST in
-    this app."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = clock.now().isoformat()
     uid = str(uuid.uuid4())
-    row = {
-        "uid": uid,
-        "title": "Untitled",
-        "content_json": '{"blocks": []}',
-        "document_type": "full",
-        # Blank, not "notes" -- 2026-10-02 direct request: a new document
-        # shouldn't default to a specific suggestion, it should visibly
-        # have no Type picked yet until the properties modal sets one.
-        "note_type": "",
-        "created_at": now,
-        "updated_at": now,
-        "tags": [label] if label else [],
-    }
-    db.upsert_notebook_document(conn, row)
+    template_uid = _s(template_uid)
+    template = db.get_notebook_document(conn, template_uid) if template_uid else None
+    if template is not None and not template["is_template"]:
+        template = None
+    fields = db.list_notebook_field_config(conn)
+    schema_keys = {f["key"].lower() for f in notebook_fields.schema_fields(fields)}
+    free = [{"key": p["key"], "value": p["value"]} for p in (template["properties"] if template else [])
+            if p["key"].lower() not in schema_keys]
+    typed = typed if isinstance(typed, dict) else {}
+    properties, errors = notebook_fields.build_properties(fields, typed, free)
+    if errors:
+        detail = [{"loc": ["body", name], "msg": msg} for name, msg in errors.items()]
+        return JSONResponse({"detail": detail}, status_code=422)
+    tags = [t for t in (tags_labels if isinstance(tags_labels, list) else [])]
+    if isinstance(label, str) and label and label not in tags:
+        tags.append(label)
+    tags = dashboard_router._tags_list(dashboard_router._with_project(conn, ",".join(tags), project, project_field))
+    kind = _resolve_note_type(note_type, _s(note_type_new)) if isinstance(note_type, str) else (template["note_type"] if template else "")
+    db.upsert_notebook_document(conn, {
+        "uid": uid, "title": _s(title) or "Untitled",
+        "content_json": template["content_json"] if template is not None else '{"blocks": []}',
+        "document_type": "full", "note_type": kind, "created_at": now, "updated_at": now,
+        "tags": tags, "properties": properties,
+    })
+    if open_note == "1":
+        return RedirectResponse(url=f"/notebook/{uid}", status_code=303)
     return respond(x_requested_with, f"/notebook/{uid}", status_code=201, uid=uid)
 
 
@@ -327,7 +324,7 @@ FIND_TOAST_THRESHOLD = 5
 
 def _find_hits(conn, q: str, case: bool, whole: bool) -> list[dict]:
     hits = []
-    for row in conn.execute("SELECT uid, title, content_json FROM notebook_documents ORDER BY title COLLATE NOCASE").fetchall():
+    for row in db.list_notebook_content_rows(conn):
         try:
             blocks = json.loads(row["content_json"] or "{}").get("blocks", [])
         except (ValueError, AttributeError):
@@ -336,6 +333,82 @@ def _find_hits(conn, q: str, case: bool, whole: bool) -> list[dict]:
         if report.count:
             hits.append({"uid": row["uid"], "title": row["title"], "count": report.count, "snippets": report.snippets})
     return hits
+
+
+@router.get("/templates")
+def templates_page(request: Request, conn=Depends(get_db)):
+    """The Templates page: every note marked as a template, opened from the Browse header."""
+    type_looks = db.notebook_note_type_looks(conn)
+    rows = []
+    for d in db.list_notebook_documents(conn, scope="templates"):
+        look = type_looks.get(d.get("note_type") or "", dict(db.NOTEBOOK_TYPE_LOOK_FALLBACK))
+        rows.append({**d, "type_icon": look["icon"], "type_color": look["color"]})
+    return templates.TemplateResponse(
+        "notebook_templates.html",
+        {"request": request, "active_tab": "notebook", "crumbs": _NOTEBOOK_HOME_CRUMB, "documents": rows},
+    )
+
+
+@router.post("/templates")
+def create_template(x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    now = clock.now().isoformat()
+    uid = str(uuid.uuid4())
+    db.upsert_notebook_document(conn, {
+        "uid": uid, "title": "Untitled template", "content_json": '{"blocks": []}', "document_type": "full",
+        "note_type": "", "is_template": 1, "created_at": now, "updated_at": now,
+    })
+    return respond(x_requested_with, f"/notebook/{uid}", status_code=201, uid=uid)
+
+
+def _new_note_templates(conn) -> list[dict]:
+    type_looks = db.notebook_note_type_looks(conn)
+    items = [{"uid": "", "name": "Blank note"}]
+    for d in db.list_notebook_documents(conn, scope="templates"):
+        look = type_looks.get(d.get("note_type") or "", db.NOTEBOOK_TYPE_LOOK_FALLBACK)
+        items.append({"uid": d["uid"], "name": d["title"], **look})
+    return items
+
+
+def _template_field_values(conn, template_uid: str) -> list[dict]:
+    """Every frontmatter field as an input, prefilled with the chosen template's values."""
+    template = db.get_notebook_document(conn, template_uid) if template_uid else None
+    if template is not None and not template["is_template"]:
+        template = None
+    schema = notebook_fields.schema_fields(db.list_notebook_field_config(conn))
+    return _typed_fields(schema, template["properties"] if template else [])
+
+
+def new_note_context(request: Request, conn, label: str = "", template_uid: str = "") -> dict:
+    """What the new-note form needs; shared by the New note modal and the sidebar's New modal."""
+    template = db.get_notebook_document(conn, template_uid) if template_uid else None
+    if template is not None and not template["is_template"]:
+        template, template_uid = None, ""
+    type_looks = db.notebook_note_type_looks(conn)
+    types = [{"uid": "", "name": "No type"}] + [
+        {"uid": n, "name": n, **type_looks.get(n, db.NOTEBOOK_TYPE_LOOK_FALLBACK)} for n in db.list_notebook_note_types_in_use(conn)]
+    tag_names = db.list_tag_names_in_use(conn)
+    label = label.strip()
+    project_ctx = db.project_picker_context(conn)
+    return {
+        "request": request, "label": label, "template_items": _new_note_templates(conn), "template_uid": template_uid,
+        "note_type_items": types, "note_type": template["note_type"] if template else "",
+        "typed_fields": _template_field_values(conn, template_uid), "typed_form_id": "notebook-new-form",
+        "tag_name_items": [{"uid": n, "name": n} for n in tag_names if n not in project_ctx["project_names"]],
+        "labels_selected": [label] if label and label not in project_ctx["project_names"] else [],
+        "pf_tags": [label] if label else [], **project_ctx,
+    }
+
+
+@router.get("/new")
+def new_note_modal(request: Request, label: str = "", template: str = "", conn=Depends(get_db)):
+    return templates.TemplateResponse("notebook_new_modal.html", {"nn": new_note_context(request, conn, label, template), "request": request})
+
+
+@router.get("/new/fields")
+def new_note_fields(request: Request, template: str = "", conn=Depends(get_db)):
+    """The type and frontmatter inputs for the chosen template, swapped into the creation form."""
+    return templates.TemplateResponse(
+        "_notebook_new_fields.html", {"request": request, "nn": new_note_context(request, conn, "", template)})
 
 
 @router.get("/find")
@@ -380,7 +453,7 @@ def find_replace(
             continue
         content["blocks"] = blocks
         document["content_json"] = json.dumps(content)
-        document["updated_at"] = datetime.now(timezone.utc).isoformat()
+        document["updated_at"] = clock.now().isoformat()
         db.upsert_notebook_document(conn, document)
         documents += 1
         replacements += count
@@ -448,21 +521,12 @@ def document_page(uid: str, request: Request, back_to: str = "", back_label: str
         return RedirectResponse(url="/notebook", status_code=303)
     back_to = _safe_return_to(back_to)
     crumbs = [{"url": back_to, "name": back_label or "Notebook"}] if back_to else _NOTEBOOK_HOME_CRUMB
-    # Bibliography (2026-10-03) -- the sidebar tab and the bottom read-only
-    # section both render this same attached list, pre-formatted once here
-    # rather than twice in the template.
+    if document["is_template"] and not back_to:
+        crumbs = [{"url": "/notebook/templates", "name": "Templates"}]
     citations = db.list_notebook_citations(conn, uid)
     for c in citations:
         c["display"] = db.format_citation_display(c)
-    # Glossary (2026-10-03 direct follow-up, "add a sidebar tab") -- this
-    # document's attached terms, same "fetch once here, sidebar tab reads
-    # it" shape as citations above.
     glossary_terms = db.list_notebook_glossary_terms(conn, uid)
-    # Relationships (2026-10-03) -- only the backlink ("Linked from") half
-    # is fetched here; the outbound ("Links to") half is filled in
-    # client-side from the live Editor.js DOM (static/notebook/
-    # notebook_wikilinks.js), same split db.list_notebook_backlinks' own
-    # docstring explains.
     backlinks = db.list_notebook_backlinks(conn, uid)
     return templates.TemplateResponse(
         "notebook_document.html",
@@ -470,10 +534,6 @@ def document_page(uid: str, request: Request, back_to: str = "", back_label: str
             "request": request, "active_tab": "notebook", "document": document,
             "citations": citations, "glossary_terms": glossary_terms, "backlinks": backlinks,
             "crumbs": crumbs,
-            # 2026-10-04 direct request: Settings > Notebook's sidebar-
-            # layout preference ('stacked', the default, vs 'sidebar') --
-            # see db.get_notebook_settings and the template's own header
-            # comment for what each value changes.
             "sidebar_layout": db.get_notebook_settings(conn)["sidebar_layout"],
             # This document's own url+title (distinct from `crumbs` above,
             # which is where THIS page's own back arrow goes) -- the
@@ -485,6 +545,15 @@ def document_page(uid: str, request: Request, back_to: str = "", back_label: str
             "self_url": f"/notebook/{uid}", "self_title": document["title"],
         },
     )
+
+
+def _typed_fields(schema: list[dict], properties: list[dict]) -> list[dict]:
+    stored = {p["key"].lower(): p["value"] for p in properties}
+    return [
+        {**f, "input_name": notebook_fields.input_name(f), "value": stored.get(f["key"].lower(), ""),
+         "values": notebook_fields.stored_list(stored.get(f["key"].lower(), "")) if f["type"] == "multi-select" else []}
+        for f in schema
+    ]
 
 
 @router.get("/{uid}/properties")
@@ -502,35 +571,12 @@ def document_properties_modal(uid: str, request: Request, conn=Depends(get_db)):
     if document is None:
         return RedirectResponse(url="/notebook", status_code=303)
     tag_names = db.list_tag_names_in_use(conn)
-    # Dynamic, usage-based suggestions (2026-10-02 direct request), same
-    # "in use" shape as Labels -- not a fixed starter list. See
-    # list_notebook_note_types_in_use's own docstring: a type drops off
-    # this list by itself once nothing uses it any more.
     note_types = db.list_notebook_note_types_in_use(conn)
-    # Property-key picker's suggestion list (2026-10-02 direct request) --
-    # same "in use, across every document" shape as note_types above, see
-    # db.list_notebook_property_keys_in_use's own docstring. Plain list of
-    # strings (not {uid, name} dicts) -- _notebook_property_key_picker.html
-    # is hand-rolled, not _widget_list_multiselect.html, so it has no
-    # ms_items contract to match.
     property_keys = db.list_notebook_property_keys_in_use(conn)
-    # Each option's color/icon (2026-10-02 direct request: note_type's
-    # look should be consistent everywhere it renders) -- same
-    # db.notebook_note_type_looks source the Browse page/widget list
-    # already read, fed into _widget_list_multiselect.html's per-item
-    # `color`/`icon` rendering (that partial's own comment on the `_pill`
-    # path explains why a generic per-item look wasn't there already --
-    # this is the first caller that needs a colored option NOT sourced
-    # from a label).
     type_looks = db.notebook_note_type_looks(conn)
     schema = notebook_fields.schema_fields(db.list_notebook_field_config(conn))
     schema_keys = {f["key"].lower() for f in schema}
-    stored = {p["key"].lower(): p["value"] for p in document["properties"]}
-    typed_fields = [
-        {**f, "input_name": notebook_fields.input_name(f), "value": stored.get(f["key"].lower(), ""),
-         "values": notebook_fields.stored_list(stored.get(f["key"].lower(), "")) if f["type"] == "multi-select" else []}
-        for f in schema
-    ]
+    typed_fields = _typed_fields(schema, document["properties"])
     free_properties = [p for p in document["properties"] if p["key"].lower() not in schema_keys]
     return templates.TemplateResponse(
         "notebook_properties_modal.html",
@@ -583,12 +629,6 @@ def _resolve_note_type(note_type: str, note_type_new: str) -> str:
     return (note_type or "").strip()
 
 
-async def _typed_field_values(request: Request) -> dict:
-    """The properties modal's typed schema inputs (`field__<key>`); a multi-select posts several values."""
-    form = await request.form()
-    return {k: form.getlist(k) for k in form.keys() if k.startswith("field__")}
-
-
 @router.post("/{uid}")
 def update_document_properties(
     uid: str,
@@ -596,6 +636,7 @@ def update_document_properties(
     note_type: str = Form(""),
     note_type_new: str = Form(""),
     tags_labels: list[str] = Form([]),
+    kind: str = Form(""),
     property_key: list[str] = Form([]),
     property_value: list[str] = Form([]),
     typed=Depends(_typed_field_values),
@@ -620,7 +661,8 @@ def update_document_properties(
     row = dict(existing)
     row["title"] = title.strip() or "Untitled"
     row["note_type"] = _resolve_note_type(note_type, note_type_new)
-    row["tags"] = tags_labels
+    row["is_template"] = 1 if kind == "template" else 0
+    row["tags"] = [] if row["is_template"] else tags_labels
     free = [{"key": k, "value": v} for k, v in zip(property_key, property_value)]
     items, errors = notebook_fields.build_properties(
         db.list_notebook_field_config(conn), typed if isinstance(typed, dict) else {}, free)
@@ -631,7 +673,7 @@ def update_document_properties(
         return RedirectResponse(
             url=f"/notebook/{uid}/properties?error={quote(next(iter(errors.values())))}", status_code=303)
     row["properties"] = items
-    row["updated_at"] = datetime.now(timezone.utc).isoformat()
+    row["updated_at"] = clock.now().isoformat()
     db.upsert_notebook_document(conn, row)
     return respond(x_requested_with, f"/notebook/{uid}")
 
@@ -645,20 +687,6 @@ def delete_document(
     db.delete_notebook_document(conn, uid)
     return respond(x_requested_with, "/notebook")
 
-
-# --------------------------------------------------------------------- #
-# Bibliography (2026-10-03, curodav-notes STATE.md's "citations are the
-# priority feature" decision) -- attaching/detaching citations on one
-# document. The attach-modal itself is a plain `_widget_list_multiselect.
-# html` select-mode picker (same shape tags_labels already uses on this
-# same properties modal) over the global citation library below -- no
-# bespoke search-as-you-type JS, consistent with architecture-notes-
-# module-2026-09-29.md §5's "a simple picker UI... is enough" call.
-# Creating a brand-new citation happens on the separate library page
-# (citations_router below), not inline here -- kept out of this modal to
-# keep the core slice small; a quick-add-while-attaching flow is a
-# follow-up, not part of this pass.
-# --------------------------------------------------------------------- #
 
 @router.get("/{uid}/bibliography")
 def document_bibliography_modal(uid: str, request: Request, conn=Depends(get_db)):
@@ -693,14 +721,6 @@ def update_document_bibliography(
     db.set_notebook_citations(conn, uid, citation_uids)
     return respond(x_requested_with, f"/notebook/{uid}")
 
-
-# --------------------------------------------------------------------- #
-# Glossary attach (2026-10-03 direct follow-up, "add a sidebar tab") --
-# attaching/detaching terms on one document, same shape as the
-# Bibliography routes above. Creating a brand-new term happens on the
-# separate library page (glossary_router below), not inline here, same
-# reasoning as Bibliography's own comment.
-# --------------------------------------------------------------------- #
 
 @router.get("/{uid}/glossary")
 def document_glossary_modal(uid: str, request: Request, conn=Depends(get_db)):
@@ -771,34 +791,9 @@ async def put_document_content(uid: str, request: Request, conn=Depends(get_db))
     return JSONResponse({"ok": True})
 
 
-# --------------------------------------------------------------------- #
-# Settings > Notebook (2026-10-02, curodav-notes STATE.md's "custom
-# frontmatter field schema" decision) -- a descriptive catalogue of the
-# properties a Notebook document can carry, edited via the same Field/
-# Type/Default/Required/Actions table + Edit-opens-a-modal shape as
-# Settings > Labels/Holidays. Own router (own prefix) rather than routes on
-# `router` above, same "feature's own router hosts its own /settings/*
-# routes" precedent as Groups (label_pages.py's groups_settings_router) --
-# only the hub tile itself lives in routers/settings.py's HUB_CATEGORIES.
-#
-# v1 is descriptive only: nothing here is enforced against a document's
-# actual notebook_properties on save (STATE.md flags save-time validation
-# of Required/Select-options as the next priority once this ships, not
-# part of it). `key` is never note_type's own canonical list -- that stays
-# hardcoded per STATE.md; this table only reuses the Select-field
-# mechanism's *presentation*, never becomes note_type's storage.
-# --------------------------------------------------------------------- #
-
 field_settings_router = APIRouter(prefix="/settings/notebook", tags=["notebook-field-settings"])
 
-_FIELD_SETTINGS_CRUMB = [{"url": "/settings", "name": "Settings"}]
-
-
-def _s(v) -> str:
-    """Same isinstance guard as routers/labels.py's `_page_fields.s` --
-    covers a direct (non-request) call from a test, where an unset Form
-    param is still FastAPI's own `Form` marker object, not a real str."""
-    return v.strip() if isinstance(v, str) else ""
+_FIELD_SETTINGS_CRUMB = [{"url": "/settings/taxonomy?view=frontmatter", "name": "Taxonomy & Data"}]
 
 
 def _field_option_rows_from_form(values: list[str], colors: list[str], icons: list[str]) -> list[dict]:
@@ -830,18 +825,15 @@ def _field_edit_context(request: Request, conn, field: dict | None, form_action:
 
 @field_settings_router.get("")
 def settings_notebook(request: Request, conn=Depends(get_db)):
-    """Notebook settings page: how a document page lays out its sidebar, and
-    the frontmatter field schema."""
+    """Notebook settings page: how a document page lays out its sidebar."""
     return templates.TemplateResponse(
         "settings_notebook.html",
         {
             "request": request,
             "active_tab": "settings_notebook",
-            "crumbs": _FIELD_SETTINGS_CRUMB,
+            "crumbs": [{"url": "/settings", "name": "Settings"}],
             "title": "Notebook",
             "sidebar_layout": db.get_notebook_settings(conn)["sidebar_layout"],
-            "fields": db.list_notebook_field_config(conn),
-            "option_types": db.NOTEBOOK_FIELD_OPTION_TYPES,
         },
     )
 
@@ -851,8 +843,8 @@ frontmatter_settings_router = APIRouter(prefix="/settings/frontmatter", tags=["n
 
 @frontmatter_settings_router.get("")
 def settings_frontmatter():
-    """Old bookmark: the frontmatter fields live on the Notebook page now."""
-    return RedirectResponse(url="/settings/notebook", status_code=303)
+    """Old bookmark: the frontmatter fields live in Taxonomy & Data."""
+    return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
 
 
 @field_settings_router.post("/layout")
@@ -879,38 +871,35 @@ def new_notebook_field_modal(request: Request, conn=Depends(get_db)):
 def edit_notebook_field_modal(uid: str, request: Request, conn=Depends(get_db)):
     field = db.get_notebook_field_config(conn, uid)
     if field is None:
-        return RedirectResponse(url="/settings/notebook", status_code=303)
-    return templates.TemplateResponse(
-        "notebook_field_edit_modal.html",
-        _field_edit_context(request, conn, field, f"/settings/notebook/{uid}/update"),
-    )
+        return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
+    context = _field_edit_context(request, conn, field, f"/settings/notebook/{uid}/update")
+    context["using_templates"] = db.list_templates_using_field(conn, field["key"])
+    return templates.TemplateResponse("notebook_field_edit_modal.html", context)
 
 
 @field_settings_router.post("")
 def create_notebook_field(
-    key: str = Form(...),
     label: str = Form(""),
     type: str = Form("text"),
     default_value: str = Form(""),
-    required: str = Form(""),
     option_value: list[str] = Form([]),
     option_color: list[str] = Form([]),
     option_icon: list[str] = Form([]),
     conn=Depends(get_db),
 ):
-    key = _s(key)
-    if not key:
-        return RedirectResponse(url="/settings/notebook", status_code=303)
+    label = _s(label)
+    if not label:
+        return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
     uid = db.upsert_notebook_field_config(
         conn,
         {
-            "key": key, "label": _s(label), "type": type,
-            "default_value": _s(default_value) or None, "required": _s(required) in ("1", "true", "on"),
+            "key": db.new_notebook_field_key(conn, label), "label": label, "type": type,
+            "default_value": _s(default_value) or None,
         },
     )
     if type in db.NOTEBOOK_FIELD_OPTION_TYPES:
         db.set_notebook_field_options(conn, uid, _field_option_rows_from_form(option_value, option_color, option_icon))
-    return RedirectResponse(url="/settings/notebook", status_code=303)
+    return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
 
 
 def _rebuild_builtin_options(existing_options: list[dict], colors: list[str], icons: list[str]) -> list[dict]:
@@ -933,11 +922,9 @@ def _rebuild_builtin_options(existing_options: list[dict], colors: list[str], ic
 @field_settings_router.post("/{uid}/update")
 def update_notebook_field(
     uid: str,
-    key: str = Form(...),
     label: str = Form(""),
     type: str = Form("text"),
     default_value: str = Form(""),
-    required: str = Form(""),
     option_value: list[str] = Form([]),
     option_color: list[str] = Form([]),
     option_icon: list[str] = Form([]),
@@ -945,33 +932,27 @@ def update_notebook_field(
 ):
     existing = db.get_notebook_field_config(conn, uid)
     if existing is None:
-        return RedirectResponse(url="/settings/notebook", status_code=303)
+        return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
     if existing["builtin"]:
-        # Built-in fields (2026-10-02 direct request, "nothing about them
-        # can be changed besides the display name") -- key/type/default/
-        # required all stay exactly what they were seeded as; only the
-        # label (display name) is ever taken from the form. note_type's
-        # own options get the one other thing that's editable -- see
-        # `_rebuild_builtin_options`.
         label = _s(label) or existing["label"]
         db.upsert_notebook_field_config(conn, {
             "uid": uid, "key": existing["key"], "label": label, "type": existing["type"],
-            "default_value": existing["default_value"], "required": existing["required"],
+            "default_value": existing["default_value"],
         })
         if existing["type"] in db.NOTEBOOK_FIELD_OPTION_TYPES:
             db.set_notebook_field_options(
                 conn, uid, _rebuild_builtin_options(existing["options"], option_color, option_icon)
             )
-        return RedirectResponse(url="/settings/notebook", status_code=303)
+        return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
 
-    key = _s(key)
-    if not key:
-        return RedirectResponse(url="/settings/notebook", status_code=303)
+    label = _s(label)
+    if not label:
+        return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
     db.upsert_notebook_field_config(
         conn,
         {
-            "uid": uid, "key": key, "label": _s(label), "type": type,
-            "default_value": _s(default_value) or None, "required": _s(required) in ("1", "true", "on"),
+            "uid": uid, "key": existing["key"], "label": label, "type": type,
+            "default_value": _s(default_value) or None,
         },
     )
     if type in db.NOTEBOOK_FIELD_OPTION_TYPES:
@@ -983,36 +964,16 @@ def update_notebook_field(
         # applies on read; this is that same rule's write-time mirror, so
         # a later switch back to Select doesn't resurrect stale options.
         db.set_notebook_field_options(conn, uid, [])
-    return RedirectResponse(url="/settings/notebook", status_code=303)
+    return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
 
 
 @field_settings_router.post("/{uid}/delete")
 def delete_notebook_field(uid: str, conn=Depends(get_db)):
-    # Built-in fields (title/author/note_type) can never be deleted
-    # (2026-10-02 direct request) -- a no-op redirect, same "silently
-    # refuse rather than error" treatment reserved-name label creation
-    # uses, since the Delete button is never shown for these rows anyway
-    # (settings_notebook_fields.html) -- this is the defense-in-depth
-    # backstop for a direct POST, not the primary guard.
     existing = db.get_notebook_field_config(conn, uid)
     if existing is not None and not existing["builtin"]:
         db.delete_notebook_field_config(conn, uid)
-    return RedirectResponse(url="/settings/notebook", status_code=303)
+    return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
 
-
-# --------------------------------------------------------------------- #
-# Citations library (2026-10-03, curodav-notes STATE.md's "citations are
-# the priority feature" decision) -- the global, cross-document pool of
-# citation records. Own router (own prefix, `/notebook/citations`), same
-# precedent as `field_settings_router` above: a Notebook sub-feature with
-# its own standalone page gets its own router rather than more routes on
-# `router`, which is scoped to one document's Browser/Editor pages.
-# Server-rendered Jinja2 throughout (architecture-notes-module-2026-09-29.
-# md §5), same Settings "Pattern B" shape as Labels/Holidays/Notebook
-# fields: a plain table, Edit opens a modal, Delete is a confirm-sheet
-# form. Attaching a citation to a specific document is handled by
-# router's own /{uid}/bibliography routes above, not here.
-# --------------------------------------------------------------------- #
 
 citations_router = APIRouter(prefix="/notebook/citations", tags=["notebook-citations"])
 
@@ -1078,7 +1039,7 @@ def _resolve_citation_year_range(year_from: str, year_to: str) -> tuple[int | No
     lo = db.parse_citation_year(year_from)
     hi = db.parse_citation_year(year_to)
     if lo is not None and hi is None:
-        hi = datetime.now(timezone.utc).year
+        hi = clock.now().year
     return lo, hi
 
 
@@ -1236,7 +1197,7 @@ def citations_filters_modal(
     # shows "present day" the moment Start has a value even before any JS
     # runs (notebook_citations_filters.js does the equivalent live, for a
     # Start typed *after* the modal's already open).
-    display_year_to = year_to or (str(datetime.now(timezone.utc).year) if year_from else "")
+    display_year_to = year_to or (str(clock.now().year) if year_from else "")
     return templates.TemplateResponse(
         "notebook_citations_filters_modal.html",
         {
@@ -1378,19 +1339,6 @@ def delete_citation(uid: str, x_requested_with: str | None = Header(default=None
     db.delete_citation(conn, uid)
     return respond(x_requested_with, "/notebook/citations")
 
-
-# --------------------------------------------------------------------- #
-# Glossary library (2026-10-03, roadmap-mvp-to-full-product-checklist's
-# "Glossary" section, "almost the same as citations") -- the global,
-# cross-document pool of term/definition pairs. Own router (own prefix,
-# `/notebook/glossary`), same precedent as `citations_router` above. No
-# per-document attach (unlike citations/bibliography) -- the roadmap's
-# document-sidebar section list doesn't include a Glossary entry, so this
-# is a standalone global reference view only. Just two fields, so no
-# Filters modal either (that was citations' own one-off, scoped to a
-# library with four filter dimensions) -- a plain `q` search box is enough
-# here.
-# --------------------------------------------------------------------- #
 
 glossary_router = APIRouter(prefix="/notebook/glossary", tags=["notebook-glossary"])
 

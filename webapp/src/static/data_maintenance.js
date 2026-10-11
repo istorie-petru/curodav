@@ -89,8 +89,9 @@
     var type = typeInput.value;
     var csv = !!formatInput && formatInput.value === "csv";
     var parts = [typeInput.dataset.dmPreview || ""];
-    if (type === "labels") {
-      parts.push("labels always export as .json.");
+    var fixed = { labels: ".json", notes: "a .zip of .md files", finance: "a .zip of .csv files", citations: ".csv", glossary: ".csv" };
+    if (fixed[type]) {
+      parts.push("always exports as " + fixed[type] + ".");
     } else if (type === "all") {
       parts.push(csv ? "one .zip of spreadsheets." : "one .zip bundle (.ics/.vcf).");
     } else {
@@ -98,9 +99,9 @@
     }
     hint.textContent = parts.filter(Boolean).join(" \u00b7 ");
     if (formatRoot) {
-      var labelsPicked = type === "labels";
+      var labelsPicked = !!fixed[type];
       dropdownInputs(formatRoot).concat(Array.from(formatRoot.querySelectorAll(".ms-trigger"))).forEach(function (el) { el.disabled = labelsPicked; });
-      formatRoot.title = labelsPicked ? "Labels always export as .json" : "";
+      formatRoot.title = labelsPicked ? "This data always exports as " + fixed[type] : "";
     }
   }
 
@@ -120,9 +121,13 @@
     if (!firstLine) return null;
     var cells = firstLine.split(",").map(function (c) { return c.trim().toLowerCase(); });
     var shapes = {
-      tasks: ["uid", "title", "status", "due", "importance", "urgency", "tags"],
+      tasks: ["uid", "title", "status", "due", "tags"],
       events: ["uid", "title", "start", "end", "all day", "location", "meeting url", "tags"],
-      contacts: ["uid", "name", "organization", "phone", "email", "address", "tags"]
+      contacts: ["uid", "name", "organization", "phone", "email", "address", "tags"],
+      "finance accounts": ["name", "type", "currency", "opening_balance", "opening_date"],
+      "finance transactions": ["date", "description", "account", "type", "amount", "label", "tags", "to_account"],
+      citations: ["uid", "type", "title", "authors", "year", "container title", "doi", "url"],
+      glossary: ["uid", "term", "definition"]
     };
     var names = Object.keys(shapes);
     for (var i = 0; i < names.length; i++) {
@@ -185,13 +190,19 @@
       if (submitBtn) submitBtn.disabled = false;
       return;
     }
+    var lower = file.name.toLowerCase();
+    if (/\.(md|markdown)$/.test(lower) || /\.zip$/.test(lower)) {
+      setStatus(form, "Detected: " + (/\.zip$/.test(lower) ? "a zip bundle (notes, spreadsheets and calendars inside)" : "a Markdown note") + ". Ready to import.", false);
+      if (submitBtn) submitBtn.disabled = false;
+      return;
+    }
     file.text().then(function (text) {
       var found = detect(text);
       if (found) {
         setStatus(form, "Detected: " + found.detail + " (" + found.kind.toUpperCase() + "). Ready to import.", false);
         if (submitBtn) submitBtn.disabled = false;
       } else {
-        setStatus(form, "Unrecognized file -- use an .ics calendar, .vcf contacts, .csv from this app's own export, or a data.json backup.", true);
+        setStatus(form, "Unrecognized file -- use an .ics, .vcf, .csv from this app's own export, .md, .zip or a data.json backup.", true);
         if (submitBtn) submitBtn.disabled = true;
       }
     });

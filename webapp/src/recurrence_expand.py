@@ -79,13 +79,6 @@ def is_excluded_by_policy(
         for h in holiday_calendars.get(calendar_name, []):
             date_from, date_to = h["date_from"], h["date_to"]
             if _HOLIDAY_YEARLESS_RE.match(date_from) or _HOLIDAY_YEARLESS_RE.match(date_to):
-                # audit-fixes-2.1.md ("only day holidays, without the
-                # year") -- a fixed-date holiday recurs every year, so
-                # match by (month, day) only, not the exact calendar date.
-                # A range can wrap the year boundary (e.g. Dec 30 -> Jan
-                # 2 for a New Year break) -- lo_md > hi_md is exactly that
-                # case, so the match becomes "on or after lo, OR on or
-                # before hi" instead of "between lo and hi".
                 lo_md, hi_md, d_md = _holiday_month_day(date_from), _holiday_month_day(date_to), (d.month, d.day)
                 if lo_md <= hi_md:
                     if lo_md <= d_md <= hi_md:

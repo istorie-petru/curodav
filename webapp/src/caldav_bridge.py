@@ -44,20 +44,6 @@ class CalDavBridge:
         # real, separate CalDAV collection -- db.py's `calendars` table
         # only adds local name/color metadata on top.
         self._event_calendars: dict[str, caldav.Calendar] = {}
-        # Multiple task lists / address books, added 2026-07-31 -- same
-        # lazily-populated-dict pattern as `_event_calendars` above, keyed
-        # by `list_path`/`addressbook_path` (db.py's `task_lists`/
-        # `addressbooks` tables). `settings.tasks_collection`/
-        # `contacts_collection` used to also be eagerly created here as a
-        # default list/addressbook, but that predates the 2026-08-06 move
-        # of the base task/contact pools to plain SQL (see sync.py's module
-        # docstring) -- nothing writes to a bare "tasks"/"contacts"
-        # collection anymore (published_lists.py always passes a real
-        # list/addressbook path), so eagerly creating them just left an
-        # empty, permanently-unused CalDAV/CardDAV collection visible to
-        # every connected client (e.g. DAVx5 showing a dead "Tasks"
-        # calendar and a dead "contacts" addressbook alongside the real
-        # published ones). Removed 2026-09-14 -- direct bug report.
         self._task_calendars: dict[str, caldav.Calendar] = {}
         self._addressbooks: dict[str, CardDavClient] = {}
 
@@ -76,12 +62,6 @@ class CalDavBridge:
 
     def _event_calendar(self, calendar_path: str) -> caldav.Calendar:
         if calendar_path not in self._event_calendars:
-            # Explicit VEVENT-only component set -- without this, Radicale
-            # creates a collection that accepts any component type since
-            # nothing was restricted in the MKCALENDAR request, which shows
-            # up in DAVx5 as one collection simultaneously offering
-            # calendar/tasks/journal (direct bug report 2026-09-14). Mirrors
-            # `_task_calendar` already passing `component_set=["VTODO"]`.
             self._event_calendars[calendar_path] = self._get_or_create_calendar(
                 calendar_path, component_set=["VEVENT"]
             )

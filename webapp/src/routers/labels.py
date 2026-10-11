@@ -48,7 +48,7 @@ from urllib.parse import quote, unquote, urlparse
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import db
+from .. import clock, db
 from ..deps import get_db, templates
 
 router = APIRouter(prefix="/settings/labels", tags=["labels"])
@@ -70,8 +70,6 @@ def _reject_reserved_label_name(name: str) -> None:
     reserved = {db.PAGE_HEADER_BANNER_SCOPE, *db.SEASON_BANNER_SCOPES.values()}
     if name in reserved:
         raise HTTPException(400, f'"{name}" is a reserved name and can\'t be used for a label.')
-    # Slice c (2026-09-25): "group:<name>" is a group page's storage key
-    # (db.group_page_key), so no label may start with it.
     if name.startswith(db.GROUP_KEY_PREFIX):
         raise HTTPException(400, f'A label name can\'t start with "{db.GROUP_KEY_PREFIX}".')
 
@@ -133,34 +131,11 @@ def _page_fields(page_fields, deadline_date, page_type, agenda_widget, tasks_wid
     }
 
 
-# 2026-08-08: grew from 8 to 16 -- direct feedback ("more colors options
-# (16) with small label under each color"). Order is a rough rainbow
-# sweep (warm to cool) ending in the two neutrals, so the picker grid
-# reads left-to-right/top-to-bottom the way a real color wheel would,
-# not an arbitrary list. The original 8 keep their exact names/values
-# (see style.css's --tag-*/.cal-* comments) -- every label/habit that
-# already picked one of them is unaffected; these are pure additions.
 COLORS = [
     "red", "orange", "yellow", "lime", "green", "mint", "teal", "cyan",
     "blue", "indigo", "purple", "magenta", "pink", "brown", "gray", "slate",
 ]
 
-# Label color name -> the hex it paints with, mirroring style.css's
-# `.cal-*` swatch classes (COLORS above is the picker order; this is the
-# actual paint). Consumers that need a real color value for a label by
-# name -- e.g. routers/timeline.py painting a label block's task bars in
-# the label's assigned color -- import this rather than restating hexes.
-#
-# 2026-08-09: the swatch set went pastel, then converged again -- the two
-# theme packs (deep tints / pale pastels) were merged into one set of
-# *mixed* medium tones (moderate brightness + saturation) that reads on
-# both a light and a dark surface; the dark theme redefines nothing.
-# These are the medium-tone *backgrounds* of that set, kept hex-for-hex
-# in sync with style.css's :root --cal-bg-* variables. The foregrounds
-# are text colors and never painted onto a bar here, so only the
-# backgrounds live in this map.
-# 2026-09-25 (UI audit C-12): 8 values darkened in style.css for >=4.5:1
-# white text; synced here to keep the mirror exact.
 CAL_COLOR_HEX = {
     "red": "#c35045", "orange": "#a1672b", "yellow": "#b59b33", "lime": "#96a93e",
     "green": "#398156", "mint": "#278172", "teal": "#2a7f91", "cyan": "#2c7d9f",
@@ -182,40 +157,6 @@ CAL_COLOR_FOREGROUND = {
     "pink": "#ffffff", "brown": "#ffffff", "gray": "#ffffff", "slate": "#ffffff",
 }
 
-# 2026-08-08: grouped into named categories (direct feedback: "more icons
-# grouped into very useful icons") instead of one flat, ungrouped list --
-# see templates/_icon_swatch_picker.html for how this renders (a labeled
-# section per group, not a single wall of ~140 undifferentiated glyphs).
-# Nearly every icon in the shared sprite (templates/_icons_sprite.html) is
-# offered now, not just the ~100 originally curated -- the only ones left
-# out are pure UI-chrome (chevrons, x, plus, external-link, move, merge,
-# a bare square, trash/trash-2, a second "edit") that read as app actions,
-# not something you'd pick to *represent* a label/habit/Space.
-#
-# `LABEL_ICONS` (a flat list, used by any code that just needs "is this a
-# known icon name" or a plain count -- e.g. habits.py's `ICONS` alias)
-# stays derived from this dict rather than hand-duplicated, so the two
-# can never drift apart.
-#
-# 2026-08-08 follow-up (reverted same day): a first attempt moved
-# activity/calendar/repeat/address-book/watch/home into Organization and
-# the "No icon" reset option inside it -- direct feedback was that
-# Organization was fine as it was, revert. Kept instead: a new "Academic"
-# group (below), per separate direct feedback asking for icons that
-# actually fit this app's own university-course side (Schedule's classes,
-# Homework tasks, the whole `_project_university_section.html` "Course
-# info"/"Homework" story) -- university/courses, history, writing, and
-# debate specifically. Built by re-homing already-offered icons that
-# genuinely fit better here than where they sat (a course textbook is
-# "Academic," not "Documents" in general; a bar chart of grades/research
-# data fits here more than "Finance & Shopping"), not by inventing new
-# glyphs outside the sprite: book/book-open (courses/textbooks), archive
-# (history/records), globe/map/compass (history/geography), bar-chart/
-# bar-chart-2/pie-chart (research/grades data), mic (debate/presentations),
-# thumbs-up (debate agree/disagree), award (academic achievement),
-# bookmark (citations/references). Each of those six other groups keeps
-# every icon it had before minus only the ones moved here -- nothing else
-# about them changed.
 ICON_GROUPS: dict[str, list[str]] = {
     "Organization": [
         "folder", "folder-plus", "folder-minus", "briefcase", "clipboard",
@@ -262,12 +203,6 @@ ICON_GROUPS: dict[str, list[str]] = {
         "clock", "bell", "tool", "settings", "activity", "calendar",
         "home", "repeat",
     ],
-    # Added 2026-09-13 (direct request: "a bigger library of icons that fit
-    # the actual uses of the app") -- curated against the user's real label
-    # list (University, Asociația de Dezbateri, Birthday, Creangă Debate,
-    # Debate, Family, High School), which had nothing more specific than
-    # generic book/award/users glyphs to work with. New symbols drawn in
-    # _icons_sprite.html; see that file's own comment for the full list.
     "School & University": [
         "graduation-cap", "school", "backpack", "pencil", "ruler",
         "calculator", "id-card", "chalkboard", "notebook", "atom",
@@ -284,13 +219,6 @@ ICON_GROUPS: dict[str, list[str]] = {
 
 LABEL_ICONS = [name for group in ICON_GROUPS.values() for name in group]
 
-# 2026-09-25 (UI audit L3): the icons the nav rail itself uses (base.html:
-# Home, Calendar, Planner, Tasks, Habits, Contacts, Search, Settings, the
-# sidebar toggle). A label or group pinned in the rail with one of these
-# looked like a second Home/Calendar entry, so the label and group icon
-# pickers don't offer them. ICON_GROUPS itself is unchanged (habits use it
-# and never appear in the rail). A label that already has one keeps it:
-# icon_groups_for() adds it back as a "Current" option.
 NAV_RESERVED_ICONS = frozenset({
     "home", "calendar", "clock", "check-square", "repeat", "address-book",
     "command", "settings", "sidebar",
@@ -314,7 +242,7 @@ def icon_groups_for(current: str | None) -> dict[str, list[str]]:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return clock.now().isoformat()
 
 
 # --------------------------------------------------------------------- #
@@ -371,19 +299,10 @@ def _labels_context(conn, request: Request, kind: str = "labels") -> dict:
         # on every label.
         if lbl.get("is_project") or lbl.get("has_deadline"):
             lbl["project_status"] = db.project_status(conn, lbl)
-        # 2026-09-25 (UI audit L7): the row's deadline badge, same states
-        # as the label's page (overdue / due soon / later / archived).
         lbl["deadline"] = deadline_info(lbl)
         if not want_projects and lbl.get("label_group"):
             lbl["group_style"] = db.get_group_style(conn, lbl["label_group"])
 
-    # Sorted by group (ungrouped last), then type (project before plain),
-    # then name (2026-09-13 request, "sorted by Groups first, then by
-    # type"; 2026-09-26: ungrouped pushed last instead of sorting "" first
-    # -- Settings > Labels reads this list flat now, and ungrouped-first
-    # read oddly). Since slice c (2026-09-25) the group is the text
-    # label_group; there are no Space rows heading a table any more, each
-    # group's table is headed by the group's own name and links to its page.
     labels.sort(key=lambda l: (
         0 if l.get("label_group") else 1,
         (l.get("label_group") or "").lower(),
@@ -413,12 +332,6 @@ def _label_role(cfg: dict) -> str:
     return "project" if cfg.get("is_project") else "none"
 
 
-# 2026-09-13: sort-order weights for _labels_context's Settings > Labels
-# table sort (direct request: "space first, then projects, then plain") --
-# a separate mapping from _label_role's own return values rather than
-# hardcoding numbers inline at the one call site, so the requested order
-# reads directly off this table instead of needing _label_role's docstring
-# cross-referenced to see what "space"/"project"/"none" even mean here.
 _ROLE_SORT_RANK = {"project": 0, "none": 1}
 
 
@@ -435,20 +348,8 @@ def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
             "colors": COLORS,
             "icon_groups": icon_groups_for(cfg.get("icon")),
             "role": _label_role(cfg),
-            # 2026-09-26: a project is edited as a project (deadline,
-            # "project" wording); a label can only become one through the
-            # one-way Convert action, never a Role field.
             "is_project_form": bool(cfg.get("is_project")),
             "group_options": [g["name"] for g in db.list_groups(conn)],
-            # 2026-08-30 (direct request): a label's banner used to be
-            # reachable only through a dashboard page's own edit-mode "Add/
-            # Change banner" button (routers/banners.py, generate_space/
-            # is_project pages only, since only those render _page_banner.
-            # html) -- this is the same banner (db.get_page_banner keyed by
-            # label name), just also surfaced here so ANY label can get one,
-            # not only a Space/Project that happens to have a dashboard
-            # page. See db.banner_for_task's priority chain (tasks/kanban
-            # banner strip) for the other consumer of this same data.
             "banner": banner,
         },
     )
@@ -513,9 +414,6 @@ def update_label(
     icon = (icon or "").strip() or None
     page = _page_fields(page_fields, deadline_date, page_type, agenda_widget, tasks_widget, contacts_widget,
                         notebook_widget, sidebar_pin, widget_pin)
-    # 2026-09-26: the edit form no longer sends a Role -- a label stays a
-    # label and a project a project (Convert to project is its own
-    # action). A caller that still posts `role` keeps working.
     explicit_role = role if isinstance(role, str) and role in ("none", "project") else None
 
     renamed_from = None
@@ -539,9 +437,6 @@ def update_label(
     # the label's page (routers/label_pages.py), not a side effect of
     # changing the role.
     db.upsert_label_config(conn, row)
-    # 2026-09-25: renamed from the label's own page -> go to the renamed
-    # label's page (the form is data-follow-redirect, see modal.js); the old
-    # URL no longer exists. From anywhere else, the labels list as before.
     if renamed_from and request is not None:
         ref = urlparse(request.headers.get("referer") or "")
         if unquote(ref.path) == f"/labels/{renamed_from}":
@@ -666,7 +561,6 @@ def create_label(
         "color": color if color in COLORS else "blue",
         "icon": icon,
         "label_group": _clean_group(label_group),
-        # 2026-09-25 (UI audit L17): the form has a Description field now.
         "description": _clean_description(description),
         "is_project": 1 if role == "project" else 0,
         "created_at": _now(),
@@ -810,25 +704,10 @@ def set_label(
     return RedirectResponse(url=redirect_url, status_code=303)
 
 
-# --------------------------------------------------------------------- #
-# Old label page URL. A label's page lives at /labels/{name} now
-# (routers/label_pages.py, labels-as-modules slice b, 2026-09-25); this
-# keeps old links and bookmarks working. Declared last so the literal
-# routes above (/new, /regions, ...) still win.
-# --------------------------------------------------------------------- #
-
-
 @router.get("/{name}")
 def label_detail_redirect(name: str):
     return RedirectResponse(url=f"/labels/{quote(name)}", status_code=301)
 
-
-# --------------------------------------------------------------------- #
-# Settings > Projects (2026-09-26, Peter: separate settings pages for
-# labels, groups and projects). A project is still a label_config row with
-# is_project=1; this is its own list and its own "Add project" entry point.
-# Editing/deleting reuse the label routes above.
-# --------------------------------------------------------------------- #
 
 projects_settings_router = APIRouter(prefix="/settings/projects", tags=["projects-settings"])
 

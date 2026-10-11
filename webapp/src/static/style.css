@@ -876,11 +876,11 @@ button.btn:disabled::after, a.btn[aria-disabled="true"]::after{display:none;}
    left alone), this is the standing rule a future change has to keep
    respecting, not a fix for something broken today. */
 .icon{
-  width:1em; height:1em; min-width:12px; min-height:12px; flex:none; vertical-align:-2px;
+  width:1em; height:1em; min-width:16px; min-height:16px; flex:none; vertical-align:-2px;
   fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round;
   display:inline-block; opacity:1;
 }
-.icon-sm{width:0.85em; height:0.85em; vertical-align:-1px;}
+.icon-sm{width:16px; height:16px; vertical-align:-3px;}
 .icon-lg{width:1.35em; height:1.35em; vertical-align:-4px;}
 button.btn .icon, a.btn .icon{margin-right:2px;}
 .icon-btn .icon{width:16px; height:16px;}
@@ -1103,7 +1103,7 @@ button.btn .icon, a.btn .icon{margin-right:2px;}
   align-items:center; justify-content:center; border-radius:var(--radius-sm);
 }
 .sidebar-tree-toggle:hover{color:var(--fg-primary);}
-.sidebar-tree-toggle .icon{width:14px; height:14px; transition:transform var(--dur-fast) var(--ease-standard);}
+.sidebar-tree-toggle .icon{width:16px; height:16px; transition:transform var(--dur-fast) var(--ease-standard);}
 .sidebar-tree-toggle[aria-expanded="true"] .icon{transform:rotate(90deg);}
 .sidebar-tree-children{display:none; width:100%; flex-direction:column;}
 /* 2026-09-25 (UI audit L3): a group's rail entry shows its own icon (the
@@ -1601,7 +1601,7 @@ label.seg-btn[hidden]{display:none;}
 }
 .detail-delete-link:hover{color:var(--danger); background:var(--tag-red-bg);}
 .detail-delete-link:focus-visible{outline:2px solid var(--danger); outline-offset:-2px;}
-.detail-delete-link .icon{width:14px; height:14px;}
+.detail-delete-link .icon{width:16px; height:16px;}
 
 /* Filled cards widget (Material You style filled rounded squares) */
 .filled-cards-grid{
@@ -1834,7 +1834,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
   .entity-table .entity-row.is-member .label-cell{padding-left:12px;}
 }
 .label-row-badge{font-size:var(--text-2xs);}
-.label-row-badge .icon{width:12px; height:12px;}
+.label-row-badge .icon{width:16px; height:16px;}
 
 .group-badge {
     display: inline-block; padding: 2px 8px; border-radius: var(--radius-pill);
@@ -2171,7 +2171,7 @@ tbody td{padding:10px 8px; vertical-align:middle;}
 .action-menu-item:hover{background:var(--bg-secondary);}
 .action-menu-item:focus-visible{outline:none; background:var(--accent-neutral-subtle);}
 
-.action-menu-item .icon{width:14px; height:14px; color:var(--fg-secondary); flex-shrink:0;}
+.action-menu-item .icon{width:16px; height:16px; color:var(--fg-secondary); flex-shrink:0;}
 .action-menu-item:hover .icon{color:var(--fg-primary);}
 
 .action-menu-item.danger{color:var(--danger);}
@@ -2931,7 +2931,7 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 }
 .checklist-delete:hover{color:var(--danger); background:var(--tag-red-bg);}
 .checklist-delete:focus-visible{outline:2px solid var(--danger); outline-offset:-2px;}
-.checklist-delete .icon{width:14px; height:14px;}
+.checklist-delete .icon{width:16px; height:16px;}
 .checklist-add-form{display:flex; gap:8px; margin-top:8px;}
 .checklist-add-form input[type="text"]{flex:1;}
 /* Work sessions card (task_detail.html/task_form.html, _task_work_allocations
@@ -3268,9 +3268,6 @@ img.avatar-circle{object-fit:cover;}
    behavior (a task's start and due are two separate dates). Each half
    gets its own small "Start"/"Due" caption (.field-hint) above its
    picker so the merged field doesn't read as one ambiguous date. */
-.task-start-due-row{display:flex; gap:var(--space-4);}
-.task-start-due-item{flex:1; min-width:0;}
-.task-start-due-item .field-hint{margin-top:0; margin-bottom:2px;}
 /* 2026-09-21 (direct report): this used to hide the WHOLE start/end
    picker -- date included -- the moment All day was checked, which made
    it impossible to pick which day an all-day event actually falls on
@@ -3427,9 +3424,6 @@ img.avatar-circle{object-fit:cover;}
    `style=` attributes (margin-top:8px x2, display:inline-block +
    cursor:pointer on the <summary>), 2026-09-07 (audit-fixes-2.0.md item
    11, CSP `'unsafe-inline'` elimination). */
-.occurrence-move-details{margin-top:8px;}
-.occurrence-move-summary{display:inline-block; cursor:pointer;}
-.occurrence-move-form{margin-top:8px;}
 
 /* Published Lists' own tight-margin hint text (2026-09-07, audit-fixes-
    2.0.md item 11, CSP `'unsafe-inline'` elimination). */
@@ -3950,7 +3944,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    markup (still purely visual, see this row's own template-side comment
    for why moving it doesn't touch the actual drag mechanic at all). */
 .unscheduled-type-glyph{flex:none; display:flex; align-items:center; justify-content:center; color:var(--fg-tertiary);}
-.unscheduled-type-glyph .icon{width:14px; height:14px;}
+.unscheduled-type-glyph .icon{width:16px; height:16px;}
 .unscheduled-drag-handle{flex:none; color:var(--fg-tertiary); display:flex; opacity:.55;}
 /* 2026-09-28 (direct request, "can unscheduled-task-main items be
    arranged as one row with same text size different colors"): was a
@@ -7243,7 +7237,6 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
   .settings-grid{grid-template-columns:1fr 1fr;}
   .field-grid{grid-template-columns:1fr;}
   .field-grid .field-wide{grid-column:span 1;}
-  .task-start-due-row{flex-direction:column; gap:var(--space-2);}
   /* padding-bottom is set in the bottom-nav block above (80px) -- only override top/sides here */
   main{padding-top:14px; padding-left:12px; padding-right:12px;}
 
@@ -8009,8 +8002,6 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .dm-dropzone-formats{font-size:var(--text-sm); color:var(--fg-tertiary);}
 .dm-status{margin:8px 0 0; font-size:var(--text-sm); color:var(--success);}
 .dm-status-error{color:var(--danger);}
-.dm-merge{display:flex; align-items:center; gap:8px; margin-top:var(--space-3); font-size:var(--text-sm); color:var(--fg-primary); cursor:pointer;}
-.dm-merge-hint{margin:4px 0 var(--space-3); font-size:var(--text-sm); color:var(--fg-tertiary);}
 
 /* Reset-database confirmation used to be a modal dialog with its own
    .dm-danger-* typed-phrase input here -- 2026-09-09: replaced by a confirm
@@ -8289,7 +8280,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    this small. */
 .habit-check-widget{min-width:26px; height:26px;}
 .habit-check-widget{width:26px;}
-.habit-check-widget .icon{width:15px; height:15px;}
+.habit-check-widget .icon{width:16px; height:16px;}
 .habit-check-btn.is-done{background:var(--habit-accent); color:var(--fg-on-accent);}
 /* 2026-09-25 (UI audit H-01/H-02): an amount habit below its target is
    "partial" -- the same lighter accent the year heatmap uses for a
@@ -8485,7 +8476,7 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .habit-log-form > .btn{min-height:41px;}
 .habit-pause-row{display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); font-size:var(--text-sm); padding:var(--space-1) 0;}
 .habit-paused-badge{display:inline-flex; align-items:center; gap:4px; color:var(--fg-primary);}
-.habit-paused-badge .icon{width:14px; height:14px;}
+.habit-paused-badge .icon{width:16px; height:16px;}
 /* Habits H7: habits in the Agenda widget and the calendar day view. */
 .agenda-habits{list-style:none; margin:0 0 var(--space-2); padding:0;}
 .agenda-habit{display:flex; align-items:center; gap:var(--space-2); padding:4px 0; margin:0; min-width:0;}
@@ -8605,9 +8596,8 @@ td .dtf--compact:hover .dtf-input, td .dtf--compact .dtf-input:focus, td .dtf--c
   text-transform:none; letter-spacing:0; font-weight:var(--font-weight-regular);}
 .field label.dtr-allday{text-transform:none; letter-spacing:0; font-weight:var(--font-weight-regular); color:var(--fg-primary);}
 .dtr-row{display:flex; flex-direction:column; gap:var(--space-1);}
-.dtr-label{font-size:var(--text-sm); color:var(--fg-secondary);}
 .dtr-fields{display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr); gap:var(--space-2);}
-.dtr[data-all-day] .dtf-time{display:none;}
+.dtr[data-all-day] .dtr-time-field{display:none;}
 .dtr[data-all-day] .dtr-fields{grid-template-columns:minmax(0,1fr);}
 .dtr--compact{gap:var(--space-1);}
 
@@ -9070,8 +9060,8 @@ button.avatar-upload{background:none; border:none; padding:0; cursor:pointer;}
   .sec-col:nth-child(2){grid-column:1;}
 }
 
-/* Notebook Browse: the table view carries no bold text anywhere on the page. */
-main.notebook-browse-page, main.notebook-browse-page *, main.notebook-browse-page .btn, main.notebook-browse-page .active, main.notebook-browse-page .is-active{font-weight:var(--font-weight-regular);}
+/* Notebook Browse: the list and filter sidebar carry no bold; scoped below the page header so shared components (page-header-narrow-title) keep their canonical weight. */
+main.notebook-browse-page .notebook-page-layout, main.notebook-browse-page .notebook-page-layout *{font-weight:var(--font-weight-regular);}
 .notebook-browse-table{width:100%;}
 .notebook-browse-table .col-meta{width:auto; min-width:0;}
 .notebook-browse-table .col-actions{width:48px; min-width:48px;}
@@ -9079,7 +9069,6 @@ main.notebook-browse-page, main.notebook-browse-page *, main.notebook-browse-pag
 .notebook-load-more{display:flex; justify-content:center; padding:var(--space-4) 0;}
 .notebook-stacked-actions{display:flex; gap:var(--space-1);}
 .notebook-field-checks{display:flex; flex-wrap:wrap; gap:var(--space-3);}
-.notebook-find-options{display:flex; gap:var(--space-4);}
 .notebook-find-hits{list-style:none; margin:var(--space-3) 0 0; padding:0; display:flex; flex-direction:column; gap:var(--space-2);}
 .notebook-find-title{font-weight:500;}
 .notebook-find-snippet{margin-left:var(--space-5);}
@@ -9096,8 +9085,7 @@ main.notebook-browse-page, main.notebook-browse-page *, main.notebook-browse-pag
 .detail-section + .detail-section{margin-top:var(--space-4); padding-top:var(--space-4); border-top:1px solid var(--separator);}
 .detail-section-head{display:flex; align-items:center; gap:var(--space-2); margin:0 0 var(--space-3); font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-tertiary);}
 .detail-text{margin:0; white-space:pre-wrap; color:var(--fg-primary); font-size:var(--text-base);}
-.detail-section-summary{display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap;}
-.detail-section-summary:not(:empty){margin-bottom:var(--space-3);}
+.detail-section-summary{display:flex; align-items:center; gap:var(--space-2); margin-left:auto; flex-wrap:nowrap;}
 .work-session-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column;}
 .work-session-item{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:var(--space-2) var(--space-4); padding:var(--space-2) 0; border-top:1px solid var(--separator);}
 .work-session-item:first-child{border-top:none; padding-top:0;}
@@ -9109,13 +9097,56 @@ main.notebook-browse-page, main.notebook-browse-page *, main.notebook-browse-pag
 .work-session-edit{counter-increment:work-session; display:flex; flex-direction:column; gap:var(--space-2); padding:var(--space-3); border:1px solid var(--border); border-radius:var(--radius-md);}
 .work-session-edit-head{display:flex; align-items:center; justify-content:space-between;}
 .work-session-edit-name::before{content:"Session " counter(work-session); font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary);}
-.work-session-edit-fields{display:flex; align-items:center; gap:var(--space-2);}
-.work-session-edit-fields input[type=text]{flex:1; min-width:0;}
-.work-session-edit-fields input[type=number]{flex:none; width:5.5rem;}
-.work-session-edit-fields .multiselect{flex:none; width:10rem;}
-.occurrence-actions{display:flex; flex-direction:column; align-items:flex-start; gap:var(--space-2); margin-top:var(--space-4);}
-.occurrence-state{display:flex; align-items:center; gap:var(--space-2);}
+.work-session-edit-fields{display:flex; align-items:flex-end; gap:var(--space-2);}
+.work-session-title-field{flex:1; min-width:0;}
+.work-session-hours-field{flex:none; width:6rem;}
+.work-session-difficulty-field{flex:none; width:10rem;}
 
 /* Modal rows never wrap: boxes that share a row stay on it and shrink instead. */
-.modal-body :is(.contact-multi-row, .task-start-due-row, .work-session-edit-fields, .habit-pause-form, .calendar-new-form, .dtr-row, .field-label-row){flex-wrap:nowrap;}
-.modal-body :is(.contact-multi-row, .task-start-due-row, .work-session-edit-fields, .habit-pause-form, .calendar-new-form) > *{min-width:0;}
+.modal-body :is(.contact-multi-row, .work-session-edit-fields, .habit-pause-form, .calendar-new-form, .dtr-row, .field-label-row){flex-wrap:nowrap;}
+.modal-body :is(.contact-multi-row, .work-session-edit-fields, .habit-pause-form, .calendar-new-form) > *{min-width:0;}
+
+/* Finance */
+.finance-toolbar{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;margin-bottom:var(--space-3);}
+.finance-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--space-3);margin-bottom:var(--space-3);}
+.finance-card{display:flex;flex-direction:column;gap:var(--space-1);padding:var(--space-3);}
+.finance-card strong{font-size:var(--text-lg);font-weight:var(--font-weight-bold);}
+.finance-card-label{color:var(--fg-secondary);font-size:var(--text-sm);}
+.finance-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:var(--space-3);margin-bottom:var(--space-4);}
+.finance-chart{padding:var(--space-3);}
+.finance-chart h4{margin:0 0 var(--space-2);}
+.finance-line{width:100%;height:auto;}
+.finance-line-path{fill:none;stroke:var(--cal-accent-blue);stroke-width:2;}
+.finance-line-dot{fill:var(--cal-accent-blue);}
+.finance-axis{font-size:var(--text-2xs);fill:var(--fg-secondary);}
+.finance-range{display:flex;justify-content:space-between;font-size:var(--text-xs);color:var(--fg-secondary);}
+.finance-doughnut-row{display:flex;flex-wrap:wrap;gap:var(--space-4);align-items:center;}
+.finance-doughnut{width:180px;height:180px;flex:none;}
+.finance-slice{fill:var(--habit-accent);}
+.finance-legend{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-1);min-width:0;}
+.finance-swatch{display:inline-block;width:var(--space-2);height:var(--space-2);border-radius:50%;background:var(--habit-accent);margin-right:var(--space-2);}
+.finance-num{text-align:right;white-space:nowrap;}
+.finance-currency{margin:var(--space-4) 0 var(--space-2);}
+.finance-txn-grid[data-txn-type="transfer"] .finance-plain-only{display:none;}
+.finance-txn-grid:not([data-txn-type="transfer"]) .finance-transfer-only{display:none;}
+.finance-header-form{display:flex;flex-wrap:nowrap;gap:var(--space-2);align-items:center;margin:0;}
+.finance-txn-grid:not([data-txn-type="transfer"]) .finance-account-field{grid-column:1 / -1;}
+.dm-formats-table th,.dm-formats-table td{text-align:left;padding:var(--space-2) var(--space-3);}
+.finance-toolbar .dtf{width:11rem;flex:none;}
+
+/* Canonical laws for inputs (rules/frontend-conventions.md): number inputs never show spin arrows, and a modal uses one font size. */
+input[type="number"]{-moz-appearance:textfield; appearance:textfield;}
+input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
+.modal-header, .modal-body, .modal-footer{font-size:var(--text-base);}
+.modal-header *, .modal-body *, .modal-footer *{font-size:inherit !important;}
+.switch-row{display:flex; align-items:center; min-height:42px;}
+.finance-txn-grid:not([data-status="scheduled"]) .finance-scheduled-only{display:none;}
+.finance-pending td{color:var(--fg-tertiary);}
+.finance-pending .label-name, .finance-pending a{color:inherit;}
+.pending-tx-edit{counter-increment:pending-tx;}
+.pending-tx-edit-name::before{content:"Transaction " counter(pending-tx); font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary);}
+.pending-tx-edit .work-session-difficulty-field{width:14rem;}
+.pending-tx-edit:not([data-type="transfer"]) .pending-tx-to{display:none;}
+.pending-tx-edit .pending-tx-expense, .pending-tx-edit .pending-tx-income, .pending-tx-edit .pending-tx-transfer{display:none;}
+.pending-tx-edit[data-type="expense"] .pending-tx-expense, .pending-tx-edit[data-type="income"] .pending-tx-income, .pending-tx-edit[data-type="transfer"] .pending-tx-transfer{display:inline;}
+.pending-tx-edit[data-type="expense"] .pending-tx-plain, .pending-tx-edit[data-type="income"] .pending-tx-plain, .pending-tx-edit[data-type="transfer"] .pending-tx-plain{display:none;}

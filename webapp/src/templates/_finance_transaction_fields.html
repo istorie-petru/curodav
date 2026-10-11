@@ -1,0 +1,48 @@
+{% from "_inputs.html" import text_input %}
+{% from "_date_time_fields.html" import date_field with context %}
+{% from "_form_rows.html" import title_date_row, recurrence_row %}
+{# Transaction fields shared by the transaction modal and the quick-add Transaction tab. #}
+    <div class="field-grid finance-txn-grid" data-txn-type="{{ kind }}" data-status="{{ status }}">
+        {% call title_date_row(t.description if t else '', 'Description', 'description', false, false) %}
+        <div class="field">
+            <label>Date</label>
+            {{ date_field('date', t.date if t else '', label='Date') }}
+        </div>
+        {% endcall %}
+        <div class="field">
+            <label>Amount</label>
+            {{ text_input({'name': 'amount', 'value': amount_text, 'inputmode': 'decimal', 'required': true}) }}
+        </div>
+        <div class="field">
+            {% set st_name = 'type' %}{% set st_label = 'Type' %}{% set st_items = type_items %}{% set st_selected = kind %}{% set st_form_id = 'finance-transaction-form' %}
+            {% include "_status_type_row.html" %}
+        </div>
+        <div class="field finance-account-field">
+            {% set st_name = 'account_uid' %}{% set st_label = 'Account' %}{% set st_items = account_items %}{% set st_selected = t.account_uid if t else '' %}{% set st_form_id = 'finance-transaction-form' %}
+            {% include "_status_type_row.html" %}
+        </div>
+        <div class="field finance-transfer-only">
+            {% set st_name = 'to_account_uid' %}{% set st_label = 'To account' %}{% set st_items = account_items %}{% set st_selected = t.to_account_uid if t and t.to_account_uid else '' %}{% set st_form_id = 'finance-transaction-form' %}
+            {% include "_status_type_row.html" %}
+        </div>
+        <div class="field finance-plain-only">
+            {% set st_name = 'label' %}{% set st_label = 'Label' %}{% set st_items = label_items %}{% set st_selected = t.label if t else '' %}{% set st_form_id = 'finance-transaction-form' %}
+            {% include "_status_type_row.html" %}
+        </div>
+        <div class="field finance-plain-only" id="finance-tag-field">
+            {% include "_finance_tag_field.html" %}
+        </div>
+        {% if status_fixed %}
+        <input type="hidden" name="status" value="scheduled">
+        {% elif not t %}
+        <div class="field">
+            {% set st_name = 'status' %}{% set st_label = 'Status' %}{% set st_items = status_items %}{% set st_selected = status %}{% set st_form_id = 'finance-transaction-form' %}
+            {% include "_status_type_row.html" %}
+        </div>
+        {% endif %}
+        <div class="field finance-scheduled-only">
+            {% set st_name = 'task_uid' %}{% set st_label = 'Task' %}{% set st_items = task_items %}{% set st_selected = t.task_uid if t and t.task_uid else '' %}{% set st_form_id = 'finance-transaction-form' %}
+            {% include "_status_type_row.html" %}
+        </div>
+        <div class="finance-scheduled-only field-wide">{{ recurrence_row(recurrence, wide=true) }}</div>
+    </div>

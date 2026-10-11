@@ -4,6 +4,17 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.0.0]
+
+- Notebook templates: frontmatter cleanup, a Templates page, and a New note modal with a template picker (type, labels, project and frontmatter set at creation; also a Note tab in the sidebar New modal).
+- Personal finance: accounts in Settings, transactions in quick add, overview and Transactions filters (period, label, custom range) in the header bar, CSV import, tags, and a finance export in Settings.
+- Scheduled transactions: pending one-off and recurring transactions, linkable to a task, with type-dependent account rows.
+- Import and export: notes as Markdown (endnotes as footnotes), finance, citations and glossary, with a supported-data table in each dialog.
+- Event edit modal reworked: full-width recurrence, Format on its own row, "This occurrence" as date and time.
+- Input laws applied app-wide (labels, one font size, no spinners, equal heights, switches); full Lucide icon library with a 16px minimum.
+- Code health: db and dashboard router split into packages, numbered migrations, backend core tests, size-limit test.
+- Notebook Browse keeps the page header title weight.
+
 ## [3.9.2]
 
 - View modals are read-only: every part is a header with its information below it, no card styling and no editing. Event occurrences are cancelled, moved or restored from the event's edit modal.

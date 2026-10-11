@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from .. import db, push
+from .. import clock, db, push
 from ..deps import get_db
 
 router = APIRouter(prefix="/push", tags=["push"])
@@ -50,7 +50,7 @@ async def subscribe(request: Request, conn=Depends(get_db)):
     if not _valid_endpoint(endpoint) or not all(isinstance(k, str) and 0 < len(k) < 256 for k in (p256dh, auth)):
         return JSONResponse({"error": "Invalid subscription."}, status_code=400)
     agent = (request.headers.get("user-agent") or "")[:200]
-    db.upsert_push_subscription(conn, endpoint, p256dh, auth, agent, datetime.now(timezone.utc).isoformat())
+    db.upsert_push_subscription(conn, endpoint, p256dh, auth, agent, clock.now().isoformat())
     return {"ok": True}
 
 

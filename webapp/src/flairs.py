@@ -166,14 +166,6 @@ from typing import Iterable
 
 from .image_sniff import sniff_image_type
 
-# Shared with routers/flairs.py's own `/flairs/{flair_id}` route (imported
-# from here, not redefined there -- see that route's own comment for why
-# this checks *shape*, not *membership*: an operator can legitimately drop
-# a file under an id this dict doesn't have yet, e.g. staging a future
-# keyword addition before its FLAIR_KEYWORDS entry ships). Also reused by
-# `ingest_uploaded_photos` below (2026-09-29, bulk upload) to validate an
-# uploaded file's name before it ever touches the filesystem, same
-# path-traversal/hostile-shape concern as the serving route has.
 ID_SHAPE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 FLAIR_KEYWORDS: dict[str, list[tuple[str, int]]] = {
@@ -257,8 +249,6 @@ FLAIR_KEYWORDS: dict[str, list[tuple[str, int]]] = {
     "christmas-party": [("christmas eve party", 4), ("christmas party", 4), ("x-mas eve party", 4), ("x-mas party", 4), ("xmas eve party", 4), ("xmas party", 4)],
     "yoga": [("yoga", 2)],
 
-    # 2026-09-29 additions -- see this file's own header docstring for
-    # the full reasoning behind each group below.
     "bills": [("bill", 2), ("bills", 2), ("pay bill", 2), ("pay bills", 2), ("utility bill", 2), ("utilities", 2)],
     "bus": [("bus", 2), ("bus ride", 2)],
     "delivery": [("delivery", 2), ("parcel", 2), ("parcel pick-up", 2), ("parcel pickup", 2), ("package delivery", 2)],
@@ -296,29 +286,6 @@ FLAIR_KEYWORDS: dict[str, list[tuple[str, int]]] = {
 }
 
 
-# 2026-09-29 (direct request: first step of multilingual support --
-# explicitly NOT "add 20 languages," just English + Romanian) --
-# `FLAIR_KEYWORDS` above is now understood as this table's "en" entry;
-# `FLAIR_KEYWORDS_RO` is the same 106 flair ids with a Romanian keyword
-# list per id (natural equivalent phrases, not a mechanical word-for-word
-# translation of every English synonym -- a shorter idiomatic Romanian
-# list matches real usage better than a longer stilted one). Priorities
-# mirror whatever tier that id's English list is dominated by (a scenery
-# word like "sea"/"mare" stays priority 5, a holiday like Chinese New
-# Year/"anul nou chinezesc" stays priority 4, and so on) -- match_flair's
-# tie-break logic doesn't care which language a keyword came from, so
-# keeping the same relative confidence per id is what makes a
-# cross-language tie between two flairs resolve the same way it would
-# within one language.
-#
-# `FLAIR_LANGUAGES`/`FLAIR_LANGUAGE_LABELS` back Settings > General's
-# "Flair languages" checkbox-dropdown (db.active_flair_languages reads the
-# stored choice, routers/settings.py's set_flair_languages writes it) --
-# English checked by default (db.active_flair_languages's own "missing =
-# English only" comment), Romanian is opt-in. `match_flair` below takes
-# whichever of these the caller resolved and searches only THOSE
-# language(s)' keyword tables, so an install that never touches this
-# setting keeps matching exactly like before this slice existed.
 FLAIR_LANGUAGES: tuple[str, ...] = ("en", "ro")
 FLAIR_LANGUAGE_LABELS: dict[str, str] = {"en": "English", "ro": "Română"}
 FLAIR_LANGUAGES_KEY = "flair_languages"
@@ -554,16 +521,6 @@ def match_flair(name: str | None, languages: Iterable[str] = ("en",)) -> str | N
     return best[3] if best else None
 
 
-# 2026-09-29 (direct request: a Settings UI to drop in a zip/folder/
-# multiple photos at once, instead of an operator needing filesystem
-# access to flairs_dir at all) -- everything below is format-agnostic:
-# `ingest_uploaded_photos` takes plain (name, bytes) pairs, so
-# routers/settings.py's upload route can feed it entries from a `list[
-# UploadFile]` (multi-file or a `webkitdirectory` folder input, where
-# each `name` is the browser-supplied relative path) and/or from
-# `zipfile.ZipFile.infolist()`/`.read()` (a dropped .zip, any file at any
-# depth) through the exact same validation and save path -- no separate
-# "zip mode" vs "files mode" logic to keep in sync.
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8MB/photo, same cap banners.py/profile-photo already use
 
 _EXT_TO_SNIFF_TYPE = {".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png", ".webp": "webp"}

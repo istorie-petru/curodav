@@ -29,7 +29,7 @@
   // Kind -> form id, kept in sync with quick_add.html's own
   // `_quick_add_form_ids` map (each panel's <form> always uses the same
   // id the standalone new/edit form for that entity uses).
-  const FORM_IDS = { task: "task-form", event: "event-form", contact: "contact-form", label: "label-form" };
+  const FORM_IDS = { task: "task-form", event: "event-form", contact: "contact-form", label: "label-form", transaction: "finance-transaction-form", note: "notebook-new-form" };
 
   window.CCQuickAdd = {
     init(root) {

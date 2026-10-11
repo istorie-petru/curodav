@@ -32,80 +32,17 @@ class Settings:
     db_path: Path
     sync_interval_seconds: int
     backup_dir: Path
-    # Content-hash-keyed cache of contact photos already transcoded to WebP
-    # (2026-09-18, direct report: "contacts page is slow loading all the
-    # photos") -- routers/contacts.py's photo route used to run a full
-    # Pillow decode/re-encode on every single request, with nothing cached
-    # anywhere; a cold page load with N photo-having contacts meant N of
-    # those, serialized behind N requests. Same "next to the db by default,
-    # relocatable via its own env var" convention as backup_dir above.
     photo_cache_dir: Path
-    # Item 10 follow-up (2026-09-27) -- where an operator places their own
-    # flair photos (src/flairs.py's own docstring has the full story: the
-    # reference Google Calendar images this feature was designed against
-    # are copyrighted, so the app ships zero photo bytes and instead reads
-    # them from here at request time). Same "next to the db by default,
-    # relocatable via its own env var" convention as backup_dir/
-    # photo_cache_dir above -- deliberately NOT anywhere under src/static/
-    # (that directory ships with the installed app and gets replaced on
-    # every deploy; this needs to survive one).
     flairs_dir: Path
-    # Single-user authentication (2026-08-16, src/auth.py). Both
-    # auth_username AND auth_password must be non-empty for login to be
-    # enforced -- an unset pair keeps the app open exactly as it always
-    # was (local dev, trusted networks). auth_session_secret is optional:
-    # when unset, the session-signing secret is auto-generated once and
-    # persisted in app_meta, surviving restarts.
     auth_username: str | None = None
     auth_password: str | None = None
     auth_session_secret: str | None = None
-    # Deploy-mode default posture (2026-08-29, src/auth.py's setup_required).
-    # "local" (default -- covers local dev and any manual/unrecognized run)
-    # keeps today's behavior: open unless CC_AUTH_USERNAME/PASSWORD are both
-    # set. The systemd unit and the Docker image both set
-    # CC_DEPLOY_MODE=production, which forces a first-run GET/POST /setup
-    # flow (credentials persisted hashed in app_meta) whenever neither the
-    # env pair nor a persisted account exists yet -- those are the two
-    # deploy paths an operator is likely to expose beyond localhost, so
-    # "fully open by default" is no longer an acceptable default there.
     deploy_mode: str = "local"
     # Dev-only switch (`./run.sh skipauth`, CC_SKIP_AUTH=1): login is waived for
     # requests that both arrive on and come from loopback in a local-mode run.
     skip_auth: bool = False
-    # 2026-08-29 -- true when CC_RADICALE_URL was actually present in the
-    # environment (the installer's --with-radicale writes all three
-    # CC_RADICALE_* vars together, see deploy/*/install.sh, so URL's
-    # presence is treated as "the trio is env-configured" rather than
-    # checking each var separately). Distinguishes "explicitly configured
-    # via env" from "sitting at the devuser/devpass dev default because
-    # nothing else was ever set" -- apply_persisted_radicale_overrides
-    # below only touches the latter, and /setup and Settings' Radicale
-    # form (routers/auth.py, routers/settings.py) only offer to edit it
-    # when this is False, since an env-configured install should keep
-    # being managed the way it always was (edit curodav.env, restart).
     radicale_env_configured: bool = False
-    # `CC_ENV_FILE` (2026-09-08, src/env_file.py) -- the path to this
-    # process's own systemd `EnvironmentFile`, if it's running under one.
-    # `scripts/curodav-ctl`'s generated unit sets this to the exact same
-    # path as its `EnvironmentFile=` line (a real, fixed path known at
-    # install time -- EnvironmentFile itself only injects the file's
-    # *contents* as env vars, never its own path). None for local dev/any
-    # non-curodav-ctl deploy: Settings > General's Account card
-    # (routers/settings.py::account_settings) falls back to persisting in
-    # app_meta instead when this is unset, same as it always has.
     env_file_path: str | None = None
-    # Public-facing Radicale URL (2026-09-13, scripts/curodav-ctl's
-    # `install --dav`), e.g. "https://app.example.com/radicale/curodav/" --
-    # a path under the app's OWN hostname (nginx splits it off locally,
-    # see deploy/nginx/), never a second subdomain. Used ONLY for display
-    # (Published Lists' "subscribe_url" -- routers/published_lists.py's
-    # `list_index`), never for the app's own sync, which always talks to
-    # Radicale over loopback via radicale_base_url regardless of whether
-    # this is set. None (the default, and what any non-`--dav` deploy or
-    # local dev has) means "Radicale was never made publicly reachable" --
-    # callers fall back to radicale_base_url in that case, same as before
-    # this field existed, so an operator copying that loopback address
-    # still sees *something*, just not a link that resolves off-box.
     radicale_public_base_url: str | None = None
 
 
@@ -217,19 +154,6 @@ def uses_default_radicale_credentials(settings: "Settings") -> bool:
     )
 
 
-# Timezone (2026-09-30, direct report: Web Push notifications arriving
-# about two hours late, traced to the app running against whatever TZ the
-# host/container happens to start in -- Docker defaults to UTC, and every
-# `date.today()`/`datetime.now()` call across this codebase (src/
-# reminders.py's scheduler included -- see that module's own docstring:
-# "Times are the server's local wall clock") has always assumed that IS
-# the user's own local time. Rather than plumb an explicit timezone
-# through every one of those call sites, this setting overrides the
-# process's own wall clock (`os.environ["TZ"]` + `time.tzset()`, below),
-# so the existing "server local time = user's time" assumption becomes
-# true again without touching any of them. Same app_meta-backed,
-# empty-means-"no change from today" convention as every other Settings >
-# General preference (see deps.py's WEEK_START_KEY and friends).
 TIMEZONE_KEY = "app_timezone"
 
 # The offered dropdown choices (routers/settings.py's settings_general),

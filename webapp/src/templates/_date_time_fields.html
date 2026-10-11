@@ -50,24 +50,22 @@
     <div class="dtr-head">
         {% if title %}<span class="dtr-title">{{ title }}</span>{% endif %}
         {% if all_day_name %}
-        <label class="dtr-allday"><span>All day</span><input type="checkbox" id="all_day" name="{{ all_day_name }}" value="1" class="dtr-allday-box checkbox"{% if all_day %} checked{% endif %}></label>
+        <label class="dtr-allday" for="all_day"><span>All day</span><span class="switch"><input type="checkbox" role="switch" id="all_day" name="{{ all_day_name }}" value="1" class="dtr-allday-box"{% if all_day %} checked{% endif %}><span class="slider"></span></span></label>
         {% endif %}
     </div>
     {% endif %}
     <input type="hidden" class="dtr-start" name="{{ start_name }}" value="{{ start_value or '' }}"{% if required %} required{% endif %}>
     <input type="hidden" class="dtr-end" name="{{ end_name }}" value="{{ end_value or '' }}">
     <div class="dtr-row">
-        <span class="dtr-label">{{ start_label }}</span>
         <div class="dtr-fields">
-            {{ date_field('', start_value, required=required, compact=compact, label=start_label ~ ' date', role='start-date') }}
-            {{ time_field('', start_value[11:16] if start_value and start_value|length > 11 else '', compact=compact, label=start_label ~ ' time', role='start-time') }}
+            <div class="field"><label>{{ start_label }} date</label>{{ date_field('', start_value, required=required, compact=compact, label=start_label ~ ' date', role='start-date') }}</div>
+            <div class="field dtr-time-field"><label>{{ start_label }} time</label>{{ time_field('', start_value[11:16] if start_value and start_value|length > 11 else '', compact=compact, label=start_label ~ ' time', role='start-time') }}</div>
         </div>
     </div>
     <div class="dtr-row">
-        <span class="dtr-label">{{ end_label }}</span>
         <div class="dtr-fields">
-            {{ date_field('', end_value, compact=compact, label=end_label ~ ' date', role='end-date') }}
-            {{ time_field('', end_value[11:16] if end_value and end_value|length > 11 else '', compact=compact, label=end_label ~ ' time', role='end-time') }}
+            <div class="field"><label>{{ end_label }} date</label>{{ date_field('', end_value, compact=compact, label=end_label ~ ' date', role='end-date') }}</div>
+            <div class="field dtr-time-field"><label>{{ end_label }} time</label>{{ time_field('', end_value[11:16] if end_value and end_value|length > 11 else '', compact=compact, label=end_label ~ ' time', role='end-time') }}</div>
         </div>
     </div>
 </div>

@@ -18,7 +18,7 @@
    little real navigation JS" approach everywhere else on this page). #}
 {% from "_widget_items.html" import widget_empty, widget_pill %}
 {% from "_label_pill.html" import label_pill with context %}
-<div class="notebook-browse-main">
+<div class="notebook-browse-main" id="notebook-browse-main" data-smart-region>
     {% if documents %}
     <div class="card table-scroll table-responsive">
     <table class="entity-table notebook-browse-table" id="notebook-list">
@@ -53,9 +53,7 @@
         <div class="empty-state-icon">{{ icon('notebook') }}</div>
         <div class="empty-state-title">No documents yet</div>
         <div class="empty-state-text">Start writing and it'll show up here.</div>
-        <form method="post" action="/notebook" class="form-inline">
-            <button type="submit" class="btn primary">{{ icon('plus') }} New document</button>
-        </form>
+        <a href="/notebook/new" data-modal class="btn primary">{{ icon('plus') }} New document</a>
     </div>
     {% endif %}
 </div>

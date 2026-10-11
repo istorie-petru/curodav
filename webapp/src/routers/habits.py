@@ -25,7 +25,7 @@ from datetime import date, datetime, timezone
 from fastapi import APIRouter, Depends, Form, Header, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from .. import db, habit_view
+from .. import clock, db, habit_view
 from ..deps import get_db, respond, templates
 
 # Habits H6: longest single pause (vacation) range accepted.
@@ -36,8 +36,6 @@ router = APIRouter(prefix="/habits", tags=["habits"])
 
 def _habits_context(conn, request: Request) -> dict:
     items = habit_view.habit_items(conn)
-    # 2026-09-26: each row's expandable history (heatmap or week/month
-    # grid + insights), same week start as the strip.
     week_start = db.get_app_meta(conn, habit_view.WEEK_START_KEY) or "monday"
     for h in items:
         task = db.get_task(conn, h["uid"])
@@ -51,7 +49,7 @@ def _habits_context(conn, request: Request) -> dict:
         "paused": [h for h in items if h["paused_today"] and not h["due_today"]],
         "has_habits": bool(items),
         "habit_label": db.get_task_habit_settings(conn)["habit_label"],
-        "today_iso": date.today().isoformat(),
+        "today_iso": clock.today().isoformat(),
     }
 
 
@@ -93,7 +91,7 @@ def pauses_modal(request: Request, conn=Depends(get_db)):
     """2026-09-26 (Peter): every pause -- all-habit and single-habit -- in
     one modal behind the Habits page header's Pauses button, instead of a
     Vacation section on the page and a Pause section in each habit."""
-    today = date.today().isoformat()
+    today = clock.today().isoformat()
     habits = [
         {"uid": h["uid"], "title": h["title"]}
         for h in habit_view.habit_items(conn)
@@ -143,7 +141,7 @@ def add_pause(
     if task_uid is not None and db.get_task(conn, task_uid) is None:
         return JSONResponse({"error": "Unknown habit."}, status_code=404)
     db.add_habit_pause(
-        conn, str(uuid.uuid4()), task_uid, start.isoformat(), end.isoformat(), datetime.now(timezone.utc).isoformat()
+        conn, str(uuid.uuid4()), task_uid, start.isoformat(), end.isoformat(), clock.now().isoformat()
     )
     return respond(x_requested_with, request.headers.get("referer") or "/habits")
 

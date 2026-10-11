@@ -136,6 +136,7 @@ class TestSettingsHub:
             "/settings/appearance",
             "/settings/taxonomy",  # labels, groups, projects, holidays
             "/settings/notebook",  # 2026-10-02
+            "/settings/finance-accounts",
             "/settings/time-blocks",
             "/settings/data-maintenance",
             # "/settings/flairs" was a hub category briefly (2026-09-29) --

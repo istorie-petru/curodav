@@ -1,0 +1,64 @@
+{% from "_empty_state.html" import empty_state %}
+{% from "_finance_header.html" import finance_header_links %}
+{% extends "base.html" %}
+{% block title %}Finance{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{# features/finance.md: transfers appear in none of the income, expense or spending figures. #}
+{% call page_header_narrow("Overview", "dollar-sign") %}
+    {{ finance_header_links(links) }}
+    <form method="get" action="/finance" id="finance-overview-form" class="finance-header-form">
+        {% set filter_form_id = 'finance-overview-form' %}
+        {% set filter_specs = [{'name': 'range', 'label': 'Period', 'items': range_items, 'selected': range}, {'name': 'group', 'label': 'Group', 'items': group_items, 'selected': group}] %}
+        {% include "_finance_filters.html" %}
+    </form>
+{% endcall %}
+<div class="settings-group">
+{% if not has_accounts %}
+{% call empty_state('No accounts yet', size='compact') %}<a href="/settings/finance-accounts/new" data-modal>Add an account</a>{% endcall %}
+{% endif %}
+{% for s in sections %}
+<section class="finance-section">
+    <h3 class="finance-currency">{{ s.currency }}</h3>
+    <div class="finance-cards">
+        <div class="card finance-card"><span class="finance-card-label">Total cash</span><strong>{{ money(s.cash, s.currency) }}</strong></div>
+        <div class="card finance-card"><span class="finance-card-label">Income</span><strong>{{ money(s.totals.income, s.currency) }}</strong></div>
+        <div class="card finance-card"><span class="finance-card-label">Expenses</span><strong>{{ money(s.totals.expenses, s.currency) }}</strong></div>
+        <div class="card finance-card"><span class="finance-card-label">Net cash flow</span><strong>{{ money(s.totals.net, s.currency, true) }}</strong></div>
+    </div>
+    <div class="finance-charts">
+        <div class="card finance-chart">
+            <h4>Balance trend</h4>
+            {% if s.chart.dots %}
+            <svg viewBox="0 0 {{ s.chart.width }} {{ s.chart.height }}" class="finance-line" role="img" aria-label="Balance trend in {{ s.currency }}">
+                <polyline points="{{ s.chart.path }}" class="finance-line-path"/>
+                {% for d in s.chart.dots %}
+                <circle cx="{{ d.x }}" cy="{{ d.y }}" r="3.5" class="finance-line-dot"><title>{{ d.month }}: {{ money(d.balance, s.currency) }}</title></circle>
+                <text x="{{ d.x }}" y="{{ s.chart.height - 6 }}" text-anchor="middle" class="finance-axis">{{ d.month[5:] }}</text>
+                {% endfor %}
+            </svg>
+            <div class="finance-range"><span>Low {{ money(s.chart.min, s.currency) }}</span><span>High {{ money(s.chart.max, s.currency) }}</span></div>
+            {% else %}
+            {% call empty_state('No balance data', size='compact') %}{% endcall %}
+            {% endif %}
+        </div>
+        <div class="card finance-chart">
+            <h4>Spending by label</h4>
+            {% if s.breakdown %}
+            <div class="finance-doughnut-row">
+                <svg viewBox="0 0 200 200" class="finance-doughnut" role="img" aria-label="Spending by label in {{ s.currency }}">
+                    {% for p in s.breakdown %}<path d="{{ p.path }}" class="finance-slice habit-c-{{ p.color }}"><title>{{ p.label or 'Unlabelled' }}: {{ money(p.amount, s.currency) }}</title></path>{% endfor %}
+                </svg>
+                <ul class="finance-legend">
+                    {% for p in s.breakdown %}<li><span class="finance-swatch habit-c-{{ p.color }}"></span>{{ p.label or 'Unlabelled' }} <span class="settings-hint">{{ money(p.amount, s.currency) }} ({{ (p.share * 100) | round | int }}%)</span></li>{% endfor %}
+                </ul>
+            </div>
+            {% else %}
+            {% call empty_state('No spending in this period', size='compact') %}{% endcall %}
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endfor %}
+</div>
+{% endblock %}

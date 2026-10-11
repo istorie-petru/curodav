@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_inputs.html" import text_input, checkbox_input %}
+{% from "_inputs.html" import text_input, switch_input %}
 {% block title %}Search contents{% endblock %}
 {% block content %}
 <div id="modal-target" class="modal-stable-height">
@@ -17,9 +17,13 @@
             <label for="find-replacement">Replace with</label>
             {{ text_input({'id': 'find-replacement', 'name': 'replacement', 'autocomplete': 'off'}) }}
         </div>
-        <div class="field field-wide notebook-find-options">
-            <label class="checkbox-row">{{ checkbox_input({'name': 'case'}) }} Match case</label>
-            <label class="checkbox-row">{{ checkbox_input({'name': 'whole'}) }} Whole word</label>
+        <div class="field notebook-find-options">
+            <label for="find-case">Match case</label>
+            <div class="switch-row">{{ switch_input({'id': 'find-case', 'name': 'case'}) }}</div>
+        </div>
+        <div class="field notebook-find-options">
+            <label for="find-whole">Whole word</label>
+            <div class="switch-row">{{ switch_input({'id': 'find-whole', 'name': 'whole'}) }}</div>
         </div>
     </div>
     <div class="notebook-find-results" data-find-results></div>

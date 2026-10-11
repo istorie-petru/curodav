@@ -1,4 +1,5 @@
 {% from "_inputs.html" import text_input, textarea_input %}
+{% from "_date_time_fields.html" import datetime_range with context %}
 {% from "_form_rows.html" import title_row, title_date_row, recurrence_row, reminder_row %}
 {# Shared event create/edit field grid (2026-08-10) -- same extraction as
    _task_form_fields.html: the inner content of event_form.html's
@@ -29,6 +30,14 @@
                               all_day_name='all_day', all_day=(event and event.all_day) or (not event and prefill_all_day), required=true) }}
         </div>
         {% endcall %}
+        {% if occurrence %}
+        <div class="field field-wide event-start-end-field">
+            <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
+            <input type="hidden" name="occ_initial_start" value="{{ occurrence.start }}">
+            <input type="hidden" name="occ_initial_end" value="{{ occurrence.end }}">
+            {{ datetime_range('occ_start_at', 'occ_end_at', occurrence.start, occurrence.end, title='This occurrence only', required=true) }}
+        </div>
+        {% endif %}
         <!-- Labels -- chip multiselect (2026-08-07, modal-input-design
              Phase B), same pattern as task_form.html -- see that
              template's own comment. -->
@@ -49,8 +58,8 @@
              Holiday calendar already had via `ms_wide=false` further
              down -- these two just never got it. -->
         {# reminders_picker.js and recurrence_picker.js upgrade these two inputs in place; routers/calendar.py still takes the raw values. #}
-        {{ reminder_row(event.reminders|join(', ') if event else '') }}
-        {{ recurrence_row(event.recurrence if event and event.recurrence not in (None, 'None', 'Nothing') else '') }}
+        {{ reminder_row(event.reminders|join(', ') if event else '', wide=true) }}
+        {{ recurrence_row(event.recurrence if event and event.recurrence not in (None, 'None', 'Nothing') else '', wide=true) }}
         <!-- 1.6 ("Generalized recurrence and the non-working-day policy"):
              any recurring event -- not just a Schedule class -- can specify
              how it behaves on non-working days. A holiday calendar and a
@@ -93,7 +102,7 @@
         {% for name in holiday_calendar_names|default([]) %}{% set _ = ms_items.append({'uid': name, 'name': name}) %}{% endfor %}
         {% set ms_selected = event.holiday_calendar if event and event.holiday_calendar not in (None, 'None', 'Nothing') else '' %}
         {% set ms_allow_new = false %}
-        {% set ms_wide = false %}
+        {% set ms_wide = true %}
         {% set ms_extra_class = 'holiday-field' %}
         {% set ms_hidden = not _recurring %}
         {% set ms_extra_checkboxes = [
@@ -103,6 +112,7 @@
              'label': 'Marx Weekend: Sunday' if _playful else 'Exclude Sunday'},
         ] %}
         {% include "_widget_list_multiselect.html" %}
+        {% set ms_extra_checkboxes = [] %}
 
         <!-- Format field (2026-08-15, "Event format for simple events") --
              most events are simple and don't need both Location and

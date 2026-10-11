@@ -30,7 +30,7 @@ def stored_list(value: str) -> list[str]:
 
 
 def coerce(field: dict, raw: str | list[str]) -> tuple[str, str | None]:
-    """Returns (stored value, error). An empty value is valid unless the field is required."""
+    """Returns (stored value, error). An empty value is always valid; anything else must fit the field's type."""
     kind = field["type"]
     label = field.get("label") or field["key"]
     if kind == "multi-select":
@@ -43,12 +43,10 @@ def coerce(field: dict, raw: str | list[str]) -> tuple[str, str | None]:
                 return "", f"{label}: '{item}' is not one of the options"
             if canonical not in picked:
                 picked.append(canonical)
-        if not picked:
-            return "", (f"{label} is required" if field.get("required") else None)
-        return json.dumps(picked), None
+        return (json.dumps(picked) if picked else ""), None
     value = (raw if isinstance(raw, str) else (raw[0] if raw else "")).strip()
     if not value:
-        return "", (f"{label} is required" if field.get("required") else None)
+        return "", None
     if kind == "number":
         try:
             number = Decimal(value.replace(",", "."))

@@ -159,26 +159,53 @@ class TestEventDetailOccurrenceCard:
         assert "Cancel this occurrence" not in body and "Restore to series" not in body
         assert "/edit?occurrence_date=2026-09-08T10:00:00" in body
 
-    def test_occurrence_date_on_a_non_overridden_slot_offers_cancel_and_move(self, conn):
+    def test_the_edit_form_offers_the_occurrence_date_and_time_instead_of_buttons(self, conn):
         uid = _seed_recurring_event(conn)
-        resp = calendar_router.edit_event_form(
+        body = calendar_router.edit_event_form(
             uid, _request(f"/events/{uid}/edit"), occurrence_date="2026-09-08T10:00:00", conn=conn,
-        )
-        body = resp.body.decode()
-        assert "This occurrence" in body
-        assert "Cancel this occurrence" in body
-        assert "Move this occurrence" in body
-        assert "Restore to series" not in body
+        ).body.decode()
+        assert "This occurrence only" in body and 'name="occ_start_at" value="2026-09-08T10:00"' in body
+        assert "Cancel this occurrence" not in body and "Move this occurrence" not in body and "Restore to series" not in body
 
-    def test_occurrence_date_on_a_cancelled_slot_offers_restore(self, conn):
+    def test_a_moved_occurrence_shows_its_new_time(self, conn):
+        uid = _seed_recurring_event(conn)
+        calendar_router.move_occurrence(uid, occurrence_date="2026-09-08T10:00:00", start_at="2026-09-09T14:00:00",
+                                        end_at="2026-09-09T16:00:00", title="", location="", conn=conn)
+        body = calendar_router.edit_event_form(
+            uid, _request(f"/events/{uid}/edit"), occurrence_date="2026-09-08T10:00:00", conn=conn,
+        ).body.decode()
+        assert 'name="occ_start_at" value="2026-09-09T14:00"' in body
+
+
+class TestSavingTheOccurrenceTimes:
+    def _save(self, conn, uid, start, end, initial=("2026-09-08T10:00", "")):
+        calendar_router.apply_occurrence_times(
+            conn, uid, "2026-09-08T10:00:00", initial, (start, end), ("2026-09-08T10:00", ""))
+
+    def test_a_changed_time_moves_only_that_occurrence(self, conn):
+        uid = _seed_recurring_event(conn)
+        self._save(conn, uid, "2026-09-09T14:00", "2026-09-09T15:00")
+        [override] = db.list_event_occurrence_overrides(conn, uid)
+        assert override["cancelled"] == 0 and override["start_at"] == "2026-09-09T14:00"
+
+    def test_setting_the_series_time_again_removes_the_move(self, conn):
+        uid = _seed_recurring_event(conn)
+        self._save(conn, uid, "2026-09-09T14:00", "")
+        self._save(conn, uid, "2026-09-08T10:00", "", initial=("2026-09-09T14:00", ""))
+        assert db.list_event_occurrence_overrides(conn, uid) == []
+
+    def test_an_untouched_occurrence_keeps_a_cancelled_state(self, conn):
         uid = _seed_recurring_event(conn)
         calendar_router.cancel_occurrence(uid, occurrence_date="2026-09-08T10:00:00", conn=conn)
-        resp = calendar_router.edit_event_form(
-            uid, _request(f"/events/{uid}/edit"), occurrence_date="2026-09-08T10:00:00", conn=conn,
-        )
-        body = resp.body.decode()
-        assert "Restore to series" in body
-        assert "Cancel this occurrence" not in body
+        self._save(conn, uid, "2026-09-08T10:00", "")
+        assert db.list_event_occurrence_overrides(conn, uid)[0]["cancelled"] == 1
+
+
+class TestEventFormLayoutAndFormat:
+    def test_the_format_dropdown_has_no_weekend_options(self, conn):
+        uid = _seed_recurring_event(conn)
+        body = calendar_router.edit_event_form(uid, _request(f"/events/{uid}/edit"), conn=conn).body.decode()
+        assert body.count('name="exclude_saturday"') == 1 and body.count('name="exclude_sunday"') == 1
 
 
 class TestWeekViewReflectsOverrides:

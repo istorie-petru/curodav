@@ -122,7 +122,9 @@ class TestIndex:
     def test_export_context_has_the_counts_data_maintenance_needs(self, conn):
         _seed(conn)
         ctx = export_router.export_context(conn)
-        assert ctx == {"contact_count": 1, "event_count": 1, "task_count": 1}
+        assert {k: ctx[k] for k in ("contact_count", "event_count", "task_count")} == {"contact_count": 1, "event_count": 1, "task_count": 1}
+        assert {k: ctx[k] for k in ("note_count", "account_count", "transaction_count", "citation_count", "glossary_count")} == {
+            "note_count": 0, "account_count": 0, "transaction_count": 0, "citation_count": 0, "glossary_count": 0}
 
 
 class TestStandardFormats:
@@ -365,7 +367,8 @@ class TestSelectiveDownload:
         resp = export_router.download_selective(data_type="all", file_format="standard", conn=conn)
         assert resp.media_type == "application/zip"
         names = zipfile.ZipFile(io.BytesIO(resp.body)).namelist()
-        assert sorted(names) == ["contacts.vcf", "events.ics", "tasks.ics"]
+        assert {"contacts.vcf", "events.ics", "tasks.ics", "citations.csv", "glossary.csv"} <= set(names)
+        assert "finance/accounts.csv" in names and "finance/transactions.csv" in names
 
     def test_all_csv_bundles_one_zip(self, conn):
         _seed(conn)
@@ -374,7 +377,8 @@ class TestSelectiveDownload:
 
         resp = export_router.download_selective(data_type="all", file_format="csv", conn=conn)
         names = zipfile.ZipFile(io.BytesIO(resp.body)).namelist()
-        assert sorted(names) == ["contacts.csv", "events.csv", "tasks.csv"]
+        assert {"contacts.csv", "events.csv", "tasks.csv", "citations.csv", "glossary.csv"} <= set(names)
+        assert "finance/accounts.csv" in names and "finance/transactions.csv" in names
 
     def test_unknown_selection_redirects_with_error(self, conn):
         resp = export_router.download_selective(data_type="nonsense", file_format="standard", conn=conn)

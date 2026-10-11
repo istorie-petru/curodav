@@ -1,0 +1,38 @@
+{% from "_row_action_buttons.html" import row_action_buttons %}
+{% from "_empty_state_row.html" import empty_state_row %}
+{% extends "base.html" %}
+{% block title %}Finance accounts - Settings{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("Finance accounts", "credit-card") }}
+<div class="settings-group">
+<div class="card table-scroll table-responsive" id="finance-accounts-wrapper">
+    <table id="finance-accounts-table">
+        <thead>
+            <tr>
+                <th>Account</th>
+                <th class="col-opt-2">Type</th>
+                <th class="col-opt-1">Currency</th>
+                <th class="col-opt-2 finance-num">Balance</th>
+                <th class="col-actions-narrow">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in accounts %}
+            <tr data-uid="{{ a.uid }}">
+                <td><a class="label-name" href="/finance/transactions?account={{ a.uid }}&range=all">{{ a.name }}</a></td>
+                <td class="col-opt-2">{{ type_names.get(a.type, a.type) }}</td>
+                <td class="col-opt-1">{{ a.currency }}</td>
+                <td class="col-opt-2 finance-num">{{ money(a.balance, a.currency) }}</td>
+                <td>{{ row_action_buttons("/settings/finance-accounts/" ~ a.uid ~ "/edit", "/settings/finance-accounts/" ~ a.uid ~ "/delete", "account",
+                    'Delete "' ~ a.name ~ '"?' ~ (' Its ' ~ a.transaction_count ~ ' transactions are deleted with it.' if a.transaction_count else '')) }}</td>
+            </tr>
+            {% else %}
+            {{ empty_state_row(5, "No accounts yet") }}
+            {% endfor %}
+            <tr class="task-add-row"><td colspan="5"><a href="/settings/finance-accounts/new" data-modal>{{ icon('plus', 'icon-sm') }} New account</a></td></tr>
+        </tbody>
+    </table>
+</div>
+</div>
+{% endblock %}

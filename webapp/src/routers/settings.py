@@ -108,7 +108,7 @@ import httpx
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from .. import auth, config, data_health, db, env_file, flairs, offline_sync, push, release, reminders
+from .. import clock, auth, config, data_health, db, env_file, finance, finance_stats, flairs, offline_sync, push, release, reminders
 from ..image_sniff import sniff_image_type
 from ..deps import (
     ACCENT_COLOR_KEY,
@@ -135,69 +135,22 @@ from .tasks import TASK_AUTO_ARCHIVE_DAYS_KEY
 router = APIRouter(tags=["settings"])
 logger = logging.getLogger(__name__)
 
-# Hub categories (settings_index.html) -- name/desc/icon/url for each of the
-# pages above. Labels/Published lists are direct links to their existing
-# manage pages (no /settings/* wrapper for either -- see
-# labels_manage.html/published_lists.html's own breadcrumbs for how each
-# still reads as "inside Settings"). Habits is deliberately NOT a hub
-# category: it's reached from Tasks > Habits, its contextual home.
-#
-# 2026-08-17 settings HTML uniformity pass (SETTINGS_UI_GUIDE.md
-# "Proposed reorganization") -- Data health, Sync conflicts and Advanced
-# were three pages splitting "everything about your data's safety and
-# lifecycle" across them with no priority ordering inside any of them.
-# They're one "Data & Maintenance" category now (settings_data_maintenance.
-# html, urgent items first): the old /settings/data-health,
-# /settings/sync-conflicts and /settings/advanced URLs stay as 303
-# redirects for old bookmarks/links. The conflict-count badge that makes an
-# unresolved conflict visible from the hub itself lives on this one row
-# (settings_index.html reads `conflict_count`).
 HUB_CATEGORIES = [
     {"url": "/settings/general", "icon": "user", "name": "General", "desc": "Week start, time format, and other display preferences"},
     {"url": "/settings/your-profile", "icon": "user-check", "name": "Your Profile", "desc": "Profile picture, nickname, login & security"},
-    # 2026-09-27 (direct feedback): Notifications split out of General
-    # into its own hub category -- Web Push (2026-09-24) grew it from one
-    # unrelated field into a real settings surface (on-device push status,
-    # which reminder types fire, the morning digest time, the push contact
-    # email), the same "earns its own page once there's enough content"
-    # reasoning Your Profile split out for 2026-09-11. Supersedes this
-    # file's own former "Notifications -- explicitly not created" note
-    # above, written before Web Push existed.
     {"url": "/settings/notifications", "icon": "bell", "name": "Notifications", "desc": "Push notifications, reminder types, morning digest"},
     {"url": "/settings/appearance", "icon": "sun", "name": "Appearance", "desc": "Theme"},
-    {"url": "/settings/taxonomy", "icon": "layers", "name": "Taxonomy & Data", "desc": "Labels, groups, projects and holidays in one table"},
-    # 2026-10-02 (STATE.md's "custom frontmatter field schema" decision):
-    # routes live in routers/notebook.py's own notebook_field_settings_router
-    # (same "feature's own router hosts its /settings/* routes" precedent as
-    # Groups -- see label_pages.py's groups_settings_router), only the hub
-    # tile itself lives here.
-    {"url": "/settings/notebook", "icon": "file-text", "name": "Notebook", "desc": "Document sidebar layout and custom frontmatter fields"},
+    {"url": "/settings/taxonomy", "icon": "layers", "name": "Taxonomy & Data", "desc": "Labels, groups, projects, frontmatter fields, tags and holidays in one table"},
+    {"url": "/settings/notebook", "icon": "file-text", "name": "Notebook", "desc": "Document sidebar layout"},
+    {"url": "/settings/finance-accounts", "icon": "credit-card", "name": "Finance accounts", "desc": "Money accounts, currencies and opening balances"},
     {"url": "/settings/time-blocks", "icon": "moon", "name": "Sleep & Leisure Time", "desc": "Weekly hours the Week/Day grid highlights and warns about"},
     {"url": "/settings/data-maintenance", "icon": "database", "name": "Data & Maintenance", "desc": "Backups, integrity, sync conflicts, export, purge"},
-    # Flairs was briefly its own hub category (2026-09-29, same day: "a UI
-    # for the flairs feature's own photo folder, instead of an operator
-    # needing filesystem access") -- direct follow-up the same day moved it
-    # into a modal button on Settings > Appearance instead (that page's own
-    # Flairs row comment), same "opened from a button on the page it's
-    # thematically part of" treatment the banner editor already gets rather
-    # than a hub tile of its own. `/settings/flairs` itself is unchanged --
-    # still a real GET route, still degrades to a full standalone page --
-    # it just isn't advertised here as a separate top-level destination any
-    # more; TestFlairsNotAHubCategory (test_settings_flairs.py) guards this.
     {"url": "/published-lists", "icon": "share-2", "name": "Published lists", "desc": "Subscribable filtered calendars/lists"},
 ]
 
 # Breadcrumb roots shared by every settings_*.html page below.
 _ROOT_CRUMB = [{"url": "/settings", "name": "Settings"}]
 
-# "Auto-archive completed tasks" (settings_data_maintenance.html) -- a
-# fixed set of choices, not a free-typed number: a handful of sane presets
-# is faster to pick from and impossible to fat-finger into "archive after
-# 0.5 days" or a negative number. "0" is Never, this app's original
-# behavior (nothing auto-deletes) -- always the default for an existing
-# install that's never touched this control. Relabeled 2026-08-26 (page
-# redesign): the plain day-counts became the plainer phrases below; the
-# stored values are unchanged, so existing settings keep working.
 DAYS_CHOICES = [("0", "Never"), ("7", "After 1 week"), ("30", "After 1 month")]
 
 
@@ -251,30 +204,8 @@ def settings_general(request: Request, conn=Depends(get_db)):
             "active_tab": "settings_general",
             "crumbs": _ROOT_CRUMB,
             "title": "General",
-            # 2026-08-08 -- "Week starts on" and "24-hour time" are the
-            # same kind of thing (a personal display/format preference, not
-            # tied to one specific page) and both affect several pages at
-            # once (Calendar Month/Week, Schedule, every dashboard widget
-            # that shows a time), so neither earns its own Settings
-            # category -- see deps.py's week_start()/time_format() for
-            # where these get read back out everywhere else in the app.
-            # Named current_week_start/current_time_format, NOT week_start/
-            # time_format -- those names are already taken by deps.py's
-            # own Jinja globals (week_start(request)/time_format(request),
-            # called from base.html on every single page). A same-named
-            # context variable shadows a same-named global in Jinja, so
-            # passing "time_format" here broke base.html's own
-            # `{{ time_format(request) }}` call the instant this page
-            # rendered it -- "'str' object is not callable" (found via the
-            # test suite, not a hunch).
             "current_week_start": db.get_app_meta(conn, WEEK_START_KEY) or "monday",
             "current_time_format": db.get_app_meta(conn, TIME_FORMAT_KEY) or "24h",
-            # 2026-08-11 -- "4-Week view: current week" (see deps.py's
-            # FOUR_WEEK_POSITION_KEY): which of the four rows the Calendar
-            # 4-Week view's current week occupies. Read back through the
-            # same _four_week_position_from_value parse the calendar route
-            # itself uses, so "this setting shows 1/2/3/4" and "the view
-            # does what the setting says" can't disagree on a bad value.
             "current_four_week_position": _four_week_position_from_value(
                 db.get_app_meta(conn, FOUR_WEEK_POSITION_KEY) or "1"
             ),
@@ -282,36 +213,17 @@ def settings_general(request: Request, conn=Depends(get_db)):
             # labels on the recurrence editor's holiday-calendar/weekend
             # controls. See deps.py's RECURRENCE_TERMINOLOGY_KEY comment.
             "current_recurrence_terminology": db.get_app_meta(conn, RECURRENCE_TERMINOLOGY_KEY) or "standard",
-            # 2026-08-28 -- "Habit streak terminology" -- "standard" or
-            # "playful" wording for the Habits group's streak readout
-            # (Tasks table). See deps.py's HABIT_STREAK_TERMINOLOGY_KEY.
             "current_habit_streak_terminology": db.get_app_meta(conn, HABIT_STREAK_TERMINOLOGY_KEY) or "standard",
-            # 2026-09-09 (direct request) -- "Hide sleep hours in Planner":
-            # off by default. Read back by routers/calendar.py's
-            # _week_view_context via _sleep_collapse_window; see that
-            # function's own docstring for what happens when this is on but
-            # the configured Sleep-kind time blocks don't agree on one
-            # single start/end window.
             "current_hide_sleep_hours": db.get_app_meta(conn, HIDE_SLEEP_HOURS_KEY) == "1",
-            # "Flair languages" (2026-09-29, multilingual support first
-            # slice) -- which flairs.FLAIR_KEYWORDS_BY_LANG tables
-            # flairs.match_flair searches; see db.active_flair_languages's
-            # own comment for why missing/empty both resolve to English
-            # only rather than "every language." flair_language_options
-            # feeds the checkbox-dropdown's ms_items straight from
-            # flairs.FLAIR_LANGUAGE_LABELS so a future third language only
-            # needs adding there, not here too.
             "current_flair_languages": db.active_flair_languages(conn),
             "flair_language_options": [
                 {"uid": code, "name": label} for code, label in flairs.FLAIR_LANGUAGE_LABELS.items()
             ],
-            # Timezone (2026-09-30, see config.py's TIMEZONE_KEY comment) --
-            # empty is "System default", listed first so the dropdown
-            # partial's single-mode empty-value fallback (its own docstring
-            # calls this out, see "Off" above) lands on it correctly.
             "current_timezone": db.get_app_meta(conn, config.TIMEZONE_KEY) or "",
             "timezone_options": [{"uid": "", "name": "System default"}]
             + [{"uid": z, "name": z} for z in config.TIMEZONE_CHOICES],
+            "current_default_currency": finance.default_currency(conn),
+            "currency_options": [{"uid": "", "name": "None"}] + [{"uid": c, "name": c} for c in finance_stats.CURRENCIES],
         },
     )
 
@@ -331,8 +243,6 @@ def settings_notifications(request: Request, conn=Depends(get_db)):
             "active_tab": "settings_notifications",
             "crumbs": _ROOT_CRUMB,
             "title": "Notifications",
-            # Web Push P3 (2026-09-24): which reminders go out, and when
-            # the morning digest does (src/reminders.py).
             "push_types": [(t, reminders.TYPE_LABELS[t]) for t in reminders.TYPES],
             "push_types_on": reminders.enabled_types(conn),
             "push_digest_time": reminders.digest_time_str(conn),
@@ -360,28 +270,7 @@ def settings_your_profile(request: Request, conn=Depends(get_db)):
             "crumbs": _ROOT_CRUMB,
             "title": "Your Profile",
             "display_name": db.get_app_meta(conn, DISPLAY_NAME_KEY) or "",
-            # The user's own profile picture (2026-08-09) -- {photo_b64,
-            # photo_type} or None, stored in app_meta (db.py's profile-photo
-            # helpers, same store as the display name). Rendered as the
-            # avatar on this page.
             "profile_photo": db.get_profile_photo(conn),
-            # Account (2026-09-08 -- replaces the old separate "Login &
-            # security" app-login card and Data & Maintenance's "CalDAV /
-            # Radicale sync" card; see account_settings' own docstring for
-            # the merge this reflects: one username/password, used for
-            # both). auth_is_env / radicale_env_configured together decide
-            # whether this install's credentials currently live in the
-            # env file or in app_meta -- env_file_available is whether
-            # there's actually a CC_ENV_FILE to rewrite when they do
-            # (curodav-ctl deploys always have one; a local/manual run
-            # doesn't, and account_settings refuses to silently fall back
-            # to app_meta out from under an env-configured install).
-            # has_account distinguishes "change your credentials"
-            # (current password required) from "set them up for the first
-            # time" (no account yet -- common in local/dev, where /setup
-            # never runs). getattr-guarded: several test files build a
-            # bare SimpleNamespace Settings stand-in predating some of
-            # these fields.
             "auth_is_env": bool(
                 getattr(settings, "auth_username", None) and getattr(settings, "auth_password", None)
             ),
@@ -523,14 +412,6 @@ def account_settings(
                 "/settings/your-profile",
                 "Could not save -- the app couldn't write to its env file. Check file permissions.",
             )
-        # 2026-09-11 direct request: "Restart app" moved to Data &
-        # Maintenance and "should be able to be called after editing
-        # important environment data for the app, appearing in the form of
-        # a toast" -- redirecting THERE instead of back to Your Profile is
-        # what makes that true: this page's note-becomes-a-toast script
-        # (data_maintenance.js) turns "Saved..." into a floating toast that
-        # lands right next to the Restart app button, not a static banner
-        # on a page that no longer has that button at all.
         return _redirect_with_note(
             '/settings/data-maintenance', 'Saved. Click "Restart app" below to apply it.'
         )
@@ -547,24 +428,10 @@ def account_settings(
     state = getattr(request.app, "state", None)
     if state is not None:
         state._cc_auth_configured = True
-    # 2026-09-07 audit fix (carried over from change_login_password): rotate
-    # the session-signing secret whenever persisted credentials are
-    # (re)established, so a session issued under the old password stops
-    # verifying immediately instead of staying valid for the rest of its
-    # 30-day life. The in-process cache AuthMiddleware reads is updated
-    # here too, same as purge_all, so this response's own freshly-minted
-    # cookie doesn't look unauthenticated on the very next request.
     secret = auth.rotate_session_secret(settings, conn)
     if state is not None:
         state._cc_auth_secret = secret
     token = auth.make_session_token(secret, username)
-    # 2026-09-11 direct request: same reasoning as the env-managed branch
-    # above -- only redirect to Data & Maintenance (where the toast lands
-    # next to the Restart app button) when a restart is actually relevant
-    # (a new password or Radicale URL was saved); a username-only change
-    # already takes effect immediately (the session was just re-minted
-    # above), so there's nothing to restart for and the user stays on
-    # Your Profile.
     restart_relevant = bool(new_password or radicale_url)
     response = _redirect_with_note(
         "/settings/data-maintenance" if restart_relevant else "/settings/your-profile",
@@ -644,16 +511,6 @@ def set_display_name(display_name: str = Form(""), conn=Depends(get_db)):
     return RedirectResponse(url="/settings/your-profile", status_code=303)
 
 
-# --------------------------------------------------------------------- #
-# Profile picture (2026-08-09) -- the user's own avatar, editable from
-# Settings > General, stored as base64 in app_meta (see db.py's
-# get_profile_photo/set_profile_photo/clear_profile_photo -- same store the
-# display name lives in). The file input reuses the `.avatar-upload`/
-# `.avatar-upload-input` markup from contact_form.html, so static/
-# avatar_cropper.js's crop/resize tool wires up automatically and the form
-# still posts a plain `name="photo"` file exactly like a contact's.
-# --------------------------------------------------------------------- #
-
 # Cap + content-type allowlist -- same reasoning as routers/contacts.py's
 # _read_photo comment (untrusted upload into an auth-less app; avatar_cropper
 # already downsizes to a small JPEG, so 5MB is a generous ceiling, not a
@@ -685,11 +542,6 @@ def set_profile_photo(
         data = photo.file.read()
         if len(data) > _MAX_PROFILE_PHOTO_BYTES:
             raise HTTPException(400, "Photo is too large (max 5MB).")
-        # 2026-09-07 fix (flagged in an earlier audit): `image_type` above
-        # only reflects the browser's own Content-Type claim -- confirm the
-        # bytes actually are a real image before storing them, using
-        # whatever the bytes actually are rather than trusting the
-        # (possibly spoofed) header any further.
         sniffed = sniff_image_type(data)
         if sniffed is None:
             raise HTTPException(400, "That file doesn't look like a real JPEG, PNG, GIF, or WEBP image.")
@@ -762,15 +614,6 @@ def profile_photo_image(conn=Depends(get_db)):
 
 _FLAIRS_CRUMB = _ROOT_CRUMB
 
-# 2026-09-29 -- caps on one bulk-upload submission, independent of
-# flairs.MAX_UPLOAD_BYTES (which caps a single PHOTO once it's already
-# been read into memory): a zip is attacker-controlled input, so the
-# compressed upload itself needs its own ceiling, and the entry count
-# needs one too so a zip crammed with thousands of tiny bogus entries
-# can't turn one request into an unbounded loop. Multi-file/folder
-# uploads get the same entry-count cap for consistency, even though
-# there's no compression-amplification risk there (the browser already
-# sent exactly these bytes, nothing to decompress).
 _MAX_ZIP_UPLOAD_BYTES = 50 * 1024 * 1024  # 50MB compressed
 _MAX_UPLOAD_ENTRIES = 500
 
@@ -953,6 +796,12 @@ def set_timezone(timezone: str = Form(""), conn=Depends(get_db)):
     return RedirectResponse(url="/settings/general", status_code=303)
 
 
+@router.post("/settings/default-currency")
+def set_default_currency(currency: str = Form(""), conn=Depends(get_db)):
+    db.set_app_meta(conn, finance.DEFAULT_CURRENCY_KEY, currency if currency in finance_stats.CURRENCIES else "")
+    return RedirectResponse(url="/settings/general", status_code=303)
+
+
 @router.post("/settings/notifications")
 def set_notifications(
     types: list[str] = Form([]),
@@ -1057,44 +906,11 @@ def settings_appearance(request: Request, conn=Depends(get_db)):
             "active_tab": "settings_appearance",
             "crumbs": _ROOT_CRUMB,
             "title": "Appearance",
-            # 2026-08-09 -- named current_show_label_icons, NOT
-            # show_label_icons: that name is taken by deps.py's own Jinja
-            # global (show_label_icons(request)), and a same-named context
-            # variable would shadow it the way current_week_start was
-            # forced on the General page for the exact same reason (see
-            # settings_general's comment).
             "current_show_label_icons": db.get_app_meta(conn, SHOW_LABEL_ICONS_KEY) == "1",
-            # Sidebar redesign item 13d (2026-08-29): edit mode is now a
-            # persistent, app-wide toggle here instead of each dashboard/
-            # label page's own "Edit mode"/"Done" buttons -- see
-            # EDIT_MODE_KEY's own comment in routers/dashboard.py.
             "current_edit_mode": db.get_app_meta(conn, EDIT_MODE_KEY) == "1",
-            # 2026-09-17 (design-system unification pass) -- "Accent color":
-            # see ACCENT_COLOR_KEY's own comment in deps.py. Named
-            # current_accent_color, not accent_color, for the same
-            # shadowing reason as current_show_label_icons/current_edit_
-            # mode above (deps.py's accent_color_hex() Jinja global).
             "current_accent_color": db.get_app_meta(conn, ACCENT_COLOR_KEY) or "blue",
             "accent_presets": ACCENT_PRESETS,
-            # 2026-08-29 (sidebar redesign item 13e follow-up) -- the
-            # Standard Page Header's own optional banner (deps.py's
-            # PAGE_HEADER_BANNER_SCOPE); "Add"/"Change" label + the Remove
-            # control inside the editor both key off whether this is set,
-            # same convention as dashboard.html/label_detail.html's own
-            # Add/Change banner button. Named current_page_header_banner,
-            # NOT page_header_banner -- that name is taken by deps.py's own
-            # Jinja global (page_header_banner(request), called inside
-            # _page_header_narrow.html's own macro on every page, including
-            # this one), same "current_X" convention as current_show_label_
-            # icons/current_edit_mode above for the exact same shadowing
-            # reason.
             "current_page_header_banner": db.get_page_banner(conn, PAGE_HEADER_BANNER_SCOPE),
-            # Flairs row (2026-09-29, moved here from its own hub category
-            # -- see HUB_CATEGORIES' own comment) -- the same coverage
-            # count settings_flairs itself computes (_known_flair_ids),
-            # shown next to the button that opens it as a modal so the "how
-            # many of mine are configured" answer is visible without a
-            # click, same reasoning the old hub tile's own status card had.
             "flairs_configured_count": len({i for i in _known_flair_ids() if flairs.flair_image_url(i)}),
             "flairs_total_count": len(_known_flair_ids()),
         },
@@ -1152,19 +968,6 @@ def set_accent_color(color: str = Form(...), conn=Depends(get_db)):
     db.set_app_meta(conn, ACCENT_COLOR_KEY, color)
     return RedirectResponse(url="/settings/appearance", status_code=303)
 
-
-# --------------------------------------------------------------------- #
-# Holidays -- moved here from Schedule's own Table view (2026-08-14), per
-# direct feedback: a holiday calendar is a reusable, named resource that
-# any recurring event can reference (1.6, "Generalized non-working-day
-# policy + named holiday calendars"), not something specific to Schedule
-# blocks -- the same "Labels get their own page, not a Tasks-only widget"
-# reasoning that already applies elsewhere in this Settings hub. The page
-# is a grouped list plus a modal (2026-08-17 settings HTML uniformity
-# pass, SETTINGS_UI_GUIDE.md pattern B -- holiday_edit_modal.html) rather
-# than the old inline-editable grid, so editing an existing holiday's dates
-# is one whole-form Save instead of per-cell PATCH calls.
-# --------------------------------------------------------------------- #
 
 _HOLIDAYS_CRUMB = _ROOT_CRUMB
 
@@ -1340,32 +1143,6 @@ async def bulk_delete_holidays(request: Request, conn=Depends(get_db)):
     return JSONResponse({"ok": True, "count": len(uids)})
 
 
-# --------------------------------------------------------------------- #
-# Sleep Time / Leisure Time (1.9 side work, direct feedback: "Add an
-# option in the settings to set-up Leisure Time and Sleep Time... similar
-# to the holiday settings, but just adding the hours... and days"). Same
-# grouped-list-plus-modal shape as Holidays directly above (2026-08-17
-# settings HTML uniformity pass, SETTINGS_UI_GUIDE.md pattern B) -- a
-# read-only row per block, Edit button opening time_block_edit_modal.html.
-# There's no date range, just a time-of-day start/end plus a day-of-week
-# set (`_widget_list_multiselect.html`, filter mode -- see
-# db.TIME_BLOCK_DAYS). See routers/calendar.py's `_time_block_overlays`
-# for where these rows turn into the Week/Day grid's soft hatching +
-# scheduling warning.
-#
-# 2026-09-08 follow-up (direct request): Sleep and Leisure used to be two
-# separate tables (own bulk-select instance, own "+ Add" row, `kind`
-# fixed by which table a row's Edit button lived in). They're one merged
-# table now -- `kind` is a per-row "Type" column (a pill, red for Sleep/
-# green for Leisure, matching the Week/Day grid's own hatching colors)
-# instead of which table a row happens to sit in, and the add/edit modal
-# grew a real Sleep/Leisure chooser (time_block_edit_modal.html's own
-# comment) so a row's type is just another editable field now, not fixed
-# at creation. `db.list_time_blocks` already stored both kinds in one
-# `time_blocks` table with a `kind` column -- this was a template/route
-# change, not a schema change.
-# --------------------------------------------------------------------- #
-
 _TIME_BLOCKS_CRUMB = _ROOT_CRUMB
 
 _DAY_ABBR = {
@@ -1391,12 +1168,6 @@ def _time_block_days_label(days_csv: str) -> str:
 
 @router.get("/settings/time-blocks")
 def settings_time_blocks(request: Request, conn=Depends(get_db)):
-    # 2026-09-08 (direct request): one merged, chronologically-sorted list
-    # instead of two separate per-kind tables -- sleep_blocks/leisure_blocks
-    # are still fetched separately (each already ordered by start_time) so
-    # the merge is a simple concatenation, Sleep rows first then Leisure,
-    # rather than an alphabetical-by-kind sort that would otherwise
-    # interleave/reorder them in a less predictable way.
     sleep_blocks = db.list_time_blocks(conn, "sleep")
     leisure_blocks = db.list_time_blocks(conn, "leisure")
     time_blocks = sleep_blocks + leisure_blocks
@@ -1550,60 +1321,11 @@ async def bulk_delete_time_blocks(request: Request, conn=Depends(get_db)):
     return JSONResponse({"ok": True, "count": len(uids)})
 
 
-# --------------------------------------------------------------------- #
-# Data & Maintenance (`plans/open.md` § Data health & maintenance) --
-# the merged page for everything about your data's safety and lifecycle,
-# reorganized 2026-08-17 (SETTINGS_UI_GUIDE.md "Proposed reorganization:
-# Advanced + Data health + Sync conflicts") into one priority-ordered page:
-# needs-attention first, then health status, primary actions, export &
-# import, danger zone, backups last. It folds together three former pages
-# -- Data health (server-side, actively-verified backups plus database
-# integrity/repair, the 1.8 "trusted only once verified backups exist"
-# precondition; every route here is a thin wrapper around src/data_health.
-# py's plain functions, the same functions scripts/data_health.py calls),
-# Advanced (export & backup, reset Home's widget layout, auto-archive
-# completed tasks by age, plus two explicit confirmed-destructive purge
-# actions), and Sync conflicts (1.8 slice 2, §7b/c -- a conflict is never
-# auto-resolved, restore/dismiss are the only two things a person can do
-# with one). The old three URLs redirect here for old bookmarks/links.
-# --------------------------------------------------------------------- #
-
-# Fixed preset choices, not a free-typed number -- same reasoning as
-# settings_data_maintenance.html's own auto-archive field (this module's
-# own DAYS_CHOICES): a select autosubmits on pick, matching this page's
-# other direct controls, and a validated preset can never end up storing
-# something typo'd/out-of-range. This app's sync design documents 90 days
-# as the retention horizon's own default (offline_sync.RETENTION_DAYS),
-# so this field's default selection is 90 -- see
-# data_health.sync_gc_retention_days's docstring. "0" disables the GC
-# outright -- tombstones are then kept forever, which is exactly what the
-# redesigned control's "Keep forever" label says (relabeled 2026-08-26,
-# stored values unchanged).
 SYNC_GC_DAYS_CHOICES = [("30", "Keep 30 days"), ("90", "Keep 90 days"), ("0", "Keep forever")]
 
 
 def _backups_dir(request: Request) -> Path:
     return request.app.state.settings.backup_dir
-
-
-# --------------------------------------------------------------------- #
-# Radicale config visibility (direct request, 2026-09-13 follow-up to the
-# DAV deploy automation work above): "these env variables are opaque and
-# hard to set or verify, and I don't know if they're set correctly if set
-# in app or in the app setup." Three things were true and none of them
-# were visible anywhere in the UI: (1) Radicale's URL/username/password
-# can currently be sourced from an env file, from app_meta (persisted via
-# Settings > Your Profile's Account form), or neither (the devuser/devpass
-# dev default) -- config.py's own apply_persisted_radicale_overrides
-# docstring is the only place that precedence rule was written down; (2) an
-# env-file edit (curodav-ctl or Settings' own env_file.update_env_file)
-# only takes effect after a restart, and nothing flagged when the file and
-# the running process had drifted apart; (3) there was no way to ask "is
-# this actually working right now" short of watching journalctl during a
-# real phone sync attempt. The four helpers below and the Data &
-# Maintenance route context feed a "CalDAV / Radicale sync" card that
-# answers all three without leaving the browser.
-# --------------------------------------------------------------------- #
 
 
 def _radicale_config_source(settings, conn) -> str:
@@ -1770,50 +1492,17 @@ def settings_data_maintenance(request: Request, conn=Depends(get_db)):
         "completed_task_count": completed_task_count,
         "task_auto_archive_days": auto_archive_days,
         "days_choices": _choices_with_stored_value(DAYS_CHOICES, auto_archive_days),
-        # Export & backup (was settings_advanced.html's, itself moved off
-        # its own /export page -- direct feedback: "export and backup
-        # should be fully with all buttons... in the advanced page").
-        # export_context() is the same data /export's own page used to
-        # gather; radicale_url is fetched here directly since
-        # export_context() takes no `request`.
         "radicale_url": request.app.state.settings.radicale_base_url,
-        # 2026-09-08 -- this card is read-only display now (the URL only;
-        # credentials moved to Settings > General's merged Account card,
-        # account_settings' own docstring covers why). radicale_env_
-        # configured still distinguishes "set via curodav.env" wording
-        # from "set through Settings" in the card's copy. getattr-guarded:
-        # several test files build their own minimal SimpleNamespace
-        # stand-in for Settings (not the real dataclass) predating this
-        # field.
         "radicale_env_configured": getattr(request.app.state.settings, "radicale_env_configured", False),
-        # 2026-09-13 direct request (opacity/verifiability of the
-        # CC_RADICALE_* env vars) -- see the "Radicale config visibility"
-        # block comment above _radicale_config_source for the full
-        # rationale behind these four fields.
         "radicale_source": _radicale_config_source(request.app.state.settings, conn),
         "radicale_public_url": getattr(request.app.state.settings, "radicale_public_base_url", None),
         "radicale_public_url_warning": _radicale_public_url_mismatch(request.app.state.settings),
         "radicale_env_drift": _env_file_drift(request.app.state.settings),
-        # Restart app (2026-09-08, moved here 2026-09-11 direct request) --
-        # only meaningful when this process is under systemd with
-        # Restart=always (curodav-ctl's generated unit); see restart_app's
-        # own docstring for why deploy_mode == "production" is the signal
-        # used. getattr-guarded: several test files build a bare
-        # SimpleNamespace Settings stand-in predating this field.
         "restart_available": getattr(request.app.state.settings, "deploy_mode", "local") == "production",
     }
     ctx.update(summary)
     ctx.update(export_context(conn))
     return templates.TemplateResponse("settings_data_maintenance.html", ctx)
-
-
-# /settings/radicale (the old plain URL/username/password form) is gone
-# (2026-09-08, superseded by /settings/account -- account_settings' own
-# docstring covers the merge) -- Data & Maintenance's "CalDAV / Radicale
-# sync" card is now a read-only display of the current URL, pointing at
-# Settings > General to actually change the connection, since the
-# credentials it used to collect independently are now the same
-# username/password as the app's own login.
 
 
 @router.get("/settings/data-health")
@@ -1905,28 +1594,6 @@ def data_health_run_sync_gc(conn=Depends(get_db)):
     return RedirectResponse(url=f"/settings/data-maintenance?note={note}", status_code=303)
 
 
-# --------------------------------------------------------------------- #
-# Advanced -- export & backup, reset Home's widget layout, auto-archive
-# completed tasks by age, plus two explicit, confirmed-destructive purge
-# actions. 2026-08-17: this whole page is now the "Export & import",
-# "Maintenance & upkeep" and "Danger zone" sections of the merged Data &
-# Maintenance page (settings_data_maintenance.html); /settings/advanced is
-# a redirect there for old bookmarks/links. Scope confirmed directly with
-# the user before building the purge actions (2026-08-07): "Purge
-# completed" is tasks-only (every done/archived task); "Purge all" is a
-# full data wipe across the whole app (not just tasks) -- see db.py's
-# purge_all_data/delete_completed_tasks docstrings for exactly what each
-# touches and, for purge-all, its one known limitation (Published Lists'
-# already-materialized Radicale collections aren't torn down, only this
-# app's own tracking of them). Reset layout itself lives in routers/
-# dashboard.py (POST /dashboard/reset) -- this page just links to it, same
-# as it always has from label_detail.html's own edit-mode toolbar. Export
-# & backup itself lives in routers/export.py (/export) -- this page links
-# to it (2026-08-08, moved here from the now-deleted "Data & backup"
-# category, see this module's own docstring).
-# --------------------------------------------------------------------- #
-
-
 @router.get("/settings/advanced")
 def settings_advanced(request: Request, conn=Depends(get_db)):
     """Old Advanced page URL -- kept as a redirect to the merged
@@ -1959,23 +1626,6 @@ def purge_completed(conn=Depends(get_db)):
 @router.post("/settings/purge-all")
 def purge_all(request: Request, conn=Depends(get_db)):
     db.purge_all_data(conn)
-    # A purge is a fresh install, and the auto-generated session signing
-    # secret lives in the just-wiped app_meta (see src/auth.py's
-    # session_secret). Drop the in-process memoized secret (AuthMiddleware
-    # caches it on app.state._cc_auth_secret) and clear the session cookie
-    # so the very next request re-mints a fresh secret and the old cookie
-    # no longer verifies -- with auth enabled that lands the user back on
-    # /login, the same state a brand-new install would be in. When a stable
-    # CC_AUTH_SECRET is configured instead, the secret isn't in the DB so
-    # it's unaffected, but clearing the cookie forces the re-login there
-    # too.
-    #
-    # 2026-08-29: a purge also wipes any /setup-created account (it lives
-    # in app_meta too, see auth.py's AUTH_USERNAME_KEY/AUTH_PASSWORD_HASH_
-    # KEY), so the "is this install configured" cache AuthMiddleware keeps
-    # on app.state._cc_auth_configured must be dropped as well -- otherwise
-    # a purged production install would still look configured and skip
-    # the forced /setup flow a fresh database should trigger.
     state = getattr(request.app, "state", None)
     if state is not None:
         state._cc_auth_secret = None
@@ -1985,20 +1635,6 @@ def purge_all(request: Request, conn=Depends(get_db)):
         auth.SESSION_COOKIE, path="/", samesite="lax", secure=auth.is_secure_request(request)
     )
     return response
-
-
-# --------------------------------------------------------------------- #
-# Sync conflicts (1.8 slice 2, plans/open-priority.md § Offline-first
-# editing & synchronization §§7b/c, 9, 11 slice 2) -- the "Sync conflicts
-# list" §7b's own text places "adjacent to Settings > Data health". A
-# conflict here is never auto-resolved or silently dropped (src/
-# offline_sync.py's apply_op/apply_batch record one whenever a genuinely
-# concurrent event-time edit or a same-batch project-label clash picks a
-# winner) -- restore or dismiss are the only two things a person can do
-# with one. 2026-08-17: the list itself renders at the top of the merged
-# Data & Maintenance page ("Needs attention" section, settings_data_
-# maintenance.html); /settings/sync-conflicts is a redirect there.
-# --------------------------------------------------------------------- #
 
 
 @router.get("/settings/sync-conflicts")
@@ -2020,7 +1656,7 @@ def restore_sync_conflict(conflict_id: str, conn=Depends(get_db)):
     conflict = db.get_sync_conflict(conn, conflict_id)
     if conflict is None:
         return RedirectResponse(url="/settings/data-maintenance", status_code=303)
-    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    now_ms = int(clock.now().timestamp() * 1000)
     restore_hlc = {"physical": now_ms, "logical": 0, "device_id": "settings-restore"}
     if conflict["field_name"] == "project_label":
         offline_sync.apply_op(conn, {

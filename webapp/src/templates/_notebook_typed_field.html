@@ -1,0 +1,46 @@
+{% from "_inputs.html" import text_input %}
+{% from "_date_time_fields.html" import date_field with context %}
+{# One typed frontmatter input; expects `f` (field with input_name, value, values) and `typed_form_id`. #}
+<div class="field{% if f.type in ('multi-select',) %} field-wide{% endif %}">
+    <label for="{{ f.input_name }}">{{ f.label }}</label>
+    {% if f.type == 'select' %}
+    {% set ms_name = f.input_name %}
+    {% set ms_label = f.label %}
+    {% set ms_mode = 'single' %}
+    {% set ms_selected = f.value %}
+    {% set ms_bare = true %}
+    {% set ms_allow_new = false %}
+    {% set ms_pill = false %}
+    {% set ms_form_id = typed_form_id %}
+    {% set ms_items = [{'uid': '', 'name': 'None'}] %}
+    {% for o in f.options %}{% set _ = ms_items.append({'uid': o.value, 'name': o.value}) %}{% endfor %}
+    {% include "_widget_list_multiselect.html" %}
+    {% elif f.type == 'multi-select' %}
+    {% set ms_name = f.input_name %}
+    {% set ms_label = f.label %}
+    {% set ms_mode = 'select' %}
+    {% set ms_selected = f.values %}
+    {% set ms_bare = true %}
+    {% set ms_allow_new = false %}
+    {% set ms_pill = false %}
+    {% set ms_form_id = typed_form_id %}
+    {% set ms_items = [] %}
+    {% for o in f.options %}{% set _ = ms_items.append({'uid': o.value, 'name': o.value}) %}{% endfor %}
+    {% include "_widget_list_multiselect.html" %}
+    {% elif f.type == 'boolean' %}
+    {% set ms_name = f.input_name %}
+    {% set ms_label = f.label %}
+    {% set ms_mode = 'single' %}
+    {% set ms_selected = f.value %}
+    {% set ms_bare = true %}
+    {% set ms_allow_new = false %}
+    {% set ms_pill = false %}
+    {% set ms_form_id = typed_form_id %}
+    {% set ms_items = [{'uid': '', 'name': 'None'}, {'uid': 'true', 'name': 'Yes'}, {'uid': 'false', 'name': 'No'}] %}
+    {% include "_widget_list_multiselect.html" %}
+    {% elif f.type == 'date' %}
+    {{ date_field(f.input_name, f.value, label=f.label) }}
+    {% else %}
+    {{ text_input({'name': f.input_name, 'id': f.input_name, 'value': f.value, 'step': 'any' if f.type == 'number' else none, 'inputmode': 'decimal' if f.type == 'number' else none}, type={'url': 'url'}.get(f.type, 'text')) }}
+    {% endif %}
+</div>

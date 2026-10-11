@@ -63,13 +63,6 @@ HLC = tuple[int, int, str]
 # no HLC arbitration needed at all -- §7a).
 _ENTITY_TABLES: dict[str, str] = db.ENTITY_TABLES
 
-# Whitelist of columns a `field_set`/`create` op may target -- op payloads
-# are client-supplied JSON, so field names must never be interpolated into
-# SQL unchecked. `deleted_at` is included deliberately: §4 models a delete
-# as an ordinary field write, not a separate code path. Single source of
-# truth lives in db.py (ENTITY_SYNC_FIELDS) -- db.py's own server-write
-# recording (the server is a participant in the same scheme, 2026-08-18)
-# must diff against the identical whitelist, and one copy beats two.
 _ENTITY_FIELDS: dict[str, set[str]] = db.ENTITY_SYNC_FIELDS
 
 
@@ -323,8 +316,6 @@ def apply_batch(conn: sqlite3.Connection, ops: list[dict[str, Any]]) -> list[dic
     return results
 
 
-# Item types limited to one project each: tasks since 1.5, events since the
-# project-picker slice (2026-09-25, Peter: "one project per data model").
 _ONE_PROJECT_TYPES = ("task", "event")
 
 
@@ -411,16 +402,6 @@ def _reconcile_project_labels(
 
 
 def _current_field_value(conn: sqlite3.Connection, entity_type: str, uid: str, field_name: str) -> Any:
-    # 2026-08-18 -- the offline "Upcoming" view. `is_work_allocation` is
-    # not an `events` column (the flag lives in
-    # event_task_relations.is_work_allocation, see db.create_work_allocation),
-    # so the generic SELECT below would fail -- pull() derives the value
-    # from the relation table instead, mirroring the deleted_at-tombstone
-    # synthesis just below (a field whose value lives somewhere other than
-    # the entity row it's recorded against). Only work-allocation events
-    # have a field_versions entry at all (db.record_work_allocation_flag
-    # and db.backfill_work_allocation_flags never write one for a regular
-    # event), so this is only ever asked about a real work allocation.
     if entity_type == "event" and field_name == "is_work_allocation":
         row = conn.execute(
             "SELECT task_uid FROM event_task_relations WHERE event_uid = ? AND is_work_allocation = 1",
@@ -433,13 +414,6 @@ def _current_field_value(conn: sqlite3.Connection, entity_type: str, uid: str, f
     row = conn.execute(f"SELECT {field_name} FROM {table} WHERE uid = ?", (uid,)).fetchone()
     if row is not None:
         return row[0]
-    # A *server-side* hard delete (db.delete_task/event/contact, 2026-08-18)
-    # records a `deleted_at` field_versions entry but physically removes the
-    # row -- unlike a sync soft-delete, there is no column value to read
-    # back. Without a special case the pull would emit `deleted_at: null`
-    # and a device's mirror would never hide the entity. Emit the tombstone
-    # HLC's own timestamp instead -- a truthy value whose only job is to
-    # let the mirror's "not soft-deleted" filter exclude the row.
     if field_name == "deleted_at":
         hlc = db.get_field_hlc(conn, entity_type, uid, "deleted_at")
         return _hlc_to_iso(hlc) if hlc else None

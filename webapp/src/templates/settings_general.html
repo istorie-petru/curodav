@@ -40,6 +40,21 @@
         {% set ms_form_id = 'timezone-form' %}
         {% include "_widget_list_multiselect.html" %}
     </form>
+    <form class="settings-field-row" method="post" action="/settings/default-currency" id="default-currency-form">
+        <span class="settings-field-label">Default currency
+            <span class="settings-field-hint">New finance accounts start with it</span>
+        </span>
+        <span class="spacer"></span>
+        {% set ms_name = 'currency' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Default currency' %}
+        {% set ms_items = currency_options %}
+        {% set ms_selected = current_default_currency %}
+        {% set ms_autosubmit = true %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'default-currency-form' %}
+        {% include "_widget_list_multiselect.html" %}
+    </form>
     <!-- 2026-09-11 direct request: Profile picture, "Your name" (now
          "Nickname") and the Account (username/password/Radicale URL) card
          moved to a new Settings > Your Profile page

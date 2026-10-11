@@ -14,6 +14,7 @@
 {% macro password_input(attrs) -%}<input type="password"{{ _attrs(attrs) }}>{%- endmacro %}
 {% macro file_input(attrs) -%}<input type="file"{{ _attrs(attrs) }}>{%- endmacro %}
 {% macro checkbox_input(attrs) -%}<input type="checkbox"{{ _attrs(attrs) }}>{%- endmacro %}
+{% macro switch_input(attrs) -%}<span class="switch"><input type="checkbox" role="switch"{{ _attrs(attrs) }}><span class="slider"></span></span>{%- endmacro %}
 {% macro radio_input(attrs) -%}<input type="radio"{{ _attrs(attrs) }}>{%- endmacro %}
 {% macro textarea_input(attrs, content='') -%}<textarea{{ _attrs(attrs) }}>{{ content }}</textarea>{%- endmacro %}
 {# The one search / add-new box: a magnifier (or plus) icon inside a text

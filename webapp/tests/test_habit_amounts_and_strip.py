@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 from starlette.requests import Request
 
+from src.deps import templates as deps_templates
 from src import db, habit_schedule, habit_view, push, reminders
 from src.routers import dashboard as dashboard_router
 from src.routers import settings as settings_router
@@ -153,7 +154,7 @@ class TestLogADayEmptyAmount:
 
 class TestWidget:
     def _render(self, conn):
-        tpl = dashboard_router.templates.env.get_template("_widget_habit_checkin.html")
+        tpl = deps_templates.env.get_template("_widget_habit_checkin.html")
         return tpl.render(request=_req(), data=dashboard_router._render_habit_checkin(conn, {}))
 
     def test_count_skips_avoid_habits(self, conn):

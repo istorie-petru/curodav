@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 from starlette.requests import Request
 
+from src.deps import templates as deps_templates
 from src import db, deps, habit_schedule, habit_view
 from src.routers import calendar as calendar_router
 from src.routers import dashboard as dashboard_router
@@ -59,7 +60,7 @@ class TestAgenda:
         _habit(conn, "h1", "Read")
         _habit(conn, "w1", "Water", target_per_day=8)
         data = dashboard_router._render_agenda(conn, {"range": "today"})
-        html = dashboard_router.templates.env.get_template("_widget_agenda.html").render(request=_req(), data=data)
+        html = deps_templates.env.get_template("_widget_agenda.html").render(request=_req(), data=data)
         assert f'action="/tasks/h1/completion/{TODAY.isoformat()}/toggle" class="form-inline habit-action habit-toggle"' in html
         assert 'action="/tasks/w1/completions" class="form-inline habit-action habit-plus"' in html
         assert "Nothing to show." not in html

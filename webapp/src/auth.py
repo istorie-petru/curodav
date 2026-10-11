@@ -115,13 +115,6 @@ logger = logging.getLogger(__name__)
 SESSION_COOKIE = "cc_session"
 AUTH_SECRET_KEY = "auth_session_secret"
 
-# app_meta keys the forced first-run /setup flow persists its
-# operator-chosen account under (2026-08-29). Unlike CC_AUTH_USERNAME/
-# CC_AUTH_PASSWORD (plaintext env vars, still supported for local/manual
-# overrides -- see auth_enabled), a /setup-created account only ever exists
-# hashed in the database -- the same "persist in app_meta, not disk config"
-# convention AUTH_SECRET_KEY already uses for the auto-generated session
-# secret.
 AUTH_USERNAME_KEY = "auth_username"
 AUTH_PASSWORD_HASH_KEY = "auth_password_hash"
 AUTH_RECOVERY_TOKEN_KEY = "auth_recovery_token"
@@ -148,13 +141,6 @@ PBKDF2_ITERATIONS = 260_000
 # docstring).
 SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 
-# Paths that must never require a session. /login is the whole point;
-# /static is shared, cacheable, non-sensitive assets (a signed-out browser
-# still needs the CSS to render the login page itself); /health (design-
-# system unification pass, 2026-09-17 -- deploy alignment with sibling app
-# Pineart's own /api/health) is polled by scripts/curodav-ctl's health
-# check after every deploy/rollback, which runs as a plain unauthenticated
-# curl from the same host, not a logged-in browser.
 PUBLIC_PATHS = {"/login", "/health"}
 
 
@@ -498,46 +484,17 @@ class AuthMiddleware:
         settings = self._get_settings(scope)
         path = scope["path"]
         if path in PUBLIC_PATHS or path.startswith("/static/") or path.startswith("/public/"):
-            # 2026-08-29: Published Lists' standalone public feed
-            # (routers/public_lists.py) -- deliberately exempt even from
-            # the forced-first-run-setup branch below, not just the
-            # normal login gate: a link already shared with someone
-            # outside the household must keep working while the operator
-            # is mid-setup, same as /static already does for the login
-            # page's own CSS.
             return await self.app(scope, receive, send)
 
         if skip_auth_applies(settings, scope):
             return await self.app(scope, receive, send)
 
-        # Forced first-run setup (2026-08-29): a production deploy
-        # (deploy_mode != "local", see config.py) with no account
-        # configured yet -- env pair or persisted -- must be walked through
-        # GET/POST /setup before anything else is reachable. This check
-        # comes before the session-cookie check below on purpose: an
-        # unconfigured production install is NOT "auth disabled", it's
-        # "not set up yet." Local dev/manual runs skip the forced-/setup
-        # redirect (they're never walked through /setup), but as of
-        # 2026-08-30 they use the *same* self._configured() check as
-        # production to decide whether a session is required at all --
-        # previously this branch called the module-level auth_enabled()
-        # directly, which special-cased local mode to ignore persisted
-        # credentials entirely (see auth_enabled's own docstring for why
-        # that changed): a password set through Settings > General while
-        # running locally now actually locks the app down, same as it
-        # always has in production.
         if settings and settings.deploy_mode != "local":
             if not self._configured(settings, scope):
                 if path == SETUP_PATH:
                     return await self.app(scope, receive, send)
                 return await self._deny(scope, receive, send, SETUP_PATH)
         elif not self._configured(settings, scope):
-            # Reached only for deploy_mode == "local" (or a settings-less
-            # test app) with no account configured -- i.e. auth is
-            # genuinely off for this request. Harmless on an actual
-            # localhost-only install; the 2026-09-07 audit's "silent
-            # misconfiguration" finding is specifically the case where
-            # that's not true anymore (see _warn_if_exposed).
             if settings is not None:
                 self._warn_if_exposed(scope)
             return await self.app(scope, receive, send)
@@ -637,19 +594,6 @@ class AuthMiddleware:
         return secret
 
 
-# --------------------------------------------------------------------- #
-# Login attempt rate limiting (2026-08-29)
-# --------------------------------------------------------------------- #
-#
-# A plain in-memory sliding window, keyed by client IP -- this is a
-# single-process app (uvicorn, no reload/workers in the deploy configs), so
-# a module-level dict is a real, if not restart-durable, lockout: exactly
-# the tradeoff the auto-generated session secret already makes for
-# simplicity (stdlib-only, no schema/dependency). Losing the counters on a
-# restart is an acceptable gap for a personal single-user app -- the
-# threat this defends against (a slow online guessing loop) still has to
-# survive the window in one process lifetime to matter.
-
 RATE_LIMIT_MAX_ATTEMPTS = 5
 RATE_LIMIT_WINDOW_SECONDS = 15 * 60
 
@@ -713,20 +657,6 @@ def is_secure_request(request: Request) -> bool:
     the cookie silently dropped by the browser, locking the operator out."""
     return request.url.scheme == "https"
 
-
-# --------------------------------------------------------------------- #
-# CSRF protection (2026-08-29)
-# --------------------------------------------------------------------- #
-#
-# Origin/Referer verification for state-changing requests, enforced only
-# when a session cookie is riding along -- see CSRFMiddleware's own
-# docstring for the full reasoning. Deliberately NOT a per-form token: this
-# app's forms/JS live across dozens of templates and a token would need
-# threading through every one of them (plus every fetch() call) for
-# comparatively little extra protection over Origin verification, which
-# OWASP lists as an accepted primary defense in its own right (see the CSRF
-# prevention cheat sheet's "Verifying Origin with Standard Headers"
-# section) and needs zero template changes.
 
 CSRF_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 

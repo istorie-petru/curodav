@@ -1,4 +1,4 @@
-{% from "_inputs.html" import checkbox_input, text_input %}
+{% from "_inputs.html" import text_input %}
 {% extends "base.html" %}
 {% from "_notebook_field_option_row.html" import notebook_field_option_row %}
 {% from "_modal_header_back.html" import modal_header_back %}
@@ -44,17 +44,8 @@
 <form method="post" id="notebook-field-form" action="{{ form_action }}">
     <div class="field-grid notebook-field-form-grid" data-field-type="{{ f.type if f else 'text' }}">
         <div class="field">
-            <label>Field name</label>
-            {% if f and f.builtin %}
-            {{ text_input({'value': (f.key), 'readonly': true}) }}
-            <input type="hidden" name="key" value="{{ f.key }}">
-            {% else %}
-            {{ text_input({'name': 'key', 'value': (f.key if f else ''), 'required': true, 'autofocus': true}) }}
-            {% endif %}
-        </div>
-        <div class="field">
             <label>Display label</label>
-            {{ text_input({'name': 'label', 'value': f.label if f else '', 'autofocus': (true if (not f or not f.builtin) else false)}) }}
+            {{ text_input({'name': 'label', 'value': f.label if f else '', 'required': true, 'autofocus': (true if (not f or not f.builtin) else false)}) }}
         </div>
         <div class="field">
             {% if f and f.builtin %}
@@ -78,11 +69,6 @@
             <label>Default value</label>
             {{ text_input({'name': 'default_value', 'value': f.default_value if f else '', 'readonly': (true if (f and f.builtin) else false)}) }}
         </div>
-        <div class="field field-toggle field-wide">
-            {{ checkbox_input({'id': 'notebook-field-required', 'name': 'required', 'value': '1', 'class': 'checkbox', 'checked': (true if (f and f.required) else false), 'disabled': (true if (f and f.builtin) else false)}) }}
-            <label for="notebook-field-required">Required</label>
-            <span class="field-hint">Descriptive only for now -- a document missing this field doesn't block saving yet.</span>
-        </div>
         <div class="field field-wide notebook-field-options-field">
             <div class="field-label-row">
                 <label>Options</label>
@@ -90,9 +76,6 @@
                 <button type="button" class="icon-btn" data-repeatable-add="notebook-field-option-rows" data-repeatable-template="notebook-field-option-row-template" title="Add option" aria-label="Add option">{{ icon('plus', 'icon-sm') }}</button>
                 {% endif %}
             </div>
-            {% if f and f.builtin %}
-            <span class="field-hint">This field's own list of values is fixed -- pick each one's color and icon below.</span>
-            {% endif %}
             <div id="notebook-field-option-rows" class="notebook-field-option-rows">
                 {% for o in (f.options if f else []) %}
                 {{ notebook_field_option_row(o.value, o.color, o.icon, loop.index, 'notebook-field-form', colors, icon_groups_for(o.icon), locked=(f and f.builtin)) }}
@@ -108,13 +91,13 @@
 </form>
 </div>
 </div>
-{% set footer_back_url = '/settings/notebook' %}
+{% set footer_back_url = '/settings/taxonomy?view=frontmatter' %}
 {% set footer_back_mode = 'cancel' %}
 {% set footer_back_label = 'Cancel' %}
 {% if f and not f.builtin %}
 {% set footer_delete_url = '/settings/notebook/' ~ f.uid ~ '/delete' %}
 {% set footer_delete_mode = 'confirm' %}
-{% set footer_delete_label = 'Delete "' ~ (f.label or f.key) ~ '"? Documents keep any values already stored under this key -- this only removes the schema entry describing it.' %}
+{% set footer_delete_label = 'Delete "' ~ (f.label or f.key) ~ '"? Notes keep any values already stored under it.' ~ (' It is also removed from these templates: ' ~ (using_templates | map(attribute='title') | join(', ')) ~ '.' if using_templates else '') %}
 {% endif %}
 {% set footer_primary_form = 'notebook-field-form' %}
 {% set footer_primary_label = 'Save' %}

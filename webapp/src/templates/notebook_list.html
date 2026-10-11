@@ -44,16 +44,19 @@
     {# Glossary library (2026-10-03) -- same "secondary, cross-document
        view reached via a plain link" treatment as Citations above. #}
     <a href="/notebook/glossary" class="icon-btn" title="Glossary" aria-label="Glossary">{{ icon('tag', 'icon-sm') }}</a>
+    <a href="/notebook/templates" class="icon-btn" title="Templates" aria-label="Templates">{{ icon('copy', 'icon-sm') }}</a>
     {# Sort (2026-10-02, direct follow-up -- moved out of the list area
        into the header bar, next to New). Its own tiny GET form; hidden
        fields carry the rail's current facet picks through so changing
        Sort alone doesn't drop them, same "preserve the other query
        params via a hidden field" convention _tasks_toolbar.html's own
        Date filter already uses for `q`. #}
-    <form method="get" action="/notebook" id="notebook-sort-form" class="form-inline">
+    <form method="get" action="/notebook" id="notebook-sort-form" class="form-inline" data-smart-form>
+        <span id="notebook-sort-state" data-smart-region>
         {% if active_note_type %}<input type="hidden" name="note_type" value="{{ active_note_type }}">{% endif %}
         {% if active_label %}<input type="hidden" name="label" value="{{ active_label }}">{% endif %}
         {% if active_group %}<input type="hidden" name="group" value="{{ active_group }}">{% endif %}
+        </span>
         {% set fd_name = 'sort' %}
         {% set fd_label = 'Sort' %}
         {% set fd_items = [{'value': 'updated', 'name': 'Last edited'}, {'value': 'title', 'name': 'Title'}] %}
@@ -62,9 +65,7 @@
         {% set fd_form_id = 'notebook-sort-form' %}
         {% include '_filter_dropdown.html' %}
     </form>
-    <form method="post" action="/notebook" class="form-inline">
-        <button type="submit" class="btn primary" data-fab title="New document">{{ icon('plus', 'icon-sm') }} New</button>
-    </form>
+    <a href="/notebook/new" data-modal class="btn primary" data-fab title="New document">{{ icon('plus', 'icon-sm') }} New</a>
 {% endcall %}
 
 <!-- Right sidebar (2026-10-03 direct request) -- the filing rail moved
@@ -96,7 +97,7 @@
                 </div>
             </div>
         </div>
-        <div class="notebook-sidebar-panel is-active" data-notebook-sidebar-panel="filters" role="tabpanel">
+        <div class="notebook-sidebar-panel is-active" id="notebook-rail-region" data-smart-region data-notebook-sidebar-panel="filters" role="tabpanel">
             {% include "_notebook_browse_rail.html" %}
         </div>
     </aside>

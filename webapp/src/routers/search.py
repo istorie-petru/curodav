@@ -34,16 +34,6 @@ from ..deps import get_db, templates
 
 router = APIRouter(tags=["search"])
 
-# Page navigation (direct feedback, 2026-08-15: "I would like it to also
-# allow to navigate to pages") -- global mode's results now include the
-# app's own primary destinations, not just entities. A fixed list (every
-# primary tabbar destination, base.html) plus every Space (generate_space=1
-# label group (db.list_groups) -- a real per-install page, not a built-in
-# one) matched the same substring-on-title way entities are. These are
-# synthetic rows, never touched by db.search_entities/_picker_result -- a
-# page isn't a database row, it has no uid/tags/status, just a title and a
-# URL to navigate straight to (static/command_palette.js's selectResult
-# special-cases type == "page" to a plain navigation, not CCModal.open).
 _STATIC_PAGES = [
     {"title": "Dashboard", "url": "/", "subtitle": "Home"},
     {"title": "Calendar", "url": "/calendar", "subtitle": ""},
@@ -52,18 +42,11 @@ _STATIC_PAGES = [
     {"title": "Settings", "url": "/settings", "subtitle": ""},
 ]
 
-# The three entity types db.search_entities knows about. ("note" was a
-# fourth, 2026-08-15 Quick Capture through 2026-09-24 ("remove or hide
-# Notes" -- hidden here, not deleted, at the time) -- removed outright
-# 2026-10-01 along with the rest of the quick-capture notes feature, see
-# db.py's search_entities docstring.)
 _GLOBAL_SEARCH_TYPES = ["task", "event", "contact"]
 
 
 def _matching_pages(conn, q: str, limit: int = 5) -> list[dict]:
     pages = list(_STATIC_PAGES)
-    # Groups (labels-as-modules slice c, 2026-09-25; were Spaces) are
-    # navigable pages too.
     for group in db.list_groups(conn):
         pages.append({"title": group["name"], "url": f"/groups/{group['name']}", "subtitle": "Group"})
     if not q:
@@ -77,24 +60,6 @@ def _page_result(page: dict) -> dict:
 
 
 def _picker_result(row: dict) -> dict:
-    # Compact surface only -- title/subtitle/tags/type/uid, never the full
-    # `entity` row `search_entities` also returns. The picker only ever
-    # renders this much, and dropping `entity` keeps the JSON payload small
-    # and trivially serializable (no risk of a stray non-JSON-safe field
-    # on the full row leaking into the response).
-    #
-    # Command palette actions (open.md § Command palette actions) -- a
-    # task's `status` is the one extra field the palette's action buttons
-    # need (to hide "Mark done" on an already-done task), so it rides
-    # along here too, `None` for the other two types. Every existing
-    # consumer of this shape (search.html, the relations picker) reads
-    # only the fields it already knew about and ignores the rest.
-    #
-    # "date" (command palette date-grouped results, 2026-09-12) -- the one
-    # sortable ISO date/datetime the overlay buckets a row into Overdue/
-    # This week/Later/No date by: a task's `due_at`, an event's `start_at`,
-    # `None` for contacts/pages (they have no date concept, and land in the
-    # "No date" bucket alongside undated tasks/events).
     entity = row["entity"]
     date = None
     if row["type"] == "task":
@@ -115,21 +80,6 @@ def _picker_result(row: dict) -> dict:
 @router.get("/api/search")
 def api_search(
     q: str = "",
-    # `Annotated[..., Query()]` is required here, not a bare
-    # `list[str] | None = None` -- a plain default on a `list[str]`
-    # parameter is never actually populated from a real HTTP query string
-    # in this FastAPI version (it silently stays `None` regardless of
-    # what's in the URL; only an explicit `Query()` triggers FastAPI's
-    # repeated/single-value list parsing). The existing unit tests never
-    # caught this because they call `api_search` directly as a plain
-    # Python function (`search_router.api_search(..., types=["task"],
-    # ...)`), which bypasses HTTP query-string parsing entirely -- the
-    # command palette's new type filter pills (2026-09-12) were the first
-    # caller to actually drive `types` through a real
-    # `GET /api/search?types=...` request, which is what surfaced this.
-    # `Query()` as metadata (not as the default itself, i.e. not
-    # `= Query(None)`) keeps the plain Python default `None`, so those
-    # direct-call tests keep working unchanged.
     types: Annotated[Optional[list[str]], Query()] = None,
     labels: Annotated[Optional[list[str]], Query()] = None,
     for_task: str = "",
@@ -178,13 +128,6 @@ def api_search(
         types=effective_types,
         labels=effective_labels,
         exclude_uids=exclude_uids,
-        # Harsh filtering (2026-09-29 direct request): a past event only
-        # shows up once the person actually types a query -- the default
-        # empty-query browsing view (command_palette.js's open() -> runQuery(""))
-        # never surfaces one. Relation-picker mode (for_task/for_event) is
-        # untouched -- it already narrows to labels-shared candidates, a
-        # much smaller pool, and "was this event in the past" isn't the
-        # same kind of noise there.
         exclude_past_events=not q and not for_task and not for_event,
         limit=limit,
     )
