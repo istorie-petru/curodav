@@ -4,6 +4,10 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.0.2]
+
+- Removed a stray package file that was committed with 4.0.1 by mistake.
+
 ## [4.0.1]
 
 - Finance: Duplicate on every transaction row; amounts colored; dates as "05 Apr"; the type shown as an icon left of the description; accounts as pills with a short abbreviation set in the account form, used throughout.
