@@ -4,6 +4,10 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.1.2]
+
+- Fixed the Add new modal: changing the data type from its dropdown did not switch the form, because the open dropdown lives outside the modal. A test now covers it.
+
 ## [4.1.1]
 
 - Repeating events are now real events: every occurrence is its own event in a series, so each one can be edited, moved or deleted. Edit and delete ask whether the change applies to this event, this and following, or all. Dragging an occurrence moves only that one, with a toast offering to move all future ones. Open-ended series are extended automatically each day.
