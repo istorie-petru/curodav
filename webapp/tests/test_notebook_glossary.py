@@ -115,7 +115,7 @@ class TestGlossaryLibraryRouter:
 
     def test_create_term_then_appears_in_library(self, conn):
         resp = notebook_router.create_glossary_term(
-            term="New Term", definition="A new definition.", x_requested_with=None, conn=conn
+            term="New Term", definition="A new definition.", section_title=[], section_body=[], x_requested_with=None, conn=conn
         )
         assert resp.status_code == 303
         terms = db.list_glossary_terms(conn)
@@ -129,7 +129,7 @@ class TestGlossaryLibraryRouter:
     def test_update_term(self, conn):
         _term(conn)
         notebook_router.update_glossary_term(
-            "t1", term="Updated Term", definition="Updated definition.", x_requested_with=None, conn=conn
+            "t1", term="Updated Term", definition="Updated definition.", section_title=[], section_body=[], x_requested_with=None, conn=conn
         )
         t = db.get_glossary_term(conn, "t1")
         assert t["term"] == "Updated Term"
@@ -283,18 +283,19 @@ class TestGlossaryTermReferences:
 
     def test_create_term_route_sets_references(self, conn):
         _document(conn, uid="d1", title="My Doc")
+        _citation(conn, uid="c1")
         resp = notebook_router.create_glossary_term(
-            term="New Term", definition="", reference_keys=["notebook:d1"],
+            term="New Term", definition="", reference_keys=["notebook:d1", "citation:c1"], section_title=[], section_body=[],
             x_requested_with=None, conn=conn,
         )
         new_uid = [t for t in db.list_glossary_terms(conn) if t["term"] == "New Term"][0]["uid"]
-        assert [r["ref_uid"] for r in db.list_glossary_term_references(conn, new_uid)] == ["d1"]
+        assert [r["ref_uid"] for r in db.list_glossary_term_references(conn, new_uid)] == ["c1"]
 
     def test_update_term_route_sets_references(self, conn):
         _term(conn, uid="t1")
         _citation(conn, uid="c1")
         notebook_router.update_glossary_term(
-            "t1", term="Feudalism", definition="", reference_keys=["citation:c1"],
+            "t1", term="Feudalism", definition="", reference_keys=["citation:c1"], section_title=[], section_body=[],
             x_requested_with=None, conn=conn,
         )
         assert [r["ref_uid"] for r in db.list_glossary_term_references(conn, "t1")] == ["c1"]
@@ -303,20 +304,20 @@ class TestGlossaryTermReferences:
         _document(conn, uid="d1", title="Doc One")
         _citation(conn, uid="c1")
         _term(conn, uid="t1")
-        db.set_glossary_term_references(conn, "t1", [("notebook", "d1")])
+        db.set_glossary_term_references(conn, "t1", [("notebook", "d1"), ("citation", "c1")])
         resp = notebook_router.edit_glossary_term_modal("t1", _bare_request(), conn=conn)
-        assert resp.context["selected_reference_keys"] == ["notebook:d1"]
-        reference_uids = [i["uid"] for i in resp.context["reference_items"]]
-        assert "notebook:d1" in reference_uids
-        assert "citation:c1" in reference_uids
+        assert resp.context["selected_reference_keys"] == ["citation:c1"]
+        assert [i["uid"] for i in resp.context["reference_items"]] == ["citation:c1"]
+        assert "ms_search_always" not in resp.body.decode() and 'aria-label="Search references"' in resp.body.decode()
 
     def test_library_page_shows_reference_names(self, conn):
         _document(conn, uid="d1", title="Further Reading Doc")
+        _citation(conn, uid="c1")
         _term(conn, uid="t1", term="Mercantilism")
-        db.set_glossary_term_references(conn, "t1", [("notebook", "d1")])
+        db.set_glossary_term_references(conn, "t1", [("notebook", "d1"), ("citation", "c1")])
         resp = notebook_router.glossary_library(_bare_request(), q="", conn=conn)
-        assert resp.context["terms"][0]["references"][0]["name"] == "Further Reading Doc"
-        assert "Further Reading Doc" in resp.body.decode()
+        assert [r["ref_type"] for r in resp.context["terms"][0]["references"]] == ["citation"]
+        assert "Further Reading Doc" not in resp.body.decode()
 
 
 class TestBackupRoundTrip:
@@ -467,3 +468,37 @@ class TestGlossaryAutoDetect:
             export_router.restore_backup_payload(fresh, payload)
             db.set_notebook_document_content(fresh, "d1", {"blocks": [_paragraph("Feudalism shaped Europe.")]})
             assert db.list_notebook_glossary_terms(fresh, "d1") == []
+
+
+class TestGlossarySections:
+    def test_sections_are_saved_in_order_and_blank_ones_dropped(self, conn):
+        _term(conn)
+        notebook_router.update_glossary_term(
+            "t1", term="Feudalism", definition="", section_title=["Example", "", "Remember"],
+            section_body=["A lord and a vassal.", "", "Fealty"], reference_keys=[], x_requested_with=None, conn=conn,
+        )
+        assert [(r["title"], r["body"]) for r in db.list_glossary_sections(conn, "t1")] == [("Example", "A lord and a vassal."), ("Remember", "Fealty")]
+
+    def test_sections_are_removed_with_their_term(self, conn):
+        _term(conn)
+        db.set_glossary_sections(conn, "t1", [("Example", "x")])
+        db.delete_glossary_term(conn, "t1")
+        assert db.list_glossary_sections(conn, "t1") == []
+
+    def test_the_edit_modal_lists_sections_and_the_sidebar_does_not(self, conn):
+        _term(conn)
+        db.set_glossary_sections(conn, "t1", [("Example", "Only in the modal")])
+        body = notebook_router.edit_glossary_term_modal("t1", _bare_request(), conn=conn).body.decode()
+        assert "Only in the modal" in body
+        from src.deps import templates
+        html = templates.get_template("_notebook_glossary_list.html").render(glossary_terms=db.list_notebook_glossary_terms(conn, "d1"))
+        assert "Only in the modal" not in html
+
+    def test_the_sidebar_list_is_alphabetical_numbered_and_linked(self, conn):
+        _document(conn, uid="d1")
+        _term(conn, uid="t1", term="Zeta")
+        _term(conn, uid="t2", term="Alpha")
+        db.set_notebook_glossary_terms(conn, "d1", ["t1", "t2"])
+        from src.deps import templates
+        html = templates.get_template("_notebook_glossary_list.html").render(glossary_terms=db.list_notebook_glossary_terms(conn, "d1"))
+        assert "<ol" in html and html.index("Alpha") < html.index("Zeta") and "/notebook/glossary/t2/edit" in html

@@ -78,9 +78,23 @@
       }
     }
 
+    // Paging is a fixed 7 days in both views. Clicking again before the fetch lands steps from the
+    // requested date, not from the stale link href, and an older response never overwrites a newer one.
+    var gridStart = document.getElementById(gridId);
+    var requested = gridStart ? gridStart.dataset.date || "" : "";
+    var seq = 0;
+    function shifted(days) {
+      var base = requested ? new Date(requested + "T00:00:00Z") : new Date();
+      base.setUTCDate(base.getUTCDate() + days);
+      return base.toISOString().slice(0, 10);
+    }
+
     function go(dateVal, push) {
+      requested = dateVal;
+      var mine = ++seq;
       refreshFn(dateVal)
         .then(function () {
+          if (mine !== seq) return;
           applyDataset();
           if (push) {
             var gridEl = document.getElementById(gridId);
@@ -99,15 +113,13 @@
     if (prevLink) {
       prevLink.addEventListener("click", function (e) {
         e.preventDefault();
-        var url = new URL(prevLink.href, window.location.origin);
-        go(url.searchParams.get("date_") || "", true);
+        go(shifted(-7), true);
       });
     }
     if (nextLink) {
       nextLink.addEventListener("click", function (e) {
         e.preventDefault();
-        var url = new URL(nextLink.href, window.location.origin);
-        go(url.searchParams.get("date_") || "", true);
+        go(shifted(7), true);
       });
     }
     window.addEventListener("popstate", function () {

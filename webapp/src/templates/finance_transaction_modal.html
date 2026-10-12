@@ -5,7 +5,7 @@
 <div class="modal-header"><h1>{{ "Edit transaction" if t and not copy else "New transaction" }}</h1></div>
 <div class="modal-body">
 <div class="card">
-<form method="post" id="finance-transaction-form" action="{{ form_action }}" data-tag-url="/finance/transactions/tag-field">
+<form method="post" id="finance-transaction-form" action="{{ form_action }}">
     {% include "_finance_transaction_fields.html" %}
 </form>
 </div>

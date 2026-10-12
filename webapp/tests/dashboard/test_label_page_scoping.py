@@ -688,7 +688,7 @@ class TestQuickAddContactAndLabelTabs:
         for tab, form_id in (("task", "task-form"), ("event", "event-form"), ("contact", "contact-form"), ("label", "label-form")):
             resp = dashboard_router.quick_add_form(_request("/quick/add"), default_tab=tab, conn=conn)
             body = resp.body.decode()
-            assert f'role="tab" aria-selected="true" data-quick-add-tab="{tab}"' in body
+            assert f'name="qa_type_{tab}"' in body and "quick-add-tabs" not in body
             assert f'data-active="{tab}"' in body
             assert f'form="{form_id}"' in body
 

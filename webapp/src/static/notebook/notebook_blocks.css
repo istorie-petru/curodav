@@ -171,8 +171,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0.6em 0;
-  min-height: 1.6em;
+  margin: 0;
+  min-height: 1.7em;
   color: var(--fg-secondary);
 }
 .cdx-nb-delimiter[data-style="stars"]::before {
@@ -186,7 +186,7 @@
   letter-spacing: 0.4em;
 }
 .cdx-nb-delimiter[data-style="line"] {
-  min-height: auto;
+  min-height: 1.7em;
 }
 .cdx-nb-delimiter[data-style="line"]::before {
   content: "";
@@ -194,3 +194,33 @@
   width: 100%;
   border-top: 1px solid var(--border-strong);
 }
+
+/* Dragging a group of selected blocks (notebook_block_drag.js). */
+.nb-drop-line {
+  position: fixed;
+  z-index: 10050;
+  height: 3px;
+  margin-top: -1px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.nb-dragging-blocks {
+  cursor: grabbing;
+  user-select: none;
+}
+.nb-multi-grip {
+  position: fixed;
+  z-index: 10040;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-control);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--fg-secondary);
+  cursor: grab;
+}
+.nb-multi-grip:hover { color: var(--fg-primary); background: var(--accent-neutral-hover); }

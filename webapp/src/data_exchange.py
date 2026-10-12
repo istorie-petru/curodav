@@ -214,3 +214,7 @@ def glossary_reference_rows(conn) -> list[dict[str, Any]]:
         "SELECT term_uid, ref_type, ref_uid, position, created_at FROM glossary_term_references"
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def glossary_section_rows(conn) -> list[dict[str, Any]]:
+    return [dict(r) for r in conn.execute("SELECT uid, term_uid, title, body, position FROM glossary_term_sections")]

@@ -1,7 +1,7 @@
 """Personal finance storage (features/finance.md): accounts, transactions and transaction tags.
 
-Amounts are integer minor units. A transaction's label is an ordinary object label (object_type
-'transaction'); tags are free-standing, shared by every label. Balances are always derived, never stored.
+Amounts are integer minor units. Transactions carry tags only (no labels or groups; older label rows are
+left dormant in the database). Balances are always derived, never stored.
 """
 
 from __future__ import annotations
@@ -185,6 +185,7 @@ def _delete_transaction_rows(conn: sqlite3.Connection, uid: str) -> None:
     conn.execute("DELETE FROM finance_transactions WHERE uid = ?", (uid,))
     conn.execute("DELETE FROM finance_transaction_tags WHERE txn_uid = ?", (uid,))
     conn.execute("DELETE FROM object_labels WHERE object_type = 'transaction' AND object_id = ?", (uid,))
+    conn.execute("DELETE FROM object_contacts WHERE object_type = 'transaction' AND object_id = ?", (uid,))
 
 
 def delete_transaction(conn: sqlite3.Connection, uid: str) -> None:
@@ -207,13 +208,10 @@ def _attach(conn: sqlite3.Connection, rows: list[dict]) -> list[dict]:
         return rows
     uids = [r["uid"] for r in rows]
     marks = ", ".join("?" for _ in uids)
-    labels = {r["object_id"]: r["label_name"] for r in conn.execute(
-        f"SELECT object_id, label_name FROM object_labels WHERE object_type = 'transaction' AND object_id IN ({marks})", uids)}
     tags: dict[str, list[str]] = {}
     for r in conn.execute(f"SELECT txn_uid, tag FROM finance_transaction_tags WHERE txn_uid IN ({marks}) ORDER BY tag COLLATE NOCASE", uids):
         tags.setdefault(r["txn_uid"], []).append(r["tag"])
     for row in rows:
-        row["label"] = labels.get(row["uid"], "")
         row["tags"] = tags.get(row["uid"], [])
     return rows
 
@@ -233,16 +231,14 @@ def get_transaction(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None
 
 
 def list_transactions(conn: sqlite3.Connection, filters: dict | None = None, limit: int | None = None, offset: int = 0) -> list[dict]:
-    """Filters: q, account_uid, type, label, group, date_from, date_to, sort, dir. A transfer matches an
-    account filter on either side; the group filter keeps only labelled income and expenses in that group."""
+    """Filters: q, account_uid, type, date_from, date_to, sort, dir. A transfer matches an account filter on either side."""
     f = filters or {}
     where: list[str] = []
     params: list[Any] = []
     if f.get("q"):
-        where.append("(t.description LIKE ? OR a.name LIKE ? OR a.abbreviation LIKE ? OR EXISTS (SELECT 1 FROM object_labels o WHERE o.object_type = 'transaction' "
-                     "AND o.object_id = t.uid AND o.label_name LIKE ?) OR EXISTS (SELECT 1 FROM finance_transaction_tags g "
+        where.append("(t.description LIKE ? OR a.name LIKE ? OR a.abbreviation LIKE ? OR EXISTS (SELECT 1 FROM finance_transaction_tags g "
                      "WHERE g.txn_uid = t.uid AND g.tag LIKE ?))")
-        params += [f"%{f['q']}%"] * 5
+        params += [f"%{f['q']}%"] * 4
     if f.get("account_uid"):
         where.append("(t.account_uid = ? OR t.to_account_uid = ?)")
         params += [f["account_uid"]] * 2
@@ -255,14 +251,6 @@ def list_transactions(conn: sqlite3.Connection, filters: dict | None = None, lim
     if f.get("date_to"):
         where.append("t.date <= ?")
         params.append(f["date_to"])
-    label_names = [f["label"]] if f.get("label") else []
-    if f.get("group"):
-        label_names = db.group_member_names(conn, f["group"]) or ["\0"]
-    if label_names:
-        marks = ", ".join("?" for _ in label_names)
-        where.append(f"EXISTS (SELECT 1 FROM object_labels o WHERE o.object_type = 'transaction' AND o.object_id = t.uid "
-                     f"AND o.label_name IN ({marks}) COLLATE NOCASE)")
-        params += label_names
     order = SORTS.get(f.get("sort") or "date", SORTS["date"])
     direction = "ASC" if f.get("dir") == "asc" else "DESC"
     sql = _SELECT + (" WHERE " + " AND ".join(where) if where else "") + f" ORDER BY {order} {direction}, t.created_at DESC"
@@ -295,7 +283,7 @@ def validate_transaction(conn: sqlite3.Connection, data: dict) -> tuple[dict, di
     if day < account["opening_date"]:
         return {}, _error("date", f"The account starts on {account['opening_date']}")
     clean = {"date": day, "type": kind, "amount": amount, "account_uid": account["uid"], "to_account_uid": None,
-             "description": (data.get("description") or "").strip(), "label": "", "tags": []}
+             "description": (data.get("description") or "").strip(), "tags": []}
     if kind == "transfer":
         target = get_account(conn, data.get("to_account_uid") or "")
         if target is None:
@@ -308,7 +296,6 @@ def validate_transaction(conn: sqlite3.Connection, data: dict) -> tuple[dict, di
             return {}, _error("date", f"The account {target['name']} starts on {target['opening_date']}")
         clean["to_account_uid"] = target["uid"]
     else:
-        clean["label"] = (data.get("label") or "").strip()
         clean["tags"] = [t.strip() for t in (data.get("tags") or []) if t and t.strip()]
     return clean, None
 
@@ -321,7 +308,6 @@ def save_transaction(conn: sqlite3.Connection, clean: dict, uid: str | None = No
         "account_uid=excluded.account_uid, to_account_uid=excluded.to_account_uid, type=excluded.type, amount=excluded.amount",
         (uid, clean["date"], clean["description"], clean["account_uid"], clean["to_account_uid"], clean["type"], clean["amount"], _now()),
     )
-    db.set_object_labels(conn, "transaction", uid, [clean["label"]] if clean["label"] else [])
     conn.execute("DELETE FROM finance_transaction_tags WHERE txn_uid = ?", (uid,))
     for tag in dict.fromkeys(clean["tags"]):
         conn.execute("INSERT OR IGNORE INTO finance_tags (group_name, name) VALUES ('', ?)", (tag,))
@@ -393,7 +379,7 @@ def import_rows(conn: sqlite3.Connection, rows: list[dict]) -> tuple[int, list[s
         clean, error = validate_transaction(conn, {
             "date": row["date"], "type": row["type"], "amount": finance_stats.amount_input(row["amount"]),
             "account_uid": account, "to_account_uid": target, "description": row["description"],
-            "label": row["label"], "tags": [t for t in row["tags"].split(";") if t.strip()],
+            "tags": [t for t in row["tags"].split(";") if t.strip()],
         })
         if error:
             problems.append(f"Line {number}: {error['message']}")
@@ -427,12 +413,12 @@ def restore_rows(conn: sqlite3.Connection, payload: dict) -> int:
         count += 1
     for row in payload.get("finance_transactions", []):
         clean = {k: row.get(k) for k in ("date", "description", "account_uid", "to_account_uid", "type", "amount")}
-        clean.update(label=row.get("label") or "", tags=row.get("tags") or [])
+        clean.update(tags=row.get("tags") or [])
         save_transaction(conn, clean, row["uid"])
         count += 1
     for row in payload.get("finance_scheduled", []):
         save_scheduled(conn, {k: row.get(k) for k in ("date", "description", "account_uid", "to_account_uid", "type", "amount",
-                                                     "recurrence", "task_uid")} | {"label": row.get("label") or "", "tags": row.get("tags") or []}, row["uid"])
+                                                     "recurrence", "task_uid")} | {"tags": row.get("tags") or []}, row["uid"])
         count += 1
     for row in payload.get("finance_tags", []):
         conn.execute("INSERT OR IGNORE INTO finance_tags (group_name, name, color, icon) VALUES ('', ?, ?, ?)",
@@ -444,13 +430,6 @@ def restore_rows(conn: sqlite3.Connection, payload: dict) -> int:
 # Scheduled transactions: one model for a pending one-off and a recurring transaction.
 # A scheduled row is shown once, at the top of the table, with its next date. Posting it creates a real
 # transaction; a recurring row then moves to its next date and a one-off row is removed.
-
-def task_label(conn: sqlite3.Connection, task_uid: str) -> str:
-    """The label a task-linked transaction carries: the task's first label that is not a project."""
-    projects = {p["name"] for p in db.list_project_labels(conn)}
-    task = db.get_task(conn, task_uid)
-    return next((name for name in (task or {}).get("tags", []) if name not in projects), "")
-
 
 def _scheduled_select() -> str:
     return (
@@ -466,7 +445,6 @@ def _decorate_scheduled(conn: sqlite3.Connection, row: dict) -> dict:
         "SELECT tag FROM finance_scheduled_tags WHERE scheduled_uid = ? ORDER BY tag COLLATE NOCASE", (row["uid"],))]
     task = db.get_task(conn, row["task_uid"]) if row.get("task_uid") else None
     row["task_title"] = task["title"] if task else ""
-    row["effective_label"] = task_label(conn, row["task_uid"]) if task else row["label"]
     return row
 
 
@@ -476,7 +454,7 @@ def get_scheduled(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
 
 
 def list_scheduled(conn: sqlite3.Connection, filters: dict | None = None, task_uid: str | None = None) -> list[dict]:
-    """Scheduled rows, dated ones first by date. Filters: q, account_uid, type, label, group (the period never applies)."""
+    """Scheduled rows, dated ones first by date. Filters: q, account_uid, type (the period never applies)."""
     f = filters or {}
     where, params = [], []
     if task_uid:
@@ -492,11 +470,7 @@ def list_scheduled(conn: sqlite3.Connection, filters: dict | None = None, task_u
     rows = [_decorate_scheduled(conn, dict(r)) for r in conn.execute(sql, params)]
     if f.get("q"):
         needle = f["q"].lower()
-        rows = [r for r in rows if needle in " ".join([r["description"], r["account_name"], r["effective_label"], r["task_title"]]).lower()]
-    labels = [f["label"]] if f.get("label") else (db.group_member_names(conn, f["group"]) if f.get("group") else [])
-    if labels:
-        wanted = {n.lower() for n in labels}
-        rows = [r for r in rows if r["effective_label"].lower() in wanted]
+        rows = [r for r in rows if needle in " ".join([r["description"], r["account_name"], r["task_title"]]).lower()]
     return rows
 
 
@@ -524,7 +498,6 @@ def validate_scheduled(conn: sqlite3.Connection, data: dict) -> tuple[dict, dict
         return {}, _error("task_uid", "Choose an existing task")
     clean = {"date": day or None, "type": kind, "amount": abs(amount), "account_uid": account["uid"], "to_account_uid": None,
              "description": (data.get("description") or "").strip(), "recurrence": rule or None, "task_uid": task_uid,
-             "label": "" if task_uid or kind == "transfer" else (data.get("label") or "").strip(),
              "tags": [] if kind == "transfer" else list(dict.fromkeys(t.strip() for t in (data.get("tags") or []) if t and t.strip()))}
     if kind == "transfer":
         target = get_account(conn, data.get("to_account_uid") or "")
@@ -541,12 +514,12 @@ def validate_scheduled(conn: sqlite3.Connection, data: dict) -> tuple[dict, dict
 def save_scheduled(conn: sqlite3.Connection, clean: dict, uid: str | None = None) -> str:
     uid = uid or str(uuid.uuid4())
     conn.execute(
-        "INSERT INTO finance_scheduled (uid, date, description, account_uid, to_account_uid, type, amount, recurrence, task_uid, label, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET date=excluded.date, description=excluded.description, "
+        "INSERT INTO finance_scheduled (uid, date, description, account_uid, to_account_uid, type, amount, recurrence, task_uid, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET date=excluded.date, description=excluded.description, "
         "account_uid=excluded.account_uid, to_account_uid=excluded.to_account_uid, type=excluded.type, amount=excluded.amount, "
-        "recurrence=excluded.recurrence, task_uid=excluded.task_uid, label=excluded.label",
+        "recurrence=excluded.recurrence, task_uid=excluded.task_uid",
         (uid, clean["date"], clean["description"], clean["account_uid"], clean["to_account_uid"], clean["type"], clean["amount"],
-         clean["recurrence"], clean["task_uid"], clean["label"], _now()),
+         clean["recurrence"], clean["task_uid"], _now()),
     )
     conn.execute("DELETE FROM finance_scheduled_tags WHERE scheduled_uid = ?", (uid,))
     for tag in clean.get("tags", []):
@@ -559,6 +532,7 @@ def save_scheduled(conn: sqlite3.Connection, clean: dict, uid: str | None = None
 def delete_scheduled(conn: sqlite3.Connection, uid: str) -> None:
     conn.execute("DELETE FROM finance_scheduled WHERE uid = ?", (uid,))
     conn.execute("DELETE FROM finance_scheduled_tags WHERE scheduled_uid = ?", (uid,))
+    conn.execute("DELETE FROM object_contacts WHERE object_type = 'scheduled' AND object_id = ?", (uid,))
     conn.commit()
 
 
@@ -572,11 +546,12 @@ def post_scheduled(conn: sqlite3.Connection, uid: str, today: str) -> str | None
     day = max(today, account["opening_date"]) if account else today
     clean, error = validate_transaction(conn, {
         "date": day, "type": row["type"], "amount": finance_stats.amount_input(row["amount"]), "account_uid": row["account_uid"],
-        "to_account_uid": row["to_account_uid"], "description": row["description"], "label": row["effective_label"], "tags": row["tags"],
+        "to_account_uid": row["to_account_uid"], "description": row["description"], "tags": row["tags"],
     })
     if error:
         return None
     new_uid = save_transaction(conn, clean)
+    db.set_object_contacts(conn, "transaction", new_uid, [c["uid"] for c in db.list_object_contacts(conn, "scheduled", uid)])
     following = finance_stats.next_occurrence(row["recurrence"], row["date"] or today, datetime.strptime(today, "%Y-%m-%d").date()) if row["recurrence"] else ""
     if following:
         conn.execute("UPDATE finance_scheduled SET date = ? WHERE uid = ?", (following, uid))
@@ -592,9 +567,8 @@ def post_for_task(conn: sqlite3.Connection, task_uid: str, today: str) -> int:
 
 
 def unlink_task(conn: sqlite3.Connection, task_uid: str) -> None:
-    """A deleted task leaves its scheduled rows behind, now unlinked, keeping the label they had."""
-    for row in list_scheduled(conn, task_uid=task_uid):
-        conn.execute("UPDATE finance_scheduled SET task_uid = NULL, label = ? WHERE uid = ?", (row["effective_label"], row["uid"]))
+    """A deleted task leaves its scheduled rows behind, now unlinked."""
+    conn.execute("UPDATE finance_scheduled SET task_uid = NULL WHERE task_uid = ?", (task_uid,))
     conn.commit()
 
 

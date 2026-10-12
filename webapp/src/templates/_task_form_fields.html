@@ -33,7 +33,7 @@
              here; each keeps its own 'date' mode picker). 2026-08-08
              direct feedback (still true): Start date defaults to today
              on a brand-new task, same as before this merge. -->
-        {% call title_date_row(task.title if task else (prefill_title or '')) %}
+        {% call title_date_row(task.title if task else (prefill_title or ''), qa=(quick_add_kind | default(''))) %}
         <div class="field">
             <label>Start date</label>
             {{ date_field('start_at', task.start_at[:10] if task and task.start_at else today, label='Start date') }}

@@ -176,7 +176,6 @@
     this.table = table;
     if (!this.readOnly) {
       this.wrapper.appendChild(this.addButton("row"));
-      this.wrapper.appendChild(this.addButton("col"));
     }
     this.refresh();
   };
@@ -189,6 +188,7 @@
     g.contentEditable = "false";
     g.dataset.index = index;
     g.textContent = kind === "col" ? M.colName(index) : String(index + 1);
+    g.title = (kind === "col" ? "Column " : "Row ") + g.textContent;
     g.setAttribute("aria-label", (kind === "col" ? "Column " : "Row ") + g.textContent + " actions");
     return g;
   };
@@ -199,7 +199,7 @@
     b.className = "nbt-add nbt-add-" + kind;
     b.tabIndex = -1;
     b.textContent = "+";
-    b.title = kind === "row" ? "Add row" : "Add column";
+    b.title = "Add row";
     b.setAttribute("aria-label", b.title);
     return b;
   };
@@ -728,7 +728,13 @@
         // Enter confirms the cell and moves down; in the last row it just confirms.
         if (pos.r + 1 < rows) self.focusCell(pos.r + 1, pos.c);
         else self.focusCell(pos.r, pos.c, true);
-      } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      } else if (e.altKey && e.key.indexOf("Arrow") === 0) {
+        e.preventDefault();
+        var dr = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+        var dc = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+        var nr = Math.max(0, Math.min(rows - 1, pos.r + dr)), nc = Math.max(0, Math.min(cols - 1, pos.c + dc));
+        self.focusCell(nr, nc, dc < 0 || dr < 0);
+      } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && !e.shiftKey) {
         var down = e.key === "ArrowDown";
         if (edgeOf(cell, down ? "end" : "start") && (down ? pos.r + 1 < rows : pos.r > 0)) {
           e.preventDefault();
@@ -798,8 +804,7 @@
       var add = e.target.closest(".nbt-add");
       if (add) {
         self.syncFromDom();
-        if (add.classList.contains("nbt-add-row")) self.apply(M.insertRow(self.model, self.model.content.length), { r: self.model.content.length, c: 0 });
-        else self.apply(M.insertCol(self.model, M.colCount(self.model.content)), { r: 0, c: M.colCount(self.model.content) });
+        self.apply(M.insertRow(self.model, self.model.content.length), { r: self.model.content.length, c: 0 });
       }
     });
 

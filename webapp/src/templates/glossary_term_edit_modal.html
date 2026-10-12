@@ -1,4 +1,15 @@
 {% from "_inputs.html" import text_input, textarea_input %}
+{% macro section_row(row) %}
+<div class="glossary-section-edit" data-repeatable-row>
+    <div class="field-label-row">
+        <label>Title</label>
+        <button type="button" class="icon-btn" data-repeatable-remove title="Remove section" aria-label="Remove section">{{ icon('x', 'icon-sm') }}</button>
+    </div>
+    {{ text_input({'name': 'section_title', 'value': (row.title if row else '')}) }}
+    <label>Text</label>
+    {{ textarea_input({'name': 'section_body', 'rows': '4'}, row.body if row else '') }}
+</div>
+{% endmacro %}
 {% extends "base.html" %}
 {% from "_modal_header_back.html" import modal_header_back %}
 {% block title %}{{ "Edit term" if t else "Add term" }}{% endblock %}
@@ -35,9 +46,18 @@
             {% set ms_form_id = 'glossary-term-form' %}
             {% set ms_name = 'reference_keys' %}
             {% set ms_label = 'References' %}
+            {% set ms_search_always = true %}
             {% set ms_items = reference_items %}
             {% set ms_selected = selected_reference_keys %}
             {% include "_widget_list_multiselect.html" %}
+        </div>
+        <div class="field field-wide" data-repeatable-rows-scope>
+            <div class="field-label-row">
+                <label>Sections</label>
+                <button type="button" class="icon-btn" data-repeatable-add="glossary-section-rows" data-repeatable-template="glossary-section-template" title="Add section" aria-label="Add section">{{ icon('plus', 'icon-sm') }}</button>
+            </div>
+            <div id="glossary-section-rows">{% for row in sections %}{{ section_row(row) }}{% endfor %}</div>
+            <template id="glossary-section-template">{{ section_row(none) }}</template>
         </div>
     </div>
 </form>

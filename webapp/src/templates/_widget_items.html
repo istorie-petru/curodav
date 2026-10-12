@@ -81,12 +81,12 @@
    per-row "edit properties" link -- a separate cell from `right` since
    that one's semantics are muted meta text everywhere else it's used,
    not a place for an interactive control). #}
-{% macro widget_link_row(url, title, leading=None, leading_class=None, right=None, row_class=None, actions=None) -%}
+{% macro widget_link_row(url, title, leading=None, leading_class=None, right=None, row_class=None, actions=None, row_attrs=None) -%}
 {# `row_class` (2026-09-28, checkbox consolidation): lets a done task row
    in the Agenda widget's Today list dim + strike its title -- same
    `.task-row-completed` treatment the Tasks table already gives a done
    row (style.css), reused rather than a second rule set. #}
-<tr{% if row_class %} class="{{ row_class }}"{% endif %}>
+<tr{% if row_class %} class="{{ row_class }}"{% endif %}{% if row_attrs %} {{ row_attrs | safe }}{% endif %}>
     {% if leading is not none %}<td{% if leading_class %} class="{{ leading_class }}"{% endif %}>{{ leading }}</td>{% endif %}
     <td>{% if url %}<a href="{{ url }}" data-modal>{{ title }}</a>{% else %}{{ title }}{% endif %}</td>
     {% if caller %}<td class="text-muted widget-row-right">{{ caller() }}</td>

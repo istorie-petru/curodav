@@ -48,18 +48,19 @@
   let cloneCounter = 0;
 
   function rewriteClonedTypePicker(root) {
-    const proxy = root.querySelector(".contact-type-proxy");
-    const radios = root.querySelectorAll(".contact-type-radio");
-    if (!proxy || !radios.length) return; // not every repeatable row has one (none currently don't, but stay defensive)
-    cloneCounter += 1;
-    const base = proxy.getAttribute("name"); // e.g. "phone_type" -- the real submitted field name, never rewritten
-    const token = "c" + cloneCounter;
-    const proxyId = base + "-proxy-" + token;
-    proxy.id = proxyId;
-    radios.forEach(function (radio) {
-      const fieldName = radio.dataset.proxyName || base;
-      radio.name = fieldName + "__" + token;
-      radio.dataset.proxyTarget = proxyId;
+    // A row can hold several pickers (a pending transaction has Type and two Accounts): each proxy and its own radios get a token.
+    root.querySelectorAll(".contact-type-proxy").forEach(function (proxy) {
+      cloneCounter += 1;
+      const base = proxy.getAttribute("name"); // e.g. "phone_type" -- the real submitted field name, never rewritten
+      const token = "c" + cloneCounter;
+      const oldId = proxy.id;
+      const proxyId = base + "-proxy-" + token;
+      proxy.id = proxyId;
+      root.querySelectorAll(".contact-type-radio").forEach(function (radio) {
+        if (radio.dataset.proxyTarget !== oldId) return;
+        radio.name = (radio.dataset.proxyName || base) + "__" + token;
+        radio.dataset.proxyTarget = proxyId;
+      });
     });
   }
 

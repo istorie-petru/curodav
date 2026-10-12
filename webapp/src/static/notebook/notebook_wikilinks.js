@@ -222,101 +222,20 @@
     notifyMountChanged(marker);
   }
 
-  // Typing `[[` anywhere in the editor opens the same search/pick flow as
-  // the toolbar button, Obsidian/Notion-style (direct request: "wiki
-  // links should also be possible to be created ... simply writing inside
-  // a `[[]]`"). Standalone rather than routed through Editor.js's own
-  // inline-toolbar machinery -- that toolbar only opens for an existing
-  // (non-collapsed) selection or a manual button click, with no public
-  // hook to force it open programmatically for a bare collapsed caret.
-  //
-  // 2026-10-04 (floating-popover -> real-modal rewrite): this used to be
-  // its own `position:fixed` popover appended to `document.body`, closed
-  // by a `document`-level `mousedown`-capture "click outside" listener
-  // this file owned and maintained itself. Replaced with
-  // `window.CCModal.openCustom` (static/modal.js) -- the same shared
-  // overlay every other modal in the app already uses, with its own
-  // battle-tested backdrop-click/Escape/focus-trap handling, instead of a
-  // bespoke listener anchored to a marker's `getBoundingClientRect()`.
-  // `onClose` replaces the old `cancelIfUnpicked` mousedown-outside
-  // behavior: if nothing was picked by the time the modal closes (X,
-  // Escape, backdrop, or Save on something else reusing the shell), the
-  // placeholder marker this function's own caller just inserted is
-  // removed, same "don't leave a dangling empty link in the text" rule as
-  // before.
-  function openFloatingPicker(marker) {
-    var wrap = document.createElement("div");
-    wrap.className = "cdx-wikilink-picker cdx-wikilink-modal-picker";
-    var input = document.createElement("input");
-    input.type = "text";
-    input.setAttribute("aria-label", "Search documents");
-    input.className = "cdx-wikilink-picker-input";
-    var results = document.createElement("ul");
-    results.className = "cdx-wikilink-picker-results";
-    wrap.appendChild(window.CCSearchField.wrap(input));
-    wrap.appendChild(results);
-
-    function runSearch() {
-      searchDocuments(input.value, function (items) {
-        renderResultsInto(results, items, function (item) {
-          applyPick(marker, item);
-          window.CCModal.close();
-        });
-      });
-    }
-    input.addEventListener("input", debounce(runSearch, 200));
-
-    window.CCModal.openCustom({
-      title: "Insert wikilink",
-      bodyNode: wrap,
-      footerNode: window.CCModal.footer(),
-      onClose: function () {
-        if (!marker.getAttribute("data-target-uid")) marker.remove();
-      },
-    });
-    runSearch();
-  }
-  document.addEventListener(
-    "input",
-    function (e) {
-      var mount = document.getElementById("notebook-editor");
-      if (!mount || !mount.contains(e.target)) return;
-      if (e.target.closest(".cdx-wikilink-picker, .cdx-footnote-input")) return;
-      var sel = window.getSelection();
-      if (!sel.rangeCount) return;
-      var range = sel.getRangeAt(0);
-      if (!range.collapsed) return;
-      var node = range.startContainer;
-      if (node.nodeType !== Node.TEXT_NODE) return;
-      var offset = range.startOffset;
-      if (offset < 2 || node.textContent.slice(offset - 2, offset) !== "[[") return;
-      if (node.parentElement && node.parentElement.closest(".cdx-wikilink, .cdx-footnote-ref")) return;
-
-      var before = node.textContent.slice(0, offset - 2);
-      var afterText = node.textContent.slice(offset);
-      node.textContent = before + afterText;
-
-      var marker = document.createElement("span");
-      marker.className = "cdx-wikilink";
-      marker.contentEditable = "false";
-      marker.setAttribute("data-target-uid", "");
-      marker.setAttribute("data-target-title", "");
-      marker.textContent = "New link";
-      var insertRange = document.createRange();
-      insertRange.setStart(node, before.length);
-      insertRange.collapse(true);
-      insertRange.insertNode(marker);
-
-      var afterRange = document.createRange();
-      afterRange.setStartAfter(marker);
-      afterRange.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(afterRange);
-
-      openFloatingPicker(marker);
-    },
-    true
-  );
+  // Typing `[` (or `[[`) opens the document dropdown in notebook_mentions.js, which builds the
+  // link with this marker.
+  window.notebookWikilinkMarker = function (item) {
+    var span = document.createElement("span");
+    span.className = "cdx-wikilink";
+    span.contentEditable = "false";
+    span.setAttribute("data-target-uid", item.uid);
+    span.setAttribute("data-target-title", item.title);
+    span.setAttribute("data-target-note-type", item.note_type || "");
+    span.setAttribute("data-target-color", item.color);
+    span.setAttribute("data-target-icon", item.icon);
+    span.textContent = item.title;
+    return span;
+  };
 
   // Slash-command entry point -- a block tool so it shows up in Editor.js's
   // own "/" toolbox (direct request: "should also be possible to be

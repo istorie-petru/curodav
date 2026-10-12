@@ -1,8 +1,9 @@
 <div class="notebook-glossary-list" data-glossary-list>
 {% if glossary_terms %}
-<ul class="notebook-bibliography-sidebar-list">
-    {% for t in glossary_terms %}<li><strong>{{ t.term }}</strong>{% if t.definition %} -- {{ t.definition }}{% endif %}</li>{% endfor %}
-</ul>
+{# Alphabetical and numbered; each entry opens its full term. Custom sections never appear here. #}
+<ol class="notebook-bibliography-sidebar-list notebook-glossary-sidebar-list">
+    {% for t in glossary_terms | sort(attribute='term', case_sensitive=false) %}<li><a href="/notebook/glossary/{{ t.uid }}/edit" data-modal><strong>{{ t.term }}</strong></a>{% if t.definition %} -- {{ t.definition }}{% endif %}</li>{% endfor %}
+</ol>
 {% else %}
 <p class="notebook-toc-empty">No terms attached yet</p>
 {% endif %}

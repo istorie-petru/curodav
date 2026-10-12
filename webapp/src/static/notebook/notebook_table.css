@@ -1,10 +1,10 @@
 /* Notebook table (notebook_table.js): a plain grid at rest; grips, add buttons and the selection
    bar appear on hover or focus. */
 .nbt{position:relative; margin:var(--space-3) 0;}
-.nbt-scroll{overflow-x:auto; padding:32px 0 0 34px; isolation:isolate;}
+.nbt-scroll{overflow-x:auto; isolation:isolate;}
 .nbt-table{width:100%; border-collapse:collapse; table-layout:auto;}
 .nbt-table td{position:relative; border:1px solid var(--border); padding:0; vertical-align:top; min-width:48px;}
-.nbt-cell{padding:6px 10px; min-height:1.5em; outline:none; word-break:break-word; font-weight:var(--font-weight-regular);}
+.nbt-cell{padding:4px 8px; min-height:1.5em; outline:none; word-break:break-word; font-weight:var(--font-weight-regular);}
 .nbt-cell:focus{box-shadow:inset 0 0 0 2px var(--accent);}
 .nbt-head{background:var(--accent-neutral-subtle);}
 .nbt.has-selection .nbt-cell:focus{box-shadow:none;}
@@ -19,19 +19,19 @@
 .nbt-table td[data-align="center"] .nbt-cell{text-align:center;}
 .nbt-table td[data-align="left"] .nbt-cell{text-align:left;}
 .nbt-err .nbt-cell{color:var(--fg-tertiary); font-size:.85em;}
-.nbt-grip{position:absolute; z-index:1; display:flex; align-items:center; justify-content:center; padding:0; border:1px solid var(--border);
-  background:var(--accent-neutral-subtle); color:var(--fg-tertiary); font-size:11px; line-height:1; cursor:pointer; opacity:0; border-radius:0;}
-.nbt-grip-col{top:-28px; left:-1px; right:-1px; height:20px;}
-.nbt-grip-row{left:-32px; top:-1px; bottom:-1px; width:24px;}
-.nbt:hover .nbt-grip, .nbt:focus-within .nbt-grip, .nbt.show-refs .nbt-grip{opacity:1;}
-.nbt:not(.show-refs) .nbt-grip{font-size:0;}
-.nbt:not(.show-refs) .nbt-grip::before{content:"\22EF"; font-size:12px;}
-.nbt:not(.show-refs) .nbt-grip-row::before{content:"\22EE";}
-.nbt-grip:hover{background:var(--accent-neutral-hover); color:var(--fg-primary);}
+.nbt-grip{position:absolute; z-index:1; display:flex; align-items:center; justify-content:center; padding:0; border:0;
+  background:var(--accent-neutral-subtle-strong); color:var(--fg-tertiary); font-size:0; line-height:1; cursor:pointer; opacity:0;
+  border-radius:var(--radius-pill, 999px); transition:opacity .12s;}
+.nbt-grip-col{top:1px; left:25%; right:25%; height:4px;}
+.nbt-grip-row{left:1px; top:25%; bottom:25%; width:4px;}
+.nbt:hover .nbt-grip, .nbt:focus-within .nbt-grip{opacity:.55;}
+.nbt .nbt-grip:hover, .nbt .nbt-grip:focus-visible{opacity:1; background:var(--accent-neutral-hover);}
+.nbt.show-refs .nbt-grip{opacity:1; font-size:10px; color:var(--fg-secondary);}
+.nbt.show-refs .nbt-grip-col{height:14px; left:30%; right:30%;}
+.nbt.show-refs .nbt-grip-row{width:14px; top:30%; bottom:30%;}
 .nbt-add{position:absolute; z-index:1; width:22px; height:22px; padding:0; border:0; border-radius:50%; background:var(--accent-neutral-subtle-strong);
   color:var(--fg-secondary); cursor:pointer; opacity:0; line-height:1;}
 .nbt-add-row{bottom:-11px; left:50%;}
-.nbt-add-col{right:-11px; top:50%;}
 .nbt:hover .nbt-add, .nbt:focus-within .nbt-add{opacity:1;}
 .nbt-add:hover{background:var(--accent-neutral-hover); color:var(--fg-primary);}
 .nbt-bar{position:absolute; z-index:3; display:flex; gap:2px; padding:3px; background:var(--bg-elevated); border:1px solid var(--border);
@@ -89,3 +89,5 @@
 .nbt-swatch-bg.nbt-c-gray{background:var(--tag-gray-bg);}
 .nbt-cell[data-locked]{scrollbar-width:none;}
 .nbt-cell[data-locked]::-webkit-scrollbar{display:none;}
+.nbt-grip::after{content:""; position:absolute; inset:-5px 0;}
+.nbt-grip-row::after{inset:0 -5px;}

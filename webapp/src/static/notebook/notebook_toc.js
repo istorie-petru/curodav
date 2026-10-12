@@ -141,6 +141,9 @@
       // (inside Editor.js's observed redactor), not on a node outside it
       // like the sidebar <a> below.
       if (h.dataset.tocLabel !== label) h.dataset.tocLabel = label;
+      // The editing view shows only the number; the word stays in the outline.
+      var num = label.replace(/^[A-Za-z]+ /, "");
+      if (h.dataset.tocNum !== num) h.dataset.tocNum = num;
       var a = document.createElement("a");
       a.className = "notebook-toc-item";
       a.href = "#" + id;

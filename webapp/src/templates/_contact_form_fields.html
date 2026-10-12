@@ -53,6 +53,7 @@
                 {{ file_input({'name': 'photo', 'accept': 'image/jpeg,image/png,image/gif,image/webp', 'class': 'avatar-upload-input', 'aria-label': 'Change photo'}) }}
             </div>
             {% endif %}
+            {% if quick_add_kind | default('') %}{% from "_form_rows.html" import quick_add_type_field %}{{ quick_add_type_field(quick_add_kind) }}{% endif %}
             <div class="field">
                 <label>Full name</label>
                 {{ text_input({'name': 'full_name', 'required': true, 'value': (contact.full_name if contact else '')}) }}

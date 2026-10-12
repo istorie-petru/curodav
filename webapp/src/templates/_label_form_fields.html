@@ -24,7 +24,8 @@
    own id), same as _task_form_fields.html's ms_form_id convention. #}
 {% set p = l or prefill|default(none) %}
 <div class="field-grid label-form-grid" data-page="{{ p.page_type if p else 'sections' }}">
-    <div class="field field-wide">
+    {% if quick_add_kind | default('') %}{% from "_form_rows.html" import quick_add_type_field %}{{ quick_add_type_field(quick_add_kind) }}{% endif %}
+    <div class="field{% if not (quick_add_kind | default('')) %} field-wide{% endif %}">
         <label>Name</label>
         {{ text_input({'name': 'new_name', 'value': (l.name if l else (prefill.name ~ ' copy' if prefill else '')), 'required': true, 'autofocus': (true if (not l) else false)}) }}
     </div>

@@ -117,25 +117,23 @@ def test_invalid_transactions_report_the_field(conn, extra, field):
     assert finance.validate_transaction(conn, data)[1]["field"] == field
 
 
-def test_a_label_and_tags_are_stored_with_the_transaction(conn):
+def test_tags_are_stored_with_the_transaction(conn):
     a = account(conn)
-    db.upsert_label_config(conn, {"name": "Personal", "label_group": "Myself"})
-    uid = txn(conn, a, label="Personal", tags=["transport", "bus"])
+    uid = txn(conn, a, tags=["transport", "bus"])
     row = finance.get_transaction(conn, uid)
-    assert row["label"] == "Personal" and row["tags"] == ["bus", "transport"]
+    assert "label" not in row and row["tags"] == ["bus", "transport"]
     assert finance.tag_names(conn) == ["bus", "transport"]
 
 
-def test_filters_narrow_by_search_account_type_label_and_dates(conn):
+def test_filters_narrow_by_search_account_type_and_dates(conn):
     a, b = account(conn, "Cash"), account(conn, "Bank")
-    txn(conn, a, "2026-10-01", "expense", "5", description="Coffee beans", label="Food")
+    txn(conn, a, "2026-10-01", "expense", "5", description="Coffee beans")
     txn(conn, a, "2026-09-01", "income", "9", description="Salary")
-    txn(conn, b, "2026-10-03", "expense", "7", description="Train", label="Travel")
+    txn(conn, b, "2026-10-03", "expense", "7", description="Train")
     names = lambda f: sorted(t["description"] for t in finance.list_transactions(conn, f))
     assert names({"q": "coffee"}) == ["Coffee beans"]
     assert names({"account_uid": b}) == ["Train"]
     assert names({"type": "income"}) == ["Salary"]
-    assert names({"label": "Food"}) == ["Coffee beans"]
     assert names({"date_from": "2026-10-01"}) == ["Coffee beans", "Train"]
     assert [t["description"] for t in finance.list_transactions(conn, {"sort": "amount", "dir": "asc"})][0] == "Coffee beans"
 
@@ -165,12 +163,12 @@ def test_csv_import_creates_rows_and_reports_unknown_accounts(conn):
 
 def test_backup_round_trips_accounts_transactions_and_tags(conn, tmp_path):
     a = account(conn)
-    txn(conn, a, label="Food", tags=["x"], description="Lunch")
+    txn(conn, a, tags=["x"], description="Lunch")
     payload = finance.backup_rows(conn)
     with db.connect(tmp_path / "other.sqlite") as other:
         finance.restore_rows(other, payload)
         row = finance.list_transactions(other)[0]
-        assert row["description"] == "Lunch" and row["label"] == "Food" and row["tags"] == ["x"]
+        assert row["description"] == "Lunch" and row["tags"] == ["x"]
 
 
 def test_purge_all_data_clears_finance(conn):
@@ -180,36 +178,11 @@ def test_purge_all_data_clears_finance(conn):
     assert finance.list_accounts(conn) == [] and finance.list_transactions(conn) == []
 
 
-def test_period_presets_use_the_injected_today():
-    today = clock.today()
-    assert router.date_range("month", today) == ("2026-10-01", "2026-10-31")
-    assert router.date_range("last_month", today) == ("2026-09-01", "2026-09-30")
-    assert router.date_range("6m", today) == ("2026-05-01", "2026-10-31")
-    assert router.date_range("all", today) == ("", "")
-
-
-def test_overview_counts_transfers_in_neither_income_nor_spending(conn):
-    a, b = account(conn, "A", opening="0"), account(conn, "B", opening="0")
-    txn(conn, a, kind="income", amount="100")
-    txn(conn, a, kind="expense", amount="30", label="Food")
-    txn(conn, a, kind="transfer", amount="40", to_account_uid=b)
-    [section] = router._overview_sections(conn, "2026-10-01", "2026-10-31", "")
-    assert section["totals"] == {"income": 10000, "expenses": 3000, "net": 7000}
-    assert section["cash"] == 7000 and [p["label"] for p in section["pies"][0]["slices"]] == ["Food"] and len(section["pies"]) == 1
-
-
-def test_overview_keeps_currencies_apart(conn):
-    txn(conn, account(conn, "Lei", currency="RON", opening="0"), kind="income", amount="10")
-    txn(conn, account(conn, "Euro", currency="EUR", opening="0"), kind="income", amount="20")
-    sections = {s["currency"]: s for s in router._overview_sections(conn, "2026-10-01", "2026-10-31", "")}
-    assert sections["RON"]["totals"]["income"] == 1000 and sections["EUR"]["totals"]["income"] == 2000
-
-
 def test_pages_render_with_data(conn):
     a = account(conn)
-    txn(conn, a, description="Lunch", label="Food")
+    txn(conn, a, description="Lunch")
     for body in (
-        router.overview(_request(), conn=conn).body, router.accounts_page(_request('/settings/finance-accounts'), conn=conn).body,
+        router.accounts_page(_request('/settings/finance-accounts'), conn=conn).body,
         router.transactions(_request(), conn=conn).body, router.new_transaction_modal(_request(), conn=conn).body,
         router.new_account_modal(_request(), conn=conn).body,
     ):
@@ -231,18 +204,6 @@ def test_the_save_route_returns_a_structured_error(conn):
 
     resp = asyncio.run(router.create_transaction(Req(), x_requested_with="fetch", conn=conn))
     assert resp.status_code == 422 and b"Amount must be a number above zero" in resp.body
-
-
-def test_doughnut_slices_get_distinct_colours_even_when_labels_share_one(conn):
-    rows = [{"label": "Food"}, {"label": "Rent"}, {"label": ""}]
-    router._assign_colors(conn, rows)
-    assert len({r["color"] for r in rows[:2]}) == 2 and rows[2]["color"] == "gray"
-
-
-def test_tags_already_picked_stay_when_the_label_changes(conn):
-    db.upsert_label_config(conn, {"name": "Personal", "label_group": "Myself"})
-    ctx = router.tag_field(_request(), label="Personal", tags=["transport"], conn=conn).context
-    assert ctx["tag_selected"] == ["transport"] and [t["uid"] for t in ctx["tag_items"]] == ["transport"]
 
 
 def test_a_tag_on_an_unlabelled_transaction_survives_adding_a_label(conn):
@@ -309,12 +270,6 @@ def test_tags_are_free_standing_and_unique_by_name(conn):
     assert finance.validate_tag(conn, "Bus", "bus")[1] is None
 
 
-def test_every_label_offers_every_tag(conn):
-    db.upsert_label_config(conn, {"name": "Personal", "label_group": "Myself"})
-    finance.save_tag(conn, {"name": "bus"})
-    assert router._tag_context(conn, "Personal", [])["tag_items"] == router._tag_context(conn, "", [])["tag_items"] == [{"uid": "bus", "name": "bus"}]
-
-
 def test_tags_that_belonged_to_a_group_become_free_standing(conn):
     conn.execute("INSERT INTO finance_tags (group_name, name) VALUES ('Myself', 'bus'), ('Work', 'bus'), ('Work', 'taxi')")
     finance.free_tags(conn)
@@ -328,10 +283,9 @@ def test_the_taxonomy_page_lists_transaction_tags(conn):
     assert "bus" in body and "Transaction tags" in body
 
 
-def test_accounts_live_in_settings_and_the_finance_header_does_not_link_to_them(conn):
+def test_accounts_live_in_settings_and_the_transactions_page_does_not_link_to_them(conn):
     from src.routers import settings as settings_router
     assert "/settings/finance-accounts" in {c["url"] for c in settings_router.HUB_CATEGORIES}
-    assert all(link["url"] != "/settings/finance-accounts" for link in router._header_links("overview"))
     body = router.transactions(_request(), conn=conn).body.decode()
     assert "/finance/accounts" not in body and 'href="/finance/transactions/new"' not in body and "Import CSV" not in body
 
@@ -345,26 +299,69 @@ def test_the_quick_add_modal_offers_a_transaction_tab_once_an_account_exists(con
     assert 'id="finance-transaction-form"' in body and 'name="amount"' in body
 
 
-def test_sort_links_and_filters_refresh_in_place(conn):
-    a = account(conn)
-    txn(conn, a)
+
+
+def test_the_overview_page_is_gone_and_the_finance_tab_opens_transactions():
+    assert router.finance_home().headers["location"] == "/finance/transactions"
+
+
+def test_the_table_shows_one_month_as_income_expenses_profit_and_savings(conn):
+    a = account(conn, "Bank", kind="bank", opening="0")
+    s = account(conn, "Pot", kind="savings", opening="0")
+    txn(conn, a, "2026-10-01", "income", "100", description="Pay")
+    txn(conn, a, "2026-10-02", "expense", "30", description="Food")
+    txn(conn, a, "2026-10-03", "transfer", "20", to_account_uid=s, description="Save")
+    txn(conn, a, "2026-09-30", "expense", "99", description="Last month")
+    ctx = router.transactions(_request(), month="2026-10", conn=conn).context
+    [section] = ctx["sections"]
+    assert (section["income_total"], section["expenses_total"], section["profit"], section["savings"]) == (10000, 3000, 7000, 2000)
+    body = router.transactions(_request(), month="2026-10", conn=conn).body.decode()
+    assert "Total income" in body and "Total expenses" in body and "Profit" in body and "Savings" in body
+    assert body.index("Total income") < body.index("Total expenses") < body.index(">Profit<") < body.index(">Savings<")
+    assert "Last month" not in body and ctx["prev_month"] == "2026-09" and ctx["next_month"] == "2026-11"
+
+
+def test_savings_counts_money_leaving_a_savings_account_and_ignores_other_transfers(conn):
+    bank, other = account(conn, "Bank", kind="bank", opening="0"), account(conn, "Other", kind="bank", opening="0")
+    pot = account(conn, "Pot", kind="savings", opening="100")
+    txn(conn, bank, "2026-10-03", "transfer", "20", to_account_uid=other)
+    txn(conn, pot, "2026-10-04", "transfer", "5", to_account_uid=bank)
+    [section] = router.transactions(_request(), month="2026-10", conn=conn).context["sections"]
+    assert section["savings"] == -500
+
+
+def test_currencies_get_their_own_block(conn):
+    txn(conn, account(conn, "Lei", currency="RON", opening="0"), "2026-10-02", "income", "10")
+    txn(conn, account(conn, "Euro", currency="EUR", opening="0"), "2026-10-02", "income", "20")
+    sections = {s["currency"]: s for s in router.transactions(_request(), month="2026-10", conn=conn).context["sections"]}
+    assert sections["RON"]["income_total"] == 1000 and sections["EUR"]["income_total"] == 2000
+
+
+def test_the_header_has_only_the_month_mover_and_an_accounts_filter(conn):
     body = router.transactions(_request(), conn=conn).body.decode()
-    assert 'id="finance-transactions-region" data-smart-region' in body and "data-smart-form" in body
-    assert body.count("data-smart-link") >= 3
+    header = body[body.index("page-header-narrow-actions"):body.index('id="finance-filter-form"')]
+    assert "Previous month" in header and "Next month" in header
+    filters = body[body.index('id="finance-filter-form"'):body.index("</form>", body.index('id="finance-filter-form"'))]
+    assert 'name="account"' in filters
+    for gone in ('name="range"', 'name="label"', 'name="group"', 'name="type"', 'name="q"'):
+        assert gone not in body
 
 
-def test_transactions_filter_by_a_custom_date_range(conn):
-    a = account(conn)
-    txn(conn, a, "2026-09-01", description="Early")
-    txn(conn, a, "2026-10-05", description="Inside")
-    txn(conn, a, "2026-11-20", description="Late")
-    body = router.transactions(_request(), range="custom", date_from="2026-10-01", date_to="2026-10-31", conn=conn).body.decode()
-    assert "Inside" in body and "Early" not in body and "Late" not in body
-    assert "Early" in router.transactions(_request(), range="all", conn=conn).body.decode()
+def test_transfers_move_money_but_are_not_listed_in_the_table(conn):
+    a, b = account(conn, "Bank", kind="bank", opening="0"), account(conn, "Pot", kind="savings", opening="0")
+    txn(conn, a, "2026-10-02", "income", "100")
+    txn(conn, a, "2026-10-03", "transfer", "40", to_account_uid=b, description="Hidden move")
+    body = router.transactions(_request(), month="2026-10", conn=conn).body.decode()
+    assert "Hidden move" not in body and "Transfers" not in body
+    balances = {x["name"]: x["balance"] for x in finance.list_accounts(conn)}
+    assert balances == {"Bank": 6000, "Pot": 4000}
 
 
-def test_the_period_and_label_filters_live_in_the_header_bar(conn):
-    ctx = router.transactions(_request(), conn=conn)
-    body = ctx.body.decode()
-    header = body[body.index("page-header-narrow-actions"):body.index("finance-filter-form\" class")]
-    assert 'name="range"' in header and 'name="label"' in header
+def test_quick_add_has_a_type_dropdown_beside_each_title_and_a_full_width_date(conn):
+    from src.routers import dashboard
+    account(conn)
+    body = dashboard.quick_add_form(_request("/quick/add"), default_tab="transaction", conn=conn).body.decode()
+    assert "quick-add-tabs" not in body and "seg-btn" not in body.split('id="quick-add-panels"')[1].split("</section>")[0]
+    for kind in ("task", "event", "contact", "label", "transaction", "note"):
+        assert f'name="qa_type_{kind}"' in body
+    assert 'class="field field-wide">\n            <label>Date</label>' in body

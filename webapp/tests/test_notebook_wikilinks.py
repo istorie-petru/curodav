@@ -184,3 +184,16 @@ class TestBackupRoundTrip:
         with db.connect(tmp_path / "restored.sqlite") as fresh:
             export_router.restore_backup_payload(fresh, payload)
             assert [b["uid"] for b in db.list_notebook_backlinks(fresh, "d2")] == ["d1"]
+
+
+class TestRankedSearch:
+    def test_same_project_then_same_label_then_alphabetical(self, conn):
+        db.upsert_label_config(conn, {"name": "Thesis", "is_project": 1})
+        db.upsert_label_config(conn, {"name": "History"})
+        for uid, title in (("me", "Me"), ("a", "Aardvark"), ("b", "Bravo"), ("c", "Charlie"), ("d", "Delta")):
+            _document(conn, uid=uid, title=title)
+        db.set_object_labels(conn, "notebook", "me", ["Thesis", "History"])
+        db.set_object_labels(conn, "notebook", "d", ["Thesis"])
+        db.set_object_labels(conn, "notebook", "c", ["History"])
+        results = db.search_notebook_documents(conn, "", exclude_uid="me", rank_for="me")
+        assert [r["uid"] for r in results] == ["d", "c", "a", "b"]

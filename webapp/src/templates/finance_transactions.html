@@ -1,69 +1,49 @@
 {% from "_row_action_buttons.html" import row_action_buttons %}
 {% macro type_icon(kind) %}<span class="finance-type-icon is-{{ kind }}" title="{{ kind | capitalize }}">{{ icon({'income': 'trending-up', 'expense': 'trending-down', 'transfer': 'repeat'}[kind], 'icon-sm') }}</span> {% endmacro %}
 {% from "_empty_state_row.html" import empty_state_row %}
-{% from "_inputs.html" import search_input %}
-{% from "_date_time_fields.html" import date_field with context %}
-{% from "_label_pill.html" import label_pill with context %}
-{% from "_finance_header.html" import finance_header_links %}
 {% extends "base.html" %}
 {% block title %}Transactions{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
+{# One month at a time, laid out like a ledger: income, its total, expenses, its total, profit, savings. #}
+{% macro account_cell(t) %}<span class="cell-tag cal-gray" title="{{ t.account_name }}">{{ t.account_abbr }}</span>{% if t.type == 'transfer' %} &rarr; <span class="cell-tag cal-gray" title="{{ t.to_account_name }}">{{ t.to_account_abbr }}</span>{% endif %}{% endmacro %}
+{% macro tags_cell(t) %}{% for tag in t.tags %}{% set ts = tag_styles.get(tag, {}) %}<span class="cell-tag cal-{{ ts.get('color', 'gray') }}">{% if ts.get('icon') %}{{ icon(ts.icon, 'icon-sm') }} {% endif %}{{ tag }}</span> {% endfor %}{% endmacro %}
+{% macro txn_row(t, sign) %}
+<tr class="entity-row" data-uid="{{ t.uid }}">
+    <td title="{{ t.date }}">{{ short_date(t.date) }}</td>
+    <td>{{ t.description or '—' }}</td>
+    <td>{{ account_cell(t) }}</td>
+    <td class="col-opt-2">{{ tags_cell(t) }}</td>
+    <td class="finance-num{% if t.type != 'transfer' %} is-{{ t.type }}{% endif %}">{{ money(t.amount * sign, t.currency) }}</td>
+    <td>{{ row_action_buttons("/finance/transactions/" ~ t.uid ~ "/edit", "/finance/transactions/" ~ t.uid ~ "/delete", "transaction", 'Delete this transaction?', duplicate_url="/finance/transactions/new?copy=" ~ t.uid) }}</td>
+</tr>
+{% endmacro %}
+{% macro head_row(title) %}<tr class="finance-ledger-head"><th colspan="6">{{ title }}</th></tr>{% endmacro %}
+{% macro sum_row(title, amount, currency, kind='') %}<tr class="finance-ledger-{{ kind or 'total' }}"><td colspan="4">{{ title }}</td><td class="finance-num">{{ money(amount, currency, kind == 'sum') }}</td><td></td></tr>{% endmacro %}
 {% call page_header_narrow("Transactions", "list") %}
-    {{ finance_header_links(links) }}
-    {% set filter_form_id = 'finance-filter-form' %}
-    {% set filter_specs = [
-        {'name': 'range', 'label': 'Period', 'items': range_items, 'selected': range},
-        {'name': 'label', 'label': 'Label', 'items': label_items, 'selected': label}] %}
-    {% include "_finance_filters.html" %}
+    <a class="icon-btn" href="?month={{ prev_month }}{% if account %}&account={{ account | urlencode }}{% endif %}" title="Previous month" aria-label="Previous month">{{ icon('chevron-left', 'icon-sm') }}</a>
+    <span class="cal-nav-label" aria-live="polite">{{ month_label }}</span>
+    <a class="icon-btn" href="?month={{ next_month }}{% if account %}&account={{ account | urlencode }}{% endif %}" title="Next month" aria-label="Next month">{{ icon('chevron-right', 'icon-sm') }}</a>
+    <form method="get" action="/finance/transactions" id="finance-filter-form" class="finance-header-form" data-smart-form>
+        <input type="hidden" name="month" value="{{ month }}">
+        {% set filter_form_id = 'finance-filter-form' %}
+        {% set filter_specs = [{'name': 'account', 'label': 'Account', 'items': account_items, 'selected': account}] %}
+        {% include "_finance_filters.html" %}
+    </form>
 {% endcall %}
 <div class="settings-group">
-<form method="get" action="/finance/transactions" id="finance-filter-form" class="form-inline finance-toolbar" data-smart-form>
-    {{ search_input({'name': 'q', 'value': q, 'aria-label': 'Search transactions', 'autocomplete': 'off'}) }}
-    <span id="finance-filter-state" data-smart-region><input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ dir }}"></span>
-    {% set filter_form_id = 'finance-filter-form' %}
-    {% set filter_specs = [
-        {'name': 'account', 'label': 'Account', 'items': account_items, 'selected': account},
-        {'name': 'type', 'label': 'Type', 'items': type_items, 'selected': type},
-        {'name': 'group', 'label': 'Group', 'items': group_items, 'selected': group}] %}
-    {% include "_finance_filters.html" %}
-    <span id="finance-custom-range" data-smart-region>
-        {% if range == 'custom' %}
-        {{ date_field('date_from', date_from, label='From', attrs='form="finance-filter-form" data-change-submit') }}
-        {{ date_field('date_to', date_to, label='To', attrs='form="finance-filter-form" data-change-submit') }}
-        {% endif %}
-    </span>
-</form>
-<div id="finance-transactions-region" data-smart-region>
-{% if summary %}
-<div class="finance-cards">
-    {% for s in summary %}
-    <div class="card finance-card"><span class="finance-card-label">{{ s.currency }} income</span><strong>{{ money(s.income, s.currency) }}</strong></div>
-    <div class="card finance-card"><span class="finance-card-label">{{ s.currency }} expenses</span><strong>{{ money(s.expenses, s.currency) }}</strong></div>
-    <div class="card finance-card"><span class="finance-card-label">{{ s.currency }} net</span><strong>{{ money(s.net, s.currency, true) }}</strong></div>
-    {% endfor %}
-</div>
-{% endif %}
-<div class="card table-scroll table-responsive" id="finance-transactions-wrapper">
-    <table id="finance-transactions-table">
-        <thead>
-            <tr>
-                {% for key, title in (('date', 'Date'), ('description', 'Description'), ('account', 'Account')) %}
-                <th><a data-smart-link href="?{{ query }}&sort={{ key }}&dir={{ 'asc' if (sort == key and dir == 'desc') else 'desc' }}">{{ title }}{% if sort == key %} {{ icon('chevron-up' if dir == 'asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
-                {% endfor %}
-                <th class="col-opt-2">Label</th>
-                <th class="finance-num"><a data-smart-link href="?{{ query }}&sort=amount&dir={{ 'asc' if (sort == 'amount' and dir == 'desc') else 'desc' }}">Amount{% if sort == 'amount' %} {{ icon('chevron-up' if dir == 'asc' else 'chevron-down', 'icon-sm') }}{% endif %}</a></th>
-                <th class="col-actions-narrow">Actions</th>
-            </tr>
-        </thead>
+{% if pending %}
+<div class="card table-scroll table-responsive">
+    <table class="finance-ledger">
         <tbody>
+            {{ head_row('Scheduled') }}
             {% for p in pending %}
             <tr class="entity-row finance-pending" data-uid="{{ p.uid }}">
                 <td>{{ short_date(p.date) if p.date else '—' }}</td>
-                <td>{{ type_icon(p.type) }}{{ icon('clock', 'icon-sm') }} {{ p.description or '—' }}{% if p.recurrence %} {{ icon('repeat', 'icon-sm') }}{% endif %}</td>
-                <td><span class="cell-tag cal-gray" title="{{ p.account_name }}">{{ p.account_abbr }}</span>{% if p.type == 'transfer' %} &rarr; <span class="cell-tag cal-gray" title="{{ p.to_account_name }}">{{ p.to_account_abbr }}</span>{% endif %}</td>
-                <td class="col-opt-2">{% if p.type != 'transfer' and p.effective_label %}{{ label_pill(p.effective_label) }}{% endif %}{% if p.task_uid %} <a href="/tasks/{{ p.task_uid }}" data-modal>{{ icon('check-square', 'icon-sm') }} {{ p.task_title }}</a>{% elif p.type == 'transfer' or not p.effective_label %}—{% endif %}</td>
-                <td class="finance-num{% if p.type != 'transfer' %} is-{{ p.type }}{% endif %}">{{ money(p.amount if p.type == 'income' else -p.amount, p.currency, p.type == 'income') if p.type != 'transfer' else money(p.amount, p.currency) }}</td>
+                <td>{{ type_icon(p.type) }}{{ icon('clock', 'icon-sm') }} {{ p.description or '—' }}{% if p.recurrence %} {{ icon('repeat', 'icon-sm') }}{% endif %}{% if p.task_uid %} <a href="/tasks/{{ p.task_uid }}" data-modal>{{ icon('check-square', 'icon-sm') }} {{ p.task_title }}</a>{% endif %}</td>
+                <td>{{ account_cell(p) }}</td>
+                <td class="col-opt-2">{{ tags_cell(p) }}</td>
+                <td class="finance-num{% if p.type != 'transfer' %} is-{{ p.type }}{% endif %}">{{ money(p.amount if p.type == 'income' else -p.amount, p.currency) if p.type != 'transfer' else money(p.amount, p.currency) }}</td>
                 <td>
                     {% call row_action_buttons("/finance/scheduled/" ~ p.uid ~ "/edit", "/finance/scheduled/" ~ p.uid ~ "/delete", "scheduled transaction", 'Delete this scheduled transaction?') %}
                     <form method="post" action="/finance/scheduled/{{ p.uid }}/post" class="form-inline">
@@ -73,22 +53,31 @@
                 </td>
             </tr>
             {% endfor %}
-            {% for t in rows %}
-            <tr class="entity-row" data-uid="{{ t.uid }}">
-                <td title="{{ t.date }}">{{ short_date(t.date) }}</td>
-                <td>{{ type_icon(t.type) }}{{ t.description or '—' }}</td>
-                <td><span class="cell-tag cal-gray" title="{{ t.account_name }}">{{ t.account_abbr }}</span>{% if t.type == 'transfer' %} &rarr; <span class="cell-tag cal-gray" title="{{ t.to_account_name }}">{{ t.to_account_abbr }}</span>{% endif %}</td>
-                <td class="col-opt-2">{% if t.type == 'transfer' or not (t.label or t.tags) %}—{% else %}{% if t.label %}{{ label_pill(t.label) }}{% endif %}{% for tag in t.tags %} {% set ts = tag_styles.get(tag, {}) %}<span class="cell-tag cal-{{ ts.get('color', 'gray') }}">{% if ts.get('icon') %}{{ icon(ts.icon, 'icon-sm') }} {% endif %}{{ tag }}</span>{% endfor %}{% endif %}</td>
-                <td class="finance-num{% if t.type != 'transfer' %} is-{{ t.type }}{% endif %}">{{ money(t.amount if t.type != 'expense' else -t.amount, t.currency, t.type == 'income') }}</td>
-                <td>{{ row_action_buttons("/finance/transactions/" ~ t.uid ~ "/edit", "/finance/transactions/" ~ t.uid ~ "/delete", "transaction", 'Delete this transaction?', duplicate_url="/finance/transactions/new?copy=" ~ t.uid) }}</td>
-            </tr>
-            {% else %}
-            {% if not pending %}{{ empty_state_row(6, "No transactions match the filters" if (q or account or type or label or group or range != "all") else ("No transactions yet" if has_accounts else "No accounts yet")) }}{% endif %}
-            {% endfor %}
         </tbody>
     </table>
 </div>
-{% if has_more %}<a class="btn ghost" data-smart-link href="?{{ query }}&sort={{ sort }}&dir={{ dir }}&limit={{ limit + 100 }}">Load more</a>{% endif %}
+{% endif %}
+{% if not has_accounts %}
+<div class="card table-scroll table-responsive"><table><tbody>{{ empty_state_row(6, "No accounts yet") }}</tbody></table></div>
+{% endif %}
+{% for s in sections if has_accounts %}
+<div class="card table-scroll table-responsive finance-ledger-card">
+    <table class="finance-ledger" id="finance-transactions-table">
+        <thead>
+            <tr><th>Date</th><th>Description</th><th>Account</th><th class="col-opt-2">Tags</th><th class="finance-num">{{ s.currency }}</th><th class="col-actions-narrow">Actions</th></tr>
+        </thead>
+        <tbody>
+            {{ head_row('Income') }}
+            {% for t in s.income %}{{ txn_row(t, 1) }}{% endfor %}
+            {{ sum_row('Total income', s.income_total, s.currency) }}
+            {{ head_row('Expenses') }}
+            {% for t in s.expenses %}{{ txn_row(t, -1) }}{% endfor %}
+            {{ sum_row('Total expenses', -s.expenses_total, s.currency) }}
+            {{ sum_row('Profit', s.profit, s.currency, 'sum') }}
+            {{ sum_row('Savings', s.savings, s.currency, 'sum') }}
+        </tbody>
+    </table>
 </div>
+{% endfor %}
 </div>
 {% endblock %}

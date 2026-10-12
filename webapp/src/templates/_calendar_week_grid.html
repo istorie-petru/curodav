@@ -40,39 +40,6 @@
         <div class="thd {% if day.is_today %}is-today{% endif %} {% if day.is_past %}is-past{% endif %}"><a class="thd-link" href="/calendar/day/{{ day.iso }}{% if active_label %}?label={{ active_label | urlencode }}{% endif %}" title="Open {{ day.date.strftime('%A') }} in Day view"{% if day.is_today %} aria-current="date"{% endif %}><span class="thd-dow">{{ day.date.strftime('%a') }}</span> <span class="thd-num">{{ day.date.day }}</span></a></div>
         {% endfor %}
     </div>
-    <div class="time-grid-allday week">
-        <div class="allday-gutter">All day</div>
-        <div class="allday-cols week">
-            <!-- 2026-09-25 direct decision (UI audit C-8): all-day events are
-                 one spanning bar per event (routers/calendar.py's _week_bars,
-                 the same lane packing Month/4-Week use, reusing their
-                 .month-bar-lane/col/span classes) instead of a repeated row in
-                 each day column. `.allday-bar` + data-uid keeps them in
-                 calendar_week_allday_drag.js's whole-day move; each column's
-                 .week-bars-spacer reserves the lanes so due-date task chips
-                 start below the bars instead of under them. -->
-            {% if week_bars %}
-            <div class="week-allday-bars">
-                {% for bar in week_bars %}
-                <a class="month-bar allday-bar cal-{{ bar.event.calendar_color }} month-bar-lane-{{ bar.lane }} month-bar-col-{{ bar.col_start }} month-bar-span-{{ bar.col_span }}{% if bar.is_past %} is-past{% endif %}"
-                   href="/events/{{ bar.event.uid }}{% if bar.event.recurrence %}?occurrence_date={{ bar.event.occurrence_date | urlencode }}{% endif %}"
-                   data-modal title="{{ bar.event.title }}"
-                   {% if not bar.event.recurrence %}data-uid="{{ bar.event.uid }}" data-start="{{ bar.event.start_at }}" data-end="{{ bar.event.end_at or '' }}"{% endif %}>
-                    <span class="month-bar-label">{{ bar.event.title }}</span>
-                </a>
-                {% endfor %}
-            </div>
-            {% endif %}
-            {% for day in days %}
-            <div class="allday-col{% if day.is_past %} is-past{% endif %}" data-date="{{ day.iso }}">
-                {% if week_lane_count %}<div class="week-bars-spacer month-bars-offset-{{ week_lane_count }}" aria-hidden="true"></div>{% endif %}
-                {% for t in day.tasks %}
-                <a class="allday-task{% if day.is_past and t.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}" data-uid="{{ t.uid }}" data-due="{{ t.due_at }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }}<span class="allday-title">{{ t.title }}</span></a>
-                {% endfor %}
-            </div>
-            {% endfor %}
-        </div>
-    </div>
     </div>
     <!-- "Hide sleep hours in Planner" (Settings > General, 2026-09-09) --
          `hours` is now a list of {hour, top_px} (grid_layout.visible_hours),
@@ -148,13 +115,20 @@
 
     <aside class="notebook-sidebar project-calendar-unscheduled" id="unscheduled-panel">
         <div class="notebook-sidebar-head unscheduled-panel-head">
-            <div class="notebook-sidebar-select">
-                <div class="notebook-sidebar-select-trigger">
+            <div class="notebook-sidebar-select" data-notebook-sidebar-select>
+                <button type="button" class="notebook-sidebar-select-trigger" aria-haspopup="listbox" aria-expanded="false">
                     <span class="notebook-sidebar-select-icon">{{ icon('clock', 'icon-sm') }}</span>
-                    <span class="notebook-sidebar-select-label">Unscheduled work <span class="unscheduled-panel-count">({{ unscheduled_tasks|length }})</span></span>
+                    <span class="notebook-sidebar-select-label">Unscheduled work</span>
+                    <span class="notebook-sidebar-select-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
+                </button>
+                <div class="notebook-sidebar-select-panel" role="listbox" aria-label="Sidebar views">
+                    <button type="button" class="notebook-sidebar-select-option active" role="option" aria-selected="true" data-notebook-sidebar-tab="unscheduled">{{ icon('clock', 'icon-sm') }} Unscheduled work</button>
+                    <button type="button" class="notebook-sidebar-select-option" role="option" aria-selected="false" data-notebook-sidebar-tab="allday">{{ icon('calendar', 'icon-sm') }} All day</button>
                 </div>
             </div>
+            <span class="unscheduled-panel-count">({{ unscheduled_tasks|length }})</span>
         </div>
+        <div class="notebook-sidebar-panel is-active" data-notebook-sidebar-panel="unscheduled" role="tabpanel">
         <div id="unscheduled-panel-body">
         {% if unscheduled_tasks %}
         <div class="unscheduled-task-list">
@@ -165,6 +139,28 @@
         {% else %}
         {{ empty_state('No unscheduled work', text='Every open task already has scheduled work.', size='compact') }}
         {% endif %}
+        </div>
+        </div>
+        <div class="notebook-sidebar-panel" data-notebook-sidebar-panel="allday" role="tabpanel">
+            {% set ns = namespace(any=false) %}
+            {% for day in days %}
+            {% set di = loop.index %}
+            {% set bars = [] %}
+            {% for b in week_bars or [] %}{% if b.col_start <= di and di < b.col_start + b.col_span %}{% set _ = bars.append(b) %}{% endif %}{% endfor %}
+            {% if bars or day.tasks %}
+            {% set ns.any = true %}
+            <div class="sidebar-allday-day{% if day.is_past %} is-past{% endif %}">
+                <div class="sidebar-allday-head">{{ day.date.strftime('%a') }} {{ day.date.day }}</div>
+                {% for bar in bars %}
+                <a class="allday-task sidebar-allday-item cal-{{ bar.event.calendar_color }}{% if bar.is_past %} is-past{% endif %}" href="/events/{{ bar.event.uid }}{% if bar.event.recurrence %}?occurrence_date={{ bar.event.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ bar.event.title }}"><span class="allday-title">{{ bar.event.title }}</span></a>
+                {% endfor %}
+                {% for t in day.tasks %}
+                <a class="allday-task sidebar-allday-item{% if day.is_past and t.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }}<span class="allday-title">{{ t.title }}</span></a>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% endfor %}
+            {% if not ns.any %}{{ empty_state('Nothing all day', text='No all-day events or due tasks this week.', size='compact') }}{% endif %}
         </div>
     </aside>
 </div>

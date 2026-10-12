@@ -4090,7 +4090,11 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
 }
 /* Planner: Unscheduled work is the shared right sidebar shell
    (.notebook-sidebar); only the narrow-screen fallback differs. */
-.unscheduled-panel-head .notebook-sidebar-select-trigger{cursor:default;}
+.sidebar-allday-day{display:flex; flex-direction:column; gap:2px; margin-bottom:var(--space-3);}
+.sidebar-allday-head{font-size:var(--text-2xs); letter-spacing:.04em; text-transform:uppercase; color:var(--fg-tertiary);}
+.sidebar-allday-day.is-past > :not(.is-overdue):not(.sidebar-allday-head){opacity:.5;}
+/* Events and tasks that already ended (static/calendar_past.js). */
+.is-time-past:not(.is-overdue){opacity:.5; filter:grayscale(1);}
 .project-calendar-unscheduled .unscheduled-task-list{max-height:none; overflow:visible;}
 .project-calendar-unscheduled .unscheduled-task-main{flex-direction:column; align-items:flex-start; gap:2px;}
 .project-calendar-unscheduled .unscheduled-task-title{max-width:100%;}
@@ -4911,7 +4915,7 @@ button.month-more-link{
      (not "expanded content" in general) -- every page already has its own
      .fab for this (see the .fab mobile block above), so the drawer isn't
      the only way to reach it and doesn't need to duplicate it. */
-  .sidebar-header, .sidebar-quick-add{display:none;}
+  .sidebar-header{display:none;}
   /* Spaces/Projects sections and the nested Spaces tree: shown here (not
      hidden the way the old bottom-bar block did) per the explicit "mirror
      the desktop expanded sidebar, not a trimmed subset" decision --
@@ -4976,7 +4980,11 @@ button.month-more-link{
      destinations this bar offers (or better -- closing gets you there
      directly), so hiding it costs no reachability while a dialog is
      open. */
-  body.modal-open .mobile-tabbar{display:none;}
+  body.modal-open .mobile-tabbar, body.command-palette-open .mobile-tabbar{display:none;}
+  /* Dropdowns and popovers always render above the bottom bar, so none of their rows hide under it. */
+  .multiselect-panel, .action-menu-panel, .color-popover, .icon-popover, .dtp-panel{z-index:calc(var(--z-mobile-tabbar) + 5);}
+  /* Sheets keep clear of the system navigation bar (viewport-fit=cover makes the inset real). */
+  .modal-body{padding-bottom:calc(var(--space-3) + env(safe-area-inset-bottom, 0px));}
   .mobile-tabbar-btn{
     flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:2px; background:none; border:none; cursor:pointer;
@@ -6742,9 +6750,9 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    the checkbox's own sizing). Harmless on the checkbox path itself: its
    button already fills the full 26px width, so centering it changes
    nothing there. */
-.widget-row-icon{width:26px; text-align:center;}
+.widget-row-icon{box-sizing:border-box; width:30px; min-width:30px; max-width:30px; text-align:center;}
 .widget-row-time{white-space:nowrap; width:1%;}
-.widget-row-right{text-align:right;}
+.widget-row-right{text-align:right; white-space:nowrap;}
 .widget-row-actions{width:1%; white-space:nowrap; text-align:right;}
 /* 2026-09-13 (direct request, "the checkbox has a left margin the other
    [rows] don't have") introduced `justify-content:flex-start` here so a
@@ -8921,10 +8929,18 @@ html[data-notebook-sidebar-collapsed] .notebook-sidebar{display:none;}
    needed for headings with no label yet (first paint, before Editor.js
    has mounted) -- the attribute simply isn't present then, so the rule
    doesn't match at all. */
-.ce-header[data-toc-label]::before{
-  content:attr(data-toc-label) " — ";
+.ce-header[data-toc-num]::before{
+  content:attr(data-toc-num) "\00a0\00a0";
   color:var(--fg-tertiary); font-weight:var(--font-weight-regular);
 }
+/* Distinct size per level and more air before a new heading. */
+#notebook-editor h1.ce-header{font-size:2em; margin-top:1.6em;}
+#notebook-editor h2.ce-header{font-size:1.65em; margin-top:1.4em;}
+#notebook-editor h3.ce-header{font-size:1.4em; margin-top:1.2em;}
+#notebook-editor h4.ce-header{font-size:1.2em; margin-top:1em;}
+#notebook-editor h5.ce-header{font-size:1.05em; margin-top:.9em;}
+#notebook-editor .ce-block:first-child h1.ce-header, #notebook-editor .ce-block:first-child h2.ce-header,
+#notebook-editor .ce-block:first-child h3.ce-header{margin-top:0;}
 
 /* Editor page's Bibliography tab (2026-10-03) -- the attached-citation
    list and its own Edit-icon header row, same shape as a card header's
@@ -9166,7 +9182,7 @@ button.avatar-upload{background:none; border:none; padding:0; cursor:pointer;}
 .sec-section{display:flex; flex-direction:column; gap:2px;}
 .sec-heading{margin:0 0 var(--space-2); font-size:calc(var(--text-xl) + 6px); font-weight:var(--font-weight-bold); color:var(--fg-primary); letter-spacing:-0.3px;}
 .sec-row{display:flex; align-items:center; gap:var(--space-2); min-height:32px;}
-.sec-lead{flex:none; display:flex; align-items:center; color:var(--fg-tertiary);}
+.sec-lead{flex:none; width:26px; display:flex; align-items:center; justify-content:center; color:var(--fg-tertiary);}
 .sec-title{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .sec-pills{flex:none; display:flex; align-items:center; gap:var(--space-1);}
 .sec-row.is-done .sec-title{text-decoration:line-through; color:var(--fg-tertiary);}
@@ -9223,10 +9239,6 @@ main.notebook-browse-page .notebook-page-layout, main.notebook-browse-page .note
 
 /* Finance */
 .finance-toolbar{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;margin-bottom:var(--space-3);}
-.finance-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--space-3);margin-bottom:var(--space-3);}
-.finance-card{display:flex;flex-direction:column;gap:var(--space-1);padding:var(--space-3);}
-.finance-card strong{font-size:var(--text-lg);font-weight:var(--font-weight-bold);}
-.finance-card-label{color:var(--fg-secondary);font-size:var(--text-sm);}
 .finance-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3);margin-bottom:var(--space-4);align-items:start;}
 .finance-col{display:flex;flex-direction:column;gap:var(--space-3);min-width:0;}
 @media (max-width:760px){.finance-charts{grid-template-columns:minmax(0,1fr);}}
@@ -9283,3 +9295,18 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .pending-tx-edit .pending-tx-expense, .pending-tx-edit .pending-tx-income, .pending-tx-edit .pending-tx-transfer{display:none;}
 .pending-tx-edit[data-type="expense"] .pending-tx-expense, .pending-tx-edit[data-type="income"] .pending-tx-income, .pending-tx-edit[data-type="transfer"] .pending-tx-transfer{display:inline;}
 .pending-tx-edit[data-type="expense"] .pending-tx-plain, .pending-tx-edit[data-type="income"] .pending-tx-plain, .pending-tx-edit[data-type="transfer"] .pending-tx-plain{display:none;}
+/* Transactions ledger: one month, income / expenses / profit / savings. */
+.finance-ledger{width:100%;}
+.finance-ledger-head th{padding-top:var(--space-3);text-align:left;font-size:var(--text-2xs);letter-spacing:.04em;text-transform:uppercase;color:var(--fg-tertiary);}
+.finance-ledger-total td{border-top:1px solid var(--border);font-weight:var(--font-weight-bold);}
+.finance-ledger-sum td{border-top:1px solid var(--border-strong);font-weight:var(--font-weight-bold);background:var(--accent-neutral-subtle);}
+.finance-ledger .finance-num{font-variant-numeric:tabular-nums;}
+/* Glossary term: extra titled text blocks (plain, no background). */
+.glossary-section-edit{display:flex; flex-direction:column; gap:var(--space-1); padding:var(--space-2) 0; border-top:1px solid var(--separator);}
+.glossary-section-edit:first-child{border-top:0;}
+.glossary-section-edit label{font-size:var(--text-sm);}
+/* Description column: one line with dots instead of a tall row. */
+.glossary-definition{max-width:42ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.notebook-glossary-sidebar-list{list-style:decimal inside; margin:0; padding:0;}
+.notebook-glossary-sidebar-list li{margin-bottom:var(--space-2);}
+.notebook-glossary-sidebar-list a{color:var(--fg-primary);}

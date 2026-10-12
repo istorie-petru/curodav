@@ -61,10 +61,10 @@ def test_a_scheduled_row_may_have_no_date_and_no_task(conn):
 
 def test_posting_a_one_off_creates_the_real_transaction_and_removes_the_row(conn):
     a = account(conn)
-    uid = schedule(conn, a, label="Transport")
+    uid = schedule(conn, a)
     new = finance.post_scheduled(conn, uid, "2026-10-20")
     row = finance.get_transaction(conn, new)
-    assert row["date"] == "2026-10-20" and row["amount"] == 8000 and row["label"] == "Transport"
+    assert row["date"] == "2026-10-20" and row["amount"] == 8000
     assert finance.get_scheduled(conn, uid) is None and finance.list_accounts(conn)[0]["balance"] == 2000
 
 
@@ -89,7 +89,7 @@ def test_completing_the_linked_task_posts_its_scheduled_rows(conn):
     schedule(conn, a, task_uid="t1")
     task(conn, status="done")
     [posted] = finance.list_transactions(conn)
-    assert posted["description"] == "Bus pass" and posted["label"] == "Transport"
+    assert posted["description"] == "Bus pass"
     assert finance.list_scheduled(conn) == []
 
 
@@ -101,21 +101,13 @@ def test_editing_a_done_task_again_does_not_post_twice(conn):
     assert finance.list_transactions(conn) == [] and len(finance.list_scheduled(conn)) == 1
 
 
-def test_a_linked_row_takes_its_label_from_the_task_but_not_a_project(conn):
-    a = account(conn)
-    db.upsert_label_config(conn, {"name": "Home project", "is_project": 1})
-    task(conn, tags=("Home project", "Household"))
-    uid = schedule(conn, a, task_uid="t1")
-    assert finance.get_scheduled(conn, uid)["effective_label"] == "Household"
-
-
-def test_deleting_the_task_keeps_the_scheduled_row_with_its_label(conn):
+def test_deleting_the_task_keeps_the_scheduled_row_unlinked(conn):
     a = account(conn)
     task(conn)
     uid = schedule(conn, a, task_uid="t1")
     db.delete_task(conn, "t1")
     row = finance.get_scheduled(conn, uid)
-    assert row["task_uid"] is None and row["effective_label"] == "Transport"
+    assert row["task_uid"] is None
 
 
 def test_the_task_form_rows_replace_the_tasks_list_and_report_errors(conn):
@@ -204,7 +196,7 @@ def test_scheduled_rows_sit_grayed_at_the_top_of_the_transactions_table(conn):
     clean, _ = finance.validate_transaction(conn, dict(date="2026-10-02", type="expense", amount="5", account_uid=a, description="Posted lunch"))
     finance.save_transaction(conn, clean)
     schedule(conn, a, description="Pending subscription")
-    body = router.transactions(_request(), range="all", conn=conn).body.decode()
+    body = router.transactions(_request(), month="2026-10", conn=conn).body.decode()
     assert body.index("Pending subscription") < body.index("Posted lunch")
     assert 'class="entity-row finance-pending"' in body and "/finance/scheduled/" in body
 
@@ -231,7 +223,7 @@ def test_the_pending_filters_follow_the_table_filters(conn):
     a, b = account(conn, "Cash"), account(conn, "Bank")
     schedule(conn, a, description="Cash thing")
     schedule(conn, b, description="Bank thing")
-    body = router.transactions(_request(), account=b, range="all", conn=conn).body.decode()
+    body = router.transactions(_request(), account=b, month="2026-10", conn=conn).body.decode()
     assert "Bank thing" in body and "Cash thing" not in body
 
 
@@ -282,8 +274,7 @@ def test_a_transfer_keeps_no_tags(conn):
 
 def test_tags_typed_on_a_scheduled_row_are_offered_next_time(conn):
     a = account(conn)
-    db.upsert_label_config(conn, {"name": "Transport", "label_group": "Myself"})
-    schedule(conn, a, label="Transport", tags=["commute"])
+    schedule(conn, a, tags=["commute"])
     assert finance.tag_names(conn) == ["commute"]
 
 
@@ -302,3 +293,15 @@ def test_tags_survive_in_a_backup(conn, tmp_path):
     with db.connect(tmp_path / "other.sqlite") as other:
         finance.restore_rows(other, finance.backup_rows(conn))
         assert finance.list_scheduled(other)[0]["tags"] == ["monthly"]
+
+
+def test_contacts_follow_a_scheduled_row_into_the_posted_transaction_and_go_with_deletes(conn):
+    a = account(conn)
+    sid = schedule(conn, a)
+    people = db.resolve_contact_entries(conn, ["Ana Pop"])
+    db.set_object_contacts(conn, "scheduled", sid, people)
+    posted = finance.post_scheduled(conn, sid, "2026-11-02")
+    assert [c["uid"] for c in db.list_object_contacts(conn, "transaction", posted)] == people
+    assert db.list_object_contacts(conn, "scheduled", sid) == []
+    finance.delete_transaction(conn, posted)
+    assert db.list_object_contacts(conn, "transaction", posted) == []

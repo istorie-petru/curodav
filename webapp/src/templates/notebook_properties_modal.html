@@ -1,4 +1,4 @@
-{% from "_inputs.html" import text_input, radio_input %}
+{% from "_inputs.html" import text_input %}
 {% from "_date_time_fields.html" import date_field with context %}
 {# Notebook's document-properties modal (2026-10-02, direct request) --
    replaces the Editor page's old inline title textbox + bare header
@@ -56,6 +56,12 @@
             <label>Title</label>
             {{ text_input({'name': 'title', 'required': true, 'value': (document.title)}) }}
         </div>
+        {% if not document.is_template %}
+        {% set ms_form_id = 'notebook-properties-form' %}
+        {% include "_labels_row.html" %}
+        {% set pf_form_id = 'notebook-properties-form' %}
+        {% include "_project_field.html" %}
+        {% endif %}
         <div class="field">
             {% set ms_form_id = 'notebook-properties-form' %}
             {% set ms_name = 'note_type' %}
@@ -66,26 +72,9 @@
             {% set ms_allow_new = true %}
             {% include "_widget_list_multiselect.html" %}
         </div>
-        {% if not document.is_template %}
         <div class="field">
-            {% set ms_form_id = 'notebook-properties-form' %}
-            {% set ms_name = 'tags_labels' %}
-            {% set ms_label = 'Labels' %}
-            {% set ms_items = tag_name_items %}
-            {% set ms_selected = document.tags %}
-            {% set ms_mode = 'select' %}
-            {% set ms_allow_new = true %}
-            {% set ms_pill = true %}
-            {% include "_widget_list_multiselect.html" %}
-        </div>
-        {% endif %}
-        <div class="field">
-            <label>Kind</label>
-            <div class="segmented" role="radiogroup" aria-label="Kind">
-                {% for value, name in (('note', 'Note'), ('template', 'Template')) %}
-                <label class="seg-btn">{{ radio_input({'name': 'kind', 'value': value, 'class': 'seg-radio', 'checked': (value == ('template' if document.is_template else 'note'))}) }} {{ name }}</label>
-                {% endfor %}
-            </div>
+            {% set st_name = 'kind' %}{% set st_label = 'Kind' %}{% set st_items = kind_items %}{% set st_selected = 'template' if document.is_template else 'note' %}{% set st_form_id = 'notebook-properties-form' %}
+            {% include "_status_type_row.html" %}
         </div>
         {% for f in typed_fields %}
         {% set typed_form_id = 'notebook-properties-form' %}

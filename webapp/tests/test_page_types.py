@@ -156,7 +156,7 @@ class TestSecretariatLayout:
         conn.commit()
         assert "Task a" not in self._render(conn)
 
-    def test_rows_carry_the_label_pill_before_the_date_pill(self, conn):
+    def test_rows_show_the_icon_and_the_date_but_no_label_pill(self, conn):
         _task(conn, "a", ["Gym"])
         body = self._render(conn)
-        assert body.index("label-pill-link") < body.index("pill-static")
+        assert "label-pill-link" not in body and "pill-static" in body and 'data-start="' in body

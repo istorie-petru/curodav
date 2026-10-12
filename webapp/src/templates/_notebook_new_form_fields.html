@@ -3,8 +3,8 @@
 <input type="hidden" name="open_note" value="1">
 {% if nn.label %}<input type="hidden" name="label" value="{{ nn.label }}">{% endif %}
 <div class="field-grid">
-    {{ title_row('', 'Title', true, 'title', false, false) }}
-    <div class="field">
+    {{ title_row('', 'Title', true, 'title', false, true, qa=(quick_add_kind | default(''))) }}
+    <div class="field field-wide">
         {% set st_name = 'template_uid' %}{% set st_label = 'Template' %}{% set st_items = nn.template_items %}{% set st_selected = nn.template_uid %}{% set st_form_id = 'notebook-new-form' %}
         {% include "_status_type_row.html" %}
     </div>

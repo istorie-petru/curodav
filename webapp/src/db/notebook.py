@@ -494,7 +494,7 @@ def list_notebook_backlinks(conn: sqlite3.Connection, uid: str) -> list[dict[str
 
 
 def search_notebook_documents(
-    conn: sqlite3.Connection, q: str = "", exclude_uid: str | None = None, limit: int = 20
+    conn: sqlite3.Connection, q: str = "", exclude_uid: str | None = None, limit: int = 20, rank_for: str | None = None
 ) -> list[dict[str, Any]]:
     """The wikilink inline tool's own search/pick autocomplete (static/
     notebook/notebook_wikilinks.js, GET /notebook/search) -- resolves a
@@ -516,6 +516,26 @@ def search_notebook_documents(
         docs = [d for d in docs if d["uid"] != exclude_uid]
     if q:
         docs = [d for d in docs if q in (d["title"] or "").lower()]
+    if rank_for:
+        # Recommended order: same project (a shared project label) first, then a shared label, then A-Z.
+        labels = {
+            r["label_name"]
+            for r in conn.execute("SELECT label_name FROM object_labels WHERE object_type = 'notebook' AND object_id = ?", (rank_for,))
+        }
+        projects = {
+            r["name"] for r in conn.execute("SELECT name FROM label_config WHERE is_project = 1")
+        } & labels
+        doc_labels: dict[str, set[str]] = {}
+        for r in conn.execute("SELECT object_id, label_name FROM object_labels WHERE object_type = 'notebook'"):
+            doc_labels.setdefault(r["object_id"], set()).add(r["label_name"])
+
+        def tier(d: dict[str, Any]) -> int:
+            mine = doc_labels.get(d["uid"], set())
+            if mine & projects:
+                return 0
+            return 1 if mine & labels else 2
+
+        docs.sort(key=lambda d: (tier(d), (d["title"] or "").lower()))
     type_looks = notebook_note_type_looks(conn)
     for d in docs:
         look = type_looks.get(d.get("note_type") or "", dict(NOTEBOOK_TYPE_LOOK_FALLBACK))
@@ -850,10 +870,40 @@ def upsert_glossary_term(conn: sqlite3.Connection, row: dict[str, Any]) -> str:
     return uid
 
 
+def list_glossary_sections(conn: sqlite3.Connection, term_uid: str) -> list[dict[str, Any]]:
+    rows = conn.execute("SELECT * FROM glossary_term_sections WHERE term_uid = ? ORDER BY position, rowid", (term_uid,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def set_glossary_sections(conn: sqlite3.Connection, term_uid: str, sections: list[tuple[str, str]]) -> None:
+    """Replaces a term's extra text blocks with (title, body) pairs, in order; a block with neither is dropped."""
+    conn.execute("DELETE FROM glossary_term_sections WHERE term_uid = ?", (term_uid,))
+    position = 0
+    for title, body in sections:
+        title, body = (title or "").strip(), (body or "").strip()
+        if not title and not body:
+            continue
+        position += 1
+        conn.execute(
+            "INSERT INTO glossary_term_sections (uid, term_uid, title, body, position) VALUES (?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), term_uid, title, body, position),
+        )
+    conn.commit()
+
+
+def restore_glossary_section(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
+    conn.execute(
+        "INSERT OR REPLACE INTO glossary_term_sections (uid, term_uid, title, body, position) VALUES (?, ?, ?, ?, ?)",
+        (row["uid"], row["term_uid"], row.get("title") or "", row.get("body") or "", row.get("position") or 0),
+    )
+    conn.commit()
+
+
 def delete_glossary_term(conn: sqlite3.Connection, uid: str) -> None:
     conn.execute("DELETE FROM glossary_terms WHERE uid = ?", (uid,))
     conn.execute("DELETE FROM notebook_glossary_terms WHERE term_uid = ?", (uid,))
     conn.execute("DELETE FROM glossary_term_references WHERE term_uid = ?", (uid,))
+    conn.execute("DELETE FROM glossary_term_sections WHERE term_uid = ?", (uid,))
     conn.execute("DELETE FROM notebook_glossary_excluded_terms WHERE term_uid = ?", (uid,))
     conn.commit()
 

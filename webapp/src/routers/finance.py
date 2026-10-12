@@ -1,11 +1,11 @@
-"""Personal finance pages: Overview, Transactions and Accounts (features/finance.md)."""
+"""Personal finance pages: the monthly Transactions table, and Accounts in Settings (features/finance.md)."""
 
 from __future__ import annotations
 
 from datetime import date
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Form, Header, Query, Request
+from fastapi import APIRouter, Depends, Form, Header, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import clock, db, finance, finance_stats
@@ -15,43 +15,16 @@ from .labels import COLORS
 router = APIRouter(prefix="/finance", tags=["finance"])
 settings_router = APIRouter(prefix="/settings/finance-accounts", tags=["finance-settings"])
 
-RANGES = [
-    ("month", "This month"), ("last_month", "Last month"), ("3m", "Last 3 months"),
-    ("6m", "Last 6 months"), ("year", "This year"), ("all", "All time"), ("custom", "Custom range"),
-]
-PAGE_SIZE = 100
-TREND_MONTHS = 6
-
-
-def date_range(preset: str, today: date) -> tuple[str, str]:
-    this = today.isoformat()[:7]
-    if preset == "last_month":
-        prev = finance_stats.month_add(this, -1)
-        return prev + "-01", finance_stats.month_end(prev)
-    if preset == "3m":
-        return finance_stats.month_add(this, -2) + "-01", this_end(this)
-    if preset == "6m":
-        return finance_stats.month_add(this, -5) + "-01", this_end(this)
-    if preset == "year":
-        return f"{today.year}-01-01", f"{today.year}-12-31"
-    if preset == "all":
-        return "", ""
-    return this + "-01", this_end(this)
-
-
-def this_end(month: str) -> str:
-    return finance_stats.month_end(month)
+def _month(value: str, today: date) -> str:
+    """The month shown, as YYYY-MM; anything unusable falls back to the current month."""
+    try:
+        date.fromisoformat(value + "-01")
+        return value
+    except ValueError:
+        return today.isoformat()[:7]
 
 
 _NONE = {"uid": "", "name": "None"}
-
-
-def _label_choices(conn) -> list[dict]:
-    return [{"uid": n, "name": n} for n in sorted(db.list_all_known_label_names(conn), key=str.lower)]
-
-
-def _group_choices(conn) -> list[dict]:
-    return [{"value": "", "name": "All groups"}] + [{"value": g["name"], "name": g["name"]} for g in db.list_groups(conn)]
 
 
 def _error_response(error: dict, x_requested_with, back: str):
@@ -60,114 +33,27 @@ def _error_response(error: dict, x_requested_with, back: str):
     return RedirectResponse(url=f"{back}?{urlencode({'error': error['message']})}", status_code=303)
 
 
-def _header_links(active: str) -> list[dict]:
-    return [{"url": u, "icon": i, "title": t, "key": k} for k, u, i, t in (
-        ("overview", "/finance", "pie-chart", "Overview"),
-        ("transactions", "/finance/transactions", "list", "Transactions"))
-        if k != active]
-
-
-# Overview
-
-def _assign_colors(conn, breakdown: list[dict]) -> None:
-    """Each slice gets its label's colour; a repeat (labels share the default colour) takes the next unused one."""
-    used: set[str] = set()
-    spare = iter(c for c in COLORS if c not in ("gray", "slate"))
-    for row in breakdown:
-        color = db.effective_label_config(conn, row["label"])["color"] if row["label"] else "gray"
-        while color in used and row["label"]:
-            color = next(spare, "gray")
-        row["color"] = color
-        used.add(color)
-
-
-def _overview_sections(conn, start: str, end: str, group: str) -> list[dict]:
-    accounts = finance.list_accounts(conn)
-    everything = finance.all_transactions(conn)
-    in_range = finance.list_transactions(conn, {"date_from": start, "date_to": end, "group": group})
-    today = clock.today().isoformat()
-    last_month = (end or today)[:7]
-    months = finance_stats.months_between(finance_stats.month_add(last_month, -(TREND_MONTHS - 1)), last_month)
-    sections = []
-    for currency in dict.fromkeys(a["currency"] for a in accounts):
-        mine = [a for a in accounts if a["currency"] == currency]
-        mine_uids = {a["uid"] for a in mine}
-        counted = [t for t in in_range if t["currency"] == currency]
-        mine_txns = [t for t in everything if t["account_uid"] in mine_uids]
-        trend = finance_stats.balance_trend(mine, mine_txns, months)
-        cash_on = end or today
-        cash = sum(finance_stats.balance_on(a, [t for t in everything if a["uid"] in (t["account_uid"], t["to_account_uid"])], cash_on) for a in mine)
-        flow = finance_stats.monthly_flow(mine_txns, months)
-        pies = []
-        for title, kind in (("Spending by label", "expense"), ("Income by label", "income")):
-            rows = finance_stats.spending_by_label([t for t in counted if t["type"] == kind])
-            if kind == "expense" or len(rows) > 1:
-                _assign_colors(conn, rows)
-                pies.append({"title": title, "kind": kind, "slices": finance_stats.doughnut(rows)})
-        sections.append({
-            "currency": currency,
-            "cash": cash,
-            "totals": finance_stats.totals(counted),
-            "runway": finance_stats.runway(cash, [r for r in flow if r["month"] <= cash_on[:7]]),
-            "chart": finance_stats.line_chart({
-                "savings": [r["balance"] for r in trend],
-                "income": [r["income"] for r in flow],
-                "expenses": [r["expenses"] for r in flow],
-                "profit": [r["income"] - r["expenses"] for r in flow],
-            }, months),
-            "pies": pies,
-        })
-    return sections
-
-
 @router.get("")
-def overview(request: Request, range: str = "month", group: str = "", conn=Depends(get_db)):
-    start, end = date_range(range, clock.today())
-    return templates.TemplateResponse("finance_overview.html", {
-        "request": request, "active_tab": "finance", "links": _header_links("overview"),
-        "sections": _overview_sections(conn, start, end, group), "range": range, "range_items": [{"value": k, "name": n} for k, n in RANGES],
-        "group": group, "group_items": _group_choices(conn), "has_accounts": bool(finance.list_accounts(conn)),
-        "money": finance_stats.format_money,
-    })
-
-
-# Transactions
-
-def _filters(q: str, account: str, type: str, label: str, group: str, range: str, sort: str, dir: str,
-             date_from: str = "", date_to: str = "") -> dict:
-    start, end = (date_from, date_to) if range == "custom" else date_range(range, clock.today())
-    return {"q": q.strip(), "account_uid": account, "type": type, "label": label, "group": group,
-            "date_from": start, "date_to": end, "sort": sort, "dir": dir}
+def finance_home():
+    return RedirectResponse(url="/finance/transactions", status_code=303)
 
 
 @router.get("/transactions")
-def transactions(request: Request, q: str = "", account: str = "", type: str = "", label: str = "", group: str = "",
-                 range: str = "all", date_from: str = "", date_to: str = "", sort: str = "date", dir: str = "desc",
-                 limit: int = PAGE_SIZE, conn=Depends(get_db)):
-    limit = max(PAGE_SIZE, min(limit, 5000))
-    rows = finance.list_transactions(conn, _filters(q, account, type, label, group, range, sort, dir, date_from, date_to))
-    sums = {}
-    for t in rows:
-        s = sums.setdefault(t["currency"], [])
-        s.append(t)
-    summary = [{"currency": c, **finance_stats.totals(items)} for c, items in sums.items()]
+def transactions(request: Request, month: str = "", account: str = "", conn=Depends(get_db)):
+    """One month at a time, laid out like a ledger: income, its total, expenses, its total, profit, savings."""
+    today = clock.today()
+    month = _month(month, today)
     accounts = finance.list_accounts(conn)
-    pending = finance.list_scheduled(conn, {"q": q.strip(), "account_uid": account, "type": type, "label": label, "group": group})
-    query = {"q": q, "account": account, "type": type, "label": label, "group": group, "range": range}
-    if range == "custom":
-        query.update(date_from=date_from, date_to=date_to)
+    rows = finance.list_transactions(conn, {"account_uid": account, "date_from": month + "-01", "date_to": finance_stats.month_end(month),
+                                            "sort": "date", "dir": "asc"})
+    pending = finance.list_scheduled(conn, {"account_uid": account})
+    sections = finance_stats.month_sections(rows, {a["uid"]: a for a in accounts}, accounts[0]["currency"] if accounts else "")
     return templates.TemplateResponse("finance_transactions.html", {
-        "request": request, "active_tab": "finance", "links": _header_links("transactions"),
-        "rows": rows[:limit], "pending": pending, "total": len(rows), "has_more": len(rows) > limit, "limit": limit, "summary": summary,
-        "q": q, "account": account, "type": type, "label": label, "group": group, "range": range, "sort": sort, "dir": dir, "date_from": date_from, "date_to": date_to,
-        "range_items": [{"value": k, "name": n} for k, n in RANGES],
+        "request": request, "active_tab": "finance", "sections": sections, "pending": pending, "has_accounts": bool(accounts),
+        "month": month, "month_label": finance_stats.month_title(month),
+        "prev_month": finance_stats.month_add(month, -1), "next_month": finance_stats.month_add(month, 1), "account": account,
         "account_items": [{"value": "", "name": "All accounts"}] + [{"value": a["uid"], "name": a["short"]} for a in accounts],
-        "type_items": [{"value": "", "name": "All types"}] + [{"value": k, "name": n} for k, n in finance_stats.TRANSACTION_TYPES],
-        "label_items": [{"value": "", "name": "All labels"}] + [{"value": c["uid"], "name": c["name"]} for c in _label_choices(conn)],
-        "group_items": _group_choices(conn), "has_accounts": bool(accounts),
-        "query": urlencode({k: v for k, v in query.items() if v}), "money": finance_stats.format_money,
-        "short_date": finance_stats.short_date, "type_short": finance_stats.TYPE_ABBREVIATIONS,
-        "tag_styles": finance.tag_styles(conn),
+        "money": finance_stats.format_money, "short_date": finance_stats.short_date, "tag_styles": finance.tag_styles(conn),
     })
 
 
@@ -181,20 +67,18 @@ def _task_items(conn) -> list[dict]:
 def transaction_form_context(request: Request, conn, txn: dict | None, action: str, scheduled: bool = False,
                              copy: bool = False) -> dict:
     accounts = finance.list_accounts(conn)
-    label = (txn or {}).get("effective_label" if scheduled else "label", "")
     return {
         "request": request, "t": txn, "copy": copy, "form_action": action, "kind": (txn or {}).get("type", ""),
         "status": "scheduled" if scheduled else ("posted" if copy else ""), "status_items": [_NONE] + STATUS_ITEMS, "status_fixed": scheduled,
         "task_items": _task_items(conn), "recurrence": (txn or {}).get("recurrence") or "",
         "account_items": [_NONE] + [{"uid": a["uid"], "name": f"{a['short']} ({a['currency']})"} for a in accounts],
         "type_items": [_NONE] + [{"uid": k, "name": n} for k, n in finance_stats.TRANSACTION_TYPES],
-        "label_items": [_NONE] + _label_choices(conn),
         "amount_text": finance_stats.amount_input((txn or {}).get("amount", 0)) if txn else "",
-        **_tag_context(conn, label, (txn or {}).get("tags", [])),
+        **_tag_context(conn, (txn or {}).get("tags", [])),
     }
 
 
-def _tag_context(conn, label: str, selected: list[str]) -> dict:
+def _tag_context(conn, selected: list[str]) -> dict:
     known = finance.tag_names(conn)
     names = list(dict.fromkeys(known + list(selected)))
     return {"tag_items": [{"uid": n, "name": n} for n in names], "tag_selected": selected}
@@ -208,12 +92,6 @@ def new_transaction_modal(request: Request, copy: str = "", conn=Depends(get_db)
                                       transaction_form_context(request, conn, source, "/finance/transactions", copy=bool(source)))
 
 
-@router.get("/transactions/tag-field")
-def tag_field(request: Request, label: str = "", tags: list[str] = Query([]), conn=Depends(get_db)):
-    """The tag picker for the chosen label, swapped into the transaction modal; tags already picked stay picked."""
-    return templates.TemplateResponse("_finance_tag_field.html", {"request": request, **_tag_context(conn, label, tags)})
-
-
 @router.get("/transactions/{uid}/edit")
 def edit_transaction_modal(uid: str, request: Request, conn=Depends(get_db)):
     txn = finance.get_transaction(conn, uid)
@@ -225,10 +103,16 @@ def edit_transaction_modal(uid: str, request: Request, conn=Depends(get_db)):
 
 async def _form_values(request: Request) -> dict:
     form = await request.form()
-    data = {k: form.get(k, "") for k in ("date", "type", "account_uid", "to_account_uid", "amount", "description", "label",
+    data = {k: form.get(k, "") for k in ("date", "type", "account_uid", "to_account_uid", "amount", "description",
                                          "status", "recurrence", "task_uid")}
     data["tags"] = form.getlist("tags")
+    data["contacts"] = form.getlist("contacts") if form.get("contacts_present") == "1" else None
     return data
+
+
+def _save_contacts(conn, object_type: str, uid: str, data: dict) -> None:
+    if data.get("contacts") is not None:
+        db.set_object_contacts(conn, object_type, uid, db.resolve_contact_entries(conn, data["contacts"]))
 
 
 def _save_scheduled(conn, data: dict, x_requested_with, uid: str | None):
@@ -236,6 +120,7 @@ def _save_scheduled(conn, data: dict, x_requested_with, uid: str | None):
     if error:
         return _error_response(error, x_requested_with, "/finance/transactions")
     new_uid = finance.save_scheduled(conn, clean, uid)
+    _save_contacts(conn, "scheduled", new_uid, data)
     return respond(x_requested_with, "/finance/transactions", status_code=200 if uid else 201, uid=new_uid)
 
 
@@ -248,6 +133,7 @@ def _save_transaction(conn, data: dict, x_requested_with, uid: str | None):
     if error:
         return _error_response(error, x_requested_with, "/finance/transactions")
     new_uid = finance.save_transaction(conn, clean, uid)
+    _save_contacts(conn, "transaction", new_uid, data)
     return respond(x_requested_with, "/finance/transactions", status_code=200 if uid else 201, uid=new_uid)
 
 

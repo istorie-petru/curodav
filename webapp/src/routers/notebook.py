@@ -463,7 +463,7 @@ def find_replace(
 
 @router.get("/search")
 def search_documents(
-    request: Request, q: str = "", exclude: str = "", limit: int = 20, conn=Depends(get_db)
+    request: Request, q: str = "", exclude: str = "", limit: int = 20, ranked: int = 0, conn=Depends(get_db)
 ):
     """The wikilink inline tool's own search/pick autocomplete (static/
     notebook/notebook_wikilinks.js) -- the other JSON exception in this
@@ -472,7 +472,9 @@ def search_documents(
     captured as a document uid -- same router-ordering care the
     citations/glossary routers' own prefix placement in main.py already
     needed (see [[notebook-citations-core]])."""
-    docs = db.search_notebook_documents(conn, q, exclude_uid=exclude or None, limit=limit)
+    docs = db.search_notebook_documents(
+        conn, q, exclude_uid=exclude or None, limit=limit, rank_for=(exclude or None) if ranked else None
+    )
     return JSONResponse(
         [
             {"uid": d["uid"], "title": d["title"], "note_type": d.get("note_type") or "", "color": d["color"], "icon": d["icon"]}
@@ -578,6 +580,7 @@ def document_properties_modal(uid: str, request: Request, conn=Depends(get_db)):
     schema_keys = {f["key"].lower() for f in schema}
     typed_fields = _typed_fields(schema, document["properties"])
     free_properties = [p for p in document["properties"] if p["key"].lower() not in schema_keys]
+    project_ctx = db.project_picker_context(conn)
     return templates.TemplateResponse(
         "notebook_properties_modal.html",
         {
@@ -586,6 +589,9 @@ def document_properties_modal(uid: str, request: Request, conn=Depends(get_db)):
             "typed_fields": typed_fields,
             "free_properties": free_properties,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
+            "labels_selected": [t for t in document["tags"] if t not in project_ctx["project_names"]],
+            "pf_tags": document["tags"], **project_ctx,
+            "kind_items": [{"uid": "note", "name": "Note"}, {"uid": "template", "name": "Template"}],
             "property_key_items": property_keys,
             # A real leading "No type" item, not just an empty `ms_selected`
             # -- _widget_list_multiselect.html's single mode defaults an
@@ -636,6 +642,8 @@ def update_document_properties(
     note_type: str = Form(""),
     note_type_new: str = Form(""),
     tags_labels: list[str] = Form([]),
+    project: str = Form(""),
+    project_field: str = Form(""),
     kind: str = Form(""),
     property_key: list[str] = Form([]),
     property_value: list[str] = Form([]),
@@ -662,7 +670,14 @@ def update_document_properties(
     row["title"] = title.strip() or "Untitled"
     row["note_type"] = _resolve_note_type(note_type, note_type_new)
     row["is_template"] = 1 if kind == "template" else 0
-    row["tags"] = [] if row["is_template"] else tags_labels
+    if row["is_template"]:
+        row["tags"] = []
+    else:
+        from . import dashboard as dashboard_router
+
+        row["tags"] = dashboard_router._tags_list(dashboard_router._with_project(
+            conn, ",".join(tags_labels if isinstance(tags_labels, list) else []),
+            project if isinstance(project, str) else "", project_field if isinstance(project_field, str) else ""))
     free = [{"key": k, "value": v} for k, v in zip(property_key, property_value)]
     items, errors = notebook_fields.build_properties(
         db.list_notebook_field_config(conn), typed if isinstance(typed, dict) else {}, free)
@@ -1346,8 +1361,8 @@ _GLOSSARY_CRUMB = [{"url": "/notebook", "name": "Notebook"}]
 
 
 def _glossary_reference_items(conn) -> list[dict]:
-    """Combined Notebook-documents + citations list for the term edit
-    form's References picker (roadmap item F) -- one fuzzy-searchable
+    """Citations-only list for the term edit
+    form's References picker (notes were dropped from it) (roadmap item F) -- one fuzzy-searchable
     multiselect over both pools rather than two separate fields, since a
     term's "further reading" is equally likely to be either. Each uid is
     prefixed with its own type (`notebook:<uid>`/`citation:<uid>`) so the
@@ -1355,9 +1370,7 @@ def _glossary_reference_items(conn) -> list[dict]:
     second round-trip -- the two uid spaces can't actually collide (both
     are independent uuid4s), but the prefix is still the honest encoding
     of what PRIMARY KEY (term_uid, ref_type, ref_uid) stores."""
-    items = [{"uid": f"notebook:{d['uid']}", "name": d["title"]} for d in db.list_notebook_documents(conn)]
-    items += [{"uid": f"citation:{c['uid']}", "name": db.format_citation_display(c)} for c in db.list_citations(conn)]
-    return items
+    return [{"uid": f"citation:{c['uid']}", "name": db.format_citation_display(c)} for c in db.list_citations(conn)]
 
 
 def _parse_reference_keys(keys: list[str]) -> list[tuple[str, str]]:
@@ -1373,7 +1386,7 @@ def _parse_reference_keys(keys: list[str]) -> list[tuple[str, str]]:
     out = []
     for key in keys:
         ref_type, sep, ref_uid = key.partition(":")
-        if sep and ref_type in db.GLOSSARY_REFERENCE_TYPES and ref_uid:
+        if sep and ref_type == "citation" and ref_uid:
             out.append((ref_type, ref_uid))
     return out
 
@@ -1387,7 +1400,8 @@ def _glossary_edit_context(request: Request, t: dict | None, form_action: str, c
         "form_action": form_action,
         "return_to": _safe_return_to(return_to),
         "reference_items": _glossary_reference_items(conn),
-        "selected_reference_keys": [f"{r['ref_type']}:{r['ref_uid']}" for r in selected],
+        "selected_reference_keys": [f"{r['ref_type']}:{r['ref_uid']}" for r in selected if r["ref_type"] == "citation"],
+        "sections": db.list_glossary_sections(conn, t["uid"]) if t else [],
     }
 
 
@@ -1398,7 +1412,7 @@ def glossary_library(request: Request, q: str = "", conn=Depends(get_db)):
     # not just a count, so the table can show names directly rather than
     # forcing a click-through to see what a term points at.
     for t in terms:
-        t["references"] = db.list_glossary_term_references(conn, t["uid"])
+        t["references"] = [r for r in db.list_glossary_term_references(conn, t["uid"]) if r["ref_type"] == "citation"]
     return templates.TemplateResponse(
         "notebook_glossary_list.html",
         {
@@ -1435,6 +1449,8 @@ def create_glossary_term(
     term: str = Form(...),
     definition: str = Form(""),
     reference_keys: list[str] = Form([]),
+    section_title: list[str] = Form([]),
+    section_body: list[str] = Form([]),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -1443,6 +1459,7 @@ def create_glossary_term(
         return RedirectResponse(url="/notebook/glossary", status_code=303)
     uid = db.upsert_glossary_term(conn, {"term": term, "definition": definition.strip()})
     db.set_glossary_term_references(conn, uid, _parse_reference_keys(reference_keys))
+    db.set_glossary_sections(conn, uid, list(zip(section_title, section_body)))
     return respond(x_requested_with, "/notebook/glossary", uid=uid)
 
 
@@ -1452,6 +1469,8 @@ def update_glossary_term(
     term: str = Form(...),
     definition: str = Form(""),
     reference_keys: list[str] = Form([]),
+    section_title: list[str] = Form([]),
+    section_body: list[str] = Form([]),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -1463,6 +1482,7 @@ def update_glossary_term(
     term = term.strip() or existing["term"]
     db.upsert_glossary_term(conn, {"uid": uid, "term": term, "definition": definition.strip()})
     db.set_glossary_term_references(conn, uid, _parse_reference_keys(reference_keys))
+    db.set_glossary_sections(conn, uid, list(zip(section_title, section_body)))
     return respond(x_requested_with, "/notebook/glossary")
 
 

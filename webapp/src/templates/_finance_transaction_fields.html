@@ -3,8 +3,8 @@
 {% from "_form_rows.html" import title_date_row, recurrence_row %}
 {# Transaction fields shared by the transaction modal and the quick-add Transaction tab. #}
     <div class="field-grid finance-txn-grid" data-txn-type="{{ kind }}" data-status="{{ status }}">
-        {% call title_date_row(t.description if t else '', 'Description', 'description', false, false) %}
-        <div class="field">
+        {% call title_date_row(t.description if t else '', 'Description', 'description', false, true, qa=(quick_add_kind | default(''))) %}
+        <div class="field field-wide">
             <label>Date</label>
             {{ date_field('date', t.date if t else '', label='Date') }}
         </div>
@@ -25,13 +25,11 @@
             {% set st_name = 'to_account_uid' %}{% set st_label = 'To account' %}{% set st_items = account_items %}{% set st_selected = t.to_account_uid if t and t.to_account_uid else '' %}{% set st_form_id = 'finance-transaction-form' %}
             {% include "_status_type_row.html" %}
         </div>
-        <div class="field finance-plain-only">
-            {% set st_name = 'label' %}{% set st_label = 'Label' %}{% set st_items = label_items %}{% set st_selected = t.label if t else '' %}{% set st_form_id = 'finance-transaction-form' %}
-            {% include "_status_type_row.html" %}
-        </div>
         <div class="field finance-plain-only" id="finance-tag-field">
             {% include "_finance_tag_field.html" %}
         </div>
+        {% set ms_form_id = 'finance-transaction-form' %}{% set contacts_object_type = 'scheduled' if status_fixed else 'transaction' %}{% set contacts_object_id = t.uid if t else '' %}
+        {% include "_contacts_row.html" %}
         {% if status_fixed %}
         <input type="hidden" name="status" value="scheduled">
         {% elif not t or copy %}

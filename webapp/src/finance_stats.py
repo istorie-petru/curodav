@@ -106,6 +106,40 @@ def totals(txns: list[dict]) -> dict[str, int]:
     return {"income": income, "expenses": expenses, "net": income - expenses}
 
 
+def month_title(key: str) -> str:
+    return date.fromisoformat(key + "-01").strftime("%B %Y")
+
+
+def month_sections(txns: list[dict], accounts: dict[str, dict], currency: str = "") -> list[dict]:
+    """One ledger block per currency for a month's transactions: income, expenses, profit and savings.
+    Savings is what moved into savings accounts minus what moved out of them (transfers between other accounts
+    are neither). Currencies are never added together."""
+    out: dict[str, dict] = {}
+
+    def blank(c: str) -> dict:
+        return {"currency": c, "income": [], "expenses": [], "transfers": [], "savings": 0}
+
+    if currency:
+        out[currency] = blank(currency)
+    for t in txns:
+        block = out.setdefault(t["currency"], blank(t["currency"]))
+        if t["type"] == "income":
+            block["income"].append(t)
+        elif t["type"] == "expense":
+            block["expenses"].append(t)
+        else:
+            block["transfers"].append(t)
+            if accounts.get(t["to_account_uid"], {}).get("type") == "savings":
+                block["savings"] += t["amount"]
+            if accounts.get(t["account_uid"], {}).get("type") == "savings":
+                block["savings"] -= t["amount"]
+    for block in out.values():
+        block["income_total"] = sum(t["amount"] for t in block["income"])
+        block["expenses_total"] = sum(t["amount"] for t in block["expenses"])
+        block["profit"] = block["income_total"] - block["expenses_total"]
+    return list(out.values())
+
+
 def balance_trend(accounts: list[dict], txns: list[dict], months: list[str]) -> list[dict]:
     """Total balance of `accounts` at the end of each month (one currency only)."""
     by_account: dict[str, list[dict]] = defaultdict(list)

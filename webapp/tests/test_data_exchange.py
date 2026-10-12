@@ -82,7 +82,7 @@ def test_importing_without_merge_leaves_an_existing_note_alone(conn):
 def test_finance_exports_and_imports_accounts_then_transactions(conn, tmp_path):
     a = _account(conn)
     clean, _ = finance.validate_transaction(conn, dict(date="2026-02-01", type="expense", amount="5.50", account_uid=a,
-                                                      description="Coffee", label="Food", tags=["out"]))
+                                                      description="Coffee", tags=["out"]))
     finance.save_transaction(conn, clean)
     bundle = zipfile.ZipFile(io.BytesIO(export_router.download_selective(data_type="finance", conn=conn).body))
     with db.connect(tmp_path / "other.sqlite") as other:
@@ -90,7 +90,7 @@ def test_finance_exports_and_imports_accounts_then_transactions(conn, tmp_path):
         note = export_router._import_one(other, "transactions.csv", bundle.read("finance/transactions.csv"), False)
         assert "Imported 1 transaction." in note
         row = finance.list_transactions(other)[0]
-        assert row["description"] == "Coffee" and row["amount"] == 550 and row["label"] == "Food" and row["tags"] == ["out"]
+        assert row["description"] == "Coffee" and row["amount"] == 550 and row["tags"] == ["out"]
 
 
 def test_a_finance_zip_imports_in_one_go(conn, tmp_path):

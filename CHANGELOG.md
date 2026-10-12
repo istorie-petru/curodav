@@ -4,6 +4,19 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.1.0]
+
+- Transactions is now a monthly ledger: a month mover and an accounts filter in the header, then income, total income, expenses, total expenses, profit and savings. Transfers move money between accounts without appearing in the table. The Overview page, labels, groups and projects on transactions, and the other filters are gone; tags stay.
+- Notebook editor: minimal rounded table grips, Alt+arrow cell moves, tables fill the writing area; distinct heading sizes, numbers only in headings and more space before them; delimiter as tall as a text line; compact popover with one font and icon size; `:` icons as inline text glyphs; typing `[` opens a ranked document picker (same project, same label, then A-Z); Markdown typed live (bold, italic, strike, code).
+- Selected blocks can be deleted with Delete and dragged as a group by a grip beside the selection; dragging across list items selects the list block.
+- Planner and calendar: items that have ended turn gray by the current time; the all-day row moved into the planner sidebar as a second view; fast double clicks on next and previous week no longer repeat the same week.
+- Agenda rows: icon, title, and day and hour at the far right, no label pill, past items gray.
+- Glossary: one-line description column, custom titled text sections per term (not shown in the sidebar), references limited to citations and searchable, editor sidebar numbered, alphabetical and clickable.
+- Document properties: labels and project as two dropdowns on one row; Kind as a dropdown.
+- Quick add: a Type dropdown beside the title replaces the tabs; date and template rows are full width.
+- Mobile: Add new in the sidebar drawer; dropdowns and sheets no longer hide behind the bottom bar; dark colors for the installed app's system bars.
+- Fixed pending transaction pickers on added rows and hid empty work sessions in the task view.
+
 ## [4.0.2]
 
 - Removed a stray package file that was committed with 4.0.1 by mistake.

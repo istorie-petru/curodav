@@ -8,8 +8,11 @@
     "@": { kind: "contact", endpoint: "contact", icon: "user" },
     "$": { kind: "item", endpoint: "item", icon: "check-square" },
     ":": { kind: "icon", endpoint: "icon", icon: "smile" },
+    "[": { kind: "doc" },
   };
   var TRIGGER = /(^|[\s (])([@$:])([\w-]{0,30})$/;
+  // `[` or `[[` opens the document picker; what is typed after it searches.
+  var WIKI_TRIGGER = /(^|[\s (])(\[\[?)([^\[\]]{0,40})$/;
   var URLS = { contact: "/contacts/", task: "/tasks/", event: "/events/" };
 
   function icon(name) {
@@ -72,8 +75,10 @@
     if (!node || node.nodeType !== Node.TEXT_NODE || !editable.contains(node)) return null;
     var before = node.textContent.slice(0, sel.anchorOffset);
     var m = TRIGGER.exec(before);
-    if (!m) return null;
-    return { editable: editable, node: node, trigger: m[2], query: m[3], start: before.length - m[3].length - 1 };
+    if (m) return { editable: editable, node: node, trigger: m[2], query: m[3], open: 1, start: before.length - m[3].length - 1 };
+    m = WIKI_TRIGGER.exec(before);
+    if (!m || editable.classList.contains("nbt-cell") || (node.parentElement && node.parentElement.closest(".cdx-wikilink, .cdx-footnote-ref"))) return null;
+    return { editable: editable, node: node, trigger: "[", query: m[3], open: m[2].length, start: before.length - m[3].length - m[2].length };
   }
 
   function caretRect(node, offset) {
@@ -105,6 +110,7 @@
       });
     }
     state.query = ctx.query;
+    state.open = ctx.open;
     fetchItems();
   }
 
@@ -112,7 +118,11 @@
     var current = state;
     var token = ++current.token;
     var cfg = KINDS[current.trigger];
-    fetch("/notebook/mentions?kind=" + cfg.endpoint + "&q=" + encodeURIComponent(current.query), { headers: { Accept: "application/json" } })
+    var mount = document.getElementById("notebook-editor");
+    var url = current.trigger === "["
+      ? "/notebook/search?ranked=1&q=" + encodeURIComponent(current.query.trim()) + "&exclude=" + encodeURIComponent(mount ? mount.getAttribute("data-uid") || "" : "")
+      : "/notebook/mentions?kind=" + cfg.endpoint + "&q=" + encodeURIComponent(current.query);
+    fetch(url, { headers: { Accept: "application/json" } })
       .then(function (resp) { return resp.ok ? resp.json() : []; })
       .catch(function () { return []; })
       .then(function (items) {
@@ -121,6 +131,11 @@
         current.index = 0;
         renderPicker();
       });
+  }
+
+  function current_glyph(item) {
+    if (state && state.trigger === "[") return item.icon || "file-text";
+    return item.kind === "icon" ? item.name : item.kind === "contact" ? "user" : item.kind === "event" ? "calendar" : "check-square";
   }
 
   function renderPicker() {
@@ -137,7 +152,7 @@
       row.type = "button";
       row.setAttribute("role", "option");
       row.className = "cdx-mention-row" + (i === state.index ? " is-active" : "");
-      var glyph = item.kind === "icon" ? item.name : item.kind === "contact" ? "user" : item.kind === "event" ? "calendar" : "check-square";
+      var glyph = current_glyph(item);
       row.innerHTML = '<span class="cdx-mention-row-icon">' + icon(glyph) + "</span>";
       var label = document.createElement("span");
       label.className = "cdx-mention-row-label";
@@ -153,7 +168,7 @@
       row.addEventListener("click", function () { pick(item); });
       popup.appendChild(row);
     });
-    var rect = caretRect(state.node, state.start + 1 + state.query.length);
+    var rect = caretRect(state.node, state.start + (state.open || 1) + state.query.length);
     var width = popup.offsetWidth, height = popup.offsetHeight;
     var left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
     var top = rect.bottom + 6;
@@ -179,7 +194,8 @@
     var undo = window.notebookUndo;
     if (undo) undo.checkpoint();
     var node = current.node;
-    var end = current.start + 1 + current.query.length;
+    var end = current.start + (current.open || 1) + current.query.length;
+    if (current.trigger === "[") while (node.textContent.charAt(end) === "]") end += 1;
     var range = document.createRange();
     range.setStart(node, current.start);
     range.setEnd(node, Math.min(end, node.textContent.length));
@@ -190,6 +206,12 @@
       var text = item.kind === "icon" ? item.name : item.title;
       inserted = document.createTextNode('"' + text.replace(/"/g, '""') + '"');
       range.insertNode(inserted);
+    } else if (current.trigger === "[") {
+      inserted = window.notebookWikilinkMarker(item);
+      range.insertNode(inserted);
+      var gap = document.createTextNode("\u00a0");
+      inserted.after(gap);
+      inserted = gap;
     } else {
       inserted = chipFor(item);
       range.insertNode(inserted);

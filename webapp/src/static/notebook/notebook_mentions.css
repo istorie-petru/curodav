@@ -3,11 +3,11 @@
   background:var(--accent-neutral-subtle-strong); color:var(--fg-primary); cursor:pointer; white-space:nowrap; vertical-align:baseline; line-height:1.5;}
 #notebook-editor data.cdx-mention[data-kind="contact"]::before{content:"@"; color:var(--fg-tertiary);}
 #notebook-editor data.cdx-mention[data-kind="task"]::before, #notebook-editor data.cdx-mention[data-kind="event"]::before{content:"$"; color:var(--fg-tertiary);}
-#notebook-editor data.cdx-mention-icon{padding:0 2px; background:transparent; cursor:default;}
+#notebook-editor data.cdx-mention-icon{display:inline; padding:0 1px; background:transparent; cursor:default; line-height:inherit;}
 #notebook-editor data.cdx-mention-icon::before{content:none;}
 #notebook-editor data.cdx-mention .icon{width:1.1em; height:1.1em;}
-/* The glyph sits about 2px above the text's visual center; nudge it down. */
-#notebook-editor data.cdx-mention-icon .icon{position:relative; top:.14em;}
+/* Treated as a text glyph: scales with the font, sits on the baseline. */
+#notebook-editor data.cdx-mention-icon .icon{width:1em; height:1em; vertical-align:-.15em; fill:none; stroke:currentColor;}
 .cdx-mention-popup{position:fixed; z-index:10050; display:flex; flex-direction:column; min-width:240px; max-width:360px; max-height:50vh; overflow-y:auto;
   padding:var(--space-1); background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md); box-shadow:var(--elevation-2);}
 .cdx-mention-row{display:flex; align-items:center; gap:10px; width:100%; border:0; background:none; text-align:left; padding:7px 10px; border-radius:var(--radius-sm);

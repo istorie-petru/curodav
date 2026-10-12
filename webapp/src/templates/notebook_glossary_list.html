@@ -51,7 +51,7 @@
                 {% for t in terms %}
                 <tr class="entity-row" data-uid="{{ t.uid }}">
                     <td class="col-name"><div class="label-cell"><span class="label-name">{{ t.term }}</span></div></td>
-                    <td class="col-meta col-opt-2">{{ t.definition or '—' }}</td>
+                    <td class="col-meta col-opt-2"><div class="glossary-definition" title="{{ t.definition }}">{{ t.definition or '—' }}</div></td>
                     <td class="col-meta col-opt-2">{{ t.references | map(attribute='name') | join(', ') if t.references else '—' }}</td>
                     <td class="col-actions">
                         {{ row_action_buttons(

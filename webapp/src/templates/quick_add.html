@@ -48,51 +48,41 @@
 <div id="modal-target" class="modal-stable-height">
 <div class="modal-header">
 <h1>New</h1>
-<!-- Segmented tab switch -- reuses the app-wide .segmented/.seg-btn
-     control (style.css). The active state is what CCQuickAdd.init (see
-     static/quick_add.js) toggles to swap panels and the footer Save
-     button's form target. Server-rendered active state follows
-     `default_tab` so the right tab/panel/save-target are already correct
-     before quick_add.js runs (progressive enhancement, same as the old
-     hardcoded task-active markup was for the task-only default). -->
-<div class="segmented quick-add-tabs" role="tablist" aria-label="What to create">
-    <button type="button" class="seg-btn quick-add-tab{% if default_tab == 'task' %} active{% endif %}" role="tab" aria-selected="{{ 'true' if default_tab == 'task' else 'false' }}" data-quick-add-tab="task">{{ icon('check-square', 'icon-sm') }} Task</button>
-    <button type="button" class="seg-btn quick-add-tab{% if default_tab == 'event' %} active{% endif %}" role="tab" aria-selected="{{ 'true' if default_tab == 'event' else 'false' }}" data-quick-add-tab="event">{{ icon('calendar', 'icon-sm') }} Event</button>
-    <button type="button" class="seg-btn quick-add-tab{% if default_tab == 'contact' %} active{% endif %}" role="tab" aria-selected="{{ 'true' if default_tab == 'contact' else 'false' }}" data-quick-add-tab="contact">{{ icon('address-book', 'icon-sm') }} Contact</button>
-    <button type="button" class="seg-btn quick-add-tab{% if default_tab == 'label' %} active{% endif %}" role="tab" aria-selected="{{ 'true' if default_tab == 'label' else 'false' }}" data-quick-add-tab="label">{{ icon('tag', 'icon-sm') }} Label</button>
-    <button type="button" class="seg-btn quick-add-tab{% if default_tab == 'transaction' %} active{% endif %}" role="tab" aria-selected="{{ 'true' if default_tab == 'transaction' else 'false' }}" data-quick-add-tab="transaction">{{ icon('dollar-sign', 'icon-sm') }} Transaction</button>
-    <button type="button" class="seg-btn quick-add-tab{% if default_tab == 'note' %} active{% endif %}" role="tab" aria-selected="{{ 'true' if default_tab == 'note' else 'false' }}" data-quick-add-tab="note">{{ icon('notebook', 'icon-sm') }} Note</button>
-</div>
 </div>
 <div class="modal-body">
 <div class="card">
 <div class="quick-add-panels" id="quick-add-panels" data-active="{{ default_tab }}">
     <section class="quick-add-panel{% if default_tab == 'task' %} is-active{% endif %}" data-quick-add-panel="task" role="tabpanel" aria-label="New task">
+        {% set quick_add_kind = 'task' %}
         <form method="post" id="task-form" action="/tasks">
             {% set ms_form_id = 'task-form' %}
             {% include "_task_form_fields.html" %}
         </form>
     </section>
     <section class="quick-add-panel{% if default_tab == 'event' %} is-active{% endif %}" data-quick-add-panel="event" role="tabpanel" aria-label="New event">
+        {% set quick_add_kind = 'event' %}
         <form method="post" id="event-form" action="/events">
             {% set ms_form_id = 'event-form' %}
             {% include "_event_form_fields.html" %}
         </form>
     </section>
     <section class="quick-add-panel{% if default_tab == 'contact' %} is-active{% endif %}" data-quick-add-panel="contact" role="tabpanel" aria-label="New contact">
+        {% set quick_add_kind = 'contact' %}
         <form method="post" id="contact-form" action="/contacts" enctype="multipart/form-data">
             {% include "_contact_form_fields.html" %}
         </form>
     </section>
     <section class="quick-add-panel{% if default_tab == 'label' %} is-active{% endif %}" data-quick-add-panel="label" role="tabpanel" aria-label="New label">
+        {% set quick_add_kind = 'label' %}
         <form method="post" id="label-form" action="/settings/labels/create">
             {% include "_label_form_fields.html" %}
         </form>
     </section>
     <section class="quick-add-panel{% if default_tab == 'transaction' %} is-active{% endif %}" data-quick-add-panel="transaction" role="tabpanel" aria-label="New transaction">
         {% if fin %}
-        <form method="post" id="finance-transaction-form" action="/finance/transactions" data-tag-url="/finance/transactions/tag-field">
-            {% with t=none, kind='', status='', status_items=fin.status_items, status_fixed=false, task_items=fin.task_items, recurrence='', account_items=fin.account_items, type_items=fin.type_items, label_items=fin.label_items, amount_text='', tag_items=fin.tag_items, tag_selected=[] %}
+        {% set quick_add_kind = 'transaction' %}
+        <form method="post" id="finance-transaction-form" action="/finance/transactions">
+            {% with t=none, kind='', status='', status_items=fin.status_items, status_fixed=false, task_items=fin.task_items, recurrence='', account_items=fin.account_items, type_items=fin.type_items, amount_text='', tag_items=fin.tag_items, tag_selected=[] %}
             {% include "_finance_transaction_fields.html" %}
             {% endwith %}
         </form>
@@ -101,6 +91,7 @@
         {% endif %}
     </section>
     <section class="quick-add-panel{% if default_tab == 'note' %} is-active{% endif %}" data-quick-add-panel="note" role="tabpanel" aria-label="New note">
+        {% set quick_add_kind = 'note' %}
         <form method="post" id="notebook-new-form" action="/notebook" data-follow-redirect data-fields-url="/notebook/new/fields">
             {% include "_notebook_new_form_fields.html" %}
         </form>

@@ -417,12 +417,27 @@
    doesn't crowd longer labels like "Unordered List" against the panel
    edge. */
 .ce-popover {
-  --icon-size: 22px;
-  --item-padding: 6px;
-  --width: 240px;
+  --icon-size: 16px;
+  --item-padding: 5px;
+  --width: 208px;
 }
-.ce-popover-item__title {
-  font-size: 15px;
+/* One font size and one icon size for every popover row (block picker, inline toolbar, settings). */
+.ce-popover-item__title,
+.ce-popover-item__secondary-title,
+.cdx-search-field__input {
+  font-size: var(--text-sm);
+}
+.ce-popover-item__icon,
+.ce-popover-item__icon svg,
+.ce-popover-item__icon .icon {
+  width: 16px;
+  height: 16px;
+}
+.ce-popover-item__icon {
+  margin-right: 8px;
+}
+.ce-popover-item[data-item-name="mention"] {
+  display: none;
 }
 
 /* ----------------------- 3. Text selection ----------------------- */

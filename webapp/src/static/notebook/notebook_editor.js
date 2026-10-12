@@ -167,6 +167,66 @@
     });
   }
 
+  // Typing the closing marker of **bold**, *italic*, _italic_, ~~strike~~ or `code` turns the
+  // span into formatted text right away, so markdown works as the way of writing.
+  var INLINE_RULES = [
+    { re: /(^|[^*])\*\*([^*\s](?:[^*]*[^*\s])?)\*\*$/, tag: "b" },
+    { re: /(^|[^~])~~([^~\s](?:[^~]*[^~\s])?)~~$/, tag: "s" },
+    { re: /(^|[^`])`([^`]+)`$/, tag: "code" },
+    { re: /(^|[^*\w])\*([^*\s](?:[^*]*[^*\s])?)\*$/, tag: "i" },
+    { re: /(^|[^_\w])_([^_\s](?:[^_]*[^_\s])?)_$/, tag: "i" },
+  ];
+
+  function wireInlineMarkdown(editor, mount) {
+    mount.addEventListener("input", function (e) {
+      var sel = window.getSelection();
+      var anchor = sel.rangeCount && sel.anchorNode;
+      // The zero-width anchor left after a conversion goes as soon as real text follows it.
+      if (anchor && anchor.nodeType === Node.TEXT_NODE && anchor.textContent.length > 1 && anchor.textContent.indexOf("\u200b") !== -1) {
+        var off = sel.anchorOffset - (anchor.textContent.slice(0, sel.anchorOffset).split("\u200b").length - 1);
+        anchor.textContent = anchor.textContent.replace(/\u200b/g, "");
+        var fix = document.createRange();
+        fix.setStart(anchor, Math.max(0, off));
+        fix.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(fix);
+      }
+      if (e.inputType !== "insertText" || !e.data || "*_~`".indexOf(e.data) === -1) return;
+      if (!sel.rangeCount || !sel.isCollapsed) return;
+      var node = sel.anchorNode;
+      if (!node || node.nodeType !== Node.TEXT_NODE) return;
+      var parent = node.parentElement;
+      if (!parent || parent.closest("code, pre, .cdx-code, .cdx-wikilink, .cdx-footnote-list, .cdx-footnote-input, .nbt")) return;
+      if (!parent.closest(".ce-block")) return;
+      var before = node.textContent.slice(0, sel.anchorOffset);
+      for (var i = 0; i < INLINE_RULES.length; i++) {
+        var m = INLINE_RULES[i].re.exec(before);
+        if (!m) continue;
+        var undo = window.notebookUndo;
+        if (undo) undo.checkpoint();
+        var start = before.length - m[0].length + m[1].length;
+        var range = document.createRange();
+        range.setStart(node, start);
+        range.setEnd(node, before.length);
+        range.deleteContents();
+        var el = document.createElement(INLINE_RULES[i].tag);
+        if (INLINE_RULES[i].tag === "code") el.className = "inline-code";
+        el.textContent = m[2];
+        range.insertNode(el);
+        var tail = document.createTextNode("\u200b");
+        el.after(tail);
+        var caret = document.createRange();
+        caret.setStart(tail, 1);
+        caret.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(caret);
+        mount.dispatchEvent(new Event("input", { bubbles: true }));
+        if (undo) setTimeout(function () { undo.checkpoint(); }, 80);
+        return;
+      }
+    });
+  }
+
   // Pasting markdown text (no rich HTML on the clipboard) into a paragraph
   // turns it into real blocks; a single line with inline markers is
   // inserted as formatted text instead.
@@ -297,7 +357,9 @@
       });
       window.notebookEditor = editor;
       if (window.notebookWireMentions) window.notebookWireMentions(mount);
+      if (window.notebookWireBlockDrag) window.notebookWireBlockDrag(mount);
       wireMarkdownShortcuts(editor, mount);
+      wireInlineMarkdown(editor, mount);
       wireMarkdownPaste(editor, mount);
       mount.addEventListener(
         "blur",

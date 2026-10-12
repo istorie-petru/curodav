@@ -23,7 +23,7 @@
            Start and End are each a date + a time you can type or pick
            (_date_time_fields.html). Posts the same start_at / end_at /
            all_day fields as before. #}
-        {% call title_date_row(event.title if event else (prefill_title or '')) %}
+        {% call title_date_row(event.title if event else (prefill_title or ''), qa=(quick_add_kind | default(''))) %}
         <div class="field field-wide event-start-end-field">
             {% from "_date_time_fields.html" import datetime_range with context %}
             {{ datetime_range('start_at', 'end_at', event.start_at if event else (prefill_start or ''), event.end_at if event else (prefill_end or ''),

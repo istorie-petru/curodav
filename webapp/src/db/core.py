@@ -444,7 +444,7 @@ def purge_all_data(conn: sqlite3.Connection) -> None:
         "notebook_documents", "notebook_properties",
         "notebook_field_config", "notebook_field_options",
         "citations", "notebook_citations",
-        "glossary_terms", "notebook_glossary_terms", "glossary_term_references",
+        "glossary_terms", "glossary_term_sections", "notebook_glossary_terms", "glossary_term_references",
         # Auto-detect override bookkeeping (item H, session 7) -- same
         # "purge wipes everything" treatment as the glossary tables above.
         "notebook_glossary_excluded_terms",

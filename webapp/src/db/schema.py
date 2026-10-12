@@ -1084,6 +1084,17 @@ CREATE TABLE IF NOT EXISTS glossary_terms (
     updated_at TEXT
 );
 
+-- Extra titled text blocks on a term (Example, "Remember", ...), user-defined per entry.
+-- Not part of the definition and never shown in the editor sidebar.
+CREATE TABLE IF NOT EXISTS glossary_term_sections (
+    uid TEXT PRIMARY KEY,
+    term_uid TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    body TEXT NOT NULL DEFAULT '',
+    position REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_glossary_term_sections_term ON glossary_term_sections(term_uid);
+
 -- A document's attached term list (2026-10-03 direct follow-up, "add a
 -- sidebar tab" -- full parity with notebook_citations above, including a
 -- per-document attach, not just the global library). Same shape as
