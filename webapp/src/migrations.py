@@ -55,6 +55,29 @@ def _free_finance_tags(conn: sqlite3.Connection) -> None:
     finance.free_tags(conn)
 
 
+def _event_series_tables(conn: sqlite3.Connection) -> None:
+    if "series_uid" not in _columns(conn, "events"):
+        conn.execute("ALTER TABLE events ADD COLUMN series_uid TEXT")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS event_series (uid TEXT PRIMARY KEY, rule TEXT NOT NULL, anchor TEXT NOT NULL, "
+        "extended_until TEXT, holiday_calendar TEXT, exclude_saturday INTEGER NOT NULL DEFAULT 0, exclude_sunday INTEGER NOT NULL DEFAULT 0)"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_events_series ON events(series_uid)")
+
+
+def _repeating_events_become_rows(conn: sqlite3.Connection) -> None:
+    """Every legacy repeating event (an RRULE plus per-occurrence exceptions) becomes a series of real event rows.
+    The first occurrence keeps the original uid; cancelled occurrences are not created, moved ones are created
+    where they were moved. A rule that cannot be read is left exactly as it was."""
+    from . import db, event_series
+
+    uids = [r[0] for r in conn.execute("SELECT uid FROM events WHERE recurrence IS NOT NULL AND TRIM(recurrence) != ''").fetchall()]
+    for uid in uids:
+        master = db.get_event(conn, uid)
+        if master:
+            event_series.migrate_master(conn, master)
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "notebook documents get an is_template flag", _note_templates),
     Migration(2, "frontmatter fields lose the required column", _field_config_without_required, destructive=True),
@@ -63,6 +86,8 @@ MIGRATIONS: list[Migration] = [
     Migration(5, "finance scheduled transaction tags", _finance_tables),
     Migration(6, "finance account abbreviations and tag looks", _finance_looks),
     Migration(7, "finance tags no longer belong to a label group", _free_finance_tags),
+    Migration(8, "events can belong to a series; series table", _event_series_tables),
+    Migration(9, "repeating events become one real event per occurrence", _repeating_events_become_rows, destructive=True),
 ]
 
 

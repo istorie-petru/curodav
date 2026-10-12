@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import clock, db, grid_layout, habit_heatmap, habit_view, recurrence_expand
+from .. import clock, db, event_series, grid_layout, habit_heatmap, habit_view, recurrence_expand
 from ..deps import HIDE_SLEEP_HOURS_KEY, _four_week_position, _week_start, get_db, respond, templates, wants_json
 from . import dashboard as dashboard_router
 
@@ -177,6 +177,18 @@ def _apply_event_label_filter(events: list[dict], label: str | None, conn=None) 
 
 
 _DEFAULT_EVENT_COLOR = "blue"
+
+
+def _annotate_series(conn, events: list[dict]) -> None:
+    """Marks events of a series whose rule can follow a day shift (the drag toast is only offered for those)."""
+    cache: dict[str, bool] = {}
+    for e in events:
+        sid = e.get("series_uid")
+        if sid:
+            if sid not in cache:
+                series = event_series.get_series(conn, sid)
+                cache[sid] = bool(series) and event_series.shiftable(series["rule"])
+            e["series_shiftable"] = cache[sid]
 
 
 def _annotate_calendar_colors(conn, events: list[dict]) -> list[dict]:
@@ -532,6 +544,7 @@ def _month_view_context(conn, request: Request, year: int | None, month: int | N
     events = recurrence_expand.expand_events(events, grid_start, grid_end, db.list_holidays_by_calendar(conn), db.list_event_occurrence_overrides_by_master(conn))
     events = _apply_event_label_filter(events, label, conn)
     events = _annotate_calendar_colors(conn, events)
+    _annotate_series(conn, events)
 
     # Timetabled tasks (work-allocation events, scheduled from a project's
     # Week/Timetable planning grids) are scheduling placeholders, not
@@ -701,6 +714,7 @@ def _four_week_view_context(conn, request, date_, label):
     events = recurrence_expand.expand_events(events, view_start, view_end, db.list_holidays_by_calendar(conn), db.list_event_occurrence_overrides_by_master(conn))
     events = _apply_event_label_filter(events, label, conn)
     events = _annotate_calendar_colors(conn, events)
+    _annotate_series(conn, events)
 
     tasks = db.list_tasks(conn)
     tasks = _apply_task_label_filter(tasks, label, conn)
@@ -774,6 +788,7 @@ def _week_view_context(conn, request, date_, label):
     events = recurrence_expand.expand_events(events, week_start_date, week_end_date, db.list_holidays_by_calendar(conn), db.list_event_occurrence_overrides_by_master(conn))
     events = _apply_event_label_filter(events, label, conn)
     events = _annotate_calendar_colors(conn, events)
+    _annotate_series(conn, events)
 
     # Every work-allocation event is schedulable-work-made-visible, prominent
     # regardless of task/project -- same annotation the old timetable_view
@@ -1082,6 +1097,7 @@ def _day_view_context(conn, request, day, label):
     events = recurrence_expand.expand_events(events, d, d, db.list_holidays_by_calendar(conn), db.list_event_occurrence_overrides_by_master(conn))
     events = _apply_event_label_filter(events, label, conn)
     events = _annotate_calendar_colors(conn, events)
+    _annotate_series(conn, events)
 
     all_tasks = db.list_tasks(conn)
     tasks = [t for t in all_tasks if (t.get("due_at") or "").startswith(day)]
@@ -1224,7 +1240,7 @@ def create_event(
         "meeting_url": _clean_field(meeting_url),
         "status": "active",
         "tags": _tags_list(tags),
-        "recurrence": _clean_field(recurrence),
+        "recurrence": None,  # a repeating event is a series of real rows (event_series.py)
         "reminders": [int(m) for m in reminders.split(",") if m.strip().isdigit()],
         # 1.6 ("Generalized recurrence and the non-working-day policy") --
         # see _event_form_fields.html's own comment on these three fields.
@@ -1234,12 +1250,19 @@ def create_event(
         "created_at": now,
         "updated_at": now,
     }
+    rule = _clean_field(recurrence)
+    if rule and not event_series.valid_rule(rule):
+        raise HTTPException(422, "Recurrence is not a valid rule")
+    resolved = db.resolve_contact_entries(conn, contacts) if isinstance(contacts, list) else None
     try:
-        db.upsert_event(conn, row)
+        if rule:
+            event_series.create_series(conn, row, rule, contacts=resolved)
+        else:
+            db.upsert_event(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
-    if isinstance(contacts, list):
-        db.set_object_contacts(conn, "event", row["uid"], db.resolve_contact_entries(conn, contacts))
+    if resolved is not None and not rule:
+        db.set_object_contacts(conn, "event", row["uid"], resolved)
     return respond(x_requested_with, "/calendar", status_code=201, ok=True, uid=row["uid"])
 
 
@@ -1264,6 +1287,10 @@ def event_detail(uid: str, request: Request, occurrence_date: str | None = None,
     occurrence" card (event_detail.html) offering Cancel/Move/Restore for
     just that one instance, never the whole series."""
     event = db.get_event(conn, uid)
+    if event and event.get("series_uid"):
+        series = event_series.get_series(conn, event["series_uid"])
+        if series:
+            event = dict(event, recurrence=series["rule"], in_series=True)
     if event:
         _annotate_calendar_colors(conn, [event])
     occurrence_override = None
@@ -1328,6 +1355,9 @@ def edit_event_form(uid: str, request: Request, occurrence_date: str | None = No
             (o for o in db.list_event_occurrence_overrides(conn, uid) if o["occurrence_date"] == occurrence_date),
             None,
         )
+    series = event_series.get_series(conn, (event or {}).get("series_uid"))
+    if series:
+        event = dict(event, recurrence=series["rule"])  # shown in the form; the stored rows carry no rule themselves
     tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
         "event_form.html",
@@ -1335,6 +1365,9 @@ def edit_event_form(uid: str, request: Request, occurrence_date: str | None = No
             "request": request,
             "active_tab": "calendar",
             "event": event,
+            "series_member": bool(series),
+            "series_scope_items": [{"uid": "this", "name": "This event"}, {"uid": "following", "name": "This and following events"},
+                                   {"uid": "all", "name": "All events in the series"}],
             "occurrence_date": occurrence_date,
             "occurrence_override": occurrence_override,
             "occurrence": occurrence_window(event, occurrence_date, occurrence_override) if occurrence_override is not None or (occurrence_date and event and event.get("recurrence")) else None,
@@ -1344,6 +1377,34 @@ def edit_event_form(uid: str, request: Request, occurrence_date: str | None = No
             "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
+
+
+def _save_series_edit(conn, uid: str, existing: dict, row: dict, scope: str, rule: str | None, contacts: list[str] | None) -> None:
+    """Saves an edit of a series member (or turns a plain event into a series) onto the chosen scope."""
+    series = event_series.get_series(conn, existing.get("series_uid"))
+    scope = scope if scope in ("this", "following", "all") else "this"
+    if not series:  # a plain event given a rule: it becomes the first occurrence of a new series
+        if not event_series.valid_rule(rule or ""):
+            raise HTTPException(422, "Recurrence is not a valid rule")
+        event_series.create_series(conn, dict(row, recurrence=None), rule, contacts=contacts)
+        return
+    if rule is not None and rule != series["rule"] and scope != "this":
+        if rule and not event_series.valid_rule(rule):
+            raise HTTPException(422, "Recurrence is not a valid rule")
+        event_series.change_rule(conn, uid, scope, rule, row, contacts)
+        return
+    start0, end0 = event_series._minute(existing["start_at"]), event_series._minute(existing.get("end_at"))
+    start1, end1 = event_series._minute(row["start_at"]), event_series._minute(row.get("end_at"))
+    fields = {k: row[k] for k in ("title", "description", "location", "meeting_url", "all_day", "reminders",
+                                  "holiday_calendar", "exclude_saturday", "exclude_sunday")}
+    if scope == "this":
+        db.upsert_event(conn, dict(row, series_uid=existing["series_uid"], recurrence=None))
+        if contacts is not None:
+            db.set_object_contacts(conn, "event", uid, contacts)
+        return
+    event_series.apply_edit(conn, uid, scope, fields, (start1 - start0) if start0 and start1 else timedelta(0),
+                            (end1 - end0) if end0 and end1 else timedelta(0), row.get("tags"), contacts,
+                            exact=(row["start_at"], row.get("end_at")))
 
 
 @events_router.post("/events/{uid}")
@@ -1372,6 +1433,7 @@ def update_event(
     occ_end_at: str = Form(""),
     occ_initial_start: str = Form(""),
     occ_initial_end: str = Form(""),
+    series_scope: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -1398,7 +1460,7 @@ def update_event(
             "location": _clean_field(location),
             "meeting_url": _clean_field(meeting_url),
             "tags": _tags_list(tags),
-            "recurrence": _clean_field(recurrence),
+            "recurrence": None if existing.get("series_uid") else _clean_field(recurrence),
             "reminders": [int(m) for m in reminders.split(",") if m.strip().isdigit()],
             "holiday_calendar": _clean_field(holiday_calendar),
             "exclude_saturday": bool(exclude_saturday),
@@ -1406,10 +1468,15 @@ def update_event(
             "updated_at": clock.now().isoformat(),
         }
     )
+    resolved = db.resolve_contact_entries(conn, contacts) if contacts_present == "1" and isinstance(contacts, list) else None
     try:
-        db.upsert_event(conn, row)
+        if existing.get("series_uid") or _clean_field(recurrence):
+            _save_series_edit(conn, uid, existing, row, series_scope if isinstance(series_scope, str) else "", _clean_field(recurrence), resolved)
+        else:
+            db.upsert_event(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
+
     if work_task_uid:
         task = db.get_task(conn, work_task_uid)
         if task and task.get("title") != title:
@@ -1417,8 +1484,8 @@ def update_event(
             task_row["title"] = title
             task_row["updated_at"] = clock.now().isoformat()
             db.upsert_task(conn, task_row)
-    if contacts_present == "1" and isinstance(contacts, list):
-        db.set_object_contacts(conn, "event", row["uid"], db.resolve_contact_entries(conn, contacts))
+    if resolved is not None and not existing.get("series_uid") and not _clean_field(recurrence):
+        db.set_object_contacts(conn, "event", row["uid"], resolved)
     if isinstance(occurrence_date, str) and occurrence_date and isinstance(occ_start_at, str) and occ_start_at:
         series = occurrence_window(row, occurrence_date, None)
         apply_occurrence_times(
@@ -1430,7 +1497,11 @@ def update_event(
 
 @events_router.post("/events/{uid}/delete")
 def delete_event(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
-    db.delete_event(conn, uid)
+    event = db.get_event(conn, uid)
+    if event and event.get("series_uid"):
+        event_series.delete_scope(conn, uid, "this")  # one occurrence; the series row goes with its last one
+    else:
+        db.delete_event(conn, uid)
     return respond(x_requested_with, "/calendar", ok=True)
 
 
@@ -1482,6 +1553,46 @@ def move_occurrence(
         },
     )
     return respond(x_requested_with, f"/events/{uid}?occurrence_date={start_at}", ok=True)
+
+
+@events_router.post("/events/{uid}/move-following")
+def move_following(
+    uid: str,
+    from_start: str = Form(...),
+    start_at: str = Form(...),
+    x_requested_with: str | None = Header(default=None),
+    conn=Depends(get_db),
+):
+    """After one occurrence was dragged: moves every later occurrence of its series by the same amount."""
+    old, new = event_series._minute(from_start), event_series._minute(start_at)
+    if not old or not new:
+        return JSONResponse({"error": "bad time"}, status_code=400)
+    moved = event_series.shift_following(conn, uid, new - old)
+    return respond(x_requested_with, "/calendar", ok=True, moved=moved)
+
+
+@events_router.post("/events/{uid}/delete-following")
+def delete_following(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    """Deletes this occurrence and every later one of its series."""
+    event_series.delete_scope(conn, uid, "following")
+    return respond(x_requested_with, "/calendar", ok=True)
+
+
+@events_router.post("/events/{uid}/delete-series")
+def delete_series(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    event_series.delete_scope(conn, uid, "all")
+    return respond(x_requested_with, "/calendar", ok=True)
+
+
+@events_router.get("/events/{uid}/delete-scope")
+def delete_scope_modal(uid: str, request: Request, occurrence_date: str = "", conn=Depends(get_db)):
+    """The question asked before deleting a repeating event: only this event, this and the following ones, or all."""
+    event = db.get_event(conn, uid)
+    if event is None:
+        return RedirectResponse(url="/calendar", status_code=303)
+    return templates.TemplateResponse(
+        "event_delete_scope_modal.html",
+        {"request": request, "event": event, "occurrence_date": occurrence_date, "in_series": bool(event.get("series_uid"))})
 
 
 @events_router.post("/events/{uid}/occurrences/restore")

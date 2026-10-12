@@ -18,8 +18,7 @@
     <td>{{ row_action_buttons("/finance/transactions/" ~ t.uid ~ "/edit", "/finance/transactions/" ~ t.uid ~ "/delete", "transaction", 'Delete this transaction?', duplicate_url="/finance/transactions/new?copy=" ~ t.uid) }}</td>
 </tr>
 {% endmacro %}
-{% macro head_row(title) %}<tr class="finance-ledger-head"><th colspan="6">{{ title }}</th></tr>{% endmacro %}
-{% macro sum_row(title, amount, currency, kind='') %}<tr class="finance-ledger-{{ kind or 'total' }}"><td colspan="4">{{ title }}</td><td class="finance-num">{{ money(amount, currency, kind == 'sum') }}</td><td></td></tr>{% endmacro %}
+{% macro sum_row(title, amount, currency, kind='') %}<tr class="finance-ledger-total"><td colspan="4">{{ title }}</td><td class="finance-num">{{ money(amount, currency, kind == 'sum') }}</td><td></td></tr>{% endmacro %}
 {% call page_header_narrow("Transactions", "list") %}
     <a class="icon-btn" href="?month={{ prev_month }}{% if account %}&account={{ account | urlencode }}{% endif %}" title="Previous month" aria-label="Previous month">{{ icon('chevron-left', 'icon-sm') }}</a>
     <span class="cal-nav-label" aria-live="polite">{{ month_label }}</span>
@@ -36,8 +35,7 @@
 <div class="card table-scroll table-responsive">
     <table class="finance-ledger">
         <tbody>
-            {{ head_row('Scheduled') }}
-            {% for p in pending %}
+                        {% for p in pending %}
             <tr class="entity-row finance-pending" data-uid="{{ p.uid }}">
                 <td>{{ short_date(p.date) if p.date else '—' }}</td>
                 <td>{{ type_icon(p.type) }}{{ icon('clock', 'icon-sm') }} {{ p.description or '—' }}{% if p.recurrence %} {{ icon('repeat', 'icon-sm') }}{% endif %}{% if p.task_uid %} <a href="/tasks/{{ p.task_uid }}" data-modal>{{ icon('check-square', 'icon-sm') }} {{ p.task_title }}</a>{% endif %}</td>
@@ -64,13 +62,11 @@
 <div class="card table-scroll table-responsive finance-ledger-card">
     <table class="finance-ledger" id="finance-transactions-table">
         <thead>
-            <tr><th>Date</th><th>Description</th><th>Account</th><th class="col-opt-2">Tags</th><th class="finance-num">{{ s.currency }}</th><th class="col-actions-narrow">Actions</th></tr>
+            <tr><th>Date</th><th>Description</th><th>Account</th><th class="col-opt-2">Tags</th><th class="finance-num">{{ s.currency }}</th><th class="col-actions-narrow"><span class="sr-only">Actions</span></th></tr>
         </thead>
         <tbody>
-            {{ head_row('Income') }}
             {% for t in s.income %}{{ txn_row(t, 1) }}{% endfor %}
             {{ sum_row('Total income', s.income_total, s.currency) }}
-            {{ head_row('Expenses') }}
             {% for t in s.expenses %}{{ txn_row(t, -1) }}{% endfor %}
             {{ sum_row('Total expenses', -s.expenses_total, s.currency) }}
             {{ sum_row('Profit', s.profit, s.currency, 'sum') }}

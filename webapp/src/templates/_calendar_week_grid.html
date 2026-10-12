@@ -97,7 +97,7 @@
                     <span class="te-resize-handle" data-uid="{{ e.uid }}"></span>
                 </div>
                 {% else %}
-                <a class="time-event cal-{{ e.calendar_color }}{% if e.is_short %} is-short{% endif %}{% if e.is_cascaded %} is-cascaded{% endif %}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
+                <a class="time-event cal-{{ e.calendar_color }}{% if e.is_short %} is-short{% endif %}{% if e.is_cascaded %} is-cascaded{% endif %}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"{% if e.recurrence and e.occurrence_date %} data-occurrence="{{ e.occurrence_date }}"{% endif %}{% if e.series_uid and e.series_shiftable %} data-series="1"{% endif %}
                    href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal
                    data-style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%;">
                     <span class="te-name">{{ e.title }}</span>
@@ -126,7 +126,6 @@
                     <button type="button" class="notebook-sidebar-select-option" role="option" aria-selected="false" data-notebook-sidebar-tab="allday">{{ icon('calendar', 'icon-sm') }} All day</button>
                 </div>
             </div>
-            <span class="unscheduled-panel-count">({{ unscheduled_tasks|length }})</span>
         </div>
         <div class="notebook-sidebar-panel is-active" data-notebook-sidebar-panel="unscheduled" role="tabpanel">
         <div id="unscheduled-panel-body">
@@ -152,10 +151,10 @@
             <div class="sidebar-allday-day{% if day.is_past %} is-past{% endif %}">
                 <div class="sidebar-allday-head">{{ day.date.strftime('%a') }} {{ day.date.day }}</div>
                 {% for bar in bars %}
-                <a class="allday-task sidebar-allday-item cal-{{ bar.event.calendar_color }}{% if bar.is_past %} is-past{% endif %}" href="/events/{{ bar.event.uid }}{% if bar.event.recurrence %}?occurrence_date={{ bar.event.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ bar.event.title }}"><span class="allday-title">{{ bar.event.title }}</span></a>
+                <a class="sidebar-allday-row{% if bar.is_past %} is-past{% endif %}" href="/events/{{ bar.event.uid }}{% if bar.event.recurrence %}?occurrence_date={{ bar.event.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ bar.event.title }}"><span class="color-dot cal-{{ bar.event.calendar_color }}"></span><span class="sidebar-allday-title">{{ bar.event.title }}</span></a>
                 {% endfor %}
                 {% for t in day.tasks %}
-                <a class="allday-task sidebar-allday-item{% if day.is_past and t.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }}<span class="allday-title">{{ t.title }}</span></a>
+                <a class="sidebar-allday-row{% if day.is_past and t.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }}<span class="sidebar-allday-title">{{ t.title }}</span></a>
                 {% endfor %}
             </div>
             {% endif %}

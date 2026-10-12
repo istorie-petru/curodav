@@ -64,8 +64,13 @@
      (not tied to event-form) -- app.js's document-level `data-delete-undo`
      handler picks up its submit regardless of where in the document it
      lives, so this doesn't need any of modal.js's own per-form wiring. -->
+{% if event.recurrence or event.series_uid %}
+{% set footer_delete_url = '/events/' ~ event.uid ~ '/delete-scope' ~ ('?occurrence_date=' ~ (occurrence_date | urlencode) if occurrence_date else '') %}
+{% set footer_delete_mode = 'link' %}
+{% else %}
 {% set footer_delete_url = '/events/' ~ event.uid ~ '/delete' %}
 {% set footer_delete_mode = 'undo' %}
+{% endif %}
 {% set footer_delete_label = event.title %}
 {% set footer_delete_redirect = '/calendar' %}
 {% set footer_delete_cc_change = 'event' %}

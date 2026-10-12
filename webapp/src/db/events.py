@@ -52,6 +52,7 @@ def upsert_event(
         # default" convention every other upsert_* in this file already
         # relies on via data.get(c).
         "holiday_calendar", "exclude_saturday", "exclude_sunday",
+        "series_uid",
         "created_at", "updated_at",
     ]
     values = [data.get(c) for c in cols]

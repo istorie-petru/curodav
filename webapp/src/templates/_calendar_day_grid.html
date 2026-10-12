@@ -98,7 +98,7 @@
             <div class="time-block-overlay time-block-{{ ov.kind }}" data-style="top:{{ ov.top_px }}px; height:{{ ov.height_px }}px;"></div>
             {% endfor %}
             {% for e in timed %}
-            <a class="time-event cal-{{ e.calendar_color }}{% if e.is_short %} is-short{% endif %}{% if e.is_cascaded %} is-cascaded{% endif %}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"
+            <a class="time-event cal-{{ e.calendar_color }}{% if e.is_short %} is-short{% endif %}{% if e.is_cascaded %} is-cascaded{% endif %}" data-uid="{{ e.uid }}" data-start="{{ e.start_at }}" data-end="{{ e.end_at or '' }}"{% if e.recurrence and e.occurrence_date %} data-occurrence="{{ e.occurrence_date }}"{% endif %}{% if e.series_uid and e.series_shiftable %} data-series="1"{% endif %}
                href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal
                data-style="top:{{ e.top_px }}px; height:{{ e.height_px }}px; left:{{ e.left_pct }}%; width:{{ e.width_pct }}%;">
                 <span class="te-name">{{ e.title }}</span>

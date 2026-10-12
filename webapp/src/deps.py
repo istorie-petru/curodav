@@ -857,6 +857,9 @@ templates.env.filters["fmt_address"] = _fmt_address
 
 def get_db(request: Request) -> Iterator[sqlite3.Connection]:
     with db.connect(request.app.state.settings.db_path) as conn:
+        from . import event_series
+
+        event_series.ensure_horizon_daily(conn)  # open-ended series get their next occurrences created, once a day
         yield conn
 
 

@@ -176,7 +176,7 @@ class CalDavBridge:
         component = obj.icalendar_component
         if component is None or component.name != "VEVENT":
             return None
-        row = ical_to_event_row(component)
+        row = ical_to_event_row(component, one_time=True)
         row["href"] = str(obj.url)
         row["etag"] = obj.etag
         row["calendar_path"] = calendar_path

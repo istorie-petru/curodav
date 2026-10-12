@@ -248,17 +248,11 @@ class TestUnscheduledPanelHeaderCountAndSearch:
     name still references was added in that same redesign and removed
     2026-09-28, direct feedback -- see test_search_box_removed below.)"""
 
-    def test_count_badge_reflects_the_list_length(self, conn):
+    def test_the_count_badge_is_gone(self, conn):
         _task(conn, "t1", title="Research")
-        _task(conn, "t2", title="Plan")
         db.create_work_allocation(conn, "t1")
-        db.create_work_allocation(conn, "t2")
         body = calendar_router.week_view(_request(), conn=conn).body.decode()
-        assert '<span class="unscheduled-panel-count">(2)</span>' in body
-
-    def test_count_badge_is_zero_when_empty(self, conn):
-        body = calendar_router.week_view(_request(), conn=conn).body.decode()
-        assert '<span class="unscheduled-panel-count">(0)</span>' in body
+        assert "unscheduled-panel-count" not in body
 
     def test_search_box_removed(self, conn):
         """2026-09-28 direct feedback ("remove unscheduled-search"): the

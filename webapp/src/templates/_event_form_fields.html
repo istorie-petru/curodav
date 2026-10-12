@@ -60,6 +60,12 @@
         {# reminders_picker.js and recurrence_picker.js upgrade these two inputs in place; routers/calendar.py still takes the raw values. #}
         {{ reminder_row(event.reminders|join(', ') if event else '', wide=true) }}
         {{ recurrence_row(event.recurrence if event and event.recurrence not in (None, 'None', 'Nothing') else '', wide=true) }}
+        {% if series_member | default(false) %}
+        <div class="field field-wide">
+            {% set st_name = 'series_scope' %}{% set st_label = 'Apply changes to' %}{% set st_items = series_scope_items %}{% set st_selected = 'this' %}{% set st_form_id = 'event-form' %}
+            {% include "_status_type_row.html" %}
+        </div>
+        {% endif %}
         <!-- 1.6 ("Generalized recurrence and the non-working-day policy"):
              any recurring event -- not just a Schedule class -- can specify
              how it behaves on non-working days. A holiday calendar and a

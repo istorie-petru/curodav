@@ -29,6 +29,7 @@
                                 (new-object forms, contact_form)
      footer_delete_mode     -- "undo" (data-delete-undo) or "confirm"
                                (data-confirm-sheet); default "undo"
+     footer_delete_mode "link" -- opens footer_delete_url as a modal (a question before deleting)
      footer_delete_label    -- undo label / confirm-sheet message
      footer_archive_url     -- POST target of the edit modal's icon-only Archive
                                button (the only place Archive lives in a modal);
@@ -119,7 +120,9 @@ footer_delete_redirect -- data-delete-undo-redirect (undo mode only)
 {% endif %}
 <span class="spacer"></span>
 {% if footer_delete_url %}
-{% if footer_delete_mode == 'confirm' %}
+{% if footer_delete_mode == 'link' %}
+<a href="{{ footer_delete_url }}" class="detail-delete-link" data-modal>{{ icon('trash', 'icon-sm') }} Delete</a>
+{% elif footer_delete_mode == 'confirm' %}
 <form method="post" action="{{ footer_delete_url }}" data-confirm-sheet="{{ footer_delete_label }}"{% if footer_delete_cc_change %} data-cc-change="{{ footer_delete_cc_change }}"{% endif %}>
     <button type="submit" class="detail-delete-link">{{ icon('trash', 'icon-sm') }} Delete</button>
 </form>

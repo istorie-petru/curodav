@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_modal_header_back.html" import modal_header_back %}
+{% block title %}Delete repeating event{% endblock %}
+{% block content %}
+{# Asked before deleting a repeating event: just the occurrence that was open, or every event in the series. #}
+<div id="modal-target">
+<div class="modal-header">
+{{ modal_header_back('/events/' ~ event.uid ~ ('?occurrence_date=' ~ (occurrence_date | urlencode) if occurrence_date else ''), event.title) }}
+<h1>Delete repeating event</h1>
+</div>
+<div class="modal-body">
+<div class="card">
+    <p>{{ event.title }} repeats. What should be deleted?</p>
+    {% if in_series %}
+    <form method="post" action="/events/{{ event.uid }}/delete" data-delete-undo="This event" data-delete-undo-redirect="/calendar" data-cc-change="event">
+        <button type="submit" class="btn ghost scope-choice">{{ icon('trash', 'icon-sm') }} This event</button>
+    </form>
+    <form method="post" action="/events/{{ event.uid }}/delete-following" data-delete-undo="This and following events" data-delete-undo-redirect="/calendar" data-cc-change="event">
+        <button type="submit" class="btn ghost scope-choice">{{ icon('trash', 'icon-sm') }} This and following events</button>
+    </form>
+    <form method="post" action="/events/{{ event.uid }}/delete-series" data-delete-undo="All {{ event.title }} events" data-delete-undo-redirect="/calendar" data-cc-change="event">
+        <button type="submit" class="btn ghost scope-choice">{{ icon('trash', 'icon-sm') }} All events in the series</button>
+    </form>
+    {% else %}
+    {% if occurrence_date %}
+    <form method="post" action="/events/{{ event.uid }}/occurrences/cancel" data-delete-undo="This event" data-delete-undo-redirect="/calendar" data-cc-change="event">
+        <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
+        <button type="submit" class="btn ghost scope-choice">{{ icon('trash', 'icon-sm') }} Only this event ({{ occurrence_date | relative_date }})</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/events/{{ event.uid }}/delete" data-delete-undo="All {{ event.title }} events" data-delete-undo-redirect="/calendar" data-cc-change="event">
+        <button type="submit" class="btn ghost scope-choice">{{ icon('trash', 'icon-sm') }} All events in the series</button>
+    </form>
+    {% endif %}
+</div>
+</div>
+{% set footer_back_url = '/events/' ~ event.uid ~ ('?occurrence_date=' ~ (occurrence_date | urlencode) if occurrence_date else '') %}
+{% set footer_back_mode = 'modal' %}
+{% set footer_back_label = 'Cancel' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

@@ -245,7 +245,7 @@ def event_row_to_ical(row: dict[str, Any]) -> bytes:
     return event.to_ical()
 
 
-def ical_to_event_row(event: Event) -> dict[str, Any]:
+def ical_to_event_row(event: Event, one_time: bool = False) -> dict[str, Any]:
     row: dict[str, Any] = {"uid": str(event.get("UID"))}
     row["title"] = str(event.get("SUMMARY", ""))
     row["description"] = str(event.get("DESCRIPTION", "")) if "DESCRIPTION" in event else ""
@@ -284,6 +284,15 @@ def ical_to_event_row(event: Event) -> dict[str, Any]:
             for dt in getattr(item, "dts", [item]):
                 exdates.append(_dt_to_field(dt.dt if hasattr(dt, "dt") else dt))
         row["exdates"] = exdates
+    if one_time:
+        # Synced and imported events never repeat here: a repeating one arrives as the single event at its start,
+        # and each exception instance (RECURRENCE-ID) as an event of its own.
+        row["recurrence"] = None
+        row["exdates"] = []
+        row.pop("occurrence_date", None)
+        if "RECURRENCE-ID" in event:
+            stamp = _dt_to_field(event.get("RECURRENCE-ID").dt).replace(":", "").replace("-", "")
+            row["uid"] = f"{row['uid']}-{stamp}"
     reminders = []
     for alarm in event.walk("VALARM"):
         trigger = alarm.get("TRIGGER")

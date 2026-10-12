@@ -343,9 +343,9 @@ class TestSubmissionUnaffectedByPickerUI:
             conn=conn,
         )
         events = db.list_events(conn, start="2026-01-01", end="2026-12-31")
-        assert len(events) == 1
-        assert events[0]["recurrence"] == "FREQ=WEEKLY"
-        assert events[0]["reminders"] == [0, 10, 1440]
+        assert len(events) > 1 and all(e["reminders"] == [0, 10, 1440] for e in events)
+        from src import event_series
+        assert event_series.get_series(conn, events[0]["series_uid"])["rule"] == "FREQ=WEEKLY"
 
     def test_update_event_recurrence_and_reminders_reach_db_unchanged(self, conn):
         _seed_event(conn, "e1")
@@ -353,13 +353,14 @@ class TestSubmissionUnaffectedByPickerUI:
             uid="e1",
             title="Standup", description="", start_at="2026-08-10T09:00", end_at="",
             all_day="", location="", meeting_url="", tags="",
-            recurrence="FREQ=MONTHLY;BYMONTHDAY=1",
+            recurrence="FREQ=MONTHLY;BYMONTHDAY=10",
             reminders="5, 60",
             holiday_calendar="", exclude_saturday="", exclude_sunday="",
             conn=conn,
         )
         updated = db.get_event(conn, "e1")
-        assert updated["recurrence"] == "FREQ=MONTHLY;BYMONTHDAY=1"
+        from src import event_series
+        assert event_series.get_series(conn, updated["series_uid"])["rule"] == "FREQ=MONTHLY;BYMONTHDAY=10"
         assert updated["reminders"] == [5, 60]
 
     def test_create_task_recurrence_reaches_db_unchanged(self, conn):

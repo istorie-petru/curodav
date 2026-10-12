@@ -4,6 +4,14 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.1.1]
+
+- Repeating events are now real events: every occurrence is its own event in a series, so each one can be edited, moved or deleted. Edit and delete ask whether the change applies to this event, this and following, or all. Dragging an occurrence moves only that one, with a toast offering to move all future ones. Open-ended series are extended automatically each day.
+- Migration 9 turns every existing repeating event (with its cancelled and moved occurrences) into a series of real events, with a copy of the database made first. Events that arrive from CalDAV or an imported file become single events.
+- Planner: the unscheduled count is gone and the All day sidebar rows show a color dot and the title.
+- Transactions: the ledger is plain rows (no section headings or fills), more compact, with edit icons on hover.
+- Notebook: pills on the Browse page are bold; a small space after headings.
+
 ## [4.1.0]
 
 - Transactions is now a monthly ledger: a month mover and an accounts filter in the header, then income, total income, expenses, total expenses, profit and savings. Transfers move money between accounts without appearing in the table. The Overview page, labels, groups and projects on transactions, and the other filters are gone; tags stay.

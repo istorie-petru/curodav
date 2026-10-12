@@ -119,7 +119,7 @@ class TestWeekViewStrip:
         _seed_event(conn, "allday1", start_at=f"{iso}T00:00:00", end_at=f"{iso}T23:59:00", all_day=True)
         resp = calendar_router.week_view(_request("/calendar/week"), conn=conn)
         body = resp.body.decode()
-        assert "sidebar-allday-item" in body
+        assert "sidebar-allday-row" in body
         assert "/events/allday1" in body
         assert {e["uid"] for e in resp.context["days"][0]["all_day"]} == {"allday1"}
 
@@ -160,7 +160,7 @@ class TestWeekViewStrip:
         _seed_task(conn, "t1", due_at=iso)
         resp = calendar_router.week_view(_request("/calendar/week"), conn=conn)
         body = resp.body.decode()
-        assert "allday-task" in body
+        assert "sidebar-allday-row" in body
         assert "t1" in body
 
 

@@ -3960,7 +3960,6 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
    sufficient and unambiguous with only one flex item claiming it. */
 .unscheduled-panel-head{display:flex; align-items:center; gap:8px;}
 .unscheduled-panel-head h2{margin:0; display:flex; align-items:baseline; gap:6px;}
-.unscheduled-panel-count{font-weight:var(--font-weight-regular); color:var(--fg-secondary); font-size:var(--text-sm);}
 /* 2026-09-28 (direct feedback, "add max height for the unscheduled work to
    about 3.5 items tall"): caps the row list instead of letting it grow to
    fit every row (2026-09-26's change, made when the panel moved below the
@@ -8934,6 +8933,8 @@ html[data-notebook-sidebar-collapsed] .notebook-sidebar{display:none;}
   color:var(--fg-tertiary); font-weight:var(--font-weight-regular);
 }
 /* Distinct size per level and more air before a new heading. */
+/* A small space after a heading, always smaller than the one before it. */
+#notebook-editor .ce-header{padding-top:0; padding-bottom:.3em;}
 #notebook-editor h1.ce-header{font-size:2em; margin-top:1.6em;}
 #notebook-editor h2.ce-header{font-size:1.65em; margin-top:1.4em;}
 #notebook-editor h3.ce-header{font-size:1.4em; margin-top:1.2em;}
@@ -9193,6 +9194,9 @@ button.avatar-upload{background:none; border:none; padding:0; cursor:pointer;}
 
 /* Notebook Browse: the list and filter sidebar carry no bold; scoped below the page header so shared components (page-header-narrow-title) keep their canonical weight. */
 main.notebook-browse-page .notebook-page-layout, main.notebook-browse-page .notebook-page-layout *{font-weight:var(--font-weight-regular);}
+/* ...except the pills, which are bold. */
+main.notebook-browse-page .notebook-page-layout .cell-tag, main.notebook-browse-page .notebook-page-layout .pill-static, main.notebook-browse-page .notebook-page-layout .label-pill-link{font-weight:var(--font-weight-bold);}
+main.notebook-browse-page .notebook-page-layout .notebook-rail-pill-count{font-weight:var(--font-weight-regular);}
 .notebook-browse-table{width:100%;}
 .notebook-browse-table .col-meta{width:auto; min-width:0;}
 .notebook-browse-table .col-actions{width:48px; min-width:48px;}
@@ -9295,11 +9299,14 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .pending-tx-edit .pending-tx-expense, .pending-tx-edit .pending-tx-income, .pending-tx-edit .pending-tx-transfer{display:none;}
 .pending-tx-edit[data-type="expense"] .pending-tx-expense, .pending-tx-edit[data-type="income"] .pending-tx-income, .pending-tx-edit[data-type="transfer"] .pending-tx-transfer{display:inline;}
 .pending-tx-edit[data-type="expense"] .pending-tx-plain, .pending-tx-edit[data-type="income"] .pending-tx-plain, .pending-tx-edit[data-type="transfer"] .pending-tx-plain{display:none;}
-/* Transactions ledger: one month, income / expenses / profit / savings. */
+/* Transactions ledger: one month as plain rows; totals are bold rows with a hairline above, no fills. */
 .finance-ledger{width:100%;}
-.finance-ledger-head th{padding-top:var(--space-3);text-align:left;font-size:var(--text-2xs);letter-spacing:.04em;text-transform:uppercase;color:var(--fg-tertiary);}
-.finance-ledger-total td{border-top:1px solid var(--border);font-weight:var(--font-weight-bold);}
-.finance-ledger-sum td{border-top:1px solid var(--border-strong);font-weight:var(--font-weight-bold);background:var(--accent-neutral-subtle);}
+.finance-ledger th, .finance-ledger td{padding-top:4px; padding-bottom:4px;}
+@media (hover:hover){
+  .finance-ledger td:last-child > *{opacity:0; transition:opacity .12s;}
+  .finance-ledger tr:hover td:last-child > *, .finance-ledger tr:focus-within td:last-child > *{opacity:1;}
+}
+.finance-ledger-total td{border-top:1px solid var(--border); font-weight:var(--font-weight-bold);}
 .finance-ledger .finance-num{font-variant-numeric:tabular-nums;}
 /* Glossary term: extra titled text blocks (plain, no background). */
 .glossary-section-edit{display:flex; flex-direction:column; gap:var(--space-1); padding:var(--space-2) 0; border-top:1px solid var(--separator);}
@@ -9310,3 +9317,9 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .notebook-glossary-sidebar-list{list-style:decimal inside; margin:0; padding:0;}
 .notebook-glossary-sidebar-list li{margin-bottom:var(--space-2);}
 .notebook-glossary-sidebar-list a{color:var(--fg-primary);}
+.scope-choice{width:100%; justify-content:flex-start; margin-top:var(--space-2);}
+.sidebar-allday-row{display:flex; align-items:center; gap:var(--space-2); min-height:28px; color:var(--fg-primary);}
+.sidebar-allday-row:hover{text-decoration:none; color:var(--fg-primary);}
+.sidebar-allday-row .icon{flex:none; color:var(--fg-tertiary);}
+.sidebar-allday-title{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.sidebar-allday-row.is-past{opacity:.5;}

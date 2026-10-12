@@ -199,6 +199,14 @@
       // endpoint (its own comment covers the new optional `all_day` field).
       // Never reached for a resize (dropAllDayCol is only ever set inside
       // the mode === "move" branch of move() above).
+      if (!wasResize && dropAllDayCol && el.dataset.occurrence) {
+        dropAllDayCol = null;
+        el.style.top = origTop + "px";
+        el.style.height = origHeight + "px";
+        if (currentCol !== startCol) startCol.appendChild(el);
+        window.ccToast({ message: "A repeating event cannot be dragged to all day. Open it to edit.", variant: "error" });
+        return;
+      }
       if (!wasResize && dropAllDayCol) {
         // Week's `.allday-col` carries its own `data-date`; Day's doesn't
         // (there's only ever one column, so no per-column date to disambiguate)
@@ -258,16 +266,43 @@
       // does a full reload is also the one case where the user needs to
       // see the server's real, authoritative state rather than trust the
       // optimistic guess.
-      fetch(`/events/${uid}/reschedule`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          start_at: `${day}T${minutesToHHMMSS(startMin)}`,
-          end_at: `${day}T${minutesToHHMMSS(endMin)}`,
-        }),
-      }).then((resp) => {
+      const startAt = `${day}T${minutesToHHMMSS(startMin)}`;
+      const endAt = `${day}T${minutesToHHMMSS(endMin)}`;
+      const occurrence = el.dataset.occurrence;
+      // A repeating event moves only the occurrence that was dragged; the toast offers the later ones too.
+      const request = occurrence
+        ? fetch(`/events/${uid}/occurrences/move`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "fetch" },
+            body: new URLSearchParams({ occurrence_date: occurrence, start_at: startAt, end_at: endAt }),
+          })
+        : fetch(`/events/${uid}/reschedule`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ start_at: startAt, end_at: endAt }),
+          });
+      request.then((resp) => {
         if (!resp.ok) throw new Error("reschedule failed");
         window.ccApi.dispatchChange({ type: "event", action: "move", uid: uid });
+        if (!el.dataset.series) return;
+        // A repeating event moves only the occurrence that was dragged; the toast offers the later ones too.
+        const fromStart = el.dataset.start;
+        window.ccToast({
+          message: "Moved this event only.",
+          actionLabel: "Move all future ones",
+          duration: 10000,
+          onAction: () => {
+            fetch(`/events/${uid}/move-following`, {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "fetch" },
+              body: new URLSearchParams({ from_start: fromStart, start_at: startAt }),
+            }).then((r) => {
+              if (!r.ok) return; // nothing to offer or show: the later events simply stay where they are
+              window.ccApi.dispatchChange({ type: "event", action: "move", uid: uid });
+              window.ccToast({ message: "Moved this and all future events." });
+            }).catch(() => {});
+          },
+        });
       }).catch(() => {
         el.style.top = origTop + "px";
         el.style.height = origHeight + "px";

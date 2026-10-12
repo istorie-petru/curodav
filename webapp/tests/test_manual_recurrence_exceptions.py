@@ -35,14 +35,13 @@ def _request(path="/calendar"):
 
 
 def _seed_recurring_event(conn, uid="e1"):
-    calendar_router.create_event(
-        title="Class", description="", start_at="2026-09-01T10:00", end_at="2026-09-01T12:00",
-        all_day="", location="", meeting_url="", tags="",
-        recurrence="FREQ=WEEKLY;UNTIL=2026-09-22", reminders="",
-        holiday_calendar="", exclude_saturday="", exclude_sunday="",
-        conn=conn,
-    )
-    return next(e for e in db.list_events(conn) if e["title"] == "Class")["uid"]
+    """A legacy repeating event (a master row with an RRULE): what imports and unreadable rules still look like."""
+    db.upsert_event(conn, {
+        "uid": uid, "title": "Class", "description": "", "start_at": "2026-09-01T10:00", "end_at": "2026-09-01T12:00",
+        "all_day": False, "status": "active", "recurrence": "FREQ=WEEKLY;UNTIL=2026-09-22", "tags": [],
+        "created_at": _now(), "updated_at": _now(),
+    })
+    return uid
 
 
 class TestListEventsIncludesFarFutureRecurringOccurrences:

@@ -395,7 +395,7 @@ def _import_ics_text(conn, text: str, skip_existing: bool = False) -> tuple[int,
         return (0, 0)
     for component in parsed.walk():
         if component.name == "VEVENT":
-            row = ical_rows.ical_to_event_row(component)
+            row = ical_rows.ical_to_event_row(component, one_time=True)
             if skip_existing and db.get_event(conn, row["uid"]) is not None:
                 continue
             db.upsert_event(conn, row)
