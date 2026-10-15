@@ -1,46 +1,10 @@
 {% from "_empty_state.html" import empty_state %}
-<!-- Shared widget grid + each widget's own Filters panel. Factored out of dashboard.html
-     (2026-08-02, per-space widgets) so a Space page (routers/projects.py's
-     space_detail) gets the *exact* same widget system as Home, not a
-     second parallel implementation -- both routes build their context via
-     routers/dashboard.py's widget_page_context and simply include this
-     partial. Adding new widgets opens the customization modal via the
-     toolbar's "New widget" button (only visible in edit mode).
-     A Project page (routers/projects.py's project_detail) shares it too
-     (2026-08-05) via project_uid, the third value of the same page-identity
-     split space_uid already is.
-     Expects (all supplied by widget_page_context): edit_mode,
-     space_uid ("" on Home, a project_groups uid on a Space),
-     project_uid ("" on Home/Space, a projects uid on a Project page),
-     page_url (where actions here should redirect back to), widget_contexts,
-     widget_sources/widget_views/widget_ranges,
-     projects, task_lists, calendars, tag_names. There is no per-widget
-     height selection anymore (2026-08-07 removal of the manual
-     height-editor/drag-resize feature, still true) -- .widget-content
-     just sizes to its own content, capped by a single flat CSS
-     max-height (see static/style.css) as a backstop, not a per-widget
-     knob.
-
-     Width IS a per-widget knob again, reinstated 2026-08-30 (direct
-     request) -- `wc.width`/`wc.width.span` below comes from the widget's
-     own type default UNLESS its own config["width"] overrides it (a
-     stack instead always reads its own stored config["width"], see
-     _widget_width in routers/dashboard.py), set via the Filters panel's
-     Width field (_widget_edit_form.html). A `.widget-resize-handle`
-     mouse-drag corner briefly existed alongside that field, same day --
-     removed again just as quickly, direct follow-up report that it
-     didn't actually work ("still doesn't work... remove it"; the Width
-     field itself was separately confirmed fine, "the dashboard customise
-     is fine"). The field is the only way to set width now. -->
 {% if edit_mode %}
 <!-- Add widget -- now opens the customization modal via the toolbar's
      "New widget" button instead of an inline form, keeping a single
      surface for adding widgets. -->
 {% endif %}
 
-{# The widget_inner macro lives in its own partial (2026-08-16, async-CRUD)
-   so the single-widget region fragment (_widget_card.html) can render a
-   plain widget's card standalone without re-rendering the whole grid. #}
 {% from "_widget_inner.html" import widget_inner with context %}
 
 {% if widget_contexts %}
@@ -51,9 +15,6 @@
     {% if edit_mode %}
     <div class="widget-header widget-stack-header">
         <button type="button" class="icon-btn widget-drag-handle" title="Drag to reorder, or drop onto another widget to stack them" aria-label="Drag to reorder">{{ icon('move', 'icon-sm') }}</button>
-        {# 2026-09-25 (UI audit H-18): the bar used to be a bare handle + an
-           x that looked exactly like each inner widget's "Remove widget" x
-           but meant "Dissolve stack". Named bar + a distinct split icon. #}
         <span class="widget-stack-label">Stack</span>
         <div class="spacer"></div>
         <form method="post" action="/dashboard/widgets/{{ wc.widget.uid }}/delete" class="form-inline" data-confirm-sheet="Dissolve this stack? (its widgets stay, just ungrouped)">

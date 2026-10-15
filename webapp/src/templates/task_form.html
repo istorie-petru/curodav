@@ -3,18 +3,6 @@
 {% from "_task_transactions.html" import pending_transactions_edit with context %}
 {% block title %}{% if task %}Edit task{% else %}New task{% endif %}{% endblock %}
 {% block content %}
-<!-- see event_form.html for why this is split into .modal-header/
-     .modal-body/.modal-footer, and why Save/Delete live in the footer as
-     plain buttons tied back to the form via `form="task-form"` rather than
-     being nested inside it -- static/modal.js.
-
-     2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
-     html partial task_detail.html's view uses too -- same structure, the
-     detail modal's "Edit" link swapped for this "Save" submit button --
-     and #modal-target carries the modal-stable-height marker so modal.js
-     keeps the dialog one fixed size in both states while the
-     header/body/footer cross-fade when the Edit link swaps them in
-     place. -->
 <div id="modal-target" class="modal-stable-height">
 <div class="modal-header">
 <h1>{% if task %}Edit task{% else %}New task{% endif %}</h1>
@@ -26,20 +14,9 @@
     {% if task %}{{ work_sessions_edit(work_allocations, 'task-form') }}{% endif %}
     {% if task and pending_account_names %}{{ pending_transactions_edit(pending_transactions, 'task-form') }}{% endif %}
 </form>
-<!-- 2026-08-29 (STATE.md backlog item 4, direct request): the Relations
-     card/picker that used to render here (task_relations_section) is
-     fully removed -- not just hidden behind the old Settings > Appearance
-     toggle. Work allocations (event_task_relations rows with
-     is_work_allocation=1) are a distinct feature and are untouched. -->
 </div>
 </div>
 {% if task %}
-<!-- 2026-08-08 direct feedback: Cancel on an edit returns to the detail
-     view modal (footer_back_mode='modal' -- a data-modal link into
-     /tasks/uid), NOT a data-modal-cancel that closes the whole window;
-     the modal's X is the way to fully close. A brand-new task has no
-     view to return to, so its Cancel is still a plain data-modal-cancel
-     close. -->
 {% set footer_back_url = '/tasks/' ~ task.uid %}
 {% set footer_back_mode = 'modal' %}
 {% else %}

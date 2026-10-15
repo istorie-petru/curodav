@@ -1,4 +1,4 @@
-"""Published Lists' standalone public feed (2026-08-29) -- the "share with
+"""Published Lists' standalone public feed -- the "share with
 a friend/colleague" surface, deliberately independent of Radicale. A List's
 `public_token` (routers/published_lists.py) resolves here to a live,
 read-only calendar/contacts feed built directly from the current label

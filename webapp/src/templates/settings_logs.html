@@ -1,0 +1,15 @@
+{% from "_empty_state.html" import empty_state %}
+{% extends "base.html" %}
+{% block title %}Logs - Settings{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("Logs", "list") }}
+<div class="card log-view" id="log-view">
+    <div class="segmented" role="group" aria-label="Log level">
+        {% for lv in levels %}<button type="button" class="seg-btn{% if lv == 'important' %} active{% endif %}" data-log-level="{{ lv }}">{{ lv | capitalize }}</button>{% endfor %}
+    </div>
+    <div class="log-lines" id="log-lines" aria-live="off"></div>
+    <div id="log-empty">{{ empty_state('No log lines at this level yet', icon_name='list', size='compact') }}</div>
+</div>
+<script defer src="{{ static_url('settings_logs.js') }}"></script>
+{% endblock %}

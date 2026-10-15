@@ -1,10 +1,4 @@
-"""Settings -- reworked 2026-08-08 into a real hub-and-children area instead
-of one long page (see features/settings.md's 2026-08-08 entry for the
-full brainstorm/rationale; the 2026-08-07 pass this replaces got Settings
-to "four honest groups on one page," which was real progress but still one
-scrolling page mixing a dozen unrelated controls together).
-
-Audited every setting this app actually exposes (routers/*.py, db.py's
+"""Audited every setting this app actually exposes (routers/*.py, db.py's
 schema, every template with a form that isn't a create/edit modal) before
 deciding on structure, per the redesign brief's own instruction not to
 force settings into categories that only look complete. Result: five
@@ -12,7 +6,7 @@ categories, each earning its own focused page because each is a distinct
 thing a user thinks about, not because five is a tidy number --
 
   1. General     -- identity + format preferences: display name, week
-                     start, time format; plus (2026-08-30) old/new/confirm
+                     start, time format; plus old/new/confirm
                      password forms for the app's own login and the app's
                      stored Radicale connection credential ("Login &
                      security" -- see change_login_password/
@@ -31,28 +25,6 @@ thing a user thinks about, not because five is a tidy number --
                      floating off the bottom of the old page -- it's
                      exactly what "Advanced" means in every settings app.
 
-2026-08-08 follow-up: "Widgets" (its own hub category, holding a "Custom
-widgets" builder on/off toggle plus the reset-layout action) is gone --
-per direct feedback, the toggle itself was removed outright (see
-_modal_widget_customize.html's own comment: it was a boolean whose only
-effect was hiding the one way to add a widget, not a real preference).
-That left exactly one action in that category (reset layout), not enough
-to justify its own top-level page -- folded into Advanced instead, next
-to the other rarely-touched, real-capability actions it already
-thematically belongs with.
-
-2026-08-08 follow-up #2: "Data & backup" (a sub-hub of Habits/Published
-lists/Export) is gone too, per direct feedback -- Export & backup moved
-into Advanced (same "real capability" theme as Reset layout/Auto-archive/
-Purge), and Published lists became a direct hub category in its own right
-rather than nested one level deeper. Habits is NOT a hub category (2026-08-08
-follow-up #3): it's reached from Tasks > Habits, its contextual home where
-the habit-tracking label setting also lives (tasks.py's save_habit_settings),
-so a Settings-hub shortcut would be pure mirroring of something already one
-click away. Once Export left, Data & backup had exactly two entries doing
-nothing but forwarding to Habits/Published lists -- a layer with no content
-of its own, just indirection.
-
 Explicitly NOT created, and why (see the redesign brief's "only create
 categories that are actually useful"):
   - Integrations -- Radicale is internal plumbing for Published Lists,
@@ -61,8 +33,7 @@ categories that are actually useful"):
     a page with zero real content is worse than no page.
   - Calendar/Tasks as their own Settings categories -- Schedule's own
     settings (semester dates/credits/reminder/event label) already moved
-    onto /schedule itself as a <details> block (2026-08-08, before this
-    redesign) specifically so there wouldn't be two paths to the same
+    onto /schedule itself as a <details> block specifically so there wouldn't be two paths to the same
     four fields; re-adding a Settings mirror here would recreate exactly
     the "which one is current" drift that move was fixing. Tasks has no
     settings of its own beyond the habit-tracking label, which likewise
@@ -71,18 +42,6 @@ categories that are actually useful"):
     not mirrored -- see the redesign brief's own "only mirror a setting
     when the contextual shortcut provides a real usability advantage";
     a settings mirror nobody asked for isn't one.
-
-2026-08-14 follow-up: Holidays is the one exception to the "Schedule stays
-contextual-only" rule directly above, and deliberately so -- a named
-holiday calendar isn't a Schedule *setting* (a single field like semester
-dates), it's a reusable, named list of date ranges any recurring event
-anywhere in the app can reference (1.6), the same "Labels" shape as the
-existing Labels hub category rather than a per-page config field. It moved
-from Schedule's Table view into its own `/settings/holidays` hub category,
-built as a Tasks-table-style grid. Schedule's own <details> Settings panel
-still keeps its `holiday_calendar` field (which named calendar the
-semester's classes respect) -- only the calendars' contents moved, not the
-picker that chooses among them.
 
 Every child page shares one back-navigation shape (_settings_breadcrumb
 .html): "Settings" (or "Settings / Data") as a link, current page as plain
@@ -95,7 +54,6 @@ from __future__ import annotations
 import base64
 import hmac
 import io
-import logging
 import os
 import threading
 import uuid
@@ -108,6 +66,8 @@ import httpx
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
+from .. import log as app_log
+from ..log import get_logger
 from .. import clock, auth, config, data_health, db, env_file, finance, finance_stats, flairs, offline_sync, push, release, reminders
 from ..image_sniff import sniff_image_type
 from ..deps import (
@@ -133,7 +93,7 @@ from .export import _redirect_with_error, _redirect_with_note, export_context
 from .tasks import TASK_AUTO_ARCHIVE_DAYS_KEY
 
 router = APIRouter(tags=["settings"])
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 HUB_CATEGORIES = [
     {"url": "/settings/general", "icon": "user", "name": "General", "desc": "Week start, time format, and other display preferences"},
@@ -144,6 +104,7 @@ HUB_CATEGORIES = [
     {"url": "/settings/notebook", "icon": "file-text", "name": "Notebook", "desc": "Document sidebar layout"},
     {"url": "/settings/finance-accounts", "icon": "credit-card", "name": "Finance accounts", "desc": "Money accounts, currencies and opening balances"},
     {"url": "/settings/time-blocks", "icon": "moon", "name": "Sleep & Leisure Time", "desc": "Weekly hours the Week/Day grid highlights and warns about"},
+    {"url": "/settings/logs", "icon": "list", "name": "Logs", "desc": "What the app is doing, live, by level"},
     {"url": "/settings/data-maintenance", "icon": "database", "name": "Data & Maintenance", "desc": "Backups, integrity, sync conflicts, export, purge"},
     {"url": "/published-lists", "icon": "share-2", "name": "Published lists", "desc": "Subscribable filtered calendars/lists"},
 ]
@@ -228,14 +189,21 @@ def settings_general(request: Request, conn=Depends(get_db)):
     )
 
 
+@router.get("/settings/logs")
+def settings_logs(request: Request):
+    return templates.TemplateResponse(
+        "settings_logs.html",
+        {"request": request, "active_tab": "settings_logs", "crumbs": _ROOT_CRUMB, "title": "Logs", "levels": list(app_log.LEVELS)},
+    )
+
+
+@router.get("/settings/logs/entries")
+def settings_log_entries(level: str = "important", after: int = 0):
+    return JSONResponse(app_log.entries(level, after))
+
+
 @router.get("/settings/notifications")
 def settings_notifications(request: Request, conn=Depends(get_db)):
-    """2026-09-27 direct feedback: split out of General into its own hub
-    category (HUB_CATEGORIES' own comment explains why) -- same "Notifications
-    on this device" + "Remind me about" + "Morning reminder at" + contact
-    email card settings_general used to render, moved here verbatim (same
-    context fields, same POST routes below -- only the page's own title/
-    crumbs and this GET route are new)."""
     return templates.TemplateResponse(
         "settings_notifications.html",
         {
@@ -253,14 +221,14 @@ def settings_notifications(request: Request, conn=Depends(get_db)):
 
 @router.get("/settings/your-profile")
 def settings_your_profile(request: Request, conn=Depends(get_db)):
-    """2026-09-11 direct request: "move the password, username, radicale
-    url etc, settings from general to a new page named Your Profile. It
-    should include the Profile Picture and Nickname (current Your Name,
-    used in greeting)." Same context fields settings_general used to build
-    for its Profile picture / Your name / Account / Restart app cards --
-    moved here verbatim, this page's own template is those same cards'
-    markup unchanged (only the page title/crumbs and where the underlying
-    routes redirect back to)."""
+    """It
+        should include the Profile Picture and Nickname (current Your Name,
+        used in greeting)." Same context fields settings_general used to build
+        for its Profile picture / Your name / Account / Restart app cards --
+        moved here verbatim, this page's own template is those same cards'
+        markup unchanged (only the page title/crumbs and where the underlying
+        routes redirect back to).
+    """
     settings = _current_settings(request)
     return templates.TemplateResponse(
         "settings_your_profile.html",
@@ -298,58 +266,57 @@ def account_settings(
     radicale_url: str = Form(""),
     conn=Depends(get_db),
 ):
-    """Settings > Your Profile's "Account" card -- 2026-09-08, direct request
-    ("merge the concept of radicale username to the app username, and
-    merge the app password with the radicale password"). Replaces three
-    former routes (change_login_password, change_radicale_password, Data
-    & Maintenance's settings_radicale) that each managed a separate
-    credential -- the app's own login, and the app's stored copy of the
-    Radicale connection -- with one form: a single username and password
-    govern both, plus the Radicale server URL (not a credential, just
-    where to reach it).
+    """Replaces three
+        former routes (change_login_password, change_radicale_password, Data
+        & Maintenance's settings_radicale) that each managed a separate
+        credential -- the app's own login, and the app's stored copy of the
+        Radicale connection -- with one form: a single username and password
+        govern both, plus the Radicale server URL (not a credential, just
+        where to reach it).
 
-    Storage backend is chosen by whether this account is currently
-    env-configured (`auth_is_env`: CC_AUTH_USERNAME/PASSWORD both set) OR
-    the Radicale side is (`settings.radicale_env_configured`,
-    CC_RADICALE_URL set) -- either one puts the WHOLE account on the
-    env-file path from here on, converting the other half over too the
-    first time this form is saved (e.g. an install that only ever had
-    CC_RADICALE_URL set now also gets CC_AUTH_USERNAME/PASSWORD written
-    alongside it): the point of merging is one identity, not one still
-    living in two different places depending on which half happened to
-    be configured first.
+        Storage backend is chosen by whether this account is currently
+        env-configured (`auth_is_env`: CC_AUTH_USERNAME/PASSWORD both set) OR
+        the Radicale side is (`settings.radicale_env_configured`,
+        CC_RADICALE_URL set) -- either one puts the WHOLE account on the
+        env-file path from here on, converting the other half over too the
+        first time this form is saved (e.g. an install that only ever had
+        CC_RADICALE_URL set now also gets CC_AUTH_USERNAME/PASSWORD written
+        alongside it): the point of merging is one identity, not one still
+        living in two different places depending on which half happened to
+        be configured first.
 
-    - Env-configured (either half) with `settings.env_file_path` known
-      (`CC_ENV_FILE`, set by curodav-ctl's generated unit): writes
-      CC_AUTH_USERNAME/CC_RADICALE_USER (always) and CC_AUTH_PASSWORD/
-      CC_RADICALE_PASSWORD (only when `new_password` is given) via
-      env_file.update_env_file. Takes effect on the next process start --
-      Settings > Your Profile's "Restart app" button (restart_app below) is
-      how an operator actually applies it without SSHing in.
-    - Env-configured but no CC_ENV_FILE known (a non-curodav-ctl deploy
-      that still sets these env vars by some other means): refuses to
-      edit at all, same "edit curodav.env and restart yourself" fallback
-      the three routes this replaces always used -- there's nowhere safe
-      to write.
-    - Neither env-configured: persisted in app_meta, same as before --
-      auth.set_persisted_credentials (hashed) for login, config.
-      RADICALE_USERNAME_KEY/RADICALE_PASSWORD_KEY (retrievable, config.
-      py's own docstring covers why) mirrored to match. Login takes
-      effect immediately (session re-minted below, same as the old
-      change_login_password); the Radicale connection still needs a
-      restart to reach CalDavBridge (main.py's lifespan builds it once).
+        - Env-configured (either half) with `settings.env_file_path` known
+          (`CC_ENV_FILE`, set by curodav-ctl's generated unit): writes
+          CC_AUTH_USERNAME/CC_RADICALE_USER (always) and CC_AUTH_PASSWORD/
+          CC_RADICALE_PASSWORD (only when `new_password` is given) via
+          env_file.update_env_file. Takes effect on the next process start --
+          Settings > Your Profile's "Restart app" button (restart_app below) is
+          how an operator actually applies it without SSHing in.
+        - Env-configured but no CC_ENV_FILE known (a non-curodav-ctl deploy
+          that still sets these env vars by some other means): refuses to
+          edit at all, same "edit curodav.env and restart yourself" fallback
+          the three routes this replaces always used -- there's nowhere safe
+          to write.
+        - Neither env-configured: persisted in app_meta, same as before --
+          auth.set_persisted_credentials (hashed) for login, config.
+          RADICALE_USERNAME_KEY/RADICALE_PASSWORD_KEY (retrievable, config.
+          py's own docstring covers why) mirrored to match. Login takes
+          effect immediately (session re-minted below, same as the old
+          change_login_password); the Radicale connection still needs a
+          restart to reach CalDavBridge (main.py's lifespan builds it once).
 
-    Any existing account (env or persisted) requires `current_password`
-    to verify before ANY change here is accepted -- username, password,
-    or just the Radicale URL -- since this form now controls both the
-    login and the sync credential together; a first-time save (no
-    account yet) has nothing to verify against and requires a
-    `new_password` to create one. `new_password` left blank on an
-    existing account keeps the current password, changing only the
-    username and/or URL. The Radicale password key is only ever written
-    when `new_password` is actually supplied -- never silently persists
-    `settings.radicale_password`'s dev-default fallback ("devpass") as if
-    it were a real chosen credential."""
+        Any existing account (env or persisted) requires `current_password`
+        to verify before ANY change here is accepted -- username, password,
+        or just the Radicale URL -- since this form now controls both the
+        login and the sync credential together; a first-time save (no
+        account yet) has nothing to verify against and requires a
+        `new_password` to create one. `new_password` left blank on an
+        existing account keeps the current password, changing only the
+        username and/or URL. The Radicale password key is only ever written
+        when `new_password` is actually supplied -- never silently persists
+        `settings.radicale_password`'s dev-default fallback ("devpass") as if
+        it were a real chosen credential.
+    """
     settings = request.app.state.settings
     username = username.strip()
     radicale_url = radicale_url.strip()
@@ -453,41 +420,34 @@ def account_settings(
 
 @router.post("/settings/restart")
 def restart_app(request: Request):
-    """Settings > Data & Maintenance's "Restart app" button -- 2026-09-08,
-    direct request ("have a button actually restarting the app so it
-    applies"); moved here from Settings > Your Profile 2026-09-11 (direct
-    request, same paragraph: "The Restart app should also be moved to the
-    Data & Maintenance and should be able to be called after editing
-    important environment data for the app, appearing in the form of a
-    toast") -- see account_settings' own `restart_relevant`
-    redirect-target logic for the toast half of that request.
-    Applies an account_settings env-file save (or any other change that
-    needs a fresh process, e.g. a Radicale connection saved to app_meta)
-    by having THIS process exit cleanly and letting systemd relaunch it
-    with the new environment -- not by shelling out to `systemctl`
-    itself, which would need granting the service user new privileges it
-    deliberately doesn't have (NoNewPrivileges/ProtectSystem in
-    scripts/curodav-ctl's generated unit). `Restart=always` on that unit
-    (changed from `on-failure` alongside this route) is what makes a
-    plain, non-crashing `exit(0)` come back up at all.
+    """Applies an account_settings env-file save (or any other change that
+        needs a fresh process, e.g. a Radicale connection saved to app_meta)
+        by having THIS process exit cleanly and letting systemd relaunch it
+        with the new environment -- not by shelling out to `systemctl`
+        itself, which would need granting the service user new privileges it
+        deliberately doesn't have (NoNewPrivileges/ProtectSystem in
+        scripts/curodav-ctl's generated unit). `Restart=always` on that unit
+        (changed from `on-failure` alongside this route) is what makes a
+        plain, non-crashing `exit(0)` come back up at all.
 
-    Gated on `deploy_mode == "production"` -- the one signal this app
-    already has for "systemd-managed, something is watching to relaunch
-    me" (curodav-ctl's generated .env always sets it; local/manual runs
-    default to "local"). Without that gate, clicking this on a bare
-    `uvicorn` dev run would just kill the process with nothing to bring
-    it back.
+        Gated on `deploy_mode == "production"` -- the one signal this app
+        already has for "systemd-managed, something is watching to relaunch
+        me" (curodav-ctl's generated .env always sets it; local/manual runs
+        default to "local"). Without that gate, clicking this on a bare
+        `uvicorn` dev run would just kill the process with nothing to bring
+        it back.
 
-    The actual exit happens on a background thread half a second after
-    this function returns its response -- long enough for uvicorn to
-    finish writing the redirect to the socket first, short enough that
-    the operator's browser barely notices before the reload. `os._exit`
-    (not `sys.exit`, not raising) skips normal interpreter teardown on
-    purpose: there's nothing here that needs flushing or rolling back --
-    every write that led to this point is already committed (SQLite,
-    or env_file.update_env_file's own atomic rename) -- and an ordinary
-    shutdown path risks hanging on an in-flight background sync tick
-    instead of actually exiting."""
+        The actual exit happens on a background thread half a second after
+        this function returns its response -- long enough for uvicorn to
+        finish writing the redirect to the socket first, short enough that
+        the operator's browser barely notices before the reload. `os._exit`
+        (not `sys.exit`, not raising) skips normal interpreter teardown on
+        purpose: there's nothing here that needs flushing or rolling back --
+        every write that led to this point is already committed (SQLite,
+        or env_file.update_env_file's own atomic rename) -- and an ordinary
+        shutdown path risks hanging on an in-flight background sync tick
+        instead of actually exiting.
+    """
     settings = request.app.state.settings
     if getattr(settings, "deploy_mode", "local") != "production":
         return _redirect_with_error(
@@ -581,17 +541,17 @@ def remove_profile_photo(conn=Depends(get_db)):
 
 @router.get("/settings/profile-photo/image")
 def profile_photo_image(conn=Depends(get_db)):
-    """Serves the profile picture's decoded bytes for `<img src>` (2026-08-29,
-    direct request: "better cache these images"). Exact mirror of routers/
-    banners.py's banner_image -- same problem (a profile photo used to be
-    embedded as an inline `data:` URI, deps.py's avatar() global, riding
-    along in the HTML of every page that shows it: contact list rows aside,
-    this one specifically rendered on every dashboard/label/Space page via
-    the header avatar overlap), same fix (a real, separately cacheable
-    request), same immutable Cache-Control safety argument (the URL's own
-    `?v=` -- db.get_profile_photo's `version` -- changes whenever the photo
-    does, so a stale cached response can never be served under a freshly-
-    rendered page's URL)."""
+    """Serves the profile picture's decoded bytes for `<img src>`. Exact mirror of routers/
+        banners.py's banner_image -- same problem (a profile photo used to be
+        embedded as an inline `data:` URI, deps.py's avatar() global, riding
+        along in the HTML of every page that shows it: contact list rows aside,
+        this one specifically rendered on every dashboard/label/Space page via
+        the header avatar overlap), same fix (a real, separately cacheable
+        request), same immutable Cache-Control safety argument (the URL's own
+        `?v=` -- db.get_profile_photo's `version` -- changes whenever the photo
+        does, so a stale cached response can never be served under a freshly-
+        rendered page's URL).
+    """
     photo = db.get_profile_photo(conn)
     if not photo:
         raise HTTPException(404)
@@ -620,12 +580,10 @@ _MAX_UPLOAD_ENTRIES = 500
 
 def _known_flair_ids() -> list[str]:
     """Every id the app currently recognizes across all three flair
-    mechanisms -- keyword-matched (flairs.FLAIR_KEYWORDS) and the two
-    date-matched tiers (db.MONTH_BANNER_SCOPES/SEASON_BANNER_SCOPES,
-    2026-09-29 -- see db.py's banner_for_object docstring for why those
-    aren't FLAIR_KEYWORDS entries despite sharing flairs_dir as their
-    photo source too). Sorted for a stable, readable settings_flairs.html
-    listing -- ordering has no bearing on the matching logic itself."""
+        mechanisms -- keyword-matched (flairs.FLAIR_KEYWORDS) and the two
+        date-matched tiers. Sorted for a stable, readable settings_flairs.html
+        listing -- ordering has no bearing on the matching logic itself.
+    """
     return sorted(set(flairs.FLAIR_KEYWORDS) | set(db.MONTH_BANNER_SCOPES) | set(db.SEASON_BANNER_SCOPES))
 
 
@@ -655,33 +613,33 @@ def upload_flairs(
     conn=Depends(get_db),
 ):
     """Bulk version of an operator manually copying files into flairs_dir
-    over SSH (direct request: a frontend for exactly that, "zip or folder
-    or multiple photos at once") -- accepts any combination of a .zip
-    (any file at any depth, smart-filtered by basename -- see flairs.
-    ingest_uploaded_photos's own docstring) and/or multiple individual
-    files (one `<input multiple>` or `webkitdirectory` folder picker,
-    same form field either way -- the browser sends N files under one
-    field name, FastAPI hands them back as a list already). Both sources
-    feed the SAME ingest call so one submission gets one summary message
-    covering everything dropped in at once, not one message per source.
+        over SSH -- accepts any combination of a .zip
+        (any file at any depth, smart-filtered by basename -- see flairs.
+        ingest_uploaded_photos's own docstring) and/or multiple individual
+        files (one `<input multiple>` or `webkitdirectory` folder picker,
+        same form field either way -- the browser sends N files under one
+        field name, FastAPI hands them back as a list already). Both sources
+        feed the SAME ingest call so one submission gets one summary message
+        covering everything dropped in at once, not one message per source.
 
-    Zip entries are read through `ZipFile.open(...).read(cap)` rather
-    than trusting `ZipInfo.file_size` -- that header is attacker-supplied
-    and a crafted zip can under-report it while the real deflate stream
-    decompresses to far more, the classic zip-bomb shape; bounding the
-    READ itself (not the size a lying header claims) means this can never
-    decompress more than `MAX_UPLOAD_BYTES + 1` for any single entry
-    regardless of what the header says. An entry that hits that cap is
-    reported as "too large" (same message ingest_uploaded_photos would
-    give it) without ever holding the full decompressed bytes in memory.
+        Zip entries are read through `ZipFile.open(...).read(cap)` rather
+        than trusting `ZipInfo.file_size` -- that header is attacker-supplied
+        and a crafted zip can under-report it while the real deflate stream
+        decompresses to far more, the classic zip-bomb shape; bounding the
+        READ itself (not the size a lying header claims) means this can never
+        decompress more than `MAX_UPLOAD_BYTES + 1` for any single entry
+        regardless of what the header says. An entry that hits that cap is
+        reported as "too large" (same message ingest_uploaded_photos would
+        give it) without ever holding the full decompressed bytes in memory.
 
-    Confirmed via AskUserQuestion: overwrites an existing photo for an id
-    silently (flair_image_url's own mtime cache-bust means the new photo
-    shows up immediately everywhere, same as replacing the file by hand
-    already did), and non-matching zip contents (icons/*.svg, unmatched/*,
-    mapping.csv, a nested folder structure, ...) are smart-filtered by
-    basename regardless of depth rather than requiring a flat top-level
-    zip."""
+        Confirmed via AskUserQuestion: overwrites an existing photo for an id
+        silently (flair_image_url's own mtime cache-bust means the new photo
+        shows up immediately everywhere, same as replacing the file by hand
+        already did), and non-matching zip contents (icons/*.svg, unmatched/*,
+        mapping.csv, a nested folder structure, ...) are smart-filtered by
+        basename regardless of depth rather than requiring a flat top-level
+        zip.
+    """
     if flairs.get_flairs_dir() is None:
         return _redirect_with_error(
             "/settings/flairs",
@@ -731,13 +689,14 @@ def set_week_start(week_start: str = Form("monday"), conn=Depends(get_db)):
 
 @router.post("/settings/four-week-position")
 def set_four_week_position(position: str = Form("1"), conn=Depends(get_db)):
-    """"4-Week view: current week" (2026-08-11) -- which of the four rows
-    of the Calendar 4-Week view the current week occupies. Only ever stores
-    one of the settings_ general page's own offered choices ("1".."4",
-    validated against the same fixed set deps.py's reader clamps to); an
-    unrecognized or tampered value falls back to "1" (first row) rather
-    than silently placing the current week somewhere the UI never offered.
-    Read back by routers/calendar.py's four_week_view."""
+    """"4-Week view: current week" -- which of the four rows
+        of the Calendar 4-Week view the current week occupies. Only ever stores
+        one of the settings_ general page's own offered choices ("1".."4",
+        validated against the same fixed set deps.py's reader clamps to); an
+        unrecognized or tampered value falls back to "1" (first row) rather
+        than silently placing the current week somewhere the UI never offered.
+        Read back by routers/calendar.py's four_week_view.
+    """
     db.set_app_meta(conn, FOUR_WEEK_POSITION_KEY, position if position in ("1", "2", "3", "4") else "1")
     return RedirectResponse(url="/settings/general", status_code=303)
 
@@ -781,15 +740,14 @@ def set_time_format(time_format: str = Form("24h"), conn=Depends(get_db)):
 
 @router.post("/settings/timezone")
 def set_timezone(timezone: str = Form(""), conn=Depends(get_db)):
-    """Timezone (2026-09-30, direct report: Web Push notifications arriving
-    about two hours late -- see config.py's TIMEZONE_KEY comment for the
-    root cause). Empty ("System default") clears the override; anything
-    else must be one of the exact zone names settings_general.html's
-    dropdown offered (config.TIMEZONE_CHOICES) -- a tampered or
-    unrecognized value is dropped rather than stored, same "never store
-    what the UI didn't actually offer" convention as set_week_start above.
-    apply_persisted_timezone applies the change to this process's own
-    clock immediately, so it takes effect without a restart."""
+    """Timezone. Empty ("System default") clears the override; anything
+        else must be one of the exact zone names settings_general.html's
+        dropdown offered (config.TIMEZONE_CHOICES) -- a tampered or
+        unrecognized value is dropped rather than stored, same "never store
+        what the UI didn't actually offer" convention as set_week_start above.
+        apply_persisted_timezone applies the change to this process's own
+        clock immediately, so it takes effect without a restart.
+    """
     value = timezone if timezone in config.TIMEZONE_CHOICES else ""
     db.set_app_meta(conn, config.TIMEZONE_KEY, value)
     config.apply_persisted_timezone(conn)
@@ -810,16 +768,10 @@ def set_notifications(
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
-    """Web Push P3 (2026-09-24): which reminder types are on (app-wide --
-    every subscribed device gets the same ones) and the morning digest
-    time for tasks/habits due today. A malformed time keeps the old one.
-
-    2026-09-25 (UI audit H-19): the Notifications card is one form now,
-    so this also saves the push contact `email` when sent (same rules as
-    set_push_contact below, which stays for old clients), answers a fetch
-    with JSON (push_settings.js toasts "Saved"), and a plain post returns
-    to #push-settings instead of the top of the page. An invalid email is
-    checked first, so nothing is half-saved."""
+    """Web Push P3: which reminder types are on (app-wide --
+        every subscribed device gets the same ones) and the morning digest
+        time for tasks/habits due today. A malformed time keeps the old one.
+    """
     fetch = isinstance(x_requested_with, str) and wants_json(x_requested_with)
     normalized_email = None
     if isinstance(email, str) and email.strip():
@@ -864,34 +816,32 @@ def set_push_contact(email: str = Form(""), conn=Depends(get_db)):
 
 @router.post("/settings/hide-sleep-hours")
 def set_hide_sleep_hours(enabled: str = Form(""), conn=Depends(get_db)):
-    """"Hide sleep hours in Planner" (Settings > General, 2026-09-09, direct
-    request: "the time tagged as sleep time is just removed as cells from
-    the planner calendar view"). Off by default, same on/off pattern as
-    set_edit_mode above. Read back by routers/calendar.py's
-    _week_view_context -- Week/Planner only, Day view is unaffected
-    regardless of this setting (direct decision)."""
+    """"Hide sleep hours in Planner". Off by default, same on/off pattern as
+        set_edit_mode above. Read back by routers/calendar.py's
+        _week_view_context -- Week/Planner only, Day view is unaffected
+        regardless of this setting (direct decision).
+    """
     db.set_app_meta(conn, HIDE_SLEEP_HOURS_KEY, "1" if enabled == "1" else "")
     return RedirectResponse(url="/settings/general", status_code=303)
 
 
 @router.post("/settings/flair-languages")
 def set_flair_languages(languages: list[str] = Form([]), conn=Depends(get_db)):
-    """"Flair languages" (Settings > General, 2026-09-29 direct request --
-    first slice of multilingual support, deliberately just English +
-    Romanian, not "20 languages") -- which of `flairs.
-    FLAIR_KEYWORDS_BY_LANG`'s keyword tables `flairs.match_flair` searches
-    when guessing a flair from an event/task/label/group/project's own
-    name (db.active_flair_languages reads this back). Same checkbox-
-    dropdown shape as General's other multi-value settings (ms_mode=
-    "select"), autosubmitting like every other row on that page. Only
-    ever stores a subset of `flairs.FLAIR_LANGUAGES` -- an unrecognized
-    value can't reach app_meta from this route even if the submitted form
-    were hand-crafted, same allowlist-not-blocklist discipline set_
-    accent_color already applies to its own fixed choice set. Unticking
-    every option stores an explicit empty string rather than refusing the
-    submission -- db.active_flair_languages's own comment is what turns
-    that back into "English only" on read, not a "zero languages" crash
-    state anywhere downstream."""
+    """"Flair languages" -- which of `flairs.
+        FLAIR_KEYWORDS_BY_LANG`'s keyword tables `flairs.match_flair` searches
+        when guessing a flair from an event/task/label/group/project's own
+        name (db.active_flair_languages reads this back). Same checkbox-
+        dropdown shape as General's other multi-value settings (ms_mode=
+        "select"), autosubmitting like every other row on that page. Only
+        ever stores a subset of `flairs.FLAIR_LANGUAGES` -- an unrecognized
+        value can't reach app_meta from this route even if the submitted form
+        were hand-crafted, same allowlist-not-blocklist discipline set_
+        accent_color already applies to its own fixed choice set. Unticking
+        every option stores an explicit empty string rather than refusing the
+        submission -- db.active_flair_languages's own comment is what turns
+        that back into "English only" on read, not a "zero languages" crash
+        state anywhere downstream.
+    """
     valid = [lang for lang in languages if lang in flairs.FLAIR_LANGUAGES]
     db.set_app_meta(conn, flairs.FLAIR_LANGUAGES_KEY, ",".join(valid))
     return RedirectResponse(url="/settings/general", status_code=303)
@@ -919,34 +869,27 @@ def settings_appearance(request: Request, conn=Depends(get_db)):
 
 @router.post("/settings/label-icons")
 def set_label_icons(show: str = Form(""), conn=Depends(get_db)):
-    """"Show icons next to labels" (Settings > Appearance, 2026-08-09) --
-    renders every label's assigned icon before its name wherever the app
-    shows a label (task/event label pills, Tasks table/board, calendar
-    chips). Reads via deps.py's show_label_icons()/label_icon() globals.
-    Default off -- an install that's never touched this stores nothing,
-    which reads as "" (off), so labels stay plain text until explicitly
-    turned on."""
+    """"Show icons next to labels" --
+        renders every label's assigned icon before its name wherever the app
+        shows a label (task/event label pills, Tasks table/board, calendar
+        chips). Reads via deps.py's show_label_icons()/label_icon() globals.
+        Default off -- an install that's never touched this stores nothing,
+        which reads as "" (off), so labels stay plain text until explicitly
+        turned on.
+    """
     db.set_app_meta(conn, SHOW_LABEL_ICONS_KEY, "1" if show == "1" else "")
     return RedirectResponse(url="/settings/appearance", status_code=303)
 
 
 @router.post("/settings/edit-mode")
 def set_edit_mode(enabled: str = Form(""), x_requested_with: str | None = Header(None), conn=Depends(get_db)):
-    """"Edit mode" (Settings > Appearance, 2026-08-29, sidebar redesign
-    item 13d) -- shows the widget grid's editing controls (move/resize/
-    reorder/delete a widget, New widget, Reset layout, Add/Change banner)
-    on every dashboard/label/Space page until turned off here, replacing
-    the old per-page "Edit mode"/"Done" buttons and their `?edit=1` query
-    param (routers/dashboard.py's widget_page_context reads this flag
-    directly now). Same on/off pattern as set_label_icons above.
-
-    2026-09-13 (command palette "Turn on/off Edit mode" row): dual-mode
-    now, same async-CRUD pattern (deps.py's respond/wants_json) as every
-    task/event mutation -- static/command_palette.js toggles this from
-    whatever page you're on and needs the new state back in the response
-    (to reload correctly) rather than a redirect to /settings/appearance,
-    which the plain <form> on that settings page itself still relies on
-    (no X-Requested-With header there, so it keeps the old redirect)."""
+    """"Edit mode" -- shows the widget grid's editing controls (move/resize/
+        reorder/delete a widget, New widget, Reset layout, Add/Change banner)
+        on every dashboard/label/Space page until turned off here, replacing
+        the old per-page "Edit mode"/"Done" buttons and their `?edit=1` query
+        param (routers/dashboard.py's widget_page_context reads this flag
+        directly now). Same on/off pattern as set_label_icons above.
+    """
     new_value = enabled == "1"
     db.set_app_meta(conn, EDIT_MODE_KEY, "1" if new_value else "")
     return respond(x_requested_with, "/settings/appearance", edit_mode=new_value)
@@ -954,15 +897,15 @@ def set_edit_mode(enabled: str = Form(""), x_requested_with: str | None = Header
 
 @router.post("/settings/appearance/accent")
 def set_accent_color(color: str = Form(...), conn=Depends(get_db)):
-    """"Accent color" (Settings > Appearance, 2026-09-17 design-system
-    unification pass) -- one of the 8 fixed presets in deps.py's
-    ACCENT_PRESETS, never a raw hex (a free color picker was deliberately
-    rejected -- see ACCENT_COLOR_KEY's own comment). Rejects anything
-    outside that set instead of silently falling back, same as any other
-    allowlisted Form value elsewhere in this router -- a request that
-    isn't the settings page's own swatch grid (hand-crafted, a stale
-    client) shouldn't be able to wedge an unsupported key into app_meta
-    that accent_color_hex() would then have to paper over."""
+    """"Accent color" -- one of the 8 fixed presets in deps.py's
+        ACCENT_PRESETS, never a raw hex (a free color picker was deliberately
+        rejected -- see ACCENT_COLOR_KEY's own comment). Rejects anything
+        outside that set instead of silently falling back, same as any other
+        allowlisted Form value elsewhere in this router -- a request that
+        isn't the settings page's own swatch grid (hand-crafted, a stale
+        client) shouldn't be able to wedge an unsupported key into app_meta
+        that accent_color_hex() would then have to paper over.
+    """
     if color not in {p["key"] for p in ACCENT_PRESETS}:
         raise HTTPException(status_code=422, detail=f"Unknown accent color: {color!r}")
     db.set_app_meta(conn, ACCENT_COLOR_KEY, color)
@@ -973,17 +916,11 @@ _HOLIDAYS_CRUMB = _ROOT_CRUMB
 
 
 def _resolve_calendar_name(calendar_name: str, calendar_name_new: str) -> str:
-    """audit-fixes-2.1.md ("not allowed to add more holidays to the same
-    calendar, defaults to Default"): the Calendar field
-    (_widget_list_multiselect.html, single mode + allow_new) is a radio
-    per existing calendar plus a free-text "new" input -- see that
-    partial's own `ms_allow_new` docstring for why the two need distinct
-    form field names (`calendar_name` for the checked radio,
-    `calendar_name_new` for the text input) rather than sharing one.
-    A non-blank typed name is always a deliberate override -- it wins
-    regardless of which radio happens to be checked/defaulted; otherwise
-    the picked radio's value applies; blank calendar_name (no radios
-    existed yet, or somehow neither was set) falls back to 'Default'."""
+    """A non-blank typed name is always a deliberate override -- it wins
+        regardless of which radio happens to be checked/defaulted; otherwise
+        the picked radio's value applies; blank calendar_name (no radios
+        existed yet, or somehow neither was set) falls back to 'Default'.
+    """
     new = (calendar_name_new or "").strip()
     if new:
         return new
@@ -1010,10 +947,10 @@ def settings_holidays(request: Request, conn=Depends(get_db)):
 
 @router.get("/settings/holidays/new")
 def new_holiday_modal(request: Request, conn=Depends(get_db)):
-    """The "+ Add holiday" entry point (2026-08-17 settings HTML
-    uniformity pass, SETTINGS_UI_GUIDE.md pattern B) -- the same
-    holiday_edit_modal.html the Edit buttons open, empty. Opens via
-    data-modal, posts to create_holiday below."""
+    """The "+ Add holiday" entry point -- the same
+        holiday_edit_modal.html the Edit buttons open, empty. Opens via
+        data-modal, posts to create_holiday below.
+    """
     return templates.TemplateResponse(
         "holiday_edit_modal.html",
         {
@@ -1032,18 +969,10 @@ def new_holiday_modal(request: Request, conn=Depends(get_db)):
 @router.get("/settings/holidays/{uid}/edit")
 def edit_holiday_modal(uid: str, request: Request, conn=Depends(get_db)):
     """The Holiday Edit button's modal (pattern B) -- one form for every
-    field, replacing the old inline-editable table cells
-    (static/settings_holidays.js's per-field PATCH). Opens via data-modal
-    from the Holidays list row; posts to update_holiday below.
-
-    audit-fixes-2.1.md ("only day holidays, without the year"): a
-    year-agnostic holiday is stored as "--MM-DD" (db.py's
-    is_year_agnostic_holiday_date), but the shared date picker only
-    understands real calendar dates -- `date_from_value`/`date_to_value`
-    feed it a placeholder-year stand-in (db.holiday_date_picker_value) so
-    the right month/day still highlights, while `year_agnostic` drives the
-    modal's "Repeats every year" checkbox that's what actually makes the
-    year get discarded again on save."""
+        field, replacing the old inline-editable table cells
+        (static/settings_holidays.js's per-field PATCH). Opens via data-modal
+        from the Holidays list row; posts to update_holiday below.
+    """
     holiday = db.get_holiday(conn, uid)
     if holiday is None:
         raise HTTPException(404, "Holiday not found")
@@ -1129,11 +1058,11 @@ def delete_holiday(uid: str, conn=Depends(get_db)):
 
 @router.post("/settings/holidays/bulk-delete")
 async def bulk_delete_holidays(request: Request, conn=Depends(get_db)):
-    """2026-08-29 (STATE.md backlog item 1, direct request: "bulk actions
-    on tables"). JSON endpoint for `static/bulk_select.js`'s Holidays
-    instance -- a plain loop over the same `db.delete_holiday` each row's
-    own single-delete button already calls, same "no all-or-nothing
-    rollback" shape as `routers/tasks.py::bulk_action`'s delete branch."""
+    """JSON endpoint for `static/bulk_select.js`'s Holidays
+        instance -- a plain loop over the same `db.delete_holiday` each row's
+        own single-delete button already calls, same "no all-or-nothing
+        rollback" shape as `routers/tasks.py::bulk_action`'s delete branch.
+    """
     payload = await request.json()
     uids = payload.get("uids") or []
     if not uids:
@@ -1152,12 +1081,12 @@ _DAY_ABBR = {
 
 
 def _time_block_days_label(days_csv: str) -> str:
-    """Human summary of a time block's day set (2026-08-17 direct
-    feedback) -- abbreviations ("Mon Tue Fri"), not the full stored day
-    names, with the two named sets spelled out: every day is "All week",
-    exactly Monday-Friday is "All work week". `days_csv` is comma-separated
-    in db.TIME_BLOCK_DAYS order (the form's checkbox order), so both the
-    len==7 test and the Mon-Fri slice comparison are order-safe."""
+    """Human summary of a time block's day set -- abbreviations ("Mon Tue Fri"), not the full stored day
+        names, with the two named sets spelled out: every day is "All week",
+        exactly Monday-Friday is "All work week". `days_csv` is comma-separated
+        in db.TIME_BLOCK_DAYS order (the form's checkbox order), so both the
+        len==7 test and the Mon-Fri slice comparison are order-safe.
+    """
     days = days_csv.split(",") if days_csv else []
     if len(days) == len(db.TIME_BLOCK_DAYS):
         return "All week"
@@ -1188,17 +1117,16 @@ def settings_time_blocks(request: Request, conn=Depends(get_db)):
 
 @router.get("/settings/time-blocks/new")
 def new_time_block_modal(request: Request, kind: str = Query("sleep"), conn=Depends(get_db)):
-    """The "+ Add time block" entry point (2026-08-17 settings HTML
-    uniformity pass, SETTINGS_UI_GUIDE.md pattern B) -- the same
-    time_block_edit_modal.html the Edit buttons open, empty. Opens via
-    data-modal from the list toolbar and posts to create_time_block below.
-    `kind` is just this modal's initial chooser selection now (2026-09-08,
-    direct request) -- Sleep/Leisure is a real field in the form
-    (time_block_edit_modal.html's own comment), not fixed by the entry
-    point; the `?kind=` query param survives only as a convenience default,
-    unused by the current single "+ Add time block" row (always opens to
-    the "sleep" default) but left in place in case a future caller wants
-    to pre-select Leisure."""
+    """The "+ Add time block" entry point -- the same
+        time_block_edit_modal.html the Edit buttons open, empty. Opens via
+        data-modal from the list toolbar and posts to create_time_block below.
+        `kind` is just this modal's initial chooser selection now -- Sleep/Leisure is a real field in the form
+        (time_block_edit_modal.html's own comment), not fixed by the entry
+        point; the `?kind=` query param survives only as a convenience default,
+        unused by the current single "+ Add time block" row (always opens to
+        the "sleep" default) but left in place in case a future caller wants
+        to pre-select Leisure.
+    """
     return templates.TemplateResponse(
         "time_block_edit_modal.html",
         {
@@ -1215,12 +1143,12 @@ def new_time_block_modal(request: Request, kind: str = Query("sleep"), conn=Depe
 @router.get("/settings/time-blocks/{uid}/edit")
 def edit_time_block_modal(uid: str, request: Request, conn=Depends(get_db)):
     """The time-blocks table's Edit button modal (pattern B) -- one form
-    for every field, replacing the old inline-editable table cells
-    (static/settings_time_blocks.js's per-field PATCH). Opens via
-    data-modal from the list row; posts to update_time_block below. `kind`
-    (the row's current Sleep/Leisure) flows in as the chooser's initial
-    selection, same as new_time_block_modal -- it's an editable field now
-    (2026-09-08, direct request), not fixed by which row this is."""
+        for every field, replacing the old inline-editable table cells
+        (static/settings_time_blocks.js's per-field PATCH). Opens via
+        data-modal from the list row; posts to update_time_block below. `kind`
+        (the row's current Sleep/Leisure) flows in as the chooser's initial
+        selection, same as new_time_block_modal -- it's an editable field now, not fixed by which row this is.
+    """
     block = db.get_time_block(conn, uid)
     if block is None:
         raise HTTPException(404, "Time block not found")
@@ -1269,15 +1197,12 @@ def update_time_block(
     conn=Depends(get_db),
 ):
     """The time block edit modal's single Save button (pattern B) -- one
-    endpoint for every field the inline edit used to PATCH separately.
-    2026-09-08 (direct request): `kind` now DOES come from the form -- the
-    Sleep/Leisure tables merged into one, so a row's type is just another
-    editable field (the modal's chooser, time_block_edit_modal.html's own
-    comment), not fixed by which table it used to live in. An unrecognized
-    `kind` (a crafted/stale request) falls back to the block's existing
-    kind rather than storing garbage -- same "drop the malformed edit,
-    keep what's on screen" reasoning the end-time-after-start-time guard
-    below already uses, just applied to this field too."""
+        endpoint for every field the inline edit used to PATCH separately. An unrecognized
+        `kind` (a crafted/stale request) falls back to the block's existing
+        kind rather than storing garbage -- same "drop the malformed edit,
+        keep what's on screen" reasoning the end-time-after-start-time guard
+        below already uses, just applied to this field too.
+    """
     block = db.get_time_block(conn, uid)
     if block is None:
         raise HTTPException(404, "Time block not found")
@@ -1306,12 +1231,6 @@ def delete_time_block(uid: str, conn=Depends(get_db)):
 
 @router.post("/settings/time-blocks/bulk-delete")
 async def bulk_delete_time_blocks(request: Request, conn=Depends(get_db)):
-    """2026-08-29 (STATE.md backlog item 1) -- same shape as
-    bulk_delete_holidays above. Sleep and Leisure share one merged table
-    (and one `CCBulkSelect` instance) since 2026-09-08, but this endpoint
-    never needed to know which kind a uid belonged to in the first place --
-    a time block's uid alone is all `db.delete_time_block` needs -- so it's
-    unchanged by that merge."""
     payload = await request.json()
     uids = payload.get("uids") or []
     if not uids:
@@ -1451,14 +1370,12 @@ def _choices_with_stored_value(
     choices: list[tuple[str, str]], stored: str
 ) -> list[tuple[str, str]]:
     """The rendered select's options, with one honest extra entry appended
-    when the currently-stored value isn't among the presets (2026-08-26:
-    the redesigned controls offer three presets each, but an install that
-    picked "14"/"90"/"180 days" before the relabel still stores one of
-    those). Without this, the browser would silently display the first
-    preset while the stored value stayed something else -- a lie. The
-    extra entry autosubmits like any other, so picking anything real
-    replaces it; it's never itself written back (the POST routes validate
-    against the preset lists only)."""
+        when the currently-stored value isn't among the presets. Without this, the browser would silently display the first
+        preset while the stored value stayed something else -- a lie. The
+        extra entry autosubmits like any other, so picking anything real
+        replaces it; it's never itself written back (the POST routes validate
+        against the preset lists only).
+    """
     if any(value == stored for value, _ in choices):
         return choices
     return [*choices, (stored, f"{stored} days (current)")]
@@ -1466,17 +1383,14 @@ def _choices_with_stored_value(
 
 @router.get("/settings/data-maintenance")
 def settings_data_maintenance(request: Request, conn=Depends(get_db)):
-    """The merged Data & Maintenance page (2026-08-17 reorg). Context is
-    everything the three former pages used to gather separately: the data
-    health summary (health_summary's `integrity`/`latest_backup`/
-    `latest_verified_backup`/`sync`/`sync_gc`/`storage`/`entities`/
-    `backups`), the unresolved sync conflicts, and Advanced's export/
-    import + purge/auto-archive context (export_context() plus the counts
-    and choices settings_data_maintenance.html renders).
-
-    2026-08-26 page redesign: the two Maintenance selects' choice lists go
-    through _choices_with_stored_value so a legacy stored value stays
-    visible; everything else about the context shape is unchanged."""
+    """The merged Data & Maintenance page. Context is
+        everything the three former pages used to gather separately: the data
+        health summary (health_summary's `integrity`/`latest_backup`/
+        `latest_verified_backup`/`sync`/`sync_gc`/`storage`/`entities`/
+        `backups`), the unresolved sync conflicts, and Advanced's export/
+        import + purge/auto-archive context (export_context() plus the counts
+        and choices settings_data_maintenance.html renders).
+    """
     backups_dir = _backups_dir(request)
     summary = data_health.health_summary(conn, request.app.state.settings.db_path, backups_dir)
     completed_task_count = len([t for t in db.list_tasks(conn) if t["status"] in ("done", "archived")])
@@ -1508,8 +1422,9 @@ def settings_data_maintenance(request: Request, conn=Depends(get_db)):
 @router.get("/settings/data-health")
 def settings_data_health(request: Request, conn=Depends(get_db)):
     """Old Data health page URL -- kept as a redirect to the merged
-    Data & Maintenance page (2026-08-17 reorg) so old bookmarks/links
-    (and the many action endpoints' redirect targets) land somewhere real."""
+        Data & Maintenance page so old bookmarks/links
+        (and the many action endpoints' redirect targets) land somewhere real.
+    """
     return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
@@ -1568,13 +1483,13 @@ def data_health_repair(request: Request, conn=Depends(get_db)):
 
 @router.post("/settings/data-health/sync-retention")
 def data_health_set_sync_retention(days: str = Form("90"), conn=Depends(get_db)):
-    """1.8 slice 7 -- Settings' side of the tombstone/idempotency-ledger
-    retention horizon (§4). `0` disables automatic (lazy, on-pull) GC --
-    same "0 = Never" idiom `routers/tasks.py`'s auto-archive field already
-    uses -- without touching `pull()`'s own stale-cursor-forces-full-resync
-    safety check, which isn't gated by this setting at all. Only ever
-    stores one of the offered presets, same validation-against-the-select's-
-    -own-options convention as `set_task_auto_archive`."""
+    """`0` disables automatic (lazy, on-pull) GC --
+        same "0 = Never" idiom `routers/tasks.py`'s auto-archive field already
+        uses -- without touching `pull()`'s own stale-cursor-forces-full-resync
+        safety check, which isn't gated by this setting at all. Only ever
+        stores one of the offered presets, same validation-against-the-select's-
+        -own-options convention as `set_task_auto_archive`.
+    """
     valid = {choice for choice, _ in SYNC_GC_DAYS_CHOICES}
     data_health.set_sync_gc_retention_days(conn, int(days) if days in valid else 90)
     return RedirectResponse(url="/settings/data-maintenance?note=Sync+cleanup+retention+updated.", status_code=303)
@@ -1597,9 +1512,10 @@ def data_health_run_sync_gc(conn=Depends(get_db)):
 @router.get("/settings/advanced")
 def settings_advanced(request: Request, conn=Depends(get_db)):
     """Old Advanced page URL -- kept as a redirect to the merged
-    Data & Maintenance page (2026-08-17 reorg) so old bookmarks/links
-    (and the export/import redirect from routers/export.py) land
-    somewhere real."""
+        Data & Maintenance page so old bookmarks/links
+        (and the export/import redirect from routers/export.py) land
+        somewhere real.
+    """
     return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 
@@ -1640,8 +1556,9 @@ def purge_all(request: Request, conn=Depends(get_db)):
 @router.get("/settings/sync-conflicts")
 def settings_sync_conflicts(request: Request, conn=Depends(get_db)):
     """Old Sync conflicts page URL -- kept as a redirect to the merged
-    Data & Maintenance page (2026-08-17 reorg) so old bookmarks/links
-    (and the restore/dismiss redirects below) land somewhere real."""
+        Data & Maintenance page so old bookmarks/links
+        (and the restore/dismiss redirects below) land somewhere real.
+    """
     return RedirectResponse(url="/settings/data-maintenance", status_code=303)
 
 

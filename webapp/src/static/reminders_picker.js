@@ -1,35 +1,3 @@
-// Progressive enhancement for `<input class="reminders-input"
-// name="reminders">` (event_form.html only -- tasks have no reminders
-// field) into a themed checkbox-dropdown for common presets instead of a
-// raw comma-separated-minutes text field. routers/calendar.py's
-// create_event/update_event parse this purely as
-// `[int(m) for m in reminders.split(",") if m.strip().isdigit()]`, with no
-// other validation, so -- same as recurrence_picker.js -- this is entirely
-// a client-side swap: the underlying `<input name="reminders">` keeps its
-// name/value contract exactly as-is, just populated by checkboxes (plus a
-// small "other minutes" escape hatch for any existing value that doesn't
-// match a preset) instead of typed directly.
-//
-// 2026-08-07 follow-up ("view, range, priority, reminders should be real
-// drop downs") -- Reminders is genuinely multi-select (you can pick "10
-// minutes before" AND "1 day before" at once), so it can't become a
-// single-value native <select> like View/Range/Priority did; instead this
-// now builds the exact same `.multiselect`/`.multiselect-trigger`/
-// `.multiselect-panel` dropdown-panel markup _widget_list_multiselect.html
-// uses for Labels/Task lists/Calendars (reusing `.widget-list-multiselect`
-// gets it the same trigger sizing as a real <select> for free, see that
-// class's own comment in style.css) instead of a flat inline row of
-// checkboxes. app.js's generic .multiselect
-// script (open/close on trigger click, close on outside click/Escape) is
-// delegated off `document`, and its own summary-sync listener is delegated
-// off `.widget-list-multiselect` too, so both automatically pick up this
-// dynamically-injected panel with no extra wiring -- only the *initial*
-// summary text (before any user interaction) is set here directly, since
-// app.js's own one-time init pass runs at DOMContentLoaded, before this
-// enhancement exists yet.
-//
-// Same "scan on DOMContentLoaded + MutationObserver for modal-injected
-// content" convention as tag_input.js/recurrence_picker.js.
 (function () {
   const enhanced = new WeakSet();
 

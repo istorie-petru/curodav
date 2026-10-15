@@ -34,9 +34,6 @@ _HOLIDAY_YEARLESS_RE = re.compile(r"^--\d{2}-\d{2}$")
 
 
 def _holiday_month_day(value: str) -> tuple[int, int]:
-    """(month, day) for either a "--MM-DD" year-agnostic holiday date or an
-    ordinary "YYYY-MM-DD" one -- the year is irrelevant either way once
-    audit-fixes-2.1.md's "only day holidays, without the year" applies."""
     if _HOLIDAY_YEARLESS_RE.match(value):
         return int(value[2:4]), int(value[5:7])
     d = date.fromisoformat(value)
@@ -57,19 +54,12 @@ def is_excluded_by_policy(
     d: date, row: dict[str, Any], holiday_calendars: dict[str, list[dict[str, Any]]] | None
 ) -> bool:
     """1.6 ("Generalized recurrence and the non-working-day policy"): a
-    holiday calendar and a weekend exclusion are independent constraints
-    (see db.py's `events` CREATE TABLE comment) -- an occurrence is
-    excluded if *either* applies, never materialized into `exdates_json`,
-    computed here at read time instead so a holiday calendar's contents or
-    an event's own policy take effect immediately.
-
-    2026-08-29 (STATE.md backlog item 3): promoted from this module's own
-    private `_excluded_by_policy` (still the only caller inside this file,
-    `expand_events` below) to a public name -- habit_heatmap.py's
-    `excluded_dates_in_range` now reuses it too, so the exact same
-    day-level policy check drives both event-occurrence expansion and
-    task/habit streak-day exclusion instead of two parallel
-    implementations drifting apart."""
+        holiday calendar and a weekend exclusion are independent constraints
+        (see db.py's `events` CREATE TABLE comment) -- an occurrence is
+        excluded if *either* applies, never materialized into `exdates_json`,
+        computed here at read time instead so a holiday calendar's contents or
+        an event's own policy take effect immediately.
+    """
     if row.get("exclude_saturday") and d.weekday() == 5:
         return True
     if row.get("exclude_sunday") and d.weekday() == 6:

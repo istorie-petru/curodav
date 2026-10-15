@@ -21,6 +21,51 @@
         {% set ms_form_id = 'notebook-layout-form' %}
         {% include "_widget_list_multiselect.html" %}
     </form>
+    <div class="settings-field-row">
+        <span class="settings-field-label">Entry types
+            <span class="settings-field-hint">Each type has a look and its own fields. A field name cannot change once it is created</span>
+        </span>
+        <span class="spacer"></span>
+        <a href="/settings/notebook/entry-kinds/new" data-modal class="btn ghost btn-sm">{{ icon('plus', 'icon-sm') }} New</a>
+    </div>
+    {% for k in entry_kinds %}
+    <div class="settings-field-row">
+        <span class="settings-field-label"><span class="cell-tag cal-{{ k.color }}">{{ icon(k.icon, 'icon-sm') }} {{ k.name }}</span>
+            <span class="settings-field-hint">{{ k.fields | join(', ') if k.fields else 'No fields' }}</span></span>
+        <span class="spacer"></span>
+        <a href="/settings/notebook/entry-kinds/edit?name={{ k.name | urlencode }}" data-modal class="icon-btn" title="Edit {{ k.name }}" aria-label="Edit {{ k.name }}">{{ icon('edit', 'icon-sm') }}</a>
+    </div>
+    {% endfor %}
+    <form class="settings-field-row" method="post" action="/settings/notebook/journal-template" id="journal-template-form">
+        <span class="settings-field-label">Journal template
+            <span class="settings-field-hint">New journal entries start from this template</span>
+        </span>
+        <span class="spacer"></span>
+        {% set ms_name = 'journal_template' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Journal template' %}
+        {% set ms_items = journal_templates %}
+        {% set ms_selected = journal_template %}
+        {% set ms_autosubmit = true %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'journal-template-form' %}
+        {% include "_widget_list_multiselect.html" %}
+    </form>
+    <form class="settings-field-row" method="post" action="/settings/notebook/citation-format" id="citation-format-form">
+        <span class="settings-field-label">Citation format
+            <span class="settings-field-hint">Used for the bibliography and generated endnotes</span>
+        </span>
+        <span class="spacer"></span>
+        {% set ms_name = 'citation_format' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = 'Citation format' %}
+        {% set ms_items = citation_styles %}
+        {% set ms_selected = citation_format %}
+        {% set ms_autosubmit = true %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'citation-format-form' %}
+        {% include "_widget_list_multiselect.html" %}
+    </form>
 </div>
 </div>
 </div>

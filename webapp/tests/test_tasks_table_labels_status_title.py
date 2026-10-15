@@ -102,18 +102,20 @@ class TestUpdateFieldTitleRejectsBlank:
 
 
 class TestTableMarkup:
-    def test_due_column_header_renamed_to_date(self, conn):
+    def test_only_the_status_is_edited_inline(self, conn):
         _seed_task(conn, "t1")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        assert ">Date</th>" in body
-        assert ">Due</th>" not in body
+        for marker in ("inline-date", "data-inline-edit"):
+            assert marker not in body
+        assert "task-status-select" in body and 'class="task-status-radio"' in body
 
-    def test_status_is_a_dropdown_not_a_native_select(self, conn):
-        _seed_task(conn, "t1")
+    def test_a_row_reads_title_then_date_then_labels_then_status_beside_the_menu(self, conn):
+        db.upsert_task(conn, {"uid": "t1", "title": "Pay rent", "description": "", "status": "active", "due_at": "2026-09-01",
+                              "tags": ["Home"], "created_at": _now()})
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        assert 'class="pill-select pill-' not in body  # old native <select> pill is gone
-        assert "task-status-select" in body
-        assert 'class="task-status-radio"' in body
+        row = body.split('data-uid="t1"', 1)[1]
+        order = [row.index(m) for m in ('task-row-title', 'task-row-date', 'task-row-tags', 'task-status-select', 'action-menu')]
+        assert order == sorted(order)
 
     def test_labels_cell_is_plain_read_only_pills(self, conn):
         db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Alpha"], "created_at": _now()})
@@ -121,15 +123,13 @@ class TestTableMarkup:
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
         assert "task-labels-select" not in body
         assert "task-label-checkbox" not in body
-        assert '<div class="cell-tags">' in body
-        assert ">No labels<" in body
+        assert 'class="task-row-tags"' in body
+        assert "No label" in body
 
-    def test_title_is_a_double_click_editable_link(self, conn):
+    def test_the_title_opens_the_view_modal(self, conn):
         _seed_task(conn, "t1")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        assert "data-inline-edit-linked" in body
-        assert 'data-field="title"' in body
-        assert 'data-type="text"' in body
+        assert 'href="/tasks/t1" data-modal' in body
 
     def test_status_options_render_as_colored_pills(self, conn):
         # Direct follow-up ("status options still aren't pills") -- the
@@ -138,6 +138,6 @@ class TestTableMarkup:
         # <color>` treatment, not just plain text next to a radio.
         _seed_task(conn, "t1")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        assert "pill-static pill-blue" in body  # "active"'s color
+        assert "pill-static pill-blue" in body  # "active"'s color, shown as a plain pill
 
 

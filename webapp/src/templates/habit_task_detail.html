@@ -7,42 +7,10 @@
 {% from "_detail_cover.html" import detail_cover with context %}
 {% block title %}{{ task.title if task else "Habit" }}{% endblock %}
 {% block content %}
-<!-- Dedicated view modal for a habit-tracked task (2026-08-29 direct
-     feedback -- see habit_task_form.html's own docstring for the full
-     context). routers/tasks.py's task_detail renders this instead of the
-     generic task_detail.html whenever the task carries the habit label:
-     no Status/Due/Start meta (a habit doesn't have those), a non-
-     interactable heatmap (_habit_heatmap.html's `interactive=false`,
-     `heatmap-wide` so its cells stretch to fill this card's width instead
-     of ever needing a scrollbar -- 2026-08-29 direct feedback) built
-     from this task's own check-off history (task_completions, the same
-     source _completion_heatmap_weeks/_habit_group_items already read),
-     current streak via the same habit_streak_text() phrasing the Habits
-     group's row uses. (Originally also had a Work sessions card here --
-     removed 2026-09-26, this view modal only; see the note further down
-     and habit_task_form.html's own docstring for the edit modal, which
-     kept it.)
-
-     2026-09-03 direct request ("I like variant B so much I want it to be
-     the baseline for all view modal windows") -- this header had no
-     identity mark at all before (no dot, unlike task_detail.html); it now
-     gets the same shared _detail_cover.html cover banner every other
-     detail modal has, reusing the same status_colors/banner context keys
-     tasks_router.task_detail already puts on `ctx` for both templates
-     (habit_task_detail.html is a habit-tracked task rendered via that same
-     route) -- a repeat icon distinguishes it from a plain task's
-     check-square. -->
 <div id="modal-target" class="modal-stable-height">
 {% if task %}
 <div class="modal-header">
-    <!-- 2026-09-03 fix ("edit the header so that it doesn't clip
-         (margins)") -- .detail-header-inner (style.css) wraps the
-         cover+title, escaping .modal-header's own padding via negative
-         margins so that padding could stay intact for every plain
-         *_form.html edit modal (a bare <h1>, no cover) that relies on it. -->
     <div class="detail-header-inner">
-        {# 2026-09-26: the habit's own colour and icon make its cover --
-           a picked colour replaces the inherited label/project banner. #}
         {{ detail_cover('var(--cal-accent-' ~ (habit_look.color or status_colors[task.status]) ~ ')', none if habit_look.color else banner, icon(habit_look.icon or 'repeat')) }}
         <div class="detail-heading-row">
             <div class="detail-heading-text">
@@ -54,11 +22,6 @@
 
 <div class="modal-body">
 {% call detail_section('Details') %}
-    {# 2026-09-25 (UI audit H-11): `habit-stats-grid` keeps these short
-       stats three to a row on phones (the generic grid drops to one
-       column <=720px, so six stats filled the first screen), and the
-       Streak value is just the count ("2 days") -- "Streak / 2 days
-       streak" said it twice. #}
     <div class="detail-meta-grid habit-stats-grid">
         <div class="detail-meta-item">
             <span class="detail-meta-label">How often</span>
@@ -106,23 +69,9 @@
 {% call detail_section('Description') %}<p class="detail-text">{{ task.description }}</p>{% endcall %}
 {% endif %}
 
-{# Habits H3 (2026-09-24): every day control below (month calendar, log
-   form) is a keep-open modal form (modal.js re-renders this modal in place; closing it refreshes the
-   page's own live region via data-cc-change="task"). #}
 {% set _keep = 'data-modal-keep-open data-cc-change="task" data-cc-action="checkin"' %}
-{# 2026-09-25 (Peter): the year heatmap is clickable again (reversing the
-   2026-08-29 view-only call) -- a click toggles the day, or for an amount
-   habit opens the small amount popup (static/habit_day.js) with the
-   target as its placeholder. A "3x a week" / "once a month" (period)
-   habit has no heatmap at all: a per-day grid doesn't describe it. #}
 {% set _is_amount = task.target_per_day and task.target_per_day > 1 and task.habit_kind != 'avoid' %}
 {% set _amount = {'url': '/tasks/' ~ task.uid ~ '/completions', 'target': task.target_per_day, 'unit': task.habit_unit} if _is_amount else none %}
-{# 2026-09-26 (Peter): one history view -- the year heatmap (clickable:
-   a click toggles the day, or opens the amount popup for an amount
-   habit), or for a "3x a week" / "once a month" habit the last 52 weeks /
-   12 months as a grid. The month calendar and the insights are gone from
-   this modal (insights: Habits page, expandable row). The habit's colour
-   paints either (habit-c-*). #}
 {% call detail_section('History') %}
 <div class="habit-year-heatmap{% if habit_look.color %} habit-c-{{ habit_look.color }}{% endif %}">
     {% if habit_periods %}
@@ -133,12 +82,6 @@
 </div>
 {% endcall %}
 
-{# 2026-09-26 (Peter): pausing (vacation) moved out of this modal into
-   the Habits page header's Pauses modal (habit_pauses.html). The
-   "Paused until" badge on the page row still shows an active pause. #}
-{# 2026-09-26 (Peter): no "Log a day" / "Log a relapse" form -- days are
-   logged from the heatmap or the Habits page strip (a phone doesn't log
-   past days). Notes already logged still list. #}
 {% if habit_notes %}
 {% call detail_section('Notes') %}
 <ul class="habit-notes">
@@ -149,10 +92,6 @@
 {% endcall %}
 {% endif %}
 
-{# 2026-09-26 (Peter): Work sessions is gone from a habit's VIEW modal
-   (this template) -- reversed the same day for the EDIT modal only
-   ("should be able to be work scheduled -- return it to the edit modal"),
-   see habit_task_form.html's own docstring. #}
 
 </div>
 

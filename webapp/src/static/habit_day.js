@@ -1,17 +1,3 @@
-// Habit day "amount" popup + work-sessions disclosure memory (2026-09-25,
-// Peter: a clickable heatmap that's "smarter" for habits that demand more
-// than one unit). Loaded app-wide (base.html) because the habit view
-// modal can open over any page.
-//
-// Any `.habit-amount-trigger` (a day cell in the habit view modal's year
-// heatmap / month calendar, or the Habits page / widget 7-day strip, for
-// an amount habit) opens one small native <dialog> with a single number
-// box -- the box starts at the habit's daily target, and Enter on an
-// empty box logs exactly that. 0 clears the day. Posts to the habit's
-// explicit-value endpoint (/tasks/<uid>/completions), then refreshes:
-// inside the view modal, the modal re-renders in place (and the page
-// catches up when it closes); elsewhere, a task change event lets the
-// page's own live region (#habits-body, widget cards, day grid) refresh.
 (function () {
   let dialog, form, input, label, current;
 
@@ -48,10 +34,6 @@
     return isNaN(d) ? iso : d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
   }
 
-  // 2026-09-25 (UI audit H-17): the popup opens next to the day that was
-  // tapped (below it, or above when there's no room), clamped to the
-  // viewport -- it used to open centred on the screen, far from the chip.
-  // Set through the CSSOM (allowed under the CSP; inline style="" isn't).
   function place(trigger) {
     const r = trigger.getBoundingClientRect();
     const box = dialog.getBoundingClientRect();
@@ -112,12 +94,6 @@
     open(trigger);
   });
 
-  // 2026-09-25 (UI audit H-14): the habit form hides its build-only
-  // fields (Unit, Recurrence, days, target) while Kind is "Avoid"
-  // (style.css .habit-task-form.is-avoid). Delegated: the form arrives
-  // in a modal after this script loaded.
-  // 2026-09-26: Kind is two radio pills now, and "How often" shows only
-  // its own sub-row (weekday chips / times count) via data-repeat.
   document.addEventListener("change", (e) => {
     const el = e.target;
     if (!el || !el.closest) return;
@@ -132,10 +108,6 @@
     if (el.name === "habit_days") daysSummary(form);
   });
 
-  // 2026-09-26: the Habits page row's chevron opens its history panel
-  // (heatmap or week/month grid + insights) under the row. Open rows are
-  // remembered by uid so they stay open when #habits-body re-renders
-  // after a check-in.
   const openRows = new Set();
   function setRow(btn, open) {
     const panel = document.getElementById(btn.getAttribute("aria-controls"));

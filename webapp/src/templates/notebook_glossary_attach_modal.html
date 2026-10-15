@@ -3,11 +3,6 @@
 {% from "_modal_header_back.html" import modal_header_back %}
 {% block title %}Glossary -- {{ document.title }}{% endblock %}
 {% block content %}
-<!-- Attach/detach terms on one document (2026-10-03 direct follow-up, "add
-     a sidebar tab") -- a plain select-mode `_widget_list_multiselect.html`
-     picker over the global glossary library, same shape as
-     notebook_bibliography_modal.html. Term creation stays on the separate
-     library page, not inline here. -->
 <div id="modal-target" class="modal-stable-height">
 <div class="modal-header">
 {{ modal_header_back('/notebook/' ~ document.uid, document.title) }}

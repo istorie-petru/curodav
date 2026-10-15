@@ -2,34 +2,6 @@
 {% extends "base.html" %}
 {% block title %}Flairs - Settings{% endblock %}
 {% block content %}
-<!-- Flairs modal (2026-09-29, direct follow-up: moved off its own hub
-     category into a button on Settings > Appearance -- see HUB_CATEGORIES'
-     own comment in routers/settings.py) -- same "server-rendered
-     #modal-target fragment, degrades to a full standalone page" shape as
-     banner_editor.html/import_modal.html: a no-JS visit to /settings/flairs
-     still works exactly as before, static/modal.js's data-modal on
-     Appearance's Flairs button strips everything but #modal-target and
-     shows it as a dialog instead.
-
-     Direct instruction: this modal must not carry the plain hint class
-     every OTHER full Settings page uses for its own small muted-text
-     paragraphs -- every hint below uses `text-muted` instead, the same
-     class every other modal's body already reaches for (contact_form.html,
-     holiday_edit_modal.html, ...). The `?note=/?error=` -> ccToast bridge
-     (settings_flairs.js) still needs its own two flash divs for a
-     genuine no-JS submission, just paired with `text-muted` instead of
-     that other class -- their own color modifiers are plain color rules,
-     not tied to the class this instruction excludes.
-
-     settings_flairs.js is NOT loaded from this file when opened as a
-     modal -- injectModalContent only ever reads #modal-target's own
-     innerHTML, so a <script> tag sitting outside it here (as one still
-     does, below, for the standalone-page case) never runs. Its drag-drop/
-     status/toast-bridge listeners are all document-level delegated ones
-     though (same trick data_maintenance.js already relies on for
-     import_modal.html), so they keep working here as long as Settings >
-     Appearance -- the page this modal actually opens from -- has already
-     loaded that same script itself; see that template's own comment. -->
 <div id="modal-target">
 <div class="modal-header">
 <h1>Flairs</h1>
@@ -112,18 +84,6 @@
 
 {% endif %}
 </div>
-<!-- Upload lives in the shared modal footer, not a body-local submit
-     button (2026-09-29 modal-ization) -- same move import_modal.html's own
-     Import button already made, `form="flairs-upload-form"` ties it back
-     to the body's <form>. Starts disabled (footer_primary_disabled) since
-     nothing is staged yet; settings_flairs.js's refreshStatus toggles it
-     by id (`flairs-upload-submit-btn`, NOT a `[data-dm-submit]`
-     `f.querySelector` scoped to the form -- that lookup only ever finds a
-     DESCENDANT of the form, and this button is now the form's SIBLING in
-     the footer, same bug static/data_maintenance.js's own comment on
-     `import-submit-btn` already describes and fixes the same way). Only
-     rendered inside the flairs_dir_configured branch above -- when it's
-     None there's no form to submit at all, so the footer is Done-only. -->
 {% if flairs_dir_configured %}
 {% set footer_back_url = '/settings/appearance' %}
 {% set footer_primary_form = 'flairs-upload-form' %}

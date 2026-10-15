@@ -14,30 +14,7 @@ This router owns:
      list" pattern tags.py/projects.py used to have.
   2. A redirect from the old label page URL (`/settings/labels/{name}`)
      to `/labels/{name}`. The page itself is in routers/label_pages.py
-     since labels-as-modules slice b (2026-09-25).
-
-2026-08-07: `databases` dropped from the object types a label can carry
--- the Databases feature (and Grades, built on it) is removed entirely.
-
-2026-08-08: the Phase 4 `enabled_modules`/"Sections" checkbox group is
-gone. See label_modules.py's own removal note for where the gating logic
-used to live.
-
-2026-08-15: the University module (Course info/Homework,
-`_project_university_section.html`) is removed entirely, alongside the
-whole Schedule module it depended on for its only source of data (a
-"class" was a Schedule-created recurring event) -- see plans/STATE.md's
-removal entry. A label's scope is just tasks/events/contacts again.
-
-2026-09-29 (direct bug report, "deleting labels from settings doesn't
-work"): Settings' own Delete button (delete_label/bulk_delete_labels
-below) now calls `db.delete_label_config`, which empties `object_labels`
-for that name AND drops its `label_config` row -- `db.list_labels` unions
-both, so leaving the config row behind (the original §0.1 plan, and still
-what the legacy/unused `/clear` route's `clear_label` does) made a
-"deleted" label sit right back in the table at "Not used" on the very
-next render. `merge_labels` already set this same "config row goes too"
-precedent for its own source label; Delete just needed to follow it.
+     since labels-as-modules slice b.
 """
 
 from __future__ import annotations
@@ -55,18 +32,15 @@ router = APIRouter(prefix="/settings/labels", tags=["labels"])
 
 
 def _reject_reserved_label_name(name: str) -> None:
-    """2026-09-07 fix (flagged in an earlier audit) -- guards every write
-    path that can set a label's *name* against colliding with one of the
-    sentinel banner scopes (db.PAGE_HEADER_BANNER_SCOPE /
-    db.SEASON_BANNER_SCOPES). Both live in the exact same
-    `page_banner_<key>` app_meta namespace a real label's own banner does
-    (db.get_page_banner/set_page_banner's `page_key` is just a free-form
-    string) -- nothing previously stopped a label literally named e.g.
-    "__page_header__" from silently reading/writing the app-wide default
-    banner instead of getting its own. The reserved names are already
-    double-underscore-wrapped specifically so no name a person would
-    naturally type collides with them; this just makes that non-collision
-    enforced instead of assumed."""
+    """Both live in the exact same
+        `page_banner_<key>` app_meta namespace a real label's own banner does
+        (db.get_page_banner/set_page_banner's `page_key` is just a free-form
+        string) -- nothing previously stopped a label literally named e.g. "__page_header__" from silently reading/writing the app-wide default
+        banner instead of getting its own. The reserved names are already
+        double-underscore-wrapped specifically so no name a person would
+        naturally type collides with them; this just makes that non-collision
+        enforced instead of assumed.
+    """
     reserved = {db.PAGE_HEADER_BANNER_SCOPE, *db.SEASON_BANNER_SCOPES.values()}
     if name in reserved:
         raise HTTPException(400, f'"{name}" is a reserved name and can\'t be used for a label.')
@@ -75,20 +49,22 @@ def _reject_reserved_label_name(name: str) -> None:
 
 
 def _clean_group(label_group) -> str | None:
-    """The label form's Group field (labels-as-modules slice c, 2026-09-25):
-    free text, trimmed, blank = no group. It replaced the Space dropdown
-    (`parent_name`), so no validation against existing groups: typing a new
-    name creates the group. The isinstance guard covers direct calls from
-    tests, where an unset param is FastAPI's Form marker object."""
+    """The label form's Group field:
+        free text, trimmed, blank = no group. It replaced the Space dropdown
+        (`parent_name`), so no validation against existing groups: typing a new
+        name creates the group. The isinstance guard covers direct calls from
+        tests, where an unset param is FastAPI's Form marker object.
+    """
     if not isinstance(label_group, str):
         return None
     return " ".join(label_group.split())[:60] or None
 
 
 def _clean_description(description) -> str | None:
-    """The label form's Description (2026-09-25, UI audit L17): trimmed,
-    capped at 500 characters, blank = none. Same isinstance guard as
-    _clean_group for direct calls from tests."""
+    """The label form's Description: trimmed,
+        capped at 500 characters, blank = none. Same isinstance guard as
+        _clean_group for direct calls from tests.
+    """
     if not isinstance(description, str):
         return None
     return description.strip()[:500] or None
@@ -96,13 +72,14 @@ def _clean_description(description) -> str | None:
 
 def _page_fields(page_fields, deadline_date, page_type, agenda_widget, tasks_widget, contacts_widget,
                  notebook_widget="", sidebar_pin="", widget_pin="") -> dict:
-    """labels-as-modules slice b (2026-09-25): the label form's Deadline and
-    Page fields as label_config columns. Returns {} when the form didn't
-    carry them (no `page_fields` marker), so an older caller that posts
-    without them leaves the stored values alone. Checkboxes send nothing
-    when unticked, so absent means off. The isinstance guards cover direct
-    (non-request) calls from tests, where an unset param is still FastAPI's
-    Form marker object."""
+    """labels-as-modules slice b: the label form's Deadline and
+        Page fields as label_config columns. Returns {} when the form didn't
+        carry them (no `page_fields` marker), so an older caller that posts
+        without them leaves the stored values alone. Checkboxes send nothing
+        when unticked, so absent means off. The isinstance guards cover direct
+        (non-request) calls from tests, where an unset param is still FastAPI's
+        Form marker object.
+    """
     def s(v):
         return v.strip() if isinstance(v, str) else ""
 
@@ -256,43 +233,22 @@ def _now() -> str:
 
 @router.get("")
 def manage_labels(request: Request, conn=Depends(get_db)):
-    """The list is grouped by Space membership only (side work, 2026-08-15
-    follow-up direct feedback): "Group" (formerly "Parent label") is a
-    dropdown of Spaces only now (see update_label's own validation), so
-    every group a label can land in corresponds to a real Space label,
-    never an arbitrary/stale free-text value -- a group heading IS that
-    Space's own row (rendered bold/tinted, `.is-space`) with its children
-    indented directly under it, not a second, disconnected divider row
-    naming the same string. A Space that itself has another Space as its
-    Group nests as a (still visually `.is-space`) child row rather than
-    also getting its own top-level section, so it's never rendered twice.
-
-    2026-09-26 (Peter): plain labels only -- projects have their own
-    Settings > Projects page (projects_settings_router below)."""
+    """The list is grouped by Space membership only: "Group" (formerly "Parent label") is a
+        dropdown of Spaces only now (see update_label's own validation), so
+        every group a label can land in corresponds to a real Space label,
+        never an arbitrary/stale free-text value -- a group heading IS that
+        Space's own row (rendered bold/tinted, `.is-space`) with its children
+        indented directly under it, not a second, disconnected divider row
+        naming the same string. A Space that itself has another Space as its
+        Group nests as a (still visually `.is-space`) child row rather than
+        also getting its own top-level section, so it's never rendered twice.
+    """
     from .taxonomy import page_response
 
     return page_response(conn, request, "labels")
 
 
 def _labels_context(conn, request: Request, kind: str = "labels") -> dict:
-    """Settings > Labels (kind "labels": plain labels) or Settings >
-    Projects (kind "projects": is_project labels) -- 2026-09-26, Peter:
-    labels and projects are different things in the UI, even though a
-    project is still a label underneath.
-
-    2026-09-26 (Peter, second pass): Settings > Labels dropped its group
-    section rows entirely (they broke row-hover, see
-    `_labels_table_body.html`'s own docstring) -- a label now carries its
-    group as a `group_style` pill in its own row instead, and `labels` is
-    sorted flat (grouped rows together, ungrouped last, alphabetical
-    within each). Settings > Projects gained a Due column instead of the
-    inline deadline badge next to the name.
-
-    2026-09-29 (direct request, "redo the projects table from settings to
-    be without grouping and be like the labels one"): Settings > Projects
-    dropped its own group section rows too -- `labels` (same flat
-    grouped-then-name-then-ungrouped sort as Labels) is now the only
-    thing `_labels_table_body.html` loops over for either page."""
     from .label_pages import deadline_info
 
     want_projects = kind == "projects"
@@ -331,8 +287,9 @@ def _labels_context(conn, request: Request, kind: str = "labels") -> dict:
 
 def _label_role(cfg: dict) -> str:
     """"none" / "project" -- a label's Role. "space" was the third role
-    until labels-as-modules slice c (2026-09-25) turned Spaces into text
-    groups."""
+        until labels-as-modules slice c turned Spaces into text
+        groups.
+    """
     return "project" if cfg.get("is_project") else "none"
 
 
@@ -361,10 +318,9 @@ def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
 
 @router.get("/{name}/merge-modal")
 def merge_modal(name: str, request: Request, conn=Depends(get_db)):
-    """Small standalone modal (side work, 2026-08-15 follow-up direct
-    feedback: "Merge should be a button in the list... it should open a
-    small modal window where the user selects") -- just the destination
-    picker, posting to the unchanged /labels/{name}/merge below."""
+    """Small standalone modal -- just the destination
+        picker, posting to the unchanged /labels/{name}/merge below.
+    """
     other_names = sorted((l["name"] for l in db.list_labels(conn) if l["name"] != name), key=str.lower)
     return templates.TemplateResponse(
         "label_merge_modal.html",
@@ -393,27 +349,6 @@ def update_label(
     request: Request = None,
     conn=Depends(get_db),
 ):
-    """The label edit modal's single Save button -- handles the unified
-    label_form_modal.html form's Role radio group (2026-08-29: replaced the
-    old Space/Project checkbox pair, see label_form_modal.html's own
-    comment -- "none"/"space"/"project" is mutually exclusive by
-    construction now, a radio group can't submit two values at once, so
-    there's no "both somehow submitted" case left to resolve here.
-
-    2026-09-03 bug fix (direct report: "chose icons individually and they
-    don't save"): `icon` was never declared as a Form param here even
-    though _icon_swatch_picker.html's radios (`name="icon"`) have posted
-    into this exact form since the icon picker existed -- FastAPI silently
-    drops any submitted field a route doesn't declare, and `db.
-    upsert_label_config`'s own "only touch what you're told to" partial-
-    update contract (its own docstring) means an absent key isn't
-    "cleared", it's "left exactly as it was" -- so every Save from this
-    modal silently no-opped the Icon picker's selection, while `color`/
-    `label_group`/`description` (all declared) saved fine right next to
-    it. The now-orphaned `set_label` route below (`/{name}/set`, no
-    template posts to it any more -- superseded by this one when
-    label_form_modal.html was built) already had the correct `icon.strip()
-    or None` pattern; mirrored here."""
     new_name = (new_name or "").strip() or name
     icon = (icon or "").strip() or None
     page = _page_fields(page_fields, deadline_date, page_type, agenda_widget, tasks_widget, contacts_widget,
@@ -450,8 +385,6 @@ def update_label(
 
 @router.post("/{name}/convert-to-project")
 def convert_to_project(name: str, conn=Depends(get_db)):
-    """2026-09-26 (Peter): the one, deliberately buried way a label becomes
-    a project -- one way only (there is no Convert back)."""
     if not db.get_label_config(conn, name):
         db.upsert_label_config(conn, {"name": name, "created_at": _now()})
     db.upsert_label_config(conn, {"name": name, "is_project": 1})
@@ -486,22 +419,23 @@ def clear_label(name: str, conn=Depends(get_db)):
 @router.get("/new")
 def new_label_modal(request: Request, project: bool = False, return_to: str = "", copy: str = "", conn=Depends(get_db)):
     """The "+ New Label" entry point -- opens the same label_form_modal.html
-    the Edit buttons open, empty. Opens via data-modal, posts to create_label below.
-    `project` (2026-09-26): Settings > Projects' "Add project" -- the same
-    form in project mode, creating an is_project label.
+        the Edit buttons open, empty. Opens via data-modal, posts to create_label below.
+        `project`: Settings > Projects' "Add project" -- the same
+        form in project mode, creating an is_project label.
 
-    `return_to` (modal-stack Cancel fix, same family as
-    routers/notebook.py's `_safe_return_to` -- see that function's own
-    comment): when this modal is opened from inside another modal that has
-    no label to pick yet (published_list_create_modal.html's "Create one"
-    link, shown when `all_labels` is empty), Cancel should swap back into
-    that picker instead of closing the whole overlay back to
-    /settings/labels. Same same-origin-relative-only guard as every other
-    return_to/back_to/next param in this app (routers/label_pages.py's
-    `back_to`, this module's own `set_label`'s `return_to`, routers/
-    auth.py's `next`) -- an unvalidated value becomes an href fetched by
-    modal.js's openModal(), which would happily fetch an absolute/
-    off-origin URL if allowed through."""
+        `return_to` (modal-stack Cancel fix, same family as
+        routers/notebook.py's `_safe_return_to` -- see that function's own
+        comment): when this modal is opened from inside another modal that has
+        no label to pick yet (published_list_create_modal.html's "Create one"
+        link, shown when `all_labels` is empty), Cancel should swap back into
+        that picker instead of closing the whole overlay back to
+        /settings/labels. Same same-origin-relative-only guard as every other
+        return_to/back_to/next param in this app (routers/label_pages.py's
+        `back_to`, this module's own `set_label`'s `return_to`, routers/
+        auth.py's `next`) -- an unvalidated value becomes an href fetched by
+        modal.js's openModal(), which would happily fetch an absolute/
+        off-origin URL if allowed through.
+    """
     if not isinstance(return_to, str) or not return_to.startswith("/") or return_to.startswith("//"):
         return_to = ""
     prefill = db.effective_label_config(conn, copy) if copy else None
@@ -543,14 +477,9 @@ def create_label(
     conn=Depends(get_db),
 ):
     """Create a new label with zero items attached -- labels are first-class
-    organizational tools, not tied to any object. `role` (2026-08-29: see
-    update_label's own comment) is the single Role radio value now, not two
-    separately-submitted checkboxes.
-
-    2026-09-03 bug fix -- same missing-`icon`-Form-param bug as
-    update_label right above (see its own comment); a brand-new label
-    created with an icon already picked in the New Label modal silently
-    got no icon at all, not just an edit losing one."""
+        organizational tools, not tied to any object. `role` is the single Role radio value now, not two
+        separately-submitted checkboxes.
+    """
     new_name = new_name.strip()
     if not new_name:
         raise HTTPException(400, "Label name is required")
@@ -576,26 +505,19 @@ def create_label(
 
 @router.post("/{name}/delete")
 def delete_label(name: str, conn=Depends(get_db)):
-    """Settings' own Delete button -- 2026-09-29 (direct bug report,
-    "deleting labels from settings doesn't work"): unlike `clear_label`
-    (kept for the legacy, unused `/clear` route), this drops the
-    `label_config` row too (`db.delete_label_config`), so the label
-    actually disappears from the manage list instead of reappearing at
-    "Not used" on the next render -- see that function's own comment."""
     db.delete_label_config(conn, name)
     return RedirectResponse(url="/settings/labels", status_code=303)
 
 
 @router.post("/bulk-delete")
 async def bulk_delete_labels(request: Request, conn=Depends(get_db)):
-    """2026-08-29 (STATE.md backlog item 1, direct request: "bulk actions
-    on tables"). JSON endpoint for `static/bulk_select.js`'s Labels
-    instance -- a plain loop over `db.clear_label`, same as a single row's
-    own Delete button (see delete_label above): removes each label from
-    every object that carries it, `label_config` rows kept harmlessly.
-    `uids` here are label names, not real uids -- `static/bulk_select.js`
-    doesn't care what the identifier actually is, it just round-trips
-    whatever each row's checkbox `data-uid` carries."""
+    """JSON endpoint for `static/bulk_select.js`'s Labels
+        instance -- a plain loop over `db.clear_label`, same as a single row's
+        own Delete button (see delete_label above): removes each label from
+        every object that carries it, `label_config` rows kept harmlessly. `uids` here are label names, not real uids -- `static/bulk_select.js`
+        doesn't care what the identifier actually is, it just round-trips
+        whatever each row's checkbox `data-uid` carries.
+    """
     payload = await request.json()
     names = payload.get("uids") or []
     if not names:
@@ -608,16 +530,13 @@ async def bulk_delete_labels(request: Request, conn=Depends(get_db)):
 @router.get("/bulk-merge-modal")
 def bulk_merge_modal(uids: str, request: Request, conn=Depends(get_db)):
     """Direct request: "in the labels table bulk select i would like an
-    option to merge labels into one". Opened via `static/bulk_select.js`'s
-    Merge button (see labels_manage.html's CCBulkSelect.init call) using
-    `window.CCModal.open`, same mechanism the per-row Edit button already
-    uses -- `uids` arrives as a comma-joined query string (a GET link, not
-    a JSON body) since this is a plain data-modal navigation, not a fetch
-    call. Destination list is every existing label (2026-09-13 direct
-    answer to a clarifying question: "pick any existing label" -- not
-    restricted to the selected rows themselves, so a merge target outside
-    the current selection is allowed, same freedom the single-row Merge
-    modal already gives)."""
+        option to merge labels into one". Opened via `static/bulk_select.js`'s
+        Merge button (see labels_manage.html's CCBulkSelect.init call) using
+        `window.CCModal.open`, same mechanism the per-row Edit button already
+        uses -- `uids` arrives as a comma-joined query string (a GET link, not
+        a JSON body) since this is a plain data-modal navigation, not a fetch
+        call. Destination list is every existing label.
+    """
     selected = [n for n in uids.split(",") if n]
     all_names = sorted((l["name"] for l in db.list_labels(conn)), key=str.lower)
     return templates.TemplateResponse(

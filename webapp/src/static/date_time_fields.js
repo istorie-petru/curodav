@@ -1,24 +1,3 @@
-// Date and time fields (templates/_date_time_fields.html, 2026-09-26 --
-// Peter's mockup; replaces datetime_picker.js).
-//
-// A field is a real text box plus a small button inside it:
-//   .dtf[data-dtf="date"|"time"] > input.dtf-input + button.dtf-btn + input.dtf-value (hidden)
-// Typing is parsed on Enter / leaving the box ("29/09/2023", "2023-09-29",
-// "29.09", "today"; "15:30", "1530", "3pm"). The button (or Alt/ArrowDown)
-// opens a dropdown: a month calendar for a date, a list of times every
-// 15 minutes for a time. The hidden input is what the form posts; it
-// fires a bubbling `change` whenever its value changes, so existing
-// listeners (the Tasks table's inline due date) keep working.
-//
-// A range (.dtr) is Start date+time and End date+time with an optional
-// All day switch that only hides the time fields; it writes its two
-// hidden inputs (start/end "YYYY-MM-DDTHH:MM", all-day T00:00..T23:59),
-// keeps the duration when the start moves, and never lets the end fall
-// before the start.
-//
-// Everything is delegated on the document, so fields that arrive later in
-// a modal need no init call. The dropdown is one element on <body> with
-// position:fixed, so a modal's overflow can't clip it.
 (function () {
   const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

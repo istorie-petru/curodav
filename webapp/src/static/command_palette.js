@@ -91,22 +91,6 @@
   // too but aren't selectable. Recomputed at the end of every render().
   let currentRowEls = [];
 
-  // Date-grouped results (direct feedback, 2026-09-12: mockup of a
-  // redesigned search overlay grouping by Overdue/This week/Later) --
-  // global mode's result rows carry a `date` field now (routers/
-  // search.py's _picker_result: a task's due_at, an event's start_at,
-  // null for contacts/pages). Bucketed client-side rather than by
-  // the server so the grouping stays purely a display concern -- the
-  // underlying /api/search ordering and relevance ranking are untouched.
-  //
-  // "overdue" vs "past" (2026-09-24 direct request, "search window
-  // simplification": "events can't be overdue, they just pass, so an
-  // event's status label needs its own wording distinct from a task's
-  // 'Overdue'") -- a past-due task keeps "Overdue" (a real unmet
-  // obligation), a past event gets its own neutral "Past" bucket/header
-  // instead of being lumped under the same word. Split by type rather
-  // than reworded in place, since the two can both appear in the same
-  // grouped list and need genuinely separate headers, not one shared one.
   const BUCKET_ORDER = ["overdue", "past", "week", "later", "nodate"];
   const BUCKET_LABEL = { overdue: "Overdue", past: "Past", week: "This week", later: "Later", nodate: "No date" };
 
@@ -148,28 +132,12 @@
   // verbatim to POST /api/quick-capture on Enter so the server parses the
   // same string the preview was computed from.
   const captureState = { active: false, text: "" };
-  // Quick Capture's entity markers -- "n" (note) was never wired in here
-  // (dropped 2026-09-24, then the whole notes feature removed 2026-10-01,
-  // see src/quick_capture.py's own docstring). Typing "!n ..." just falls
-  // through to a plain search query instead of triggering a capture
-  // preview that would 400 on submit.
   const CAPTURE_MARKER_RE = /(^|\s)!(t|e|c)(\s|$)/;
   const CAPTURE_TYPE_LABEL = { task: "Task", event: "Event", contact: "Contact" };
   const CAPTURE_ICON = { task: "check-square", event: "calendar", contact: "user" };
 
   const TYPE_ICON = { task: "check-square", event: "calendar", contact: "user", page: "layout" };
 
-  // "Turn on/off Edit mode" (2026-09-13, direct request: "a way to
-  // activate edit mode with the help of the command palette") -- a
-  // virtual, client-only row alongside global mode's "Create task/
-  // event: ..." rows above (buildRows), not a real /api/search result:
-  // there's nothing to search for server-side, this just surfaces an
-  // app-wide setting (Settings > Appearance's own toggle, routers/
-  // settings.py's set_edit_mode) as a quick action. Current on/off state
-  // comes from body[data-edit-mode] (deps.py's edit_mode_enabled()
-  // Jinja global, threaded onto every page via base.html), so this works
-  // the same everywhere the palette itself works, not just on pages that
-  // render the widget grid.
   function editModeOn() {
     return document.body.getAttribute("data-edit-mode") === "1";
   }
@@ -200,14 +168,6 @@
       });
   }
 
-  // Explicit menu action (2026-09-24, "search window simplification"
-  // direct request: "Add explicit menu actions beyond search itself --
-  // Edit mode toggle...") -- the .action-menu item in the input row
-  // (base.html) alongside the typed "edit mode" row above; its label is
-  // the one piece render() can't own (it's static markup, not a result
-  // row rebuilt on every keystroke), so it's refreshed once per open()
-  // instead, same "read body[data-edit-mode] fresh" approach editModeOn()
-  // already uses everywhere else.
   function updateEditModeMenuItem() {
     if (!editModeMenuItem) return;
     editModeMenuItem.innerHTML = iconMarkup("edit") + " Turn " + (editModeOn() ? "off" : "on") + " Edit mode";
@@ -443,10 +403,7 @@
     const rows = groupRowsByDate(buildRows(q, items));
 
     if (!rows.length) {
-      const empty = document.createElement("div");
-      empty.className = "command-palette-empty";
-      empty.textContent = emptyMessage(q, data);
-      resultsEl.appendChild(empty);
+      resultsEl.appendChild(window.ccEmptyState(emptyMessage(q, data)));
       activeIndex = -1;
       currentRowEls = [];
       return;
@@ -517,15 +474,6 @@
     highlightActive();
   }
 
-  // Global-mode-only per-row action (open.md § Command palette actions):
-  // Mark done, tasks only, not already done. Add label/Delete (any type)
-  // removed 2026-09-24 (direct request, "search window simplification":
-  // "remove the Add label and Delete buttons from the search window") --
-  // see this file's own top-of-file comment for what came out with them.
-  // Relation mode's rows stay action-free -- they exist to be picked as a
-  // link target, not acted on. Returns null (no actions row at all) when
-  // there's nothing to show, e.g. an already-done task or any event/
-  // contact row -- Mark done is the only action left, and it's task-only.
   function buildActions(r) {
     const defs = [];
     if (r.type === "task" && r.status !== "done") {
@@ -649,11 +597,6 @@
     const raw = input.value;
     const q = raw.trim();
     debounceTimer = window.setTimeout(function () {
-      // Quick Capture (plans/quick-capture.md) -- a standalone !t/!e/!c
-      // token anywhere in global mode's input switches from search to a
-      // live capture preview instead. Checked fresh on every keystroke, so
-      // editing the marker away falls straight back to runQuery's normal
-      // /api/search path (render() itself resets captureState.active).
       if (mode === "global" && CAPTURE_MARKER_RE.test(raw)) {
         runCapturePreview(raw);
       } else {

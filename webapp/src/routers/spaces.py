@@ -1,6 +1,5 @@
 """Old Space page URL. A Space's page lives at `/labels/{name}` since
-labels-as-modules slice b (2026-09-25, routers/label_pages.py, which also
-took over the Space-scope query this module used to own). This only keeps
+labels-as-modules slice b. This only keeps
 old `/spaces/{name}` links and bookmarks working. Slice c turns Spaces into
 text groups with their own pages.
 """

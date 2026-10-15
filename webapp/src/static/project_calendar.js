@@ -1,63 +1,3 @@
-// Project Week Calendar (1.4 slice 3, templates/project_calendar.html) --
-// two interactions on top of the same time-grid geometry calendar.js
-// already lays out server-side (grid_layout.py):
-//
-// 1. Drag an "unscheduled task" list item onto a `.project-calendar-col`
-//    to create a work allocation there (default 1-hour block, snapped to
-//    30 minutes) -- a POINTER-based drag (pointerdown/pointermove/pointerup,
-//    a fixed-position ghost clone of the item follows the cursor, the hovered
-//    column lights up, and near the grid's top/bottom edge it auto-scrolls
-//    so a tall grid is fully reachable), NOT the native HTML5 drag-and-drop
-//    this page used to use -- native DnD is unreliable on touch and doesn't
-//    let a drag survive scrolling. Same drop math as before: the time is
-//    read from the pointer's Y relative to the column's rect (viewport-
-//    relative, so it stays correct while the grid auto-scrolls) and a plain
-//    hidden form submits to routers/projects.py::create_allocation.
-//    1b. (2026-09-10, audit-fixes-2.1.md direct request, superseded same
-//    day -- see end()'s own comment) A plain click on the same list item --
-//    released with no drag past DRAG_THRESHOLD_PX -- opens the task's view
-//    modal, same as interaction 4 does for a placed `.work-allocation`
-//    block. Adding another undated session now happens from that modal's
-//    own Work sessions card (its "+" button), not from a click on this
-//    panel.
-// 2. Drag an existing `.work-allocation` block to move it, or its
-//    `.te-resize-handle` to resize it -- same pointer-based drag model as
-//    static/calendar.js's Week/Day grid (pointerdown/pointermove/pointerup
-//    on `document`, 15-minute snap), but on release this submits a plain
-//    hidden form to routers/projects.py::move_allocation (a form-POST +
-//    redirect, matching every other action on this page) instead of that
-//    file's JSON/fetch `/events/{uid}/reschedule` contract -- the page
-//    reloads either way, so there's no reason to duplicate the more complex
-//    optimistic-update/revert logic that route's own JS needs. A move is
-//    scroll-aware: if the grid auto-scrolls mid-drag (edge scroll below),
-//    the block keeps the pointer's intended time instead of staying put
-//    while the content slides under it. A pointercancel (interruption,
-//    lost capture) reverts the block to where it was and submits nothing.
-// 3. (Optional, config-driven) Drag a `.work-allocation` block off the
-//    grid and onto the "Unscheduled work" panel to UNSCHEDULE it -- the
-//    inverse of interaction 1. Set `window.PROJECT_CALENDAR.deleteUrlBase`
-//    (the allocation-delete endpoint base) and `unscheduleDropSelector`
-//    (a CSS selector for the unscheduled panel) to enable it; while the
-//    drag is over that panel the block highlights it, and releasing there
-//    submits the delete form instead of the move form. Releasing anywhere
-//    else keeps the normal move/resize behavior. The "delete" endpoint
-//    doesn't actually delete the session -- it clears this ONE session's
-//    start/end back to undated (`db.unschedule_work_allocation`), so the
-//    reload shows the task back on the panel at the SAME session count it
-//    already had (just one more of them now undated), never fewer.
-// 4. (Optional, config-driven) A plain click on a `.work-allocation`
-//    block's own body (not its title link, not the delete button, not a
-//    drag, not the resize handle) opens the block's task VIEW modal -- so
-//    reaching the task needs no smaller click target. Set
-//    `window.PROJECT_CALENDAR.taskUrlBase` (e.g. "/tasks/") to enable it;
-//    the block's `data-task-uid` is appended. The block's `.te-name` title
-//    link carries the same href, so the whole block is one target.
-//
-// All of these submit a real form and let the resulting redirect reload
-// the page -- the simplest way to guarantee what's shown always matches
-// whatever the server actually persisted (including a rejected drop, e.g.
-// a task that doesn't belong to this project), same reasoning
-// static/calendar.js documents for its own revert-on-failure path.
 
 (function () {
   const cfg = window.PROJECT_CALENDAR;
@@ -167,17 +107,6 @@
       const ghost = item.cloneNode(true);
       ghost.classList.add("drag-ghost");
       document.body.appendChild(ghost);
-      // The actual drop target preview: a real grid-anchored box, always
-      // DEFAULT_BLOCK_MINUTES tall (the block a drop actually creates --
-      // see end()'s own identical snap/height math) -- NOT the 30-minute
-      // CREATE_SNAP_PX the drop *position* snaps to. Reuses calendar.js's
-      // own `.schedule-ghost` look for visual consistency. Direct feedback
-      // (2026-08-14, after the merged Week view started also loading
-      // calendar.js): calendar.js's own hover-preview ghost is 30 minutes
-      // tall (its own click-to-create default) and was rendering on top of
-      // this drag since the merged grid columns now carry
-      // `.calendar-create-col` too -- see the `window.__ccGridDragActive`
-      // suppression below and calendar.js's own check of it.
       const slotGhost = document.createElement("div");
       slotGhost.className = "schedule-ghost";
       slotGhost.style.display = "none";
@@ -246,18 +175,6 @@
       const col = drag && drag.hoverCol;
       finish();
       if (!wasDrag) {
-        // A plain click (no drag past DRAG_THRESHOLD_PX) -- audit-
-        // fixes-2.1.md (2026-09-10, direct request, second pass same day):
-        // "for any pill inside it, the user could click it and open the
-        // task view modal window." This item briefly (same session, same
-        // day) used a plain click to add one more undated session instead
-        // -- that conflicted with this later, more specific request for
-        // the same gesture, so per direct decision the click-to-add
-        // behavior is gone: opening the task modal wins, and adding a
-        // session now happens from the modal's own Work sessions card
-        // ("+" button, `_task_work_allocations.html`) instead. Same
-        // taskUrlBase + CCModal convention interaction 4 already uses for
-        // a placed `.work-allocation` block's click-to-open.
         if (cfg.taskUrlBase && item.dataset.taskUid) {
           const url = cfg.taskUrlBase + item.dataset.taskUid;
           if (window.CCModal) {

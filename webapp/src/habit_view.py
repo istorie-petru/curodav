@@ -1,17 +1,4 @@
-"""The one frontend habit shape (2026-09-24, plans/ui-cleanup-2026-09.md
-item 14, slice 1).
-
-A habit is a habit-labeled task in the backend (task_habit_settings'
-label + `tasks.target_per_day`/`recurrence` + `task_completions.value`) --
-the standalone Habit entity (`habits`/`habit_entries`) is gone as of this
-same slice (Peter: no real entities in use; its tables are left physically
-in place, never force-dropped, same convention as every other table
-removal in db.py). Every habit surface renders from `habit_items` below
-instead of reading task rows directly, so a habit never has to look like a
-task (status, due date, Kanban column) anywhere it's shown -- the Habits
-page (`/habits`, H2) and the Dashboard's Habit Check-in widget. (The
-Tasks table's own Habits group was retired in H2.)
-"""
+"""The one frontend habit shape."""
 
 from __future__ import annotations
 
@@ -52,10 +39,10 @@ HABIT_COLORS = (
 
 
 def habit_icon_choices() -> list[str]:
-    """Every icon a habit can pick (2026-09-26, Peter: the short list was
-    too small): the habit-flavoured ones above first, then the rest of the
-    app's icon library (routers/labels.py ICON_GROUPS -- imported lazily,
-    that router imports deps, which imports this module)."""
+    """Every icon a habit can pick: the habit-flavoured ones above first, then the rest of the
+        app's icon library (routers/labels.py ICON_GROUPS -- imported lazily,
+        that router imports deps, which imports this module).
+    """
     from .routers.labels import ICON_GROUPS
 
     seen = set(HABIT_ICONS)
@@ -108,10 +95,9 @@ def pause_info(pauses: list[dict], uid: str, today: date) -> dict:
 
 
 def quantity_target(task: dict) -> float | None:
-    """2026-09-25 (UI audit H-01/H-02/C-5): the daily target of an *amount*
-    habit ("8 glasses a day": target_per_day > 1, not an avoid habit), or
-    None for a plain check-off / avoid habit. The one place that decides
-    whether "done" means value >= target or just value > 0."""
+    """The one place that decides
+        whether "done" means value >= target or just value > 0.
+    """
     target = task.get("target_per_day") or 1
     if target > 1 and task.get("habit_kind") != "avoid":
         return target
@@ -196,12 +182,12 @@ def _week_order(week_start: str) -> list[int]:
 
 
 def repeat_choice(task: dict | None, week_start: str = "monday") -> dict:
-    """The habit form's "How often" choice for an existing habit
-    (2026-09-26, Peter: no raw "FREQ=WEEKLY;BYDAY=..." in the edit modal).
-    mode is "daily" / "days" (fixed weekdays) / "week" / "month" (N times
-    per period) or "keep" for anything those four can't express (every 2
-    days, every 2 weeks, yearly, an end date) -- the form then offers the
-    current schedule in words and leaves the stored rule untouched."""
+    """The habit form's "How often" choice for an existing habit.
+        mode is "daily" / "days" (fixed weekdays) / "week" / "month" (N times
+        per period) or "keep" for anything those four can't express (every 2
+        days, every 2 weeks, yearly, an end date) -- the form then offers the
+        current schedule in words and leaves the stored rule untouched.
+    """
     rrule = (task or {}).get("recurrence") or "FREQ=DAILY"
     per = (task or {}).get("habits_per_period")
     out = {
@@ -235,9 +221,9 @@ def week_strip(
     week_start: str = "monday",
 ) -> list[dict]:
     """The calendar week containing `today`, starting on the configured
-    first day of the week (2026-09-26, Peter: the strip didn't respect
-    it -- it used to be the rolling last seven days). Days after today
-    are `is_future`: shown, never clickable."""
+        first day of the week. Days after today
+        are `is_future`: shown, never clickable.
+    """
     excluded = excluded or set()
     days = []
     first = today - timedelta(days=(today.weekday() + (1 if week_start == "sunday" else 0)) % 7)
@@ -358,23 +344,10 @@ def habit_items(conn, today: date | None = None) -> list[dict]:
 
 def habits_for_day(conn, d: date, today: date | None = None) -> list[dict]:
     """Habits H7: the habits scheduled on day `d` (calendar day view) --
-    build habits only (an avoid habit has nothing to do on a day), minus
-    paused and non-working days. Each carries whether `d` was logged and
-    a toggle URL unless `d` is in the future.
-
-    2026-09-25 (UI audit C-5): an amount habit carries `is_quantity`,
-    `target`, `today_value`, `next_value`, `date` and `plus_url` so the Day
-    view renders n/target with a +1 (like the Agenda widget) instead of a
-    toggle that marked 8/day "done" at 1; `done_today` only at target,
-    `partial_today` below it.
-
-    2026-09-28 (checkbox consolidation): field names (`done_today`,
-    `partial_today`, `today_value`, plus the added `icon`/`color`) match
-    `habit_item()`'s own naming so `_calendar_day_grid.html` can share
-    _habit_page_row.html's `habit_check_control` macro and per-habit
-    `habit-c-*` accent colour instead of a third bespoke shape -- `date`
-    stays its own key (not `today`) since `d` here can be a future day,
-    unlike `habit_item`'s always-today `today`."""
+        build habits only (an avoid habit has nothing to do on a day), minus
+        paused and non-working days. Each carries whether `d` was logged and
+        a toggle URL unless `d` is in the future.
+    """
     today = today or clock.today()
     iso = d.isoformat()
     pauses = db.list_habit_pauses(conn)
@@ -418,12 +391,11 @@ def period_grid(
     entries_by_date: dict, schedule: habit_schedule.Schedule, today: date, week_start: str = "monday",
     target: float | None = None,
 ) -> dict:
-    """2026-09-26 (Peter): a "3x a week" / "once a month" habit's history
-    as periods, not days -- the last 52 weeks (weeks starting on the
-    configured first day) or the last 12 months. Each cell: logged days
-    in that period against the per-period target; `done` at the target,
-    `partial` below it. A day counts once it's done (at the daily target
-    for an amount habit)."""
+    """Each cell: logged days
+        in that period against the per-period target; `done` at the target,
+        `partial` below it. A day counts once it's done (at the daily target
+        for an amount habit).
+    """
     per = max(1, schedule.per_period)
     done_days = {iso for iso, v in entries_by_date.items() if day_state(v or 0, target) == "done"}
     cells = []
@@ -452,9 +424,10 @@ def period_grid(
 
 def history(conn, task: dict, today: date | None = None, week_start: str = "monday") -> dict:
     """What a habit's history view shows (the Habits page's expandable
-    row, the view modal): the year heatmap for a daily / fixed-days /
-    avoid habit, or the week / month grid for a period habit, plus
-    insights (2026-09-26: moved here from the view modal)."""
+        row, the view modal): the year heatmap for a daily / fixed-days /
+        avoid habit, or the week / month grid for a period habit, plus
+        insights.
+    """
     today = today or clock.today()
     rows = db.list_task_completions(conn, task["uid"])
     entries = {r["due_date"]: r.get("value") or 0 for r in rows}

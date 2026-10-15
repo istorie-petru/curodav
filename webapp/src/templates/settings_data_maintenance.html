@@ -5,15 +5,6 @@
 {{ page_header_narrow("Data & Maintenance", "database") }}
 <div id="modal-target">
 
-{# 2026-09-09 direct request: every action below still redirects back here
-   with ?note=/?error= (progressive enhancement -- the routes work as plain
-   full-page form posts with no JS required), but data_maintenance.js now
-   converts that into a floating ccToast instead, the same notification
-   style every delete/archive elsewhere in the app already uses, and
-   removes this banner + strips the query params from the URL once it has.
-   The banner below is what actually shows if JS is unavailable/broken --
-   a real fallback, not dead markup. data-dm-flash is what the script looks
-   for; its value (note/error) is also the toast variant. #}
 {% if request.query_params.get('note') %}
 <div class="settings-hint settings-hint-accent" data-dm-flash="note">{{ request.query_params.get('note') }}</div>
 {% endif %}
@@ -23,20 +14,6 @@
 
 {% include "_settings_status_cards.html" %}
 
-<!-- 2b. CalDAV / Radicale sync -- 2026-09-08: read-only display now. The
-     credentials this card used to collect independently (URL/username/
-     password) merged into Settings > General's Account card -- one
-     username/password for both the app's own login and Radicale (direct
-     request, "merge the concept of radicale username to the app
-     username"); this card just shows where that connection currently
-     points. -->
-<!-- 2026-09-13 direct request: the env vars behind this connection were
-     "opaque and hard to set or verify" -- this card now says, in plain
-     language, WHERE the current values came from (source), whether the
-     on-disk env file and this running process have drifted apart, whether
-     the public/loopback URLs still agree on which user they point at, and
-     offers a live one-click "Test connection" instead of the only prior
-     way to know ("watch journalctl while a phone tries to sync"). -->
 <div class="settings-group">
     <div class="card">
         <p class="settings-hint">Current URL: <code>{{ radicale_url }}</code></p>
@@ -60,27 +37,8 @@
         </form>
     </div>
 </div>
-{# 2026-09-25 (UI audit F5): group divider, see .settings-divider. #}
 <hr class="settings-divider">
 
-<!-- 3. Maintenance & cleanup -- 2026-08-26 redesign: every row here is now
-     an inline actionable control (label left, control right). The two
-     lifecycle selects autosubmit on pick.
-     2026-09-11 direct request: "Purge Completed Tasks" moved into the
-     Database card's own context menu above (as "Purge completed"), and
-     the "Reset Home to default layout" row removed outright -- edit
-     mode's own "Reset layout" button (dashboard.html) already does the
-     exact same thing via the same /dashboard/reset route, so this was a
-     verbatim duplicate control, not a second surface worth keeping.
-     2026-09-11 (same session, second half of the same direct request):
-     "Restart app" moved in from Settings > Your Profile -- same
-     /settings/restart route, same data-confirm-sheet. Placed first in
-     this card since it's what applies an Account-card save (Your
-     Profile's env-managed username/password/Radicale URL) -- saving that
-     now redirects back to THIS page instead, so the "Saved" note this
-     card already turns into a floating toast (data_maintenance.js, see
-     this page's own header comment) shows up right next to the button
-     that finishes the job. -->
 <div class="settings-group">
     <div class="card">
         {% if restart_available %}
@@ -94,13 +52,6 @@
             </form>
         </div>
         {% endif %}
-        {# 2026-09-25 (UI audit F14): the last two native <select>s in
-           Settings now use the same single-select dropdown General/
-           Appearance switched to on 2026-09-24 (_widget_list_multiselect
-           .html, ms_mode="single" + ms_bare + ms_autosubmit). The choice
-           lists stay routers/settings.py's (value, label) tuples --
-           including _choices_with_stored_value's honest "(current)" entry
-           for a legacy stored value -- mapped to {uid, name} here. #}
         <form class="settings-field-row" method="post" action="/settings/task-auto-archive" id="task-auto-archive-form">
             <span class="settings-field-label">Auto-archive completed tasks
                 <span class="settings-field-hint">Deletes done/archived tasks once they're this old</span>

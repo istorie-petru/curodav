@@ -61,11 +61,11 @@ def test_templates_are_hidden_from_note_lists_search_and_links(conn):
     assert [d["uid"] for d in db.search_notebook_documents(conn, "")] == ["n"]
 
 
-def test_templates_do_not_count_in_the_browse_page(conn):
+def test_templates_do_not_count_in_the_folders(conn):
     _note(conn, "n")
     _note(conn, "t", template=True)
-    ctx = router._notebook_browse_context(conn, _request("/notebook"), "", "", "", "updated", limit=50)
-    assert ctx["total_documents"] == 1
+    folders = db.list_notebook_folders(conn)
+    assert [f["count"] for f in folders["labels"]] == [1]
 
 
 def test_search_contents_skips_templates(conn):
@@ -181,9 +181,9 @@ def test_the_creation_modal_asks_to_open_the_new_note(conn):
 def test_a_new_note_can_be_given_type_labels_project_and_frontmatter_up_front(conn):
     db.upsert_notebook_field_config(conn, {"key": "author", "label": "Author", "type": "text"})
     doc = db.get_notebook_document(conn, _uid(_create(
-        conn, title="Chapter 1", note_type="wiki", tags_labels=["History", "Draft"],
+        conn, title="Chapter 1", note_type="wiki", tags_labels=["History"],
         typed={"field__author": ["Ada"]})))
-    assert doc["title"] == "Chapter 1" and doc["note_type"] == "wiki" and sorted(doc["tags"]) == ["Draft", "History"]
+    assert doc["title"] == "Chapter 1" and doc["note_type"] == "wiki" and doc["tags"] == ["History"]
     assert {p["key"]: p["value"] for p in doc["properties"]} == {"author": "Ada"}
 
 

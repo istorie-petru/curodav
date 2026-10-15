@@ -1,15 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Export data{% endblock %}
 {% block content %}
-<!-- Export dialog (2026-08-26 third pass: opened from the Sync status
-     card's "Export…" menu item). Same two-dropdown form the old Export &
-     import card rendered -- every (type, format) combination resolves
-     server-side to exactly one real file via GET /export/download. The
-     form carries data-modal-get so modal.js's POST interceptor stands
-     down and the submit navigates natively to the attachment (the browser
-     downloads it without leaving the page); openModal's own fetch of the
-     file finds no #modal-target and falls back to exactly that
-     navigation. -->
 <div id="modal-target">
 <div class="modal-header">
 <h1>Export data</h1>
@@ -43,13 +34,6 @@
 </form>
 {% include "_data_formats_table.html" %}
 </div>
-{# 2026-08-30 (direct feedback, modal-footer-consistency fix): Download
-   used to be its own full-width button inside the body, with the footer
-   below it carrying only Cancel -- every other modal in the app pairs
-   Cancel + the one primary action in this same footer row
-   (UI_CONSISTENCY_GUIDE.md #5). data-modal-get on the form above (not
-   this button) is what makes modal.js's submit interceptor stand down
-   for a native download navigation -- unchanged by moving the button. #}
 {% set footer_back_url = '/settings' %}
 {% set footer_back_label = 'Cancel' %}
 {% set footer_primary_form = 'export-form' %}

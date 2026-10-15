@@ -1,0 +1,20 @@
+{% from "_inputs.html" import checkbox_input %}
+{% from "_action_menu.html" import action_menu with context %}
+{% for d in documents %}
+<div class="contact-row-wrap" data-uid="{{ d.uid }}">
+    {% if select | default(true) %}{{ checkbox_input({'class': 'row-select', 'data-uid': d.uid, 'aria-label': 'Select ' ~ d.title, 'autocomplete': 'off'}) }}{% endif %}
+    <a class="contact-row" href="/notebook/{{ d.uid }}{% if back_to %}?back_to={{ back_to | urlencode }}&amp;back_label={{ back_label | urlencode }}{% endif %}">
+        <span class="notebook-row-icon">{{ icon(d.type_icon, 'icon-sm cal-' ~ d.type_color) }}</span>
+        <span class="contact-row-main">
+            <span class="contact-row-name">{{ d.title or 'Untitled' }}</span>
+            <span class="contact-row-sub">{% if d.note_type %}{{ d.note_type }}{% if d.subtitle %} · {% endif %}{% endif %}{{ d.subtitle }}</span>
+        </span>
+        <span class="notebook-row-edited">{{ (d.updated_at if sort == 'updated' else d.created_at) | relative_date }}</span>
+    </a>
+    {{ action_menu([
+        {'label': 'Properties', 'icon': 'edit', 'href': '/notebook/' ~ d.uid ~ '/properties', 'modal': true},
+        {'label': 'Unpin' if d.pinned else 'Pin to the top', 'icon': 'pin', 'form_action': '/notebook/' ~ d.uid ~ '/pin', 'fields': {'pinned': '0' if d.pinned else '1'}, 'change': 'notebook'},
+        {'label': 'Delete document', 'icon': 'trash', 'danger': true, 'form_action': '/notebook/' ~ d.uid ~ '/delete', 'undo': d.title or 'Untitled', 'change': 'notebook'},
+    ], aria_label='More actions for ' ~ (d.title or 'Untitled')) }}
+</div>
+{% endfor %}

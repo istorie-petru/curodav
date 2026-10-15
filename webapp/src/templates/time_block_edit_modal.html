@@ -2,30 +2,6 @@
 {% extends "base.html" %}
 {% block title %}{{ form_title }}{% endblock %}
 {% block content %}
-<!-- One form for every field (2026-08-17 settings HTML uniformity pass,
-     SETTINGS_UI_GUIDE.md pattern B) -- replaces the Sleep/Leisure tables'
-     old inline-editable cells (per-field PATCH via
-     static/settings_time_blocks.js). Same shape as label_edit_modal.html:
-     opened empty from the list's "+ Add time block" toolbar button
-     (routers/settings.py::new_time_block_modal, posts to create_time_block)
-     or prefilled from a row's Edit button (edit_time_block_modal, posts to
-     update_time_block). The day set uses the same filter-mode multiselect
-     as the old table cells (_widget_list_multiselect.html). Delete lives
-     in the shared modal footer as a confirm-only action (time-block
-     deletion is irreversible -- no undo), pointing at the unchanged
-     /settings/time-blocks/{uid}/delete endpoint.
-
-     2026-09-08 follow-up (direct request): `kind` used to ride along as a
-     hidden input -- a block's Sleep/Leisure was fixed by which of the two
-     separate tables its row lived in, so the form only ever needed to
-     echo it back unchanged. Now that Sleep and Leisure are one merged
-     table (settings_time_blocks.html's own comment), a row's type is a
-     real editable field -- a two-option `.segmented` chooser, same
-     control shape settings_appearance.html's Theme picker uses, radio
-     inputs instead of a hidden one so Save actually posts whichever
-     option the person picked. `kind` (the context var, not the field
-     name) still supplies the chooser's *initial* selection either way --
-     the row's current type when editing, "sleep" by default when adding. -->
 <div id="modal-target" class="modal-height-md">
 <div class="modal-header">
 <h1>{{ form_title }}</h1>
@@ -45,7 +21,6 @@
             <label>Title</label>
             {{ text_input({'name': 'label', 'value': (b.label if b else '')}) }}
         </div>
-        {# 2026-09-26: two plain time fields (typed or picked). #}
         {% from "_date_time_fields.html" import time_field with context %}
         <div class="field">
             <label>From</label>

@@ -1,5 +1,4 @@
-"""Notebook (curodav-notes/documentation/plans/STATE.md +
-architecture-notes-module-2026-09-29.md, 2026-09-29) -- Phase 1 backend
+"""Notebook -- Phase 1 backend
 skeleton of the 0-to-MVP roadmap: a top-level, block-based note-taking
 module with two modes (see db.py's `notebook_documents` schema comment for
 the full column rationale):
@@ -14,19 +13,21 @@ absorption of the old quick-capture `notes` feature (Phase 4) -- see the
 roadmap for what's intentionally not here yet. The Groups/Labels widget
 itself (Phase 3) lives in routers/dashboard.py's WIDGET_TYPES registry,
 not here -- this router only needed to support create-with-label (already
-present below) for that widget to work."""
+present below) for that widget to work.
+"""
 
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, Form, Header, Query, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from .. import clock, db, notebook_fields, notebook_find, notebook_mentions
+from .. import citation_formats, clock, db, notebook_fields, notebook_find, notebook_mentions
 from ..deps import get_db, respond, templates, wants_json
 from .labels import COLORS, icon_groups_for
 
@@ -35,178 +36,144 @@ router = APIRouter(prefix="/notebook", tags=["notebook"])
 BROWSE_PAGE_SIZE = 30
 
 
-def _browse_href(note_type: str, label: str, group: str, sort: str, limit: int | None = None) -> str:
-    params = {k: v for k, v in (("note_type", note_type), ("label", label), ("group", group)) if v}
-    if sort == "title":
-        params["sort"] = "title"
-    if limit and limit > BROWSE_PAGE_SIZE:
-        params["limit"] = limit
-    return "/notebook" + (f"?{urlencode(params)}" if params else "")
+def _folder_context(conn, request: Request, kind: str, name: str, note_type: str, sort: str, limit: int, offset: int) -> dict:
+    from .labels import COLORS  # noqa: F401  (the palette the folder icon colors come from)
 
-
-def _notebook_browse_context(
-    conn, request: Request, note_type: str, label: str, group: str, sort: str,
-    limit: int = BROWSE_PAGE_SIZE, offset: int = 0,
-) -> dict:
-    """Browse page (`/notebook`, curodav-notes/documentation/plans
-    notebook-browse-page-widget-plans.md's "filing rail" redesign,
-    2026-10-02) -- a left rail of facets (Everything / TYPE / LABELS /
-    GROUPS, each with a GLOBAL count unaffected by the current filter, so
-    the rail doesn't visibly shift as you narrow the list -- same
-    "counts describe the whole collection, not the current view"
-    convention a faceted-search sidebar always uses) plus the filtered,
-    sorted document list.
-
-    Each rail row is a plain navigational link carrying exactly one
-    dimension's value (`note_type`/`label`/`group`, each a single scalar,
-    not a checkbox multi-select) -- clicking a different row in the same
-    dimension REPLACES that dimension's filter; combining across
-    dimensions is a plain AND (STATE.md planning session's own "AND across
-    different filter dimensions / replace within the same dimension"
-    note). No client-side filtering engine anywhere -- every pick is a
-    real GET navigation, the same server-GET-reload + shared-query-string
-    mechanism `_filter_dropdown.html` already established for Tasks/
-    Calendar/Contacts (this page just doesn't need that partial's own
-    checkbox-panel UI, since the rail's rows are plain links, not a
-    dropdown)."""
-    all_documents = db.list_notebook_documents(conn)
-    total = len(all_documents)
-
-    type_counts: dict[str, int] = {}
-    label_counts: dict[str, int] = {}
-    for d in all_documents:
-        if d.get("note_type"):
-            type_counts[d["note_type"]] = type_counts.get(d["note_type"], 0) + 1
-        for tag in d.get("tags") or []:
-            label_counts[tag] = label_counts.get(tag, 0) + 1
-
-    group_rows = []
-    for g in db.list_groups(conn):
-        member_names = {n.lower() for n in db.group_member_names(conn, g["name"])}
-        count = sum(
-            1 for d in all_documents if member_names & {t.lower() for t in (d.get("tags") or [])}
-        )
-        if count:
-            # Icon falls back to db.GROUP_DEFAULT_ICON, same convention
-            # every other group-icon render site already uses (base.html's
-            # sidebar group glyph, group_view_modal.html, etc.) -- a group
-            # always shows *some* icon, never an icon-less pill, unlike a
-            # label (see label_rows below, where "no icon configured" is a
-            # legitimate state label_pill() already renders icon-less).
-            group_rows.append({
-                "name": g["name"], "count": count, "color": g["color"] or "gray",
-                "icon": g["icon"] or db.GROUP_DEFAULT_ICON,
-            })
-
-    documents = all_documents
-    if note_type:
-        documents = [d for d in documents if d.get("note_type") == note_type]
-    if label:
-        documents = [d for d in documents if label.lower() in {t.lower() for t in (d.get("tags") or [])}]
-    if group:
-        member_names = {n.lower() for n in db.group_member_names(conn, group)}
-        documents = [
-            d for d in documents if member_names & {t.lower() for t in (d.get("tags") or [])}
-        ]
-    # list_notebook_documents' own ORDER BY is already newest-updated-
-    # first -- the right default (STATE.md), so "updated" needs no
-    # re-sort; only the Title alternative actually reorders anything.
-    if sort == "title":
-        documents = sorted(documents, key=lambda d: (d.get("title") or "").lower())
+    if kind not in ("project", "label", "unfiled", "journal"):
+        kind = "unfiled"
+    name = "" if kind == "unfiled" else name
+    documents, total = db.list_notebook_folder_documents(conn, kind, name, note_type, sort, "", limit, offset)
     type_looks = db.notebook_note_type_looks(conn)
     for d in documents:
         look = type_looks.get(d.get("note_type") or "", db.NOTEBOOK_TYPE_LOOK_FALLBACK)
-        d["type_icon"] = look["icon"]
-        d["type_color"] = look["color"]
-
-    def facet_href(dimension: str, value: str) -> str:
-        """Picking a facet adds it; picking the active one again removes it."""
-        current = {"note_type": note_type, "label": label, "group": group}
-        current[dimension] = "" if current[dimension] == value else value
-        return _browse_href(current["note_type"], current["label"], current["group"], sort)
-
-    matching = len(documents)
-    shown = documents[offset: offset + limit]
-
+        d["type_icon"], d["type_color"] = look["icon"], look["color"]
+    cfg = db.effective_label_config(conn, name) if name else {}
+    params = {k: v for k, v in (("kind", kind), ("name", name), ("note_type", note_type), ("sort", sort if sort in ("title", "updated") else "")) if v}
     return {
         "request": request,
         "active_tab": "notebook",
-        "documents": shown,
-        "matching_documents": matching,
-        "has_more": offset + limit < matching,
+        "kind": kind,
+        "name": name,
+        "folder_name": name or "Unfiled",
+        "folder_icon_name": "calendar" if kind == "journal" else cfg.get("icon") or ("inbox" if kind == "unfiled" else "folder"),
+        "current_week": db.week_key(clock.today()),
+        "journal_weeks": db.journal_year_weeks(conn, name, db.week_key(clock.today())) if kind == "journal" and re.fullmatch(r"\d{4}", name) else [],
+        "folder_color": cfg.get("color") or "gray",
+        "documents": documents,
+        "total": total,
+        "note_type": note_type,
+        "sort": sort if sort in ("title", "updated") else "created",
+        "type_items": [{"value": t, "name": t} for t in db.list_notebook_note_types_in_use(conn)],
+        "has_more": offset + limit < total,
         "next_offset": offset + limit,
-        "page_limit": limit,
-        "more_href": _browse_href(note_type, label, group, sort, limit + BROWSE_PAGE_SIZE),
-        "everything_href": _browse_href("", "", "", sort),
-        "facet_href": facet_href,
-        "total_documents": total,
-        "type_rows": [
-            {"name": t, "count": c, **type_looks.get(t, db.NOTEBOOK_TYPE_LOOK_FALLBACK)}
-            for t, c in sorted(type_counts.items())
-        ],
-        "label_rows": [
-            {
-                "name": n, "count": c,
-                "color": (_cfg := db.effective_label_config(conn, n)).get("color") or "gray",
-                "icon": _cfg.get("icon"),
-            }
-            for n, c in sorted(label_counts.items(), key=lambda kv: kv[0].lower())
-        ],
-        "group_rows": sorted(group_rows, key=lambda g: g["name"].lower()),
-        "active_note_type": note_type,
-        "active_label": label,
-        "active_group": group,
-        "notebook_filter_active": bool(note_type or label or group),
-        "sort": sort if sort == "title" else "updated",
+        "more_href": "/notebook/folder?" + urlencode({**params, "limit": limit + BROWSE_PAGE_SIZE}),
+        "rows_query": urlencode(params),
+        "crumbs": [{"url": "/notebook", "name": "Notebook"}],
+        "back_to": "/notebook/folder?" + urlencode({k: v for k, v in (("kind", kind), ("name", name)) if v}),
+        "back_label": name or "Unfiled",
     }
 
 
 @router.get("")
-def list_documents(
-    request: Request,
-    note_type: str = "",
-    label: str = "",
-    group: str = "",
-    sort: str = "updated",
-    limit: int = BROWSE_PAGE_SIZE,
-    conn=Depends(get_db),
+def list_documents(request: Request, conn=Depends(get_db)):
+    """The Notebook home: generated folders (open projects, labels, Unfiled) and the library folders."""
+    import json as _json
+
+    folders = db.list_notebook_folders(conn)
+    recent = db.latest_notebook_document(conn)
+    report = db.get_app_meta(conn, "notebook_label_report")
+    return templates.TemplateResponse(
+        "notebook_home.html",
+        {
+            "request": request,
+            "active_tab": "notebook",
+            "folders": folders,
+            "continue_note": recent,
+            "label_report": _json.loads(report) if report else [],
+            "glossary_count": len(db.list_glossary_terms(conn)),
+            "citation_count": len(db.list_citations(conn)),
+            "template_count": len(db.list_notebook_documents(conn, scope="templates")),
+            "journal_count": sum(m["count"] for m in db.list_journal_years(conn)),
+            "pinned": db.list_pinned_notebook_documents(conn),
+        },
+    )
+
+
+@router.get("/folder")
+def folder_view(
+    request: Request, kind: str = "unfiled", name: str = "", note_type: str = "", sort: str = "created",
+    limit: int = BROWSE_PAGE_SIZE, conn=Depends(get_db),
 ):
     return templates.TemplateResponse(
-        "notebook_list.html",
-        _notebook_browse_context(
-            conn, request, note_type.strip(), label.strip(), group.strip(), sort.strip(),
-            limit=max(BROWSE_PAGE_SIZE, min(limit, 1000)),
-        ),
+        "notebook_folder.html",
+        _folder_context(conn, request, kind.strip(), name.strip(), note_type.strip(), sort.strip(),
+                        max(BROWSE_PAGE_SIZE, min(limit, 1000)), 0),
     )
 
 
-@router.get("/rows")
-def browse_rows(
-    request: Request,
-    note_type: str = "",
-    label: str = "",
-    group: str = "",
-    sort: str = "updated",
-    offset: int = 0,
-    conn=Depends(get_db),
+@router.get("/folder/rows")
+def folder_rows(
+    request: Request, kind: str = "unfiled", name: str = "", note_type: str = "", sort: str = "created",
+    offset: int = 0, conn=Depends(get_db),
 ):
-    """The next page of Browse rows, for the Load more button."""
-    ctx = _notebook_browse_context(
-        conn, request, note_type.strip(), label.strip(), group.strip(), sort.strip(),
-        limit=BROWSE_PAGE_SIZE, offset=max(offset, 0),
-    )
-    html = templates.get_template("_notebook_browse_rows.html").render(ctx)
+    """The next page of a folder's rows, for the Load more button."""
+    ctx = _folder_context(conn, request, kind.strip(), name.strip(), note_type.strip(), sort.strip(),
+                          BROWSE_PAGE_SIZE, max(offset, 0))
+    html = templates.get_template("_notebook_folder_rows.html").render(ctx)
     return JSONResponse({"html": html, "has_more": ctx["has_more"], "next_offset": ctx["next_offset"]})
+
+
+@router.get("/journal")
+def journal_home(request: Request, conn=Depends(get_db)):
+    """The Journal folder: one folder per year that has weekly notes, and a button for this week's note."""
+    return templates.TemplateResponse(
+        "notebook_journal.html",
+        {"request": request, "active_tab": "notebook", "years": db.list_journal_years(conn), "current_week": db.week_key(clock.today()),
+         "crumbs": [{"url": "/notebook", "name": "Notebook"}]},
+    )
+
+
+@router.post("/journal/week")
+def open_journal_week(week: str = Form(...), conn=Depends(get_db)):
+    """Opens the journal note of a week (`2026-42`), making it from the journal template when it does not exist yet."""
+    week = week.strip()
+    m = re.fullmatch(r"(\d{4})-(\d{2})", week)
+    if not m or not 1 <= int(m.group(2)) <= db.weeks_in_year(int(m.group(1))):
+        return RedirectResponse(url="/notebook/journal", status_code=303)
+    uid = db.create_journal_entry(conn, week, db.get_journal_template(conn))
+    return RedirectResponse(url=f"/notebook/{uid}", status_code=303)
+
+
+@router.get("/label-report")
+def label_report(request: Request, conn=Depends(get_db)):
+    import json as _json
+
+    raw = db.get_app_meta(conn, "notebook_label_report")
+    return templates.TemplateResponse(
+        "notebook_label_report_modal.html", {"request": request, "active_tab": "notebook", "report": _json.loads(raw) if raw else []}
+    )
+
+
+@router.post("/label-report/dismiss")
+def dismiss_label_report(conn=Depends(get_db)):
+    db.set_app_meta(conn, "notebook_label_report", "")
+    return RedirectResponse(url="/notebook", status_code=303)
+
+
+_NONE = "__none__"
 
 
 @router.get("/bulk-edit-modal")
 def bulk_edit_modal(uids: str, request: Request, conn=Depends(get_db)):
-    """Bulk-select "Edit": sets the same label and Type on every selected document."""
-    labels = [(n, n) for n in sorted(db.list_all_known_label_names(conn), key=str.lower)]
+    """Bulk-select "Edit": sets the same label, project and Type on every selected document."""
+    project_names = {c["name"] for c in db.list_project_labels(conn)}
+    all_names = sorted(db.list_all_known_label_names(conn), key=str.lower)
+    labels = [(_NONE, "No label")] + [(n, n) for n in all_names if n not in project_names]
+    projects = [(_NONE, "No project")] + [(n, n) for n in sorted(project_names, key=str.lower)]
     types = [(t, t.capitalize()) for t in db.list_notebook_note_types_in_use(conn)]
     fields = [
-        {"name": "add_tag", "label": "Add label", "kind": "select", "options": labels},
-        {"name": "remove_tag", "label": "Remove label", "kind": "select", "options": labels},
+        {"name": "label", "label": "Label", "kind": "select", "options": labels},
+        {"name": "project", "label": "Project", "kind": "select", "options": projects},
         {"name": "note_type", "label": "Type", "kind": "select", "options": types},
     ]
     return templates.TemplateResponse(
@@ -219,22 +186,23 @@ def bulk_edit_modal(uids: str, request: Request, conn=Depends(get_db)):
 @router.post("/bulk-edit")
 def bulk_edit(
     uids: list[str] = Form([]),
-    add_tag: str = Form(""),
-    remove_tag: str = Form(""),
+    label: str = Form(""),
+    project: str = Form(""),
     note_type: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     now = clock.now().isoformat()
+    project_names = {c["name"] for c in db.list_project_labels(conn)}
     for uid in uids:
         row = db.get_notebook_document(conn, uid)
         if row is None:
             continue
         tags = list(row.get("tags") or [])
-        if remove_tag:
-            tags = [t for t in tags if t != remove_tag]
-        if add_tag and add_tag not in tags:
-            tags.append(add_tag)
+        if label:
+            tags = [t for t in tags if t in project_names] + ([] if label == _NONE else [label])
+        if project:
+            tags = [t for t in tags if t not in project_names] + ([] if project == _NONE else [project])
         row["tags"] = tags
         if note_type.strip():
             row["note_type"] = note_type.strip()
@@ -461,6 +429,12 @@ def find_replace(
                          "warn": documents > FIND_TOAST_THRESHOLD})
 
 
+@router.get("/link-search")
+def link_search(q: str = "", exclude: str = "", kinds: str = "all", conn=Depends(get_db)):
+    """The link picker's results: entries and notes in groups, each with a subtitle, icon and color."""
+    return JSONResponse(db.search_link_targets(conn, q, exclude_uid=exclude or None, kinds=kinds))
+
+
 @router.get("/search")
 def search_documents(
     request: Request, q: str = "", exclude: str = "", limit: int = 20, ranked: int = 0, conn=Depends(get_db)
@@ -505,19 +479,20 @@ _NOTEBOOK_HOME_CRUMB = [{"url": "/notebook", "name": "Notebook"}]
 
 @router.get("/{uid}")
 def document_page(uid: str, request: Request, back_to: str = "", back_label: str = "", conn=Depends(get_db)):
-    """`back_to`/`back_label` (roadmap item G, session 8, 2026-10-03) --
-    the Document editor is reachable from several different contexts
-    (Browse list, a label page's Notebook widget, a group dashboard's
-    Notebook widget, another document's wikilink/backlink), unlike the
-    Citations/Glossary library pages' own `crumbs`, which are always
-    opened from exactly one place and so can stay hardcoded to Notebook
-    home. Every link that navigates here carries its own origin as these
-    two query params (see _widget_notebook_list.html, notebook_document.
-    html's backlinks loop, and notebook_wikilinks.js's renderRelationships)
-    so the header's back arrow returns to wherever the user actually came
-    from, falling back to Notebook home (same target the two library
-    pages already use) for a bookmarked/typed-in-directly URL that never
-    carried either param."""
+    """`back_to`/`back_label` --
+        the Document editor is reachable from several different contexts
+        (Browse list, a label page's Notebook widget, a group dashboard's
+        Notebook widget, another document's wikilink/backlink), unlike the
+        Citations/Glossary library pages' own `crumbs`, which are always
+        opened from exactly one place and so can stay hardcoded to Notebook
+        home. Every link that navigates here carries its own origin as these
+        two query params (see _widget_notebook_list.html, notebook_document.
+        html's backlinks loop, and notebook_wikilinks.js's renderRelationships)
+        so the header's back arrow returns to wherever the user actually came
+        from, falling back to Notebook home (same target the two library
+        pages already use) for a bookmarked/typed-in-directly URL that never
+        carried either param.
+    """
     document = db.get_notebook_document(conn, uid)
     if document is None:
         return RedirectResponse(url="/notebook", status_code=303)
@@ -526,24 +501,19 @@ def document_page(uid: str, request: Request, back_to: str = "", back_label: str
     if document["is_template"] and not back_to:
         crumbs = [{"url": "/notebook/templates", "name": "Templates"}]
     citations = db.list_notebook_citations(conn, uid)
+    style = db.get_citation_format(conn)
     for c in citations:
         c["display"] = db.format_citation_display(c)
-    glossary_terms = db.list_notebook_glossary_terms(conn, uid)
-    backlinks = db.list_notebook_backlinks(conn, uid)
+        c["bibliography"] = citation_formats.bibliography(c, style)
     return templates.TemplateResponse(
         "notebook_document.html",
         {
             "request": request, "active_tab": "notebook", "document": document,
-            "citations": citations, "glossary_terms": glossary_terms, "backlinks": backlinks,
+            "citations": citations,
+            "entry_groups": db.group_entries_by_kind(conn, db.list_notebook_glossary_terms(conn, uid)),
             "crumbs": crumbs,
+            "journal_weeks": db.journal_year_weeks(conn, document["journal_week"][:4], db.week_key(clock.today())) if document.get("journal_week") else [],
             "sidebar_layout": db.get_notebook_settings(conn)["sidebar_layout"],
-            # This document's own url+title (distinct from `crumbs` above,
-            # which is where THIS page's own back arrow goes) -- the
-            # backlinks loop below and notebook_wikilinks.js's outbound
-            # "Links to" list both need to stamp *this* document as the
-            # back_to/back_label on every link they render to another
-            # document, so navigating away and clicking that document's own
-            # back arrow lands here again.
             "self_url": f"/notebook/{uid}", "self_title": document["title"],
         },
     )
@@ -558,17 +528,43 @@ def _typed_fields(schema: list[dict], properties: list[dict]) -> list[dict]:
     ]
 
 
+@router.post("/{uid}/pin")
+def pin_document(uid: str, pinned: str = Form("1"), x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    """Pins a note so it also shows at the root of the Notebook, or unpins it."""
+    db.set_notebook_pinned(conn, uid, pinned == "1")
+    return respond(x_requested_with, f"/notebook/{uid}")
+
+
+@router.get("/{uid}/export.md")
+def export_document_markdown(uid: str, conn=Depends(get_db)):
+    """One note as a Markdown file, with its metadata as frontmatter."""
+    from urllib.parse import quote as _quote
+
+    from .. import notebook_markdown
+
+    doc = db.get_notebook_document(conn, uid)
+    if doc is None:
+        return RedirectResponse(url="/notebook", status_code=303)
+    blocks = (db.get_notebook_document_content(conn, uid) or {}).get("blocks", [])
+    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', " ", doc["title"] or "Untitled").strip(" .") or "Untitled"
+    return Response(
+        notebook_markdown.note_to_markdown(doc, blocks), media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_quote(name)}.md"},
+    )
+
+
 @router.get("/{uid}/properties")
 def document_properties_modal(uid: str, request: Request, conn=Depends(get_db)):
-    """The document-properties modal (2026-10-02, direct request) --
-    title/label(s)/note_type/custom properties in one place, reachable
-    from the Editor page's header icon button and, as of the same date,
-    each Browser-mode document row (_notebook_browse_list.html/
-    _widget_notebook_list.html). Same dual-mode contract every other form
-    template in this app follows (a real page, and an in-place modal via
-    data-modal) -- works with no JS either way. `document["properties"]`
-    (this document's custom key/value rows) comes attached for free --
-    db.get_notebook_document already does it, same as `document["tags"]`."""
+    """The document-properties modal --
+        title/label(s)/note_type/custom properties in one place, reachable
+        from the Editor page's header icon button and, as of the same date,
+        each Browser-mode document row (_notebook_browse_list.html/
+        _widget_notebook_list.html). Same dual-mode contract every other form
+        template in this app follows (a real page, and an in-place modal via
+        data-modal) -- works with no JS either way. `document["properties"]`
+        (this document's custom key/value rows) comes attached for free --
+        db.get_notebook_document already does it, same as `document["tags"]`.
+    """
     document = db.get_notebook_document(conn, uid)
     if document is None:
         return RedirectResponse(url="/notebook", status_code=303)
@@ -612,23 +608,23 @@ def document_properties_modal(uid: str, request: Request, conn=Depends(get_db)):
 
 def _resolve_note_type(note_type: str, note_type_new: str) -> str:
     """Same "typed value always wins over the picked radio" rule as
-    routers/settings.py's `_resolve_calendar_name` -- see
-    _widget_list_multiselect.html's own `ms_allow_new` docstring for why
-    single-mode's two fields (`note_type` from the radios, `note_type_new`
-    from the always-present text input) need resolving explicitly rather
-    than sharing one name.
+        routers/settings.py's `_resolve_calendar_name` -- see
+        _widget_list_multiselect.html's own `ms_allow_new` docstring for why
+        single-mode's two fields (`note_type` from the radios, `note_type_new`
+        from the always-present text input) need resolving explicitly rather
+        than sharing one name.
 
-    No fallback-to-existing-value branch (2026-10-02 direct request, "allow
-    'No type' for notes") -- unlike `_resolve_calendar_name` (where a blank
-    radio can genuinely mean "nothing available to pick"), this picker
-    always has a real, always-present "No type" sentinel radio
-    (`document_properties_modal`'s `note_type_items`), so a blank `note_type`
-    here is never ambiguous: it's the user explicitly choosing "No type",
-    not "nothing was selected." Falling back to the previous value made it
-    impossible to ever clear an already-set type back to blank -- picking
-    "No type" silently kept whatever type the document already had. Blank
-    now means blank, same as `tags_labels`' already-established "empty
-    submission clears it" contract on this same route."""
+        No fallback-to-existing-value branch -- unlike `_resolve_calendar_name` (where a blank
+        radio can genuinely mean "nothing available to pick"), this picker
+        always has a real, always-present "No type" sentinel radio
+        (`document_properties_modal`'s `note_type_items`), so a blank `note_type`
+        here is never ambiguous: it's the user explicitly choosing "No type",
+        not "nothing was selected." Falling back to the previous value made it
+        impossible to ever clear an already-set type back to blank -- picking
+        "No type" silently kept whatever type the document already had. Blank
+        now means blank, same as `tags_labels`' already-established "empty
+        submission clears it" contract on this same route.
+    """
     new = (note_type_new or "").strip()
     if new:
         return new
@@ -652,15 +648,13 @@ def update_document_properties(
     conn=Depends(get_db),
 ):
     """Saves the properties modal's fields in one request -- title,
-    note_type (`_resolve_note_type` above), labels (`tags_labels`:
-    object_labels, no separate `_new` field needed here since select mode
-    shares one field name between its checkboxes and its allow-new text
-    input -- see _widget_list_multiselect.html's own ms_allow_new
-    docstring), and custom properties (2026-10-02: parallel
-    `property_key[]`/`property_value[]` arrays, same shape `tags_labels`
-    already uses -- the whole ordered list is replaced on every save, see
-    db.set_notebook_properties's own docstring). Same `respond()`-based
-    JSON-or-redirect shape every other mutation route in this app uses."""
+        note_type (`_resolve_note_type` above), labels (`tags_labels`:
+        object_labels, no separate `_new` field needed here since select mode
+        shares one field name between its checkboxes and its allow-new text
+        input -- see _widget_list_multiselect.html's own ms_allow_new
+        docstring), and custom properties. Same `respond()`-based
+        JSON-or-redirect shape every other mutation route in this app uses.
+    """
     existing = db.get_notebook_document(conn, uid)
     if existing is None:
         if wants_json(x_requested_with):
@@ -763,11 +757,23 @@ def autofill_document_glossary(uid: str, conn=Depends(get_db)):
 
 
 @router.get("/{uid}/glossary/list")
-def document_glossary_list(uid: str, request: Request, conn=Depends(get_db)):
+def document_entries_list(uid: str, request: Request, conn=Depends(get_db)):
     return templates.TemplateResponse(
-        "_notebook_glossary_list.html",
-        {"request": request, "glossary_terms": db.list_notebook_glossary_terms(conn, uid)},
+        "_notebook_entries_list.html",
+        {"request": request, "entry_groups": db.group_entries_by_kind(conn, db.list_notebook_glossary_terms(conn, uid))},
     )
+
+
+@router.get("/{uid}/glossary/names")
+def document_entry_names(uid: str, conn=Depends(get_db)):
+    """The attached entries and their names, for the dotted links in the editor."""
+    return JSONResponse(db.list_document_entry_names(conn, uid))
+
+
+@router.post("/{uid}/glossary/{term_uid}/detach")
+def detach_document_entry(uid: str, term_uid: str, conn=Depends(get_db)):
+    db.detach_notebook_glossary_term(conn, uid, term_uid)
+    return JSONResponse({"ok": True})
 
 
 @router.post("/{uid}/glossary")
@@ -849,8 +855,75 @@ def settings_notebook(request: Request, conn=Depends(get_db)):
             "crumbs": [{"url": "/settings", "name": "Settings"}],
             "title": "Notebook",
             "sidebar_layout": db.get_notebook_settings(conn)["sidebar_layout"],
+            "citation_format": db.get_citation_format(conn),
+            "journal_template": db.get_journal_template(conn),
+            "entry_kinds": db.list_entry_kinds(conn),
+            "journal_templates": [{"uid": "", "name": "None"}] + [
+                {"uid": t["uid"], "name": t["title"] or "Untitled"} for t in db.list_notebook_documents(conn, scope="templates")],
+            "citation_styles": [{"uid": k, "name": v} for k, v in citation_formats.STYLES.items()],
         },
     )
+
+
+@field_settings_router.post("/journal-template")
+def save_journal_template(journal_template: str = Form(""), conn=Depends(get_db)):
+    db.set_journal_template(conn, journal_template.strip())
+    return RedirectResponse(url="/settings/notebook", status_code=303)
+
+
+@field_settings_router.post("/citation-format")
+def save_citation_format(citation_format: str = Form("chicago"), conn=Depends(get_db)):
+    db.set_citation_format(conn, citation_format)
+    return RedirectResponse(url="/settings/notebook", status_code=303)
+
+
+def _kind_modal(request: Request, conn, kind: dict | None):
+    kind = kind or {"name": "", "icon": "tag", "color": "teal", "fields": []}
+    return templates.TemplateResponse(
+        "entry_kind_modal.html",
+        {"request": request, "active_tab": "settings_notebook", "kind": kind, "is_new": not kind["name"], "colors": COLORS,
+         "icon_groups": icon_groups_for(kind["icon"]), "in_use": sum(1 for e in db.list_glossary_terms(conn) if e["kind"] == kind["name"])},
+    )
+
+
+@field_settings_router.get("/entry-kinds/new")
+def new_entry_kind_modal(request: Request, conn=Depends(get_db)):
+    return _kind_modal(request, conn, None)
+
+
+@field_settings_router.get("/entry-kinds/edit")
+def edit_entry_kind_modal(request: Request, name: str, conn=Depends(get_db)):
+    kind = next((k for k in db.list_entry_kinds(conn) if k["name"] == name), None)
+    if kind is None:
+        return RedirectResponse(url="/settings/notebook", status_code=303)
+    return _kind_modal(request, conn, kind)
+
+
+def _kind_error(error: dict, x_requested_with):
+    if wants_json(x_requested_with):
+        return JSONResponse({"detail": [{"loc": ["body", error["field"]], "msg": error["message"]}]}, status_code=422)
+    return RedirectResponse(url="/settings/notebook?" + urlencode({"error": error["message"]}), status_code=303)
+
+
+@field_settings_router.post("/entry-kinds")
+def save_entry_kind_form(
+    original: str = Form(""), name: str = Form(""), color: str = Form("teal"), icon: str = Form("tag"),
+    field_keep: list[str] = Form([]), field_new: list[str] = Form([]),
+    x_requested_with: str | None = Header(default=None), conn=Depends(get_db),
+):
+    error = db.save_entry_kind(conn, _s(original), name, _s(icon), color if color in COLORS else "teal",
+                               field_keep if isinstance(field_keep, list) else [], field_new if isinstance(field_new, list) else [])
+    if error:
+        return _kind_error(error, x_requested_with)
+    return respond(x_requested_with, "/settings/notebook")
+
+
+@field_settings_router.post("/entry-kinds/delete")
+def delete_entry_kind_form(name: str = Query(...), x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    error = db.delete_entry_kind(conn, name)
+    if error:
+        return _kind_error(error, x_requested_with)
+    return respond(x_requested_with, "/settings/notebook")
 
 
 frontmatter_settings_router = APIRouter(prefix="/settings/frontmatter", tags=["notebook-frontmatter-settings"])
@@ -864,12 +937,12 @@ def settings_frontmatter():
 
 @field_settings_router.post("/layout")
 def save_notebook_layout(sidebar_layout: str = Form("stacked"), conn=Depends(get_db)):
-    """The Document editor's "sidebar layout" preference (2026-10-04 direct
-    request) -- see db.save_notebook_settings' own docstring and
-    notebook_document.html's own header comment for what each of the two
-    values actually changes. A plain `data-change-submit` <select>, same
-    pattern settings_your_profile.html's Nickname field uses -- no Save
-    button needed."""
+    """The Document editor's "sidebar layout" preference -- see db.save_notebook_settings' own docstring and
+        notebook_document.html's own header comment for what each of the two
+        values actually changes. A plain `data-change-submit` <select>, same
+        pattern settings_your_profile.html's Nickname field uses -- no Save
+        button needed.
+    """
     db.save_notebook_settings(conn, sidebar_layout)
     return RedirectResponse(url="/settings/notebook", status_code=303)
 
@@ -918,14 +991,14 @@ def create_notebook_field(
 
 
 def _rebuild_builtin_options(existing_options: list[dict], colors: list[str], icons: list[str]) -> list[dict]:
-    """A builtin field's option VALUES are fixed (note_type's canonical
-    list, STATE.md) -- only each option's color/icon is user-editable, so
-    this rebuilds the list from the field's own existing option order,
-    pairing in the submitted color/icon positionally and ignoring whatever
-    `option_value` the form posted entirely. A short submitted colors/
-    icons list (shouldn't happen -- the form always renders one Look
-    picker per existing option) falls back to that option's current look
-    rather than clearing it."""
+    """A builtin field's option VALUES are fixed -- only each option's color/icon is user-editable, so
+        this rebuilds the list from the field's own existing option order,
+        pairing in the submitted color/icon positionally and ignoring whatever
+        `option_value` the form posted entirely. A short submitted colors/
+        icons list (shouldn't happen -- the form always renders one Look
+        picker per existing option) falls back to that option's current look
+        rather than clearing it.
+    """
     rows = []
     for i, opt in enumerate(existing_options):
         color = colors[i] if i < len(colors) else opt.get("color")
@@ -1043,14 +1116,14 @@ _CITATION_SORT_KEYS = frozenset(k for k, _ in CITATION_SORT_OPTIONS)
 
 
 def _resolve_citation_year_range(year_from: str, year_to: str) -> tuple[int | None, int | None]:
-    """2026-10-03 direct request: Year is a from/to interval, not a
-    multi-select of discrete years. Both blank by default -- "don't
-    autocomplete" unless Start actually has a value, at which point a
-    blank End is filled in as "present day" (today's year), not left open-
-    ended -- an unbounded "from 1900 onward" range reads as a mistake more
-    often than an intentional one. The reverse isn't true: End alone (no
-    Start) is a perfectly normal "everything up to year X" query and needs
-    no default for Start."""
+    """Both blank by default -- "don't
+        autocomplete" unless Start actually has a value, at which point a
+        blank End is filled in as "present day" (today's year), not left open-
+        ended -- an unbounded "from 1900 onward" range reads as a mistake more
+        often than an intentional one. The reverse isn't true: End alone (no
+        Start) is a perfectly normal "everything up to year X" query and needs
+        no default for Start.
+    """
     lo = db.parse_citation_year(year_from)
     hi = db.parse_citation_year(year_to)
     if lo is not None and hi is None:
@@ -1060,13 +1133,13 @@ def _resolve_citation_year_range(year_from: str, year_to: str) -> tuple[int | No
 
 def _citation_sort_value(c: dict, field: str):
     """One field's own sort key for a citation -- `title` (the default/
-    fallback for any unrecognized value) is a plain casefolded string,
-    `type`/`author` are likewise single comparable values, `year` is
-    already a ready-made tuple (db.citation_year_sort_key). Shared by
-    both the primary and secondary sort fields (2026-10-03 direct
-    request: "primary sort on the left and secondary sort on the right"),
-    so there's exactly one place that knows how to compare citations by
-    any given field, not two near-duplicate branches."""
+        fallback for any unrecognized value) is a plain casefolded string,
+        `type`/`author` are likewise single comparable values, `year` is
+        already a ready-made tuple (db.citation_year_sort_key). Shared by
+        both the primary and secondary sort fields,
+        so there's exactly one place that knows how to compare citations by
+        any given field, not two near-duplicate branches.
+    """
     if field == "type":
         return c["type_label"].casefold()
     if field == "year":
@@ -1088,19 +1161,17 @@ def _filter_and_sort_citations(
     sort2: str,
 ) -> list[dict]:
     """Shared by the library page and (eventually) any other citation list
-    view -- filters are a plain AND across dimensions, same convention the
-    Browse page's rail already established (STATE.md planning session's
-    own "AND across different filter dimensions"). Author matching checks
-    EVERY author on a citation, not just the first (2026-10-03 direct
-    decision: a secondary-author match is simply included, no special
-    reordering based on which position matched).
+        view -- filters are a plain AND across dimensions, same convention the
+        Browse page's rail already established. Author matching checks
+        EVERY author on a citation, not just the first.
 
-    Sort is primary (`sort`) + secondary (`sort2`) -- two independent
-    fields, not one combined picker (2026-10-03 direct request). Title is
-    always appended as an unconditional third/tiebreaker level regardless
-    of what's picked, so the result stays fully deterministic even when
-    Primary and Secondary end up equal for two citations (or are the same
-    field picked twice, which simply makes Secondary a no-op)."""
+        Sort is primary (`sort`) + secondary (`sort2`) -- two independent
+        fields, not one combined picker. Title is
+        always appended as an unconditional third/tiebreaker level regardless
+        of what's picked, so the result stays fully deterministic even when
+        Primary and Secondary end up equal for two citations (or are the same
+        field picked twice, which simply makes Secondary a no-op).
+    """
     selected_types, selected_authors = set(type_vals), set(author_vals)
     if selected_types:
         citations = [c for c in citations if c["type"] in selected_types]
@@ -1134,6 +1205,7 @@ def citations_library(
     year_to: str = "",
     sort: str = "title",
     sort2: str = "title",
+    q: str = "",
     conn=Depends(get_db),
 ):
     sort = sort if sort in _CITATION_SORT_KEYS else "title"
@@ -1144,11 +1216,15 @@ def citations_library(
         c["display_authors"] = db.format_citation_authors(c["authors"])
         c["type_label"] = type_labels.get(c["type"], c["type"])
         c["author_keys"] = [db.citation_author_key(a) for a in c["authors"]]
+    needle = q.strip().casefold()
+    if needle:
+        citations = [c for c in citations if needle in c["title"].casefold() or needle in c["display_authors"].casefold()]
     citations = _filter_and_sort_citations(citations, type, author, year_from, year_to, sort, sort2)
     return templates.TemplateResponse(
         "notebook_citations_list.html",
         {
             "request": request,
+            "q": q,
             "active_tab": "notebook",
             "crumbs": _CITATIONS_CRUMB,
             "citations": citations,
@@ -1179,33 +1255,28 @@ def citations_filters_modal(
     sort2: str = "title",
     conn=Depends(get_db),
 ):
-    """The Filters modal (2026-10-03, direct request -- "too many filter
-    options/combinations to fit nicely in the header bar", a deliberate
-    departure from this app's usual inline-fancy-dropdown convention for
-    list pages, scoped to this one page because of how large the citation
-    library is expected to grow). Author options are built from
-    `list_citation_authors_in_use` (distinct values actually in the data,
-    same shape as the property-key picker), not a fixed list -- Type is
-    the other fixed, small (7-value) list; Year is a from/to interval
-    (same direct request, same session), two plain number inputs, not a
-    dropdown at all -- `_resolve_citation_year_range`'s own comment has
-    the "blank End defaults to the present year, but only once Start is
-    set" rule. Sort is Primary (`sort`) + Secondary (`sort2`), two
-    independent single-select dropdowns (2026-10-03 direct request --
-    "primary sort on the left and seundary sort on the right") sharing the
-    same CITATION_SORT_OPTIONS list -- `_citation_sort_value`/
-    `_filter_and_sort_citations` have the actual comparison logic. Type/
-    Author render with `ms_search=true` (the new
-    in-dropdown fuzzy filter, static/app.js's multiselect IIFE) so a
-    library with hundreds of authors stays usable. The Apply button's
-    href is server-rendered to already match the current query string (so
-    clicking it with no changes just closes the modal via a real
-    navigation back to the same filtered view); static/
-    notebook_citations_filters.js keeps it in sync live as the user
-    changes any control (including auto-filling End once Start gets a
-    value) -- see that file's own header comment for why a GET form can't
-    just submit itself through modal.js's generic (POST-shaped) form
-    handler."""
+    """The Filters modal. Author options are built from
+        `list_citation_authors_in_use` (distinct values actually in the data,
+        same shape as the property-key picker), not a fixed list -- Type is
+        the other fixed, small (7-value) list; Year is a from/to interval, two plain number inputs, not a
+        dropdown at all -- `_resolve_citation_year_range`'s own comment has
+        the "blank End defaults to the present year, but only once Start is
+        set" rule. Sort is Primary (`sort`) + Secondary (`sort2`), two
+        independent single-select dropdowns sharing the
+        same CITATION_SORT_OPTIONS list -- `_citation_sort_value`/
+        `_filter_and_sort_citations` have the actual comparison logic. Type/
+        Author render with `ms_search=true` (the new
+        in-dropdown fuzzy filter, static/app.js's multiselect IIFE) so a
+        library with hundreds of authors stays usable. The Apply button's
+        href is server-rendered to already match the current query string (so
+        clicking it with no changes just closes the modal via a real
+        navigation back to the same filtered view); static/
+        notebook_citations_filters.js keeps it in sync live as the user
+        changes any control (including auto-filling End once Start gets a
+        value) -- see that file's own header comment for why a GET form can't
+        just submit itself through modal.js's generic (POST-shaped) form
+        handler.
+    """
     current_query = request.url.query
     # Same "render the common case server-side, let JS sync the rest"
     # convention this app's other pre-paint defaults use -- the End field
@@ -1234,19 +1305,19 @@ def citations_filters_modal(
 @citations_router.get("/search")
 def search_citations(q: str = "", limit: int = 20, conn=Depends(get_db)):
     """JSON autocomplete for the footnote slash-menu's "Page citation"
-    action (static/notebook/notebook_footnotes.js) -- the third JSON
-    exception in this router, same shape as `/notebook/search` above
-    (search_documents' own docstring) and `/notebook/search`'s router-
-    ordering care: registered before `/{uid}/edit` below so "search" is
-    never captured as a citation uid. Plain case-insensitive substring
-    match on title/container/author surnames (not the client-fuzzy
-    subsequence match `ms_search` does -- this is a live server round-trip
-    per keystroke, same tradeoff `/notebook/search` already made, not a
-    new one introduced here) -- good enough for picking one citation out
-    of a personal library, not a general search feature. Returns enough
-    fields for the client to both render a result row and assemble the
-    one hardcoded Chicago-inspired footnote string itself (item J,
-    2026-10-03) without a second round trip."""
+        action (static/notebook/notebook_footnotes.js) -- the third JSON
+        exception in this router, same shape as `/notebook/search` above
+        (search_documents' own docstring) and `/notebook/search`'s router-
+        ordering care: registered before `/{uid}/edit` below so "search" is
+        never captured as a citation uid. Plain case-insensitive substring
+        match on title/container/author surnames (not the client-fuzzy
+        subsequence match `ms_search` does -- this is a live server round-trip
+        per keystroke, same tradeoff `/notebook/search` already made, not a
+        new one introduced here) -- good enough for picking one citation out
+        of a personal library, not a general search feature. Returns enough
+        fields for the client to both render a result row and assemble the
+        one hardcoded Chicago-inspired footnote string itself without a second round trip.
+    """
     citations = db.list_citations(conn)
     needle = q.strip().casefold()
     if needle:
@@ -1270,6 +1341,19 @@ def search_citations(q: str = "", limit: int = 20, conn=Depends(get_db)):
             for c in citations
         ]
     )
+
+
+@citations_router.post("/footnote")
+async def citation_footnote(request: Request, conn=Depends(get_db)):
+    """The text of a generated endnote in the chosen citation format."""
+    payload = await request.json()
+    kind = payload.get("kind") or "page_citation"
+    pick = lambda key: db.get_citation(conn, payload.get(key) or "")
+    citation = pick("citation") or pick("original")
+    if kind != "ibidem" and citation is None:
+        return JSONResponse({"error": "citation not found"}, status_code=404)
+    text = citation_formats.repeated(kind, citation, db.get_citation_format(conn), payload.get("page") or "", secondary=pick("secondary"))
+    return JSONResponse({"text": text})
 
 
 @citations_router.get("/new")
@@ -1301,6 +1385,20 @@ def create_citation(
     url: str = Form(""),
     author_family: list[str] = Form([]),
     author_given: list[str] = Form([]),
+    subtitle: str = Form(""),
+    edition: str = Form(""),
+    volume: str = Form(""),
+    issue: str = Form(""),
+    pages: str = Form(""),
+    publisher: str = Form(""),
+    place: str = Form(""),
+    isbn: str = Form(""),
+    issn: str = Form(""),
+    accessed: str = Form(""),
+    institution: str = Form(""),
+    degree: str = Form(""),
+    editors: str = Form(""),
+    note: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -1312,7 +1410,7 @@ def create_citation(
         {
             "type": type, "title": title, "year": year.strip(),
             "container_title": container_title.strip(), "doi": doi.strip(), "url": url.strip(),
-            "authors": _citation_authors_from_form(author_family, author_given),
+            "authors": _citation_authors_from_form(author_family, author_given), **{k: _s(v) for k, v in dict(subtitle=subtitle, edition=edition, volume=volume, issue=issue, pages=pages, publisher=publisher, place=place, isbn=isbn, issn=issn, accessed=accessed, institution=institution, degree=degree, editors=editors, note=note).items()},
         },
     )
     return respond(x_requested_with, "/notebook/citations", uid=uid)
@@ -1329,6 +1427,20 @@ def update_citation(
     url: str = Form(""),
     author_family: list[str] = Form([]),
     author_given: list[str] = Form([]),
+    subtitle: str = Form(""),
+    edition: str = Form(""),
+    volume: str = Form(""),
+    issue: str = Form(""),
+    pages: str = Form(""),
+    publisher: str = Form(""),
+    place: str = Form(""),
+    isbn: str = Form(""),
+    issn: str = Form(""),
+    accessed: str = Form(""),
+    institution: str = Form(""),
+    degree: str = Form(""),
+    editors: str = Form(""),
+    note: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -1343,7 +1455,7 @@ def update_citation(
         {
             "uid": uid, "type": type, "title": title, "year": year.strip(),
             "container_title": container_title.strip(), "doi": doi.strip(), "url": url.strip(),
-            "authors": _citation_authors_from_form(author_family, author_given),
+            "authors": _citation_authors_from_form(author_family, author_given), **{k: _s(v) for k, v in dict(subtitle=subtitle, edition=edition, volume=volume, issue=issue, pages=pages, publisher=publisher, place=place, isbn=isbn, issn=issn, accessed=accessed, institution=institution, degree=degree, editors=editors, note=note).items()},
         },
     )
     return respond(x_requested_with, "/notebook/citations")
@@ -1391,6 +1503,31 @@ def _parse_reference_keys(keys: list[str]) -> list[tuple[str, str]]:
     return out
 
 
+async def _kind_field_values(request: Request) -> dict:
+    """The kind-field boxes of an entry form (`kfield:<kind>:<field>`)."""
+    form = await request.form()
+    return {k: str(v) for k, v in form.items() if k.startswith("kfield:")}
+
+
+def _entry_sections(conn, kind: str, kfields, section_title, section_body) -> list[tuple[str, str]]:
+    """The entry's titled boxes: the kind's fields first (when filled), then its own extra boxes."""
+    kfields = kfields if isinstance(kfields, dict) else {}
+    fields = db.entry_kind_fields(conn, kind)
+    pairs = [(f, kfields.get(f"kfield:{kind}:{f}", "").strip()) for f in fields]
+    pairs = [(f, v) for f, v in pairs if v]
+    extra = [(t, b) for t, b in zip(section_title if isinstance(section_title, list) else [], section_body if isinstance(section_body, list) else [])
+             if (t or "").strip() not in fields]
+    return pairs + extra
+
+
+def _entry_extras(aliases, wiki_uid) -> dict:
+    """The alternate names (one per comma) and the wiki note of an entry form."""
+    return {
+        "aliases": [a for a in (_s(aliases).split(",")) if a.strip()],
+        "wiki_uid": _s(wiki_uid),
+    }
+
+
 def _glossary_edit_context(request: Request, t: dict | None, form_action: str, conn, return_to: str = "") -> dict:
     selected = db.list_glossary_term_references(conn, t["uid"]) if t else []
     return {
@@ -1401,26 +1538,39 @@ def _glossary_edit_context(request: Request, t: dict | None, form_action: str, c
         "return_to": _safe_return_to(return_to),
         "reference_items": _glossary_reference_items(conn),
         "selected_reference_keys": [f"{r['ref_type']}:{r['ref_uid']}" for r in selected if r["ref_type"] == "citation"],
-        "sections": db.list_glossary_sections(conn, t["uid"]) if t else [],
+        "sections": db.entry_custom_sections(conn, t["uid"], t["kind"]) if t else [],
+        "kind_field_groups": [k for k in db.list_entry_kinds(conn) if k["fields"]],
+        "field_values": db.entry_field_values(conn, t["uid"], t["kind"]) if t else {},
+        "current_kind": t["kind"] if t else "Term",
+        "kind_items": [{"uid": k["name"], "name": k["name"]} for k in db.list_entry_kinds(conn)],
+        "wiki_items": [{"uid": "", "name": "None"}] + [
+            {"uid": d["uid"], "name": d["title"] or "Untitled"} for d in db.list_notebook_documents(conn)
+        ],
     }
 
 
 @glossary_router.get("")
-def glossary_library(request: Request, q: str = "", conn=Depends(get_db)):
-    terms = db.list_glossary_terms(conn, q)
-    # References column (item F): each term's own resolved reference list,
-    # not just a count, so the table can show names directly rather than
-    # forcing a click-through to see what a term points at.
-    for t in terms:
-        t["references"] = [r for r in db.list_glossary_term_references(conn, t["uid"]) if r["ref_type"] == "citation"]
+def glossary_library(request: Request, q: str = "", kind: str = "", conn=Depends(get_db)):
+    """The Entries list: every entry grouped by kind, found by name, alternate name or text."""
+    entries = db.list_glossary_terms(conn, q, kind)
+    looks = db.entry_kind_looks(conn)
+    groups = []
+    for k in db.list_entry_kinds(conn):
+        members = [e for e in entries if e["kind"] == k["name"]]
+        if members:
+            groups.append({"kind": k["name"], "icon": k["icon"], "color": k["color"], "entries": members})
     return templates.TemplateResponse(
         "notebook_glossary_list.html",
         {
             "request": request,
             "active_tab": "notebook",
             "crumbs": _GLOSSARY_CRUMB,
-            "terms": terms,
+            "groups": groups,
+            "looks": looks,
+            "total": len(entries),
             "q": q,
+            "kind": kind,
+            "kind_items": [{"value": "", "name": "All kinds"}] + [{"value": k["name"], "name": k["name"]} for k in db.list_entry_kinds(conn)],
         },
     )
 
@@ -1430,6 +1580,41 @@ def new_glossary_term_modal(request: Request, return_to: str = "", conn=Depends(
     return templates.TemplateResponse(
         "glossary_term_edit_modal.html",
         _glossary_edit_context(request, None, "/notebook/glossary", conn, return_to),
+    )
+
+
+@glossary_router.get("/{uid}/card")
+def entry_card(uid: str, request: Request, conn=Depends(get_db)):
+    """The small hover card: kind, short text and a link to the wiki note."""
+    entry = db.get_glossary_term(conn, uid)
+    if entry is None:
+        return JSONResponse({"error": "entry not found"}, status_code=404)
+    return templates.TemplateResponse(
+        "_entry_card.html", {"request": request, "entry": entry, "look": db.entry_kind_looks(conn).get(entry["kind"], {"icon": "tag", "color": "teal"}),
+                             "wiki": db.get_notebook_document(conn, entry["wiki_uid"]) if entry["wiki_uid"] else None},
+    )
+
+
+@glossary_router.get("/{uid}")
+def entry_view_modal(uid: str, request: Request, return_to: str = "", conn=Depends(get_db)):
+    entry = db.get_glossary_term(conn, uid)
+    if entry is None:
+        return RedirectResponse(url="/notebook/glossary", status_code=303)
+    references = [r for r in db.list_glossary_term_references(conn, uid) if r["ref_type"] == "citation"]
+    return templates.TemplateResponse(
+        "entry_view_modal.html",
+        {
+            "request": request,
+            "active_tab": "notebook",
+            "entry": entry,
+            "look": db.entry_kind_looks(conn).get(entry["kind"], {"icon": "tag", "color": "teal"}),
+            "sections": db.entry_custom_sections(conn, uid, entry["kind"]),
+            "field_values": {k: v for k, v in db.entry_field_values(conn, uid, entry["kind"]).items() if v},
+            "references": references,
+            "mentions": db.list_entry_mentions(conn, uid),
+            "wiki": db.get_notebook_document(conn, entry["wiki_uid"]) if entry["wiki_uid"] else None,
+            "return_to": _safe_return_to(return_to),
+        },
     )
 
 
@@ -1448,18 +1633,23 @@ def edit_glossary_term_modal(uid: str, request: Request, conn=Depends(get_db)):
 def create_glossary_term(
     term: str = Form(...),
     definition: str = Form(""),
+    kind: str = Form(""),
+    kind_new: str = Form(""),
+    aliases: str = Form(""),
+    wiki_uid: str = Form(""),
     reference_keys: list[str] = Form([]),
     section_title: list[str] = Form([]),
     section_body: list[str] = Form([]),
+    kfields=Depends(_kind_field_values),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     term = term.strip()
     if not term:
         return RedirectResponse(url="/notebook/glossary", status_code=303)
-    uid = db.upsert_glossary_term(conn, {"term": term, "definition": definition.strip()})
+    uid = db.upsert_glossary_term(conn, {"term": term, "definition": definition.strip(), "kind": _s(kind_new) or _s(kind), **_entry_extras(aliases, wiki_uid)})
     db.set_glossary_term_references(conn, uid, _parse_reference_keys(reference_keys))
-    db.set_glossary_sections(conn, uid, list(zip(section_title, section_body)))
+    db.set_glossary_sections(conn, uid, _entry_sections(conn, db.get_glossary_term(conn, uid)["kind"], kfields, section_title, section_body))
     return respond(x_requested_with, "/notebook/glossary", uid=uid)
 
 
@@ -1468,9 +1658,14 @@ def update_glossary_term(
     uid: str,
     term: str = Form(...),
     definition: str = Form(""),
+    kind: str = Form(""),
+    kind_new: str = Form(""),
+    aliases: str = Form(""),
+    wiki_uid: str = Form(""),
     reference_keys: list[str] = Form([]),
     section_title: list[str] = Form([]),
     section_body: list[str] = Form([]),
+    kfields=Depends(_kind_field_values),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -1480,9 +1675,9 @@ def update_glossary_term(
             return JSONResponse({"error": "term not found"}, status_code=404)
         return RedirectResponse(url="/notebook/glossary", status_code=303)
     term = term.strip() or existing["term"]
-    db.upsert_glossary_term(conn, {"uid": uid, "term": term, "definition": definition.strip()})
+    db.upsert_glossary_term(conn, {"uid": uid, "term": term, "definition": definition.strip(), "kind": _s(kind_new) or _s(kind), **_entry_extras(aliases, wiki_uid)})
     db.set_glossary_term_references(conn, uid, _parse_reference_keys(reference_keys))
-    db.set_glossary_sections(conn, uid, list(zip(section_title, section_body)))
+    db.set_glossary_sections(conn, uid, _entry_sections(conn, db.get_glossary_term(conn, uid)["kind"], kfields, section_title, section_body))
     return respond(x_requested_with, "/notebook/glossary")
 
 

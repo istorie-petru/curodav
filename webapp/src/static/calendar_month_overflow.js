@@ -1,28 +1,3 @@
-// "+N more" overflow on Month/4-Week's day cells (templates/
-// _calendar_month_grid.html / _calendar_fourweek_grid.html).
-//
-// History: 2026-09-09 (FullCalendar-parity interactions slice 3) turned the
-// old `<a href="/calendar/day/...">` into a `<button>` that popped a
-// ccToast listing the hidden titles. 2026-09-25 (UI audit C-10): that toast
-// was the green success toast, bottom-right, far from the day, with no
-// date and no times -- replaced by a real popover anchored on the day
-// cell (a bottom sheet at <=720px), the way Google/Apple calendars do it:
-//   * title = the day's date, then every row of that day (colour dot or
-//     task icon, time, title), each opening its own modal through
-//     modal.js's document-level [data-modal] delegation;
-//   * an "Open day" link to the Day view;
-//   * Esc, the close button, or a click outside closes it and focus goes
-//     back to the "+N more" button; opening moves focus into it.
-//
-// The rows are never fetched -- each day cell with an overflow renders an
-// inert `<template class="month-overflow-data">` carrying `data-title`,
-// `data-day-url` and one `a.cal-pop-row` per row, built server-side with
-// the same href logic as the visible rows (see that template's comment).
-//
-// One document-level delegated listener: works on both grids and survives
-// async_calendar.js's region swaps with no re-init (it holds no element
-// references between clicks except the one open popover, which closes on
-// any calendar change).
 (function () {
   let open = null; // { el, trigger, backdrop }
 

@@ -1,0 +1,6 @@
+{% from "_empty_state.html" import empty_state %}
+{% extends "base.html" %}
+{% block title %}Not found{% endblock %}
+{% block content %}
+{% call empty_state('Not found', icon_name='search', text='This page or item does not exist, or it was deleted.') %}<a href="/" class="btn primary">{{ icon('home') }} Home</a>{% endcall %}
+{% endblock %}

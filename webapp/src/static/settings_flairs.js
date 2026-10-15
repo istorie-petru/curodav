@@ -1,67 +1,9 @@
-/* Settings > Flairs (2026-09-29, direct request: a frontend for bulk-
- * adding flair photos -- "drop down the photos in either zip or folder
- * or multiple photos at once" -- instead of an operator needing
- * filesystem access to flairs_dir). Loaded from settings_flairs.html
- * itself (a real no-JS visit) AND from settings_appearance.html (see that
- * template's own comment) -- every listener below is document-level
- * delegated, same trick data_maintenance.js already relies on so its own
- * import_modal.html works without loading a second copy of that script,
- * so it doesn't matter which of the two pages actually requested this
- * file, or whether the Flairs modal it targets is injected later via
- * static/modal.js's innerHTML swap (a <script> tag inside a fetched
- * fragment never executes, so settings_flairs.html's own copy of this
- * tag is dead code whenever it's opened AS a modal -- only the
- * Appearance-page copy matters then).
- *
- * The upload form (settings_flairs.html) works with zero JS: it's a
- * plain multipart POST with four real <input type=file> fields (a
- * hidden zip slot + hidden multi-photo slot inside the dropzone label,
- * plus two visible picker buttons for "choose a folder"/"choose
- * photos") and a plain submit button -- click any picker, hit Upload,
- * done. This script only adds: (1) drag-and-drop onto the dropzone,
- * routing a dropped .zip to the zip field and dropped image files to
- * the multi-photo field, (2) a live "N files selected" status instead
- * of the browser's own terse file-input label, (3) keeping Submit
- * disabled until at least one file is actually staged (nothing to
- * upload otherwise), and (4) the same ?note=/?error= -> ccToast bridge
- * data_maintenance.js already established for this app's plain-POST
- * settings actions.
- *
- * 2026-09-29 modal-ization: the Upload button moved out of the body
- * <form> into the shared #modal-footer (settings_flairs.html's own
- * comment on why) -- it's now the form's SIBLING, not its descendant, so
- * `form().querySelector("[data-dm-submit]")` (which only ever searches
- * DESCENDANTS) stopped finding it. Same bug, same fix as
- * data_maintenance.js's own `import-submit-btn` comment describes:
- * looked up by id via `document.getElementById` instead.
- */
 (function () {
   "use strict";
 
   function closest(el, selector) {
     return el && el.closest ? el.closest(selector) : null;
   }
-
-  // ---- ?note=/?error= banner -> toast --------------------------------
-  document.addEventListener("DOMContentLoaded", function () {
-    var flashes = document.querySelectorAll("[data-dm-flash]");
-    if (!flashes.length) return;
-    if (window.ccToast) {
-      flashes.forEach(function (el) {
-        window.ccToast({
-          message: el.textContent.trim(),
-          variant: el.getAttribute("data-dm-flash") === "error" ? "error" : "default",
-        });
-        el.remove();
-      });
-    }
-    if (window.history && window.history.replaceState) {
-      var url = new URL(window.location.href);
-      url.searchParams.delete("note");
-      url.searchParams.delete("error");
-      window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
-    }
-  });
 
   // ---- Live status + enabling Submit ---------------------------------
   //

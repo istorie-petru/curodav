@@ -1,46 +1,3 @@
-// Calendar async-CRUD (features/async-crud.md): after an event or task
-// change elsewhere on the page (a modal create/edit/delete, the calendar
-// grid's own drag-to-move, the command palette, a dashboard widget),
-// re-render just this page's calendar region instead of a full reload.
-//
-// Three regions, loaded by whichever calendar template includes this
-// script:
-//   * Month (calendar_month.html): #month-grid, static; re-bound via
-//     CCMonthGridCreate / CCMonthGridDrag.
-//   * 4-Week (calendar_fourweek.html): #fourweek-grid -- same grid shape
-//     and the same two re-bind hooks as Month (2026-08-31: split out of
-//     calendar_fourweek.html's own former inline markup, which had no
-//     region at all -- a drag's POST landed fine server-side but nothing
-//     on screen ever reflected it, since nothing here claimed the change
-//     event for that page; see _calendar_fourweek_grid.html's comment).
-//   * Week (calendar_week.html): #week-grid, the whole
-//     .project-calendar-layout; re-bound via CCWeekGrid / CCProjectCalendar /
-//     CCWeekAllDayDrag / CCUnscheduledPanel. Its mutation endpoints (work-allocation create/
-//     move/delete in project_calendar.js) POST through ccApi with
-//     change.type "task" and dispatch this same event, so the refreshed
-//     region is also what moves the dragged block out from under the
-//     pointer -- the swapped-in DOM replaces the stale one the drag was
-//     mutating.
-//   * Day (calendar_day.html): #day-grid -- added alongside the fix for
-//     the direct bug report "two events overlap, I move one, they still
-//     show half-width" (calendar.js's `.time-event` drag handler now
-//     dispatches type "event" on a successful move/resize instead of only
-//     patching the `.te-time` label in place). Day had no region at all
-//     before this -- a Day-view drag had nothing to refresh and stayed
-//     stale until a real page load. Re-bound the same way Week's
-//     `.time-event`/create-col bindings are, via CCWeekGrid.init()
-//     (calendar.js's shared init: it queries generically, not by page, so
-//     it works unmodified here).
-//
-// Claims the change event only when a region is actually on this page (the
-// ccApi.claimed protocol); on a refresh failure it falls back to a reload so
-// the page converges to server truth.
-//
-// 2026-09-09, slice 6 of the "FullCalendar-parity interactions" arc: also
-// wires up AJAX prev/next navigation (4-Week and Week only -- Month's own
-// page route is retired, see routers/calendar.py's calendar_root_redirect
-// docstring, so there's no reachable page to wire nav clicks on for it).
-// `bindCalNav` below is the shared helper both regions call.
 (function () {
   // Shared prev/next AJAX-nav wiring for a region that has `.cal-nav-prev`/
   // `.cal-nav-next` <a> links and a `#cal-nav-label` span in its page header
@@ -208,11 +165,6 @@
         if (window.CCWeekGrid) window.CCWeekGrid.init();
         if (window.CCProjectCalendar) window.CCProjectCalendar.init();
         if (window.CCWeekAllDayDrag) window.CCWeekAllDayDrag.init();
-        // Item 11 redesign: the row's own "..." kebab (action-menu) is
-        // swapped in fresh with the rest of #week-grid -- same re-bind-
-        // after-swap need as the calls above. (The panel header's search
-        // box and its own CCUnscheduledSearch init call were removed
-        // 2026-09-28, direct feedback -- the search box itself is gone.)
         if (window.CCActionMenu) window.CCActionMenu.init();
       });
     }

@@ -1,5 +1,4 @@
-"""Universal command surface -- 1.2 side work (plans/open.md § Universal
-command surface). Step 1 (`db.search_entities`, 2026-08-13) built the query
+"""Universal command surface -- 1.2 side work. Step 1 built the query
 layer; this router exposes it: a JSON API the shared picker overlay
 (static/command_palette.js) calls in every one of its invocation modes, plus
 a standalone `/search` page for the "no JS yet, or you just want a URL to

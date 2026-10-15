@@ -1,19 +1,4 @@
-// Notebook's right sidebar -- tab switch (notebook_list.html's Filters
-// tab, notebook_document.html's Outline tab, 2026-10-03 direct request)
-// plus the header bar's collapse/expand toggle (same day, direct
-// follow-up). The shared shell behind style.css's `.notebook-sidebar`.
 (function () {
-  // Sidebar view switcher (2026-10-03, backlog item A -- "replace the
-  // segmented control with a dropdown"): a custom icon+label dropdown, not
-  // a native `<select>` (can't render each option's own icon, which item
-  // D's icon swaps need) and not the app's generic `.multiselect` component
-  // (built around real form radio/checkbox inputs + modal-clipped-context
-  // portaling -- this sidebar is a plain, always-unclipped `position:fixed`
-  // rail, so none of that machinery is needed for what's just a client-side
-  // display toggle). Replaces the old `.segmented`/`.seg-btn` tab-row click
-  // handler this file used to have. One delegated document click listener,
-  // same reasoning as before: these pages' markup is plain static
-  // server-rendered HTML, never re-injected the way a modal fragment is.
   function closeAllSelects() {
     document.querySelectorAll(".notebook-sidebar-select.is-open").forEach(function (w) {
       w.classList.remove("is-open");

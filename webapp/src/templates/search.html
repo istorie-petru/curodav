@@ -13,10 +13,6 @@
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {{ page_header_narrow("Search", "command") }}
-{# 2026-09-25 (UI audit F4): the old `.toolbar.top-app-bar` row repeated a
-   visible "Search" h1 in a shadowed bar right under the narrow header that
-   already says "Search". The real page heading stays for screen readers,
-   same as Tasks' sr-only h1. #}
 <h1 class="sr-only">Search</h1>
 <form class="search-page-form" data-command-palette-page action="/search" method="get">
     {{ search_input({'name': 'q', 'value': (q), 'aria-label': 'Search tasks, events, contacts', 'class': 'search-page-input', 'data-command-palette-input': true, 'autocomplete': 'off'}) }}

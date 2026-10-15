@@ -1,13 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Merge label{% endblock %}
 {% block content %}
-<!-- Small standalone modal (side work, 2026-08-15 follow-up direct
-     feedback: "Merge should be a button in the list... it should open a
-     small modal window where the user selects") -- just the destination
-     picker, posting to the unchanged /labels/{name}/merge
-     (routers/labels.py::merge_label, db.merge_labels does the actual
-     work: every object tagged with `name` moves to the destination and
-     `name`'s own label_config row is removed). -->
 <div id="modal-target">
 <div class="modal-header">
 <h1>Merge "{{ name }}"</h1>

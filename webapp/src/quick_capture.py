@@ -1,4 +1,4 @@
-"""Quick Capture parser (plans/quick-capture.md) -- a single-field input
+"""Quick Capture parser -- a single-field input
 method for creating a task/event/contact without opening a dedicated
 form. Pure functions only: nothing here touches the database (that's
 routers/quick_capture.py's job, which also runs label resolution via
@@ -22,19 +22,10 @@ Grammar, per the design doc:
     in the design doc) -- this parser does not attempt to recognize a
     marker/date/label glued to adjacent text with no space.
 
-`!n` (note) was a valid marker in the design doc's original scope,
-alongside a quick-capture-backed `notes` feature -- both are gone as of
-2026-10-01, absorbed into the Notebook module instead (curodav-notes/
-documentation/plans/STATE.md). `!n` was already unwired from
-`MARKER_TYPES`/`_MARKER_RE` before this (2026-09-24, "hide not delete");
-`parse_note` and its `_PARSERS` entry are now deleted outright instead of
-staying as unreachable code, per this app's "no compatibility layers,
-migrate and delete superseded paths" rule -- there's no Notebook-
-equivalent quick-capture marker to replace it with.
-
 See parse_task/parse_event/parse_contact below for the per-type rules;
 `parse()` is the single dispatch entry point routers/quick_capture.py
-calls."""
+calls.
+"""
 
 from __future__ import annotations
 
@@ -144,13 +135,14 @@ def _extract_labels(tokens: list[str]) -> tuple[list[str], list[int]]:
 
 
 def parse_task(tokens: list[str], today: date) -> ParsedCapture:
-    """`!t` -- plans/quick-capture.md § Tasks. The first standalone date
-    (one NOT immediately followed by a time-range token) is the due date;
-    every date immediately followed by a time-range token is a timeblock's
-    date instead. Both are removed from the title; only the FIRST
-    standalone date becomes `due_date_iso` (further bare dates, an
-    undocumented edge case, are still stripped from the title but
-    otherwise ignored -- see this module's own docstring)."""
+    """The first standalone date
+        (one NOT immediately followed by a time-range token) is the due date;
+        every date immediately followed by a time-range token is a timeblock's
+        date instead. Both are removed from the title; only the FIRST
+        standalone date becomes `due_date_iso` (further bare dates, an
+        undocumented edge case, are still stripped from the title but
+        otherwise ignored -- see this module's own docstring).
+    """
     labels, label_idx = _extract_labels(tokens)
     consumed = set(label_idx)
     timeblocks: list[TimeBlock] = []
@@ -187,12 +179,13 @@ def parse_task(tokens: list[str], today: date) -> ParsedCapture:
 
 
 def parse_event(tokens: list[str], today: date) -> ParsedCapture:
-    """`!e` -- plans/quick-capture.md § Events. The first date token found
-    is the event's date; if immediately followed by a time range, that's
-    the start/end time-of-day (a timed event). A date with no following
-    time range makes an all-day event. No date at all is allowed too (an
-    undated event, left for the user to schedule on the form) -- the spec
-    doesn't require a date, only shows it in every example."""
+    """The first date token found
+        is the event's date; if immediately followed by a time range, that's
+        the start/end time-of-day (a timed event). A date with no following
+        time range makes an all-day event. No date at all is allowed too (an
+        undated event, left for the user to schedule on the form) -- the spec
+        doesn't require a date, only shows it in every example.
+    """
     labels, label_idx = _extract_labels(tokens)
     consumed = set(label_idx)
     start_date: date | None = None
@@ -238,14 +231,6 @@ def parse_event(tokens: list[str], today: date) -> ParsedCapture:
 
 
 def parse_contact(tokens: list[str], today: date) -> ParsedCapture:
-    """`!c` -- plans/quick-capture.md § Contacts. Every recognized phone/
-    email token is stripped from the name regardless of position; only the
-    first of each is kept -- Quick Capture's free-text grammar has no way to
-    express "this is a second phone number" or a type for either, so it
-    deliberately stays single-value even though contacts themselves are
-    multi-value as of Contacts field parity slice 2 of 6 (routers/
-    quick_capture.py stores whatever's captured here as one "Other"-typed
-    entry -- see that module for why)."""
     labels, label_idx = _extract_labels(tokens)
     consumed = set(label_idx)
     phone: str | None = None

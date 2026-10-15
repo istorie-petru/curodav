@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% from "_modal_header_back.html" import modal_header_back %}
+{% block title %}{{ entry.term }}{% endblock %}
+{% block content %}
+<div id="modal-target">
+<div class="modal-header">
+{% if return_to %}{{ modal_header_back(return_to, 'Back') }}{% endif %}
+<h1>{{ entry.term }}</h1>
+</div>
+<div class="modal-body">
+<div class="card">
+    <div class="field-grid">
+        <div class="field">
+            <label>Kind</label>
+            <span class="cell-tag cal-{{ look.color }}">{{ icon(look.icon, 'icon-sm') }} {{ entry.kind }}</span>
+        </div>
+        {% if entry.aliases %}
+        <div class="field">
+            <label>Also called</label>
+            <span>{{ entry.aliases | join(', ') }}</span>
+        </div>
+        {% endif %}
+        {% if entry.definition %}
+        <div class="field field-wide">
+            <label>Short text</label>
+            <span>{{ entry.definition }}</span>
+        </div>
+        {% endif %}
+        {% for name, value in field_values.items() %}
+        <div class="field field-wide">
+            <label>{{ name }}</label>
+            <span class="entry-section-body">{{ value }}</span>
+        </div>
+        {% endfor %}
+        {% for s in sections %}
+        <div class="field field-wide">
+            <label>{{ s.title or 'Note' }}</label>
+            <span class="entry-section-body">{{ s.body }}</span>
+        </div>
+        {% endfor %}
+        {% if wiki %}
+        <div class="field field-wide">
+            <label>Wiki note</label>
+            <a href="/notebook/{{ wiki.uid }}">{{ icon('notebook', 'icon-sm') }} {{ wiki.title or 'Untitled' }}</a>
+        </div>
+        {% endif %}
+        {% if references %}
+        <div class="field field-wide">
+            <label>Further reading</label>
+            <span>{{ references | map(attribute='name') | join('; ') }}</span>
+        </div>
+        {% endif %}
+        <div class="field field-wide">
+            <label>Mentioned in</label>
+            {% if mentions %}
+            <ul class="entry-mentions">{% for m in mentions %}<li><a href="/notebook/{{ m.uid }}">{{ m.title or 'Untitled' }}</a></li>{% endfor %}</ul>
+            {% else %}
+            <span>No notes yet</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+</div>
+{% set footer_back_url = return_to if return_to else '/notebook/glossary' %}
+{% set footer_back_mode = 'modal' if return_to else 'cancel' %}
+{% set footer_back_label = 'Back' if return_to else 'Done' %}
+{% set footer_delete_url = '/notebook/glossary/' ~ entry.uid ~ '/delete' %}
+{% set footer_delete_mode = 'confirm' %}
+{% set footer_delete_label = 'Delete "' ~ entry.term ~ '"?' %}
+{% set footer_primary_href = '/notebook/glossary/' ~ entry.uid ~ '/edit' %}
+{% set footer_primary_label = 'Edit' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

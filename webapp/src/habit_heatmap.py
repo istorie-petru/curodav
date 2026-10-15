@@ -1,6 +1,5 @@
 """Shared GitHub-style heatmap/streak math for anything tracked as a daily
-{date: value} log -- the standalone Habits feature (habit_entries) and
-(2026-08-08, "add habits page as a view on tasks") habit-labeled tasks
+{date: value} log -- the standalone Habits feature (habit_entries) and habit-labeled tasks
 (task_completions) both need the exact same grid-building and streak-
 counting logic, just fed from different tables. Factored out of
 routers/habits.py into its own module (not left there and imported by
@@ -11,10 +10,7 @@ routers/habits.py (which itself imports from routers/labels.py for
 LABEL_ICONS), that would close a labels -> tasks -> habits -> labels
 cycle. This module imports nothing from any router, so both can depend on
 it safely.
-
-2026-09-24: the standalone Habits feature (habit_entries, routers/
-habits.py's endpoints) is removed -- habit-labeled tasks are the only
-caller now, via habit_view.py and routers/tasks.py."""
+"""
 
 from __future__ import annotations
 
@@ -85,18 +81,16 @@ def heatmap_weeks(
 def heatmap_range(
     entries_by_date: dict[str, float], target: float, start: date, end: date, today: date | None = None
 ) -> list[list[dict]]:
-    """Same cell shape as heatmap_weeks (date/value/level/is_future/
-    weekday/month_label), but a fixed calendar range (`start` through
-    `end`, Monday-aligned) instead of "N weeks ending today" -- 2026-08-08
-    direct feedback ("pick a fixed date for all ... and show from there")
-    for Tasks > Habits: every habit-task's heatmap starts on the same
-    fixed date (the current half-year's first day) regardless of when
-    that task was created, so cards line up and compare directly instead
-    of each scrolling its own rolling window. `end` can be in the future
-    (the current half-year's last day, e.g. Dec 31) -- any day after the
-    real `today` still renders (level -1, non-interactive) so the grid's
-    *shape* (how many weeks wide) stays identical all year, only the
-    filled-in portion grows as the year progresses."""
+    """and show from there")
+        for Tasks > Habits: every habit-task's heatmap starts on the same
+        fixed date (the current half-year's first day) regardless of when
+        that task was created, so cards line up and compare directly instead
+        of each scrolling its own rolling window. `end` can be in the future
+        (the current half-year's last day, e.g. Dec 31) -- any day after the
+        real `today` still renders (level -1, non-interactive) so the grid's
+        *shape* (how many weeks wide) stays identical all year, only the
+        filled-in portion grows as the year progresses.
+    """
     today = today or date.today()
     aligned_start = start - timedelta(days=start.weekday())  # snap back to the preceding Monday
 
@@ -155,20 +149,17 @@ def excluded_dates_in_range(
     start: date,
     end: date,
 ) -> set[str]:
-    """2026-08-29 (STATE.md backlog item 3, direct request): the 1.6
-    non-working-day policy (`holiday_calendar`/`exclude_saturday`/
-    `exclude_sunday` -- see db.py's `events` CREATE TABLE comment) extended
-    to recurring tasks and habits. Those two entities don't go through
-    recurrence_expand.expand_events (a habit has no RRULE at all; a
-    recurring task's completion history is a flat {date: value} log, not
-    RRULE-expanded occurrences) -- so rather than "is this occurrence
-    excluded," the question here is just "which calendar days in
-    [start, end] does this row's own policy mark as non-working," reusing
-    the exact same day-level check (`recurrence_expand.
-    is_excluded_by_policy`) `expand_events` applies per-occurrence. `row`
-    just needs to carry `holiday_calendar`/`exclude_saturday`/
-    `exclude_sunday` -- a task row, a habit row, and an event row all
-    shape-match for this purpose."""
+    """Those two entities don't go through
+        recurrence_expand.expand_events (a habit has no RRULE at all; a
+        recurring task's completion history is a flat {date: value} log, not
+        RRULE-expanded occurrences) -- so rather than "is this occurrence
+        excluded," the question here is just "which calendar days in
+        [start, end] does this row's own policy mark as non-working," reusing
+        the exact same day-level check (`recurrence_expand. is_excluded_by_policy`) `expand_events` applies per-occurrence. `row`
+        just needs to carry `holiday_calendar`/`exclude_saturday`/
+        `exclude_sunday` -- a task row, a habit row, and an event row all
+        shape-match for this purpose.
+    """
     if not row.get("holiday_calendar") and not row.get("exclude_saturday") and not row.get("exclude_sunday"):
         return set()
     result: set[str] = set()
@@ -182,13 +173,13 @@ def excluded_dates_in_range(
 
 def recurrence_frequency(rrule: str | None) -> str:
     """Coarse recurrence bucket ("daily"/"weekly"/"monthly"/"yearly"/
-    "custom"/"") for an RRULE string -- looks only at FREQ=, so an
-    INTERVAL/BYDAY/COUNT/UNTIL qualifier beyond the bare FREQ still
-    resolves to its FREQ bucket (e.g. "FREQ=WEEKLY;INTERVAL=2" is still
-    "weekly"). Used both for display (recurrence_label below) and for
-    sizing a habit-tracked task's "how many work sessions does the
-    displayed week still need" requirement (routers/calendar.py's
-    Unscheduled work panel, 2026-08-29 "habit work sessions" slice)."""
+        "custom"/"") for an RRULE string -- looks only at FREQ=, so an
+        INTERVAL/BYDAY/COUNT/UNTIL qualifier beyond the bare FREQ still
+        resolves to its FREQ bucket (e.g. "FREQ=WEEKLY;INTERVAL=2" is still
+        "weekly"). Used both for display (recurrence_label below) and for
+        sizing a habit-tracked task's "how many work sessions does the
+        displayed week still need" requirement.
+    """
     if not rrule:
         return ""
     parts = dict(p.split("=", 1) for p in rrule.split(";") if "=" in p)
@@ -200,12 +191,12 @@ def recurrence_frequency(rrule: str | None) -> str:
 
 def recurrence_label(rrule: str | None) -> str:
     """Human phrasing for an RRULE string -- "Daily"/"Weekly"/"Monthly"/
-    "Yearly"/"Custom" -- never the raw "FREQ=DAILY" a task's `recurrence`
-    column stores (2026-08-29 direct feedback: the Habits group's Due
-    column showed the raw RRULE verbatim). Every real caller only ever
-    feeds this something that IS recurring (a habit is defined by
-    recurring), so an empty/unrecognized value reads as "Custom" rather
-    than blank."""
+        "Yearly"/"Custom" -- never the raw "FREQ=DAILY" a task's `recurrence`
+        column stores. Every real caller only ever
+        feeds this something that IS recurring (a habit is defined by
+        recurring), so an empty/unrecognized value reads as "Custom" rather
+        than blank.
+    """
     return {
         "daily": "Daily",
         "weekly": "Weekly",
@@ -215,17 +206,16 @@ def recurrence_label(rrule: str | None) -> str:
 
 
 def streak_text(days: int, playful: bool = False, unit: str = "day") -> str:
-    """Human-readable phrase for a `streaks()`-computed current streak --
-    2026-08-28 direct feedback ("the due date for habits should display a
-    text with the streak... that can be playful depending on the
-    settings"). `days` is the same integer either way; only the wording
-    changes (Settings > General's "Habit streak terminology", same
-    presentation-layer-only pattern as 1.6's recurrence terminology --
-    see deps.py's HABIT_STREAK_TERMINOLOGY_KEY). Standard mode is a plain,
-    neutral count that reads the same at any length; playful mode
-    escalates through weekly/monthly language as the streak grows,
-    matching the concrete examples the feature request gave ("1 day
-    streak", "This Week has been full", "Consistent for 1 Month")."""
+    """that can be playful depending on the
+        settings"). `days` is the same integer either way; only the wording
+        changes (Settings > General's "Habit streak terminology", same
+        presentation-layer-only pattern as 1.6's recurrence terminology --
+        see deps.py's HABIT_STREAK_TERMINOLOGY_KEY). Standard mode is a plain,
+        neutral count that reads the same at any length; playful mode
+        escalates through weekly/monthly language as the streak grows,
+        matching the concrete examples the feature request gave ("1 day
+        streak", "This Week has been full", "Consistent for 1 Month").
+    """
     if days <= 0:
         return "Let's get started" if playful else "No streak yet"
     if unit != "day":

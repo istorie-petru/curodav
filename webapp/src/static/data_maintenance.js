@@ -1,70 +1,9 @@
-/* Data & Maintenance page + its two remaining dialogs (2026-08-26 redesign;
- * 2026-09-09: the reset-database dialog was replaced by a confirm toast,
- * see below).
- *
- * Progressive enhancement for the export/import dialogs -- both work
- * without this script: the export dialog's Download submits a plain GET
- * form (data-modal-get keeps modal.js's POST interceptor out of the way);
- * the import dialog is a plain multipart form. What JS adds there is the
- * live "Includes: ..." export preview, the drag-and-drop affordance with a
- * "Detected: ..." preview before anything is uploaded, and gating Import on
- * a recognizable file.
- *
- * "Reset database (purge all)" is the one exception, JS-only end to end:
- * it's a plain <button>, not a link to a real page, and opens a
- * ccConfirmSheet (static/toast.js) carrying the DELETE ALL typed-phrase
- * gate -- with no JS there's nothing to click through to at all. Same
- * tradeoff the old modal already had in practice (its submit button shipped
- * server-disabled and only this script could ever arm it), just made
- * explicit now that there's no page underneath it either.
- *
- * Page-local: only settings_data_maintenance.html loads it -- but the two
- * dialogs' markup (export_modal.html / import_modal.html) is injected into
- * the modal overlay AFTER this script has long since run, so every listener
- * binds by event delegation at the document level and works no matter when
- * the markup appears.
- */
 (function () {
   "use strict";
 
   function closest(el, selector) {
     return el && el.closest ? el.closest(selector) : null;
   }
-
-  // ---- ?note=/?error= banner -> toast (2026-09-09 direct request) --------
-  //
-  // Every action on this page (Backup now, Verify, Restore, Compact &
-  // reindex, sync retention/cleanup, purge completed, integrity check...)
-  // redirects back here with a message in the query string rather than a
-  // fetch-based response -- deliberate progressive enhancement, see this
-  // file's own header comment, so those routes stay plain form posts that
-  // work with no JS at all. settings_data_maintenance.html renders that
-  // message as a static `[data-dm-flash]` banner as its no-JS fallback.
-  // When ccToast IS available, this fires the same message as a floating
-  // toast instead -- the notification style every delete/archive elsewhere
-  // in the app already uses (app.js) -- then removes the banner and strips
-  // note/error from the URL so a refresh or share link doesn't repeat it.
-  // Runs once, at load; nothing on this page adds a new flash banner later
-  // without a full page redirect, so there's no delegated case to cover.
-  document.addEventListener("DOMContentLoaded", function () {
-    var flashes = document.querySelectorAll("[data-dm-flash]");
-    if (!flashes.length) return;
-    if (window.ccToast) {
-      flashes.forEach(function (el) {
-        window.ccToast({
-          message: el.textContent.trim(),
-          variant: el.getAttribute("data-dm-flash") === "error" ? "error" : "default",
-        });
-        el.remove();
-      });
-    }
-    if (window.history && window.history.replaceState) {
-      var url = new URL(window.location.href);
-      url.searchParams.delete("note");
-      url.searchParams.delete("error");
-      window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
-    }
-  });
 
   // ---- Export dialog: live "Includes: N Events, N Tasks, N Contacts" ----
   //
@@ -177,12 +116,6 @@
 
   function previewFile(input) {
     var form = input.closest("form");
-    // 2026-08-30 (modal-footer-consistency fix): the Import button moved
-    // from inside this <form> into the shared modal footer (a sibling,
-    // linked back to the form only via its `form="import-form"`
-    // attribute) -- form.querySelector can't see it there since that only
-    // searches DOM descendants, so this looks it up by the stable id
-    // import_modal.html's footer_primary_id now gives it instead.
     var submitBtn = document.getElementById("import-submit-btn");
     var file = input.files && input.files[0];
     if (!file) {
@@ -258,19 +191,6 @@
     previewFile(input);
   });
 
-  // ---- Reset database (purge all): confirm-toast + typed DELETE ALL gate --
-  //
-  // 2026-09-09 direct request: the standalone confirmation modal
-  // (purge_modal.html) is gone -- "Reset database (purge all)" in the
-  // Database card's menu now opens a persistent confirm toast
-  // (ccConfirmSheet's `typedConfirm` option, static/toast.js) instead of
-  // navigating to a page. Same bar as the old modal: the Permanently
-  // Delete button starts disabled and only arms once the input reads
-  // exactly "DELETE ALL" -- see toast.js for the arm/disarm wiring itself,
-  // this just supplies the message/phrase and does the actual POST once
-  // confirmed. Backups are never touched by this -- purge_all_data (db.py)
-  // only clears this app's own SQLite tables; backup-*.json files live on
-  // disk in a separate directory purge-all never reads from.
   document.addEventListener("click", function (e) {
     var btn = closest(e.target, '[data-action="purge-all"]');
     if (!btn) return;
@@ -293,15 +213,4 @@
     });
   });
 
-  // "Force sync" (originally moved off settings_data_maintenance.html's own
-  // inline <script> 2026-09-07, audit-fixes-2.0.md item 11 -- CSP
-  // `'unsafe-inline'` elimination) was removed outright 2026-09-09: it only
-  // ever worked by calling window.CCOfflineSync.syncNow(), defined by
-  // static/offline_sync_client.js, which was deleted along with the rest of
-  // the client-side Offline Mode feature (direct request, "purge it"). No
-  // client engine means no way to force a push/pull round -- the button
-  // could only ever show "Sync engine not available" now, so the template's
-  // own button and this file's forceSyncFromServer/click-delegation were
-  // both removed rather than left as a guaranteed-broken control. See
-  // templates/settings_data_maintenance.html's own comment at the same spot.
 })();

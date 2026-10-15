@@ -1,39 +1,3 @@
-// Outline tab (notebook_document.html's right sidebar, 2026-10-03 direct
-// request) -- a plain table of contents built from the live Editor.js DOM,
-// re-run on load and on every change, the same "walk the rendered DOM in
-// document order, re-run on change" approach notebook_footnotes.js's
-// footer list already uses (see that file's own header comment). Headings
-// are Editor.js's built-in Header tool, rendered as `<h1>`-`<h5>` with a
-// `ce-header` class directly on the tag (header.umd.js) -- no stable id of
-// their own, so this assigns one (`toc-h-N`, by document position) the
-// same way notebook_footnotes.js stamps `fn-ref-*` ids onto its own
-// markers, letting the sidebar's links target them with a plain anchor
-// click + scrollIntoView instead of Editor.js's own block API.
-//
-// Renders into #notebook-toc, a nav element in the sidebar's Outline
-// panel -- OUTSIDE Editor.js's own mount/block model entirely, same
-// reasoning notebook_footnotes.js's footer uses for staying outside it.
-//
-// Numbering scheme (2026-10-03, backlog item B): the editor's Header tool
-// is configured for levels 1-5 only (notebook_editor.js's `config:
-// {levels:[1,2,3,4,5]}`), mapped one-to-one onto a fixed Part/Chapter/
-// Section/Subsection/Paragraph scheme -- see computeLabel() below for the
-// exact numbering/reset rules, lifted straight from the roadmap doc's own
-// spec. Two independent renders of the *same* computed label:
-//   1. The sidebar list text (built directly below, plain string
-//      concatenation -- safe, this nav is outside Editor.js's saved
-//      content entirely).
-//   2. A `data-toc-label` attribute stamped onto the live `<h1>`-`<h5>`
-//      element itself, picked up by a `::before` CSS rule
-//      (style.css's own `.ce-header[data-toc-label]::before`) to show the
-//      same prefix in the actual document. Deliberately NOT written into
-//      `h.textContent` -- that's the heading's real, user-typed text, and
-//      Editor.js's Header tool reads it straight back into `data.text` on
-//      save; baking a computed "Part I — " prefix into it would persist
-//      stale numbering into the saved content the moment a heading above
-//      it gets added/removed/reordered, instead of just recomputing live
-//      like the sidebar copy already does. A CSS-only overlay has no such
-//      staleness problem and never touches saved content.
 (function () {
   // Classic spreadsheet-column letters (1->A, 26->Z, 27->AA...) -- Paragraph's
   // own numbering style ("uppercase letters (A, B, C...)"), extended past Z
@@ -92,15 +56,6 @@
         return "Section " + counters.chapter + "." + counters.section;
       case 4:
         counters.subsection += 1;
-        // Roadmap doc's own worked example literally reads "Section
-        // 5.2.1," reusing the "Section" word for a Subsection-level
-        // heading -- flagged in the doc itself as "confirm whether
-        // that's intentional label reuse or a typo." Treated as a typo
-        // here: using "Subsection" keeps every level's own display label
-        // distinct, matching the scheme's own naming (Part/Chapter/
-        // Section/Subsection/Paragraph are five different words for a
-        // reason). Flag to Peter if "Section" was actually intended for
-        // level 4 too.
         return "Subsection " + counters.chapter + "." + counters.section + "." + counters.subsection;
       case 5:
         counters.paragraph += 1;
@@ -116,10 +71,7 @@
     var headers = mount.querySelectorAll(".ce-header");
     nav.innerHTML = "";
     if (!headers.length) {
-      var empty = document.createElement("p");
-      empty.className = "notebook-toc-empty";
-      empty.textContent = "No headings yet";
-      nav.appendChild(empty);
+      nav.appendChild(window.ccEmptyState("No headings yet"));
       return;
     }
     var counters = { part: 0, chapter: 0, section: 0, subsection: 0, paragraph: 0 };

@@ -1,15 +1,3 @@
-/* Styles for the custom Code block (notebook_code.js, 2026-10-03) --
-   first-party, not a patch on vendored chrome, same reasoning as
-   notebook_blocks.css for being its own file.
-
-   The highlighted <pre><code> and the real <textarea> MUST share
-   identical font/padding/border/white-space metrics -- the textarea's
-   text is invisible (only its caret/selection show), so every glyph the
-   user sees actually comes from the <pre> positioned directly behind it;
-   any metric mismatch between the two would make clicks land on the
-   wrong character. Both halves of that pairing are written together
-   below rather than one inheriting from the other, so a future edit to
-   one isn't silently missed on the other. */
 .cdx-nb-code {
   position: relative;
   margin: 0.4em 0;

@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import clock, db, event_series, grid_layout, habit_heatmap, habit_view, recurrence_expand
-from ..deps import HIDE_SLEEP_HOURS_KEY, _four_week_position, _week_start, get_db, respond, templates, wants_json
+from .. import validation
+from ..deps import HIDE_SLEEP_HOURS_KEY, _four_week_position, _week_start, get_db, respond, templates, validation_response, wants_json
 from . import dashboard as dashboard_router
 
 MONTH_MAX_VISIBLE_ITEMS = 4
@@ -71,22 +72,21 @@ def _hhmm_to_minutes(t: str) -> int:
 
 
 def _sleep_collapse_window(blocks: list[dict]) -> grid_layout.CollapseWindow:
-    """Settings > General's "Hide sleep hours" (2026-09-09, direct request:
-    "the time tagged as sleep time is just removed as cells from the
-    planner calendar view") needs exactly ONE (start_min, end_min) window
-    to remove from the shared Week-grid hour axis -- every day column uses
-    the same hour gutter, so there's no such thing as collapsing a
-    different range per day. Confirmed via AskUserQuestion: if the
-    configured Sleep-kind blocks (db.list_time_blocks, possibly one per
-    distinct day-subset, Settings > Sleep & Leisure Time) don't all share
-    the exact same start_time/end_time, this returns None -- collapsing an
-    arbitrary pick among several different windows would silently hide the
-    wrong hours on whichever days don't actually match it, so an ambiguous
-    configuration just leaves the grid uncollapsed rather than guess.
-    Ignores each block's own `days` list entirely once a single uniform
-    window is confirmed -- the window applies to every column regardless
-    of which weekdays a given block formally covers, same "one shared axis"
-    reasoning."""
+    """Settings > General's "Hide sleep hours" needs exactly ONE (start_min, end_min) window
+        to remove from the shared Week-grid hour axis -- every day column uses
+        the same hour gutter, so there's no such thing as collapsing a
+        different range per day. Confirmed via AskUserQuestion: if the
+        configured Sleep-kind blocks (db.list_time_blocks, possibly one per
+        distinct day-subset, Settings > Sleep & Leisure Time) don't all share
+        the exact same start_time/end_time, this returns None -- collapsing an
+        arbitrary pick among several different windows would silently hide the
+        wrong hours on whichever days don't actually match it, so an ambiguous
+        configuration just leaves the grid uncollapsed rather than guess.
+        Ignores each block's own `days` list entirely once a single uniform
+        window is confirmed -- the window applies to every column regardless
+        of which weekdays a given block formally covers, same "one shared axis"
+        reasoning.
+    """
     windows = {(b["start_time"], b["end_time"]) for b in blocks if b["kind"] == "sleep"}
     if len(windows) != 1:
         return None
@@ -192,33 +192,21 @@ def _annotate_series(conn, events: list[dict]) -> None:
 
 
 def _annotate_calendar_colors(conn, events: list[dict]) -> list[dict]:
-    """Fixes a real, pre-existing bug found 2026-08-07 while reworking
-    Month view's multi-day bars: every calendar template (Month/Week/
-    Day/Agenda) has always read `e.calendar_color` to color-code events
-    (`cal-{{ e.calendar_color }}`, the same class convention labels use
-    for their own color pills) -- but nothing anywhere in db.py has ever
-    set that key on an event row. It's been silently undefined since the
-    label-space rework removed the old `calendars` table (which used to
-    be where an event's color genuinely lived, one color per calendar);
-    every event has been rendering with the class `cal-` (empty suffix,
-    no color) this whole time, on every calendar view, not just Month.
+    """It's been silently undefined since the
+        label-space rework removed the old `calendars` table (which used to
+        be where an event's color genuinely lived, one color per calendar);
+        every event has been rendering with the class `cal-` (empty suffix,
+        no color) this whole time, on every calendar view, not just Month.
 
-    Fix, consistent with how color already works everywhere else in this
-    app post-rework (a label's own `color` field, e.g. `label_config`
-    rows, `cell-tag cal-{{ l.color }}` in labels_manage.html): an event's
-    color is its first label's color (alphabetical, for a stable pick
-    when an event carries more than one label), falling back to a fixed
-    neutral default for an unlabeled event. Mutates and returns the same
-    list (matches _apply_event_label_filter's sibling functions' style
-    of returning a list rather than annotating in place silently).
-
-    2026-09-21: the real logic now lives in `db.annotate_item_colors`
-    (routers/dashboard.py and routers/projects.py need the same
-    resolution for their own Agenda-style widgets and can't import this
-    module -- it already imports `dashboard`, so the reverse import would
-    cycle). This stays a thin wrapper so its own existing call sites
-    (routers/tasks.py) and tests (`_DEFAULT_EVENT_COLOR`) don't need to
-    change."""
+        Fix, consistent with how color already works everywhere else in this
+        app post-rework (a label's own `color` field, e.g. `label_config`
+        rows, `cell-tag cal-{{ l.color }}` in labels_manage.html): an event's
+        color is its first label's color (alphabetical, for a stable pick
+        when an event carries more than one label), falling back to a fixed
+        neutral default for an unlabeled event. Mutates and returns the same
+        list (matches _apply_event_label_filter's sibling functions' style
+        of returning a list rather than annotating in place silently).
+    """
     return db.annotate_item_colors(conn, events, key="calendar_color")
     return events
 
@@ -233,26 +221,16 @@ def _apply_task_label_filter(tasks: list[dict], label: str | None, conn=None) ->
 
 
 def _is_bar_worthy(e: dict) -> bool:
-    """2026-08-07 follow-up to the Month-view bar rework: not every event
-    belongs in the bar system. Apple/Google both draw a hard line here --
-    an all-day event or a genuine multi-day span gets a colored bar; a
-    plain timed event on a single day (a 2-hour meeting) renders as
-    compact text with a time + color dot instead, the same visual weight
-    this app's tasks already have. The first version of this rework put
-    *every* event through the old bar-lane layout regardless, which is
-    why a single "9am" timed event was showing up as a full-width filled
-    pill getting its title truncated to "9" -- there was no length/weight
-    distinction between a week-long trip and an hour-long call.
-
-    Bar-worthy: `all_day` is set. Full stop -- a *timed* event that
-    happens to span multiple days (e.g. an overnight flight, or a
-    conference with specific 9am-5pm times across three days) is still
-    text, not a bar, matching direct feedback: "color background should
-    be only all day and multi day all day. The rest are text only."
-    2026-08-07's first version of this function also treated any multi-
-    day date range as bar-worthy regardless of the all_day flag -- that
-    was wrong per this feedback and has been narrowed to just the
-    all_day check."""
+    """Apple/Google both draw a hard line here --
+        an all-day event or a genuine multi-day span gets a colored bar; a
+        plain timed event on a single day (a 2-hour meeting) renders as
+        compact text with a time + color dot instead, the same visual weight
+        this app's tasks already have. The first version of this rework put
+        *every* event through the old bar-lane layout regardless, which is
+        why a single "9am" timed event was showing up as a full-width filled
+        pill getting its title truncated to "9" -- there was no length/weight
+        distinction between a week-long trip and an hour-long call.
+    """
     return bool(e.get("all_day"))
 
 
@@ -277,24 +255,18 @@ def _event_date_range(e: dict) -> tuple[date, date] | None:
 
 def _bucket_month_items(events: list[dict], tasks: list[dict]) -> tuple[list[dict], dict, dict]:
     """Buckets events/tasks for the Month and 4-Week grids -- extracted so
-    the 4-Week view (_four_week_grid, 2026-08-11) builds identical day
-    cells from a continuous 28-day window without duplicating the
-    multi-day repeat-per-day + timed-sort logic. Returns
-    (all_day_events, timed_by_date, tasks_by_date).
+        the 4-Week view builds identical day
+        cells from a continuous 28-day window without duplicating the
+        multi-day repeat-per-day + timed-sort logic. Returns
+        (all_day_events, timed_by_date, tasks_by_date).
 
-    `all_day_events` is the raw bar-worthy event list, NOT bucketed per
-    date the way it was pre-2026-09-08 -- Month/4-Week's spanning-bar
-    lane-packing (_week_bars) needs each event's own start/end range to
-    lay it out once per week row it touches (a continuous bar, wrapping
-    at week boundaries), not a per-day membership list the way timed
-    events/tasks still use for their flat per-day text rows.
-
-    Multi-day timed events still repeat on every day they touch, not just
-    their start date -- same "repeated entry per day" behavior Apple/
-    Google use, and the fix for the original "event only showed on its
-    start day" bug this view's rework started from. All-day events now
-    render as bars instead (see _week_bars), which cover their own full
-    span by construction, so they no longer need this per-day repeat."""
+        Multi-day timed events still repeat on every day they touch, not just
+        their start date -- same "repeated entry per day" behavior Apple/
+        Google use, and the fix for the original "event only showed on its
+        start day" bug this view's rework started from. All-day events now
+        render as bars instead (see _week_bars), which cover their own full
+        span by construction, so they no longer need this per-day repeat.
+    """
     all_day_events = [e for e in events if _is_bar_worthy(e)]
     timed_events = [e for e in events if not _is_bar_worthy(e)]
 
@@ -332,27 +304,22 @@ MONTH_MAX_BAR_LANES = 8
 
 
 def _week_bars(week_dates: list[date], all_day_events: list[dict]) -> tuple[list[dict], int]:
-    """Lane-packs every bar-worthy (all_day) event overlapping this week's
-    7-day span into a row of non-overlapping continuous bars -- reverses
-    the 2026-08-08 "flat per-day list" design for exactly this one item
-    type (_is_bar_worthy), per the 2026-09-08 direct request to bring
-    Month/4-Week closer to fullcalendar.io's continuous multi-day bars.
+    """Standard interval-graph greedy lane assignment: events overlapping this
+        week are sorted by (clipped start day, then longest-span-first so a
+        week-long bar claims lane 0 before a 1-day one wedges in beside it,
+        then title for a stable tiebreak), and each is placed in the first lane
+        whose last-placed bar ends before this one starts; no fitting lane
+        opens a new one. Each bar is clipped to the week's own bounds (`col`
+        1-7) -- an event spanning multiple weeks gets a separate bar per week
+        row it touches, each independently lane-assigned, exactly like
+        FullCalendar's own dayGrid (no lane continuity is attempted or implied
+        across week-row boundaries).
 
-    Standard interval-graph greedy lane assignment: events overlapping this
-    week are sorted by (clipped start day, then longest-span-first so a
-    week-long bar claims lane 0 before a 1-day one wedges in beside it,
-    then title for a stable tiebreak), and each is placed in the first lane
-    whose last-placed bar ends before this one starts; no fitting lane
-    opens a new one. Each bar is clipped to the week's own bounds (`col`
-    1-7) -- an event spanning multiple weeks gets a separate bar per week
-    row it touches, each independently lane-assigned, exactly like
-    FullCalendar's own dayGrid (no lane continuity is attempted or implied
-    across week-row boundaries).
-
-    Returns (bars, lane_count) -- `lane_count` (0 if no bars) is how many
-    stacked rows this week's bar layer needs, min-capped by
-    MONTH_MAX_BAR_LANES so the template's static offset/lane CSS classes
-    stay bounded."""
+        Returns (bars, lane_count) -- `lane_count` (0 if no bars) is how many
+        stacked rows this week's bar layer needs, min-capped by
+        MONTH_MAX_BAR_LANES so the template's static offset/lane CSS classes
+        stay bounded.
+    """
     week_start, week_end = week_dates[0], week_dates[-1]
     spans = []
     for e in all_day_events:
@@ -372,16 +339,6 @@ def _week_bars(week_dates: list[date], all_day_events: list[dict]) -> tuple[list
                 "col_start": col_start,
                 "col_span": col_end - col_start + 1,
                 "is_past": clip_end < clock.today(),
-                # FullCalendar-parity interactions, slice 2 (drag-move +
-                # edge-resize): whether this bar SEGMENT's left/right edge
-                # is the event's own real start/end, vs. a clip introduced
-                # by this week row's own bounds. A multi-week event gets a
-                # separate bar per week it touches (this function's own
-                # docstring) -- only the segment that actually starts (or
-                # ends) the event should ever offer a resize handle on that
-                # edge; a mid-event continuation segment must stay
-                # move-only, since "resizing" a clipped edge back would
-                # silently change a date that was never the real boundary.
                 "is_start": clip_start == start_d,
                 "is_end": clip_end == end_d,
                 "_sort_start": clip_start,
@@ -415,28 +372,29 @@ def _month_day_cells(
     is_window_day,
 ) -> list[dict]:
     """Build one week's day cells -- the shared core of the Month and
-    4-Week grids (2026-08-11). `dates` is a single week's 7 days;
-    `is_window_day(date) -> bool` marks a cell in-window (Month:
-    day.month == month, which grays out the leading/trailing adjacent-month
-    days; 4-Week: always True, since its window is exactly 4 weeks and
-    never bleeds into surrounding weeks/months).
+        4-Week grids. `dates` is a single week's 7 days;
+        `is_window_day(date) -> bool` marks a cell in-window (Month:
+        day.month == month, which grays out the leading/trailing adjacent-month
+        days; 4-Week: always True, since its window is exactly 4 weeks and
+        never bleeds into surrounding weeks/months).
 
-    Each cell is ONE flat list of rows: timed events by time, then tasks --
-    same visual priority the cell shows top-to-bottom, and the count that
-    feeds the "+N more" link. All-day (bar-worthy) events are NOT in this
-    list any more (2026-09-08) -- they render once per week row as a
-    continuous spanning bar instead (see _week_bars), above this flat list,
-    not competing with its MONTH_MAX_VISIBLE_ITEMS cap. The key is `rows`,
-    NOT `items` -- a dict key named `items` would collide with Python's own
-    `dict.items` method in Jinja (a template's `day.items` would resolve to
-    the bound method and crash iterating over it).
+        Each cell is ONE flat list of rows: timed events by time, then tasks --
+        same visual priority the cell shows top-to-bottom, and the count that
+        feeds the "+N more" link. All-day (bar-worthy) events are NOT in this
+        list any more -- they render once per week row as a
+        continuous spanning bar instead (see _week_bars), above this flat list,
+        not competing with its MONTH_MAX_VISIBLE_ITEMS cap. The key is `rows`,
+        NOT `items` -- a dict key named `items` would collide with Python's own
+        `dict.items` method in Jinja (a template's `day.items` would resolve to
+        the bound method and crash iterating over it).
 
-    `overflow` (2026-09-09, FullCalendar-parity interactions slice 3) is the
-    same-shaped tail end of `rows` past the cap -- the items the "+N more"
-    link doesn't show directly. The template renders these into a hidden
-    per-day `<template>` block so the "+N more" click can pop them into an
-    info toast with real click-through, without a second request back to
-    the server just to find out what was hiding behind the count."""
+        `overflow` is the
+        same-shaped tail end of `rows` past the cap -- the items the "+N more"
+        link doesn't show directly. The template renders these into a hidden
+        per-day `<template>` block so the "+N more" click can pop them into an
+        info toast with real click-through, without a second request back to
+        the server just to find out what was hiding behind the count.
+    """
     week_days = []
     for day in dates:
         key = day.isoformat()
@@ -485,31 +443,33 @@ def _month_grid(year: int, month: int, events: list[dict], tasks: list[dict], we
 
 
 def _four_week_window(anchor: date, week_start: str, position: int) -> tuple[date, date]:
-    """(view_start, view_end) for the 4-Week view (2026-08-11): a
-    continuous 28-day window whose `position`-th week (1-4) is the anchor
-    week -- the week `anchor` falls in, per the "Week starts on"
-    preference. Position 1 puts the anchor week on the first row (the
-    window starts at the anchor week itself), position 2 on the second
-    (starts one week earlier), 3 on the third, 4 on the fourth -- i.e.
-    the window starts `(position - 1) * 7` days before the anchor week.
-    Extracted from four_week_view so the math is unit-testable independent
-    of request/settings plumbing."""
+    """(view_start, view_end) for the 4-Week view: a
+        continuous 28-day window whose `position`-th week (1-4) is the anchor
+        week -- the week `anchor` falls in, per the "Week starts on"
+        preference. Position 1 puts the anchor week on the first row (the
+        window starts at the anchor week itself), position 2 on the second
+        (starts one week earlier), 3 on the third, 4 on the fourth -- i.e.
+        the window starts `(position - 1) * 7` days before the anchor week.
+        Extracted from four_week_view so the math is unit-testable independent
+        of request/settings plumbing.
+    """
     anchor_week_start, _ = _week_bounds(anchor, week_start)
     view_start = anchor_week_start - timedelta(days=(position - 1) * 7)
     return view_start, view_start + timedelta(days=27)
 
 
 def _four_week_grid(view_start: date, events: list[dict], tasks: list[dict], week_start: str = "monday") -> list[dict]:
-    """4-Week view's day grid (2026-08-11) -- the Month grid's own day-cell
-    layout (_month_day_cells) laid out over a continuous 28-day window
-    instead of a calendar month: exactly four week rows, every cell always
-    in-window (no grayed-out .not-in-month adjacent-month days at all,
-    since the window never bleeds into surrounding weeks/months). `view_start`
-    is the window's first day (a week start, already shifted back by the
-    current-week-position preference -- see four_week_view below). Keeps
-    the same interaction surface as Month: each cell's data-date + DOM
-    order feed static/calendar_month.js's click-and-hold drag-to-create
-    unchanged."""
+    """4-Week view's day grid -- the Month grid's own day-cell
+        layout (_month_day_cells) laid out over a continuous 28-day window
+        instead of a calendar month: exactly four week rows, every cell always
+        in-window (no grayed-out .not-in-month adjacent-month days at all,
+        since the window never bleeds into surrounding weeks/months). `view_start`
+        is the window's first day (a week start, already shifted back by the
+        current-week-position preference -- see four_week_view below). Keeps
+        the same interaction surface as Month: each cell's data-date + DOM
+        order feed static/calendar_month.js's click-and-hold drag-to-create
+        unchanged.
+    """
     all_day_events, timed_by_date, tasks_by_date = _bucket_month_items(events, tasks)
     today = clock.today()
     weeks = []
@@ -592,24 +552,22 @@ def _month_view_context(conn, request: Request, year: int | None, month: int | N
 
 @router.get("")
 def calendar_root_redirect(label: str | None = None):
-    """The "Calendar" tabbar destination is the 4-Week view now, not Month
-    (2026-08-28 follow-up to "Calendar split into two pages" -- direct
-    feedback: "in the month view it should be the 4 week view, not actually
-    the month view"). Registered at the bare `/calendar` root (same URL
-    base.html's "Calendar" tab links to and every event-mutation redirect
-    already targets, e.g. create_event's `respond(x_requested_with,
-    "/calendar", ...)`), so this is a plain retire-to-redirect, same
-    precedent as week_redirect/timetable_view_redirect below -- any old
-    `/calendar?year=&month=` bookmark still lands somewhere real, just on
-    4-Week instead of Month.
+    """The "Calendar" tabbar destination is the 4-Week view now, not Month. Registered at the bare `/calendar` root (same URL
+        base.html's "Calendar" tab links to and every event-mutation redirect
+        already targets, e.g. create_event's `respond(x_requested_with,
+        "/calendar", ...)`), so this is a plain retire-to-redirect, same
+        precedent as week_redirect/timetable_view_redirect below -- any old
+        `/calendar?year=&month=` bookmark still lands somewhere real, just on
+        4-Week instead of Month.
 
-    `month_view` itself (and everything it renders -- calendar_month.html,
-    _calendar_month_grid.html, _month_view_context/_month_grid) is
-    deliberately NOT deleted, just un-routed: it's still exercised directly
-    by test_calendar_month_bars.py and several other test files (this app's
-    router-function-call convention), and `_month_day_cells`/
-    `_bucket_month_items` underneath it are shared with the 4-Week grid, so
-    there's no dead-weight cost to keeping it importable."""
+        `month_view` itself (and everything it renders -- calendar_month.html,
+        _calendar_month_grid.html, _month_view_context/_month_grid) is
+        deliberately NOT deleted, just un-routed: it's still exercised directly
+        by test_calendar_month_bars.py and several other test files (this app's
+        router-function-call convention), and `_month_day_cells`/
+        `_bucket_month_items` underneath it are shared with the 4-Week grid, so
+        there's no dead-weight cost to keeping it importable.
+    """
     url = "/calendar/fourweek"
     if label:
         url += f"?label={label}"
@@ -669,19 +627,18 @@ def four_week_view(
     label: str | None = None,
     conn=Depends(get_db),
 ):
-    """4-Week view (2026-08-11) -- Month's day-grid layout (_four_week_grid)
-    over a rolling, continuous 28-day window instead of calendar-month
-    boundaries. The anchor (default: today, like Month's year/month default)
-    falls in the anchor week; that week occupies whichever of the four rows
-    Settings > General's "4-Week view: current week" preference names
-    (deps.py's _four_week_position: 1-4), so the window starts
-    `(position - 1) * 7` days before the anchor week's start -- e.g.
-    position 1 shows [this week, +1, +2, +3], position 2 shows
-    [-1, this week, +1, +2]. Prev/next move the whole window by one week
-    at a time (the anchor shifts by 7 days, so the window slides by a week
-    while the anchor week keeps its configured row -- direct feedback
-    2026-08-11, "move by 1 week, not 4"); the `date_` param is the anchor
-    (a bare date inside whatever window is shown)."""
+    """4-Week view -- Month's day-grid layout (_four_week_grid)
+        over a rolling, continuous 28-day window instead of calendar-month
+        boundaries. The anchor (default: today, like Month's year/month default)
+        falls in the anchor week; that week occupies whichever of the four rows
+        Settings > General's "4-Week view: current week" preference names
+        (deps.py's _four_week_position: 1-4), so the window starts
+        `(position - 1) * 7` days before the anchor week's start -- e.g.
+        position 1 shows [this week, +1, +2, +3], position 2 shows
+        [-1, this week, +1, +2]. Prev/next move the whole window by one week
+        at a time; the `date_` param is the anchor
+        (a bare date inside whatever window is shown).
+    """
     return templates.TemplateResponse(
         "calendar_fourweek.html", _four_week_view_context(conn, request, date_, label)
     )
@@ -689,18 +646,17 @@ def four_week_view(
 
 def _four_week_view_context(conn, request, date_, label):
     """Everything the 4-Week view needs, in one dict -- shared by
-    four_week_view (full page) and the async `#fourweek-grid` region
-    (features/async-crud.md), which re-renders just the grid after a drag-
-    to-move or an event/task change on the 4-Week page. Split out
-    2026-08-31 (direct bug report, "drag and drop still is not working ...
-    4 week view") -- 4-Week previously had no async region at all (its own
-    duplicated inline markup in calendar_fourweek.html, no `id`, no
-    `calendar_month_drag.js` script tag, and its event/task chips carried
-    none of Month's `.month-event-item`/`.month-due-task-item`/`data-uid`
-    hooks), so a drag's own POST landed fine server-side but nothing on
-    screen ever reflected it -- same silent-no-op shape as a `cc-entity-
-    changed` event nobody claims (see async_calendar.js's own comment on
-    the claimed protocol)."""
+        four_week_view (full page) and the async `#fourweek-grid` region
+        (features/async-crud.md), which re-renders just the grid after a drag-
+        to-move or an event/task change on the 4-Week page. 4 week view") -- 4-Week previously had no async region at all (its own
+        duplicated inline markup in calendar_fourweek.html, no `id`, no
+        `calendar_month_drag.js` script tag, and its event/task chips carried
+        none of Month's `.month-event-item`/`.month-due-task-item`/`data-uid`
+        hooks), so a drag's own POST landed fine server-side but nothing on
+        screen ever reflected it -- same silent-no-op shape as a `cc-entity-
+        changed` event nobody claims (see async_calendar.js's own comment on
+        the claimed protocol).
+    """
     today = clock.today()
     anchor = date.fromisoformat(date_) if date_ else today
     week_start = _week_start(request)
@@ -752,25 +708,24 @@ def week_view(
     label: str | None = None,
     conn=Depends(get_db),
 ):
-    """Week -- the ordinary Week grid (Month/4-Week/Week/Day) MERGED with the
-    former "Timetable" sub-view (1.9 side work, direct feedback: "merge the
-    calendar's week view with the timetable view"). One grid, both
-    capabilities at once: ordinary calendar events stay fully interactive
-    (drag-to-move/resize via `static/calendar.js`, click to open), empty grid
-    space still drag-creates a new event (`.calendar-create-col`), AND every
-    work-allocation event renders prominently as a draggable `.work-allocation`
-    block (`static/project_calendar.js`) with its own move/resize/delete
-    (block only, never the task) plus the "Unscheduled work" sidebar that
-    drags a task onto the grid to schedule it. Both scripts load on this page
-    now; calendar.js's own `.time-event` selector explicitly excludes
-    `.work-allocation` so the two scripts never double-attach a pointerdown
-    handler to the same block (see calendar.js's own comment). The sidebar is
-    the shared right sidebar shell (static/notebook_sidebar.js collapses it).
+    """One grid, both
+        capabilities at once: ordinary calendar events stay fully interactive
+        (drag-to-move/resize via `static/calendar.js`, click to open), empty grid
+        space still drag-creates a new event (`.calendar-create-col`), AND every
+        work-allocation event renders prominently as a draggable `.work-allocation`
+        block (`static/project_calendar.js`) with its own move/resize/delete
+        (block only, never the task) plus the "Unscheduled work" sidebar that
+        drags a task onto the grid to schedule it. Both scripts load on this page
+        now; calendar.js's own `.time-event` selector explicitly excludes
+        `.work-allocation` so the two scripts never double-attach a pointerdown
+        handler to the same block (see calendar.js's own comment). The sidebar is
+        the shared right sidebar shell (static/notebook_sidebar.js collapses it).
 
-    This reuses what the old timetable_view (folded in here) computed: the
-    per-event `is_allocation`/`task_uid` annotation and the unscheduled-work
-    list (`db.work_allocation_panel_info`), on top of the plain Week grid's
-    own geometry (`grid_layout.layout_day`) and color annotation."""
+        This reuses what the old timetable_view (folded in here) computed: the
+        per-event `is_allocation`/`task_uid` annotation and the unscheduled-work
+        list (`db.work_allocation_panel_info`), on top of the plain Week grid's
+        own geometry (`grid_layout.layout_day`) and color annotation.
+    """
     return templates.TemplateResponse(
         "calendar_week.html", _week_view_context(conn, request, date_, label)
     )
@@ -941,18 +896,12 @@ def _week_view_context(conn, request, date_, label):
 
 @events_router.get("/week")
 def week_redirect(date_: str | None = None):
-    """The former standalone /week page ("Week -- planning", 1.7 slice 2,
-    routers/week.py) is retired (1.9 side work) -- its cross-project
-    scheduling surface (Unscheduled work sidebar, drag-drop, the grid
-    itself) is now identically present at /calendar/week (see this file's
-    own week_view docstring: the "Calendar Week + Timetable merged" side
-    work already folded Timetable's planning capability into the ordinary
-    Week grid, confirmed by reading both routers/templates directly before
-    this retirement, not assumed). Registered on `events_router` (this
-    module's unprefixed router) rather than `router` (prefix="/calendar")
-    since the redirect's own path has to be the bare "/week", not
-    "/calendar/week" -- same "any bookmark still lands somewhere real"
-    precedent `timetable_view_redirect` right below already set."""
+    """Registered on `events_router` (this
+        module's unprefixed router) rather than `router` (prefix="/calendar")
+        since the redirect's own path has to be the bare "/week", not
+        "/calendar/week" -- same "any bookmark still lands somewhere real"
+        precedent `timetable_view_redirect` right below already set.
+    """
     url = "/calendar/week"
     if date_:
         url += f"?date_={date_}"
@@ -1073,14 +1022,12 @@ def day_view(
     label: str | None = None,
     conn=Depends(get_db),
 ):
-    """2026-08-08: Day's 24-hour grid now fills the whole viewport and
-    scrolls internally, the same single-pane layout Week uses (direct
-    feedback: "make day-agenda-split calendar-viewport scrollable like the
-    calendar week view. Remove the agenda at the bottom of the calendar
-    day view") -- the old Day+Agenda side-by-side split is gone along with
-    _build_agenda_days (the separate rolling-30-day list that used to sit
-    beside it). GET /calendar/agenda (agenda_view, below) still redirects
-    here."""
+    """Remove the agenda at the bottom of the calendar
+        day view") -- the old Day+Agenda side-by-side split is gone along with
+        _build_agenda_days (the separate rolling-30-day list that used to sit
+        beside it). GET /calendar/agenda (agenda_view, below) still redirects
+        here.
+    """
     return templates.TemplateResponse("calendar_day.html", _day_view_context(conn, request, day, label))
 
 
@@ -1092,7 +1039,10 @@ def _day_view_context(conn, request, day, label):
     (fixing its `left_pct`/`width_pct` overlap layout) instead of a full
     reload -- see calendar.js's own comment on the `.time-event` drag
     handler for why that recompute has to come from here, not the client."""
-    d = date.fromisoformat(day)
+    try:
+        d = date.fromisoformat(day)
+    except ValueError:
+        raise HTTPException(status_code=404)
     events = db.list_events(conn, start=day, end=day + "T23:59:59")
     events = recurrence_expand.expand_events(events, d, d, db.list_holidays_by_calendar(conn), db.list_event_occurrence_overrides_by_master(conn))
     events = _apply_event_label_filter(events, label, conn)
@@ -1144,13 +1094,11 @@ def _day_view_context(conn, request, day, label):
 
 @router.get("/agenda")
 def agenda_view(label: str | None = None):
-    """2026-08-08: Agenda is no longer its own page -- Day and Agenda were
-    merged into one view, and then (direct feedback) Day became the sole
-    single-pane grid and the merged Agenda list was removed entirely (see
-    day_view above, calendar_day.html). This route stays registered as a
-    redirect (matching the same pattern GET /export uses after Export &
-    backup was inlined into Settings > Advanced) so an old bookmark/link
-    to /calendar/agenda still lands somewhere real."""
+    """This route stays registered as a
+        redirect (matching the same pattern GET /export uses after Export &
+        backup was inlined into Settings > Advanced) so an old bookmark/link
+        to /calendar/agenda still lands somewhere real.
+    """
     today_iso = clock.today().isoformat()
     url = f"/calendar/day/{today_iso}"
     if label:
@@ -1226,6 +1174,9 @@ def create_event(
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
+    error = validation.event_error(title, start_at, end_at)
+    if error:
+        return validation_response(error, x_requested_with, "/calendar")
     tags = dashboard_router._combine_tags(tags, tags_labels)
     tags = dashboard_router._with_project(conn, tags, project, project_field)
     now = clock.now().isoformat()
@@ -1268,24 +1219,20 @@ def create_event(
 
 @events_router.get("/events/{uid}")
 def event_detail(uid: str, request: Request, occurrence_date: str | None = None, conn=Depends(get_db)):
-    """2026-08-08 direct feedback ("add for events a way like for tasks to
-    only view the event before editing it") -- events previously had no
-    read-only view at all, every event link (Calendar's own Month/Week/
-    Day/Agenda grids, every dashboard widget that lists events) went
-    straight to /events/{uid}/edit. Mirrors task_detail.html's shape:
-    #modal-target wrapper (same "modal is progressive enhancement over a
-    real page" pattern), a compact meta grid, an Edit button leading to
-    the real edit form, Delete at the bottom -- see event_detail.html.
-    /events/{uid}/edit itself is unchanged, still reachable directly (a
-    bookmark, or this page's own Edit button).
+    """Mirrors task_detail.html's shape:
+        #modal-target wrapper (same "modal is progressive enhancement over a
+        real page" pattern), a compact meta grid, an Edit button leading to
+        the real edit form, Delete at the bottom -- see event_detail.html. /events/{uid}/edit itself is unchanged, still reachable directly (a
+        bookmark, or this page's own Edit button).
 
-    1.6 ("Manual recurrence exceptions"): `occurrence_date` (the RECURRENCE-
-    ID every expanded occurrence carries, see ical_rows.py's
-    ical_to_event_row) identifies which specific occurrence the user
-    clicked, when it's a recurring event -- calendar_month/week/day.html
-    append it to every occurrence's own link. Its presence gates the "This
-    occurrence" card (event_detail.html) offering Cancel/Move/Restore for
-    just that one instance, never the whole series."""
+        1.6 ("Manual recurrence exceptions"): `occurrence_date` (the RECURRENCE-
+        ID every expanded occurrence carries, see ical_rows.py's
+        ical_to_event_row) identifies which specific occurrence the user
+        clicked, when it's a recurring event -- calendar_month/week/day.html
+        append it to every occurrence's own link. Its presence gates the "This
+        occurrence" card (event_detail.html) offering Cancel/Move/Restore for
+        just that one instance, never the whole series.
+    """
     event = db.get_event(conn, uid)
     if event and event.get("series_uid"):
         series = event_series.get_series(conn, event["series_uid"])
@@ -1437,6 +1384,9 @@ def update_event(
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
+    error = validation.event_error(title, start_at, end_at)
+    if error:
+        return validation_response(error, x_requested_with, f"/events/{uid}/edit")
     tags = dashboard_router._combine_tags(tags, tags_labels)
     tags = dashboard_router._with_project(conn, tags, project, project_field)
     existing = db.get_event(conn, uid) or {}
@@ -1606,19 +1556,13 @@ def restore_occurrence(uid: str, occurrence_date: str = Form(...), x_requested_w
 @events_router.post("/events/{uid}/reschedule")
 async def reschedule_event(uid: str, request: Request, conn=Depends(get_db)):
     """JSON endpoint for the Week/Day grid's drag-to-move / drag-to-resize
-    (see static/calendar.js), Month/4-Week's bar drag (calendar_month_drag.js)
-    and Week's all-day-row drag (calendar_week_allday_drag.js) -- touches
-    start_at/end_at and, optionally, all_day; leaves every other field alone.
-    A plain form POST to /events/{uid} would also work but means
-    round-tripping every field through JS for no reason; this is the minimal
-    surface the drag interactions actually need.
-
-    `all_day` is optional and only sent by FullCalendar-parity slice 4 (Week:
-    drag an event between the "All day" row and the timed grid, both
-    directions) -- every earlier caller only ever reschedules within the same
-    row/grid, so it never needed to flip this flag and omitting it here must
-    leave the existing value untouched (`row = dict(existing)` already
-    carries it forward)."""
+        (see static/calendar.js), Month/4-Week's bar drag (calendar_month_drag.js)
+        and Week's all-day-row drag (calendar_week_allday_drag.js) -- touches
+        start_at/end_at and, optionally, all_day; leaves every other field alone.
+        A plain form POST to /events/{uid} would also work but means
+        round-tripping every field through JS for no reason; this is the minimal
+        surface the drag interactions actually need.
+    """
     payload = await request.json()
     existing = db.get_event(conn, uid)
     if existing is None:

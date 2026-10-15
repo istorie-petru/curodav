@@ -5,11 +5,6 @@
 <div class="settings-group">
     <div class="card card-danger">
         {% if conflicts %}
-        <!-- 2026-09-08 (direct request): the count pill used to live in
-             the now-removed "Needs attention" h2.section-label -- kept
-             here instead of dropped outright, since it's real information
-             (not just heading chrome) a reader can't get elsewhere on the
-             page at a glance. -->
         <p class="settings-hint"><span class="pill-static pill-red align-middle">{{ conflicts|length }} unresolved sync conflict{{ 's' if conflicts|length != 1 else '' }}</span></p>
         <table class="task-table">
             <thead>
@@ -70,37 +65,11 @@
                             <form class="form-contents" method="post" action="/settings/data-health/repair" data-confirm-sheet="Compact and reindex the database? This rebuilds every index and reclaims disk space -- safe, but takes a moment on a large database.">
                                 <button type="submit" class="action-menu-item" role="menuitem">{{ icon('tool', 'icon-sm') }} Compact &amp; reindex</button>
                             </form>
-                            <!-- 2026-09-11 direct request: "Purge Completed
-                                 Tasks should sit in the context menu of
-                                 Database (as purge completed)" -- moved in
-                                 from the Maintenance & cleanup card below,
-                                 where it lived as its own inline row. Routine
-                                 housekeeping (grouped with Check integrity/
-                                 Compact & reindex), not danger styling --
-                                 unlike "Reset database (purge all)" below,
-                                 which stays in its own danger section. -->
                             <form class="form-contents" method="post" action="/settings/purge-completed" data-confirm-sheet="Delete every completed task ({{ completed_task_count }} task{{ 's' if completed_task_count != 1 else '' }})? This cannot be undone.">
                                 <button type="submit" class="action-menu-item" role="menuitem">{{ icon('trash-2', 'icon-sm') }} Purge completed ({{ completed_task_count }})</button>
                             </form>
                         </div>
-                        <!-- 2026-09-08 direct request: "Verify latest backup",
-                             "Clean up sync data" and "Force sync" removed from
-                             this menu -- each was a verbatim duplicate of an
-                             action already offered in the Backup/Sync cards
-                             below (same endpoint/behavior, just a different
-                             label here). One home per action now: Verify
-                             lives in the Backup card (it already carries the
-                             specific filename), sync cleanup and Force sync
-                             both live in the Sync card. -->
                         <div class="action-menu-section">
-                            <!-- 2026-09-09 direct request: the standalone
-                                 confirmation modal template this used to open
-                                 is gone -- this now opens a persistent
-                                 confirm toast (data_maintenance.js's
-                                 data-action="purge-all" handler) with the
-                                 same typed "DELETE ALL" gate the modal used
-                                 to carry, just rendered as a toast instead
-                                 of a page. -->
                             <button type="button" class="action-menu-item danger" role="menuitem" data-action="purge-all">{{ icon('shield', 'icon-sm') }} Reset database (purge all)</button>
                         </div>
                     </div>
@@ -119,13 +88,6 @@
         </div>
 
         <!-- BACKUP CARD -->
-        <!-- 2026-08-26 second pass: the former "Full backup & restore"
-             section is folded INTO this card's menu -- download, verify,
-             and restore live one click away here, and the card's own meta
-             line is the only place on the page naming a last-backup
-             timestamp or size. Restoring a *file* (a downloaded data.json
-             or any .ics/.vcf/.csv) goes through the unified drop zone in
-             Export & import below, which auto-detects the type. -->
         {% set backup_status_class = 'healthy' %}
         {% set backup_status_text = 'Up to date' %}
         {% set backup_status_icon = 'check-circle' %}
@@ -170,11 +132,6 @@
                             </form>
                         </div>
                         {% endif %}
-                        <!-- 2026-09-08 direct request: the old file-restore
-                             menu item here was removed -- verbatim duplicate
-                             of the Sync card's own Import item (same
-                             /export/import-modal dialog). Kept there,
-                             paired with Export. -->
                     </div>
                 </div>
             </div>
@@ -207,23 +164,10 @@
                 <div class="action-menu" aria-label="Sync actions">
                     <button type="button" class="action-menu-trigger" aria-label="Sync actions" aria-haspopup="true" aria-expanded="false">{{ icon('more', 'icon-sm') }}</button>
                     <div class="action-menu-panel" role="menu">
-                        <!-- 2026-08-26 third pass: export/import moved off
-                             their own page section into this menu -- each
-                             opens its own dialog. -->
                         <div class="action-menu-section">
                             <a class="action-menu-item" role="menuitem" href="/export/modal" data-modal>{{ icon('share-2', 'icon-sm') }} Export data&hellip;</a>
                             <a class="action-menu-item" role="menuitem" href="/export/import-modal" data-modal>{{ icon('upload', 'icon-sm') }} Import data&hellip;</a>
                         </div>
-                        <!-- 2026-09-09: "Force sync" removed -- it only ever
-                             worked by calling window.CCOfflineSync.syncNow(),
-                             defined by static/offline_sync_client.js, which
-                             was deleted along with the rest of the
-                             client-side Offline Mode feature (direct
-                             request, "purge it"). There's no such thing as
-                             forcing a push/pull sync without a client engine
-                             to run it from, so the button could only ever
-                             show "Sync engine not available" now -- removed
-                             rather than left as a guaranteed-broken control. -->
                         <div class="action-menu-section">
                             <form class="form-contents" method="post" action="/settings/data-health/sync-gc">
                                 <button type="submit" class="action-menu-item" role="menuitem">{{ icon('trash-2', 'icon-sm') }} Clean up now</button>
@@ -252,4 +196,3 @@
 
     </div>
 </div>
-{# 2026-09-25 (UI audit F5): group divider, see .settings-divider. #}

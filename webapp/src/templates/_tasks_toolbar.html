@@ -1,38 +1,6 @@
-<!-- 2026-08-28 "major rework" session (item 3+4): Table is now the ONLY
-     Tasks view -- the Table/Timeline/Board/Habits segmented switcher is
-     gone entirely (routers/tasks.py's board_view_redirect/habits_view_
-     redirect, routers/timeline.py's whole-file retirement), along with
-     every filter but Date (Status/Importance/Urgency/label dropdowns and
-     the Group by toggle -- grouping is fixed/always-on now, see
-     routers/tasks.py's _build_task_groups). What's left was one light row:
-     a page title, search, the one remaining Date dropdown, and "+ New".
-
-     2026-08-29 follow-up (sidebar redesign item 13e, direct request): the
-     separate `.toolbar.top-app-bar.toolbar-2row` row is gone outright --
-     the inline search box and "+ New" button were redundant with the
-     sidebar's own global quick-add/Search destinations, so both are
-     dropped rather than relocated. This partial is now just the Date
-     filter dropdown, rendered inside tasks_list.html's narrow-header
-     call block (_page_header_narrow.html's actions slot) instead of its
-     own toolbar row. `q` (the old search box's value) has no
-     visible control left, but a bookmarked/deep-linked `?q=...` URL still
-     works -- carried through as a hidden field so choosing a Date filter
-     doesn't silently drop it.
-
-     Context this partial expects: q, active_date_filter, date_filters,
-     date_filter_labels. -->
 {% set _df = active_date_filter | default('all') %}
 {% set _q = q | default('') %}
 
-<!-- This form's own visible content is always empty (just an optional
-     hidden `q` field) -- what it's actually for is being a submit target
-     the Date filter's radio inputs below point at via `form="tasks-
-     filters-form"` (see _filter_dropdown.html's own comment on
-     fd_form_id), so it has to stay in the DOM even with no `q` and no
-     visible content of its own. style.css's "hide the actions slot when
-     it has nothing to show" rule (2026-09-12) knows to look past
-     `.filter-bar` specifically for exactly this reason -- see that
-     rule's own comment. -->
 <form method="get" action="/tasks" class="filter-bar" id="tasks-filters-form">
     {% if _q %}<input type="hidden" name="q" value="{{ _q }}">{% endif %}
 </form>
@@ -47,10 +15,3 @@
 {% set fd_form_id = 'tasks-filters-form' %}
 {% include '_filter_dropdown.html' %}
 
-{# The "+ Task nou" header button this partial briefly added (2026-09-03,
-   same day as the "one single big table" flattening below it removed
-   every per-group "+") is gone again -- direct follow-up request to
-   remove it. Task creation from this page falls back to the sidebar's own
-   global quick-add (base.html's `.sidebar-quick-add`) and the command
-   palette, same as it did between the sidebar redesign (2026-08-29, see
-   this file's own header comment) and the flattening change. #}

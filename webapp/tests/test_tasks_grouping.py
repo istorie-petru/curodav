@@ -69,15 +69,16 @@ def _group(groups, kind, name=None):
 
 
 class TestFixedGroupOrder:
-    def test_project_unassigned_completed_in_that_order(self, conn):
-        # Habits H2 (2026-09-24): the Habits group moved to /habits.
+    def test_project_label_unassigned_completed_in_that_order(self, conn):
         _project(conn, "Alpha")
         _task(conn, "a1", tags=["Alpha"])
+        _task(conn, "g1", tags=["Gym"])
         _task(conn, "loose1", tags=[])
+        _task(conn, "done1", tags=["Alpha"], status="done")
 
         resp = tasks_router.list_tasks(_request(), conn=conn)
         kinds = [g["kind"] for g in resp.context["groups"]]
-        assert kinds == ["project", "unassigned", "completed"]
+        assert kinds == ["project", "label", "unassigned", "completed"]
 
     def test_multiple_projects_stay_alphabetical_before_unassigned(self, conn):
         _project(conn, "banana")
@@ -88,8 +89,7 @@ class TestFixedGroupOrder:
         resp = tasks_router.list_tasks(_request(), conn=conn)
         groups = resp.context["groups"]
         names = [g["name"] for g in groups]
-        assert names[:2] == ["Apple", "banana"]
-        assert names[2:] == ["Unassigned", "Completed"]
+        assert names == ["Apple", "banana"]
 
 
 class TestProjectGrouping:
@@ -114,7 +114,15 @@ class TestProjectGrouping:
 
         resp = tasks_router.list_tasks(_request(), conn=conn)
         unassigned = _group(resp.context["groups"], "unassigned")
-        assert {t["uid"] for t in unassigned["tasks"]} == {"loose1", "loose2"}
+        assert {t["uid"] for t in unassigned["tasks"]} == {"loose1"}
+        assert {t["uid"] for t in _group(resp.context["groups"], "label", "SomeSpace")["tasks"]} == {"loose2"}
+
+    def test_a_task_with_an_archived_project_goes_to_its_label_group(self, conn):
+        _project(conn, "Old")
+        db.upsert_label_config(conn, {"name": "Old", "archived_at": "2026-10-01"})
+        _task(conn, "t1", tags=["Old", "Gym"])
+        groups = tasks_router.list_tasks(_request(), conn=conn).context["groups"]
+        assert [(g["kind"], g["name"]) for g in groups] == [("label", "Gym")]
 
     def test_named_groups_sorted_alphabetically_case_insensitive(self, conn):
         _project(conn, "banana")

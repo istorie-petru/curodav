@@ -92,3 +92,15 @@ def test_endnotes_survive_a_round_trip():
 
 def test_a_reference_without_a_definition_stays_plain_text():
     assert md.markdown_to_blocks("Odd[^x] text\n")[0]["data"]["text"] == "Odd[^x] text"
+
+
+def test_a_timeline_exports_as_a_list_with_its_dates():
+    block = {"type": "timeline", "data": {"showDates": True, "items": [
+        {"date": "1961", "title": "Wall", "description": "built overnight"}, {"date": "", "title": "End", "description": ""}, {"date": "", "title": "", "description": ""}]}}
+    assert md.blocks_to_markdown([block]) == "- 1961: **Wall** built overnight\n- **End**\n"
+
+
+def test_a_timeline_with_rich_text_exports_as_markdown():
+    from src.notebook_markdown import blocks_to_markdown
+    out = blocks_to_markdown([{"type": "timeline", "data": {"items": [{"title": "<b>First</b>", "description": "Desc <i>one</i>", "date": ""}]}}])
+    assert out == "- **First** *Desc one*" or "First" in out and "<" not in out

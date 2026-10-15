@@ -35,6 +35,21 @@
     }
   }
 
+  // Refreshes the regions of the current page after a change; resolves false when the page has none.
+  window.ccSmartRefresh = function () {
+    if (!document.querySelector("[data-smart-region]")) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      refresh(window.location.href, () => resolve(false)).then(() => resolve(true));
+    });
+  };
+
+  // A change to a note (pin, delete, bulk edit) refreshes the regions of a page that has them.
+  document.addEventListener("cc-entity-changed", function (e) {
+    if (!e.detail || e.detail.type !== "notebook" || !document.querySelector("[data-smart-region]")) return;
+    e.detail.claimed = true;
+    window.ccSmartRefresh();
+  });
+
   document.addEventListener("click", function (e) {
     const link = e.target.closest("a[data-smart-link]");
     if (!link || e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;

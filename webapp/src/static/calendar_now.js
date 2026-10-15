@@ -1,27 +1,3 @@
-// Week/Day time grid: initial scroll position + "now" line
-// (2026-09-25, UI audit C-7). Before this both views always opened at
-// 00:00 -- the first event of a normal day sat a full screen below the
-// fold -- and nothing on the grid said what time it currently was.
-//
-// Two jobs, both on #week-grid (calendar_week.html) and #day-grid
-// (calendar_day.html):
-//
-//   1. Auto-scroll: when the grid's scroller (`.time-grid-wrap`) opens at
-//      scrollTop 0 and nothing restored a position, scroll so the earlier
-//      of (first timed event, now if today is shown) sits one hour below
-//      the sticky header. No events and not today -> 07:00, the same
-//      "start of a normal day" fallback most calendar apps use.
-//   2. Now-line: a `.now-line` in today's `.time-col` (the column whose
-//      data-date matches the browser's own local date), repositioned every
-//      minute.
-//
-// Region swaps: async_calendar.js (and habit_actions.js on Day) replace
-// the whole #week-grid/#day-grid node after a change, which drops both the
-// line and the scroll position. A childList MutationObserver on the
-// region's parent notices the swap and re-runs setup; the last scrollTop
-// the user had is carried over (refreshWeek already restores it itself --
-// a non-zero scrollTop on the fresh node counts as "restored" and is left
-// alone), so a refresh never yanks the grid back to the auto position.
 (function () {
   const REGION_IDS = ["week-grid", "day-grid"];
   const PX_PER_HOUR = Number(document.body.dataset.pxPerHour || 48);
@@ -107,12 +83,6 @@
     scroller.addEventListener("scroll", () => {
       lastScrollTop = scroller.scrollTop;
     }, { passive: true });
-    // Phones (<=720px): the grid isn't its own scroll box there -- the
-    // page grows and the WINDOW scrolls. 2026-09-25 (Peter: "phones need
-    // the correct scroll"): same target, applied to the window, once per
-    // page load only, and only while the page is still at the top (a
-    // browser-restored or user scroll wins). style.css lets .time-grid-top
-    // stick to the viewport there, so the day names stay visible.
     if (scroller.scrollHeight <= scroller.clientHeight + 1) {
       if (windowScrolled || window.scrollY > 0) return;
       windowScrolled = true;

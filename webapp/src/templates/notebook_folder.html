@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "_empty_state.html" import empty_state %}
+{% from "_journal_strip.html" import journal_strip %}
+{% from "_folder_icon.html" import folder_icon %}
+{% from "_bulk_actions_bar.html" import bulk_actions_bar, bulk_count %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% block title %}{{ folder_name }} - Notebook{% endblock %}
+{% block main_class %}main-full-width notebook-main notebook-folder-page{% endblock %}
+{% block content %}
+{% set _count_extra %}<span class="notebook-browse-doc-count">{{ total }} note{{ 's' if total != 1 else '' }}</span>{{ bulk_count("notebook") }}{% endset %}
+{% call page_header_narrow(folder_name, folder_icon_name, title_extra=_count_extra) %}
+    {{ bulk_actions_bar("notebook", edit=true) }}
+    <form method="get" action="/notebook/folder" id="notebook-folder-form" class="form-inline" data-smart-form>
+        <input type="hidden" name="kind" value="{{ kind }}">
+        {% if kind != 'unfiled' %}<input type="hidden" name="name" value="{{ name }}">{% endif %}
+        <div class="notebook-folder-filters">
+        {% set fd_name = 'note_type' %}
+        {% set fd_label = 'Type' %}
+        {% set fd_items = [{'value': '', 'name': 'All types'}] + type_items %}
+        {% set fd_selected = note_type %}
+        {% set fd_mode = 'single' %}
+        {% set fd_form_id = 'notebook-folder-form' %}
+        {% include '_filter_dropdown.html' %}
+        {% set fd_name = 'sort' %}
+        {% set fd_label = 'Sort' %}
+        {% set fd_items = [{'value': 'created', 'name': 'Date created'}, {'value': 'updated', 'name': 'Last edited'}, {'value': 'title', 'name': 'Title'}] %}
+        {% set fd_selected = sort %}
+        {% include '_filter_dropdown.html' %}
+        </div>
+    </form>
+    {% if kind == 'journal' %}
+    <form method="post" action="/notebook/journal/week" class="form-inline"><input type="hidden" name="week" value="{{ current_week }}"><button type="submit" class="btn primary" data-fab title="This week's note">{{ icon('plus', 'icon-sm') }} Week</button></form>
+    {% else %}
+    <a href="/notebook/new{% if kind == 'label' %}?label={{ name | urlencode }}{% endif %}" data-modal class="btn primary" data-fab title="New document">{{ icon('plus', 'icon-sm') }} New</a>
+    {% endif %}
+{% endcall %}
+{% if journal_weeks %}{{ journal_strip(journal_weeks, '', true) }}{% endif %}
+<div class="notebook-folder-body" id="notebook-folder-body" data-smart-region>
+    {% if documents %}
+    <div class="card contact-list notebook-folder-list" id="notebook-folder-list">
+        <div id="notebook-rows">{% include "_notebook_folder_rows.html" %}</div>
+    </div>
+    {% if has_more %}
+    <div class="notebook-load-more">
+        <a class="btn ghost" id="notebook-load-more" href="{{ more_href }}" data-next-offset="{{ next_offset }}" data-rows-url="/notebook/folder/rows?{{ rows_query }}">{{ icon('chevron-down', 'icon-sm') }} Load more</a>
+    </div>
+    {% endif %}
+    {% elif note_type %}
+    {{ empty_state('No documents of this type', icon_name='filter', text='Try another type.') }}
+    {% else %}
+    {% call empty_state('No documents here', icon_name='notebook') %}<a href="/notebook" class="btn ghost">All folders</a>{% endcall %}
+    {% endif %}
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script defer src="{{ static_url('notebook/notebook_find.js') }}"></script>
+<script defer src="{{ static_url('notebook_browse_more.js') }}"></script>
+<script defer src="{{ static_url('bulk_select.js') }}"></script>
+<script nonce="{{ csp_nonce() }}">
+document.addEventListener("DOMContentLoaded", function () {
+    function wire() {
+        window.CCBulkSelect.init({
+            tableId: "notebook-folder-list",
+            rowSelector: ".contact-row-wrap",
+            barId: "notebook-bulk-bar",
+            countId: "notebook-bulk-count",
+            clearId: "notebook-bulk-clear",
+            deleteButtonId: "notebook-bulk-delete",
+            deleteUrl: "/notebook/bulk-delete",
+            editButtonId: "notebook-bulk-edit",
+            editModalUrl: "/notebook/bulk-edit-modal",
+            itemLabel: "document",
+            changeType: "notebook",
+        });
+    }
+    wire();
+    document.addEventListener("cc-region-refreshed", wire);
+});
+</script>
+{% endblock %}

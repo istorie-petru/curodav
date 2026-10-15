@@ -1,28 +1,8 @@
 {% from "_inputs.html" import text_input, textarea_input %}
 {% from "_date_time_fields.html" import datetime_range with context %}
 {% from "_form_rows.html" import title_row, title_date_row, recurrence_row, reminder_row %}
-{# Shared event create/edit field grid (2026-08-10) -- same extraction as
-   _task_form_fields.html: the inner content of event_form.html's
-   #event-form, shared with the merged dashboard quick-add modal
-   (quick_add.html) so both render the exact same fields.
-
-   The surrounding <form> (action/id) lives in the parent template.
-   Parent must provide:
-     event        -- the event being edited, or None for a new event
-     tag_name_items -- the Labels multiselect items
-     prefill_start / prefill_end / prefill_all_day -- new-event defaults
-                     (all blank/false on quick_add)
-   ms_form_id is set inside the partial (always this form's own id). #}
     {% set ms_form_id = 'event-form' %}
     <div class="field-grid">
-        <!-- Phase 1 (label-space rework, 2026-08-06) removed the Calendar
-             picker here -- calendars is gone, every event lives in one
-             universal pool now (see db.py's Phase 1 comments). -->
-        {# Date & time (2026-09-26, Peter's mockup): the All day switch
-           sits in the block's header and only shows/hides the time boxes;
-           Start and End are each a date + a time you can type or pick
-           (_date_time_fields.html). Posts the same start_at / end_at /
-           all_day fields as before. #}
         {% call title_date_row(event.title if event else (prefill_title or ''), qa=(quick_add_kind | default(''))) %}
         <div class="field field-wide event-start-end-field">
             {% from "_date_time_fields.html" import datetime_range with context %}
@@ -38,10 +18,6 @@
             {{ datetime_range('occ_start_at', 'occ_end_at', occurrence.start, occurrence.end, title='This occurrence only', required=true) }}
         </div>
         {% endif %}
-        <!-- Labels -- chip multiselect (2026-08-07, modal-input-design
-             Phase B), same pattern as task_form.html -- see that
-             template's own comment. -->
-        {# 2026-09-25 (UI audit L1): prefill_tags = the label page quick-add was opened from. #}
         {% set pf_tags = event.tags if event else (prefill_tags or []) %}
         {% set pf_form_id = 'event-form' %}
         {% include "_project_field.html" %}
@@ -49,14 +25,6 @@
         {% include "_labels_row.html" %}
         {% set contacts_object_type = 'event' %}{% set contacts_object_id = event.uid if event else '' %}
         {% include "_contacts_row.html" %}
-        <!-- 2026-09-03 direct feedback ("make the input boxes more dense:
-             half width... especially valuable for reminders, recurrence,
-             holiday calendar") -- both fields below dropped their
-             `field-wide` class, so they now sit side by side as plain
-             `.field`s in the 2-column `.field-grid` instead of each
-             claiming a full row for one short input. Same treatment
-             Holiday calendar already had via `ms_wide=false` further
-             down -- these two just never got it. -->
         {# reminders_picker.js and recurrence_picker.js upgrade these two inputs in place; routers/calendar.py still takes the raw values. #}
         {{ reminder_row(event.reminders|join(', ') if event else '', wide=true) }}
         {{ recurrence_row(event.recurrence if event and event.recurrence not in (None, 'None', 'Nothing') else '', wide=true) }}
@@ -66,34 +34,6 @@
             {% include "_status_type_row.html" %}
         </div>
         {% endif %}
-        <!-- 1.6 ("Generalized recurrence and the non-working-day policy"):
-             any recurring event -- not just a Schedule class -- can specify
-             how it behaves on non-working days. A holiday calendar and a
-             weekend exclusion are independent constraints (an event can
-             combine either, both, or neither), applied at read time
-             (recurrence_expand.expand_events), never materialized into a
-             stored EXDATE. Only meaningful once Recurrence above is set --
-             so this is one `.holiday-field`-classed dropdown (rather than
-             three separate grid items) that starts `hidden` unless the
-             event is already recurring (so a recurring event's holiday
-             field is visible on first paint, no JS-dependent flash).
-             static/recurrence_picker.js's sync() toggles `hidden` on it as
-             the user changes the Recurrence preset above -- direct
-             feedback: "make the holiday selector for events to appear only
-             if the event is recurring."
-             2026-08-14 follow-up ("add exclude saturday and sunday into
-             the holiday drop down menu as checkboxes at the end") folded
-             Exclude Saturday/Sunday into this same
-             _widget_list_multiselect.html single-select dropdown (the same
-             "pick, don't type" widget the Recurrence/Ends pickers and
-             Labels already use) via its new `ms_extra_checkboxes` --
-             independent boolean fields appended after the calendar-name
-             radios, own name/id each, not part of the single-select group.
-             An explicit `{'uid': '', 'name': '(none)'}` leads `ms_items`
-             so "no calendar" is a real, selectable option rather than the
-             widget's own "nothing selected -> default to the first item"
-             fallback silently forcing whichever calendar happens to sort
-             first. -->
         <!-- 1.6 ("Configurable terminology"): the field names/values below
              (holiday_calendar/exclude_saturday/exclude_sunday) never
              change -- only the on-screen label does, per Settings >
@@ -120,64 +60,6 @@
         {% include "_widget_list_multiselect.html" %}
         {% set ms_extra_checkboxes = [] %}
 
-        <!-- Format field (2026-08-15, "Event format for simple events") --
-             most events are simple and don't need both Location and
-             Meeting URL visible at once, so a Format choice reveals only
-             the relevant one (In person -> Location, Online -> Meeting
-             URL) instead of always showing both. No backing column: Format
-             is purely derived from which of the two fields already has a
-             value (see the `_has_location`/`_has_meeting` set below) --
-             cheaper than a new column and can't drift out of sync with the
-             two fields it switches between. If an existing event somehow
-             has both fields set (legacy data predating this field),
-             Location/In person wins the tie -- documented here since
-             there's no real "both" state in the new model.
-             static/event_format_toggle.js clears the *other* field's value
-             on switch (so a hidden stale value can't silently resubmit and
-             leave both columns populated again); the show/hide itself is
-             plain CSS (#event-form:has(#event_format_in_person:checked),
-             style.css), same pattern as #all_day/.holiday-field above.
-
-             2026-09-03 direct feedback ("move away from how the Format
-             toggle looks -- too cramped between icons and text, the gray
-             out of place, no clear subordination for what they do, no
-             clear 'not one of these' state"): rebuilt on the existing
-             tile/card picker pattern (.tile-select/.tile-option, style.css
-             "Tile/card picker" section, already used by the widget
-             builder's Data source field) instead of the cramped
-             .segmented/.seg-btn pill row -- three equal cards, icon above
-             label, an unmistakable selected look (border + tint) vs. a
-             plain neutral outline when not selected. "Neither picked" used
-             to be an implicit state (both radios simply unchecked); it's
-             now a real third, visibly-selectable option (`event_format_
-             none`, id kept alongside the original two ids/wrapper class so
-             existing tests and event_format_toggle.js's selector still
-             match), checked whenever neither Location nor Meeting URL has
-             a value -- including every brand-new event.
-
-             2026-09-03 immediate follow-up (direct request: "the format
-             settings should be right at the end of the modal, not before
-             the reminders") -- moved from right after All day/before
-             Labels down to the very end of the field grid, after Holiday
-             calendar. Purely a reorder: the `_has_location`/`_has_meeting`
-             sets and the field's own show/hide CSS don't care about
-             position in the DOM, only that they exist somewhere inside
-             #event-form.
-
-             2026-09-26 (Peter): rebuilt again, this time on the app's
-             shared single-select dropdown (_widget_list_multiselect.html,
-             ms_mode="single") instead of the tile/card picker -- same
-             pattern the habit form's Kind/How often/Daily goal fields
-             use. The three ids (`event_format_in_person`/`_online`/
-             `_none`) are passed through via the macro's `it.id` (added
-             for this) so the pre-existing `:has(#event_format_*:checked)`
-             CSS and event_format_toggle.js (which finds its radios by
-             `.event-format-segmented input[type="radio"]`, not by id)
-             keep working unchanged. New this pass: Format itself shrinks
-             to half width whenever In person/Online reveals its Location/
-             Meeting URL follow-up, so the two sit side by side -- the
-             same half-width follow-up rule the habit form's How often/
-             Daily goal fields use (style.css). -->
         {% set _has_location = event and event.location and event.location not in (None, 'None', 'Nothing') %}
         {% set _has_meeting = event and event.meeting_url and event.meeting_url not in (None, 'None', 'Nothing') %}
         {% set ms_hidden = false %}
@@ -196,22 +78,12 @@
         {% set ms_extra_class = '' %}
         <div class="field field-format-location">
             <label>Location</label>
-            <!-- `or ''` + the empty-check below: the DB has legacy literal
-                 "None" strings from a pre-2026-08-08 str(None) sync bug
-                 (see db.py's init_schema self-heal) -- treat those as
-                 empty here too, so they render as a blank field with a
-                 placeholder example rather than a value that re-saves. -->
             {{ text_input({'name': 'location', 'value': (event.location if event and event.location not in (None, 'None', 'Nothing') else '')}) }}
         </div>
         <div class="field field-format-meeting">
             <label>Meeting URL</label>
             {{ text_input({'name': 'meeting_url', 'value': (event.meeting_url if event and event.meeting_url not in (None, 'None', 'Nothing') else '')}, 'url') }}
         </div>
-        <!-- Description -- last (2026-09-21 direct request: "prioritise
-             information better... description last") -- was the 2nd
-             field on this form, right after Title; moved behind every
-             other field for the same reason task_form.html's own
-             Description just moved. -->
         <div class="field field-wide">
             <label>Description</label>
             {{ textarea_input({'name': 'description', 'rows': '3'}, event.description if event else '') }}

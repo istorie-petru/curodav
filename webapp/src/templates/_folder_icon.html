@@ -1,0 +1,4 @@
+{# A folder drawn in the data's own color with its icon centered on the body. Sizes: sm, md, lg. #}
+{% macro folder_icon(icon_name, color, size='md') %}
+<span class="folder-icon folder-{{ size }} folder-c-{{ color or 'gray' }}" aria-hidden="true"><span class="folder-icon-body">{{ icon(icon_name or 'folder', 'folder-glyph') }}</span></span>
+{% endmacro %}

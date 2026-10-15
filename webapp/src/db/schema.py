@@ -948,7 +948,9 @@ CREATE TABLE IF NOT EXISTS notebook_documents (
     note_type TEXT NOT NULL DEFAULT '',
     is_template INTEGER NOT NULL DEFAULT 0,
     created_at TEXT,
-    updated_at TEXT
+    updated_at TEXT,
+    journal_week TEXT NOT NULL DEFAULT '',
+    pinned INTEGER NOT NULL DEFAULT 0
 );
 
 -- Custom document properties (2026-10-02, curodav-notes/documentation/
@@ -1051,7 +1053,21 @@ CREATE TABLE IF NOT EXISTS citations (
     doi TEXT NOT NULL DEFAULT '',
     url TEXT NOT NULL DEFAULT '',
     created_at TEXT,
-    updated_at TEXT
+    updated_at TEXT,
+    subtitle TEXT NOT NULL DEFAULT '',
+    edition TEXT NOT NULL DEFAULT '',
+    volume TEXT NOT NULL DEFAULT '',
+    issue TEXT NOT NULL DEFAULT '',
+    pages TEXT NOT NULL DEFAULT '',
+    publisher TEXT NOT NULL DEFAULT '',
+    place TEXT NOT NULL DEFAULT '',
+    isbn TEXT NOT NULL DEFAULT '',
+    issn TEXT NOT NULL DEFAULT '',
+    accessed TEXT NOT NULL DEFAULT '',
+    institution TEXT NOT NULL DEFAULT '',
+    degree TEXT NOT NULL DEFAULT '',
+    editors TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT ''
 );
 
 -- A document's attached citation list -- the bibliography (sidebar) and
@@ -1081,7 +1097,26 @@ CREATE TABLE IF NOT EXISTS glossary_terms (
     term TEXT NOT NULL DEFAULT '',
     definition TEXT NOT NULL DEFAULT '',
     created_at TEXT,
-    updated_at TEXT
+    updated_at TEXT,
+    kind TEXT NOT NULL DEFAULT 'Term',
+    aliases_json TEXT NOT NULL DEFAULT '[]',
+    wiki_uid TEXT NOT NULL DEFAULT ''
+);
+
+-- The fields every entry of a kind has; a field's name is fixed once it is created.
+CREATE TABLE IF NOT EXISTS entry_kind_fields (
+    kind TEXT NOT NULL,
+    name TEXT NOT NULL,
+    position REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (kind, name)
+);
+
+-- The kinds an entry can have (Term, Person, Place, ...), each with its own icon and color.
+CREATE TABLE IF NOT EXISTS entry_kinds (
+    name TEXT PRIMARY KEY,
+    icon TEXT NOT NULL DEFAULT 'tag',
+    color TEXT NOT NULL DEFAULT 'teal',
+    position REAL NOT NULL DEFAULT 0
 );
 
 -- Extra titled text blocks on a term (Example, "Remember", ...), user-defined per entry.

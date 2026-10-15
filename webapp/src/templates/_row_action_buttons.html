@@ -1,45 +1,5 @@
-{# Shared row-level Edit/Delete icon-button pair -- the `.action-buttons`
-   cell that appears once per row in a settings/manage table (Edit link
-   opening a modal, Delete form with a confirm-sheet). Extracted 2026-09-07
-   (audit-fixes-2.0.md item 13) from four identical copies (settings_
-   holidays.html, settings_time_blocks.html's Sleep and Leisure sections,
-   labels_manage.html, _labels_table_body.html) that differed only in the
-   edit/delete URLs, the `title` noun, and the confirm-sheet message --
-   same shape as item 9's `_bulk_actions_bar.html` extraction, just not
-   caught in that pass.
-
-   Params:
-     edit_url        -- href for the Edit icon link (opens via data-modal).
-     delete_url       -- action for the Delete <form> (POST).
-     noun             -- text after "Edit "/"Delete " in each button's
-                         title attribute, e.g. "holiday", "sleep time",
-                         "label".
-     confirm_message  -- full data-confirm-sheet text, built by the caller
-                         (it embeds the row's own name/label mid-sentence,
-                         and the trailing explanation varies enough per
-                         caller -- e.g. labels' "clears usage, not a real
-                         delete" wording -- that it can't be assembled
-                         generically here). Any literal `"` in this value
-                         is auto-escaped to `&quot;` by Jinja's normal
-                         attribute-escaping, which a browser decodes back
-                         to `"` when JS reads the attribute -- same
-                         rendered/observed text as the un-extracted markup,
-                         now valid HTML instead of a raw embedded quote.
-     view_url         -- optional href to the row's own generated page
-                         (a Space/Project/plain-label's /spaces/.../
-                         /projects/.../.settings/labels/... destination,
-                         direct request 2026-09-21: "a button that allows
-                         the user to navigate to that label's page").
-                         Rendered first, before Edit, only when given --
-                         holidays/time blocks (this macro's other two
-                         callers) have no such page and just omit it, same
-                         shape as every other optional param elsewhere in
-                         this app's shared partials. A real navigation
-                         (no data-modal), not a modal trigger. #}
 {% macro row_action_buttons(edit_url, delete_url, noun, confirm_message, view_url=none, duplicate_url=none) %}
 <div class="action-buttons">
-    {# 2026-09-26: `{% call row_action_buttons(...) %}` puts extra buttons
-       first (Settings > Labels' Convert to project). #}
     {% if caller is defined %}{{ caller() }}{% endif %}
     {% if view_url %}<a href="{{ view_url }}" class="icon-btn" title="Open {{ noun }} page">{{ icon('external-link', 'icon-sm') }}</a>{% endif %}
     {% if duplicate_url %}<a href="{{ duplicate_url }}" class="icon-btn" data-modal title="Duplicate {{ noun }}" aria-label="Duplicate {{ noun }}">{{ icon('copy', 'icon-sm') }}</a>{% endif %}

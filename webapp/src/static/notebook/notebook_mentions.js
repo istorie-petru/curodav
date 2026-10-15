@@ -13,7 +13,7 @@
   var TRIGGER = /(^|[\s (])([@$:])([\w-]{0,30})$/;
   // `[` or `[[` opens the document picker; what is typed after it searches.
   var WIKI_TRIGGER = /(^|[\s (])(\[\[?)([^\[\]]{0,40})$/;
-  var URLS = { contact: "/contacts/", task: "/tasks/", event: "/events/" };
+  var URLS = { contact: "/contacts/", task: "/tasks/", event: "/events/", entry: "/notebook/glossary/" };
 
   function icon(name) {
     return '<svg class="icon" aria-hidden="true"><use href="#icon-' + name + '"></use></svg>';
@@ -120,13 +120,20 @@
     var cfg = KINDS[current.trigger];
     var mount = document.getElementById("notebook-editor");
     var url = current.trigger === "["
-      ? "/notebook/search?ranked=1&q=" + encodeURIComponent(current.query.trim()) + "&exclude=" + encodeURIComponent(mount ? mount.getAttribute("data-uid") || "" : "")
+      ? "/notebook/link-search?q=" + encodeURIComponent(current.query.trim()) + "&exclude=" + encodeURIComponent(mount ? mount.getAttribute("data-uid") || "" : "")
       : "/notebook/mentions?kind=" + cfg.endpoint + "&q=" + encodeURIComponent(current.query);
     fetch(url, { headers: { Accept: "application/json" } })
       .then(function (resp) { return resp.ok ? resp.json() : []; })
       .catch(function () { return []; })
       .then(function (items) {
         if (state !== current || token !== current.token) return;
+        var typed = current.query.trim();
+        if (current.trigger === "[" && typed) {
+          items = items.concat([
+            { kind: "create-note", title: typed, group: "Create" },
+            { kind: "create-entry", title: typed, group: "Create" },
+          ]);
+        }
         current.items = items;
         current.index = 0;
         renderPicker();
@@ -134,6 +141,7 @@
   }
 
   function current_glyph(item) {
+    if (item.kind === "create-note" || item.kind === "create-entry") return "plus";
     if (state && state.trigger === "[") return item.icon || "file-text";
     return item.kind === "icon" ? item.name : item.kind === "contact" ? "user" : item.kind === "event" ? "calendar" : "check-square";
   }
@@ -142,12 +150,17 @@
     if (!popup || !state) return;
     popup.innerHTML = "";
     if (!state.items.length) {
-      var empty = document.createElement("div");
-      empty.className = "cdx-mention-empty";
-      empty.textContent = "No matches";
-      popup.appendChild(empty);
+      popup.appendChild(window.ccEmptyState("No matches"));
     }
+    var lastGroup = "";
     state.items.forEach(function (item, i) {
+      if (item.group && item.group !== lastGroup) {
+        lastGroup = item.group;
+        var heading = document.createElement("div");
+        heading.className = "cdx-mention-group";
+        heading.textContent = item.group;
+        popup.appendChild(heading);
+      }
       var row = document.createElement("button");
       row.type = "button";
       row.setAttribute("role", "option");
@@ -156,7 +169,7 @@
       row.innerHTML = '<span class="cdx-mention-row-icon">' + icon(glyph) + "</span>";
       var label = document.createElement("span");
       label.className = "cdx-mention-row-label";
-      label.textContent = item.title;
+      label.textContent = item.kind === "create-note" ? 'New note "' + item.title + '"' : item.kind === "create-entry" ? 'New entry "' + item.title + '"' : item.title;
       row.appendChild(label);
       if (item.subtitle) {
         var sub = document.createElement("span");
@@ -168,6 +181,8 @@
       row.addEventListener("click", function () { pick(item); });
       popup.appendChild(row);
     });
+    var activeRow = popup.querySelector(".is-active");
+    if (activeRow && activeRow.scrollIntoView) activeRow.scrollIntoView({ block: "nearest" });
     var rect = caretRect(state.node, state.start + (state.open || 1) + state.query.length);
     var width = popup.offsetWidth, height = popup.offsetHeight;
     var left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
@@ -188,9 +203,37 @@
     return chip;
   }
 
+  // Creating from the picker makes the note or entry first, then links to it like any other pick.
+  function createThen(item) {
+    var body = new URLSearchParams();
+    var url;
+    if (item.kind === "create-note") {
+      body.set("title", item.title);
+      url = "/notebook";
+    } else {
+      body.set("term", item.title);
+      body.set("kind", "Term");
+      url = "/notebook/glossary";
+    }
+    fetch(url, { method: "POST", headers: { "X-Requested-With": "fetch" }, body: body })
+      .then(function (resp) { if (!resp.ok) throw new Error("create failed"); return resp.json(); })
+      .then(function (data) {
+        var isNote = item.kind === "create-note";
+        pick({
+          kind: isNote ? "doc" : "entry", uid: data.uid, title: item.title, note_type: "",
+          icon: isNote ? "file-text" : "tag", color: isNote ? "gray" : "teal",
+        });
+      })
+      .catch(function () { window.ccToast({ message: "Could not create it", variant: "error" }); });
+  }
+
   function pick(item) {
     var current = state;
     if (!current) return;
+    if (item.kind === "create-note" || item.kind === "create-entry") {
+      createThen(item);
+      return;
+    }
     var undo = window.notebookUndo;
     if (undo) undo.checkpoint();
     var node = current.node;
@@ -206,7 +249,7 @@
       var text = item.kind === "icon" ? item.name : item.title;
       inserted = document.createTextNode('"' + text.replace(/"/g, '""') + '"');
       range.insertNode(inserted);
-    } else if (current.trigger === "[") {
+    } else if (current.trigger === "[" && item.kind !== "entry") {
       inserted = window.notebookWikilinkMarker(item);
       range.insertNode(inserted);
       var gap = document.createTextNode("\u00a0");

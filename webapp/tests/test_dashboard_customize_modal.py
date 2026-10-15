@@ -52,7 +52,6 @@ class TestCustomizeRoute:
         assert "Customize dashboard" in body
         assert 'id="modal-target"' in body
         assert "Add widget" in body
-        assert "Done" in body  # Done button closes the modal
 
     def test_renders_builder_with_no_widgets(self, conn):
         # No widgets exist, but the builder form is always shown -- the

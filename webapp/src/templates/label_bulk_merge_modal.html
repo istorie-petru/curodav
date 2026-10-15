@@ -1,16 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Merge labels{% endblock %}
 {% block content %}
-<!-- Bulk-select "Merge" modal (direct request: "in the labels table bulk
-     select i would like an option to merge labels into one") -- same shape
-     as label_merge_modal.html's single-row Merge (a destination picker
-     posting to a merge endpoint), but for every currently-selected row at
-     once. Opened via static/bulk_select.js's Merge button
-     (window.CCModal.open) with the selected names carried in the URL, not
-     read from the DOM here -- the modal doesn't know about the table it
-     was opened from. Posts to /settings/labels/bulk-merge
-     (routers/labels.py::bulk_merge_labels), which loops the existing
-     db.merge_labels per selected name. -->
 <div id="modal-target">
 <div class="modal-header">
 <h1>Merge {{ selected_names|length }} label{{ '' if selected_names|length == 1 else 's' }}</h1>

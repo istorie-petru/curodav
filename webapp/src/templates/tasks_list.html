@@ -1,81 +1,12 @@
 {% extends "base.html" %}
-{% from "_task_row.html" import task_row with context %}
 {% block title %}Tasks{% endblock %}
 {% block main_class %}main-shell{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_bulk_actions_bar.html" import bulk_button %}
-<!-- Real page heading, kept sr-only -- the narrow header's own title
-     (_page_header_narrow.html) is deliberately an h2 element, not h1 (see
-     that partial's own comment), since most pages using it already have
-     their own real/sr-only h1 elsewhere. This page's old toolbar row
-     WAS that h1 (removed below, 2026-08-29 sidebar redesign item 13e
-     follow-up) -- restored standalone here so the page still has exactly
-     one real heading for assistive tech. is_inbox is never actually set
-     anywhere in routers/tasks.py (dead branch, predates this change) --
-     simplified to the one text it ever rendered. -->
 <h1 class="sr-only">Tasks</h1>
 {% set _bulk_count_html %}<span id="bulk-count" class="bulk-count"></span>{% endset %}
 {% call page_header_narrow("Tasks", "check-square", title_extra=_bulk_count_html) %}
-<!-- Bulk actions -- 2026-08-01, relocated into the header's actions slot
-     and trimmed to just Delete+Clear 2026-09-13 (audit-fixes-2.1.md: "the
-     bulk-actions-bar should only contain two buttons - Delete and Clear
-     ... should not be placed in the bulk-actions-bar, but in the
-     page-header-narrow"). The bulk status-set `<select>` and the
-     Add/Remove-label chip-multiselect controls this bar used to carry are
-     gone outright (direct follow-up decision, not just relocated) -- see
-     routers/tasks.py's bulk_action, which still supports the "status"/
-     "tag" actions server-side unchanged (nothing else called them
-     UI-only; this is a UI simplification, not an API removal). Still
-     hand-rolled markup, not _bulk_actions_bar.html's shared macro -- see
-     that partial's own header comment for why (unprefixed ids
-     static/tasks_table.js already hardcodes, and its own async-CRUD
-     region-swap reconciliation CCBulkSelect doesn't need to know about).
-     Hidden until at least one row is selected (static/tasks_table.js
-     toggles it), same "don't show controls with nothing to act on"
-     reasoning as Dashboard's edit-mode gating -- and, like every other
-     actions-slot control, physically can't grow the header regardless:
-     .page-header-narrow is a hard height:48px + overflow:hidden box (see
-     that rule's own comment in style.css). -->
-<!-- 2026-09-15 (direct feedback, applied the same way to
-     _bulk_actions_bar.html's shared macro for consistency): Delete/Clear
-     moved before the count -- on this page the bulk bar sits right after
-     the Date filter dropdown in the same actions cluster, and the count
-     sitting between the two read as part of the filter, not the
-     bulk-select group. "All buttons should have the same width" is
-     style.css's `.page-header-narrow-actions .btn-sm`/
-     `.filter-dropdown-trigger` rule (Delete/Clear/the Date trigger all
-     share one min-width); the count stays plain text, deliberately
-     excluded.
-
-     2026-09-15 same-day follow-up (direct feedback: "the order of the
-     buttons should be reversed because they are on the right of the
-     page"): this cluster sits flush against the header's right edge (the
-     actions slot's own .spacer pushes it there), so the control nearest
-     that edge reads as "first," not the one nearest the Date filter to
-     its left. Reversed to count -> Clear -> Delete, putting Delete --
-     the actual bulk action -- at the true right edge.
-
-     2026-09-15 same-day follow-up #2 (direct feedback: "the multiselect
-     widget-list-multiselect filter-dropdown should be last"): the Date
-     filter (`_tasks_toolbar.html`, a `.multiselect.widget-list-
-     multiselect.filter-dropdown`) used to render first, before this bar
-     -- moved to after it instead, so the true right edge is now the Date
-     filter, past Delete. Same "the edge is what reads as last/first, not
-     source position relative to a neighbor" reasoning as the button
-     reorder above -- Contacts already had its own Label filter dropdown
-     after its bulk bar (contacts_list.html), so this brings Tasks in
-     line with that instead of the other way around.
-
-     2026-09-12 (direct feedback: "the bulk count should be allowed to sit
-     on the first row"): #bulk-count itself moved out of this div, up into
-     page_header_narrow's title_extra slot above (captured via a Jinja
-     set-block, since this page's bar is still hand-rolled, not
-     _bulk_actions_bar.html's macro) -- same reasoning/pattern as that
-     partial's own bulk_count() macro applied to every other bulk-select
-     page. Id unchanged ("bulk-count"), so static/tasks_table.js's
-     document.getElementById("bulk-count") still finds it regardless of
-     where in the DOM it now lives. -->
 <div class="bulk-actions-bar" id="bulk-actions-bar">
     {{ bulk_button('bulk-clear', 'Clear', 'x') }}
     {{ bulk_button('bulk-edit', 'Edit', 'edit') }}
@@ -84,10 +15,6 @@
 {% include "_tasks_toolbar.html" %}
 {% endcall %}
 
-<!-- Quick-add form removed 2026-08-08 (direct feedback, minimalist toolbar
-     pass) -- the "+ New" button in the toolbar above opens the same create
-     endpoint via the full field-grid modal; that's the one create path now,
-     not two. -->
 
 {# Table body + empty state (open_tasks/completed_tasks/grouping/pager) --
    shared with the async-CRUD region fragment (GET /tasks/regions?region=table)
@@ -97,10 +24,5 @@
    them, and the fragment route supplies its own defaults. #}
 {% include "_tasks_body.html" %}
 
-{# The Tasks > Habits tab and the standalone Habits page are both retired
-   (2026-08-28 "major rework" session, items 2+3) -- every habit-labeled
-   task and every standalone Habit entity now renders inline as a row in
-   the "Habits" group below, right alongside Project/Unassigned/Completed
-   (see _tasks_body.html and routers/tasks.py's _build_task_groups). #}
 {% endblock %}
 {% block extra_scripts %}<script defer src="{{ static_url('tasks_table.js') }}"></script>{% endblock %}

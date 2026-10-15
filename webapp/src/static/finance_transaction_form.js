@@ -4,9 +4,7 @@
   document.addEventListener("change", function (e) {
     const target = e.target;
     if (!target.matches || !target.form || target.form.id !== "finance-transaction-form") return;
-    if (target.name === "status") {
-      target.form.querySelector(".finance-txn-grid").dataset.status = target.value;
-    } else if (target.name === "type") {
+    if (target.name === "type") {
       target.form.querySelector(".finance-txn-grid").dataset.txnType = target.value;
     }
   });

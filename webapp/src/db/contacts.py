@@ -17,25 +17,19 @@ from .events import _birthday_event_uid, delete_event, get_event, upsert_event
 
 
 def migrate_legacy_contact_phone_email(conn: sqlite3.Connection) -> None:
-    """Contacts field parity slice 2 of 6 (plans/open.md) -- the green-lit
-    auto-migration: a contact whose legacy `phone`/`email` column already
-    has a value gets that value copied into the new `contact_phones`/
-    `contact_emails` table as a single row typed "Other" (the vocabulary's
-    catch-all, since the old flat column never recorded which kind of
-    number/address it was).
-
-    Idempotent by construction, not by a separate "have I run" flag: a
-    contact is only migrated if it has a legacy value AND zero existing
-    child rows for that field, so running this again after the first row
-    exists is a no-op for that contact -- covers both "called twice in a
-    row" (schema setup runs on every `db.connect`) and "the contact
-    already has real typed rows a user entered" (per this slice's own test
-    list: a contact with real post-migration rows must be left alone even
-    if the legacy column somehow still has a stale value, since nothing
-    writes to the legacy column anymore -- see the contacts CREATE TABLE
-    comment for why it's frozen, not kept live). A contact with no legacy
-    value gets no rows at all -- no spurious "Other" entry from an empty
-    field."""
+    """Idempotent by construction, not by a separate "have I run" flag: a
+        contact is only migrated if it has a legacy value AND zero existing
+        child rows for that field, so running this again after the first row
+        exists is a no-op for that contact -- covers both "called twice in a
+        row" (schema setup runs on every `db.connect`) and "the contact
+        already has real typed rows a user entered" (per this slice's own test
+        list: a contact with real post-migration rows must be left alone even
+        if the legacy column somehow still has a stale value, since nothing
+        writes to the legacy column anymore -- see the contacts CREATE TABLE
+        comment for why it's frozen, not kept live). A contact with no legacy
+        value gets no rows at all -- no spurious "Other" entry from an empty
+        field.
+    """
     now = datetime.now(timezone.utc).isoformat()
     phone_rows = conn.execute(
         "SELECT uid, phone FROM contacts WHERE phone IS NOT NULL AND TRIM(phone) != '' "
@@ -60,23 +54,20 @@ def migrate_legacy_contact_phone_email(conn: sqlite3.Connection) -> None:
 
 
 def migrate_legacy_contact_address(conn: sqlite3.Connection) -> None:
-    """Contacts field parity slice 5 of 6 -- the same green-lit auto-
-    migration shape as migrate_legacy_contact_phone_email above: a contact
-    whose legacy free-text `address` column already has a value gets that
-    value copied into the new `contact_addresses` table as a single row
-    typed "Other". Unlike phone/email (a single flat string that maps
-    directly onto TEL/EMAIL's own single `value`), the legacy `address`
-    column was never structured -- there's no reliable way to split an
-    arbitrary free-text address into PO Box/Street/City/Region/Postal code/
-    Country, so the whole legacy string is placed into `street` (the one
-    ADR line meant for a general street-level address) and every other
-    structured field is left blank; a user can split it into the real
-    fields by hand from the edit form afterward if they want to.
+    """Unlike phone/email (a single flat string that maps
+        directly onto TEL/EMAIL's own single `value`), the legacy `address`
+        column was never structured -- there's no reliable way to split an
+        arbitrary free-text address into PO Box/Street/City/Region/Postal code/
+        Country, so the whole legacy string is placed into `street` (the one
+        ADR line meant for a general street-level address) and every other
+        structured field is left blank; a user can split it into the real
+        fields by hand from the edit form afterward if they want to.
 
-    Same idempotence shape as migrate_legacy_contact_phone_email: only
-    migrates a contact that has a legacy value AND zero existing
-    contact_addresses rows, so a contact with real typed address rows
-    already (or a second call after the first migrated it) is left alone."""
+        Same idempotence shape as migrate_legacy_contact_phone_email: only
+        migrates a contact that has a legacy value AND zero existing
+        contact_addresses rows, so a contact with real typed address rows
+        already (or a second call after the first migrated it) is left alone.
+    """
     now = datetime.now(timezone.utc).isoformat()
     address_rows = conn.execute(
         "SELECT uid, address FROM contacts WHERE address IS NOT NULL AND TRIM(address) != '' "
@@ -161,9 +152,6 @@ CONTACT_PHONE_TYPES: tuple[str, ...] = ("Home", "Work", "Cell", "Fax", "Pager", 
 CONTACT_EMAIL_TYPES: tuple[str, ...] = ("Home", "Work", "Other")
 CONTACT_WEBSITE_TYPES: tuple[str, ...] = ("Home", "Work", "Other")
 CONTACT_ADDRESS_TYPES: tuple[str, ...] = ("Home", "Work", "Other")
-# Contacts field parity slice 6 of 6 -- Social network. Network names, not
-# Home/Work/Other -- matches vcard_rows.py's own _SOCIAL_TYPE_TO_VCARD
-# mapping (every entry here except "Other" has a TYPE= token there).
 CONTACT_SOCIAL_TYPES: tuple[str, ...] = ("Twitter", "Facebook", "Instagram", "LinkedIn", "Mastodon", "GitHub", "Other")
 
 
@@ -207,30 +195,28 @@ def format_contact_birthday(value: str | None) -> str:
 
 
 def sync_contact_birthday_event(conn: sqlite3.Connection, contact_uid: str, full_name: str | None, birthday: str | None) -> None:
-    """Direct follow-up (2026-08-16) to Contacts field parity slice 4 of 6:
-    a contact's Birthday shows up on the Calendar itself, as a real all-day
-    event recurring yearly, tagged with the "Birthday" label -- not a
-    separate widget. Called from upsert_contact on every save (so the
-    event's title/date always tracks the contact's current full_name/
-    birthday) and from delete_contact.
+    """Called from upsert_contact on every save (so the
+        event's title/date always tracks the contact's current full_name/
+        birthday) and from delete_contact.
 
-    The event's uid is deterministic (`_birthday_event_uid`), not a fresh
-    uuid4 -- lets this function find-and-replace it idempotently without a
-    separate contact<->event relation column/table, the same "derive the
-    id instead of storing a relation" shape event_occurrence_overrides'
-    `master_uid::occurrence_date` composite key already uses. A cleared
-    birthday (`None`) deletes the event outright via `delete_event` (which
-    also clears its `object_labels` row) rather than leaving a dangling
-    dateless event around.
+        The event's uid is deterministic (`_birthday_event_uid`), not a fresh
+        uuid4 -- lets this function find-and-replace it idempotently without a
+        separate contact<->event relation column/table, the same "derive the
+        id instead of storing a relation" shape event_occurrence_overrides'
+        `master_uid::occurrence_date` composite key already uses. A cleared
+        birthday (`None`) deletes the event outright via `delete_event` (which
+        also clears its `object_labels` row) rather than leaving a dangling
+        dateless event around.
 
-    A year-less "--MM-DD" birthday has no real year to anchor DTSTART on,
-    so it uses a fixed placeholder year (1900) far enough in the past that
-    `FREQ=YEARLY` always has a "this year" occurrence to expand, regardless
-    of when the calendar is viewed -- RRULE recurrence only ever generates
-    occurrences forward from DTSTART, never before it, which is also
-    exactly correct for a *full* birthday date: recurrence naturally starts
-    at the real birth year and never fires an occurrence before someone was
-    born."""
+        A year-less "--MM-DD" birthday has no real year to anchor DTSTART on,
+        so it uses a fixed placeholder year (1900) far enough in the past that
+        `FREQ=YEARLY` always has a "this year" occurrence to expand, regardless
+        of when the calendar is viewed -- RRULE recurrence only ever generates
+        occurrences forward from DTSTART, never before it, which is also
+        exactly correct for a *full* birthday date: recurrence naturally starts
+        at the real birth year and never fires an occurrence before someone was
+        born.
+    """
     event_uid = _birthday_event_uid(contact_uid)
     if not birthday:
         delete_event(conn, event_uid)
@@ -281,16 +267,8 @@ def upsert_contact(
     # now also owns writing the child tables when the caller supplies them.
     phones = data.pop("phones", None)
     emails = data.pop("emails", None)
-    # Contacts field parity slice 3 of 6 -- Website, same "pop, write the
-    # base row, then attach the related rows" shape as phones/emails above.
     websites = data.pop("websites", None)
-    # Contacts field parity slice 5 of 6 -- Address, same "pop, write the
-    # base row, then attach the related rows" shape as phones/emails/
-    # websites above.
     addresses = data.pop("addresses", None)
-    # Contacts field parity slice 6 of 6 -- Social network, same "pop,
-    # write the base row, then attach the related rows" shape as phones/
-    # emails/websites/addresses above.
     social_profiles = data.pop("social_profiles", None)
     data["photo_version"] = hashlib.md5(data["photo_b64"].encode("ascii")).hexdigest()[:12] if data.get("photo_b64") else None
     if "archived_at" not in data:
@@ -463,16 +441,16 @@ def list_contacts(
     q: str | None = None,
     include_archived: bool = False,
 ) -> list[dict[str, Any]]:
-    """`include_archived` defaults False (2026-09-26, item 19 -- "archived
-    contacts don't sync"/aren't visible normally) -- same "excluded unless
-    a caller explicitly opts in" shape `list_tasks`'s own
-    `include_habit_tasks` already established. This is the ONE fetcher
-    both the Contacts page (routers/contacts.py) and Published Lists'
-    materialization (published_lists.py's `_ENTITY_FETCHERS["contact"]`)
-    call, so leaving this default False protects both call sites at once
-    -- a List can never end up including an archived contact just because
-    it matched the List's own label filter, without published_lists.py
-    needing its own separate archived-exclusion logic."""
+    """`include_archived` defaults False -- same "excluded unless
+        a caller explicitly opts in" shape `list_tasks`'s own
+        `include_habit_tasks` already established. This is the ONE fetcher
+        both the Contacts page (routers/contacts.py) and Published Lists'
+        materialization (published_lists.py's `_ENTITY_FETCHERS["contact"]`)
+        call, so leaving this default False protects both call sites at once
+        -- a List can never end up including an archived contact just because
+        it matched the List's own label filter, without published_lists.py
+        needing its own separate archived-exclusion logic.
+    """
     query = "SELECT * FROM contacts"
     params: list[str] = []
     clauses = ["is_draft = 0"]
@@ -505,14 +483,15 @@ def list_contacts(
 
 
 def archive_contact(conn: sqlite3.Connection, uid: str) -> None:
-    """Item 19 (2026-09-26): a real top-level data-model column, not a
-    label -- replaces the old `ARCHIVED_LABEL` fake-label hack
-    (routers/contacts.py), which conflated archiving with categorization
-    once a contact could carry only one label total (item 16). Same
-    "explicit action, never automatic" shape `archive_project` already
-    uses for label_config.archived_at. No-op on an unknown uid (matches
-    every other single-object mutator's own quiet-no-op convention, e.g.
-    `remove_latest_work_allocation`)."""
+    """Item 19: a real top-level data-model column, not a
+        label -- replaces the old `ARCHIVED_LABEL` fake-label hack
+        (routers/contacts.py), which conflated archiving with categorization
+        once a contact could carry only one label total (item 16). Same
+        "explicit action, never automatic" shape `archive_project` already
+        uses for label_config.archived_at. No-op on an unknown uid (matches
+        every other single-object mutator's own quiet-no-op convention, e.g.
+        `remove_latest_work_allocation`).
+    """
     conn.execute(
         "UPDATE contacts SET archived_at = ? WHERE uid = ?",
         (datetime.now(timezone.utc).isoformat(), uid),
@@ -527,16 +506,17 @@ def unarchive_contact(conn: sqlite3.Connection, uid: str) -> None:
 
 
 def migrate_archived_contact_label(conn: sqlite3.Connection) -> None:
-    """One-time migration (item 19, 2026-09-26): 'Archived' used to be a
-    top-level fake LABEL on Contacts (routers/contacts.py's since-removed
-    `ARCHIVED_LABEL`) -- every contact still carrying that tag gets the
-    tag removed and the real `contacts.archived_at` column (this item's
-    whole point) set instead. Matched case-insensitively, same convention
-    the old filter code used (a user could have typed "Archived" via the
-    label picker's free-text "new label" field, not just lowercase).
-    Idempotent via its own app_meta flag -- once run, a later admin who
-    deliberately creates a real, ordinary label that happens to be NAMED
-    "archived" is never silently re-migrated."""
+    """One-time migration: 'Archived' used to be a
+        top-level fake LABEL on Contacts (routers/contacts.py's since-removed
+        `ARCHIVED_LABEL`) -- every contact still carrying that tag gets the
+        tag removed and the real `contacts.archived_at` column (this item's
+        whole point) set instead. Matched case-insensitively, same convention
+        the old filter code used (a user could have typed "Archived" via the
+        label picker's free-text "new label" field, not just lowercase).
+        Idempotent via its own app_meta flag -- once run, a later admin who
+        deliberately creates a real, ordinary label that happens to be NAMED
+        "archived" is never silently re-migrated.
+    """
     key = "contacts_archived_label_migrated_v1"
     if get_app_meta(conn, key):
         return
@@ -556,24 +536,6 @@ def migrate_archived_contact_label(conn: sqlite3.Connection) -> None:
         )
     set_app_meta(conn, key, "1")
     conn.commit()
-
-
-# --------------------------------------------------------------------- #
-# Contact phones / emails -- Contacts field parity slice 2 of 6 (plans/
-# open.md). Per-parent child-table CRUD, closest precedent is work
-# allocations' list_work_allocations_for_task/create_work_allocation/
-# delete_work_allocation trio -- but a contact's phone/email list is edited
-# as a whole via one Save button (contact_form.html submits every row
-# together as parallel phone_type[]/phone_value[] form arrays, same shape
-# `tags_labels: list[str] = Form([])` already uses on this router), not
-# through separate per-row add/remove endpoints the way work sessions or
-# checklist items are -- so the primary write operation here is
-# set_contact_phones/set_contact_emails ("replace everything for this
-# contact with this ordered list"), not incremental add/update/delete
-# calls. add_contact_phone/add_contact_email still exist standalone because
-# migrate_legacy_contact_phone_email needs to insert exactly one row without
-# disturbing anything else already there.
-# --------------------------------------------------------------------- #
 
 
 def list_contact_phones(conn: sqlite3.Connection, contact_uid: str) -> list[dict[str, Any]]:
@@ -626,14 +588,13 @@ def add_contact_email(conn: sqlite3.Connection, contact_uid: str, type_: str, va
 
 def set_contact_phones(conn: sqlite3.Connection, contact_uid: str, items: list[dict[str, Any]]) -> None:
     """Replaces every phone row for `contact_uid` with `items` (each a
-    {"type", "value"} dict), in the given order. The create/edit form always
-    submits its whole ordered phone list together (one Save button, per
-    plans/open.md's own reasoning for choosing form-array fields over
-    per-row endpoints) so "delete everything, re-insert in submitted order"
-    is simpler and just as correct as diffing against the previous set by
-    uid -- position is always just the item's index, so display order keeps
-    matching submission order. Blank values are dropped silently (an empty
-    row in the form is "no phone here", not a phone with an empty number)."""
+        {"type", "value"} dict), in the given order. The create/edit form always
+        submits its whole ordered phone list together so "delete everything, re-insert in submitted order"
+        is simpler and just as correct as diffing against the previous set by
+        uid -- position is always just the item's index, so display order keeps
+        matching submission order. Blank values are dropped silently (an empty
+        row in the form is "no phone here", not a phone with an empty number).
+    """
     conn.execute("DELETE FROM contact_phones WHERE contact_uid = ?", (contact_uid,))
     now = datetime.now(timezone.utc).isoformat()
     position = 0
@@ -665,17 +626,6 @@ def set_contact_emails(conn: sqlite3.Connection, contact_uid: str, items: list[d
     conn.commit()
 
 
-# --------------------------------------------------------------------- #
-# Contact websites -- Contacts field parity slice 3 of 6 (plans/open.md).
-# Same shape as contact_phones/contact_emails immediately above -- one
-# Save-button replace-all write path (set_contact_websites), no separate
-# add/remove endpoints. Unlike phone/email, there is no legacy single-value
-# column to migrate from (confirmed by grep before this slice started), so
-# there's no add_contact_website standalone helper -- nothing needs to
-# insert exactly one row outside of set_contact_websites.
-# --------------------------------------------------------------------- #
-
-
 def list_contact_websites(conn: sqlite3.Connection, contact_uid: str) -> list[dict[str, Any]]:
     rows = conn.execute(
         "SELECT * FROM contact_websites WHERE contact_uid = ? ORDER BY position ASC, created_at ASC",
@@ -703,17 +653,6 @@ def set_contact_websites(conn: sqlite3.Connection, contact_uid: str, items: list
         position += 1
     conn.commit()
 
-
-# --------------------------------------------------------------------- #
-# Contact addresses -- Contacts field parity slice 5 of 6 (plans/open.md).
-# Same shape as contact_phones/contact_emails/contact_websites above (one
-# Save-button replace-all write path, no separate add/remove endpoints),
-# just with seven value fields per row instead of one. A row counts as
-# "blank" (dropped on save) only when EVERY structured field is blank --
-# unlike phone/email/website's single `value`/`url`, a real address could
-# legitimately have e.g. only a city and country filled in, so there's no
-# single field whose blankness alone means "no address here."
-# --------------------------------------------------------------------- #
 
 _CONTACT_ADDRESS_FIELDS: tuple[str, ...] = (
     "po_box", "extended", "street", "city", "region", "postal_code", "country",
@@ -777,15 +716,6 @@ def set_contact_addresses(conn: sqlite3.Connection, contact_uid: str, items: lis
         )
         position += 1
     conn.commit()
-
-
-# --------------------------------------------------------------------- #
-# Contact social profiles -- Contacts field parity slice 6 of 6 (plans/
-# open.md). Same shape as contact_phones/contact_emails/contact_websites
-# (single `value` column, one Save-button replace-all write path, no
-# separate add/remove endpoints, no legacy column to migrate -- same
-# "confirmed by grep, nothing to migrate" situation as Website).
-# --------------------------------------------------------------------- #
 
 
 def list_contact_social_profiles(conn: sqlite3.Connection, contact_uid: str) -> list[dict[str, Any]]:
@@ -899,14 +829,15 @@ _CONTACTS_WIDGET_DEFAULT_FIXED_KEY = "label_modules_contacts_default_fixed"
 
 
 def _fix_contacts_widget_default(conn: sqlite3.Connection) -> None:
-    """One-time fix (slice b, 2026-09-25): slice a shipped contacts_widget
-    defaulting to off, on the wrong belief that the plain label page had no
-    Contacts card. It did (added 2026-09-16). Nothing could set the field
-    before slice b's form, so every stored value is that wrong default and
-    is safe to turn on. On a database migrated by slice a, the column
-    DEFAULT stays 0 (SQLite can't alter a default in place), but every
-    insert goes through upsert_label_config, which writes the Python-side
-    default of 1 explicitly."""
+    """One-time fix: slice a shipped contacts_widget
+        defaulting to off, on the wrong belief that the plain label page had no
+        Contacts card. It did. Nothing could set the field
+        before slice b's form, so every stored value is that wrong default and
+        is safe to turn on. On a database migrated by slice a, the column
+        DEFAULT stays 0 (SQLite can't alter a default in place), but every
+        insert goes through upsert_label_config, which writes the Python-side
+        default of 1 explicitly.
+    """
     if get_app_meta(conn, _CONTACTS_WIDGET_DEFAULT_FIXED_KEY):
         return
     conn.execute("UPDATE label_config SET contacts_widget = 1")

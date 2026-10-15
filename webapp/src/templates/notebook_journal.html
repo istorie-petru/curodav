@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "_empty_state.html" import empty_state %}
+{% from "_folder_icon.html" import folder_icon %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% block title %}Journal - Notebook{% endblock %}
+{% block main_class %}main-full-width notebook-main notebook-home-page{% endblock %}
+{% block content %}
+{% call page_header_narrow("Journal", "calendar") %}
+    <form method="post" action="/notebook/journal/week" class="form-inline"><input type="hidden" name="week" value="{{ current_week }}"><button type="submit" class="btn primary" data-fab title="This week's note">{{ icon('plus', 'icon-sm') }} Week</button></form>
+{% endcall %}
+<div class="notebook-home">
+    {% if years %}
+    <div class="folder-grid">
+        {% for m in years %}
+        <a class="folder-tile" href="/notebook/folder?kind=journal&amp;name={{ m.name }}">
+            {{ folder_icon('calendar', 'amber', 'lg') }}
+            <span class="folder-tile-name">{{ m.name }}</span>
+            <span class="folder-tile-count">{{ m.count }} week{{ 's' if m.count != 1 else '' }}</span>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    {% call empty_state('No journal entries yet', icon_name='calendar', text='Each week gets its own note, filed by year.') %}
+    <form method="post" action="/notebook/journal/week"><input type="hidden" name="week" value="{{ current_week }}"><button type="submit" class="btn primary">{{ icon('plus') }} This week's note</button></form>
+    {% endcall %}
+    {% endif %}
+</div>
+{% endblock %}

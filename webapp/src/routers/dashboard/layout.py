@@ -110,14 +110,15 @@ def _widget_sources_for_scope(scope: str) -> dict[str, dict]:
 
 def _scoped_collections(conn, label_name: str | None) -> tuple[list[dict], list[dict], list[dict]]:
     """(projects, task_lists, calendars) the Customize/Filter forms may
-    offer for one page's grid -- Home offers every plain label; a Space's
-    page only its own child labels; a plain label's own page just itself.
-    Phase 1 (label-space rework, 2026-08-06) dropped `task_lists`/
-    `calendars` -- those two elements of the tuple are always empty now;
-    kept as an empty list, not removed from the return shape, so every
-    existing caller (widget_page_context below) keeps unpacking a 3-tuple
-    unchanged. "projects" here means "labels" -- kept as the historical
-    name templates already read (`projects` context key)."""
+        offer for one page's grid -- Home offers every plain label; a Space's
+        page only its own child labels; a plain label's own page just itself.
+        Phase 1 dropped `task_lists`/
+        `calendars` -- those two elements of the tuple are always empty now;
+        kept as an empty list, not removed from the return shape, so every
+        existing caller (widget_page_context below) keeps unpacking a 3-tuple
+        unchanged. "projects" here means "labels" -- kept as the historical
+        name templates already read (`projects` context key).
+    """
     if label_name is not None:
         group = db.group_from_page_key(label_name)
         if group is not None:
@@ -131,28 +132,26 @@ def _scoped_collections(conn, label_name: str | None) -> tuple[list[dict], list[
 
 def _seed_agenda_stack_layout(conn, label_name: str | None, now: str) -> None:
     """Writes the default layout for one page's grid -- Home when
-    `label_name` is None, otherwise that label's generated Space/Project
-    page -- shared by _ensure_default_widgets and
-    _ensure_default_label_widgets so both seed with the identical
-    screenshot-driven look: Today's Agenda beside a stack of At a
-    Glance / Upcoming events (2026-09-13: the stack's third member, a
-    duplicate Overdue+Today pane, was dropped -- see
-    _DEFAULT_STACK_MEMBER_TYPES's own comment). Building the stack this way (a
-    `type="stack"` row + group_uid members) mirrors stack_widget()'s own
-    shape exactly, not a new mechanism.
+        `label_name` is None, otherwise that label's generated Space/Project
+        page -- shared by _ensure_default_widgets and
+        _ensure_default_label_widgets so both seed with the identical
+        screenshot-driven look: Today's Agenda beside a stack of At a
+        Glance / Upcoming events. Building the stack this way (a
+        `type="stack"` row + group_uid members) mirrors stack_widget()'s own
+        shape exactly, not a new mechanism.
 
-    Every widget/stack row is scoped to this page via the `label_name`
-    column (None means Home -- see db.upsert_dashboard_widget), and each
-    *widget's own config* additionally gets `label_name` set (label pages
-    only) so its data query is filtered to this label, same as every
-    other label-page widget (see _effective_tags_filter).
+        Every widget/stack row is scoped to this page via the `label_name`
+        column (None means Home -- see db.upsert_dashboard_widget), and each
+        *widget's own config* additionally gets `label_name` set (label pages
+        only) so its data query is filtered to this label, same as every
+        other label-page widget (see _effective_tags_filter).
 
-    Home (2026-09-24, plans/ui-cleanup-2026-09.md item 15) and a group page
-    (2026-09-28, direct request) both get the 25/50/25 row -- Today at
-    quarter width, the stack at half, and a quarter-width third widget
-    after it: Habit Check-in on Home, `group_members` (this group's own
-    label list) on a group page. A plain label/Space/Project page keeps
-    the half/half pair, no third widget."""
+        Home and a group page both get the 25/50/25 row -- Today at
+        quarter width, the stack at half, and a quarter-width third widget
+        after it: Habit Check-in on Home, `group_members` (this group's own
+        label list) on a group page. A plain label/Space/Project page keeps
+        the half/half pair, no third widget.
+    """
     from .views import _DEFAULT_STACK_CONFIG, _DEFAULT_STACK_MEMBER_TYPES, _DEFAULT_TODAY_AGENDA_CONFIG, _GROUP_MEMBERS_QUARTER_CONFIG, _HOME_HABIT_CHECKIN_CONFIG, _HOME_TODAY_AGENDA_CONFIG
     home = label_name is None
     is_group = label_name is not None and label_name.startswith(db.GROUP_KEY_PREFIX)
@@ -207,21 +206,17 @@ def _seed_agenda_stack_layout(conn, label_name: str | None, now: str) -> None:
 
 def _ensure_default_widgets(conn) -> None:
     """A brand-new install gets a working dashboard out of the box
-    (unfiltered today/week/upcoming) -- "customizable" means you can
-    reshape it from there, not that you start from a blank page.
+        (unfiltered today/week/upcoming) -- "customizable" means you can
+        reshape it from there, not that you start from a blank page.
 
-    A one-time-only seed: once seeded (tracked via app_meta), it never
-    re-seeds -- even if the user deletes every widget. This honors the
-    "No widgets yet" empty state instead of silently re-creating defaults
-    on every reload after a full clear. Same convention as the existing
-    _backfill_mini_calendar_widget one-time migration and
-    ensure_default_calendar/ensure_default_task_list/ensure_default_addressbook
-    (db.py), but scoped per-page.
-
-    2026-08-07 (screenshot-driven default-layout rework): see
-    _seed_agenda_stack_layout -- Today's Agenda + a stacked At a
-    Glance/Upcoming Events/Overdue Tasks card, replacing the previous
-    six-widget seed."""
+        A one-time-only seed: once seeded (tracked via app_meta), it never
+        re-seeds -- even if the user deletes every widget. This honors the
+        "No widgets yet" empty state instead of silently re-creating defaults
+        on every reload after a full clear. Same convention as the existing
+        _backfill_mini_calendar_widget one-time migration and
+        ensure_default_calendar/ensure_default_task_list/ensure_default_addressbook
+        (db.py), but scoped per-page.
+    """
     from .views import _HOME_SEEDED_KEY, _MINI_CALENDAR_BACKFILL_KEY
     if db.get_app_meta(conn, _HOME_SEEDED_KEY):
         return
@@ -254,16 +249,11 @@ def _ensure_default_widgets(conn) -> None:
 
 def _ensure_default_label_widgets(conn, label_name: str) -> None:
     """Same one-time-only seeding as _ensure_default_widgets, scoped to
-    one label's page -- never re-seeds once _that label_ has been seeded,
-    even if the user later deletes every widget from it (honors the empty
-    state instead of silently re-creating defaults). Checked independently
-    of every other label's/Home's own widgets.
-
-    2026-08-07 (screenshot-driven default-layout rework): both a Space
-    page and a plain Project/label page now get the identical layout Home
-    does -- see _seed_agenda_stack_layout. (Previously Space and Project
-    pages seeded different widget sets; that distinction is gone now that
-    the target layout is the same everywhere.)"""
+        one label's page -- never re-seeds once _that label_ has been seeded,
+        even if the user later deletes every widget from it (honors the empty
+        state instead of silently re-creating defaults). Checked independently
+        of every other label's/Home's own widgets.
+    """
     seeded_key = f"dashboard_label_{label_name}_seeded_v1"
     if db.get_app_meta(conn, seeded_key):
         return
@@ -276,19 +266,14 @@ def _ensure_default_label_widgets(conn, label_name: str) -> None:
 
 def _backfill_mini_calendar_widget(conn) -> None:
     """One-time migration, NOT the same idempotent-forever pattern
-    _ensure_default_widgets uses. mini_month_calendar was added to
-    _DEFAULT_WIDGETS after real dashboards already existed -- Widget
-    seeding only runs on a completely empty dashboard, so anyone who'd
-    already visited before this change never got it. Runs exactly once
-    (tracked in app_meta), inserting it right after Today's Agenda if
-    that widget exists, so deleting it afterward sticks instead of it
-    reappearing on the next load like a true default would.
-
-    2026-08-03 (§1 Dashboard rework): calendar_agenda replaces the
-    standalone mini_month_calendar in the defaults -- dashboards that
-    already have a calendar_agenda widget don't need a bare
-    mini_month_calendar too. The backfill marks itself done immediately
-    in that case instead of inserting the now-redundant widget."""
+        _ensure_default_widgets uses. mini_month_calendar was added to
+        _DEFAULT_WIDGETS after real dashboards already existed -- Widget
+        seeding only runs on a completely empty dashboard, so anyone who'd
+        already visited before this change never got it. Runs exactly once
+        (tracked in app_meta), inserting it right after Today's Agenda if
+        that widget exists, so deleting it afterward sticks instead of it
+        reappearing on the next load like a true default would.
+    """
     from .views import _MINI_CALENDAR_BACKFILL_KEY
     if db.get_app_meta(conn, _MINI_CALENDAR_BACKFILL_KEY):
         return
@@ -321,34 +306,34 @@ def _backfill_mini_calendar_widget(conn) -> None:
 
 
 def _migrate_widget_consolidation(conn) -> None:
-    """One-time migration (2026-08-15 widget consolidation, plans/open.md
-    § Widget consolidation) -- rewrites every existing dashboard_widgets
-    row still carrying one of the seven now-removed types in place, so no
-    existing dashboard silently loses a widget just because this version
-    is running. Runs exactly once (tracked in app_meta), same
-    non-idempotent-forever pattern _backfill_mini_calendar_widget uses
-    below (this only ever needs to run once, not "until the condition is
-    no longer true").
+    """One-time migration -- rewrites every existing dashboard_widgets
+        row still carrying one of the seven now-removed types in place, so no
+        existing dashboard silently loses a widget just because this version
+        is running. Runs exactly once (tracked in app_meta), same
+        non-idempotent-forever pattern _backfill_mini_calendar_widget uses
+        below (this only ever needs to run once, not "until the condition is
+        no longer true").
 
-    - today_agenda/weekly_overview/upcoming_events/overdue_tasks all
-      become "agenda", each config translated to the exact Range/Show
-      combination that reproduces its old content -- every one of these
-      four preserves the underlying task/event set unchanged, just under
-      the new registry (see AGENDA_RANGES/AGENDA_SHOWS and _render_agenda's
-      own docstring for what each combination renders).
-    - project_preview/filled_cards become "spaces_projects" with
-      style="list"/"cards" respectively.
-    - calendar_agenda splits into two widgets in its old row's place: the
-      row itself becomes an "agenda" (range=next_7_days,
-      show=[tasks, events], matching the old embedded 7-day agenda), and
-      a brand-new "mini_month_calendar" row is inserted right beside it,
-      sharing the same group_uid -- a calendar_agenda that was already
-      inside a stack keeps both halves stacked together; a standalone one
-      gets two standalone widgets at (roughly) the same position. Doesn't
-      nest a new stack around them -- stacks aren't nestable (see
-      stack_widget's own comment), and reusing calendar_agenda's existing
-      group_uid (None or a real stack) sidesteps that restriction
-      entirely."""
+        - today_agenda/weekly_overview/upcoming_events/overdue_tasks all
+          become "agenda", each config translated to the exact Range/Show
+          combination that reproduces its old content -- every one of these
+          four preserves the underlying task/event set unchanged, just under
+          the new registry (see AGENDA_RANGES/AGENDA_SHOWS and _render_agenda's
+          own docstring for what each combination renders).
+        - project_preview/filled_cards become "spaces_projects" with
+          style="list"/"cards" respectively.
+        - calendar_agenda splits into two widgets in its old row's place: the
+          row itself becomes an "agenda" (range=next_7_days,
+          show=[tasks, events], matching the old embedded 7-day agenda), and
+          a brand-new "mini_month_calendar" row is inserted right beside it,
+          sharing the same group_uid -- a calendar_agenda that was already
+          inside a stack keeps both halves stacked together; a standalone one
+          gets two standalone widgets at (roughly) the same position. Doesn't
+          nest a new stack around them -- stacks aren't nestable (see
+          stack_widget's own comment), and reusing calendar_agenda's existing
+          group_uid (None or a real stack) sidesteps that restriction
+          entirely.
+    """
     from .views import _WIDGET_CONSOLIDATION_KEY
     if db.get_app_meta(conn, _WIDGET_CONSOLIDATION_KEY):
         return
@@ -408,30 +393,29 @@ def _migrate_widget_consolidation(conn) -> None:
 
 
 def _migrate_widget_removal_2026_08_30(conn) -> None:
-    """One-time migration (2026-08-30, direct requests: "merge the quick
-    links and spaces & projects into one data source" / "maybe just remove
-    the next deadline, what needs organizing and streak widgets") -- same
-    non-idempotent-forever pattern as `_migrate_widget_consolidation`
-    above (runs exactly once, tracked in its own app_meta key so it
-    doesn't re-run and doesn't collide with that migration's own guard).
+    """One-time migration -- same
+        non-idempotent-forever pattern as `_migrate_widget_consolidation`
+        above (runs exactly once, tracked in its own app_meta key so it
+        doesn't re-run and doesn't collide with that migration's own guard).
 
-    - Every existing "quick_links" row becomes "spaces_projects" with
-      `style="cards"` in place (same rewrite-in-place approach
-      `_migrate_widget_consolidation` already uses for project_preview/
-      filled_cards) -- `_render_spaces_projects`'s own cards branch now
-      renders the identical "every Space + every open project" tile set
-      Quick Links used to when unscoped, so nothing is lost, just
-      relabeled onto the surviving type.
-    - Every existing "next_deadline"/"organize_today"/"streak" row is
-      deleted outright -- there's no replacement type to rewrite onto (a
-      straight removal, not a merge), and leaving the row in place would
-      otherwise render as `_widget_inner.html`'s generic "Unknown widget
-      type" empty state forever (`_widget_context` already degrades a
-      row whose `type` isn't in `WIDGET_TYPES` that way -- harmless, but
-      not what "remove" means here). `db.delete_dashboard_widget` is a
-      plain row delete; a removed widget that happened to be inside a
-      stack just stops appearing among that stack's children (nothing
-      else references it back)."""
+        - Every existing "quick_links" row becomes "spaces_projects" with
+          `style="cards"` in place (same rewrite-in-place approach
+          `_migrate_widget_consolidation` already uses for project_preview/
+          filled_cards) -- `_render_spaces_projects`'s own cards branch now
+          renders the identical "every Space + every open project" tile set
+          Quick Links used to when unscoped, so nothing is lost, just
+          relabeled onto the surviving type.
+        - Every existing "next_deadline"/"organize_today"/"streak" row is
+          deleted outright -- there's no replacement type to rewrite onto (a
+          straight removal, not a merge), and leaving the row in place would
+          otherwise render as `_widget_inner.html`'s generic "Unknown widget
+          type" empty state forever (`_widget_context` already degrades a
+          row whose `type` isn't in `WIDGET_TYPES` that way -- harmless, but
+          not what "remove" means here). `db.delete_dashboard_widget` is a
+          plain row delete; a removed widget that happened to be inside a
+          stack just stops appearing among that stack's children (nothing
+          else references it back).
+    """
     from .views import _WIDGET_REMOVAL_2026_08_30_KEY
     if db.get_app_meta(conn, _WIDGET_REMOVAL_2026_08_30_KEY):
         return
@@ -448,26 +432,24 @@ def _migrate_widget_removal_2026_08_30(conn) -> None:
 
 
 def _migrate_group_layout_2026_09_28(conn) -> None:
-    """One-time migration (2026-09-28, direct request: "I don't want the
-    Labels in this group to be visible by default... for groups, copy the
-    main dashboard design, but instead of the habits 25% column have a
-    Groups & Labels List of this Space") -- converts every group page that
-    was already seeded under the old design (a half-width Today +
-    half-width stack, plus a separate always-pinned, full-width
-    `group_members` widget at position -1.0 -- see the now-unused
-    `_ensure_group_members_widget`) into the new one (see
-    `_seed_agenda_stack_layout`'s own docstring): Today moves to quarter
-    width, and the pinned `group_members` widget moves out of its own row
-    into the ordinary quarter-width third column, position 2.0 (after the
-    half-width stack), same as a group page seeded fresh now gets.
+    """One-time migration -- converts every group page that
+        was already seeded under the old design (a half-width Today +
+        half-width stack, plus a separate always-pinned, full-width
+        `group_members` widget at position -1.0 -- see the now-unused
+        `_ensure_group_members_widget`) into the new one (see
+        `_seed_agenda_stack_layout`'s own docstring): Today moves to quarter
+        width, and the pinned `group_members` widget moves out of its own row
+        into the ordinary quarter-width third column, position 2.0 (after the
+        half-width stack), same as a group page seeded fresh now gets.
 
-    Same non-idempotent-forever pattern as the migrations above (runs
-    exactly once, tracked in its own app_meta key). Scoped to top-level
-    widgets only (`group_uid is None`) on a group page (`label_name`
-    starting with `db.GROUP_KEY_PREFIX`) -- a group page's stack members
-    are untouched (the stack itself stays half width), and this can never
-    touch Home or a plain label/Space/Project page, which never had a
-    pinned `group_members` widget to migrate away from."""
+        Same non-idempotent-forever pattern as the migrations above (runs
+        exactly once, tracked in its own app_meta key). Scoped to top-level
+        widgets only (`group_uid is None`) on a group page (`label_name`
+        starting with `db.GROUP_KEY_PREFIX`) -- a group page's stack members
+        are untouched (the stack itself stays half width), and this can never
+        touch Home or a plain label/Space/Project page, which never had a
+        pinned `group_members` widget to migrate away from.
+    """
     from .views import _GROUP_LAYOUT_2026_09_28_KEY
     if db.get_app_meta(conn, _GROUP_LAYOUT_2026_09_28_KEY):
         return
@@ -506,15 +488,16 @@ def _widget_context(conn, widget: dict, nav: dict | None = None) -> dict:
 
 def _build_widget_contexts(conn, widgets: list[dict], nav: dict | None = None) -> list[dict]:
     """Top-level render list -- plain widgets via _widget_context as
-    before, plus stacks (2026-08-02): a stack is just another
-    dashboard_widgets row (type="stack", no spec/render of its own,
-    _widget_context already treats an unrecognized type as "no spec"),
-    grouping whatever other widgets have `group_uid` pointing at it. Its
-    members are excluded from this top-level list entirely -- they only
-    ever get rendered nested inside their stack's own `children`, in
-    `position` order among just that stack's members (not comparable to
-    any other widget's position, same as this file's docstring on
-    group_uid already explains)."""
+        before, plus stacks: a stack is just another
+        dashboard_widgets row (type="stack", no spec/render of its own,
+        _widget_context already treats an unrecognized type as "no spec"),
+        grouping whatever other widgets have `group_uid` pointing at it. Its
+        members are excluded from this top-level list entirely -- they only
+        ever get rendered nested inside their stack's own `children`, in
+        `position` order among just that stack's members (not comparable to
+        any other widget's position, same as this file's docstring on
+        group_uid already explains).
+    """
     children_by_group: dict[str, list[dict]] = {}
     for w in widgets:
         gid = w.get("group_uid")

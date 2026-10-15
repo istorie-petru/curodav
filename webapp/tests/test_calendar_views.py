@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from starlette.requests import Request
 
 from src import db
@@ -96,20 +97,15 @@ class TestDayHeader:
 
 
 class TestAllDayTitlesAndOverdue:
-    """C-3 (title span for ellipsis) and C-24 (overdue open tasks not dimmed)."""
+    """Open tasks due on a past day of the week are marked overdue in the planner's all-day list; done ones are not."""
 
-    def test_week_task_title_wrapped_and_overdue_marked(self, conn):
-        today = date.today()
-        monday = today - timedelta(days=today.weekday())
-        if today == monday:
-            pytest.skip("needs a past day inside the current week")
-        past = monday.isoformat()
-        _seed_task(conn, "open_past", past)
-        _seed_task(conn, "done_past", past, status="done")
+    def test_week_open_task_in_the_past_is_marked_overdue_and_done_one_is_not(self, conn, frozen_today):
+        frozen_today(date(2026, 10, 14))
+        _seed_task(conn, "open_past", "2026-10-12")
+        _seed_task(conn, "done_past", "2026-10-12", status="done")
         body = calendar_router.week_view(_request("/calendar/week"), conn=conn).body.decode()
-        assert '<span class="allday-title">open_past</span>' in body
-        open_tag = re.search(r'<a class="allday-task([^"]*)"[^>]*title="open_past"', body).group(1)
-        done_tag = re.search(r'<a class="allday-task([^"]*)"[^>]*title="done_past"', body).group(1)
+        open_tag = re.search(r'<a class="sidebar-allday-row([^"]*)"[^>]*title="open_past"', body).group(1)
+        done_tag = re.search(r'<a class="sidebar-allday-row([^"]*)"[^>]*title="done_past"', body).group(1)
         assert "is-overdue" in open_tag
         assert "is-overdue" not in done_tag
 
@@ -145,3 +141,9 @@ class TestMiniCalendar:
 
 
 
+
+
+def test_day_view_with_an_invalid_date_is_not_found(conn):
+    with pytest.raises(HTTPException) as err:
+        calendar_router.day_view("abc", _request("/calendar/day/abc"), conn=conn)
+    assert err.value.status_code == 404

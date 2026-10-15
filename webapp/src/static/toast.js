@@ -1,39 +1,3 @@
-// Generic toast/snackbar component, replacing native alert()/confirm() app-
-// wide (see app.js's delete/archive handlers and modal.js's error paths).
-// Native dialogs were the one thing in this app that didn't look like this
-// app -- every save-error and every delete used the browser's own unstyled
-// system popup, breaking the illusion the rest of the design system built.
-//
-// Two things live here:
-//   window.ccToast(opts)         -- a dismissible message, optionally with
-//                                    action button(s) (e.g. "Undo").
-//   window.ccConfirmSheet(opts)  -- the "are you sure" prompt for
-//                                    destructive actions that genuinely
-//                                    can't be undone (cascading deletes).
-//                                    Rendered as a persistent toast in the
-//                                    same bottom-right stack (2026-08-16
-//                                    follow-up -- was a button-anchored
-//                                    popover), styled like the rest of the
-//                                    app instead of the OS's confirm() box.
-//
-// Toast anatomy (2026-08-16 rework): a tinted status icon chip (derived from
-// `variant`, overridable via `icon`), a bold short `title` header, an
-// optional short `message` body, optional action button(s), and a close ✕.
-// A thin `.toast-progress` bar across the bottom edge drains 100% -> 0% over
-// the auto-dismiss countdown, so "how long until this goes away" is always
-// visible (it freezes with the countdown while hovered). Duplicate
-// suppression (a small time barrier: the same variant+title+message shown
-// again within BARRIER_MS is dropped) and hover-pause (hovering a toast
-// stops its countdown; leaving restarts it with a short grace so it still
-// goes away on its own) were both direct feedback asks.
-//
-// `persistent: true` opts out of the whole countdown (and its progress bar /
-// hover-pause) -- the toast stays until dismissed, and the returned handle
-// gains `set()` (update title/message/variant/icon in place) and `isAlive()`.
-// Persistent toasts are state indicators, not event announcements, so they
-// skip the duplicate barrier entirely: a state that genuinely re-appears
-// must re-show even if the same text was dismissed moments ago. offline_status
-// .js uses this for the sync status; ccConfirmSheet uses it for confirms.
 (function () {
   const stack = document.createElement("div");
   stack.className = "toast-stack";
@@ -84,13 +48,6 @@
     bodyEl.textContent = message || "";
     content.appendChild(bodyEl);
 
-    // Typed-phrase gate (2026-09-09, ported from the old reset-database
-    // modal's data-purge-phrase input): an optional extra safety step for
-    // the one confirm that isn't just "undo a delete" -- wiping every live
-    // record in the app. Any action whose own `gated: true` starts
-    // disabled and only arms once this input's value matches
-    // `typedConfirm.matchValue` exactly, same "type the phrase, not just
-    // click twice" bar the old modal held.
     let typedInput = null;
     if (typedConfirm) {
       const typedWrap = document.createElement("span");
@@ -307,6 +264,40 @@
     if (!openConfirm || !openConfirm.isAlive()) openConfirm = null;
   }
 
+  // The script-built twin of the empty_state macro: same classes, same markup.
+  function ccEmptyState(title, tag) {
+    const el = document.createElement(tag || "div");
+    el.className = "empty-state empty-state-compact";
+    const text = document.createElement("div");
+    text.className = "empty-state-title";
+    text.textContent = title;
+    el.appendChild(text);
+    return el;
+  }
+
   window.ccToast = ccToast;
   window.ccConfirmSheet = ccConfirmSheet;
+  window.ccEmptyState = ccEmptyState;
+
+  // A redirect carries its message as ?note= / ?error=; the template renders it
+  // as a [data-dm-flash] banner (the no-JS fallback) and this turns it into a toast.
+  function flashToToast() {
+    const flashes = document.querySelectorAll("[data-dm-flash]");
+    if (!flashes.length) return;
+    flashes.forEach((el) => {
+      ccToast({
+        message: el.textContent.trim(),
+        variant: el.getAttribute("data-dm-flash") === "error" ? "error" : "default",
+      });
+      el.remove();
+    });
+    if (window.history && window.history.replaceState) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("note");
+      url.searchParams.delete("error");
+      window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+    }
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", flashToToast);
+  else flashToToast();
 })();

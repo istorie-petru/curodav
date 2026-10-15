@@ -137,17 +137,17 @@ def apply_persisted_radicale_overrides(settings: "Settings", conn) -> "Settings"
 
 def uses_default_radicale_credentials(settings: "Settings") -> bool:
     """True when `settings` would authenticate to Radicale with the
-    dev-only devuser/devpass fallback (load_settings' defaults) -- true
-    whether that's because CC_RADICALE_USER/PASSWORD were never set, or
-    because a /setup-persisted override (apply_persisted_radicale_overrides,
-    called before this) happens to match the same values verbatim. Checked
-    by main.py's lifespan (2026-09-07 audit fix,
-    `documentation/reports/full-app-audit-2026-09-07.md`) only AFTER a
-    production deploy's CalDavBridge actually connects -- a standalone
-    install with no reachable Radicale at all never exercises these
-    credentials against anything, so it must not be forced to change them
-    just to boot; see main.py's own comment for why the check is gated on
-    a live connection rather than firing unconditionally."""
+        dev-only devuser/devpass fallback (load_settings' defaults) -- true
+        whether that's because CC_RADICALE_USER/PASSWORD were never set, or
+        because a /setup-persisted override (apply_persisted_radicale_overrides,
+        called before this) happens to match the same values verbatim. Checked
+        by main.py's lifespan only AFTER a
+        production deploy's CalDavBridge actually connects -- a standalone
+        install with no reachable Radicale at all never exercises these
+        credentials against anything, so it must not be forced to change them
+        just to boot; see main.py's own comment for why the check is gated on
+        a live connection rather than firing unconditionally.
+    """
     return (
         settings.radicale_username == _DEV_RADICALE_USERNAME
         and settings.radicale_password == _DEV_RADICALE_PASSWORD

@@ -1,18 +1,3 @@
-{# Shared back-arrow for a plain `.modal-header` div (roadmap item G,
-   session 8, 2026-10-03) -- `_page_header_narrow.html`'s own crumbs-driven
-   `.page-header-narrow-back` arrow only renders inside that macro, which
-   none of this app's bare-`modal-header`-div templates (the "Pattern B"
-   create/edit modals, plus Notebook's document-adjacent attach modals)
-   call. Reuses the same `icon-btn`/`chevron-left` look, placed as the
-   FIRST child of `.modal-header` (already `display:flex`, so no extra
-   CSS is needed) -- a plain child element, not a class on `.modal-header`
-   itself, so static/modal.js's `injectModalContent` (which only copies
-   that div's innerHTML into the persistent `#modal-header` for the real
-   JS-modal path) carries this along for free; it shows up identically
-   whether the page is opened as a modal or loaded directly with no JS.
-   `url` is intentionally the only required param -- a caller with no
-   sensible back target (e.g. a context var that came back empty) should
-   just not render anything, not fall back to some guessed destination. #}
 {% macro modal_header_back(url, name) %}
 {% if url %}
 <a class="icon-btn modal-header-back" href="{{ url }}" title="Back to {{ name }}" aria-label="Back to {{ name }}">{{ icon('chevron-left', 'icon-sm') }}</a>

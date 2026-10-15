@@ -9,12 +9,6 @@
      the Sections toggles in step with the Dashboard checkbox. -->
 <div id="modal-target" class="modal-height-lg">
 <div class="modal-header">
-{# Direct request, 2026-09-21: "I would also like the banner to continue
-   over to the edit modal" -- same .detail-cover-wrap/.detail-cover-img
-   cover treatment every detail (view) modal and banner_editor.html's own
-   header already use, not a one-off. Only ever set when editing an
-   existing label (`l`) that actually has a banner -- routers/labels.py::
-   edit_label_modal resolves `banner` from the label's own name. #}
 {% if l and banner %}
 <div class="detail-header-inner">
     <div class="detail-cover-wrap">
@@ -37,11 +31,6 @@
 <div class="modal-body">
 <div class="card">
 <form method="post" id="label-form" action="{{ '/settings/labels/' ~ l.name ~ '/update' if l else '/settings/labels/create' }}" data-cc-change="label" data-cc-action="{{ 'edit' if l else 'create' }}" data-follow-redirect>
-    {# 2026-09-14 (quick-add Contact/Label parity): the fields below used
-       to live inline here -- extracted into _label_form_fields.html so
-       quick_add.html's Label panel renders the exact same markup instead
-       of a second, driftable copy. See that partial's own header comment
-       for the parent-context contract. #}
     {% include "_label_form_fields.html" %}
 </form>
 </div>

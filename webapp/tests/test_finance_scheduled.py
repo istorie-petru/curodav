@@ -180,14 +180,16 @@ def test_the_transaction_form_creates_a_scheduled_row_when_the_status_is_schedul
     assert resp.status_code == 201 and finance.list_transactions(conn) == [] and len(finance.list_scheduled(conn)) == 1
 
 
-def test_a_new_transaction_needs_a_status(conn):
+def test_a_new_transaction_is_always_posted_without_choosing_a_status(conn):
     import asyncio
 
     from src.routers import finance as router
     a = account(conn)
     resp = asyncio.run(router.create_transaction(_form(type="expense", amount="5", account_uid=a, date="2026-10-02"),
                                                  x_requested_with="fetch", conn=conn))
-    assert resp.status_code == 422 and b"Choose a status" in resp.body
+    assert resp.status_code == 201
+    assert [t["amount"] for t in finance.list_transactions(conn)] == [500]
+    assert finance.list_scheduled(conn) == []
 
 
 def test_scheduled_rows_sit_grayed_at_the_top_of_the_transactions_table(conn):
@@ -247,7 +249,7 @@ def test_saving_the_task_form_saves_its_pending_transactions_and_validates_them_
     from src.routers import tasks as tasks_router
     a = account(conn, "Cash")
     task(conn)
-    kwargs = dict(title="Renew", description="", due_at="", start_at="", status="todo", tags="", tags_labels=[], project="", project_field="", recurrence="", pending_tx_present="1", pt_key=["1"], pending_tags={"1": ["monthly", "commute"]}, pt_uid=[""], pt_type=["Expense"], pt_amount=["80"],
+    kwargs = dict(title="Renew", description="", due_at="", start_at="", status="active", tags="", tags_labels=[], project="", project_field="", recurrence="", pending_tx_present="1", pt_key=["1"], pending_tags={"1": ["monthly", "commute"]}, pt_uid=[""], pt_type=["Expense"], pt_amount=["80"],
                   pt_description=["Bus pass"], pt_account=["Cash"], pt_to_account=[""], pt_date=["2026-11-01"], x_requested_with="fetch")
     bad = tasks_router.update_task("t1", **{**kwargs, "pt_amount": ["abc"]}, conn=conn)
     assert bad.status_code == 422 and db.get_task(conn, "t1")["title"] == "Renew the bus subscription"

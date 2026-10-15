@@ -1,55 +1,3 @@
-// Inline editing for the Tasks table view (templates/tasks_list.html) --
-// status is a `.multiselect` radio-checkbox dropdown styled to look like a
-// colored pill trigger (pill-select-trigger, see style.css; 2026-08-29,
-// STATE.md backlog item 9 -- was a native <select> before that), due date
-// is the shared themed date picker (datetime_picker.js, date mode) whose
-// Clear/day-pick fires a `change` on the same hidden input contract this
-// file listens for, and title is a double-click-to-edit cell
-// (static/inline_edit.js). (Labels was briefly an editable checkbox
-// dropdown too, 2026-08-29 - 2026-09-26 -- reverted, "labels should not be
-// inline editable"; _task_row.html's Labels cell is plain read-only pills
-// again. Importance/Urgency used to be inline-editable pill-selects too --
-// side work, post-1.1, removed them: both are purely computed now,
-// rendered as read-only .pill-static spans instead, see _task_row.html.)
-// Changing status/due_at/title fires a single-field PATCH-ish call to
-// POST /tasks/{uid}/update-field (routers/tasks.py) instead of a full form
-// submit, so editing a row never re-navigates the page or loses scroll
-// position -- only the edited cell's own pill color updates in place;
-// everything else on the page is left alone.
-//
-// Deliberately does NOT reload the page on success (unlike modal.js's
-// create/edit forms) -- a full reload after every dropdown change would
-// make the table feel like a page of static links rather than an editable
-// grid. It only reloads if the request actually fails, so the row falls
-// back to whatever's on the server rather than silently drifting from it.
-//
-// async-CRUD (features/async-crud.md): all interaction here is delegated
-// at the document level against #tasks-body rather than bound to the rows
-// present at load, because a mutation-triggered cc-entity-changed event
-// causes ccApi.refreshRegion() to swap the whole #tasks-body in place --
-// delegated listeners keep working across the swap, and the bulk-selection
-// state is reconciled to the fresh rows. The page's one listener for task
-// changes lives here too.
-//
-// Two separate `<table>`s live inside #tasks-body (2026-08-29, STATE.md
-// backlog item 9 follow-up: "habits should be a separate table at the end
-// of the normal tasks table, with its own header row") -- `#task-table`
-// (Project/Unassigned/Completed) and `#habits-table` (the Habits group,
-// _habit_row.html), each with its own <thead> since the two row shapes
-// don't share every column. Bulk-select and the delegated inline-edit
-// listeners below are scoped to `#tasks-body` as a whole, not either table
-// specifically, so a selection (and the shared bulk-actions-bar) can span
-// both -- exactly the "Habits rows join the same #task-table selection"
-// contract STATE.md backlog item 1 already established, just against a
-// wrapper that now contains two tables instead of one.
-//
-// A caveat for the Status dropdown: static/app.js's generic `.multiselect`
-// handling portals an open panel out to #multiselect-portal, so a radio
-// inside it is no longer a DOM descendant of its `.task-status-select`
-// wrapper while open -- this file locates the *trigger* (which never
-// moves) by the row's own `data-uid` via `currentBody().querySelector(...)`
-// instead of `closest()` from the changed input, same reasoning
-// static/app.js's own `wrapperFor` helper documents.
 
 (function () {
   const initialBody = document.getElementById("tasks-body");
@@ -65,110 +13,40 @@
     return "/tasks/regions?region=table" + (window.location.search || "");
   }
 
-  async function updateField(uid, field, value) {
+  // The status dropdown is the one inline editor: the pill repaints at once and the change is saved.
+  async function saveStatus(uid, value) {
     try {
       const resp = await fetch(`/tasks/${uid}/update-field`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ field, value }),
+        body: JSON.stringify({ field: "status", value }),
       });
-      if (!resp.ok) throw new Error("update failed");
-      return true;
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        throw new Error(body.error || "Could not save that change");
+      }
     } catch (err) {
-      window.ccToast({ message: "Could not save that change. Reloading...", variant: "error", duration: 1400 });
-      setTimeout(() => window.location.reload(), 1200);
-      return false;
+      window.ccToast({ message: err.message || "Could not save that change", variant: "error" });
+      window.ccApi.refreshRegion(regionUrl(), "tasks-body").catch(() => {});
     }
   }
 
-  // Inline status-pill / due-date / title changes -- delegated so they
-  // survive a region swap. These stay optimistic with NO region refresh
-  // (the design's explicit choice): a swap after every dropdown change
-  // would lose the table's scroll/focus for no benefit.
-  //
-  // Bug fix (2026-08-29, direct report: "the label inline editor still
-  // doesn't work"): the Status check below used to be scoped
-  // `"#tasks-body input.task-status-radio"`, an ancestor-scoped selector
-  // that requires the input to currently be a DOM descendant of
-  // #tasks-body -- true when the dropdown is closed, but FALSE the moment
-  // it's open, because static/app.js's generic `.multiselect` handling
-  // portals the whole open panel (radios included) out to
-  // `#multiselect-portal`, a sibling of #tasks-body, not a descendant of
-  // it (see app.js's own header comment). Since a radio can only ever fire
-  // `change` *while its panel is open*, that `.matches()` check was
-  // silently false on every real click, so nothing here ever ran --
-  // app.js's own unrelated summary-sync still updated the trigger's
-  // visible text (and closed the panel, single-select mode), which is why
-  // picking a status LOOKED like it worked even though the actual save
-  // never fired. Dropped the `#tasks-body` ancestor requirement for this
-  // one -- the class name alone is specific enough to this row template,
-  // unlike `input.inline-date` and `[data-inline-edit]` below, which are
-  // never portaled (only the date picker's floating calendar panel moves;
-  // its hidden input stays put) and so can keep the ancestor scoping
-  // safely.
   document.addEventListener("change", (e) => {
     const target = e.target;
-    if (!target || !target.matches) return;
-    if (target.matches("input.task-status-radio")) {
-      const uid = target.dataset.uid;
-      const color = target.dataset.color || "gray";
-      const trigger = currentBody().querySelector('.task-status-select[data-uid="' + uid + '"] .pill-select-trigger');
-      // Optimistic: repaint the pill color/text immediately, don't wait on
-      // the network round-trip. (app.js's own `change` listener already
-      // updates the trigger's `.ms-summary` text and closes the panel --
-      // single-select mode -- this only owns the color class app.js
-      // doesn't know about.)
-      if (trigger) trigger.className = "multiselect-trigger pill-select-trigger pill-" + color;
-      updateField(uid, target.dataset.field, target.value);
-    } else if (target.matches("#tasks-body input.inline-date")) {
-      updateField(target.dataset.uid, target.dataset.field, target.value);
-    }
+    if (!target || !target.matches || !target.matches("input.task-status-radio")) return;
+    const trigger = currentBody().querySelector('.task-status-select[data-uid="' + target.dataset.uid + '"] .pill-select-trigger');
+    if (trigger) trigger.className = "multiselect-trigger pill-select-trigger pill-" + (target.dataset.color || "gray");
+    saveStatus(target.dataset.uid, target.value);
   });
-
-  // Title double-click-to-edit (static/inline_edit.js) has no wrapping
-  // `<form>` to post through -- it dispatches this generic commit event
-  // instead (see that file's own comment on why), which this table is the
-  // one page-level owner of persisting via the same update-field endpoint
-  // every other inline edit here uses. Works for both tables: a plain task
-  // row's title (`#task-table`) and, since STATE.md backlog item 9's
-  // follow-up ("support inline editing for habit title too"), a Habits-
-  // group row's title (`#habits-table`) -- both are task uids.
-  document.addEventListener("cc-inline-edit-commit", (e) => {
-    const cell = e.target;
-    if (!cell || !cell.matches || !cell.matches("#tasks-body [data-inline-edit]")) return;
-    const uid = cell.dataset.uid;
-    const field = e.detail && e.detail.field;
-    if (!uid || !field) return;
-    updateField(uid, field, e.detail.value);
-  });
-
-  // ------------------------------------------------------------------ //
-  // Bulk select + bulk actions, 2026-08-01 -- see
-  // plans/webapp-action-pipelines-audit.md's "no bulk select/bulk action
-  // anywhere in Tasks" finding. Two ways to build a selection, both
-  // standard spreadsheet/file-manager conventions:
-  //   - Shift-click a checkbox: selects every row between the last
-  //     checkbox you clicked (plain, no shift) and this one.
-  //   - Press-and-drag across the checkbox column: "paints" every row
-  //     the pointer crosses to match whatever the first row's new state
-  //     is (deselecting if it started checked, selecting otherwise) --
-  //     confined to the checkbox column specifically, not the whole row,
-  //     so it can't be triggered by an incidental drag over a pill/date
-  //     cell that's actually a click on those controls.
-  // ------------------------------------------------------------------ //
 
   const selected = new Set();
   const bar = document.getElementById("bulk-actions-bar");
   const countEl = document.getElementById("bulk-count");
-  // 2026-09-12: same reasoning as bulk_select.js's own actionsSlot --
-  // style.css's "hide the actions slot when it has nothing to show" rule
-  // needs to know whether `bar` is currently visible, which CSS can't
-  // otherwise see from a sibling's inline style.
   const actionsSlot = bar ? bar.closest(".page-header-narrow-actions") : null;
   let lastClickedIdx = null;
 
   function checkboxRow(cb) {
-    return cb.closest("tr");
+    return cb.closest(".task-row");
   }
 
   function allCheckboxes() {
@@ -197,12 +75,6 @@
     } else {
       bar.style.display = "none";
       if (actionsSlot) actionsSlot.classList.remove("has-visible-bulk-bar");
-      // 2026-09-12: #bulk-count moved out of #bulk-actions-bar into the
-      // header's title_extra slot (tasks_list.html), so hiding `bar` no
-      // longer hides it too -- style.css's `.bulk-count:empty` rule needs
-      // this cleared back to empty to actually re-hide it (same fix
-      // applied to bulk_select.js's own updateBar for CCBulkSelect
-      // callers).
       if (countEl) countEl.textContent = "";
     }
   }
@@ -224,54 +96,8 @@
     updateBar();
   }
 
-  // 2026-09-13 (direct request: "row-select should not persist between
-  // page refresh") -- `selected` above is always a fresh, empty Set on
-  // every load (this whole file is one IIFE re-evaluated from scratch on
-  // a real page navigation/reload, no localStorage/sessionStorage
-  // involved anywhere in this module). The actual bug was the browser's
-  // own form-control state restoration: Chrome (and some other browsers)
-  // re-applies a checkbox's last `.checked` value across a plain reload
-  // purely from DOM position, independent of any app-level persistence
-  // and regardless of whether the checkbox sits inside a `<form>` --
-  // outside app code entirely, so nothing server-side or in this file's
-  // own state was ever "persisting" it. Left uncorrected, a bfcache/
-  // reload-restored checkbox could show visually checked while `selected`
-  // (rebuilt empty) has no matching uid -- no highlighted row, no bulk
-  // bar, a checkbox stuck showing a selection that no longer exists
-  // anywhere. Calling the same `reconcileAfterSwap()` region-swap already
-  // uses, once here at load against the still-empty `selected`, forces
-  // every checkbox back to unchecked and clears any stray `.is-selected`
-  // -- same reconciliation, just run once against the page's initial
-  // load instead of only after a later async swap.
   reconcileAfterSwap();
 
-  // Row-select checkbox clicks -- delegated (document) so they survive a
-  // region swap; the checkbox list is re-queried per interaction so
-  // shift-click range selection indexes the live rows.
-  //
-  // 2026-09-15 bugfix (direct report: "this is actually still happening in
-  // tasks and maybe other pages" -- static/bulk_select.js's own copy of
-  // this exact same code had just been fixed for Holidays/Labels/Time
-  // Blocks/Contacts, but this file is a separate, hand-rolled
-  // implementation -- see its own header comment on why Tasks never used
-  // the shared module -- so that fix never touched it). Root cause is
-  // identical: the pointerdown handler below already calls
-  // `setSelected(cb, paintValue)` (flipping `cb.checked` itself) so a real
-  // press-and-drag paints the row the drag *started* on, not just the ones
-  // the pointer crosses afterward. On a plain, no-drag click, the
-  // browser's own native checkbox activation then toggles `checked` a
-  // SECOND time when the matching `click` fires right after (mouseup on
-  // the same element) -- right back to whatever it was before the
-  // pointerdown. Net effect on an ordinary click: the box flips checked,
-  // then immediately flips back -- "it immediately deselects." A real
-  // drag never hit this (mouseup lands on a different element, so no
-  // `click` ever fires on the origin checkbox). `e.preventDefault()` here
-  // suppresses that native toggle (confirmed via a real Chrome/Puppeteer
-  // click, not a synthetic `.click()` call, that canceling pointerdown/
-  // mousedown does NOT suppress it -- only canceling `click` itself does)
-  // -- pointerdown's `setSelected` call is now the sole source of truth
-  // for `cb.checked` either way; this handler only needs the shift-range
-  // fill logic off of whatever state pointerdown already set.
   document.addEventListener("click", (e) => {
     const cb = e.target.closest && e.target.closest("#tasks-body .row-select");
     if (!cb) return;
@@ -369,7 +195,7 @@
           });
           if (!resp.ok) throw new Error("bulk delete failed");
           taskUids.forEach((uid) => {
-            const row = currentBody().querySelector(`tr[data-uid="${uid}"]`);
+            const row = currentBody().querySelector(`.task-row[data-uid="${uid}"]`);
             if (row) row.remove();
           });
           selected.clear();
@@ -383,14 +209,6 @@
     });
   });
 
-  // 2026-09-13 (audit-fixes-2.1.md, "the bulk-actions-bar should only
-  // contain two buttons - Delete and Clear"): the bulk-status-set
-  // `<select>` this listener drove is gone from tasks_list.html -- see
-  // that template's own comment. /tasks/bulk's "status" action itself is
-  // untouched (routers/tasks.py's bulk_action, still covered by
-  // test_bulk_actions_tables.py::TestTasksBulkDelete::
-  // test_status_action_400s_on_empty_uids) -- this was a
-  // UI simplification, not an API removal.
 
   document.getElementById("bulk-list-select")?.addEventListener("change", async (e) => {
     const listPath = e.target.value;
@@ -406,13 +224,6 @@
     }
   });
 
-  // 2026-09-13 (audit-fixes-2.1.md): the bulk-tag-picker Add/Remove chip-
-  // multiselect controls (#bulk-tag-picker, #bulk-tag-add, #bulk-tag-remove)
-  // this section used to drive are gone from tasks_list.html too -- same
-  // "Delete and Clear only" trim as the status-select above. /tasks/bulk's
-  // "tag" action is untouched server-side (test_modal_input_phaseB_chip_
-  // multiselect.py::TestBulkTagActionSemanticsPreserved still covers it
-  // directly) -- this was a UI simplification, not an API removal.
 
   // ------------------------------------------------------------------ //
   // The page's one listener for task changes (async-CRUD design §5) --

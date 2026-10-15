@@ -13,51 +13,6 @@
 (function () {
   const THEME_KEY = "commandCenterWeb.theme";
   const mql = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
-  // 2026-08-11: the tabbar's #btnTheme icon button is gone (see
-  // base.html's removal note) -- Settings > Appearance's System/Light/Dark
-  // choice is the only theme control left, so this block no longer has to
-  // keep a one-click flip button in sync with it.
-  //
-  // The control is a three-way System/Light/Dark choice, not an on/off
-  // switch -- a switch can only ever represent two states, so "follow the
-  // OS" (the actual out-of-the-box behavior, computed once by base.html's
-  // inline <head> script from prefers-color-scheme whenever localStorage
-  // has nothing stored yet) became permanently unreachable the instant
-  // anyone touched the old switch even once. "System" isn't a third stored
-  // value -- it's the *absence* of a stored value, same meaning the inline
-  // head script already gives that absence; picking "System" here just
-  // clears the key instead of writing one, and a live prefers-color-scheme
-  // listener keeps the page in sync if the OS theme changes while "System"
-  // is active and the tab stays open.
-  //
-  // 2026-09-24 direct request ("instead of segmented, drop down menu with
-  // select one") -- the three-way choice is now settings_appearance.html's
-  // `.theme-select` (_widget_list_multiselect.html, `ms_mode="single"`,
-  // no `ms_autosubmit`/`ms_form_id` -- there's still no server round-trip
-  // for this, same as the old buttons: theme stays a pure client-side
-  // localStorage choice). Real radio inputs now, not `data-theme-choice`
-  // buttons, so:
-  //   - Which option is "checked" is native radio-group behavior, no JS
-  //     needed for that part.
-  //   - The trigger's summary text ("System"/"Light"/"Dark") is kept in
-  //     sync automatically by app.js's own generic `.widget-list-
-  //     multiselect` change listener (further down this file) -- every
-  //     multiselect on the page gets that for free, this one included.
-  //   - This block only still owns: reading which radio should start
-  //     checked at page load (the server can't know localStorage's
-  //     content, so it always renders "system" checked and this corrects
-  //     it before the user ever sees a mismatch), applying `data-theme`
-  //     to <html> on every choice (including a live OS-preference change
-  //     while "System" is active), and persisting a pick to localStorage.
-  //   - Uses a plain (non-portal-aware) query rather than
-  //     `window.CCMultiselect.panelFor` -- this file's theme block runs
-  //     before the multiselect IIFE that defines it further down, and in
-  //     every case this code actually needs to read/set the radio (page
-  //     load, or right after a pick the generic listener already closed
-  //     the panel for) the panel is guaranteed to still be in its normal,
-  //     un-portaled spot. The one truly unreachable edge case -- the OS
-  //     theme flips while the user has the panel open and portaled -- just
-  //     self-corrects next render(), not worth the added complexity.
   const themeControl = document.querySelector(".theme-select");
 
   function osPrefersDark() {
@@ -342,37 +297,6 @@ document.addEventListener("submit", (event) => {
   });
 });
 
-// Generic multi-select dropdown -- e.g. Calendar's "which calendars are
-// visible" toggle (_calendar_nav.html), where more than one option can be
-// active at once, so a single <select> (which only ever picks one) isn't
-// the right control -- unlike the Tasks/Contacts list/status filters
-// (tasks_list.html etc.), which really are "pick exactly one" and use a
-// plain <select> instead of this.
-//
-// Markup contract: `.multiselect` wraps a `.multiselect-trigger` button
-// and a `.multiselect-panel`. Clicking the trigger toggles the panel;
-// clicking anywhere outside, or pressing Escape, closes it. Each option
-// inside the panel is free to be whatever it needs to be (here: a
-// same-origin `<form>` per checkbox that submits itself on change, since
-// visibility-toggling is already a real server-side POST, not client
-// state) -- this script only owns open/close, not what's inside.
-//
-// 2026-08-08 direct feedback ("this drop down menus should be able to
-// exit the modal window, not be masked inside it, always [available]") --
-// the "always lives directly in the page" assumption above turned out to
-// be wrong: task_form/event_form/contact_form/habit_form/the widget
-// builder all render this inside `.modal-body`, which clips overflow same
-// as modal.js's color/icon popovers do, so the panel was getting visually
-// cut off or overlapping other modal content instead of just scrolling
-// internally. Same portal technique as modal.js's openPopover/
-// closeOpenPopover now: on open, move the panel itself into
-// #multiselect-portal (base.html, a fixed-position layer outside any
-// modal) and position it with `position:fixed` against its trigger; on
-// close, move it back to exactly where it came from. Each option input
-// carries a `form="..."` attribute (_widget_list_multiselect.html's
-// ms_form_id) so it stays part of its real `<form>` even while reparented
-// outside it -- otherwise the browser silently drops a moved form control
-// from its form's submission.
 (function () {
   const portal = document.getElementById("multiselect-portal");
   let openPanel = null; // { panel, trigger, anchor, nextSibling }
@@ -410,15 +334,6 @@ document.addEventListener("submit", (event) => {
     openPanel = null;
   }
 
-  // In-panel fuzzy search (ms_search, 2026-10-03 -- _widget_list_
-  // multiselect.html's own doc comment has the full reasoning). A plain
-  // subsequence match ("brl" matches "Bloch, Marc L.") -- enough to feel
-  // fuzzy without pulling in a library for what's still just a client-
-  // side option filter. Deliberately never touches `.disabled` inputs
-  // (rows already hidden by an unrelated gating mechanism, e.g.
-  // dashboard_widget_preview.js's View/Range filtering) -- this only
-  // ever narrows what a search ALSO hides, never un-hides something an
-  // enclosing feature decided shouldn't be offered at all.
   function fuzzyMatch(query, text) {
     if (!query) return true;
     text = text.toLowerCase();
@@ -486,14 +401,6 @@ document.addEventListener("submit", (event) => {
     if (!wrapper) return null;
     return wrapper.querySelector(".multiselect-panel") || (openPanel && openPanel.anchor === wrapper ? openPanel.panel : null);
   }
-  // `close` (2026-10-02, added for static/notebook_properties_rows.js's
-  // own Enter-to-commit handler -- a *different* script, so it can't call
-  // the closure-private `closeOpenPanel` directly the way this file's own
-  // "New label..." handler does below) -- exposing the real close
-  // function here, rather than having that script try to fake the same
-  // effect itself (remove `is-open`, move the panel back...), keeps
-  // `openPanel`'s bookkeeping consistent regardless of which script
-  // triggers a close.
   window.CCMultiselect = { panelFor: resolvePanel, close: closeOpenPanel };
 
   document.addEventListener("click", (e) => {
@@ -540,19 +447,6 @@ document.addEventListener("submit", (event) => {
     if (openPanel) position(openPanel.panel, openPanel.trigger);
   });
 
-  // Keep each .widget-list-multiselect's trigger summary ("All"/"N
-  // selected"/"No labels") in sync with its checkboxes (2026-08-07,
-  // modal-input-design Phase B -- generalized here, out of
-  // dashboard_widget_preview.js, so every page reusing
-  // _widget_list_multiselect.html gets this for free, not just the widget
-  // builder's own .widget-select-form). data-ms-mode is set by the
-  // template: "filter" (default, unchanged widget-builder behavior --
-  // empty or fully-checked both read "All"), "select" (task_form/
-  // event_form/contact_form/habit_form/tasks_list.html's Labels pickers --
-  // empty reads "No <label>", never collapses to "All"), or "single"
-  // (2026-08-07, widget builder's View/Range -- a single-select mode of
-  // the same partial, radios instead of checkboxes, summary is just the
-  // checked option's own label text).
   function updateMsSummary(ms) {
     const summary = ms.querySelector(".ms-summary");
     if (!summary) return;
@@ -570,8 +464,6 @@ document.addEventListener("submit", (event) => {
       return;
     }
     const boxes = panel ? panel.querySelectorAll('input[type="checkbox"]') : [];
-    // "names" (2026-09-26, the label form's Sections / Show in): the ticked
-    // options' own names, or the dropdown's empty text.
     if (mode === "names") {
       const names = Array.from(boxes)
         .filter((b) => b.checked)
@@ -609,30 +501,6 @@ document.addEventListener("submit", (event) => {
     return input.closest(".widget-list-multiselect") || (openPanel && openPanel.panel.contains(input) ? openPanel.anchor : null);
   }
 
-  // `data-change-submit` (2026-09-07, audit-fixes-2.0.md item 11 -- CSP
-  // `'unsafe-inline'` elimination) replaces every `onchange="this.form.
-  // requestSubmit()"`/`onchange="this.form.submit()"` inline handler this
-  // app used to sprinkle on auto-saving selects/radios/checkboxes
-  // (Settings > General/Appearance's segmented controls, the
-  // maintenance-page lifecycle <select>s, Published Lists' visibility
-  // <select>, the filter dropdown's multiselect checkboxes,
-  // _widget_list_multiselect.html's ms_autosubmit option) with one
-  // delegated listener -- inline event-handler attributes are exactly
-  // what `'unsafe-inline'` on script-src was covering, so every one of
-  // them has to go for the CSP to drop it. Deliberately a different
-  // attribute name from the existing form-level `data-autosubmit`
-  // (avatar_cropper.js/modal.js's "submit this whole form once a picker
-  // resolves" flag, checked via `hasAttribute` on the `<form>` itself) --
-  // this one lives on the individual input/select that changed, so
-  // reusing the same name for a different element/semantic would be
-  // confusing even though the two never collide in practice. `e.target.
-  // form` (not `.closest("form")`) matches what `this.form` on an inline
-  // handler already resolved to, including portalled controls that reach
-  // their form via the `form="..."` attribute rather than DOM nesting
-  // (_widget_list_multiselect.html's portalled panel, see that file's own
-  // header comment). Uses `requestSubmit()` uniformly (some inline
-  // handlers used the older `.submit()`, which skips the `submit` event
-  // and validation) -- no call site depended on skipping either.
   document.addEventListener("change", (e) => {
     if (e.target.matches && e.target.matches("[data-change-submit]") && e.target.form) {
       e.target.form.requestSubmit();
@@ -658,19 +526,6 @@ document.addEventListener("submit", (event) => {
   document.addEventListener("keydown", (e) => {
     const input = e.target.closest(".multiselect-new-input");
     if (!input || e.key !== "Enter") return;
-    // 2026-10-02 direct follow-up bugfix ("it doesn't save after the
-    // first enter, but after two"): `e.preventDefault()` used to live
-    // only at the very end of this handler, past an early `if (!value)
-    // return` for a blank input. That's exactly the state this same
-    // input is in immediately *after* a successful first Enter (the code
-    // below clears it) -- so a second Enter press on the now-empty field
-    // took the early-return path, skipped `preventDefault()` entirely,
-    // and fell through to the browser's native "Enter submits the form"
-    // behavior. That native, JS-uncontrolled submission is what was
-    // actually persisting the form -- the *first* Enter only updated
-    // local dropdown state (correctly, per the original bugfix above),
-    // never the server. Hoisted to the top so this input's Enter key
-    // never reaches native form-submit, empty value or not.
     e.preventDefault();
     const value = input.value.trim();
     if (!value) return;
@@ -678,32 +533,6 @@ document.addEventListener("submit", (event) => {
     if (!panel) return;
     const ms = panel.closest(".multiselect") || (openPanel && openPanel.panel === panel ? openPanel.anchor : null);
     if (!ms) return;
-    // 2026-10-02 direct bugfix ("pressing enter should not also close the
-    // modal, but should first of all save the value and keep the modal
-    // open"): this used to read the submitted field name off a sibling
-    // checkbox/radio inside `ms` -- `ms.querySelector('input[type=
-    // "checkbox"], input[type="radio"]')`. That throws the moment `ms` is
-    // the portaled fallback (`openPanel.anchor`, true for essentially
-    // every real caller -- see openPanelFor's own header comment: the
-    // panel, radios/checkboxes included, gets moved out to
-    // #multiselect-portal on open, so the *anchor* left behind has no
-    // input descendants left to find) or whenever `ms_items` is empty (a
-    // picker with zero options yet, e.g. the very first custom property on
-    // a document -- no radio/checkbox rendered at all to read a name off
-    // of even when not portaled). Either way `.name` on that `null` threw
-    // an uncaught TypeError, which aborted this handler *before* it ever
-    // reached `e.preventDefault()` below -- so typing a new value and
-    // pressing Enter fell through to the browser's native "Enter submits
-    // the form" behavior instead, submitting (and closing) whatever modal
-    // this dropdown lived in. Reading the name off `input` itself instead
-    // needs no sibling to exist at all: list/select/names mode's
-    // allow-new input already shares `name="{{ ms_name }}"` directly with
-    // its checkboxes (see _widget_list_multiselect.html's own
-    // `ms_allow_new` docstring), so `input.name` *is* msName there;
-    // single mode's allow-new input is deliberately `name="{{ ms_name }}
-    // _new"` instead (same docstring, same reasoning as routers/
-    // settings.py's `_resolve_calendar_name`), so msName is that name
-    // with the `_new` suffix stripped back off.
     const isSingle = ms.dataset.msMode === "single";
     const msName = isSingle ? input.name.replace(/_new$/, "") : input.name;
     // Merged search-and-add box (more than 7 items): Enter on a name that
@@ -768,55 +597,11 @@ document.addEventListener("submit", (event) => {
   document.querySelectorAll(".widget-list-multiselect").forEach(updateMsSummary);
 })();
 
-// Dashboard row layout (dashboard.html's #dashboard-grid, both edit and
-// view mode -- 2026-08-02, reworked 2026-09-21 direct request: "Dashboard
-// Widgets that are on the same row should have a shared height,
-// calculated as the biggest value between the widgets on that row").
-// SUPERSEDED 2026-09-25 (direct request): columns now stack
-// independently, each card at its natural height -- see layout() below.
-// The history in the rest of this comment is kept for context.
-//
-// 2026-08-02..2026-08-30 this used to be a hand-written "skyline" best-fit
-// bin-packer: cards could start at whatever top a shorter neighbor left
-// free, specifically so a short widget's dead space below it wouldn't
-// block the next widget from starting there. That's the opposite of what
-// this rework asks for -- row-mates now share one explicit height, which
-// necessarily reintroduces dead space under a widget shorter than its
-// row-mates (a deliberate, confirmed tradeoff, not an oversight). Cards
-// still each claim a `data-span` out of `maxCols` virtual columns (12 as
-// of 2026-08-30 -- see routers/dashboard.py's WIDGET_WIDTHS own comment:
-// quarter=3/half=6/three_quarters=9/full=12, third=4/two_thirds=8), but
-// placement is now plain strict-DOM-order row wrapping (packRows below):
-// walk cards in order, start a new row whenever the next card's span
-// would overflow the current row's remaining columns, same as a normal
-// CSS grid/flex-wrap would place them -- no best-fit reordering.
-//
-// Runs unconditionally (not gated behind edit mode -- unlike every other
-// dashboard grid script below) since row alignment matters just looking
-// at the dashboard as much as while rearranging it. A MutationObserver on
-// the grid re-runs it automatically after anything that changes a card's
-// size or order (drag reorder's insertBefore, resize's data-span writes,
-// a delete-undo hide/unhide) -- deliberately not threaded as an explicit
-// call through every one of those scripts individually, since that list
-// would only grow and be easy to miss one of. rAF-coalesced so a burst of
-// mutations in one frame (e.g. every pointermove during a drag) still
-// only computes layout once per frame.
 (function () {
   const grid = document.getElementById("dashboard-grid");
   if (!grid) return;
 
   const MOBILE_BREAKPOINT = 720; // matches every other collapsing layout in this app
-  // 2026-08-30, direct report ("the width settings doesn't work for
-  // smaller devices... the 25% should round up to 50%") -- a manually-set
-  // "quarter" (span 3 of 12, 25%) card is fine on a full-width desktop
-  // window but becomes too narrow to read on a narrower one (a snapped/
-  // half-monitor browser window, not yet the MOBILE_BREAKPOINT full-width
-  // collapse). Below MEDIUM_BREAKPOINT (and still above MOBILE_BREAKPOINT
-  // -- that already forces every span to full-width regardless, this
-  // promotion is a no-op there), any span-3 card is promoted to span-6
-  // (half) for layout purposes only -- the widget's own stored
-  // config["width"] is untouched, same "CSS/JS-only, no data mutation"
-  // precedent MOBILE_BREAKPOINT's own full-width collapse already sets.
   const MEDIUM_BREAKPOINT = 1000;
   const GAP = 16; // var(--space-4) -- see style.css's design tokens
 
@@ -869,24 +654,7 @@ document.addEventListener("submit", (event) => {
       return;
     }
     const containerWidth = grid.clientWidth;
-    // 12, not 6 (2026-08-30 -- see this section's own header comment):
-    // widened so the reinstated manual Width override has an exact
-    // 25%/75% option, not just halves/thirds.
     const maxCols = window.innerWidth <= MOBILE_BREAKPOINT ? 1 : 12;
-    // 2026-08-08 direct feedback ("weird permanent empty space on the
-    // right, widgets crowded") -- a dashboard with only a couple of
-    // widgets (e.g. two half/third-width cards, some columns never
-    // claimed) always reserved the full column width regardless, so the
-    // untouched columns sat there as dead space on the right forever,
-    // and every card's own pixel width was computed against a colWidth
-    // narrower than the space actually available. Fix: a cheap dry run
-    // (packRows, pure index math, no DOM) using the full column count
-    // first, just to find out how many columns this actual set of cards
-    // ends up touching (the widest row) -- then the real pass below uses
-    // THAT as its column count, so colWidth (and therefore every card's
-    // width) is computed against the space genuinely in use, not an
-    // assumed max. A dashboard with enough widgets to fill every column
-    // anyway sees no change at all (effectiveCols === maxCols).
     const dryRows = packRows(cards, maxCols, effectiveSpan);
     let cols = 1;
     dryRows.forEach((row) => {
@@ -899,18 +667,6 @@ document.addEventListener("submit", (event) => {
     // differently here than it did in the dry run above.
     const rows = packRows(cards, cols, effectiveSpan);
 
-    // 2026-09-25 direct request (UI audit, answering "equal-height rows
-    // leave a ~450px hole at 900px now that widget boxes are invisible"):
-    // "let each column stack independently." Replaces the 2026-09-21
-    // shared-row-height rule. Horizontal placement is unchanged (strict
-    // DOM-order row wrapping, packRows above) -- only the vertical is new:
-    // each card keeps its own natural height and starts right under the
-    // lowest bottom among the virtual columns it spans (`colBottom`), so a
-    // short widget no longer leaves dead space that pushes the next row
-    // down. Width is still written before measuring, and any height a
-    // previous pass stamped is cleared (the 2026-09-24 stale-height fix --
-    // kept even though this pass no longer writes heights, since a page
-    // loaded from an older cached app.js could still carry one).
     const colBottom = new Array(cols).fill(0);
     rows.forEach((row) => {
       let colStart = 0;
@@ -979,18 +735,9 @@ document.addEventListener("submit", (event) => {
   if (!grid || !grid.classList.contains("is-editing")) return;
 
   const DRAG_THRESHOLD = 6;
-  // Stacking's drop zone (2026-08-02) -- the outer EDGE_ZONE fraction of
-  // whichever single axis reorder already uses (x when the target's in
-  // your row, y otherwise -- see reorderPreview) reorders before/after;
-  // everything else, the middle 1 - 2*EDGE_ZONE, stacks. This used to
-  // require BOTH x *and* y to land in a 40%-wide center band at once --
-  // a small box in the exact middle of the card, awkward to actually hit
-  // while dragging from a handle that sits up in the corner. Checking
-  // only the one axis that already matters for that drop makes "stack"
-  // the easy, generous default (the whole middle of the card) and
-  // "reorder" the deliberate, narrower gesture (near an edge) instead.
   const EDGE_ZONE = 0.2;
   let dragCard = null;
+  let dragOrigin = null;
   let dragPointerId = null;
   let startX = 0;
   let startY = 0;
@@ -1056,7 +803,7 @@ document.addEventListener("submit", (event) => {
   // no error surfaced anywhere, it just looked like dragging did
   // nothing. Passing the already-captured element sidesteps that
   // entirely.
-  async function persistOrder(card) {
+  async function persistOrder(card, origin) {
     const afterEl = card.previousElementSibling;
     const afterUid = afterEl && afterEl.classList.contains("widget-card") ? afterEl.dataset.uid : "";
     try {
@@ -1067,8 +814,8 @@ document.addEventListener("submit", (event) => {
       });
       if (!resp.ok) throw new Error("reorder failed");
     } catch (err) {
-      window.ccToast({ message: "Could not save the new order. Reloading...", variant: "error", duration: 1400 });
-      setTimeout(() => window.location.reload(), 1200);
+      window.ccToast({ message: "Could not save the new order", variant: "error" });
+      if (origin && origin.parent) origin.parent.insertBefore(card, origin.next && origin.next.parentElement === origin.parent ? origin.next : null);
     }
   }
 
@@ -1107,7 +854,7 @@ document.addEventListener("submit", (event) => {
     if (targetEl) {
       persistStack(card.dataset.uid, targetEl.dataset.uid);
     } else {
-      persistOrder(card);
+      persistOrder(card, dragOrigin);
     }
   }
 
@@ -1116,6 +863,7 @@ document.addEventListener("submit", (event) => {
       if (e.button !== undefined && e.button !== 0) return;
       dragCard = handle.closest(".widget-card");
       if (!dragCard) return;
+      dragOrigin = { parent: dragCard.parentElement, next: dragCard.nextElementSibling };
       dragPointerId = e.pointerId;
       startX = e.clientX;
       startY = e.clientY;
@@ -1154,27 +902,7 @@ document.addEventListener("submit", (event) => {
   grid.addEventListener("lostpointercapture", endDrag);
 })();
 
-// Drag-to-resize width -- reinstated 2026-08-30, then removed again the
-// same day, direct follow-up report that it still didn't work after a
-// first fix attempt ("the mouse resize still doesn't work. remove it.
-// but the dashboard customise is fine. no more work needed"). The
-// Filters panel's own Width field (_widget_edit_form.html) is the only
-// way to set config["width"] now -- see routers/dashboard.py's
-// WIDGET_WIDTHS/_widget_width. No resize handle, no /resize endpoint,
-// left on the page or the server.
 
-// Reordering *within* a stack (2026-08-02) -- deliberately a separate,
-// simpler script from the top-level grid drag above rather than
-// generalizing that one further: stack members aren't wrapped in
-// .widget-card (only the stack container itself is), so the "find
-// whichever card is under the pointer" 2D hit-test above doesn't apply
-// here at all -- this is a plain single-column vertical list, closer to
-// Kanban's own card-within-column reorder than the top-level grid drag.
-// One handler covers every stack on the page; each stack scopes its own
-// drag to its own .widget-stack-item children, so dragging in one stack
-// can never reorder into a different one (moving a widget *between*
-// stacks isn't supported by dragging -- Unstack, then stack it onto the
-// other one).
 (function () {
   const stacks = document.querySelectorAll(".dashboard-grid.is-editing .widget-stack");
   if (!stacks.length) return;
@@ -1183,6 +911,7 @@ document.addEventListener("submit", (event) => {
 
   stacks.forEach((stack) => {
     let dragItem = null;
+    let dragOrigin = null;
     let dragPointerId = null;
     let startX = 0;
     let startY = 0;
@@ -1211,7 +940,7 @@ document.addEventListener("submit", (event) => {
     // silently, inside the pointerup handler -- the reorder never
     // actually reached the server. Passing the already-captured element
     // sidesteps that.
-    async function persistOrder(item) {
+    async function persistOrder(item, origin) {
       const afterEl = item.previousElementSibling;
       const afterUid = afterEl && afterEl.classList.contains("widget-stack-item") ? afterEl.dataset.uid : "";
       try {
@@ -1222,8 +951,8 @@ document.addEventListener("submit", (event) => {
         });
         if (!resp.ok) throw new Error("reorder failed");
       } catch (err) {
-        window.ccToast({ message: "Could not save the new order. Reloading...", variant: "error", duration: 1400 });
-        setTimeout(() => window.location.reload(), 1200);
+        window.ccToast({ message: "Could not save the new order", variant: "error" });
+        if (origin && origin.parent) origin.parent.insertBefore(item, origin.next && origin.next.parentElement === origin.parent ? origin.next : null);
       }
     }
 
@@ -1235,7 +964,7 @@ document.addEventListener("submit", (event) => {
       dragItem = null;
       dragging = false;
       dragPointerId = null;
-      if (wasDragging) persistOrder(item);
+      if (wasDragging) persistOrder(item, dragOrigin);
     }
 
     stack.querySelectorAll(".widget-stack-drag-handle").forEach((handle) => {
@@ -1243,6 +972,7 @@ document.addEventListener("submit", (event) => {
         if (e.button !== undefined && e.button !== 0) return;
         dragItem = handle.closest(".widget-stack-item");
         if (!dragItem) return;
+        dragOrigin = { parent: dragItem.parentElement, next: dragItem.nextElementSibling };
         dragPointerId = e.pointerId;
         startX = e.clientX;
         startY = e.clientY;
@@ -1274,35 +1004,6 @@ document.addEventListener("submit", (event) => {
   });
 })();
 
-// Manual width picker / drag-to-resize-width (2026-08-02) removed
-// 2026-08-07 per direct feedback: "auto-fit by content" -- a widget's
-// width is now always just its type's own default_width (or, for a
-// stack, the stack's own stored config -- see routers/dashboard.py's
-// _widget_width), no manual override. There is no more
-// .widget-resize-handle element and no more
-// /dashboard/widgets/{uid}/resize endpoint to POST to. The masonry
-// layout function above still reads each card's data-span attribute and
-// does skyline packing exactly as before -- it never cared whether
-// data-span came from a manual choice or an automatic default, so it
-// needed no changes here.
-
-// Manual height editor / drag-to-resize-height (2026-08-02) removed
-// 2026-08-07 per direct feedback -- a widget's height is now just "how
-// much content it is", no scrollbar, unless it goes over a max height
-// (a single flat CSS max-height on .widget-content, see style.css).
-// There is no more .widget-resize-handle-vertical element and no more
-// /dashboard/widgets/{uid}/resize-height endpoint to POST to.
-
-// Banner upload auto-compression (2026-08-10, banner_editor.html) -- REMOVED
-// 2026-08-29 (direct request: "add the ability to crop, move, aspect ratio
-// modal window after all image uploads"). Replaced by an interactive crop
-// editor instead of this silent background resize -- static/
-// avatar_cropper.js, generalized that day to also wire
-// `.banner-upload-input` (see that file's own header comment and
-// banner_editor.html's), which already did the equivalent client-side
-// downscale-before-upload step for contact photos/the profile picture, now
-// covering banners too with a UI to actually choose the crop region
-// instead of a fixed center-crop.
 
 // Action menu (three-dot dropdown for status cards) -- lightweight,
 // accessible dropdown that closes on outside click/Escape/scroll and
@@ -1436,5 +1137,8 @@ document.addEventListener("submit", (event) => {
   // Cross-document view transitions swap page content without a reload --
   // pagereveal fires as the new page's content becomes live.
   document.addEventListener("pagereveal", initActionMenus);
+  // A refreshed region brings new row menus, which need their handlers too.
+  document.addEventListener("cc-region-refreshed", initActionMenus);
+  document.addEventListener("cc-region-swapped", initActionMenus);
   window.CCActionMenu = { close: closeMenu, init: initActionMenus };
 })();

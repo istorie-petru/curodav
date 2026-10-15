@@ -98,13 +98,13 @@ def set_group_page_type(conn: sqlite3.Connection, group: str, page_type: str) ->
 
 
 def group_page_key(group: str) -> str:
-    """The page key a group's dashboard is stored under (labels-as-modules
-    slice c, 2026-09-25). Groups are plain text (`label_config.label_group`)
-    with no table of their own, so a group's dashboard widgets, "seeded"
-    marker and banner reuse the same per-page storage a label's page uses
-    (dashboard_widgets.label_name, app_meta), keyed "group:<name>". Label
-    names can't start with this prefix (routers/labels.py's
-    _reject_reserved_label_name), so the two can't collide."""
+    """The page key a group's dashboard is stored under. Groups are plain text (`label_config.label_group`)
+        with no table of their own, so a group's dashboard widgets, "seeded"
+        marker and banner reuse the same per-page storage a label's page uses
+        (dashboard_widgets.label_name, app_meta), keyed "group:<name>". Label
+        names can't start with this prefix (routers/labels.py's
+        _reject_reserved_label_name), so the two can't collide.
+    """
     return f"{GROUP_KEY_PREFIX}{group}"
 
 
@@ -290,19 +290,12 @@ def _page_banner_key(page_key: str) -> str:
 
 def get_page_banner(conn: sqlite3.Connection, page_key: str) -> dict[str, Any] | None:
     """One dashboard page's banner, or None when unset. Stored as a single
-    JSON blob; returns only well-formed {kind: 'remote'|'upload', ...}
-    dicts -- anything corrupt (e.g. an interrupted write) reads as None
-    rather than crashing the page render. See routers/banners.py for the
-    two kinds; templates only read image_url/image_b64/image_type/alt/
-    version, so the optional source_url attribution is harmless extra.
-
-    2026-08-10: upload banners also carry a short content hash as
-    `version` -- it cache-busts the /banners/image URL in _page_banner.html
-    so the browser can hold a banner at max-age=immutable without ever
-    showing a stale one after a re-upload. New uploads store it up front
-    (routers/banners.py's upload_banner); banners stored before that get
-    it backfilled here exactly once (the hash is idempotent, so writing it
-    into app_meta is a cheap one-time write, not a per-render cost)."""
+        JSON blob; returns only well-formed {kind: 'remote'|'upload', ...}
+        dicts -- anything corrupt (e.g. an interrupted write) reads as None
+        rather than crashing the page render. See routers/banners.py for the
+        two kinds; templates only read image_url/image_b64/image_type/alt/
+        version, so the optional source_url attribution is harmless extra.
+    """
     raw = get_app_meta(conn, _page_banner_key(page_key))
     if not raw:
         return None
@@ -320,19 +313,20 @@ def get_page_banner(conn: sqlite3.Connection, page_key: str) -> dict[str, Any] |
 
 
 def _page_banner_explicitly_cleared(conn: sqlite3.Connection, page_key: str) -> bool:
-    """Item 10 (2026-09-27, flairs): True only when this page's banner was
-    deliberately cleared via `set_page_banner_cleared` below (banner_
-    editor's "Clear banner" button) -- distinct from simply never having
-    had a banner at all. `get_page_banner` itself can't tell the two apart
-    (both read as None there, on purpose -- every EXISTING caller only
-    ever needed "is there an image", not "was one explicitly refused"),
-    so this reads the raw stored kind directly rather than going through
-    it. The one thing this bool gates: whether `effective_page_banner`
-    below is allowed to fall through to a flair match -- confirmed via
-    AskUserQuestion that a flair default must stay genuinely removable,
-    not a permanent floor under labels/groups/projects the way the
-    original queued wording ("this default behavior can't be removed")
-    literally read."""
+    """Item 10: True only when this page's banner was
+        deliberately cleared via `set_page_banner_cleared` below (banner_
+        editor's "Clear banner" button) -- distinct from simply never having
+        had a banner at all. `get_page_banner` itself can't tell the two apart
+        (both read as None there, on purpose -- every EXISTING caller only
+        ever needed "is there an image", not "was one explicitly refused"),
+        so this reads the raw stored kind directly rather than going through
+        it. The one thing this bool gates: whether `effective_page_banner`
+        below is allowed to fall through to a flair match -- confirmed via
+        AskUserQuestion that a flair default must stay genuinely removable,
+        not a permanent floor under labels/groups/projects the way the
+        original queued wording ("this default behavior can't be removed")
+        literally read.
+    """
     raw = get_app_meta(conn, _page_banner_key(page_key))
     if not raw:
         return False
@@ -344,18 +338,19 @@ def _page_banner_explicitly_cleared(conn: sqlite3.Connection, page_key: str) -> 
 
 
 def set_page_banner_cleared(conn: sqlite3.Connection, page_key: str) -> None:
-    """Item 10 (2026-09-27): the banner editor's "Clear banner" button
-    (routers/banners.py's `remove_banner`, renamed from "Remove banner"
-    the same slice) -- stores an explicit "there is deliberately no image
-    here" marker instead of `clear_page_banner`'s plain blank-out, so a
-    label/group/project/task/event whose name happens to match a flair
-    keyword can still end up with a real, sticky blank instead of the
-    flair reappearing the moment the stored override goes away. Every
-    EXISTING caller of get_page_banner keeps reading this exactly like
-    "no banner" (kind="none" isn't in that function's own remote/upload
-    allow-list) -- only `effective_page_banner` below, via
-    `_page_banner_explicitly_cleared`, treats it as meaningfully different
-    from "never set" at all."""
+    """Item 10: the banner editor's "Clear banner" button
+        (routers/banners.py's `remove_banner`, renamed from "Remove banner"
+        the same slice) -- stores an explicit "there is deliberately no image
+        here" marker instead of `clear_page_banner`'s plain blank-out, so a
+        label/group/project/task/event whose name happens to match a flair
+        keyword can still end up with a real, sticky blank instead of the
+        flair reappearing the moment the stored override goes away. Every
+        EXISTING caller of get_page_banner keeps reading this exactly like
+        "no banner" (kind="none" isn't in that function's own remote/upload
+        allow-list) -- only `effective_page_banner` below, via
+        `_page_banner_explicitly_cleared`, treats it as meaningfully different
+        from "never set" at all.
+    """
     set_app_meta(conn, _page_banner_key(page_key), json.dumps({"kind": "none"}))
 
 
@@ -386,27 +381,26 @@ def active_flair_languages(conn: sqlite3.Connection) -> list[str]:
 
 
 def effective_page_banner(conn: sqlite3.Connection, page_key: str, name: str | None = None) -> dict[str, Any] | None:
-    """`get_page_banner`, extended with the flair default (item 10,
-    2026-09-27, "dynamically attach a photo to an event/task/habit/label/
-    group/project based on a keyword list matched against its name"): an
-    explicit upload/remote banner always wins first; failing that, a page
-    explicitly cleared (`set_page_banner_cleared` above) stays blank on
-    purpose rather than falling through; failing THAT, `name`'s own
-    keyword match (`flairs.match_flair`) is the default, same as this
-    page's Add/Change-banner button would show before the user ever
-    touches it. `name` is optional (default None -- no flair at all) for
-    every page this doesn't apply to: Home, the global page-header
-    default, and the four season scopes (matched by DATE, not name --
-    see banner_for_object's own season tier, which calls this the same
-    way with name=None and its own flair lookup for the season photo
-    itself instead).
+    """`get_page_banner`, extended with the flair default: an
+        explicit upload/remote banner always wins first; failing that, a page
+        explicitly cleared (`set_page_banner_cleared` above) stays blank on
+        purpose rather than falling through; failing THAT, `name`'s own
+        keyword match (`flairs.match_flair`) is the default, same as this
+        page's Add/Change-banner button would show before the user ever
+        touches it. `name` is optional (default None -- no flair at all) for
+        every page this doesn't apply to: Home, the global page-header
+        default, and the four season scopes (matched by DATE, not name --
+        see banner_for_object's own season tier, which calls this the same
+        way with name=None and its own flair lookup for the season photo
+        itself instead).
 
-    Callers: routers/dashboard.py's `_page_banner_context` (a label/
-    group/project's own page banner) and `banner_for_object` below (an
-    event/task's inherited label/Project/Space banner, and its own
-    season/global fallback) -- both now resolve every tier through this
-    one function instead of the raw `get_page_banner`, so a flair
-    default is available everywhere an explicit banner already was."""
+        Callers: routers/dashboard.py's `_page_banner_context` (a label/
+        group/project's own page banner) and `banner_for_object` below (an
+        event/task's inherited label/Project/Space banner, and its own
+        season/global fallback) -- both now resolve every tier through this
+        one function instead of the raw `get_page_banner`, so a flair
+        default is available everywhere an explicit banner already was.
+    """
     banner = get_page_banner(conn, page_key)
     if banner:
         return banner
@@ -426,90 +420,45 @@ def effective_page_banner(conn: sqlite3.Connection, page_key: str, name: str | N
 
 
 def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str, Any]) -> dict[str, Any] | None:
-    """2026-08-30 (direct request, tasks/kanban banner strip + task detail
-    modal header), generalized 2026-09-03 (direct request: the same cover
-    treatment as the baseline "Variant B" detail-modal header for events/
-    contacts/habit-tasks too, not just tasks) -- the banner an object
-    should show, if any, resolved by priority: its own directly-set plain
-    label(s) first, then its Project label, then that project's group's
-    page (`label_config.label_group`; was the parent Space until slice c). No new storage: a label's banner
-    already exists (get_page_banner/routers/banners.py, keyed by label
-    name) as the image a label's own generated dashboard page shows --
-    this just resolves which one of an object's several labels wins, the
-    same banner data either way.
+    """No new storage: a label's banner
+        already exists (get_page_banner/routers/banners.py, keyed by label
+        name) as the image a label's own generated dashboard page shows --
+        this just resolves which one of an object's several labels wins, the
+        same banner data either way.
 
-    `object_type` is whatever `object_labels`/`project_label_for` already
-    key on ("task", "event", "contact" -- anything `set_object_labels` is
-    called with). `obj` needs `uid` (to look up its Project label) and
-    `tags` (every router's own dict-building helper already attaches
-    both -- routers/tasks.py's task dicts, _attach_tags(conn, "event"/
-    "contact", ...), db.list_tasks rows). Every tag but the project's own
-    is tried in list order before falling through to the project/Space
-    tiers -- an object with both a Project label and a more specific
-    plain label (e.g. "Client call") should show the specific one, not
-    the broader project's, which is why the project tag itself is skipped
-    in this first pass rather than tried alongside its siblings.
+        `object_type` is whatever `object_labels`/`project_label_for` already
+        key on ("task", "event", "contact" -- anything `set_object_labels` is
+        called with). `obj` needs `uid` (to look up its Project label) and
+        `tags` (every router's own dict-building helper already attaches
+        both -- routers/tasks.py's task dicts, _attach_tags(conn, "event"/
+        "contact", ...), db.list_tasks rows). Every tag but the project's own
+        is tried in list order before falling through to the project/Space
+        tiers -- an object with both a Project label and a more specific
+        plain label (e.g. "Client call") should show the specific one, not
+        the broader project's, which is why the project tag itself is skipped
+        in this first pass rather than tried alongside its siblings.
 
-    The returned dict carries one extra key beyond get_page_banner's own
-    shape: `scope` -- the label name the banner actually came from. A
-    template needs this to build the /banners/image?scope=... URL (an
-    uploaded banner's bytes are served per-scope, and the winning scope
-    here is whichever label/project/Space matched, not the object itself,
-    which has no scope of its own). Safe to inject: this dict is a fresh
-    json.loads() from get_page_banner, never written back through
-    set_page_banner, so the extra key can't leak into storage.
+        The returned dict carries one extra key beyond get_page_banner's own
+        shape: `scope` -- the label name the banner actually came from. A
+        template needs this to build the /banners/image?scope=... URL (an
+        uploaded banner's bytes are served per-scope, and the winning scope
+        here is whichever label/project/Space matched, not the object itself,
+        which has no scope of its own). Safe to inject: this dict is a fresh
+        json.loads() from get_page_banner, never written back through
+        set_page_banner, so the extra key can't leak into storage.
 
-    2026-09-27 (item 10, flairs): every tier below now resolves through
-    `effective_page_banner` instead of the raw `get_page_banner` -- a
-    label/Project/Space with no upload of its own falls back to its OWN
-    flair match (its name against `flairs.FLAIR_KEYWORDS`) before this
-    function ever needs to try the object's own name, so an event tagged
-    "Basketball" inherits that label's basketball flair the normal way,
-    through the exact same tag/project/group tiers that already existed.
-    A NEW tier is added after all three -- the object's own title/name,
-    tried BEFORE the season/global fallback (a specific keyword match on
-    the object's own name is a stronger signal than a generic month-based
-    guess) -- for task/event only (`_FLAIR_ELIGIBLE_TYPES` below), per the
-    item's own wording ("event/task/habit", never contact: a person's
-    name coincidentally containing a keyword says nothing real about
-    them, unlike a task/event's own title -- and a habit IS a task,
-    `object_type == "task"` either way, nothing habit-specific needed
-    here). The season/global tiers below were UNCHANGED by item 10 --
-    wiring the reference folder's own four season photos in as real
-    defaults there too was tried and reverted (see flairs.py's own header
-    comment): it turned out to have a much bigger blast radius than that
-    item asked for, showing a photo on nearly every task/event that
-    previously showed none at all.
-
-    2026-09-29: a MONTH tier (`MONTH_BANNER_SCOPES`, `month_for_date`)
-    was added between the object's-own-name tier and season -- more
-    specific than season (a photo set for "july" wins over one merely set
-    for "summer" on the same date), same date field. An earlier attempt
-    at covering the reference folder's 12 month photos added them as
-    FLAIR_KEYWORDS entries instead (keyword-matched against the object's
-    own title) -- direct correction: a month/season is a property of the
-    object's DATE, not something its name should be string-matched
-    against, so that approach was reverted in favor of this tier.
-
-    Both the month and season tiers resolve the same way (direct request,
-    same day: "the months/seasons should work through the flairs system,
-    even the default ones") -- an explicit banner set on that scope
-    through the normal /banners/editor still wins first (get_page_banner,
-    unchanged), but failing that, `flairs.flair_image_url` is asked for
-    the exact season/month word as an id (NOT `flairs.match_flair` --
-    this is a direct lookup of the id `season_for_date`/`month_for_date`
-    already computed, never a keyword scan of the object's title), so an
-    operator can drop `summer.jpg`/`july.jpg` straight into flairs_dir
-    exactly like any other flair and it just works, no banner-editor
-    upload required. See SEASON_BANNER_SCOPES's own comment for why this
-    still isn't a FLAIR_KEYWORDS entry despite now sharing flairs_dir as
-    its photo source.
-
-    2026-09-29 (direct request, same day): the object's-own-title tier
-    now also tries the object's own DESCRIPTION, but only as a backstop
-    -- see that tier's own comment below for the exact precedence (title
-    match+image wins outright; description is only ever consulted once
-    the title has produced nothing usable, never weighed against it)."""
+        Both the month and season tiers resolve the same way -- an explicit banner set on that scope
+        through the normal /banners/editor still wins first (get_page_banner,
+        unchanged), but failing that, `flairs.flair_image_url` is asked for
+        the exact season/month word as an id (NOT `flairs.match_flair` --
+        this is a direct lookup of the id `season_for_date`/`month_for_date`
+        already computed, never a keyword scan of the object's title), so an
+        operator can drop `summer.jpg`/`july.jpg` straight into flairs_dir
+        exactly like any other flair and it just works, no banner-editor
+        upload required. See SEASON_BANNER_SCOPES's own comment for why this
+        still isn't a FLAIR_KEYWORDS entry despite now sharing flairs_dir as
+        its photo source.
+    """
     tags = obj.get("tags") or []
     project = project_label_for(conn, object_type, obj["uid"]) if obj.get("uid") else None
     for tag in tags:

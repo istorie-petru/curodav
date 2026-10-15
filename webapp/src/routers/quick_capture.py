@@ -1,4 +1,4 @@
-"""Quick Capture's HTTP surface (plans/quick-capture.md) -- the palette's
+"""Quick Capture's HTTP surface -- the palette's
 marker-triggered capture mode (static/command_palette.js) calls both of
 these:
 
@@ -6,15 +6,15 @@ these:
     the palette can show a live "here's what this will create" summary as
     you type. Labels are shown exactly as typed here, NOT run through
     `db.resolve_capture_label` -- that function persists a new alias on a
-    fuzzy match (plans/quick-capture.md § Labels and Approximate
-    Matching), and this endpoint fires on every debounced keystroke, so
+    fuzzy match, and this endpoint fires on every debounced keystroke, so
     resolving (and potentially writing an alias for) every partially-typed
     label the user hasn't committed to yet would be real, unwanted write
     traffic. Resolution only happens at actual creation time, below.
   - `POST /api/quick-capture` -- parse, resolve labels, create the right
     entity (task/event/contact). src/quick_capture.py (the parser) is a
     pure module with no `conn` argument at all -- every actual database
-    write lives here, not there."""
+    write lives here, not there.
+"""
 
 from __future__ import annotations
 
@@ -103,14 +103,6 @@ def _create_from_capture(conn, result: ParsedCapture) -> dict:
         return {"type": "event", "uid": uid, "title": result.title}
 
     if result.type == "contact":
-        # Contacts field parity slice 2 of 6: Quick Capture has no way to
-        # specify a phone/email TYPE from free text, so a captured number/
-        # address goes straight into the new multi-value tables typed
-        # "Other" -- the same default the legacy-column auto-migration uses
-        # for the same reason (an unqualified single value). Writing the now
-        # -dead `phone`/`email` columns instead would silently lose the
-        # capture the instant it's viewed anywhere in the UI, which no
-        # longer reads them.
         db.upsert_contact(
             conn,
             {

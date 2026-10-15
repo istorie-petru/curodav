@@ -1,23 +1,3 @@
-// "Hide sleep hours in Planner" (Settings > General, 2026-09-09) client
-// helper -- Week view only (templates/calendar_week.html renders the
-// `#cc-sleep-collapse` JSON tag this reads; calendar_day.html never does,
-// so window.CCSleepCollapse.active is simply false everywhere else and
-// every call site below is a no-op there, same as time_blocks.js's own
-// "absent tag -> nothing to do" pattern).
-//
-// The server (grid_layout.py) already collapses `[skip_start, skip_end)`
-// out of every event/overlay's own top_px/height_px before rendering --
-// that's the actual "cells removed" effect. What's left for the client:
-// static/calendar.js's and static/project_calendar.js's drag create/move/
-// resize handlers each independently convert a pixel position back into a
-// real minutes-since-midnight value to save (`top / PX_PER_HOUR * 60`).
-// On a collapsed grid that pixel position is already in COLLAPSED space
-// (there's no DOM height for the hidden window at all), so the naive
-// conversion is off by exactly the hidden window's width for anything
-// below it -- e.g. collapsing 00:00-06:00 would save a 5pm drag as 11am.
-// `toReal` is the fix: the exact inverse of grid_layout.collapse_minutes,
-// applied to that same raw pixel-derived value before it's formatted and
-// POSTed.
 (function () {
   const raw = document.getElementById("cc-sleep-collapse");
   let collapse = null;

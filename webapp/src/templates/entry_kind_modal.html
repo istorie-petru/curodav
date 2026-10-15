@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "_inputs.html" import text_input %}
+{% block title %}{{ kind.name or 'New entry type' }}{% endblock %}
+{% block content %}
+{% from "_look_picker.html" import look_picker %}
+{% macro field_row(name, existing) %}
+<div class="field-label-row entry-kind-field-row" data-repeatable-row>
+    {% if existing %}
+    {{ text_input({'name': 'field_keep', 'value': name, 'readonly': true, 'class': 'is-fixed', 'aria-label': 'Field name, fixed'}) }}
+    {% else %}
+    {{ text_input({'name': 'field_new', 'value': '', 'aria-label': 'New field name'}) }}
+    {% endif %}
+    <button type="button" class="icon-btn" data-repeatable-remove title="Remove field" aria-label="Remove field">{{ icon('x', 'icon-sm') }}</button>
+</div>
+{% endmacro %}
+<div id="modal-target">
+<div class="modal-header">
+<h1>{{ kind.name or 'New entry type' }}</h1>
+</div>
+<div class="modal-body">
+<form method="post" id="entry-kind-form" action="/settings/notebook/entry-kinds" data-follow-redirect>
+    <input type="hidden" name="original" value="{{ kind.name }}">
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label>Name</label>
+            {% if kind.name == 'Term' %}<input type="hidden" name="name" value="Term">{{ text_input({'value': 'Term', 'readonly': true, 'class': 'is-fixed', 'aria-label': 'Name, fixed'}) }}
+            {% else %}{{ text_input({'name': 'name', 'value': kind.name, 'required': true, 'autofocus': true}) }}{% endif %}
+        </div>
+        {{ look_picker('look-entry-kind', 'entry-kind-form', kind.color, kind.icon, colors, icon_groups, default_icon='tag', wide=true, label='Look') }}
+        <div class="field field-wide" data-repeatable-rows-scope>
+            <div class="field-label-row">
+                <label>Fields</label>
+                <button type="button" class="icon-btn" data-repeatable-add="entry-kind-field-rows" data-repeatable-template="entry-kind-field-template" title="Add field" aria-label="Add field">{{ icon('plus', 'icon-sm') }}</button>
+            </div>
+            <div id="entry-kind-field-rows">{% for f in kind.fields %}{{ field_row(f, true) }}{% endfor %}</div>
+            <template id="entry-kind-field-template">{{ field_row('', false) }}</template>
+        </div>
+    </div>
+</form>
+</div>
+{% set footer_back_url = '/settings/notebook' %}
+{% set footer_back_mode = 'cancel' %}
+{% set footer_back_label = 'Cancel' %}
+{% if not is_new and kind.name != 'Term' %}
+{% set footer_delete_url = '/settings/notebook/entry-kinds/delete?name=' ~ (kind.name | urlencode) %}
+{% set footer_delete_mode = 'confirm' %}
+{% set footer_delete_label = 'Delete the "' ~ kind.name ~ '" type?' %}
+{% endif %}
+{% set footer_primary_form = 'entry-kind-form' %}
+{% set footer_primary_label = 'Save' %}
+{% set footer_primary_icon = 'check-square' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

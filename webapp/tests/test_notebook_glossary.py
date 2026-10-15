@@ -111,7 +111,7 @@ class TestGlossaryLibraryRouter:
         _term(conn, uid="t1", term="Mercantilism")
         _term(conn, uid="t2", term="Socialism")
         resp = notebook_router.glossary_library(_bare_request(), q="Merc", conn=conn)
-        assert [t["uid"] for t in resp.context["terms"]] == ["t1"]
+        assert [e["uid"] for g in resp.context["groups"] for e in g["entries"]] == ["t1"]
 
     def test_create_term_then_appears_in_library(self, conn):
         resp = notebook_router.create_glossary_term(
@@ -143,8 +143,8 @@ class TestGlossaryLibraryRouter:
     def test_no_match_still_renders_a_distinct_empty_state(self, conn):
         _term(conn, term="Mercantilism")
         resp = notebook_router.glossary_library(_bare_request(), q="nonexistent", conn=conn)
-        assert resp.context["terms"] == []
-        assert 'No terms match' in resp.body.decode()
+        assert resp.context["groups"] == []
+        assert 'No entries match' in resp.body.decode()
 
 
 class TestNotebookGlossaryTerms:
@@ -210,9 +210,8 @@ class TestGlossaryAttachRoutes:
         _term(conn, uid="t1", term="Rendered Term")
         db.set_notebook_glossary_terms(conn, "d1", ["t1"])
         req = _bare_request("/notebook/d1")
-        resp = notebook_router.document_page("d1", req, conn=conn)
-        assert resp.context["glossary_terms"][0]["term"] == "Rendered Term"
-        assert "Rendered Term" in resp.body.decode()
+        body = notebook_router.document_page("d1", req, conn=conn).body.decode()
+        assert "Rendered Term" in body and "/notebook/d1/glossary" in body
 
     def test_glossary_route_missing_document_redirects(self, conn):
         resp = notebook_router.update_document_glossary(
@@ -315,9 +314,9 @@ class TestGlossaryTermReferences:
         _citation(conn, uid="c1")
         _term(conn, uid="t1", term="Mercantilism")
         db.set_glossary_term_references(conn, "t1", [("notebook", "d1"), ("citation", "c1")])
-        resp = notebook_router.glossary_library(_bare_request(), q="", conn=conn)
-        assert [r["ref_type"] for r in resp.context["terms"][0]["references"]] == ["citation"]
-        assert "Further Reading Doc" not in resp.body.decode()
+        body = notebook_router.entry_view_modal("t1", _bare_request(), conn=conn).body.decode()
+        assert "Further reading" in body
+        assert "Further Reading Doc" not in body
 
 
 class TestBackupRoundTrip:
@@ -485,20 +484,9 @@ class TestGlossarySections:
         db.delete_glossary_term(conn, "t1")
         assert db.list_glossary_sections(conn, "t1") == []
 
-    def test_the_edit_modal_lists_sections_and_the_sidebar_does_not(self, conn):
+    def test_the_edit_modal_and_the_view_modal_list_sections(self, conn):
         _term(conn)
-        db.set_glossary_sections(conn, "t1", [("Example", "Only in the modal")])
-        body = notebook_router.edit_glossary_term_modal("t1", _bare_request(), conn=conn).body.decode()
-        assert "Only in the modal" in body
-        from src.deps import templates
-        html = templates.get_template("_notebook_glossary_list.html").render(glossary_terms=db.list_notebook_glossary_terms(conn, "d1"))
-        assert "Only in the modal" not in html
+        db.set_glossary_sections(conn, "t1", [("Example", "Shown in both modals")])
+        assert "Shown in both modals" in notebook_router.edit_glossary_term_modal("t1", _bare_request(), conn=conn).body.decode()
+        assert "Shown in both modals" in notebook_router.entry_view_modal("t1", _bare_request(), conn=conn).body.decode()
 
-    def test_the_sidebar_list_is_alphabetical_numbered_and_linked(self, conn):
-        _document(conn, uid="d1")
-        _term(conn, uid="t1", term="Zeta")
-        _term(conn, uid="t2", term="Alpha")
-        db.set_notebook_glossary_terms(conn, "d1", ["t1", "t2"])
-        from src.deps import templates
-        html = templates.get_template("_notebook_glossary_list.html").render(glossary_terms=db.list_notebook_glossary_terms(conn, "d1"))
-        assert "<ol" in html and html.index("Alpha") < html.index("Zeta") and "/notebook/glossary/t2/edit" in html

@@ -80,3 +80,18 @@ def test_no_module_is_over_the_size_limit():
     }
     over = {name: lines for name, lines in over.items() if lines > MAX_MODULE_LINES and name not in OVERSIZED}
     assert not over, f"Split these modules (limit {MAX_MODULE_LINES} lines): {over}"
+
+
+def test_logging_goes_through_the_one_helper():
+    """No print and no ad hoc logger outside `log.py`; the helper hides secret values at runtime."""
+    import re
+
+    src = Path(__file__).resolve().parents[2] / "src"
+    offenders = []
+    for path in sorted(src.rglob("*.py")):
+        if path.name == "log.py" or "__pycache__" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if re.search(r"^\s*print\(|logging\.getLogger\(", text, re.M):
+            offenders.append(path.name)
+    assert not offenders, f"use src/log.py's get_logger: {offenders}"

@@ -1,55 +1,6 @@
 {% from "_inputs.html" import number_input, radio_input, text_input %}
-<!-- Widget configuration fields (Source/View/Range/Title/Limit +
-     project/tags/task-list/calendar filters) -- the *body* of the Add-widget
-     form, shared by the workspace Add-widget form (_widget_add_form.html)
-     and the Widget Builder in the Customize modal (dashboard_customize.html)
-     so the two surfaces can never drift apart. Deliberately has NO <form>
-     wrapper, NO submit button, and NO preview pane -- callers own those
-     (workspace: stacked form + preview below; builder: two-pane layout with
-     an always-visible preview and its own Add/Duplicate/Edit actions).
-     Expects the same context _widget_add_form.html does: space_uid,
-     widget_sources/widget_views/widget_ranges, projects,
-     task_lists, calendars, tag_names, tag_name_items (tag_names reshaped
-     into {uid, name} pairs -- uid == name, a label's own name IS its
-     identity -- for the Labels chip multiselect below, which reuses
-     _widget_list_multiselect.html's {uid, name} contract).
-
-     Width field (2026-08-30, reinstated -- direct request after the
-     automatic masonry layout still produced an unwanted arrangement even
-     after a best-fit packing pass: "can't we have a width setting in
-     edit mode (100%,75%,50%,25%), or maybe actually fix the automatic
-     one" -- given a purely automatic layout can't be verified visually
-     from this environment at all, manual control is the more reliable
-     fix. This reverses the 2026-08-07 "no manual override, auto-fit by
-     content" decision for width specifically (not height -- that
-     removal stands). Auto (blank value, the default) leaves the type's
-     own default_width in charge, same as before this field existed;
-     picking one of the four percentages sets config["width"], read by
-     _widget_width ahead of the type default. See WIDGET_WIDTHS/
-     _widget_width in routers/dashboard.py.
-
-     2026-08-07 (modal-input-design Phase A) -- Source/View/Range/Limit/
-     Labels reworked from raw select/number/text-with-datalist into real
-     radio/checkbox/number inputs styled as a tile picker, segmented
-     controls, and a stepper, following the same "real input, CSS does the
-     visual trick" convention as .pill-select/.field-toggle/the icon-swatch
-     picker elsewhere in this app -- a no-JS submission still works
-     unchanged. See _widget_edit_form.html for the same treatment applied
-     to the per-widget Filters editor. -->
 {% if space_uid %}<input type="hidden" name="space_uid" value="{{ space_uid }}">{% endif %}
 {% if project_uid %}<input type="hidden" name="project_uid" value="{{ project_uid }}">{% endif %}
-<!-- Title first (2026-08-07 follow-up) -- was last in the field-grid,
-     below Source/View/Range/Advanced (the "Advanced" grouping itself is
-     gone now too, see the Labels/Task lists/Calendars comment below);
-     moved to the very top since it's the one thing every other field's
-     default depends on ("Defaults to the view's name") rather than the
-     other way around, and it's the one plain free-text field in a form
-     that's otherwise all pickers -- leading with it means the form opens
-     on something immediately typeable instead of a wall of choices. No
-     longer says "(optional)" in its own label text -- see
-     .field-required's own comment below for the replacement convention
-     (unmarked = optional, so Title simply isn't marked, same as Limit/
-     Labels below). -->
 <div class="field">
     <label>Title</label>
     {{ text_input({'name': 'title', 'class': 'widget-preview-field'}) }}
@@ -85,11 +36,6 @@
     </div>
 </div>
 <div class="field-grid">
-    <!-- View/Range (2026-08-07, "should look the same as list") -- a
-         single-select variant of the same _widget_list_multiselect.html
-         trigger+panel used by Labels/Task lists/Calendars below, instead
-         of a native <select> (whose open-list chrome is unstyleable
-         browser UI -- see that partial's own header comment). -->
     {% set _view_ns = namespace(items=[]) %}
     {% for key, spec in widget_views.items() %}
     {% set _view_ns.items = _view_ns.items + [{'uid': key, 'name': spec.label, 'data': {'source': spec.source, 'has-range': ('1' if spec.has_range else ''), 'has-limit': ('1' if spec.get('has_limit') else '')}}] %}
@@ -118,21 +64,6 @@
     {% set ms_root_class = 'widget-range-select' %}
     {% include "_widget_list_multiselect.html" %}
     <div class="field widget-limit-field">
-        <!-- 2026-08-31 direct feedback: "add a way to set the limit to 0
-             (0 = unlimited)" -- min was 1, which blocked both the stepper's
-             own decrement (static/stepper.js clamps to the input's `min`)
-             and a plain typed 0 in some browsers' native validation, so
-             there was no way to reach it. _render_agenda/_render_contact_
-             list (routers/dashboard.py) originally treated a stored `0` as
-             "no cap" -- only an absent config value fell back to the
-             10/20 default -- so this was purely a "let the field reach 0"
-             change, no template-side unlimited-specific handling needed.
-             2026-09-13 direct request ("no limit should actually be 20
-             maximum items"): those two renderers capped an explicit `0`
-             at 20 too, so only the hint text below changed to match.
-             2026-09-28 direct feedback ("make the default limit smaller,
-             maximum 8"): default and 0-cap both dropped from 10/20 to a
-             single 8 -- field/min/stepper themselves are still unchanged. -->
         <label>Limit</label>
         <div class="stepper">
             <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease limit">&minus;</button>
@@ -141,15 +72,6 @@
         </div>
         <div class="field-hint">0 = up to 8</div>
     </div>
-    <!-- Width (2026-08-30, reinstated -- see this file's own header
-         comment) -- every widget type gets this, unlike Show/Style/Scope
-         below which are gated to one type each. Auto (blank, first/
-         default item) leaves the type's own default_width in charge.
-         2026-08-31 direct feedback ("all width should be a radio drop
-         down") -- was a `.field-toggle-group` of visible radio buttons;
-         now the same single-select dropdown View/Range already use
-         (_widget_list_multiselect.html, ms_mode="single") instead of a
-         second, differently-styled radio control on the same form. -->
     {% set ms_name = 'width' %}
     {% set ms_mode = 'single' %}
     {% set ms_label = 'Width' %}
@@ -165,23 +87,6 @@
     {% set ms_extra_class = 'widget-width-field' %}
     {% set ms_root_class = 'widget-width-select' %}
     {% include "_widget_list_multiselect.html" %}
-    <!-- Show -- Agenda-only (2026-08-15 widget consolidation), gated by
-         static/dashboard_widget_preview.js the same way Range/Limit are
-         (hidden unless the current View is agenda_view, never removed/
-         disabled, so a no-JS submission still works). Replaces the old
-         "agenda"/"upcoming_list"/"overdue_list" View choices -- which
-         sections render is now these three checkboxes instead of a
-         fourth name in the View picker. All three default checked
-         (today_agenda's own old default content). 2026-08-31 direct
-         feedback ("show should be another checkbox dropdown") -- was a
-         `.field-toggle-group` of three independently-named
-         `show_overdue`/`show_tasks`/`show_events` booleans, always
-         visible; now one `name="show"` field in the same checkbox-
-         dropdown shape Labels/Task lists/Calendars use
-         (_widget_list_multiselect.html), just ms_mode="select" instead of
-         "filter" -- an empty selection here is a real "show nothing"
-         state, not "no filter" the way Labels' own empty selection reads
-         as "All" (see _agenda_show_from_form, routers/dashboard.py). -->
     {% set ms_name = 'show' %}
     {% set ms_mode = 'select' %}
     {% set ms_label = 'Show' %}
@@ -196,9 +101,6 @@
     {% set ms_extra_class = 'widget-show-field' %}
     {% set ms_root_class = 'widget-show-select' %}
     {% include "_widget_list_multiselect.html" %}
-    <!-- Style -- Spaces & Projects-only (2026-08-15 widget consolidation),
-         same gating idea as Show above -- List (the old project_preview
-         default) or Cards (the old filled_cards look). -->
     <div class="field widget-style-field">
         <label>Style</label>
         <div class="field-toggle-group">
@@ -206,14 +108,6 @@
             <label class="field-toggle">{{ radio_input({'name': 'style', 'value': 'cards'}) }} Cards</label>
         </div>
     </div>
-    <!-- Scope -- Spaces & Projects-only, and only meaningful on a Space/
-         Project page (2026-08-15, expanded scope: "make the Spaces &
-         Projects widget placeable on a Space's own dashboard, scoped to
-         that Space's children or everything"). Home has no auto-scope to
-         override in the first place (config["label_name"] is never set
-         there), so this field is omitted entirely rather than shown as a
-         dead no-op choice. Same JS gating as Show/Style; see
-         _config_from_form's own `scope` handling. -->
     {% if space_uid or project_uid %}
     <div class="field widget-scope-field">
         <label>Scope</label>
@@ -224,34 +118,6 @@
     </div>
     {% endif %}
 </div>
-<!-- Labels/Task lists/Calendars -- used to be wrapped in a visually
-     distinct "Advanced" group (background/heading/its own field-grid);
-     2026-08-07 follow-up ("move them into normality") flattened that
-     away entirely -- these are now plain fields in the normal field
-     flow, same as Title/Source/View/Range/Limit above, no special
-     treatment. The manual "Project" filter select that used to live here
-     is gone too (2026-08-07, "purge all remains of projects") -- the
-     *hidden* project_uid field above (auto-scoping a widget to whichever
-     Space/Project page the modal was opened from) is unrelated and
-     still there. -->
-<!-- Labels -- chip multiselect (2026-08-07), reusing
-     _widget_list_multiselect.html's checkbox-dropdown pattern.
-     A label's own name IS its identity (no separate uid, see
-     object_labels' natural-key design), so ms_items is faked
-     as {uid: name, name: name} pairs -- the checkbox value
-     (ms_name="tags_labels") is the label name itself. The
-     server (_combine_tags in routers/dashboard.py) folds
-     tags_labels together with the legacy tags= string field
-     into the same comma-separated config["tags"] it always
-     stored, so no stored-config format changed. -->
-{# "No label" (2026-08-31 direct feedback: "add a way to not select any
-   label to filter by") -- a synthetic option ahead of the real label
-   list, carrying routers/dashboard.py's NO_LABEL_SENTINEL as its value.
-   Distinct from leaving every checkbox unchecked (which already means
-   "All", no filter at all -- see _widget_list_multiselect.html's own
-   "filter" mode comment): this filters *for* items that carry no label,
-   the one thing the checkbox list couldn't express before since every
-   other option is a real label name. #}
 {% set ms_name = 'tags_labels' %}
 {% set ms_label = 'Labels' %}
 {% set ms_items = [{'uid': '__no_label__', 'name': 'No label'}] + tag_name_items %}

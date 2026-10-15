@@ -4,6 +4,16 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.2.0]
+
+- Notebook: notes now live in generated folders (by project, then label, plus Unfiled), with gradient folder icons, a Contacts-style list per folder, pinned notes on the Notebook home, and a Back button. Folders sort by date created by default. A note has at most one label and one project (migration 10 merges extras and keeps a report).
+- Weekly Journal: one note per week (`2026-50`), grouped by year, with a week strip always visible.
+- Entries: glossary terms became entries with an editable kind (Settings > Notebook), per-kind default fields and extra boxes, dotted links with hover cards and a view modal, and a sidebar list grouped by kind.
+- Citations: more complete academic fields, a Chicago and Academia Română format setting, a folder-style list with search, filters and sort.
+- Editor: `[[` and slash wikilinks with a better picker, markdown shortcuts on already-written text, a manual Timeline block (rich title and description), more spacing between blocks, better arrow keys in tables and lists, Markdown export, and note-level undo kept.
+- Tasks: a compact read-only list grouped by project, then label; the status dropdown is the only inline editor. Transactions no longer have a status (all are posted).
+- Fixes from the audit: one empty-state component, toasts for errors, single modal window, server-side input validation, a friendly 404 page, an error log with a live view in Settings > Logs, row menus working after in-place refreshes, and the Entries header staying on one row.
+
 ## [4.1.2]
 
 - Fixed the Add new modal: changing the data type from its dropdown did not switch the form, because the open dropdown lives outside the modal. A test now covers it.

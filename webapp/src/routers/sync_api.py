@@ -1,5 +1,4 @@
-"""1.8 slice 1 -- the sync API skeleton (plans/open-priority.md §
-Offline-first editing & synchronization §8). Thin HTTP wrapper around
+"""Thin HTTP wrapper around
 `src/offline_sync.py`'s pure apply/pull logic -- this module owns request
 parsing and the `sync_devices` cursor bookkeeping only, same "router
 computes nothing the pure module doesn't already do" layering as every
@@ -73,14 +72,6 @@ async def pull(request: Request, conn=Depends(get_db)):
     device_id = payload["device_id"]
     cursor_payload = payload.get("cursor")
     cursor = offline_sync.hlc_from_payload(cursor_payload) if cursor_payload else None
-    # 1.8 slice 7 -- run before computing this pull's own response, not
-    # after: anything GC purges is by definition already past the
-    # retention horizon, hence already older than any cursor this
-    # response could legitimately need to include -- running it first
-    # just means this response is computed against the already-clean
-    # state, with no risk of racing its own result. A no-op call when
-    # retention is configured to 0/Never (data_health.run_sync_gc's own
-    # force=False default).
     data_health.run_sync_gc(conn)
     result = offline_sync.pull(conn, cursor)
     db.touch_sync_device(conn, device_id, last_pulled_hlc=result["cursor"])

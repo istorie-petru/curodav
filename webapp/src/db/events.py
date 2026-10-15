@@ -106,20 +106,19 @@ def list_events(
     start: str | None = None,
     end: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Real bug fix (found 2026-08-14 while building 1.6's manual
-    recurrence exceptions, via a router test that moved an occurrence into
-    a later week and it silently never rendered): a *recurring* row's own
-    literal start_at/end_at only anchor its first occurrence -- the date
-    range filter below used to exclude the row entirely once `start`/`end`
-    fell far enough past that literal end_at, even though its RRULE would
-    still generate real occurrences inside the window. Nothing caught this
-    before because no existing test seeded a recurring event and then
-    queried a week more than ~one occurrence-length past its own creation
-    date. Fix: a recurring row (recurrence IS NOT NULL) is always a
-    candidate regardless of its own literal bounds -- `recurrence_expand.
-    expand_events` (which every caller of this function already runs
-    recurring rows through) is what actually decides whether it produces
-    any occurrence in the window, via the real RRULE/UNTIL/COUNT."""
+    """Real bug fix: a *recurring* row's own
+        literal start_at/end_at only anchor its first occurrence -- the date
+        range filter below used to exclude the row entirely once `start`/`end`
+        fell far enough past that literal end_at, even though its RRULE would
+        still generate real occurrences inside the window. Nothing caught this
+        before because no existing test seeded a recurring event and then
+        queried a week more than ~one occurrence-length past its own creation
+        date. Fix: a recurring row (recurrence IS NOT NULL) is always a
+        candidate regardless of its own literal bounds -- `recurrence_expand.
+        expand_events` (which every caller of this function already runs
+        recurring rows through) is what actually decides whether it produces
+        any occurrence in the window, via the real RRULE/UNTIL/COUNT.
+    """
     query = "SELECT * FROM events"
     params: list[str] = []
     bounds_clauses = []
@@ -212,14 +211,14 @@ def all_event_uids(conn: sqlite3.Connection) -> set[str]:
 
 
 def _reject_new_multiple_project_labels_on_event(conn: sqlite3.Connection, uid: str, tags: list[str]) -> None:
-    """One project per event (project-picker slice, 2026-09-25, Peter: "one
-    project per data model"). Same rule as tasks, with one difference: an
-    event that already carries the same set of project labels is let
-    through. Events are re-saved whole by non-form paths (the week grid's
-    drag-to-reschedule, work-session time edits) and could already hold
-    two projects from before this rule existed. Rejecting those would break
-    an unrelated edit rather than protect anything, so only a *new*
-    combination is refused."""
+    """One project per event. Same rule as tasks, with one difference: an
+        event that already carries the same set of project labels is let
+        through. Events are re-saved whole by non-form paths (the week grid's
+        drag-to-reschedule, work-session time edits) and could already hold
+        two projects from before this rule existed. Rejecting those would break
+        an unrelated edit rather than protect anything, so only a *new*
+        combination is refused.
+    """
     project_names = {cfg["name"] for cfg in list_project_labels(conn)}
     selected = {t for t in tags if t in project_names}
     if len(selected) <= 1:
@@ -332,13 +331,13 @@ _HOLIDAY_YEARLESS_RE = re.compile(r"^--\d{2}-\d{2}$")
 
 def is_year_agnostic_holiday_date(value: str | None) -> bool:
     """True for a "--MM-DD" holiday date_from/date_to -- same vCard-derived
-    year-less convention Contacts' Birthday field already uses (see
-    parse_contact_birthday/_BIRTHDAY_YEARLESS_RE above), reused here rather
-    than adding a new column: `schedule_holidays.date_from`/`date_to` stay
-    plain TEXT, just holding an alternate string shape for a holiday that
-    "repeats every year" (audit-fixes-2.1.md, e.g. a fixed-date national/
-    religious holiday) instead of one dated range that only ever applies
-    once."""
+        year-less convention Contacts' Birthday field already uses (see
+        parse_contact_birthday/_BIRTHDAY_YEARLESS_RE above), reused here rather
+        than adding a new column: `schedule_holidays.date_from`/`date_to` stay
+        plain TEXT, just holding an alternate string shape for a holiday that
+        "repeats every year" instead of one dated range that only ever applies
+        once.
+    """
     return bool(_HOLIDAY_YEARLESS_RE.match((value or "").strip()))
 
 

@@ -1,39 +1,9 @@
-<!-- 2026-08-31 (direct bug report, "drag and drop still is not working ...
-     4 week view") -- split out of calendar_fourweek.html's own former
-     inline markup so 4-Week gets the exact same async-CRUD region + drag
-     hooks Month already has via _calendar_month_grid.html, instead of a
-     second hand-maintained copy that had quietly drifted out of sync
-     (missing `.month-event-item`/`.month-due-task-item` classes and
-     `data-uid` attributes -- see routers/calendar.py's
-     _four_week_view_context docstring for the full story). Content here
-     is deliberately identical to _calendar_month_grid.html's, just with
-     a `fourweek-grid` id/data-date instead of `month-grid`'s id/data-year/
-     data-month -- calendar_month.js and calendar_month_drag.js both query
-     by class name only (`.month-day-cell`, `.month-event-item[data-uid]`,
-     etc.), never by a container id, so the same two scripts work
-     unmodified on either grid.
-
-     id="fourweek-grid": the 4-Week view's async-CRUD region
-     (features/async-crud.md) -- calendar_month.js/calendar_month_drag.js/
-     async_calendar.js refresh this element from GET /calendar/regions?
-     region=fourweek after an event/task change instead of a full page
-     reload, then re-run the drag-to-create / drag-to-move bindings.
-
-     2026-09-09, slice 6 ("FullCalendar-parity interactions"): data-label-
-     text/data-prev/data-next added alongside the existing data-date/
-     data-label -- calendar_nav.js reads these off the freshly-swapped
-     element after a prev/next AJAX nav to update the visible label and
-     the two <a> hrefs for the *next* click, without a second round-trip. -->
 <div class="card calendar-viewport month-viewport fourweek-viewport" id="fourweek-grid" data-date="{{ anchor_iso }}" data-label="{{ active_label | default('') }}" data-label-text="{{ label_text }}" data-prev="{{ prev_start }}" data-next="{{ next_start }}">
 <div class="month-weekday-row">
     {% for wd in weekday_names %}<span>{{ wd }}</span>{% endfor %}
 </div>
 {% for week in weeks %}
 <div class="month-week-grid">
-    <!-- 2026-09-08: same bar layer as _calendar_month_grid.html -- see
-         that file's own comment for the full rationale (routers/
-         calendar.py's _week_bars, style.css's .month-week-bars /
-         .month-bars-offset-*). -->
     {% if week.bars %}
     <div class="month-week-bars">
         {% for bar in week.bars %}
@@ -64,15 +34,6 @@
                 {% endif %}
             {% endfor %}
             {% if day.overflow_count %}
-                <!-- 2026-09-25 (UI audit C-10): "+N more" opens an anchored
-                     popover (calendar_month_overflow.js) titled with the
-                     day's date, listing ALL of that day's rows -- dot/icon,
-                     time, title -- plus an "Open day" link; a bottom sheet
-                     on phones. It replaced the 2026-09-09 success-style
-                     toast that popped up bottom-right, far from the day,
-                     with bare titles only. The rows live in this inert
-                     <template> (no second request), rendered with the same
-                     href logic as the visible rows above. -->
                 <button type="button" class="month-more-link" aria-haspopup="dialog" aria-label="{{ day.overflow_count }} more on {{ day.date.strftime('%A, %B') }} {{ day.date.day }}">+{{ day.overflow_count }}<span class="month-more-word"> more</span></button>
                 <template class="month-overflow-data" data-title="{{ day.date.strftime('%A, %B') }} {{ day.date.day }}" data-day-url="/calendar/day/{{ day.iso }}{% if active_label %}?label={{ active_label | urlencode }}{% endif %}">
                     {% for item in day.rows + day.overflow %}

@@ -1,5 +1,4 @@
-"""Web Push delivery (2026-09-24, plans/ui-cleanup-2026-09.md item 7,
-slice P1: the plumbing -- keys, subscriptions, one send path).
+"""Web Push delivery.
 
 - **VAPID keys**: one P-256 key pair per install, generated on first use
   and kept in app_meta (the private key never leaves the server; the
@@ -21,7 +20,6 @@ from __future__ import annotations
 
 import base64
 import json
-import logging
 import os
 import re
 from datetime import datetime, timezone
@@ -30,9 +28,10 @@ from cryptography.hazmat.primitives import serialization
 from py_vapid import Vapid02, _check_sub
 from pywebpush import WebPushException, webpush
 
+from .log import get_logger
 from . import db
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 _PRIVATE_KEY_META = "push_vapid_private_pem"
 DEFAULT_CONTACT = "https://github.com"

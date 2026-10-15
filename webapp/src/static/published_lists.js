@@ -48,16 +48,6 @@
         document.body.removeChild(textarea);
     }
 
-    // Form validation for the create/edit modal -- 2026-09-08 (this
-    // session): the same template now renders as either #create-list-form
-    // (POST /published-lists/create) or #edit-list-form (POST /published-
-    // lists/{id}/update, new this session), so this looks for whichever
-    // one is actually on the page instead of a single hardcoded id. The
-    // label checkboxes moved onto _widget_list_multiselect.html's own
-    // checkbox-dropdown panel (no more #label-checkboxes wrapper) -- that
-    // change dropped nothing here, since this never actually gated on the
-    // checkboxes' state (see the comment below), only re-ran the same
-    // name-only check on every toggle.
     function initCreateFormValidation() {
         var form = document.getElementById('create-list-form') || document.getElementById('edit-list-form');
         if (!form) return;
@@ -66,18 +56,6 @@
         var submitBtn = document.getElementById('publish-btn') || document.getElementById('save-list-btn');
 
         function checkValidity() {
-            // 2026-09-08 (direct bug report): used to also require at least
-            // one label checkbox ticked, but the server has never required
-            // that -- create_list()'s `labels` form field defaults to an
-            // empty list and _filter_from_form()/evaluate_label_filter()
-            // both handle "no labels selected" without error (an unfiltered/
-            // empty list is a valid, if not very useful, published list).
-            // The stricter client-side gate meant the button silently never
-            // enabled itself for a labelless list, even though labels
-            // existed in the account -- no error shown anywhere, since this
-            // is a disabled-button UI gate, not a validation message. Name
-            // is still required (the server's own `name: str = Form(...)`
-            // has no default, so an empty name is a real 422, not a UX nicety).
             var hasName = nameInput && nameInput.value.trim().length > 0;
             if (submitBtn) {
                 submitBtn.disabled = !hasName;

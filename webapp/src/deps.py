@@ -5,6 +5,7 @@ CalDavBridge singleton (writes go through this to reach Radicale)."""
 from __future__ import annotations
 
 import hashlib
+import re
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
@@ -14,6 +15,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
+from jinja2.ext import Extension
 from markupsafe import Markup, escape
 
 from . import db, habit_heatmap, habit_view, recurrence_text
@@ -59,7 +61,15 @@ PAGE_HEADER_BANNER_SCOPE = db.PAGE_HEADER_BANNER_SCOPE
 _BASE_DIR = Path(__file__).resolve().parent
 _STATIC_DIR = _BASE_DIR / "static"
 
-templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
+
+class _DropHtmlComments(Extension):
+    """Developer notes written as <!-- --> never reach the browser."""
+
+    def preprocess(self, source, name, filename=None):
+        return re.sub(r"<!--.*?-->", "", source, flags=re.S)
+
+
+templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"), extensions=[_DropHtmlComments])
 
 
 def _static_url(filename: str) -> str:
@@ -98,21 +108,15 @@ templates.env.globals["static_url"] = _static_url
 
 def _icon(name: str, cls: str = "") -> Markup:
     """Renders a `<use>` reference into the sprite in
-    templates/_icons_sprite.html (included once in base.html) -- registered
-    as a Jinja global (rather than a per-template `{% from %} import`) so
-    every template can call `{{ icon('trash') }}` with no per-file
-    boilerplate, including ones that `{% extends %}` base.html (a child
-    template's own top-level scope doesn't automatically inherit a parent
-    template's macro imports, but Jinja globals are visible everywhere).
-    See _icons_sprite.html's own header comment for why this is a local,
-    inline sprite instead of an external icons.svg + cross-file <use>.
-
-    2026-09-25 (UI audit L14/F18): a name the sprite doesn't define (an old
-    stored label/habit icon, a typo) used to render a blank 16px gap. It
-    falls back to `tag` now, the neutral "some label" glyph. The known
-    names are read once from the sprite file itself, so a new symbol is
-    picked up with no second list to keep in sync. This also means only
-    known names are ever interpolated into the markup."""
+        templates/_icons_sprite.html (included once in base.html) -- registered
+        as a Jinja global (rather than a per-template `{% from %} import`) so
+        every template can call `{{ icon('trash') }}` with no per-file
+        boilerplate, including ones that `{% extends %}` base.html (a child
+        template's own top-level scope doesn't automatically inherit a parent
+        template's macro imports, but Jinja globals are visible everywhere).
+        See _icons_sprite.html's own header comment for why this is a local,
+        inline sprite instead of an external icons.svg + cross-file <use>.
+    """
     extra = f" {cls}" if cls else ""
     if name not in _sprite_icon_names():
         name = "tag"
@@ -147,21 +151,21 @@ templates.env.globals["icon"] = _icon
 @pass_context
 def _csp_nonce(ctx) -> str:
     """`{{ csp_nonce() }}` for every real inline `<script>`/`<style>` tag
-    left in the templates (audit-fixes-2.0.md item 11 -- CSP's script-src/
-    style-src moved off `'unsafe-inline'` onto nonces). Registered as a
-    Jinja global rather than templates reaching into `request.state`
-    directly, same reasoning as `icon`/`static_url` above: one place to
-    read from, and it stays usable from a child template that only
-    `{% extends %}` base.html. `SecurityHeadersMiddleware` (security_
-    headers.py) is what actually generates the nonce and stashes it on
-    `scope["state"]["csp_nonce"]` before this app even runs -- by the
-    time a template renders, `request.state.csp_nonce` is always already
-    set for every real HTTP request. Only falls back to `""` for the rare
-    context with no nonce at all (e.g. a template rendered directly in a
-    unit test with a hand-built request, no SecurityHeadersMiddleware in
-    the stack) rather than raising -- a missing nonce there just means
-    the rendered tag's `nonce=""` attribute won't match any real CSP
-    header, not a reason to fail the render."""
+        left in the templates. Registered as a
+        Jinja global rather than templates reaching into `request.state`
+        directly, same reasoning as `icon`/`static_url` above: one place to
+        read from, and it stays usable from a child template that only
+        `{% extends %}` base.html. `SecurityHeadersMiddleware` (security_
+        headers.py) is what actually generates the nonce and stashes it on
+        `scope["state"]["csp_nonce"]` before this app even runs -- by the
+        time a template renders, `request.state.csp_nonce` is always already
+        set for every real HTTP request. Only falls back to `""` for the rare
+        context with no nonce at all (e.g. a template rendered directly in a
+        unit test with a hand-built request, no SecurityHeadersMiddleware in
+        the stack) rather than raising -- a missing nonce there just means
+        the rendered tag's `nonce=""` attribute won't match any real CSP
+        header, not a reason to fail the render.
+    """
     request = ctx.get("request")
     if request is None:
         return ""
@@ -182,16 +186,12 @@ _STABLE_COLOR_NAMES = (
 
 
 def _stable_color(seed: str) -> str:
-    """Deterministic `.cal-*`/`--cal-accent-*` color name for something
-    with no color of its own (2026-09-03, contact detail-view cover
-    banner -- Variant B's baseline header treatment needs an accent for
-    every entity type's gradient-fallback cover, but contacts have no
-    color field the way events (calendar_color) and tasks (status) do.
-    A flat neutral cover for every contact would read as "nothing was
-    designed here"; a name-derived color instead gives each contact a
-    stable, distinct identity across visits without adding a real color
-    field/picker to the contact model. Seed on `contact.uid` (stable for
-    the contact's lifetime), not `full_name` (would jump on a rename)."""
+    """A flat neutral cover for every contact would read as "nothing was
+        designed here"; a name-derived color instead gives each contact a
+        stable, distinct identity across visits without adding a real color
+        field/picker to the contact model. Seed on `contact.uid` (stable for
+        the contact's lifetime), not `full_name` (would jump on a rename).
+    """
     digest = hashlib.md5(seed.encode("utf-8")).hexdigest()
     return _STABLE_COLOR_NAMES[int(digest, 16) % len(_STABLE_COLOR_NAMES)]
 
@@ -201,34 +201,16 @@ templates.env.globals["stable_color"] = _stable_color
 
 def _avatar(contact: dict | None, cls: str = "", lazy: bool = False) -> Markup:
     """Renders a contact's (or the app user's own profile) avatar -- their
-    uploaded photo if they have one, otherwise the same initials-in-a-
-    circle fallback every avatar spot used before photos existed. One
-    global (registered the same way as `icon()` above, for the same
-    reason) instead of duplicating this if/else across contacts_list.html,
-    contact_detail.html, contact_form.html's photo preview,
-    settings_your_profile.html's profile-picture row, and _page_banner.html's
-    dashboard-header avatar -- all five now render the exact same markup
-    for "this photo," which is the actual UI-consistency fix, not just
-    five separately-hand-matched copies of similar-looking HTML.
-
-    2026-08-29 (direct request: "better cache these images... convert...
-    to webp or compress them") -- prefers a real, separately cacheable
-    `photo_url` (routers/contacts.py's contact_photo_image / routers/
-    settings.py's profile_photo_image, each `?v=`-versioned so an
-    immutable Cache-Control is safe) over embedding the photo inline as a
-    `data:` URI, which every caller here used to do unconditionally: that
-    put the full base64 blob in the HTML of every page showing it (a
-    contact list row, or -- worse -- the profile photo, rendered on every
-    dashboard/label/Space page via the header avatar overlap), the exact
-    "2MB inline blob made the page slow" problem routers/banners.py's own
-    banner_image already existed to solve for banners. `photo_url` is set
-    by each call site's own router (contacts.py/settings.py), not derived
-    here -- this function has no way to know a contact's uid or whether a
-    profile photo's version has been backfilled yet. Falls back to the
-    inline `data:` URI when no `photo_url` is given (a brand-new, not-yet-
-    saved contact has no uid to build a real URL from) or when `photo_b64`
-    is present without one (defensive -- keeps working for any caller that
-    hasn't been updated to attach `photo_url` yet)."""
+        uploaded photo if they have one, otherwise the same initials-in-a-
+        circle fallback every avatar spot used before photos existed. One
+        global (registered the same way as `icon()` above, for the same
+        reason) instead of duplicating this if/else across contacts_list.html,
+        contact_detail.html, contact_form.html's photo preview,
+        settings_your_profile.html's profile-picture row, and _page_banner.html's
+        dashboard-header avatar -- all five now render the exact same markup
+        for "this photo," which is the actual UI-consistency fix, not just
+        five separately-hand-matched copies of similar-looking HTML.
+    """
     contact = contact or {}
     classes = f"avatar-circle {cls}".strip()
     photo_url = contact.get("photo_url")
@@ -260,14 +242,14 @@ templates.env.globals["avatar"] = _avatar
 
 
 def _sidebar_groups(request: Request) -> list[dict]:
-    """The nav rail's group section (base.html; labels-as-modules slice c,
-    2026-09-25, replacing the Spaces section). Every group gets an entry
-    that links to its page (/groups/<name>); its `children` are its members
-    with `sidebar_pin` on, revealed by the entry's chevron in the expanded
-    rail. A Jinja global rather than per-route context because base.html
-    renders on every page. Broad try/except with a short-lived connection
-    for the same reasons as before: a bare test Request has no `.app`, and
-    a DB error should degrade to an empty section, not a 500."""
+    """The nav rail's group section. Every group gets an entry
+        that links to its page (/groups/<name>); its `children` are its members
+        with `sidebar_pin` on, revealed by the entry's chevron in the expanded
+        rail. A Jinja global rather than per-route context because base.html
+        renders on every page. Broad try/except with a short-lived connection
+        for the same reasons as before: a bare test Request has no `.app`, and
+        a DB error should degrade to an empty section, not a 500.
+    """
     try:
         with db.connect(request.app.state.settings.db_path) as conn:
             groups = db.list_groups(conn)
@@ -329,13 +311,13 @@ def _cached_app_meta(request: Request, key: str, default: str) -> str:
 
 
 def _four_week_position_from_value(value: str | None) -> int:
-    """Shared parse for the "4-Week view: current week" position
-    (Settings > General, 2026-08-11): "1".."4" -> 1..4, anything else
-    (unset, tampered, an old DB that never wrote it) -> 1, the default
-    (current week on the first row). Used by both _four_week_position
-    below (the per-request reader) and routers/settings.py (the setting's
-    own page context + POST validation), so the two can't drift on what a
-    bad value means."""
+    """Shared parse for the "4-Week view: current week" position: "1".."4" -> 1..4, anything else
+        (unset, tampered, an old DB that never wrote it) -> 1, the default
+        (current week on the first row). Used by both _four_week_position
+        below (the per-request reader) and routers/settings.py (the setting's
+        own page context + POST validation), so the two can't drift on what a
+        bad value means.
+    """
     try:
         pos = int(value)
     except (TypeError, ValueError):
@@ -376,11 +358,11 @@ templates.env.globals["time_format"] = _time_format
 
 
 def _show_label_icons(request: Request) -> bool:
-    """Whether label icons render next to label names (Settings >
-    Appearance's "Show icons next to labels", 2026-08-09). Reads the
-    app_meta flag via the same per-request-memoized helper as
-    week_start()/time_format(). Off is the default: labels show as
-    plain text pills until the user turns the toggle on."""
+    """Whether label icons render next to label names. Reads the
+        app_meta flag via the same per-request-memoized helper as
+        week_start()/time_format(). Off is the default: labels show as
+        plain text pills until the user turns the toggle on.
+    """
     return _cached_app_meta(request, SHOW_LABEL_ICONS_KEY, "") == "1"
 
 
@@ -389,16 +371,14 @@ templates.env.globals["show_label_icons"] = _show_label_icons
 
 def _edit_mode_enabled(request: Request) -> bool:
     """Whether the widget grid's editing controls (move/resize/reorder/
-    delete a widget, New widget, Reset layout, Add/Change banner) are on
-    (Settings > Appearance's "Edit mode", 2026-08-29, see EDIT_MODE_KEY's
-    own comment). routers/dashboard.py's widget_page_context already reads
-    this flag directly for the pages that actually render the widget grid
-    (Dashboard/Space/Project/Label) -- this Jinja global exists so
-    base.html, which renders on *every* page, can expose the current
-    state to static/command_palette.js (its own "Turn on/off Edit mode"
-    row, 2026-09-13) without needing every route to thread it through its
-    own context dict. Same per-request-memoized app_meta pattern as
-    show_label_icons() above."""
+        delete a widget, New widget, Reset layout, Add/Change banner) are on. routers/dashboard.py's widget_page_context already reads
+        this flag directly for the pages that actually render the widget grid
+        (Dashboard/Space/Project/Label) -- this Jinja global exists so
+        base.html, which renders on *every* page, can expose the current
+        state to static/command_palette.js without needing every route to thread it through its
+        own context dict. Same per-request-memoized app_meta pattern as
+        show_label_icons() above.
+    """
     return _cached_app_meta(request, EDIT_MODE_KEY, "") == "1"
 
 
@@ -423,16 +403,16 @@ templates.env.globals["accent_color_hex"] = _accent_color_hex
 
 
 def _page_header_banner(request: Request) -> dict | None:
-    """The Standard Page Header's own optional banner image (Settings >
-    Appearance, 2026-08-29 sidebar redesign item 13e follow-up) -- see
-    PAGE_HEADER_BANNER_SCOPE's own comment above. Same per-request-
-    memoized-connection, broad-try/except-on-a-bare-test-Request pattern
-    as _cached_app_meta below, but returns a banner dict (or None)
-    straight from db.get_page_banner instead of a plain string, so it
-    isn't built on top of that helper. Called by _page_header_narrow.html
-    (imported `with context`, so `request` is in scope at the call site)
-    -- every standard page gets this for free without its own route
-    needing to fetch and thread it through its context dict."""
+    """The Standard Page Header's own optional banner image -- see
+        PAGE_HEADER_BANNER_SCOPE's own comment above. Same per-request-
+        memoized-connection, broad-try/except-on-a-bare-test-Request pattern
+        as _cached_app_meta below, but returns a banner dict (or None)
+        straight from db.get_page_banner instead of a plain string, so it
+        isn't built on top of that helper. Called by _page_header_narrow.html
+        (imported `with context`, so `request` is in scope at the call site)
+        -- every standard page gets this for free without its own route
+        needing to fetch and thread it through its context dict.
+    """
     cache_attr = "_cc_page_header_banner_cache"
     if hasattr(request.state, cache_attr):
         return getattr(request.state, cache_attr)
@@ -503,8 +483,6 @@ templates.env.filters["recurrence_text"] = recurrence_text.describe
 
 
 def _habit_cadence_label(task) -> str:
-    """habit_view.cadence_label for a template ("3x a week", "Mon, Wed,
-    Fri", "Every 2 days") -- habits H1, 2026-09-24."""
     return habit_view.cadence_label(task or {})
 
 
@@ -628,13 +606,14 @@ templates.env.globals["object_contact_uids"] = _object_contact_uids
 
 
 def _project_label_names(request: Request) -> frozenset[str]:
-    """Every project label's name (2026-09-25, UI audit L18): the task and
-    event detail modals show an item's project on its own "Project" row,
-    matching the forms' separate Project dropdown, instead of as one more
-    pill under Labels. A Jinja global so those templates don't need every
-    detail route to pass db.project_picker_context. Memoized per request;
-    empty on any DB error (a bare test Request has no `.app`), which just
-    means everything shows under Labels as before."""
+    """Every project label's name: the task and
+        event detail modals show an item's project on its own "Project" row,
+        matching the forms' separate Project dropdown, instead of as one more
+        pill under Labels. A Jinja global so those templates don't need every
+        detail route to pass db.project_picker_context. Memoized per request;
+        empty on any DB error (a bare test Request has no `.app`), which just
+        means everything shows under Labels as before.
+    """
     cached = getattr(request.state, "_cc_project_names", None)
     if cached is not None:
         return cached
@@ -652,12 +631,13 @@ templates.env.globals["project_label_names"] = _project_label_names
 
 def _format_time_value(value: str, fmt: str) -> str:
     """Shared formatting core for the two filters below -- accepts either
-    a full ISO datetime ("2026-08-08T14:30:00") or a bare "HH:MM" string
-    (schedule_classes.html's start_time/end_time columns store just the
-    latter). Anything that doesn't parse as a plausible HH:MM is returned
-    unchanged rather than raising -- a display filter degrading to "the
-    original value" on bad input is a much smaller problem than a broken
-    page."""
+        a full ISO datetime or a bare "HH:MM" string
+        (schedule_classes.html's start_time/end_time columns store just the
+        latter). Anything that doesn't parse as a plausible HH:MM is returned
+        unchanged rather than raising -- a display filter degrading to "the
+        original value" on bad input is a much smaller problem than a broken
+        page.
+    """
     if not value:
         return ""
     time_part = value[11:16] if "T" in value else value[:5]
@@ -699,10 +679,7 @@ _DTF_MON = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct"
 
 
 def _dtf_date(value) -> str:
-    """Jinja filter for the date field (_date_time_fields.html, 2026-09-26):
-    "2026-09-26" (or a "...T15:30" datetime) -> "Sat, Sep 26, 2026", the
-    same text static/date_time_fields.js writes after a pick; "" for a
-    blank or unparseable value. English on purpose, matching the JS."""
+    """English on purpose, matching the JS."""
     try:
         d = date.fromisoformat(str(value or "")[:10])
     except ValueError:
@@ -732,12 +709,11 @@ templates.env.filters["fmt_hour"] = _fmt_hour
 
 
 def _fmt_birthday(value: str | None) -> str:
-    """Jinja filter for Contacts field parity slice 4 of 6 (Birthday) --
-    `{{ contact.birthday | fmt_birthday }}` to render the stored raw
-    "YYYY-MM-DD"/"--MM-DD" string as "May 17, 1990"/"May 17". No @pass_context
-    needed (unlike fmt_time/fmt_hour) -- birthday display has no per-request
-    Settings preference the way 24h/12h time format does, it's a pure
-    function of the stored value (db.format_contact_birthday)."""
+    """No @pass_context
+        needed (unlike fmt_time/fmt_hour) -- birthday display has no per-request
+        Settings preference the way 24h/12h time format does, it's a pure
+        function of the stored value (db.format_contact_birthday).
+    """
     return db.format_contact_birthday(value)
 
 
@@ -745,26 +721,14 @@ templates.env.filters["fmt_birthday"] = _fmt_birthday
 
 
 def _relative_date(value: str | None) -> str:
-    """Jinja filter for a short/relative date -- `{{ t.due_at[:10] |
-    relative_date }}` instead of a raw "2026-09-05" (2026-08-31 direct
-    feedback on the Dashboard's Agenda widget: "make the dates ...
-    shorthand or relative"). Today/Tmw/Yest for the immediate cases (the
-    ones worth naming instead of counting), otherwise "5 Sep" -- same
-    day-drop-year-unless-different convention static/datetime_picker.js's
-    own `.dtp--compact` fmtDate already established for the Tasks table's
-    Date column (2026-08-30, praised then as "reads at a glance"); this
-    is that same convention's server-rendered equivalent for read-only
-    widget text rather than an editable picker's trigger label.
-
-    2026-09-24 direct request: the three named cases shortened to fit a
-    5-character budget ("Tomorrow" -> "Tmw", "Yesterday" -> "Yest") so a
-    widget pill never wraps or gets clipped -- "Today" already fit and is
-    unchanged. No @pass_context needed (unlike fmt_time/fmt_hour) -- pure
-    function of the stored value and today's date, no per-request
-    Settings preference involved. Expects a plain "YYYY-MM-DD" (or a
-    longer ISO timestamp -- only the first 10 chars are read); anything
-    that doesn't parse is returned unchanged, same "display filter
-    degrades to the original value" rule as fmt_time/fmt_dt above."""
+    """Today/Tmw/Yest for the immediate cases (the
+        ones worth naming instead of counting), otherwise "5 Sep" -- same
+        day-drop-year-unless-different convention static/datetime_picker.js's
+        own `.dtp--compact` fmtDate already established for the Tasks table's
+        Date column; this
+        is that same convention's server-rendered equivalent for read-only
+        widget text rather than an editable picker's trigger label.
+    """
     if not value:
         return value
     try:
@@ -787,13 +751,13 @@ templates.env.filters["relative_date"] = _relative_date
 
 
 def _holiday_date(value: str | None) -> str:
-    """Jinja filter for the Holidays table's Date Range column
-    (audit-fixes-2.1.md, "only day hollydays, withot the year") -- same
-    Today/Tmw/"5 Sep" shorthand as `relative_date` for an ordinary
-    full-date holiday, or db.format_holiday_date's "25 Dec" for a
-    year-agnostic "--MM-DD" one (there's no real year to be relative to,
-    so relative_date's own ValueError fallback would otherwise just print
-    the raw "--MM-DD" unchanged)."""
+    """Jinja filter for the Holidays table's Date Range column -- same
+        Today/Tmw/"5 Sep" shorthand as `relative_date` for an ordinary
+        full-date holiday, or db.format_holiday_date's "25 Dec" for a
+        year-agnostic "--MM-DD" one (there's no real year to be relative to,
+        so relative_date's own ValueError fallback would otherwise just print
+        the raw "--MM-DD" unchanged).
+    """
     if db.is_year_agnostic_holiday_date(value):
         return db.format_holiday_date(value)
     return _relative_date(value)
@@ -804,14 +768,14 @@ templates.env.filters["holiday_date"] = _holiday_date
 
 def _format_datetime_value(value: str, fmt: str) -> str:
     """Shared formatting core for the fmt_dt filter below -- one stored ISO
-    timestamp ("2026-08-25T20:57:05", UTC like every timestamp this app
-    writes) rendered human-readably as "Aug 25, 2026, 8:57 PM" (12h pref)
-    or "Aug 25, 2026, 20:57" (24h pref). Aware timestamps are converted to
-    the server's local zone first (a backup made at 22:57 UTC should read
-    as the wall-clock time it was actually made at); naive ones are taken
-    as-is. Anything that doesn't parse is returned unchanged -- same
-    "display filter degrades to the original value" rule as
-    _format_time_value above."""
+        timestamp rendered human-readably as "Aug 25, 2026, 8:57 PM" (12h pref)
+        or "Aug 25, 2026, 20:57" (24h pref). Aware timestamps are converted to
+        the server's local zone first (a backup made at 22:57 UTC should read
+        as the wall-clock time it was actually made at); naive ones are taken
+        as-is. Anything that doesn't parse is returned unchanged -- same
+        "display filter degrades to the original value" rule as
+        _format_time_value above.
+    """
     if not value:
         return value
     try:
@@ -832,9 +796,9 @@ def _format_datetime_value(value: str, fmt: str) -> str:
 @pass_context
 def _fmt_dt(ctx, value: str) -> str:
     """Jinja filter for whole-datetime display ("Aug 25, 2026, 8:57 PM")
-    -- Data & Maintenance's backup facts (2026-08-26 redesign: all raw ISO
-    timestamps on that page became human-readable ones). Same @pass_context
-    12h/24h-preference read as fmt_time above."""
+        -- Data & Maintenance's backup facts. Same @pass_context
+        12h/24h-preference read as fmt_time above.
+    """
     request = ctx.get("request")
     fmt = _time_format(request) if request is not None else "24h"
     return _format_datetime_value(value, fmt)
@@ -844,11 +808,9 @@ templates.env.filters["fmt_dt"] = _fmt_dt
 
 
 def _fmt_address(addr: dict) -> str:
-    """Jinja filter for Contacts field parity slice 5 of 6 (Address) --
-    `{{ a | fmt_address }}` to render one structured {"po_box", "extended",
-    "street", "city", "region", "postal_code", "country"} dict as vCard's
-    own multi-line address layout. Same "pure function of the stored
-    value, no per-request Settings preference" shape as fmt_birthday above."""
+    """Same "pure function of the stored
+        value, no per-request Settings preference" shape as fmt_birthday above.
+    """
     return db.format_contact_address(addr)
 
 
@@ -876,6 +838,15 @@ def get_bridge(request: Request) -> CalDavBridge:
 # without building a Request -- those keep getting the redirect default.
 def wants_json(x_requested_with: str | None) -> bool:
     return x_requested_with == "fetch"
+
+
+def validation_response(error: dict, x_requested_with: str | None, back: str):
+    """A refused input: the structured 422 for fetch (shown as a toast), else a redirect with the message."""
+    from urllib.parse import urlencode
+
+    if wants_json(x_requested_with):
+        return JSONResponse({"detail": [{"loc": ["body", error["field"]], "msg": error["message"]}]}, status_code=422)
+    return RedirectResponse(url=f"{back}?{urlencode({'error': error['message']})}", status_code=303)
 
 
 def respond(

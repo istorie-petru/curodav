@@ -18,20 +18,6 @@ from .contacts import _search_contacts
 from .tasks import _search_tasks
 
 
-# --------------------------------------------------------------------- #
-# search_entities -- 1.2 (universal command surface, see plans/open.md §
-# Universal command surface). One shared query layer for the search /
-# picker / command palette component: finds tasks, events, and contacts by
-# name -- plus working filters -- and is the single source of truth every
-# future invocation mode (Ctrl-K global search, the relation picker, the
-# per-view search boxes) delegates to instead of each view's own q=
-# handling. Fuzzy free-text over the meaningful indexed metadata (titles,
-# descriptions, labels, contact fields); explicit filters AND together;
-# multi-select labels are any-match (one shared label suffices), matching
-# the app's established label-membership convention.
-# --------------------------------------------------------------------- #
-
-
 def search_entities(
     conn: sqlite3.Connection,
     q: str | None = None,
@@ -48,50 +34,41 @@ def search_entities(
 ) -> list[dict[str, Any]]:
     """Search across tasks, events, and contacts.
 
-    Explicit filters (AND together):
-      - `q`        -- free-text, case-insensitive substring across the
-                      meaningful metadata: task title/description/labels;
-                      event title/description/labels; contact name/org/
-                      phone/email/labels. (Fuzzy = SQL LIKE, the same
-                      mechanism list_tasks/list_contacts already use -- no
-                      index, appropriate at personal-scale volumes.)
-      - `types`    -- subset of ("task", "event", "contact"); None/empty
-                      means all three. (Quick Capture's "note" type, added
-                      2026-08-15, was removed 2026-10-01 along with the
-                      rest of the quick-capture notes feature -- see
-                      db.py's `notebook_documents` schema comment; every
-                      existing caller that passes an explicit `types` list
-                      of its own, e.g. the relation picker's
-                      `["event"]`/`["task"]`, is unaffected.)
-      - `labels`   -- multi-select label filter, any-match (a result needs
-                      just one of the chosen labels), case-sensitive on the
-                      stored object_labels name like every other label
-                      query here.
-      - `task_status`  -- tasks only: exact status match.
-      - `task_due_on`  -- tasks only: due on this exact ISO date (the
-                      picker's "due date" filter).
-      - `event_start`/`event_end` -- events only: start_at within this
-                      ISO-date range.
+        Explicit filters (AND together):
+          - `q`        -- free-text, case-insensitive substring across the
+                          meaningful metadata: task title/description/labels;
+                          event title/description/labels; contact name/org/
+                          phone/email/labels. (Fuzzy = SQL LIKE, the same
+                          mechanism list_tasks/list_contacts already use -- no
+                          index, appropriate at personal-scale volumes.)
+          - `types`    -- subset of ("task", "event", "contact"); None/empty
+                          means all three.
+          - `labels`   -- multi-select label filter, any-match (a result needs
+                          just one of the chosen labels), case-sensitive on the
+                          stored object_labels name like every other label
+                          query here.
+          - `task_status`  -- tasks only: exact status match.
+          - `task_due_on`  -- tasks only: due on this exact ISO date (the
+                          picker's "due date" filter).
+          - `event_start`/`event_end` -- events only: start_at within this
+                          ISO-date range.
 
-    Implicit (applied by the caller, see the spec's "implicit" list):
-      - `exclude_uids`     -- {type: {uid, ...}} of already-linked items to
-                      drop ("not-already-linked" for the relation picker).
-      - `include_habit_tasks` -- False hides habit-labeled tasks, the same
-                      default list_tasks applies everywhere.
-      - `exclude_past_events` -- events only: drop anything that already
-                      started before today. Command palette browsing
-                      (2026-09-29 direct request, "harsh filtering ... remove
-                      past events from showing, they can only appear when
-                      searching") -- the default empty-query view on open
-                      shouldn't be cluttered with events that have already
-                      happened; a real typed query still surfaces them
-                      (routers/search.py only sets this when `q` is empty).
+        Implicit (applied by the caller, see the spec's "implicit" list):
+          - `exclude_uids`     -- {type: {uid, ...}} of already-linked items to
+                          drop ("not-already-linked" for the relation picker).
+          - `include_habit_tasks` -- False hides habit-labeled tasks, the same
+                          default list_tasks applies everywhere.
+          - `exclude_past_events` -- events only: drop anything that already
+                          started before today. Command palette browsing -- the default empty-query view on open
+                          shouldn't be cluttered with events that have already
+                          happened; a real typed query still surfaces them
+                          (routers/search.py only sets this when `q` is empty).
 
-    Returns a flat list of result dicts, one per hit, ordered by type
-    (tasks, events, contacts) and then by that type's natural order; each
-    carries a `type` tag plus a compact title/subtitle/tags surface for the
-    picker plus the full row under `entity`:
-      {"type": ..., "uid": ..., "title": ..., "subtitle": ..., "tags": [...], "entity": {...}}
+        Returns a flat list of result dicts, one per hit, ordered by type
+        (tasks, events, contacts) and then by that type's natural order; each
+        carries a `type` tag plus a compact title/subtitle/tags surface for the
+        picker plus the full row under `entity`:
+          {"type": ..., "uid": ..., "title": ..., "subtitle": ..., "tags": [...], "entity": {...}}
     """
     wanted = set(types or ())
     # Implicit type restriction (the spec's "type" implicit filter): a
@@ -498,13 +475,6 @@ def touch_sync_device(
 
 
 def list_sync_devices(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """1.8 slice 6 -- every device that has ever pushed or pulled, most
-    recently seen first. `data_health.health_summary`'s own "sync" field
-    was a fixed `{"configured": False}` placeholder through slice 5
-    (open.md's own note: "the field exists now so the page's shape doesn't
-    change once it does") -- this is what that placeholder needed once a
-    real sync engine (routers/sync_api.py, called by static/offline_sync_
-    client.js) actually exists to populate `sync_devices` rows."""
     rows = conn.execute(
         "SELECT device_id, last_pushed_physical, last_pushed_logical, last_pushed_device_id, "
         "last_pulled_physical, last_pulled_logical, last_pulled_device_id, last_seen_at "

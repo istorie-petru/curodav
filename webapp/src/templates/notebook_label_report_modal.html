@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Label report{% endblock %}
+{% block content %}
+<div id="modal-target">
+<div class="modal-header">
+<h1>Notes that lost a label</h1>
+</div>
+<div class="modal-body">
+<div class="card">
+    {% for r in report %}
+    <div class="settings-field-row">
+        <span class="settings-field-label"><a href="/notebook/{{ r.uid }}">{{ r.title or 'Untitled' }}</a>
+            Kept {{ r.kept | join(', ') or 'nothing' }}. Removed {{ r.dropped | join(', ') }}.</span>
+    </div>
+    {% endfor %}
+</div>
+</div>
+{% set footer_back_url = '/notebook' %}
+{% set footer_back_mode = 'cancel' %}
+{% set footer_back_label = 'Done' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

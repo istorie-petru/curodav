@@ -5,71 +5,21 @@
 {% block content %}
 {% from "_look_picker.html" import look_picker %}
 {% from "_task_work_allocations.html" import work_sessions_edit with context %}
-<!-- Tasks > Habits' own create form (2026-08-08 direct feedback) -- a
-     stripped-down, dedicated form, not task_form.html with fields
-     pre-filled. A habit-labeled task doesn't have a due date, a start
-     date, a status worth choosing (it's just always "active" -- there's
-     no "done" for a thing you do every day), or importance/urgency, so
-     none of those fields are here at all; Recurrence is required instead
-     of optional (a habit is defined by recurring, defaults to "Daily")
-     and the habit label is a hidden field, always applied, not a
-     removable checkbox -- "adding a task in that view should
-     automatically add the default habit label." Posts to the exact same
-     POST /tasks (create_task) every other task uses; nothing server-side
-     is habit-specific except which fields this particular form happens
-     to send.
-
-     2026-08-29 direct feedback ("in the edit and view of habits, the
-     user should be able to put work sessions... habits should not have
-     in their edit modal a label dropdown, a status dropdown, a due or a
-     start date"): this template now also handles EDIT, not just create
-     -- routers/tasks.py's edit_task_form renders this instead of the
-     generic task_form.html whenever the task being edited carries the
-     habit label, so a habit-tracked task never sees those fields even on
-     an edit round-trip. `task` is None for the create path (unchanged)
-     or the existing row for edit; the form posts to `/tasks` (create) or
-     `/tasks/{uid}` (update_task, its own POST /{uid}) accordingly.
-     update_task's `due_at`/`start_at`/`status` all fall back to their own
-     Form(...) defaults ("", "", "active") when this form omits them --
-     the exact same "always blank/always active" values the create path
-     already relies on producing for a brand-new habit task, so an edit
-     round-trip through this form can't accidentally introduce a due
-     date, a start date, or a non-active status a habit task was never
-     supposed to have in the first place. `tags_labels` still carries only
-     the hidden habit label -- a habit task's other tags (e.g. a project
-     label) survive because update_task's `tags` Form field defaults to
-     "" and _combine_tags treats an absent `tags`/`tags_labels` pairing as
-     "nothing to add beyond what's listed", so this form only ever
-     round-trips the habit label itself; any additional labels a habit
-     task carries are left exactly as edit_task_form loaded them since
-     this form doesn't re-send or clear them. -->
 <div id="modal-target" class="modal-height-md">
 <div class="modal-header">
 <h1>{% if task %}Edit habit{% else %}New habit{% endif %}</h1>
 </div>
 <div class="modal-body">
 <div class="card">
-{# 2026-09-25 (UI audit H-14): `.is-avoid` hides the build-only fields
-   (Unit, Recurrence, Only on, Times per period, Daily target) -- none
-   of them apply to an avoid habit. static/habit_day.js flips the class
-   when Kind changes; the fields still submit, so switching back keeps
-   their values. #}
 {% set _rep0 = habit_repeat_choice(task, week_start(request)) %}
 <form method="post" id="habit-task-form" data-repeat="{{ _rep0.mode }}" data-goal="{{ 'amount' if task and (task.target_per_day or 1) > 1 else 'once' }}" class="habit-task-form{% if task and task.habit_kind == 'avoid' %} is-avoid{% endif %}" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}" data-cc-change="task" data-cc-action="{% if task %}edit{% else %}create{% endif %}">
     <input type="hidden" name="tags_labels" value="{{ habit_label }}">
     <div class="field-grid">
         {{ title_row(task.title if task else '', autofocus=true) }}
-        {# 2026-09-26 (Peter): the habit's own colour and icon -- the
-           shared Look dropdown (_look_picker.html). The icon draws the
-           check button, the colour paints the heatmap, the strip and the
-           view modal's cover. #}
         {% set _look = habit_look(task) %}
         {{ look_picker('look-habit-task-form', 'habit-task-form', _look.color, _look.icon, habit_colors, {'': habit_icons()},
                        color_field='habit_color', icon_field='habit_icon', allow_no_color=true,
                        no_color_label='Default colour', no_icon_label='Default icon', default_icon='check-circle') }}
-        {# Habits H5 (2026-09-24): "avoid" habits log relapses instead of
-           check-ins. 2026-09-26 (Peter, second pass): the app's own
-           dropdown, not pills in the body. #}
         {% set _avoid = task and task.habit_kind == 'avoid' %}
         {% set ms_name = 'habit_kind' %}
         {% set ms_mode = 'single' %}
@@ -81,16 +31,6 @@
         {% set ms_extra_class = 'habit-kind-field' %}
         {% set ms_form_id = 'habit-task-form' %}
         {% include "_widget_list_multiselect.html" %}
-        {# 2026-09-26 (Peter's approved mockup, plans/habit-edit-mockup-
-           2026-09-26.md): every control is the app's dropdown and full
-           width; a choice that needs a follow-up (certain days, times a
-           week/month, an amount) shrinks to half width and its follow-up
-           takes the other half. The form's data-repeat / data-goal pick
-           which follow-up shows (style.css; habit_day.js keeps them in
-           sync). routers/tasks.py _apply_habit_repeat / _apply_habit_goal
-           turn the choices back into the stored rule and target; "keep"
-           (a rule these can't express, like every 2 weeks) sends the
-           current rule back untouched. #}
         {% set _rep = habit_repeat_choice(task, week_start(request)) %}
         {% set ms_name = 'habit_repeat' %}
         {% set ms_mode = 'single' %}
@@ -148,8 +88,6 @@
                 </div>
             </div>
         </div>
-        {# Per-habit reminder time (2026-09-25): the half-hour list plus
-           "No reminder" (= only the morning digest). Build habits only. #}
         {% set _current = task.reminder_time if task and task.reminder_time else '' %}
         {% set _slots = [] %}
         {% for h in range(24) %}{% for m in (0, 30) %}{% set _ = _slots.append('%02d:%02d'|format(h, m)) %}{% endfor %}{% endfor %}
@@ -169,27 +107,9 @@
     {% if task %}{{ work_sessions_edit(work_allocations, 'habit-task-form') }}{% endif %}
 </form>
 {% if task %}
-{# Item 19 (2026-09-26, "Habits must be archivable") -- a DEDICATED
-   button, not a Status field (this form deliberately has none, see this
-   file's own top comment): posts straight to /tasks/{uid}/archive or
-   /unarchive (routers/tasks.py, both new this item), never through this
-   form's own `update_task` POST -- update_task's `status` default now
-   preserves whatever's already on the row when omitted (see that
-   route's own comment), so a plain Save afterward can't silently undo
-   this either way. `data-cc-change="task"` (no data-modal-keep-open)
-   closes the modal and lets habit_actions.js's existing cc-entity-
-   changed listener refresh #habits-body -- the archived habit
-   disappears from the list it was just edited from (habit_view.
-   habit_items' `_INACTIVE_STATUSES` filter), same as any other habit
-   edit's region refresh. Restoring one back is only reachable from
-   routers/habits.py's Archived modal (see that route's own docstring),
-   since an archived habit is gone from the page this edit form itself
-   would normally be opened from. #}
 {% endif %}
 </div>
 </div>
-{# 2026-09-26 (Peter): Cancel on an existing habit goes back to its view
-   modal (same as task/event/contact forms), not out of the modal. #}
 {% if task %}
 {% set footer_back_url = '/tasks/' ~ task.uid %}
 {% set footer_back_mode = 'modal' %}

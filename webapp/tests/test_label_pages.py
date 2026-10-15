@@ -438,9 +438,9 @@ class TestLabelPillLinks:
         treatment every other pill in the app has."""
         from src.routers import tasks as tasks_router
         db.upsert_task(conn, {"uid": "t1", "title": "Draft", "description": "", "status": "active",
-                              "tags": ["Gym"], "created_at": _now()})
+                              "tags": ["Gym", "Home"], "created_at": _now()})
         body = tasks_router.list_tasks(_request("/tasks"), conn=conn).body.decode()
-        assert 'href="/labels/Gym/preview" data-modal' in body
+        assert 'href="/labels/Gym/preview" data-modal' in body and 'href="/labels/Home/preview" data-modal' in body
 
     def test_pills_inside_other_controls_stay_plain(self, conn):
         """The still-live case the class docstring describes: a label

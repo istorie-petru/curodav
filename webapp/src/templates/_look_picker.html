@@ -1,71 +1,3 @@
-{# The "Look" dropdown -- colour + icon in one control (2026-09-26, Peter:
-   "have this drop down everywhere colors and icons can be set"). Replaces
-   the old header/inline dot pickers (_color_swatch_picker.html /
-   _icon_swatch_picker.html) on habits, labels (edit modal and quick add)
-   and groups.
-
-   The app's own `.multiselect` trigger + portaled panel (static/app.js
-   opens, closes and portals it). The trigger shows the icon on a circle
-   of the colour plus "Colour · Icon"; the panel holds a swatch grid and
-   an icon grid -- side by side when the panel is wide, stacked when not
-   (style.css .look-panel container query). Radios carry form="..."
-   because the panel leaves the <form> while open; static/look_picker.js
-   keeps the trigger in sync.
-
-   look_picker(
-     id            -- unique id for the trigger (e.g. "look-habit-task-form")
-     form_id       -- the <form> the radios submit with
-     color, icon   -- current values (None/"" = none)
-     colors        -- colour names offered (the label palette)
-     icon_groups   -- {group: [icon names]}, shown as one flat grid (group
-                      order kept, duplicates dropped; no headings since
-                      2026-09-26)
-     color_field / icon_field -- form field names ("color"/"icon" for
-                      labels and groups, "habit_color"/"habit_icon" for habits)
-     allow_no_color -- offer a "no colour" swatch (value ""); labels and
-                      groups always have a colour, a habit may use the accent
-     no_color_label / no_icon_label -- trigger text for the empty choices
-     default_icon  -- glyph shown when no icon is picked
-     label         -- the field label ("Look")
-     show_icon     -- (2026-09-27, Settings > Appearance's Accent color:
-                      "utilize the look dropdown... repurposed for this
-                      page") false renders colour-only -- no icon grid,
-                      no icon in the trigger preview circle (just the flat
-                      colour dot the CSS already draws it as), no "· Icon"
-                      half of the trigger text. `icon_name`/`icon_groups`/
-                      `icon_field`/`no_icon_label`/`default_icon` are all
-                      simply unused in this mode; every existing caller
-                      passes none of this, so they're unaffected by the
-                      default `true`. See look_picker.js's own `sync()` --
-                      it already only touches an icon radio group / a
-                      preview `<use>` element when one actually exists for
-                      this trigger id, so no icon markup here means no JS
-                      change was needed either.
-     dot_var_prefix -- (2026-09-27, same Accent color caller) which CSS
-                      custom property each swatch/the preview circle reads
-                      its colour from: `--{{ dot_var_prefix }}{{ color }}`.
-                      Default "cal-accent-" is the label/habit palette
-                      (--cal-accent-red, ...), same as the old `habit-c-*`
-                      classes this replaced -- every existing caller keeps
-                      that exact palette. Accent color's 8 presets are a
-                      *different*, separately-curated palette
-                      (--accent-preset-*, deps.py's ACCENT_PRESETS -- tuned
-                      to match Pineart's own accent picker, not the 16-
-                      color calendar/label palette), so that caller passes
-                      "accent-preset-" instead. Set via inline `style`, not
-                      a per-colour class, specifically so two different
-                      palettes can share this one macro without a CSS
-                      specificity fight over which class's `background`
-                      wins on the same element.
-     autosubmit    -- (2026-09-27, same Accent color caller) add
-                      `data-change-submit` to every radio, so picking a
-                      swatch saves immediately (app.js's delegated
-                      listener, `requestSubmit()`s `form_id` on change) --
-                      Settings' other rows all work this way, with no
-                      separate Save button. Every existing look_picker
-                      caller (habit/label/group forms) has a real Save
-                      button and deliberately does NOT want a pick to
-                      submit early, hence default `false`. #}
 {% from "_inputs.html" import search_input %}
 {% macro look_picker(id, form_id, color, icon_name, colors, icon_groups, color_field='color', icon_field='icon', allow_no_color=false, no_color_label='Default colour', no_icon_label='No icon', default_icon='tag', label='Look', wide=true, extra_class='', show_icon=true, dot_var_prefix='cal-accent-', autosubmit=false) %}
 <div class="field{% if wide %} field-wide{% endif %}{% if extra_class %} {{ extra_class }}{% endif %}">
@@ -89,10 +21,6 @@
                     {% endfor %}
                 </div>
                 {% if show_icon %}
-                {# 2026-10-11: the icon half is a category sidebar (Lucide's own categories, plus "Suggested" = the
-                   curated list passed in as `icon_groups`) beside a grid that static/look_picker.js fills on
-                   first open from /static/icons/lucide-categories.json. The picked icon is one hidden input
-                   (no per-icon radios: the full library is 1,877 icons). #}
                 {% set _seen = [] %}{% for names in icon_groups.values() %}{% for ic in names if ic not in _seen %}{% set _ = _seen.append(ic) %}{% endfor %}{% endfor %}
                 <input type="hidden" name="{{ icon_field }}" value="{{ icon_name or '' }}" form="{{ form_id }}" data-look-for="{{ id }}" data-look-part="icon"{% if autosubmit %} data-change-submit{% endif %}>
                 <div class="look-icons-pane" data-look-panel-for="{{ id }}" data-curated="{{ _seen|join(',') }}" data-default-icon="{{ default_icon }}" data-no-icon="{{ no_icon_label }}">

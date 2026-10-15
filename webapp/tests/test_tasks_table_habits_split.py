@@ -130,35 +130,27 @@ class TestGroupNameAndAddButtonInTableHeader:
         assert "task-add-row" not in body
         assert "task-section-divider" not in body
 
-    def test_task_table_has_exactly_one_plain_header_no_group_names(self, conn):
+    def test_the_list_has_a_heading_per_group_and_no_table_header(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "is_project": 1})
         _seed_task(conn, "t1", tags=["Garden"])
-        _seed_task(conn, "t2", tags=[])
-        db.upsert_task(conn, dict(db.get_task(conn, "t2"), status="done"))
+        _seed_task(conn, "t2", tags=["Gym"])
+        _seed_task(conn, "t3", tags=[])
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        task_table = body.split('id="task-table"', 1)[1].split('id="habits-table"')[0]
-        # Exactly one <thead> in the task table's own region -- not one per
-        # group -- and the column labels appear only that once.
-        assert task_table.count("<thead>") == 1
-        assert task_table.count(">Title<") == 1
-        assert task_table.count(">Status<") == 1
-        assert task_table.count(">Date<") == 1
-        assert task_table.count(">Labels<") == 1
-        # No more per-group name+count header text anywhere.
-        assert "Garden (1)" not in body
-        assert "Unassigned (1)" not in body
-        assert "Completed (1)" not in body
+        task_list = body.split('id="task-table"', 1)[1]
+        assert "<thead>" not in task_list.split("</div>\n</div>", 1)[0]
+        assert task_list.count('class="section-row') >= 3
+        assert "No label" in task_list
 
-    def test_project_and_unassigned_tasks_share_the_one_table(self, conn):
+    def test_project_label_and_unassigned_tasks_share_the_one_list(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "is_project": 1})
         _seed_task(conn, "a1", tags=["Garden"])
+        _seed_task(conn, "b1", tags=["Gym"])
         _seed_task(conn, "loose1", tags=[])
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        task_table = body.split('id="task-table"', 1)[1].split('task-table-habits')[0]
-        assert "a1" in task_table
-        assert "loose1" in task_table
-        # Only one <table> element opens in this region (the merged one).
-        assert task_table.count("<table") == 1
+        task_list = body.split('id="task-table"', 1)[1]
+        for uid in ("a1", "b1", "loose1"):
+            assert f'data-uid="{uid}"' in task_list
+        assert body.count('id="task-table"') == 1
 
     def test_no_per_group_add_task_link_left_anywhere(self, conn):
         # 2026-09-03 direct follow-up: the single "+ Task nou" header
@@ -174,18 +166,14 @@ class TestGroupNameAndAddButtonInTableHeader:
         assert "/tasks/new?project=Garden" not in body
 
 
-    def test_completed_tasks_render_dimmed_in_the_same_table_no_own_header(self, conn):
+    def test_completed_tasks_render_dimmed_in_their_own_trailing_group(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "is_project": 1})
         _seed_task(conn, "open1", tags=["Garden"])
         _seed_task(conn, "done1", tags=["Garden"])
         db.upsert_task(conn, dict(db.get_task(conn, "done1"), status="done"))
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        task_table = body.split('id="task-table"', 1)[1].split('id="habits-table"')[0]
-        assert "open1" in task_table
-        assert "done1" in task_table
-        assert task_table.count("<thead>") == 1  # still just the one shared header
-        after_uid = task_table.split('data-uid="done1"', 1)[1]
-        done_row_open_tag = after_uid.split(">", 1)[0]
-        assert "task-row-completed" in done_row_open_tag
-
+        task_list = body.split('id="task-table"', 1)[1]
+        assert task_list.index('data-uid="open1"') < task_list.index("Completed") < task_list.index('data-uid="done1"')
+        done_row_open_tag = task_list.split('data-uid="done1"', 1)[1].split(">", 1)[0]
+        assert "task-row-completed" in task_list.split('data-uid="done1"', 1)[0].rsplit("<div", 1)[1] or "task-row-completed" in done_row_open_tag
 

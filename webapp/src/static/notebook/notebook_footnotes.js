@@ -288,10 +288,7 @@
   function renderCitationResultsInto(ul, items, onPick) {
     ul.innerHTML = "";
     if (!items.length) {
-      var empty = document.createElement("li");
-      empty.className = "cdx-footnote-picker-empty";
-      empty.textContent = "No matching citations";
-      ul.appendChild(empty);
+      ul.appendChild(window.ccEmptyState("No matching citations", "li"));
       return;
     }
     items.forEach(function (item) {
@@ -305,98 +302,12 @@
     });
   }
 
-  // One hardcoded Chicago-inspired note format (roadmap item J2, resolved
-  // 2026-10-03: "ship one hardcoded format now ... don't build a format
-  // selector yet"). Natural author-name order ("First Last", not the
-  // bibliography's "Last, F." -- Chicago's own note/bibliography-entry
-  // distinction), title quoted for a journal article, plain otherwise (no
-  // italics available in plain footnote text), year in parens, page last.
-  // Deliberately simple: this is the one format v1 ships, not a template
-  // engine -- see J2's own "knobs identified for when this is built"
-  // list for what a second format would eventually need to vary.
-  function formatCitationAuthorsNatural(authors) {
-    var parts = (authors || []).map(function (a) {
-      var family = (a.family || "").trim();
-      var given = (a.given || "").trim();
-      return (given ? given + " " : "") + family;
-    }).filter(Boolean);
-    if (parts.length <= 1) return parts[0] || "";
-    if (parts.length === 2) return parts[0] + " and " + parts[1];
-    return parts.slice(0, -1).join(", ") + ", and " + parts[parts.length - 1];
-  }
-  function formatCitationTitlePart(citation) {
-    var title = (citation.title || "").trim() || "Untitled";
-    return citation.type === "article-journal" ? '"' + title + '"' : title;
-  }
-  function formatPageCitationText(citation, page) {
-    var bits = [];
-    var authors = formatCitationAuthorsNatural(citation.authors);
-    if (authors) bits.push(authors);
-    bits.push(formatCitationTitlePart(citation));
-    var tail = citation.year ? "(" + citation.year + ")" : "";
-    var head = bits.join(", ");
-    var text = tail ? head + " " + tail : head;
-    if (page) text += ", " + page;
-    return text + ".";
-  }
-  // Session 9b (2026-10-03) -- the remaining five actions, same one-
-  // hardcoded-format rule as J2 ("ship one format, no selector yet").
-  // Each is a distinct, named Latin convention with its own wording, not
-  // a parameterized variant of `formatPageCitationText` -- Confer is the
-  // one exception (literally the same body, just "Cf. " prefixed), kept
-  // as a thin wrapper rather than re-deriving the author/title/year
-  // assembly a second time.
-  function formatConferText(citation, page) {
-    return "Cf. " + formatPageCitationText(citation, page);
-  }
-  // Chicago's own short-form repeat citation: author + "op. cit." + page,
-  // no title at all (the full citation was already given earlier in the
-  // document -- that's the whole point of op. cit.). Page is genuinely
-  // optional here (same reasoning as Ibidem below) since a document might
-  // reference the same source's general argument without a specific page.
-  function formatOpereCitatoText(citation, page) {
-    var authors = formatCitationAuthorsNatural(citation.authors) || formatCitationTitlePart(citation);
-    return page ? authors + ", op. cit., " + page + "." : authors + ", op. cit.";
-  }
-  // "Ibid." refers to whatever the immediately preceding footnote cited --
-  // the citation itself is never named again, only the page (if it
-  // differs from the previous note's own page; same-page "Ibid." alone is
-  // also valid Chicago and is exactly what an empty `page` produces here).
-  function formatIbidemText(page) {
-    return page ? "Ibid., " + page + "." : "Ibid.";
-  }
-  // Apud ("in the work of") -- the one action that genuinely needs two
-  // sources, not one: the original work being quoted, and the secondary
-  // work it was actually found/read in (2026-10-03, confirmed with Peter
-  // via AskUserQuestion before building -- "Two citations" over a single-
-  // citation-plus-wording variant). No page on the original (its own
-  // locator isn't knowable from the secondary source alone); page applies
-  // to the secondary, where the quotation was actually read.
-  function formatApudText(original, secondary, page) {
-    var originalBits = [];
-    var originalAuthors = formatCitationAuthorsNatural(original.authors);
-    if (originalAuthors) originalBits.push(originalAuthors);
-    originalBits.push(formatCitationTitlePart(original));
-    var secondaryText = formatPageCitationText(secondary, page);
-    return originalBits.join(", ") + ", apud " + secondaryText;
-  }
-  // One dispatch point so both insertion and the Edit/regenerate picker
-  // assemble text the same way for a given kind, rather than each having
-  // its own copy of this branch.
-  function formatFootnoteText(kind, data) {
-    if (kind === "confer") return formatConferText(data.citation, data.page);
-    if (kind === "opere_citato") return formatOpereCitatoText(data.citation, data.page);
-    if (kind === "passim") return formatPageCitationText(data.citation, "passim");
-    if (kind === "ibidem") return formatIbidemText(data.page);
-    if (kind === "apud") return formatApudText(data.citations.original, data.citations.secondary, data.page);
-    return formatPageCitationText(data.citation, data.page); // page_citation, the default shape
-  }
   // The single-citation kinds Ibidem can refer back to -- deliberately
   // excludes `apud` (a two-source note; "Ibid. of an apud" is ill-defined
   // enough that this just skips past it to the nearest single-citation
   // note instead, a documented judgment call, not an oversight) and
   // `custom_note`/plain footnotes (nothing citation-shaped to refer to).
-  var IBIDEM_SOURCE_KINDS = { page_citation: true, confer: true, opere_citato: true, passim: true, ibidem: true };
+  var IBIDEM_SOURCE_KINDS = { page_citation: true, confer: true, opere_citato: true, passim: true, idem: true, ibidem: true };
   // Walks every citation-bearing marker in the whole mount (not just this
   // block's own paragraph) in document order, same "walk the live DOM"
   // convention `renderFootnoteList`/`renderRelationships` already use, and
@@ -451,6 +362,7 @@
     { key: "confer", label: "Confer" },
     { key: "apud", label: "Apud" },
     { key: "passim", label: "Passim" },
+    { key: "idem", label: "Idem" },
   ];
 
   function markFor(li) {
@@ -590,12 +502,25 @@
 
     var saveAction = function () {};
 
+    // The text is written by the server in the citation format chosen in Settings.
     function finish(data) {
-      mark.setAttribute("data-note", formatFootnoteText(kind, data));
-      mark.setAttribute("data-footnote-kind", kind);
-      mark.setAttribute("data-footnote-data", JSON.stringify(data));
-      refresh(mark);
-      window.CCModal.close();
+      var body = {
+        kind: kind,
+        page: data.page || "",
+        citation: data.citation ? data.citation.uid : "",
+        original: data.citations ? data.citations.original.uid : "",
+        secondary: data.citations ? data.citations.secondary.uid : "",
+      };
+      fetch("/notebook/citations/footnote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+        .then(function (resp) { if (!resp.ok) throw new Error("format failed"); return resp.json(); })
+        .then(function (result) {
+          mark.setAttribute("data-note", result.text);
+          mark.setAttribute("data-footnote-kind", kind);
+          mark.setAttribute("data-footnote-data", JSON.stringify(data));
+          refresh(mark);
+          window.CCModal.close();
+        })
+        .catch(function () { window.ccToast({ message: "Could not write the citation", variant: "error" }); });
     }
 
     function renderKind() {

@@ -28,16 +28,6 @@
 // otherwise do (a "Cancel"/"Back" link that would normally navigate).
 
 (function () {
-    // 2026-09-08 direct report: a form rejected with FastAPI's 422 (e.g. a
-    // required field missing) surfaced its raw JSON validation body --
-    // `{"detail":[{"type":"missing","loc":["body","date_from"],...}]}` --
-    // straight into the error toast, truncated at 150 characters. Turns a
-    // real (if now mostly-preventable, see datetime_picker.js's own
-    // required-field guard) server rejection into something unreadable.
-    // Recognizes FastAPI/Pydantic's own `detail: [{type, loc, msg}, ...]`
-    // shape specifically and renders each entry as "<field>: <msg>";
-    // anything else (a plain-text 500, an HTML error page, a detail string)
-    // falls back to the raw text exactly as before.
     function friendlyErrorMessage(text) {
       try {
         const body = JSON.parse(text);
@@ -56,15 +46,6 @@
       return text.slice(0, 150);
     }
 
-    // 2026-09-17 (design-system unification pass, shared spec with the
-    // sibling app Pineart) -- friendlyErrorMessage
-    // above turns a 422 into one readable toast line, but a toast still
-    // doesn't tell you *which* input on a long form (task/event/contact)
-    // is wrong. applyFieldErrors marks each error against its actual
-    // field (a red border + a .field-error line right under it, style.css)
-    // and focuses the first one, falling back to the toast only for
-    // whatever doesn't match a visible input (a nested/array loc path with
-    // no single form field to point at).
     function clearFieldErrors(form) {
       form.querySelectorAll(".field.has-error").forEach((f) => f.classList.remove("has-error"));
       form.querySelectorAll(".field-error").forEach((e) => e.remove());
@@ -117,22 +98,8 @@
   // Cancel can walk back to the original window like a browser does.
   const modalStack = [];
   let pendingReload = false;
-  // Habits H3 (2026-09-24): when every keep-open form that changed
-  // something carried data-cc-change, closing the modal dispatches that
-  // change (the page refreshes just its own live region) instead of a
-  // full reload. Any keep-open form without it forces the reload.
   let pendingChange = null;
   let pendingForceReload = false;
-  // openCustom()'s own close hook (2026-10-04, notebook floating-picker ->
-  // real-modal rewrite) -- a caller that opened the overlay with
-  // client-side content (no fetch, nothing for refreshModalContent to
-  // re-GET) registers one function here to run whenever the modal closes,
-  // by whichever path (X, Escape, backdrop click -- closeModal is the one
-  // function all three already funnel through). Typically "if nothing was
-  // picked, undo the in-progress insert" -- the same job the old anchored
-  // popovers' own `cancelIfUnpicked` mousedown-outside listener did, now
-  // for free via this shell's existing close plumbing instead of a
-  // bespoke per-picker listener.
   let customCloseHandler = null;
 
    function closeModal() {
@@ -149,14 +116,6 @@
        handler();
      }
      overlay.classList.remove("is-open");
-     // 2026-09-08 bugfix (direct report, confirmed live: the persistent
-     // mobile bottom bar -- Menu/Home/Search, base.html's .mobile-tabbar
-     // -- sat at a higher z-index than the modal overlay and covered the
-     // open dialog's own footer buttons on every phone-width viewport.
-     // style.css's body.modal-open rule hides that bar for as long as
-     // this class is present; removed here on every close path (X,
-     // Escape, backdrop click -- all of which call this function) so it
-     // never gets stuck hidden.
      document.body.classList.remove("modal-open");
      body.innerHTML = "";
      if (header) header.innerHTML = "";
@@ -169,7 +128,7 @@
        pendingChange = null;
        pendingForceReload = false;
        if (!(change && window.ccApi && window.ccApi.dispatchChange && window.ccApi.dispatchChange(change))) {
-         window.location.reload();
+         refreshPage();
        }
      }
    }
@@ -228,7 +187,25 @@
      animateContentSwap();
    }
 
-   function wireContent() {
+   // The first visible text field gets focus, so the user can type straight away.
+  // Re-renders the page's smart regions in place; a page without any is reloaded.
+  function refreshPage() {
+    if (!window.ccSmartRefresh) return window.location.reload();
+    window.ccSmartRefresh().then((done) => { if (!done) window.location.reload(); });
+  }
+
+  function focusFirstField(root) {
+    const fields = root.querySelectorAll(
+      "input:not([data-no-autofocus]):not([type=hidden]):not([type=radio]):not([type=checkbox]), textarea:not([data-no-autofocus])"
+    );
+    for (const el of fields) {
+      if (el.disabled || el.readOnly || !el.getClientRects().length) continue;
+      el.focus();
+      return;
+    }
+  }
+
+  function wireContent() {
     // Lets a page script (e.g. push_settings.js) set itself up on content
     // that was injected after the page loaded.
     document.dispatchEvent(new CustomEvent("cc-modal-content"));
@@ -247,25 +224,10 @@
        });
      }
 
-    // Contact photo cropper (contact_form.html) -- same re-init reasoning.
-    // 2026-09-12 bugfix (direct report, "the banner upload still doesn't
-    // work"): banner_editor.html's Upload control has lived in
-    // #modal-footer (not #modal-body) since the 2026-09-08 "Remove/Upload
-    // move into the footer" slice (_modal_footer.html's footer_extra_html
-    // escape hatch) -- but this init call, and the form-submit-intercept
-    // loop below, only ever scanned `body`. CCAvatarCropper.init(body)
-    // never found `.banner-upload-input` in the footer, so selecting a
-    // file never opened the crop editor and nothing ever called
-    // form.requestSubmit() -- the upload form just sat there with a file
-    // chosen and no way to submit it. Also init on `footer` so a banner
-    // upload (and any future footer_extra_html file input) gets wired the
-    // same as a body one.
     if (window.CCAvatarCropper) {
       window.CCAvatarCropper.init(body);
       if (footer) window.CCAvatarCropper.init(footer);
     }
-    // contact_form.html's Phone/Email add/remove rows (Contacts field
-    // parity slice 2 of 6) -- same re-init reasoning.
     if (window.CCContactPhoneEmailRows) window.CCContactPhoneEmailRows.init(body);
     // task_form.html's Daily target visibility -- same re-init reasoning.
     if (window.CCHabitFieldToggle) window.CCHabitFieldToggle.init(body);
@@ -287,35 +249,10 @@
     // notebook_field_edit_modal.html's Type toggle + Options add/remove
     // rows -- same re-init reasoning.
     if (window.CCNotebookFieldOptionRows) window.CCNotebookFieldOptionRows.init(body);
-    // Relations cards' add-row picker (1.2 side work, static/
-    // command_palette.js) needs no re-init call here -- its entry points
-    // are document-level delegated listeners, which already cover content
-    // injected via this innerHTML swap without a wireContent() hook.
-    // Merged task/event quick-add modal (quick_add.html, 2026-08-10) --
-    // tab switch between the two create-forms + retargeting the footer
-    // Save button's `form` attribute. Same re-init reasoning.
     if (window.CCQuickAdd) window.CCQuickAdd.init(body);
 
-    // Widget Builder (dashboard_customize.html): add-widget form + live
-    // preview live inside the modal, injected via innerHTML like Schedule's
-    // widgets. CCWidgetPreview.init wires the Source/View/Range controls
-    // and the live preview for both the builder and each edit form. The
-    // builder form itself is a plain add-and-close form now (2026-08-07,
-    // "Add widget should be the only button") -- it has no data-builder
-    // any more, so it falls straight through to the generic form handler
-    // below like any other modal form.
     if (window.CCWidgetPreview) window.CCWidgetPreview.init(body);
 
-    // 2026-09-12 bugfix (same report as the CCAvatarCropper.init call
-    // above): this used to be `body.querySelectorAll("form").forEach(...)`
-    // only -- a footer_extra_html form (banner_editor.html's Upload/Remove,
-    // the only current user) lives in #modal-footer, a sibling of
-    // #modal-body, so it was never wired here either. Upload has no submit
-    // button of its own (the crop editor's Apply is what calls
-    // form.requestSubmit() once wiring above is fixed), so with neither fix
-    // applied a chosen file had literally no path to actually submit.
-    // Factored into a named function so the same per-form wiring applies to
-    // both `body` and `footer` forms without duplicating the whole handler.
     const wireForm = (form) => {
       // data-modal-get forms (a search box) are handled by their own
       // document-level listener below instead -- this per-form handler
@@ -387,12 +324,6 @@
               await refreshModalContent(); // re-render in place, modal stays open
             } else {
               closeModal();
-              // 2026-09-25 (group/label rename): a form marked
-              // data-follow-redirect goes where the server redirected when
-              // that's a different page. Renaming the group or label whose
-              // page is open would otherwise reload the old URL, which no
-              // longer exists (it lands on the labels list). Same page ->
-              // falls through to the normal refresh below.
               if (form.hasAttribute("data-follow-redirect") && resp.redirected) {
                 const dest = new URL(resp.url, window.location.href);
                 if (dest.origin === window.location.origin && dest.pathname !== window.location.pathname) {
@@ -411,10 +342,10 @@
               const changeAction = form.getAttribute("data-cc-action") || "edit";
               if (changeType && window.ccApi && window.ccApi.dispatchChange) {
                 if (!window.ccApi.dispatchChange({ type: changeType, action: changeAction })) {
-                  window.location.reload();
+                  refreshPage();
                 }
               } else {
-                window.location.reload();
+                refreshPage();
               }
             }
           } else {
@@ -445,12 +376,6 @@
     if (footer) footer.querySelectorAll("form").forEach(wireForm);
   }
 
-  // 2026-08-08 view<->edit merge (see _modal_footer.html, and the
-  // modal-stable-height marker the event/task/contact detail + form
-  // templates carry): the dialog keeps one fixed width/height for a
-  // detail-view/edit-form pair, and the header/body/footer cross-fade in
-  // place when the modal navigates between the two states (or refreshes
-  // via refreshModalContent) instead of hard-replacing.
   function stabilizeHeight(fragment) {
     if (!dialog) return;
     const stable = fragment && fragment.classList &&
@@ -458,11 +383,6 @@
     dialog.classList.toggle("is-stable-height", !!stable);
   }
 
-  // 2026-08-30 (direct feedback): min-height tiers -- see style.css's
-  // .modal-height-md/.modal-height-lg comment. Same "fragment states its
-  // own shape, JS mirrors the marker onto the persistent .modal dialog"
-  // pattern stabilizeHeight above already uses (#modal-target is swapped
-  // out on every navigation; the dialog element wrapping it isn't).
   function applyHeightTier(fragment) {
     if (!dialog) return;
     const isMd = fragment && fragment.classList && fragment.classList.contains("modal-height-md");
@@ -470,17 +390,6 @@
     dialog.classList.toggle("is-height-md", !!isMd && !isLg);
     dialog.classList.toggle("is-height-lg", !!isLg);
   }
-  // 2026-09-09 (direct follow-up, "the mobile handle should sit on top
-  // of the banner") -- style.css's `.modal.has-cover .modal-handle` rule
-  // floats the drag handle over a cover image instead of its own row
-  // above a plain header; this is what decides whether that rule is
-  // live. Same "fragment states its own shape, JS mirrors the marker
-  // onto the persistent dialog" pattern stabilizeHeight/applyHeightTier
-  // above use, just detected by content (`.detail-cover-wrap` inside the
-  // now-populated #modal-header) rather than a marker class on
-  // #modal-target itself -- the cover only sometimes renders even within
-  // one template (banner_editor.html's `{% if banner %}`), so a static
-  // class on the outer fragment wouldn't track that.
   function applyCoverHandle() {
     if (!dialog || !header) return;
     dialog.classList.toggle("has-cover", !!header.querySelector(".detail-cover-wrap"));
@@ -530,16 +439,6 @@
      // bottom bar (.mobile-tabbar) for as long as this class is present,
      // so it can't sit on top of the open dialog's footer.
      document.body.classList.add("modal-open");
-     // Size variant (2026-08-01) -- most modals (a field-grid form) are
-     // fine at the default width, but a few (Schedule's Blocks table/week
-     // grid, 9+ columns wide) need real room or they force a horizontal
-     // scrollbar inside a modal that's already narrower than the content
-     // wants. `data-modal-size="wide"` on the *trigger* link (not
-     // hardcoded to a URL) is what the opening page decides, same as
-     // data-modal/data-fab already work -- see _calendar_nav.html's
-     // Schedule button. Reset on every open (not just when going wide) so
-     // a wide modal doesn't stay wide once you navigate to a normal one
-     // inside it (e.g. Schedule -> New block).
      if (dialog) {
        const size = trigger ? trigger.getAttribute("data-modal-size") : null;
        dialog.classList.toggle("is-wide", size === "wide");
@@ -557,39 +456,9 @@
      // data-no-autofocus (habits H3): a view modal's secondary inputs
      // (the habit detail's "Log a day" form) shouldn't grab focus -- and
      // scroll the modal / raise a phone keyboard -- on open.
-     const firstInput = body.querySelector("input:not([data-no-autofocus]), select:not([data-no-autofocus]), textarea:not([data-no-autofocus])");
-     if (firstInput) firstInput.focus();
+     focusFirstField(body);
    }
 
-   // 2026-10-04 (notebook floating-picker -> real-modal rewrite) -- a
-   // client-side-only sibling of openModal() above, for content that's
-   // already a built DOM node (a search/pick UI backed by a live fetch,
-   // not a server page) rather than something fetched from a URL. Reuses
-   // every piece of the shell openModal() already wires (backdrop click,
-   // Escape, focus trap, mobile drag-to-dismiss, the always-present X
-   // button) instead of each caller re-implementing its own "click
-   // outside closes this" listener -- see notebook_wikilinks.js's
-   // openFloatingPicker and notebook_footnotes.js's openFootnoteEditPicker
-   // for the two callers this replaced, both previously anchored
-   // `position:fixed` popovers with their own `document`-level
-   // `mousedown`-capture listener (a real mechanism, but easy to get a
-   // false "outside" read from if anything about the click sequence
-   // doesn't land exactly where expected -- the shared overlay's own
-   // backdrop-click/Escape handling has already been through that
-   // hardening for every other modal in the app).
-   //
-   // A script-built modal still has the header/body/footer layout:
-   // `CCModal.footer(primary)` builds the shared footer (Cancel on the left,
-   // an optional `{ label, icon, onClick }` primary on the right) for
-   // `footerNode`.
-   //
-   // `opts`: `{ title, bodyNode, footerNode, onClose, size }`. `bodyNode`
-   // is required (a real DOM node, appended as-is -- the caller owns its
-   // own event listeners on it, nothing here re-wires them). `onClose` is
-   // the one new piece `openModal()`'s plain pages never needed: run
-   // whenever the modal closes by any path, registered through the same
-   // `customCloseHandler` hook `closeModal()` already calls -- a picker
-   // uses it to undo its own in-progress insert if nothing was picked.
    function buildFooter(primary) {
      const frag = document.createDocumentFragment();
      function button(cls, icon, label, onClick) {
@@ -650,8 +519,7 @@
      stabilizeHeight(null);
      applyHeightTier(null);
      applyCoverHandle();
-     const firstInput = body.querySelector("input:not([data-no-autofocus]), select:not([data-no-autofocus]), textarea:not([data-no-autofocus])");
-     if (firstInput) firstInput.focus();
+     focusFirstField(body);
    }
 
   document.addEventListener("click", (e) => {
@@ -695,15 +563,6 @@
     if (e.target === overlay) closeModal();
   });
 
-  // Keyboard focus trap (audit-fixes-2.0.md #4, full-app-audit-2026-09-07.md
-  // finding #2, WCAG 2.1.2/2.4.3) -- Escape-to-close already existed below,
-  // but nothing stopped Tab/Shift+Tab from walking focus straight out of an
-  // open modal into the page behind it. `dialog` (#modal-dialog) is the
-  // fixed element that wraps header/body/footer across every open/refresh/
-  // navigate cycle (see stabilizeHeight's comment above), so querying it
-  // fresh on every keydown -- rather than caching a focusable list at open
-  // time -- stays correct across refreshModalContent()/form navigation
-  // swapping #modal-body's content underneath it.
   const FOCUSABLE_SELECTOR = [
     "a[href]",
     "button:not([disabled])",
@@ -803,20 +662,10 @@
     openCustom: openCustomModal,
     footer: buildFooter,
     close: closeModal,
-    // markChanged() flags the modal as having unsaved page state so
-    // closing (X/Escape/backdrop) reloads the underlying page; refresh()
-    // re-fetches the modal's own URL and re-renders it in place without
-    // closing -- used by data-modal-keep-open forms (e.g. calendars_list.
-    // html's per-row edits). No longer used by the Customize modal's own
-    // builder form (2026-08-07 removal of dashboard_widget_builder.js's
-    // stay-open flow) -- that form is a plain add-and-close form now.
     markChanged: function () {
       pendingReload = true;
       pendingForceReload = true;
     },
-    // 2026-09-25 (static/habit_day.js): like markChanged, but closing
-    // dispatches `change` (the page refreshes its live region) instead
-    // of a full reload -- same as a keep-open form with data-cc-change.
     markChangedWith: function (change) {
       pendingReload = true;
       pendingChange = change;

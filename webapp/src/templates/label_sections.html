@@ -5,14 +5,8 @@
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% block title %}{{ label.name }}{% endblock %}
 {% block main_class %}main-full-width{% endblock %}
-<!-- A label's page when it has no dashboard (labels-as-modules slice b,
-     2026-09-25; routers/label_pages.py). It shows only the sections
-     switched on in the label's settings: Agenda, Contacts, and Tasks (the
-     Kanban board). It replaced the separate plain-label and Project pages,
-     which were near-identical copies of each other. -->
 
 {% block content %}
-{# Narrow header (2026-09-25, ui-cleanup item 2), same as label_detail.html. #}
 {% call page_header_narrow(label.name, label.icon or 'tag', banner=banner, banner_image_scope=banner_image_scope, icon_color=label.color) %}
     {% if edit_mode %}
     <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
@@ -23,32 +17,12 @@
     {% include "_label_page_actions.html" %}
     {% endif %}
 {% endcall %}
-{# 2026-09-28 (direct request: "for the project's page, could you remove
-   these pills from this widget because they are already present in the
-   agenda and it's redundant" -- the "Open"/deadline pills _label_status.
-   html renders under the header). `hide_redundant_status_pills` tells
-   that partial to drop just the status/deadline pills specifically (NOT
-   the "Archived on ... · Unarchive" line/button it also renders -- that
-   one's a real action control the Agenda section never duplicates, so it
-   always stays). Only set when the Agenda section below is actually on:
-   it's the one place that re-shows this label's deadline (the `item.
-   is_deadline` row, line ~40 below), which is what made the header pills
-   redundant in the first place. A label with Agenda switched off has
-   nowhere else this status/deadline shows, so the header pills still
-   render there. label_detail.html (the widget-dashboard variant of a
-   label's page) never sets this var, so it keeps showing both -- that
-   page's Agenda is an optional, removable widget like any other, not a
-   fixed section, so there's no reliable "it's shown below" guarantee to
-   suppress this on. #}
 {% if not label.pooled %}
 {% set hide_redundant_status_pills = label.agenda_widget %}
 {% include "_label_status.html" %}
 {% if label.description %}<p class="label-description">{{ label.description }}</p>{% endif %}
 {% include "_label_empty_state.html" %}
 {% endif %}
-{# 2026-09-25 (flesh-out item 6): a label nothing carries yet gets the one
-   empty state above instead of an empty Agenda, an empty Contacts list
-   and four empty Kanban columns. #}
 {% if label_usage_count != 0 %}
 {# Sections with nothing in them are hidden. #}
 {% set show_agenda = label.agenda_widget and agenda_items %}
@@ -106,8 +80,6 @@
 <!-- Tasks: every non-archived task carrying this label on a Kanban board
      grouped by status (drag and drop via static/tasks_board.js). -->
 {% if show_tasks %}
-{# 2026-09-25 (UI audit L12): the board had no heading, unlike the Agenda
-   and Contacts sections above it. #}
 <div class="card-title widget-header label-section-heading"><h2>{{ icon('check-square', 'icon-sm') }} Tasks</h2></div>
 <div class="kanban-board-wrap">
 <div class="kanban-board" id="kanban-board">
@@ -134,7 +106,7 @@
                 </div>
             </div>
             {% else %}
-            <div class="kanban-empty">No tasks</div>
+            {{ empty_state('No tasks', size='compact') }}
             {% endfor %}
         </div>
     </div>

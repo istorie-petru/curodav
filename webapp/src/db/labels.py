@@ -41,14 +41,12 @@ def _attach_tags_bulk(
     conn: sqlite3.Connection, object_type: str, dicts: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
     """Batch form of `_attach_tags` -- one `IN (...)` query for the whole
-    result set instead of one `list_labels_for_object` call per row. Every
-    `list_*` function that returns more than one row should call this
-    instead of looping `_attach_tags` per row (the N+1 finding in
-    `documentation/reports/full-app-audit-2026-09-07.md` #1, `db.py:1415`
-    -- confirmed the hottest path in the app: dashboard, calendar,
-    tasks table, contacts). Mutates and returns `dicts` in place, same
-    "attach in place" contract `_attach_tags` already has, so callers that
-    build a list comprehension around it don't need to change shape."""
+        result set instead of one `list_labels_for_object` call per row. Every
+        `list_*` function that returns more than one row should call this
+        instead of looping `_attach_tags` per row. Mutates and returns `dicts` in place, same
+        "attach in place" contract `_attach_tags` already has, so callers that
+        build a list comprehension around it don't need to change shape.
+    """
     if not dicts:
         return dicts
     ids = [d["uid"] for d in dicts]
@@ -75,17 +73,17 @@ def _reject_multiple_project_labels(conn: sqlite3.Connection, tags: list[str], n
 
 
 def project_picker_context(conn: sqlite3.Connection) -> dict[str, Any]:
-    """Context for the task/event forms' Project dropdown (project-picker
-    slice, 2026-09-25). Projects are still stored as labels; the forms just
-    split them out of the Labels picker because assigning a project means
-    something different from tagging.
+    """Context for the task/event forms' Project dropdown. Projects are still stored as labels; the forms just
+        split them out of the Labels picker because assigning a project means
+        something different from tagging.
 
-    `project_items` is the dropdown's options: "No project" first, then
-    every open project. `project_names` is every project label, archived
-    ones included. The template uses it to find the item's current project
-    and to keep projects out of the Labels picker, and it adds an archived
-    project back as an option when that's the current value, so saving an
-    old item doesn't silently drop it."""
+        `project_items` is the dropdown's options: "No project" first, then
+        every open project. `project_names` is every project label, archived
+        ones included. The template uses it to find the item's current project
+        and to keep projects out of the Labels picker, and it adds an archived
+        project back as an option when that's the current value, so saving an
+        old item doesn't silently drop it.
+    """
     projects = list_project_labels(conn)
     return {
         "project_items": [{"uid": "", "name": "No project"}]
@@ -165,14 +163,9 @@ def remove_object_label(conn: sqlite3.Connection, object_type: str, object_id: s
 
 def set_object_labels(conn: sqlite3.Connection, object_type: str, object_id: str, label_names: list[str]) -> None:
     """Replaces every label currently on (object_type, object_id) with
-    exactly `label_names` -- the common "save this object's label picker"
-    write shape, one transaction instead of a diff of adds/removes.
-
-    2026-08-09: each submitted name is resolved through
-    `_resolve_label_name` first, so an abbreviation (label_config.
-    abbreviation) typed anywhere a label name is expected lands as its
-    full label -- an abbreviation is a synonym for its label, never a
-    separate label of its own."""
+        exactly `label_names` -- the common "save this object's label picker"
+        write shape, one transaction instead of a diff of adds/removes.
+    """
     conn.execute(
         "DELETE FROM object_labels WHERE object_type = ? AND object_id = ?", (object_type, object_id)
     )
@@ -190,18 +183,19 @@ def set_object_labels(conn: sqlite3.Connection, object_type: str, object_id: str
 
 
 def _resolve_label_name(conn: sqlite3.Connection, name: str) -> str:
-    """(2026-08-09) Maps a submitted label string through the
-    abbreviation -> full-name synonym table, returning `name` unchanged
-    when it isn't one. Rules, all deliberate:
-      * A string that's already a real label always wins -- a label
-        literally named e.g. "ABC" beats another label's "ABC"
-        abbreviation, so an abbreviation can never shadow a genuine label.
-      * The match is case-insensitive (labels are deduped
-        case-insensitively everywhere, see effective_label_config_ci).
-      * Only a *unique* abbreviation resolves -- if two config rows carry
-        the same abbreviation (or it collides case-insensitively), the
-        string is passed through untouched rather than guessing which
-        label the user meant."""
+    """Maps a submitted label string through the
+        abbreviation -> full-name synonym table, returning `name` unchanged
+        when it isn't one. Rules, all deliberate:
+          * A string that's already a real label always wins -- a label
+            literally named e.g. "ABC" beats another label's "ABC"
+            abbreviation, so an abbreviation can never shadow a genuine label.
+          * The match is case-insensitive (labels are deduped
+            case-insensitively everywhere, see effective_label_config_ci).
+          * Only a *unique* abbreviation resolves -- if two config rows carry
+            the same abbreviation (or it collides case-insensitively), the
+            string is passed through untouched rather than guessing which
+            label the user meant.
+    """
     known = {n.lower() for n in list_all_label_names(conn)}
     known |= {r["name"].lower() for r in conn.execute("SELECT name FROM label_config").fetchall()}
     if name.lower() in known:
@@ -217,39 +211,39 @@ def _resolve_label_name(conn: sqlite3.Connection, name: str) -> str:
 
 
 def resolve_capture_label(conn: sqlite3.Connection, name: str) -> str:
-    """Quick Capture's label resolution (plans/quick-capture.md § Labels
-    and Approximate Matching) -- deliberately separate from
-    `_resolve_label_name` above (that one only ever resolves an explicit
-    `label_config.abbreviation` synonym; this is the spec's own
-    approximate-matching pipeline for a capture's `#label` tokens, which
-    have no such config row backing them):
+    """Quick Capture's label resolution -- deliberately separate from
+        `_resolve_label_name` above (that one only ever resolves an explicit
+        `label_config.abbreviation` synonym; this is the spec's own
+        approximate-matching pipeline for a capture's `#label` tokens, which
+        have no such config row backing them):
 
-      1. Exact match (case-insensitive) against every label already in
-         use always wins -- "a label is first matched ... using an exact
-         match."
-      2. Exact match against a previously-learned alias (`label_aliases`)
-         -- a typo already corrected once resolves instantly without
-         recomputing the fuzzy match below.
-      3. A close-but-not-exact match against every label in use
-         (`difflib.get_close_matches`, cutoff 0.8 -- high on purpose, so
-         only genuine near-typos resolve, e.g. "uunniversity"/
-         "universitty"/"unisity" -> "university" from the spec's own
-         examples, not merely related words) is picked automatically ("a
-         very close match may be resolved automatically") and persisted
-         as a new alias.
-      4. Otherwise `name` is returned unchanged -- a genuinely new label,
-         "preserving the ability to create genuinely new labels."
+          1. Exact match (case-insensitive) against every label already in
+             use always wins -- "a label is first matched ... using an exact
+             match."
+          2. Exact match against a previously-learned alias (`label_aliases`)
+             -- a typo already corrected once resolves instantly without
+             recomputing the fuzzy match below.
+          3. A close-but-not-exact match against every label in use
+             (`difflib.get_close_matches`, cutoff 0.8 -- high on purpose, so
+             only genuine near-typos resolve, e.g. "uunniversity"/
+             "universitty"/"unisity" -> "university" from the spec's own
+             examples, not merely related words) is picked automatically ("a
+             very close match may be resolved automatically") and persisted
+             as a new alias.
+          4. Otherwise `name` is returned unchanged -- a genuinely new label,
+             "preserving the ability to create genuinely new labels."
 
-    Simplification, noted deliberately: the spec also describes an
-    "uncertain match ... suggested for correction" tier sitting between
-    (3) and (4), reviewed interactively before being accepted. Quick
-    Capture v1 has no such review step (a capture is a single fire-and-
-    forget submission, not a multi-turn form) -- step 3's automatic
-    resolution doubles as the "user correction" step 4 of the spec
-    describes recording into the alias table, since there's no separate
-    moment where a person explicitly confirms it. A future interactive
-    capture flow could split this back into two real tiers without
-    changing the alias table's shape."""
+        Simplification, noted deliberately: the spec also describes an
+        "uncertain match ... suggested for correction" tier sitting between
+        (3) and (4), reviewed interactively before being accepted. Quick
+        Capture v1 has no such review step (a capture is a single fire-and-
+        forget submission, not a multi-turn form) -- step 3's automatic
+        resolution doubles as the "user correction" step 4 of the spec
+        describes recording into the alias table, since there's no separate
+        moment where a person explicitly confirms it. A future interactive
+        capture flow could split this back into two real tiers without
+        changing the alias table's shape.
+    """
     import difflib
 
     existing = list_all_label_names(conn)
@@ -303,26 +297,10 @@ def list_all_label_names(conn: sqlite3.Connection) -> list[str]:
 
 def list_all_known_label_names(conn: sqlite3.Connection) -> list[str]:
     """Every label name known to the system -- the union of labels in use
-    (object_labels) and labels with config (label_config). Used for the
-    label picker dropdowns so a label created in the manage page appears
-    immediately even before it's applied to anything.
-
-    2026-09-13 (direct request: "the Birthday label should be hidden, as
-    well for the habits one, because they are not intended to be applied
-    by the user directly") -- excludes the two system-managed labels this
-    app applies on its own: "Birthday" (hardcoded, see
-    sync_contact_birthday_event's own tags=["Birthday"]) and whichever
-    label name is currently configured as the habit marker
-    (task_habit_settings.habit_label -- user-renameable in Settings, so
-    this reads the live value via get_task_habit_settings rather than
-    matching a fixed "Habit" string). Scoped deliberately narrow, per a
-    follow-up clarification: this is the single choke point every "apply
-    a label to this task/event/contact" chip picker goes through
-    (list_tag_names_in_use), NOT db.list_labels (the Settings > Labels
-    management table) or db.list_all_label_names (used by that table and
-    by published-lists' own label filter) -- both of those still show
-    every label, including these two, so they stay visible/editable
-    wherever the user is configuring labels rather than applying one."""
+        (object_labels) and labels with config (label_config). Used for the
+        label picker dropdowns so a label created in the manage page appears
+        immediately even before it's applied to anything.
+    """
     from .tasks import get_task_habit_settings
     names = set(list_all_label_names(conn))
     names |= {r["name"] for r in conn.execute("SELECT name FROM label_config").fetchall()}
@@ -456,22 +434,16 @@ _SPACES_TO_GROUPS_KEY = "label_modules_spaces_to_groups"
 
 
 def migrate_spaces_to_groups(conn: sqlite3.Connection) -> None:
-    """One-time (labels-as-modules slice c, 2026-09-25): Spaces stop being
-    a kind of label. A Space was always "this group of labels" in practice,
-    and the group itself (label_group, set by backfill_label_modules)
-    now gets its own page at /groups/<name>. For every generate_space=1
-    label:
+    """One-time: Spaces stop being
+        a kind of label. A Space was always "this group of labels" in practice,
+        and the group itself (label_group, set by backfill_label_modules)
+        now gets its own page at /groups/<name>. For every generate_space=1
+        label:
 
-    - its dashboard widgets move to the group's page key, config included
-      (Peter's call, left open and decided when building: the Space page
-      was the whole-group view, so that is where its widgets belong);
-    - its banner is copied to the group page (the label keeps its copy);
-    - the label itself becomes an ordinary label: no dashboard (its own
-      page now shows what is tagged with it directly), generate_space off.
-
-    parent_name is cleared everywhere, because label_group replaced it.
-    Idempotent through its own app_meta marker. Runs after
-    backfill_label_modules, so every Space already has label_group set."""
+        parent_name is cleared everywhere, because label_group replaced it.
+        Idempotent through its own app_meta marker. Runs after
+        backfill_label_modules, so every Space already has label_group set.
+    """
     from .pages import _page_banner_key, group_page_key
     if get_app_meta(conn, _SPACES_TO_GROUPS_KEY):
         return
@@ -513,23 +485,24 @@ def migrate_spaces_to_groups(conn: sqlite3.Connection) -> None:
 
 
 def backfill_label_modules(conn: sqlite3.Connection) -> None:
-    """One-time (labels-as-modules slice a, 2026-09-25): fills the new
-    per-label module fields from the Space/Project model they replace, so
-    that when later slices switch the UI over, what's visible stays the same:
+    """One-time: fills the new
+        per-label module fields from the Space/Project model they replace, so
+        that when later slices switch the UI over, what's visible stays the same:
 
-    - label_group: a Space's children take the Space's name, and the Space
-      itself takes its own name. That group was the Space. A label with no
-      Space keeps whatever free-text label_group it already had.
-    - sidebar_pin: everything the sidebar shows today, which is Spaces,
-      the children of real Spaces, and projects.
-    - widget_pin: Spaces and projects (the "Spaces & Projects" widget).
-    - page_type: Spaces, projects, and any label whose page already has
-      its own widgets.
-    - has_deadline/deadline_date: a project's end_date.
-    - agenda/tasks/contacts_widget: all on, matching the plain label page
-      they replace (Agenda + Contacts + Kanban).
+        - label_group: a Space's children take the Space's name, and the Space
+          itself takes its own name. That group was the Space. A label with no
+          Space keeps whatever free-text label_group it already had.
+        - sidebar_pin: everything the sidebar shows today, which is Spaces,
+          the children of real Spaces, and projects.
+        - widget_pin: Spaces and projects (the "Spaces & Projects" widget).
+        - page_type: Spaces, projects, and any label whose page already has
+          its own widgets.
+        - has_deadline/deadline_date: a project's end_date.
+        - agenda/tasks/contacts_widget: all on, matching the plain label page
+          they replace (Agenda + Contacts + Kanban).
 
-    Idempotent through its own app_meta marker."""
+        Idempotent through its own app_meta marker.
+    """
     from .contacts import _fix_contacts_widget_default
     _fix_contacts_widget_default(conn)
     if get_app_meta(conn, _LABEL_MODULES_BACKFILLED_KEY):
@@ -587,9 +560,10 @@ GROUP_KEY_PREFIX = "group:"
 
 
 def list_groups(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """Every group (label_groups, 2026-09-26: standalone, may be empty),
-    sorted by name, each with its `icon`/`color` and its member labels'
-    effective configs."""
+    """Every group,
+        sorted by name, each with its `icon`/`color` and its member labels'
+        effective configs.
+    """
     groups: dict[str, dict[str, Any]] = {}
     for r in conn.execute("SELECT * FROM label_groups ORDER BY name COLLATE NOCASE").fetchall():
         groups[r["name"].lower()] = {"name": r["name"], "labels": [], "icon": r["icon"] or None,
@@ -672,7 +646,6 @@ def _group_style_key(group: str) -> str:
 
 
 def _legacy_group_style(conn: sqlite3.Connection, group: str) -> dict[str, Any]:
-    """A group's look from before 2026-09-26 (app_meta "group_style:<name>")."""
     raw = get_app_meta(conn, _group_style_key(group))
     try:
         return (json.loads(raw) or {}) if raw else {}
@@ -681,9 +654,7 @@ def _legacy_group_style(conn: sqlite3.Connection, group: str) -> dict[str, Any]:
 
 
 def get_group_style(conn: sqlite3.Connection, group: str) -> dict[str, Any]:
-    """A group's own icon + color. `icon` None = the default group glyph
-    (GROUP_DEFAULT_ICON, drawn in the group's colour -- 2026-09-26, Peter:
-    no more first-letter badge); `color` defaults to gray."""
+    """A group's own icon + color. `icon` None = the default group glyph; `color` defaults to gray."""
     row = get_group(conn, group) or {}
     return {"icon": row.get("icon") or None, "color": row.get("color") or "gray"}
 
@@ -730,16 +701,17 @@ def group_member_names(conn: sqlite3.Connection, group: str) -> list[str]:
 
 
 def rename_group(conn: sqlite3.Connection, old: str, new: str) -> str:
-    """Renames a group (2026-09-25, UI audit flesh-out item 7). A group is
-    only the text in its labels' label_group, plus per-page storage keyed
-    by group_page_key and its look in app_meta -- all three move with it.
+    """Renames a group. A group is
+        only the text in its labels' label_group, plus per-page storage keyed
+        by group_page_key and its look in app_meta -- all three move with it.
 
-    Renaming onto another existing group (case-insensitively) merges: the
-    members join that group and keep ITS dashboard and look; the old
-    group's own storage is left as is (nothing points at it any more, the
-    same "harmless leftover" rule clear_label follows) rather than deleted.
-    Returns the group's resulting name (the existing group's own spelling on
-    a merge)."""
+        Renaming onto another existing group (case-insensitively) merges: the
+        members join that group and keep ITS dashboard and look; the old
+        group's own storage is left as is (nothing points at it any more, the
+        same "harmless leftover" rule clear_label follows) rather than deleted.
+        Returns the group's resulting name (the existing group's own spelling on
+        a merge).
+    """
     from .pages import _move_page_storage, group_page_key
     old = (old or "").strip()
     new = (new or "").strip()
@@ -761,12 +733,12 @@ def rename_group(conn: sqlite3.Connection, old: str, new: str) -> str:
 
 
 def set_group_members(conn: sqlite3.Connection, group: str, members: list[str]) -> None:
-    """Makes exactly `members` the group's labels (2026-09-25): each named
-    label gets label_group = group (moving it out of any other group -- a
-    label is in at most one), and a current member not in the list leaves
-    the group. Names without a label_config row get one, the same way
-    archiving a usage-only label does. An empty list empties the group;
-    since 2026-09-26 a group is its own row and survives that."""
+    """Makes exactly `members` the group's labels: each named
+        label gets label_group = group (moving it out of any other group -- a
+        label is in at most one), and a current member not in the list leaves
+        the group. Names without a label_config row get one, the same way
+        archiving a usage-only label does.
+    """
     group = (group or "").strip()
     wanted = [m.strip() for m in members if m and m.strip()]
     ensure_group(conn, group)
@@ -794,28 +766,28 @@ def list_project_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
 def project_status(conn: sqlite3.Connection, cfg: dict[str, Any], today: date | None = None) -> str:
     """Computed lifecycle state -- Open / Pending / Pending Archiving /
-    Archived (§ Project lifecycle). Only `archived_at` is stored (the
-    user's explicit confirmation); the other three states are derived at
-    read time from task completion + end_date, same "computed, not
-    stored" treatment as Importance/Urgency, because both inputs change
-    underneath the label without the label itself being edited.
+        Archived (§ Project lifecycle). Only `archived_at` is stored (the
+        user's explicit confirmation); the other three states are derived at
+        read time from task completion + end_date, same "computed, not
+        stored" treatment as Importance/Urgency, because both inputs change
+        underneath the label without the label itself being edited.
 
-    - Archived: `archived_at` is set (explicit user confirmation only --
-      neither the end date passing nor every task completing gets here by
-      itself).
-    - Open: at least one incomplete task, or no tasks at all (a project
-      with no work yet hasn't reached a completion point to leave Open
-      from).
-    - Pending: every task is completed (and there's at least one), but
-      today is still before the deadline -- completed early.
-    - Pending Archiving: every task is completed and today is on/after
-      the deadline (or there's no deadline) -- ready for the user to
-      confirm closure.
+        - Archived: `archived_at` is set (explicit user confirmation only --
+          neither the end date passing nor every task completing gets here by
+          itself).
+        - Open: at least one incomplete task, or no tasks at all (a project
+          with no work yet hasn't reached a completion point to leave Open
+          from).
+        - Pending: every task is completed (and there's at least one), but
+          today is still before the deadline -- completed early.
+        - Pending Archiving: every task is completed and today is on/after
+          the deadline (or there's no deadline) -- ready for the user to
+          confirm closure.
 
-    labels-as-modules slice b (2026-09-25): reads the generic
-    `deadline_date` (when `has_deadline` is on) instead of a project's
-    `end_date`, so this works for any label with a deadline, not only
-    is_project ones.
+        labels-as-modules slice b: reads the generic
+        `deadline_date` (when `has_deadline` is on) instead of a project's
+        `end_date`, so this works for any label with a deadline, not only
+        is_project ones.
     """
     from .tasks import list_tasks
     if cfg.get("archived_at"):
@@ -853,12 +825,11 @@ def unarchive_label(conn: sqlite3.Connection, name: str) -> None:
 
 def label_selector_scope(conn: sqlite3.Connection, key: str) -> list[str] | None:
     """The label names a Labels picker should offer while the user is on
-    one page (direct request: "On space's dashboard, project pages or
-    label's page, the label selector should only have labels from that
-    group"). Since slice c (2026-09-25) that group is the text label_group:
-    a group's page offers its members, and a label's page offers the
-    members of its group. None means unscoped: Home, or a label with no
-    group."""
+        one page. Since slice c that group is the text label_group:
+        a group's page offers its members, and a label's page offers the
+        members of its group. None means unscoped: Home, or a label with no
+        group.
+    """
     from .pages import group_from_page_key
     group = group_from_page_key(key)
     if group is None:
@@ -920,41 +891,32 @@ def merge_labels(conn: sqlite3.Connection, source_name: str, dest_name: str) -> 
     conn.execute("UPDATE label_config SET parent_name = ? WHERE parent_name = ?", (dest_name, source_name))
     conn.execute("DELETE FROM label_config WHERE name = ?", (source_name,))
     conn.commit()
+    from .notebook import enforce_one_label_and_project
+
+    enforce_one_label_and_project(conn)
 
 
 def clear_label(conn: sqlite3.Connection, name: str) -> None:
     """The "remove from everything" action (§0.1) -- strips this label
-    from every object currently carrying it. Deliberately does NOT delete
-    the label_config row -- a stale config row with nothing pointing at it
-    is harmless (per the plan), and there is no delete-a-label endpoint at
-    all in this app.
-
-    2026-09-29 (direct bug report, "deleting labels from settings doesn't
-    work"): this is still the right behavior for the legacy `/clear`
-    route (unused by any template/JS any more, kept for its own tests),
-    but Settings > Labels' actual Delete button (routers/labels.py's
-    delete_label/bulk_delete_labels) needs `delete_label_config` below
-    instead -- see that function's own comment for why calling only this
-    one made Delete look broken."""
+        from every object currently carrying it. Deliberately does NOT delete
+        the label_config row -- a stale config row with nothing pointing at it
+        is harmless (per the plan), and there is no delete-a-label endpoint at
+        all in this app.
+    """
     conn.execute("DELETE FROM object_labels WHERE label_name = ?", (name,))
     conn.commit()
 
 
 def delete_label_config(conn: sqlite3.Connection, name: str) -> None:
-    """Settings > Labels/Projects' own "Delete" button (routers/labels.py's
-    delete_label/bulk_delete_labels) -- 2026-09-29 direct bug report
-    ("deleting labels from settings doesn't work"): every label created
-    through the UI has a `label_config` row, and `list_labels` unions
-    object_labels usage with label_config rows (its own docstring: "a
-    label can exist purely as config with nothing pointing at it yet").
-    Calling only `clear_label` (strips membership, leaves the config row
-    on purpose -- see its own docstring) therefore left the label sitting
-    right back in the table at "Not used" the moment the page reloaded --
-    Delete redirected successfully but visibly did nothing, which is
-    exactly the reported bug. `merge_labels` already treats "membership
-    repointed + config row dropped" as "the same 'deleting' semantics as
-    every other label removal in this app" for its own source label; this
-    is that same pair of statements with no destination to repoint onto."""
+    """Calling only `clear_label` (strips membership, leaves the config row
+        on purpose -- see its own docstring) therefore left the label sitting
+        right back in the table at "Not used" the moment the page reloaded --
+        Delete redirected successfully but visibly did nothing, which is
+        exactly the reported bug. `merge_labels` already treats "membership
+        repointed + config row dropped" as "the same 'deleting' semantics as
+        every other label removal in this app" for its own source label; this
+        is that same pair of statements with no destination to repoint onto.
+    """
     conn.execute("DELETE FROM object_labels WHERE label_name = ?", (name,))
     conn.execute("DELETE FROM label_config WHERE name = ?", (name,))
     conn.commit()
@@ -962,27 +924,20 @@ def delete_label_config(conn: sqlite3.Connection, name: str) -> None:
 
 def project_label_for(conn: sqlite3.Connection, object_type: str, object_id: str) -> str | None:
     """The one label treated as "the project" for this object. Deliberately
-    a *derived view* over the object's real `object_labels` rows, not a
-    separately tracked field -- there is no "this label is special, it's
-    THE project" category (see features/architecture.md §0.1/§2: a label
-    is a label, full stop). Used uniformly for schedule_class, habit, and
-    database -- an earlier version of this rework gave habits/databases
-    their own pseudo object_type (`f"{object_type}:project"`) to track
-    this separately from real tags; that was a mistake (it made a habit's
-    project invisible to any label page's aggregation, and reintroduced
-    exactly the "project is a special kind of label" distinction this
-    rework exists to remove) and was corrected 2026-08-06 -- see
-    set_object_project_label_uniform below for the corresponding write
-    path.
+        a *derived view* over the object's real `object_labels` rows, not a
+        separately tracked field -- there is no "this label is special, it's
+        THE project" category (see features/architecture.md §0.1/§2: a label
+        is a label, full stop).
 
-    1.3 (Project-enabled label stack) supersedes the old heuristic here:
-    a label explicitly marked is_project=1 now wins outright, since a
-    label can finally say "I'm the project" instead of it being inferred.
-    Falls back to the pre-1.3 heuristic (the attached label whose config
-    has generate_space=0 -- a course/list label, not a Space) only when
-    nothing attached is explicitly project-enabled, so data written before
-    1.3 (nothing has is_project=1 yet) keeps behaving exactly as before
-    until the user actually promotes a label to a project."""
+        1.3 (Project-enabled label stack) supersedes the old heuristic here:
+        a label explicitly marked is_project=1 now wins outright, since a
+        label can finally say "I'm the project" instead of it being inferred.
+        Falls back to the pre-1.3 heuristic (the attached label whose config
+        has generate_space=0 -- a course/list label, not a Space) only when
+        nothing attached is explicitly project-enabled, so data written before
+        1.3 (nothing has is_project=1 yet) keeps behaving exactly as before
+        until the user actually promotes a label to a project.
+    """
     names = sorted(list_labels_for_object(conn, object_type, object_id), key=str.lower)
     configs = {name: get_label_config(conn, name) for name in names}
     for name in names:
@@ -1000,13 +955,14 @@ def project_label_config_for(
     conn: sqlite3.Connection, object_type: str, object_id: str
 ) -> dict[str, Any] | None:
     """The project label's *effective config* (every default filled in, so
-    `name`/`icon`/`color` are all present) for an object, or None if it has
-    no project label. Thin wrapper over `project_label_for` +
-    `effective_label_config` so a planning grid's "Unscheduled work" panel
-    can render the project pill (icon + name, 2026-08-14) without
-    re-deriving the lookup at each of its three call sites. The returned
-    dict is the label's config, not a name string -- callers that only
-    needed the name (the older panel items) can read `["name"]` off it."""
+        `name`/`icon`/`color` are all present) for an object, or None if it has
+        no project label. Thin wrapper over `project_label_for` +
+        `effective_label_config` so a planning grid's "Unscheduled work" panel
+        can render the project pill without
+        re-deriving the lookup at each of its three call sites. The returned
+        dict is the label's config, not a name string -- callers that only
+        needed the name (the older panel items) can read `["name"]` off it.
+    """
     name = project_label_for(conn, object_type, object_id)
     if name is None:
         return None

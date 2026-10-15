@@ -12,36 +12,50 @@
 {% endmacro %}
 {% extends "base.html" %}
 {% from "_modal_header_back.html" import modal_header_back %}
-{% block title %}{{ "Edit term" if t else "Add term" }}{% endblock %}
+{% block title %}{{ "Edit entry" if t else "New entry" }}{% endblock %}
 {% block content %}
-<!-- Glossary library create/edit modal (2026-10-03, roadmap-mvp-to-full-
-     product-checklist's "Glossary" section) -- same Settings "Pattern B"
-     shape as citation_edit_modal.html, just two fields (term/definition),
-     so no repeatable-rows machinery needed. References (roadmap item F,
-     2026-10-03) adds one multiselect field over a combined Notebook-
-     documents + citations list -- the term's own "further reading," not
-     this document's attach list (that's notebook_glossary_attach_modal.html,
-     a different relationship in the opposite direction). -->
 <div id="modal-target" class="modal-stable-height">
 <div class="modal-header">
-{# item G (session 8, 2026-10-03): same return_to-wins-over-crumbs rule
-   as citation_edit_modal.html -- see that template's own comment. #}
 {{ modal_header_back(return_to or (crumbs[-1].url if crumbs else ''), 'Back' if return_to else (crumbs[-1].name if crumbs else '')) }}
-<h1>{{ "Edit term" if t else "Add term" }}</h1>
+<h1>{{ "Edit entry" if t else "New entry" }}</h1>
 </div>
 <div class="modal-body">
 <div class="card">
 <form method="post" id="glossary-term-form" action="{{ form_action }}">
     <div class="field-grid">
         <div class="field field-wide">
-            <label>Term</label>
+            <label>Name</label>
             {{ text_input({'name': 'term', 'value': (t.term if t else ''), 'required': true, 'autofocus': true}) }}
         </div>
-        <div class="field field-wide">
-            <label>Definition</label>
-            {{ textarea_input({'name': 'definition', 'rows': '4'}, t.definition if t else '') }}
+        {% set ms_form_id = 'glossary-term-form' %}
+        {% set ms_name = 'kind' %}
+        {% set ms_label = 'Kind' %}
+        {% set ms_items = kind_items %}
+        {% set ms_selected = t.kind if t else 'Term' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_allow_new = true %}
+        {% set ms_wide = false %}
+        {% set ms_pill = false %}
+        {% include "_widget_list_multiselect.html" %}
+        <div class="field">
+            <label>Alternate names</label>
+            {{ text_input({'name': 'aliases', 'value': (t.aliases | join(', ') if t else '')}) }}
         </div>
         <div class="field field-wide">
+            <label>Short text</label>
+            {{ textarea_input({'name': 'definition', 'rows': '4'}, t.definition if t else '') }}
+        </div>
+        {% set ms_form_id = 'glossary-term-form' %}
+        {% set ms_name = 'wiki_uid' %}
+        {% set ms_label = 'Wiki note' %}
+        {% set ms_items = wiki_items %}
+        {% set ms_selected = t.wiki_uid if t else '' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_allow_new = false %}
+        {% set ms_wide = true %}
+        {% include "_widget_list_multiselect.html" %}
+        <div class="field field-wide">
+            {% set ms_allow_new = false %}
             {% set ms_mode = 'select' %}
             {% set ms_form_id = 'glossary-term-form' %}
             {% set ms_name = 'reference_keys' %}
@@ -51,6 +65,16 @@
             {% set ms_selected = selected_reference_keys %}
             {% include "_widget_list_multiselect.html" %}
         </div>
+        {% for kg in kind_field_groups %}
+        <div class="field field-wide entry-kind-fields" data-kind-fields="{{ kg.name }}"{% if kg.name != current_kind %} hidden{% endif %}>
+            {% for f in kg.fields %}
+            <div class="field field-wide">
+                <label>{{ f }}</label>
+                {{ textarea_input({'name': 'kfield:' ~ kg.name ~ ':' ~ f, 'rows': '3'}, field_values[f] if kg.name == current_kind and field_values else '') }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
         <div class="field field-wide" data-repeatable-rows-scope>
             <div class="field-label-row">
                 <label>Sections</label>
@@ -63,10 +87,6 @@
 </form>
 </div>
 </div>
-{# item I (2026-10-03 modal-stack fix): same reasoning as
-   citation_edit_modal.html's own comment -- return_to carries the
-   Glossary attach-picker's URL when opened from its "+ New term" link, so
-   Cancel swaps back into it instead of closing the whole overlay. #}
 {% set footer_back_url = return_to if return_to else '/notebook/glossary' %}
 {% set footer_back_mode = 'modal' if return_to else 'cancel' %}
 {% set footer_back_label = 'Cancel' %}

@@ -128,7 +128,7 @@ class TestGlobalTasksPage:
         # Scheduled no longer renders as a column at all.
         _task(conn, "t1", due_at="2026-09-01T00:00:00")
         body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
-        assert ">Date<" in body
+        assert "task-row-date" in body
         assert ">Scheduled<" not in body
 
 

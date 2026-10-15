@@ -1,22 +1,4 @@
-"""1.8 slice 3 -- PWA shell (plans/open-priority.md § Offline-first editing
-& synchronization §11 slice 3; architecture fork in §0). Manifest + service
-worker + an app-shell cache, so the app is installable and opens to a real
-shell offline, per plans/ofline-first-pwa.md's own acceptance line.
-
-2026-09-09 -- the client-side "Offline Mode" feature (the `/offline` page,
-its Quick Add builder, the local IndexedDB mirror/write queue, and the
-service worker's offline-navigation fallback) was purged outright, direct
-request, after repeated UI complaints against screenshots concluded the
-whole surface wasn't worth salvaging. `templates/offline.html` and every
-`static/offline_*.js` file are gone; the `GET /offline` route that used to
-render that template is gone with them. The server-side sync engine
-(`src/offline_sync.py`, `routers/sync_api.py`, the Sync card on Settings >
-Data & Maintenance) was explicitly kept out of scope -- it doesn't depend
-on this route or these files existing, so it's left exactly as it was, now
-just unreachable from any UI until/unless something else calls it. `/sw.js`
-and `/favicon.ico` below are unrelated to any of this and stay as they were.
-
-One route lives here rather than under the existing /static mount:
+"""One route lives here rather than under the existing /static mount:
 
   - `GET /sw.js` -- the service worker script. It must be served from the
     same path it wants as its control scope (the whole app, "/"), and a

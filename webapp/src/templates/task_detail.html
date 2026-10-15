@@ -6,65 +6,9 @@
 {% from "_detail_cover.html" import detail_cover with context %}
 {% block title %}{{ task.title if task else "Task" }}{% endblock %}
 {% block content %}
-<!-- see event_form.html for why this is wrapped -- static/modal.js. Task
-     rows/cards (tasks_list.html, tasks_board.html) now open this as a
-     modal via data-modal instead of navigating away; this route still
-     renders as a normal standalone page too (direct link, bookmark,
-     no-JS), same "modal is progressive enhancement over a real page"
-     pattern every other modal-opened view in this app already follows.
-
-     2026-08-08 redesign (direct feedback: "merge checklists and subtasks
-     into one feature", "try to not occupy more vertical space than
-     current without good reason") -- three cards collapsed to two: the
-     key/value <table> became a compact 2-column meta grid (roughly half
-     the vertical height for the common case of 3-4 short fields, same
-     "pack related short fields side by side" idea task_form.html's own
-     field-grid already uses -- "you could copy the add widget"), and the
-     separate Checklist + Subtasks cards merged into one (see
-     _task_relations.html; 2026-08-09 that same card gained the Related
-     events half, so the "Subtasks" title became "Relations"; 1.2 removed
-     the Subtasks half outright -- tasks are flat now).
-
-     2026-08-08 visual rework (all three detail modals at once -- events,
-     tasks, contacts -- one cohesive stroke): header = identity (a dot in
-     the task's status color + the large bold title), body = the meta grid
-     and the Work sessions card, footer = a quiet "Done" back-link, a
-     demoted Delete text-link, and the primary Edit action taking center
-     stage.
-
-     2026-09-03 direct feedback ("restyle the view modal to not use the
-     colored bg card div to view the meta"): the meta grid's wrapper is now
-     the plain .detail-meta-panel (style.css), not the elevated tonal
-     .detail-card with a status-colored left border the paragraph above
-     originally described -- just the grid plus a hairline rule underneath.
-     The Work sessions card below it is a separate, real .detail-card,
-     unchanged.
-
-     2026-09-03 direct request, same day ("I like variant B so much I want
-     it to be the baseline for all view modal windows") -- the header's old
-     colored dot + title row is now the shared _detail_cover.html cover
-     banner, and the resolved banner image (db.banner_for_task) that used
-     to render as its own hero strip at the top of .modal-body moved *into*
-     that same cover slot instead of staying a second, separate banner --
-     stacking a color header above an image banner would have looked like
-     two unrelated banners, confirmed via AskUserQuestion rather than
-     guessed. A task with no resolved banner gets the flat gradient fill in
-     its status color instead, with a floating check-square icon badge.
-
-     2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
-     html partial the edit form uses too (same structure, "Edit" swapped
-     for "Save"), and #modal-target carries the modal-stable-height marker
-     so modal.js keeps the dialog one fixed size in both states while the
-     header/body/footer cross-fade when the Edit link swaps them in
-     place -- one continuous modal instead of a hard page swap. -->
 <div id="modal-target" class="modal-stable-height">
 {% if task %}
 <div class="modal-header">
-    <!-- 2026-09-03 fix ("edit the header so that it doesn't clip
-         (margins)") -- .detail-header-inner (style.css) wraps the
-         cover+title, escaping .modal-header's own padding via negative
-         margins so that padding could stay intact for every plain
-         *_form.html edit modal (a bare <h1>, no cover) that relies on it. -->
     <div class="detail-header-inner">
         {{ detail_cover('var(--cal-accent-' ~ status_colors[task.status] ~ ')', banner, icon('check-square')) }}
         <div class="detail-heading-row">
@@ -106,9 +50,6 @@
             <span class="detail-meta-value">{{ task.recurrence | recurrence_text }}</span>
         </div>
         {% endif %}
-        {# 2026-09-25 (UI audit L18): the project gets its own row, like
-           the form's separate Project dropdown, instead of reading as one
-           more label. #}
         {% set _projects = project_label_names(request) %}
         {% set _proj = (task.tags or []) | select('in', _projects) | list %}
         {% set _plain = (task.tags or []) | reject('in', _projects) | list %}

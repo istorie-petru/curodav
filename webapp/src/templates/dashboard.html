@@ -1,89 +1,18 @@
 {% extends "base.html" %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% block title %}Dashboard{% endblock %}
-<!-- 2026-08-07: opt out of the default 1120px-max-width centered column
-     (base.html's main_class block), same mechanism Calendar already uses
-     (calendar_month/week/day/agenda.html). Direct feedback: the boxed
-     column left a permanent empty region to the right of the widget grid
-     on wide viewports, crowding the widgets into a narrower area than the
-     page actually has room for -- the masonry layout in app.js sizes its
-     6 virtual columns off the grid's own (boxed) rendered width, so the
-     fix is simply giving the grid the full width to lay out in, not a
-     change to the masonry math itself. -->
 {% block main_class %}main-full-width main-shell{% endblock %}
 {% block content %}
-{# Narrow header (2026-09-25, ui-cleanup item 2): Home's greeting as the
-   title next to the house icon, its own banner (or the default) behind
-   it; the avatar is gone. Edit-mode actions sit in the actions slot. #}
 {% call page_header_narrow(greeting, 'home', banner=banner, banner_image_scope=banner_image_scope) %}
-    <!-- Dynamic greeting (dashboard usability rework, 2026-08-07) --
-         "Good morning/afternoon/evening[, name]" computed server-side in
-         routers/dashboard.py's dashboard_view (_greeting_for_hour), local
-         server time same as date.today() uses everywhere else in this
-         app -- passed to page_banner() above as the page's title either
-         way (overlay-below-the-cover with a banner, plain top-bar title
-         without one), so there's exactly one h1 regardless of which.
-
-         Move/reorder/delete controls on each widget below are hidden
-         unless this is on. 2026-08-29 (sidebar redesign item 13d): edit
-         mode is now a persistent, app-wide Settings > Appearance toggle
-         (routers/dashboard.py's EDIT_MODE_KEY) instead of a per-page
-         `?edit=1` query param with its own "Edit mode"/"Done" buttons
-         here -- there's no page-level control left to turn it on/off,
-         only Settings. -->
     {% if edit_mode %}
-    <!-- New widget (Phase 3 rework, 2026-08-03) -- opens the widget
-         customization modal (dashboard_customize.html) to add a new widget.
-         Only visible in edit mode -- adding/removing widgets is an explicit
-         edit action, not a browsing action. -->
     <a href="/dashboard/customize{% if space_uid %}?space_uid={{ space_uid }}{% endif %}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('plus', 'icon-sm') }} New widget</a>
-    <!-- Add/Change banner (2026-08-09) -- next to New widget in edit mode,
-         since both are page-content edits. Opens the banner editor modal
-         (routers/banners.py); "Add" vs "Change" labels by whether THIS
-         page has its own banner (2026-08-29 direct request: `has_own_
-         banner`, not `banner` -- a page with no override of its own
-         still renders `banner` truthy now, via the Settings > Appearance
-         default, routers/dashboard.py's _page_banner_context). -->
-    {# 2026-09-08: data-modal-size="wide" dropped -- the editor's content
-       shrank to a small preview thumbnail + a short footer that day, so
-       the 1040px wide dialog just left a huge empty gap around it (and,
-       on mobile, its 700px min-width wasn't reset by the bottom-sheet
-       breakpoint, overflowing the viewport -- see style.css's is-wide fix
-       in the same commit). Default modal sizing is plenty now. #}
     <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
-    <!-- Reset to default layout (2026-08-10) -- same edit-mode control as
-         a label page's (label_detail.html): wipes Home's widgets back to
-         the seeded default via /dashboard/reset. data-confirm-sheet is the
-         same confirmation mechanism every other destructive action in this
-         app already uses, not a second confirmation UI. -->
     <form method="post" action="/dashboard/reset" class="form-inline" data-confirm-sheet="Reset Home's widgets to the default layout? This deletes every widget you've added or customized here.">
         <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Reset layout</button>
     </form>
     {% endif %}
-    <!-- 2026-08-29 (direct request): the quick capture "+" button that
-         used to live here outside edit mode is gone -- obsolete now that
-         the sidebar rail has its own global "+ New" (13c, base.html),
-         reachable from every page including this one. -->
 {% endcall %}
 
-<!-- Widget grid -- Add-widget/live-preview/grid/Filters, shared verbatim
-     with every Space page (routers/projects.py's space_detail) via
-     routers/dashboard.py's widget_page_context. See _widget_workspace.html.
-     Wrapped in .main-shell-body (2026-09-07, direct request extending the
-     flex-shell model here) -- #dashboard-grid itself keeps setting its own
-     JS-computed `style.height` (static/app.js's masonry layout, sized off
-     total card content, often taller than the viewport), unchanged; this
-     wrapper is the one that actually gets the fixed viewport-derived
-     height + overflow-y:auto, so the grid scrolls inside it exactly the
-     same way Calendar's .time-grid-body scrolls inside .time-grid-wrap.
-
-     2026-09-24, then 2026-09-29: .main-shell-body used to carry a
-     `margin-bottom:6dvh` that "creates a veil that hides content" here
-     (a `.main-shell-body--flush` modifier opted Dashboard out of just
-     that margin while it was still true for Tasks/Contacts/Notes). The
-     2026-09-29 follow-up confirmed the same symptom app-wide, so the
-     margin is gone from the shared rule outright and --flush with it --
-     see style.css's own comment on .main-shell-body. -->
 <div class="main-shell-body">
 {% include "_widget_workspace.html" %}
 </div>

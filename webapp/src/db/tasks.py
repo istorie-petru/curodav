@@ -19,8 +19,9 @@ from .events import _EVENT_JSON_FIELDS, delete_event, get_event, upsert_event
 
 
 def set_task_habit_look(conn: sqlite3.Connection, uid: str, icon: str | None, color: str | None) -> None:
-    """A habit's icon and colour (2026-09-26) -- see the tasks.habit_icon
-    column comment. Callers validate the names; blank = default."""
+    """A habit's icon and colour -- see the tasks.habit_icon
+        column comment. Callers validate the names; blank = default.
+    """
     conn.execute(
         "UPDATE tasks SET habit_icon = ?, habit_color = ? WHERE uid = ?", (icon or None, color or None, uid)
     )
@@ -137,13 +138,14 @@ def delete_task(
 
 
 def delete_completed_tasks(conn: sqlite3.Connection) -> int:
-    """Settings' "Purge completed" (2026-08-07) -- every task with
-    status done/archived, deleted the same way a single delete_task
-    would (object_labels cascade included), just looped. Doesn't touch
-    task_checklist_items/task_completions for those tasks -- same gap
-    delete_task already has for a single task, not something this purge
-    action should silently start cleaning up on its own. Returns the
-    count deleted, so the caller can report what actually happened."""
+    """Settings' "Purge completed" -- every task with
+        status done/archived, deleted the same way a single delete_task
+        would (object_labels cascade included), just looped. Doesn't touch
+        task_checklist_items/task_completions for those tasks -- same gap
+        delete_task already has for a single task, not something this purge
+        action should silently start cleaning up on its own. Returns the
+        count deleted, so the caller can report what actually happened.
+    """
     rows = conn.execute("SELECT uid FROM tasks WHERE status IN ('done', 'archived')").fetchall()
     for row in rows:
         delete_task(conn, row["uid"])
@@ -151,24 +153,25 @@ def delete_completed_tasks(conn: sqlite3.Connection) -> int:
 
 
 def delete_old_completed_tasks(conn: sqlite3.Connection, days: int) -> int:
-    """"Auto-archive completed tasks" (Settings > Advanced, 2026-08-08) --
-    the automatic, age-based sibling of delete_completed_tasks above:
-    deletes every done/archived task whose `completed_at` is older than
-    `days`, instead of every completed task regardless of age. Same
-    per-task delete_task() cascade (object_labels included, task_checklist
-    _items/task_completions not -- identical gap, see
-    delete_completed_tasks' own docstring).
+    """"Auto-archive completed tasks" --
+        the automatic, age-based sibling of delete_completed_tasks above:
+        deletes every done/archived task whose `completed_at` is older than
+        `days`, instead of every completed task regardless of age. Same
+        per-task delete_task() cascade (object_labels included, task_checklist
+        _items/task_completions not -- identical gap, see
+        delete_completed_tasks' own docstring).
 
-    A task can be done/archived with `completed_at` NULL -- e.g. one
-    whose status was set directly in the database, or synced in from
-    somewhere that predates this column -- deliberately excluded here
-    rather than treated as "infinitely old" and swept up immediately;
-    an unknown completion date is a reason to leave a task alone, not
-    delete it. `days <= 0` is a no-op (routers/tasks.py's lazy caller
-    only invokes this when the Settings > Advanced preference is a
-    positive number -- "Never" stores 0/empty and never reaches this at
-    all -- but this function stays a safe no-op either way, not relying
-    on the caller alone to enforce that)."""
+        A task can be done/archived with `completed_at` NULL -- e.g. one
+        whose status was set directly in the database, or synced in from
+        somewhere that predates this column -- deliberately excluded here
+        rather than treated as "infinitely old" and swept up immediately;
+        an unknown completion date is a reason to leave a task alone, not
+        delete it. `days <= 0` is a no-op (routers/tasks.py's lazy caller
+        only invokes this when the Settings > Advanced preference is a
+        positive number -- "Never" stores 0/empty and never reaches this at
+        all -- but this function stays a safe no-op either way, not relying
+        on the caller alone to enforce that).
+    """
     if days <= 0:
         return 0
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
@@ -192,16 +195,15 @@ def list_tasks(
     q: str | None = None,
     include_habit_tasks: bool = False,
 ) -> list[dict[str, Any]]:
-    """`include_habit_tasks` defaults False (2026-08-08, "add habits page
-    as a view on tasks" -- "not appear in any other view or widget unless
-    it's habit related") -- a task carrying the configured habit label
-    (task_habit_settings.habit_label) is meant to live *only* on Tasks >
-    Habits, not the normal Table/Timeline/Board/Calendar/dashboard-widget
-    views this function backs almost everywhere in the app. Every one of
-    those call sites gets the exclusion for free without needing its own
-    change; the two callers that genuinely need every task regardless
-    (routers/tasks.py's own habits_view, and export.py's full backup) pass
-    True explicitly."""
+    """`include_habit_tasks` defaults False -- a task carrying the configured habit label
+        (task_habit_settings.habit_label) is meant to live *only* on Tasks >
+        Habits, not the normal Table/Timeline/Board/Calendar/dashboard-widget
+        views this function backs almost everywhere in the app. Every one of
+        those call sites gets the exclusion for free without needing its own
+        change; the two callers that genuinely need every task regardless
+        (routers/tasks.py's own habits_view, and export.py's full backup) pass
+        True explicitly.
+    """
     query = "SELECT * FROM tasks"
     params: list[str] = []
     clauses = []
@@ -269,9 +271,10 @@ def normalize_reminder_time(value: str | None) -> str | None:
 
 
 def set_task_reminder_time(conn: sqlite3.Connection, uid: str, value: str | None) -> None:
-    """A habit's own reminder time (2026-09-25) -- see the tasks.reminder_time
-    column comment. Dedicated setter, same reason as set_task_timeline_lane:
-    an ordinary save (or a CalDAV sync) must not be able to clear it."""
+    """A habit's own reminder time -- see the tasks.reminder_time
+        column comment. Dedicated setter, same reason as set_task_timeline_lane:
+        an ordinary save (or a CalDAV sync) must not be able to clear it.
+    """
     conn.execute("UPDATE tasks SET reminder_time = ? WHERE uid = ?", (normalize_reminder_time(value), uid))
     conn.commit()
 
@@ -343,19 +346,6 @@ def related_events_for_task(conn: sqlite3.Connection, task_uid: str) -> list[dic
         (task_uid,),
     ).fetchall()
     return _attach_tags_bulk(conn, "event", [_row_to_dict(r, _EVENT_JSON_FIELDS) for r in rows])
-
-
-# --------------------------------------------------------------------- #
-# Work allocations (1.4, plans/open-priority.md § Work allocations, §
-# Task & calendar semantics)
-#
-# "A work allocation... is a calendar Event linked to that task, not a
-# different kind of calendar object." Concretely: an ordinary `events` row,
-# plus an `event_task_relations` row with `is_work_allocation=1` (see that
-# table's CREATE TABLE comment). The functions below are the only place
-# that flag is set or read -- everything else in this file treats a
-# work-allocation row exactly like the events/relations it already is.
-# --------------------------------------------------------------------- #
 
 
 def create_work_allocation(
@@ -550,20 +540,15 @@ def set_work_allocation_times(conn: sqlite3.Connection, event_uid: str, start_at
 
 def unschedule_work_allocation(conn: sqlite3.Connection, event_uid: str) -> bool:
     """The inverse of `set_work_allocation_times`: clear an existing work-
-    allocation session's start/end back to undated instead of deleting the
-    session outright. This is what "unschedule" means for the planning
-    grids' block interactions (drag a block back onto the "Unscheduled
-    work" panel, or its own delete button) -- the block comes off the
-    calendar, but the session itself is still there, now back on the panel
-    as an unplaced session, exactly like a "+"-added placeholder. 2026-08-14:
-    this used to fully `delete_work_allocation` the block, which silently
-    shrank the task's total session count by one every time a block was
-    unscheduled -- surprising when the point of unscheduling is "I'll place
-    this later," not "I don't need this session anymore" (that's what the
-    panel's own "−" stepper, or the task's Work sessions card, are for).
-    Only a real work allocation may be unscheduled (`work_allocation_
-    task_uid` guard, same idiom `set_work_allocation_times` uses); returns
-    False if it isn't one or the event doesn't exist."""
+        allocation session's start/end back to undated instead of deleting the
+        session outright. This is what "unschedule" means for the planning
+        grids' block interactions (drag a block back onto the "Unscheduled
+        work" panel, or its own delete button) -- the block comes off the
+        calendar, but the session itself is still there, now back on the panel
+        as an unplaced session, exactly like a "+"-added placeholder. Only a real work allocation may be unscheduled (`work_allocation_
+        task_uid` guard, same idiom `set_work_allocation_times` uses); returns
+        False if it isn't one or the event doesn't exist.
+    """
     if not work_allocation_task_uid(conn, event_uid):
         return False
     existing = get_event(conn, event_uid)
@@ -579,22 +564,18 @@ def unschedule_work_allocation(conn: sqlite3.Connection, event_uid: str) -> bool
 
 def work_allocation_panel_info(conn: sqlite3.Connection, task_uid: str) -> dict[str, Any]:
     """Summary the planning grids' "Unscheduled work" panel needs for one
-    task (week_view/timetable_view/project_calendar build the same item
-    shape): session count plus the scheduled/total hours shown next to the
-    title. `scheduled_hours` is the sum of dated session durations (the
-    same number db.task_work_hours reports as `scheduled`); `total_hours`
-    adds one default hour per undated session -- an undated session has no
-    duration yet, so its planned contribution counts as the default 1-hour
-    block it becomes when placed on a grid (project_calendar.js's
-    DEFAULT_BLOCK_MINUTES), which makes the x/y read "hours on the calendar
-    out of hours planned". `undated_count` is the number of sessions still
-    awaiting placement -- the panel's "still unscheduled" rule (`undated_count
-    == 0` drops a task off the list, whether that's because every session is
-    dated or because there are no sessions at all -- audit-fixes-2.1.md,
-    2026-09-10: a 0-session task used to slip through the old
-    `count > 0 and undated_count == 0` check and show up with a bare "0"
-    pill) needs it, and it's what separates the panel summary from
-    task_work_hours."""
+        task (week_view/timetable_view/project_calendar build the same item
+        shape): session count plus the scheduled/total hours shown next to the
+        title. `scheduled_hours` is the sum of dated session durations (the
+        same number db.task_work_hours reports as `scheduled`); `total_hours`
+        adds one default hour per undated session -- an undated session has no
+        duration yet, so its planned contribution counts as the default 1-hour
+        block it becomes when placed on a grid (project_calendar.js's
+        DEFAULT_BLOCK_MINUTES), which makes the x/y read "hours on the calendar
+        out of hours planned". `undated_count` is the number of sessions still
+        awaiting placement -- the panel's "still unscheduled" rule needs it, and it's what separates the panel summary from
+        task_work_hours.
+    """
     allocations = list_work_allocations_for_task(conn, task_uid)
     scheduled = sum(_hours_between(a.get("start_at"), a.get("end_at")) for a in allocations)
     undated = sum(1 for a in allocations if not a.get("start_at"))
@@ -610,27 +591,12 @@ def habit_work_sessions_status(
     conn: sqlite3.Connection, task_uid: str, recurrence: str | None, period_start: str, period_end: str
 ) -> dict[str, Any]:
     """Unscheduled-work visibility for a habit-tracked recurring task,
-    scoped to `period_start`/`period_end` (ISO dates, inclusive) --
-    routers/calendar.py's week_view picks the period per the habit's own
-    cadence (the displayed week for daily/weekly, that week's calendar
-    month for monthly/anything else) and passes it in here rather than
-    this function guessing at "which week" from the task alone.
-
-    Unlike a plain task's `work_allocation_panel_info` (which only ever
-    asks "does every session have a date, at all, ever"), a habit needs a
-    specific NUMBER of dated sessions before it's "handled" for the
-    period: one per day for a daily habit (`required=7` for a 7-day
-    period), just one for weekly/monthly/anything else -- 2026-08-29
-    direct feedback ("a daily habit remains persistent and disappears
-    from the unscheduled work only when the current week has all been
-    taken care of; for a weekly task it's enough to add only one, and
-    monthly the same"). `needed` (dated-in-period sessions still short of
-    `required`, after crediting any undated placeholder sessions already
-    added and awaiting placement) is what the caller checks for inclusion
-    -- 0 means this period is fully covered and the habit drops off the
-    panel; every value in between is the picture, ready-computed rather
-    than callers reaching into `list_work_allocations_for_task`
-    themselves."""
+        scoped to `period_start`/`period_end` (ISO dates, inclusive) --
+        routers/calendar.py's week_view picks the period per the habit's own
+        cadence (the displayed week for daily/weekly, that week's calendar
+        month for monthly/anything else) and passes it in here rather than
+        this function guessing at "which week" from the task alone.
+    """
     allocations = list_work_allocations_for_task(conn, task_uid)
     dated_in_period = sum(
         1 for a in allocations if a.get("start_at") and period_start <= a["start_at"][:10] <= period_end
@@ -690,23 +656,24 @@ def task_work_hours(conn: sqlite3.Connection, task_uid: str) -> dict[str, float]
 
 def task_work_hours_bulk(conn: sqlite3.Connection, task_uids: list[str]) -> dict[str, dict[str, float]]:
     """Batch counterpart to `task_work_hours` above -- one query for every
-    task in `task_uids` instead of one `list_work_allocations_for_task`
-    query per task. Added for the 1.5 "deadline vs. work allocation"
-    surfacing slice (`plans/open-priority.md` § Task model): the global
-    Tasks table and the project detail Tasks view both render every visible
-    row's scheduled/completed hours, and calling the per-task function in a
-    template loop would be a straightforward N+1 (one row -> one query) on
-    any list beyond a handful of tasks. There was no existing "aggregate X
-    across many tasks in one query" precedent in this module to follow
-    (`_project_card`'s `progress` counts an already-fetched Python list, not
-    a SQL aggregate) -- this is the first one, and `task_work_hours` itself
-    is left untouched (same return shape, same semantics) so single-task
-    call sites (task detail/edit modals) are unaffected.
+        task in `task_uids` instead of one `list_work_allocations_for_task`
+        query per task. Added for the 1.5 "deadline vs. work allocation"
+        surfacing slice: the global
+        Tasks table and the project detail Tasks view both render every visible
+        row's scheduled/completed hours, and calling the per-task function in a
+        template loop would be a straightforward N+1 (one row -> one query) on
+        any list beyond a handful of tasks. There was no existing "aggregate X
+        across many tasks in one query" precedent in this module to follow
+        (`_project_card`'s `progress` counts an already-fetched Python list, not
+        a SQL aggregate) -- this is the first one, and `task_work_hours` itself
+        is left untouched (same return shape, same semantics) so single-task
+        call sites (task detail/edit modals) are unaffected.
 
-    Returns a dict keyed by task_uid, every value the same
-    `{"scheduled", "completed", "remaining"}` shape `task_work_hours`
-    returns -- including a zero-filled entry for a task with no allocations
-    at all, so callers never need an `if task_uid in result` branch."""
+        Returns a dict keyed by task_uid, every value the same
+        `{"scheduled", "completed", "remaining"}` shape `task_work_hours`
+        returns -- including a zero-filled entry for a task with no allocations
+        at all, so callers never need an `if task_uid in result` branch.
+    """
     result = {uid: {"scheduled": 0.0, "completed": 0.0, "remaining": 0.0} for uid in task_uids}
     if not task_uids:
         return result
@@ -872,15 +839,16 @@ def upsert_task_completion(
     note: str | None = None,
 ) -> None:
     """Records (or updates) that a recurring task was completed on `due_date`
-    -- the row that feeds its heatmap/streak. `completed_at` is when the
-    check-off actually happened (usually today), `due_date` the pattern's
-    day being checked off. `value` (2026-08-08) is only meaningful for a
-    habit-labeled task with target_per_day > 1 -- every other caller
-    (the plain recurring-task complete_task path) leaves it at the
-    default 1, same as before this column existed.
+        -- the row that feeds its heatmap/streak. `completed_at` is when the
+        check-off actually happened (usually today), `due_date` the pattern's
+        day being checked off. `value` is only meaningful for a
+        habit-labeled task with target_per_day > 1 -- every other caller
+        (the plain recurring-task complete_task path) leaves it at the
+        default 1, same as before this column existed.
 
-    `note` (habits H3, 2026-09-24): None leaves an existing note alone (a
-    check-in or +1 never wipes what you wrote); "" clears it."""
+        `note`: None leaves an existing note alone (a
+        check-in or +1 never wipes what you wrote); "" clears it.
+    """
     conn.execute(
         "INSERT INTO task_completions (task_uid, due_date, completed_at, value, note) VALUES (?, ?, ?, ?, ?) "
         "ON CONFLICT(task_uid, due_date) DO UPDATE SET completed_at=excluded.completed_at, value=excluded.value, "
@@ -938,12 +906,8 @@ def list_task_completions(conn: sqlite3.Connection, task_uid: str | None = None)
 
 def banner_for_task(conn: sqlite3.Connection, task: dict[str, Any]) -> dict[str, Any] | None:
     """Thin, name-preserving wrapper over `banner_for_object` for task's
-    two pre-existing consumers (task_detail.html's cover, project_detail.
-    html's Kanban cards) -- kept as its own function (rather than inlining
-    `banner_for_object(conn, "task", task)` at both call sites) so neither
-    call site needed to change when this generalized 2026-09-03, and so
-    test_banners.py's own `TestBannerForTask` keeps testing the exact name
-    it always has."""
+        two pre-existing consumers (task_detail.html's cover, project_detail.
+    """
     return banner_for_object(conn, "task", task)
 
 

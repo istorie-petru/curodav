@@ -4,10 +4,6 @@
 {% from "_detail_section.html" import detail_section %}
 {% block title %}{{ group.name }}{% endblock %}
 {% block content %}
-{# A group's view modal (2026-09-26, Peter: groups get view + edit modals
-   like labels; routers/label_pages.py group_view_modal). Cover = the
-   group's banner, or its colour; the icon is its own (or the default
-   group glyph). Footer: Done, Delete (its labels stay, ungrouped), Edit. #}
 <div id="modal-target" class="modal-stable-height">
 <div class="modal-header">
     <div class="detail-header-inner">

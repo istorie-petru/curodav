@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% from "_empty_state.html" import empty_state %}
+{% from "_folder_icon.html" import folder_icon %}
+{% from "_section_row.html" import section_row %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% block title %}Notebook{% endblock %}
+{% block main_class %}main-full-width notebook-main notebook-home-page{% endblock %}
+{% block content %}
+{% call page_header_narrow("Notebook", "notebook") %}
+    <a href="/notebook/find" data-modal class="icon-btn" title="Search contents" aria-label="Search contents">{{ icon('search', 'icon-sm') }}</a>
+    <a href="/notebook/new" data-modal class="btn primary" data-fab title="New document">{{ icon('plus', 'icon-sm') }} New</a>
+{% endcall %}
+{% macro tile(href, name, count_text, icon_name, color) %}
+<a class="folder-tile" href="{{ href }}">
+    {{ folder_icon(icon_name, color, 'lg') }}
+    <span class="folder-tile-name">{{ name }}</span>
+    <span class="folder-tile-count">{{ count_text }}</span>
+</a>
+{% endmacro %}
+<div class="notebook-home">
+    {% if label_report %}
+    <div class="card notebook-report-notice">
+        <span>{{ label_report | length }} note{{ 's' if label_report | length != 1 }} had several labels or projects. The first of each was kept.</span>
+        <span class="spacer"></span>
+        <a class="btn ghost btn-sm" href="/notebook/label-report" data-modal>Review</a>
+        <form method="post" action="/notebook/label-report/dismiss" class="form-inline"><button type="submit" class="btn ghost btn-sm">Dismiss</button></form>
+    </div>
+    {% endif %}
+    {% if continue_note %}
+    <a class="card notebook-continue" href="/notebook/{{ continue_note.uid }}">
+        {{ icon('edit', 'icon-sm') }}
+        <span class="notebook-continue-text"><span class="notebook-continue-label">Continue writing</span><span class="notebook-continue-title">{{ continue_note.title or 'Untitled' }}</span></span>
+    </a>
+    {% endif %}
+    {% if pinned %}
+    <div id="notebook-pinned" data-smart-region>
+    {% call section_row(pinned | length ~ ' pinned') %}Pinned{% endcall %}
+    <div class="card contact-list notebook-folder-list">
+        {% with documents = pinned, select = false, sort = 'updated', back_to = '/notebook', back_label = 'Notebook' %}{% include "_notebook_folder_rows.html" %}{% endwith %}
+    </div>
+    </div>
+    {% endif %}
+    {% if folders.projects %}
+    {% call section_row(folders.projects | length ~ ' project' ~ ('s' if folders.projects | length != 1 else '')) %}Projects{% endcall %}
+    <div class="folder-grid">
+        {% for f in folders.projects %}{{ tile('/notebook/folder?kind=project&name=' ~ (f.name | urlencode), f.name, f.count ~ ' note' ~ ('s' if f.count != 1 else ''), f.icon, f.color) }}{% endfor %}
+    </div>
+    {% endif %}
+    {% if folders.labels %}
+    {% call section_row(folders.labels | length ~ ' folder' ~ ('s' if folders.labels | length != 1 else '')) %}Labels{% endcall %}
+    <div class="folder-grid">
+        {% for f in folders.labels %}{% if f.kind == 'unfiled' %}{{ tile('/notebook/folder?kind=unfiled', 'Unfiled', f.count ~ ' note' ~ ('s' if f.count != 1 else ''), 'inbox', 'gray') }}{% else %}{{ tile('/notebook/folder?kind=label&name=' ~ (f.name | urlencode), f.name, f.count ~ ' note' ~ ('s' if f.count != 1 else ''), f.icon, f.color) }}{% endif %}{% endfor %}
+    </div>
+    {% endif %}
+    {% if not folders.projects and not folders.labels %}
+    {% call empty_state('No documents yet', icon_name='notebook', text="Start writing and it'll show up here.") %}<a href="/notebook/new" data-modal class="btn primary">{{ icon('plus') }} New document</a>{% endcall %}
+    {% endif %}
+    {% call section_row('') %}Library{% endcall %}
+    <div class="folder-grid">
+        {{ tile('/notebook/glossary', 'Entries', glossary_count ~ ' entr' ~ ('ies' if glossary_count != 1 else 'y'), 'tag', 'teal') }}
+        {{ tile('/notebook/citations', 'Citations', citation_count ~ ' citation' ~ ('s' if citation_count != 1 else ''), 'book-open', 'slate') }}
+        {{ tile('/notebook/journal', 'Journal', journal_count ~ ' week' ~ ('s' if journal_count != 1 else ''), 'calendar', 'amber') }}
+        {{ tile('/notebook/templates', 'Templates', template_count ~ ' template' ~ ('s' if template_count != 1 else ''), 'copy', 'sand') }}
+    </div>
+</div>
+{% endblock %}

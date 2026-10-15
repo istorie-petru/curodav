@@ -3,18 +3,6 @@
 {% from "_modal_header_back.html" import modal_header_back %}
 {% block title %}Bibliography -- {{ document.title }}{% endblock %}
 {% block content %}
-<!-- Attach/detach citations on one document (2026-10-03) -- a plain
-     select-mode `_widget_list_multiselect.html` picker over the global
-     citation library (routers/notebook.py's document_bibliography_modal),
-     same shape as this same document's own Labels picker on the
-     properties modal. Not a search-as-you-type/quick-add-inline widget
-     (architecture-notes-module-2026-09-29.md §5 calls that "enough", but
-     this core slice keeps citation creation on the separate library page
-     -- see routers/notebook.py's own comment on this route). Saving
-     reloads the document page (routers/notebook.py's `respond()` call),
-     refreshing both the sidebar Bibliography tab and the bottom
-     bibliography section at once, same convention the properties modal
-     already uses. -->
 <div id="modal-target" class="modal-stable-height">
 <div class="modal-header">
 {{ modal_header_back('/notebook/' ~ document.uid, document.title) }}

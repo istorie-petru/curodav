@@ -36,25 +36,6 @@
      banner (current banner dict or None). -->
 <div id="modal-target">
     <div class="modal-header">
-        {# 2026-08-15 modal uniformization rule 3: plain title, no icon
-           prefix, to match every other utility modal (label_edit_modal,
-           note_form, _modal_widget_customize, ...).
-           2026-09-09 (direct follow-up, "the mobile handle should sit on
-           top of the banner"): when a banner is set, this reuses the
-           exact same cover treatment the event/task/contact detail
-           modals already carry (.detail-cover-wrap/.detail-header-inner/
-           .detail-heading-row -- "Variant B baseline... for all view
-           modal windows", 2026-09-03) instead of a one-off bleed just for
-           this template. .modal-handle is now position:absolute (style.
-           css, mobile breakpoint) rather than its own row above
-           modal-header, so it floats on top of whichever of these two
-           renders -- the cover image here, or a plain header elsewhere --
-           the same way a native bottom sheet's handle overlays its own
-           content instead of pushing it down. The small preview thumbnail
-           that used to sit in modal-body (2026-09-08's "small,
-           preview-only thumbnail" pass) is retired in favor of this --
-           showing the same image twice would be redundant now that it
-           renders here. #}
         {% if banner %}
         <div class="detail-header-inner">
             <div class="detail-cover-wrap">
@@ -84,30 +65,7 @@
         {% from "_upload_zone.html" import upload_zone %}
         {{ upload_zone('banner_file', 'banner-upload-input', 'banner-upload-form', 'Choose or drop a banner image') }}
     </div>
-    {# 2026-09-08: Remove banner and Upload image both move into the
-       footer, alongside Done, instead of living as their own body
-       section -- same side-by-side-forms shape .profile-photo-controls
-       already uses (HTML forbids nesting a form inside a form, so these
-       stay two independent <form>s rather than one). Routed through
-       _modal_footer.html's new footer_extra_html escape hatch rather than
-       hand-rolling `.modal-footer` here: the app-wide regression guard
-       (test_modal_uniformization.py::TestFullAppModalSweep) requires
-       every modal include the shared partial, and Upload doesn't fit the
-       existing footer_delete_url/footer_primary_* slots -- it's a <label>
-       wrapping a hidden file input (clicking it opens the picker, and
-       picking a file hands off to the crop editor -- avatar_cropper.js,
-       see this template's own header comment -- whose own Apply is what
-       actually submits the form), not a plain submit button. page_url is
-       a real navigable page (this template also renders standalone for a
-       no-JS visit), so footer_back_url is the real URL, not "#". #}
     {% set footer_back_url = page_url %}
-    {# 2026-09-21 direct request: a back button that navigates from one
-       modal to another should read "Cancel"/go back, never "Done" --
-       "Done" stays for every caller that isn't nested inside another
-       modal (Home/Space/Project/label's own edit-mode banner button on a
-       real page), where closing genuinely is the end of the action, not
-       a step back into something else. See routers/banners.py::
-       banner_editor's own comment on from_modal/footer_back_mode. #}
     {% if from_modal %}
     {% set footer_back_mode = 'modal' %}
     {% set footer_back_label = 'Cancel' %}
@@ -119,19 +77,6 @@
     <form method="post" action="/banners/remove" class="form-inline" data-cc-change="banner" data-cc-action="remove">
         <input type="hidden" name="scope" value="{{ scope }}">
         <input type="hidden" name="page_url" value="{{ page_url }}">
-        {# 2026-09-08 follow-up (direct request, "standard button style"):
-           swapped the quiet .detail-delete-link text-link (the detail
-           modals' demoted-Delete treatment -- meant to rank below a
-           primary Edit) for a plain .btn ghost, matching Done/Upload and
-           every other secondary footer button in the app -- this footer
-           has no Edit-vs-Delete hierarchy to demote against.
-           2026-09-27 (item 10, flairs): "Remove" -> "Clear" -- the
-           /banners/remove route itself is unchanged (same action, same
-           form), but what it DOES changed (routers/banners.py's
-           remove_banner's own comment): a label/project/task/event whose
-           name matches a flair keyword no longer goes back to blank when
-           this fires, it goes back to ITS flair -- "Clear" is what
-           forces true blank even then. #}
         <button type="submit" class="btn ghost">{{ icon('trash', 'icon-sm') }} Clear</button>
     </form>
     {% endif %}

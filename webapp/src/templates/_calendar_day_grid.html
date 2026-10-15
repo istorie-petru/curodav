@@ -21,8 +21,6 @@
 <div class="time-grid-wrap">
 <div class="time-grid-top">
 <div class="time-grid-head day">
-    {# 2026-09-25 (UI audit C-6/C-17): weekday + day number (accent pill on
-       today), same markup as Week's headers, instead of the raw ISO date. #}
     <div class="thd {% if day == today_iso %}is-today{% endif %} {% if day < today_iso %}is-past{% endif %}"><span class="thd-link"{% if day == today_iso %} aria-current="date"{% endif %}><span class="thd-dow">{{ day_date.strftime('%A') }}</span> <span class="thd-num">{{ day_date.day }}</span></span></div>
 </div>
 <div class="time-grid-allday day">
@@ -32,42 +30,17 @@
             {% for e in all_day %}
             <a class="allday-task" href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ e.title }}">
                 <span class="color-dot cal-{{ e.calendar_color }}"></span>
-                {# 2026-09-25 (UI audit C-3): title in its own span so
-                   `.allday-task > *`'s ellipsis reaches it (a bare text node
-                   was hard-clipped mid-letter). #}
                 <span class="allday-title">{{ e.title }}</span>
             </a>
             {% endfor %}
             {% for t in tasks %}
             <a class="allday-task{% if day < today_iso and t.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }}<span class="allday-title">{{ t.title }}</span></a>
             {% endfor %}
-            {# Habits H7: habits scheduled today, one-tap checkable
-               (static/habit_actions.js re-renders #day-grid).
-
-               2026-09-28 (checkbox consolidation): this chip stays its own
-               markup rather than the shared `habit_check_control` macro
-               (_habit_page_row.html) -- unlike every other habit check in
-               the app, the whole pill is the tap target (icon *and* title
-               together, so it fits the all-day strip's narrow row) rather
-               than a separate check control next to a title link; forcing
-               the icon-only macro here would mean either shrinking the tap
-               target to just the icon or restructuring this strip's
-               layout, neither asked for. It does now share the same
-               per-habit accent colour (`habit-c-*`, from `h.color` --
-               habit_view.habits_for_day carries `habit_look()`'s
-               icon/color same as every other habit row since this same
-               pass) and the same field names (`done_today`/`partial_today`/
-               `today_value`) as habit_item()'s shape, so this is the same
-               data/colour, just a different, deliberately chip-shaped
-               control. #}
             {% for h in habits | default([]) %}
             {% set _c = ' habit-c-' ~ h.color if h.color else '' %}
             {% if h.is_future %}
             <span class="allday-task allday-habit{{ _c }}" title="{{ h.title }} (habit)">{{ icon('repeat', 'icon-sm') }} {{ h.title }}</span>
             {% elif h.is_quantity %}
-            {# 2026-09-25 (UI audit C-5): an amount habit shows n/target and
-               logs one more per tap (same +1 as the Agenda widget); it only
-               reads done at its target, lighter while partial. #}
             <form method="post" action="{{ h.plus_url }}" class="form-inline habit-action allday-habit-form">
                 <input type="hidden" name="completion_date" value="{{ h.date }}">
                 <input type="hidden" name="value" value="{{ h.next_value|int }}">

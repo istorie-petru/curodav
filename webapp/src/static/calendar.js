@@ -1,61 +1,3 @@
-// Drag-to-move and drag-to-resize for the Week/Day time grid
-// (templates/calendar_week.html, calendar_day.html). Loaded only on those
-// pages (see the <script> tag at the bottom of each) -- if there's no
-// `.time-col` on the page this is a silent no-op.
-//
-// Interaction model: pointerdown on a `.time-event` starts a move; pointerdown
-// specifically on its `.te-resize-handle` starts a resize instead. Both
-// snap to 15-minute increments while dragging (live, not just on release --
-// desktop's Week/Day grid had a bug once where it *looked* snapped during
-// the drag but only actually snapped on release, see features/calendar.md's
-// 2026-07-19 fix; this avoids repeating that by snapping the displayed
-// position on every mousemove, not just at the end). On release, the new
-// time (and day column, for a cross-day move in the week view) is saved via
-// POST /events/{uid}/reschedule, then `window.ccApi.dispatchChange` fires
-// the app-wide `cc-entity-changed` event (async-CRUD,
-// features/async-crud.md) -- async_calendar.js re-fetches the whole
-// #week-grid/#day-grid region and swaps it in, which re-runs
-// grid_layout.layout_day server-side. That's deliberate, not just "reuse
-// the existing plumbing": this is also the fix for a direct bug report --
-// two overlapping events (each rendered at half-width by layout_day) where
-// dragging one so it no longer overlaps left BOTH stuck at their old
-// width, because `left_pct`/`width_pct` are baked into the HTML once at
-// render time and this handler used to only ever touch `top`/`height`
-// (and, on success, patch the `.te-time` label text) -- never the lane
-// layout of the event just moved OR the one it used to overlap with,
-// which a client-side patch can't fix without duplicating layout_day's
-// packing algorithm in JS. Every other calendar drag path (month/day-cell
-// drag, all-day-row drag, work-allocation drag) already dispatches this
-// same event on success; this handler was the one holdout still patching
-// DOM by hand instead.
-//
-// move/up listeners are attached to `document`, not the dragged
-// element itself, for the drag's duration -- earlier used
-// `setPointerCapture` + element-level pointermove/pointerup instead, which
-// turned out to not reliably deliver move events once the cursor left the
-// element's own box (confirmed with a real headless-browser test: the
-// element never even gained its "dragging" class despite a 96px move).
-// Document-level listeners are the standard, more robust drag pattern and
-// don't depend on capture semantics working perfectly.
-//
-// A short drag (a few px, effectively a click) is treated as a click and
-// left alone, so the event's normal href (open its edit form) still works.
-//
-// FullCalendar-parity slice 4 (2026-09-09): a move-mode drag (not resize --
-// crossing rows mid-resize makes no sense) can now also be dropped onto
-// Week's "All day" row (`.allday-col`, templates/_calendar_week_grid.html),
-// the other half of the cross-boundary move calendar_week_allday_drag.js's
-// own setupItem() implements for the reverse direction. Deliberately does
-// NOT reparent the dragged element into the all-day row's normal-flow DOM
-// mid-drag (it's an absolutely-positioned `.time-event`, the all-day row is
-// plain flow -- reprojecting it correctly there is exactly what the full
-// #week-grid region refresh on a successful drop already does server-side,
-// same "let the server re-render" reasoning every other calendar drag path
-// in this app already follows for lane/lay-out-affecting moves). While
-// hovering the all-day row this handler skips its own top/column-tracking
-// logic entirely -- the element's on-screen top/height stay wherever they
-// last were, which is fine since a successful drop replaces the whole
-// region a moment later anyway.
 
 (function () {
   const grid = document.querySelector(".time-col");
@@ -410,15 +352,6 @@
     // preview, but the drag-to-create gesture below still works
     // identically once pressed) and the live drag-update while `creating`.
     col.addEventListener("pointermove", (e) => {
-      // On the merged Week view (1.9 side work) these columns also carry
-      // `.project-calendar-col` -- static/project_calendar.js sets
-      // `window.__ccGridDragActive` while it owns an active drag (an
-      // unscheduled task being dragged onto the grid, or an existing block
-      // being moved/resized). Without this check, this hover-preview
-      // ghost -- always 30 minutes tall, this file's own click-to-create
-      // default -- rendered on top of that drag and looked like the drop
-      // would create a 30-minute block, when the actual result is always
-      // DEFAULT_BLOCK_MINUTES (60) -- direct feedback, confirmed live.
       if (window.__ccGridDragActive) {
         ghost.style.display = "none";
         return;

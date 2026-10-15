@@ -1,14 +1,6 @@
-/* Styles for footnotes (notebook_footnotes.js, 2026-10-03) -- first-party
-   component CSS, same reasoning as notebook_blocks.css for living outside
-   editor-theme.css (that file is patches on *vendored* chrome; this is
-   ours start to finish). */
 
 .cdx-footnote-ref {
   cursor: pointer;
-  /* 2026-10-04 direct request: the marker numbers should read as the
-     app's own accent color (consistent with other in-app "this is a
-     clickable reference" treatments), not the --tag-orange-fg this used
-     before. */
   color: var(--accent);
   font-weight: var(--font-weight-bold);
   padding: 0 2px;
@@ -34,14 +26,6 @@
   line-height: 1.4;
   resize: vertical;
 }
-/* 2026-10-04 direct request: a brand-new empty footnote (still showing
-   its placeholder) shouldn't default to the full 60px box -- that reads
-   as an oversized blank rectangle before there's anything to fill it.
-   `:placeholder-shown` only matches while the field is genuinely empty
-   (an HTML state, not a class we have to toggle ourselves), so typing
-   anything at all lifts both the min- and max-height caps automatically,
-   falling back to the rule above's 60px/resize:vertical for any real
-   amount of text. */
 .cdx-footnote-input:placeholder-shown {
   min-height: 32px;
   max-height: 32px;
@@ -166,15 +150,6 @@
   display: block;
   width: 320px;
 }
-/* 2026-10-04 (floating-popover -> real-modal rewrite,
-   notebook_footnotes.js's openFootnoteEditPicker) -- this used to be
-   `.cdx-footnote-float-picker`, a `position:fixed` popover with its own
-   background/border/shadow chrome, anchored to the footer entry being
-   edited. Now rendered inside the shared `#modal-body` (static/modal.js's
-   `CCModal.openCustom`), which already supplies that chrome -- only the
-   width reset is still needed, since `.cdx-footnote-picker` above is
-   sized for the slash-command block's own embedded steps, not a modal
-   body's full content width. */
 .cdx-footnote-modal-picker {
   width: auto;
 }
@@ -193,11 +168,6 @@
 }
 .cdx-footnote-picker-result:hover {
   background: var(--bg-secondary);
-}
-.cdx-footnote-picker-empty {
-  padding: 6px 8px;
-  font-size: 14px;
-  color: var(--fg-tertiary);
 }
 .cdx-footnote-picker-page-row {
   display: flex;

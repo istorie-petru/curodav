@@ -1,4 +1,4 @@
-"""Security response headers (2026-08-29) -- a pure-ASGI middleware that
+"""Security response headers -- a pure-ASGI middleware that
 adds a fixed set of hardening headers to every HTTP response. Separate
 module from auth.py: this has nothing to do with sessions/login, it's
 about the browser-enforced protections every response gets regardless of
@@ -35,8 +35,7 @@ Headers added, and why:
     this app's common LAN/Tailscale-over-HTTP deployment, so it's
     deliberately conditional rather than unconditional.
 
-CSP nonces (2026-09-07, audit-fixes-2.0.md item 11 -- `'unsafe-inline'`
-fully eliminated from both script-src and style-src): every inline
+CSP nonces: every inline
 <script>/<style> tag left in this app's templates now carries a
 per-request nonce (`{{ csp_nonce() }}`, a Jinja global -- see
 deps.py::_csp_nonce), and every `onclick=`/`onchange=`/`style=`
@@ -56,7 +55,8 @@ template context -- sees `request.state.csp_nonce`, matching the nonce
 this middleware puts in the response header -- and formats
 `CSP_POLICY.format(nonce=nonce)` into the actual header value, giving
 `script-src 'self' 'nonce-<value>'` / `style-src 'self'
-'nonce-<value>'` with no `'unsafe-inline'` anywhere in the policy."""
+'nonce-<value>'` with no `'unsafe-inline'` anywhere in the policy.
+"""
 
 from __future__ import annotations
 

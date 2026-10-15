@@ -33,6 +33,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any
 
+from .log import get_logger
 from . import db
 
 
@@ -47,24 +48,12 @@ def evaluate_label_filter(
     conn: sqlite3.Connection, entity_type: str, filter_dict: dict[str, Any] | None
 ) -> list[str]:
     """Boolean label expression, structured not a query language (§5 of
-    the plan doc): AND of everything in `all`, OR (at least one) of
-    `any` if non-empty, then NOT any of `none` subtracted at the end.
-    `all`/`any` are combined with AND between the two groups when both
-    are given (e.g. `all=["University"], any=["Homework","Exam"]` means
-    University AND (Homework OR Exam)).
-
-    Neither `all` nor `any` given at all means "no positive criterion" --
-    2026-09-08: this now means "no restriction," i.e. everything of
-    `entity_type` (still minus `none`, so "everything except labelled X"
-    stays expressible). Previously this returned nothing outright, on the
-    reasoning that a List with zero criteria publishing the entire pool
-    would be a surprising default for something meant to be a narrow,
-    curated subscription -- flipped per direct feedback: an account with
-    no labels defined yet had no way to make a List do anything at all
-    under the old rule, and "empty filter = show everything" is the more
-    standard convention anyway. A List that genuinely wants "nothing" has
-    no way to express that either way (there's no UI for it, before or
-    after this change) -- not a real use case for this feature."""
+        the plan doc): AND of everything in `all`, OR (at least one) of
+        `any` if non-empty, then NOT any of `none` subtracted at the end.
+        `all`/`any` are combined with AND between the two groups when both
+        are given (e.g. `all=["University"], any=["Homework","Exam"]` means
+        University AND (Homework OR Exam)).
+    """
     filter_dict = filter_dict or {}
     all_names = [n for n in (filter_dict.get("all") or []) if n]
     any_names = [n for n in (filter_dict.get("any") or []) if n]
@@ -195,25 +184,13 @@ def materialize(conn: sqlite3.Connection, bridge: Any, list_row: dict[str, Any])
 
 def materialize_all(conn: sqlite3.Connection, bridge: Any) -> dict[str, dict[str, int]]:
     """Materializes every published List -- what sync.py's full_refresh
-    calls on each periodic tick. One List's failure (e.g. a Radicale
-    hiccup on that one collection) is isolated so it doesn't abort the
-    rest -- same "per-collection failure isolation" principle this app's
-    old multi-calendar full_refresh used to document before Phase 1
-    removed that code path.
-
-    2026-08-29: a List with `visibility == "archived"` is skipped
-    entirely -- not materialized, not touched. "Archived" means paused:
-    its Radicale collection was already torn down at the moment it was
-    archived (routers/published_lists.py's visibility route calls
-    teardown_collection there, once, rather than this function repeating
-    a delete every tick), and the row itself is left alone here so
-    switching back to private/public later just needs this function to
-    resume normally -- no special "re-create" step, since materialize()
-    already creates whatever the bridge needs on its next successful
-    push, the same way a brand-new List does today."""
-    import logging
-
-    logger = logging.getLogger(__name__)
+        calls on each periodic tick. One List's failure (e.g. a Radicale
+        hiccup on that one collection) is isolated so it doesn't abort the
+        rest -- same "per-collection failure isolation" principle this app's
+        old multi-calendar full_refresh used to document before Phase 1
+        removed that code path.
+    """
+    logger = get_logger(__name__)
     results: dict[str, dict[str, int]] = {}
     # `bridge` may be None (Radicale unreachable at startup, see main.py's
     # lifespan) -- nothing to push to, so skip quietly instead of logging

@@ -5,49 +5,9 @@
 {% from "_detail_section.html" import detail_section %}
 {% block title %}{{ contact.full_name if contact else "Contact" }}{% endblock %}
 {% block content %}
-<!-- see event_form.html/task_detail.html for why this is wrapped -- opens
-     as a modal from contacts_list.html (data-modal) but still renders as a
-     normal standalone page on a direct visit.
-
-     2026-08-08 visual rework (all three detail modals at once -- events,
-     tasks, contacts -- one cohesive stroke): the old one-row-per-field
-     <table> (.detail-kv, contact_detail.html's own differently-shaped
-     layout) is gone -- contacts now use the exact same header/body/footer
-     language as event/task detail: header = identity (the contact's
-     avatar + large bold title + org subtitle), body = the meta fields in
-     the same 2-column grid, footer = a quiet "Done" back-link, a demoted
-     Delete text-link, and the primary Edit action taking center stage.
-
-     2026-09-03 direct feedback ("restyle the view modal to not use the
-     colored bg card div to view the meta"): the meta grid's wrapper is now
-     the plain .detail-meta-panel (style.css), not the elevated tonal
-     .detail-card the paragraph above originally described.
-
-     2026-09-03 direct request, same day ("I like variant B so much I want
-     it to be the baseline for all view modal windows") -- the avatar moved
-     out of the title row and into the shared _detail_cover.html cover
-     banner's floating badge slot (avatar_mode=true -- a ringed photo/
-     initials circle instead of an icon on a white card). Cover fill is the
-     contact's resolved label/Project/Space banner image
-     (db.banner_for_object) when set, else a flat gradient in a color
-     derived from the contact's own uid (deps.py's stable_color) -- contacts
-     have no color field of their own the way events/tasks do, and a flat
-     neutral cover for every contact would have looked undesigned.
-
-     2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
-     html partial the edit form uses too (same structure, "Edit" swapped
-     for "Save"), and #modal-target carries the modal-stable-height marker
-     so modal.js keeps the dialog one fixed size in both states while the
-     header/body/footer cross-fade when the Edit link swaps them in
-     place -- one continuous modal instead of a hard page swap. -->
 <div id="modal-target" class="modal-stable-height">
 {% if contact %}
 <div class="modal-header">
-    <!-- 2026-09-03 fix ("edit the header so that it doesn't clip
-         (margins)") -- .detail-header-inner (style.css) wraps the
-         cover+title, escaping .modal-header's own padding via negative
-         margins so that padding could stay intact for every plain
-         *_form.html edit modal (a bare <h1>, no cover) that relies on it. -->
     <div class="detail-header-inner">
         {% set _badge %}<a href="/contacts/{{ contact.uid }}/photo/modal" data-modal class="avatar-upload" title="Change photo">{{ avatar(contact, 'avatar-large') }}<span class="avatar-upload-overlay" aria-hidden="true">{{ icon('camera', 'icon-sm') }}</span></a>{% endset %}
         {{ detail_cover('var(--cal-accent-' ~ stable_color(contact.uid) ~ ')', banner, _badge, avatar_mode=true) }}
@@ -65,12 +25,6 @@
 </div>
 
 <div class="modal-body">
-<!-- Contacts field parity slice 2 of 6: phone/email are multi-value now
-     (contact.phones/contact.emails, each {"type", "value"}) -- quick
-     actions (Call/Email) use just the first entry of each, same "concise
-     first entry" convention contacts_list.html's row subtitle uses; the
-     meta grid below lists every entry with its type label, same tel:/
-     mailto: links as before, just repeated per row. -->
 {% if contact.phones or contact.emails %}
 <div class="contact-quick-actions">
     {% if contact.phones %}<a class="btn" href="tel:{{ contact.phones[0].value }}">{{ icon('phone', 'icon-sm') }} Call</a>{% endif %}
@@ -92,39 +46,18 @@
             <span class="detail-meta-value"><a href="mailto:{{ e.value }}">{{ e.value }}</a></span>
         </div>
         {% endfor %}
-        <!-- Contacts field parity slice 3 of 6: website is multi-value
-             (contact.websites, each {"type", "url"}) -- listed same as
-             phone/email above, one row per entry with its type label, an
-             external link (target="_blank" rel="noopener", matching
-             event_detail.html's meeting_url convention) rather than tel:/
-             mailto:. -->
         {% for w in contact.websites %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Website{% if w.type %} ({{ w.type }}){% endif %}</span>
             <span class="detail-meta-value"><a href="{{ w.url }}" target="_blank" rel="noopener">{{ icon('external-link', 'icon-sm') }} {{ w.url }}</a></span>
         </div>
         {% endfor %}
-        <!-- Contacts field parity slice 5 of 6: Address is now structured
-             and multi-value (contact.addresses, each {"type", "po_box",
-             "extended", "street", "city", "region", "postal_code",
-             "country"}) -- listed same as phone/email/website above, one
-             row per entry with its type label, formatted through the
-             vCard-standard line ordering (PO Box/Extended/Street each own
-             line, then "City, Region PostalCode", then Country) via the
-             new fmt_address filter (deps.py) rather than re-deriving that
-             layout in the template. -->
         {% for a in contact.addresses %}
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">Address{% if a.type %} ({{ a.type }}){% endif %}</span>
             <span class="detail-meta-value detail-meta-multiline">{{ a | fmt_address }}</span>
         </div>
         {% endfor %}
-        <!-- Contacts field parity slice 6 of 6: Social network
-             (contact.social_profiles, each {"type", "value"}) -- listed
-             same as phone/email/website above. A value that looks like a
-             URL renders as an external link (matching website's own
-             convention); a bare handle/username renders as plain text,
-             since X-SOCIALPROFILE doesn't guarantee either shape. -->
         {% for s in contact.social_profiles %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Social{% if s.type %} ({{ s.type }}){% endif %}</span>
@@ -137,11 +70,6 @@
             </span>
         </div>
         {% endfor %}
-        <!-- Contacts field parity slice 4 of 6: Birthday, single-value, the
-             stored raw "YYYY-MM-DD"/"--MM-DD" text rendered human-readable
-             via the fmt_birthday filter (deps.py -> db.format_contact_
-             birthday) -- "May 17, 1990" for a full date, "May 17" (no
-             year) for a year-less one. -->
         {% if contact.birthday %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Birthday</span>

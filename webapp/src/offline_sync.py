@@ -1,6 +1,5 @@
 """1.8 slices 1-2 and 7 -- "Field-HLC shadow store + sync API skeleton",
-"Sync conflicts surface", and "Tombstone GC" (plans/open-priority.md §
-Offline-first editing & synchronization, §11). Pure conflict-detection/
+"Sync conflicts surface", and "Tombstone GC". Pure conflict-detection/
 apply/GC logic, deliberately independent of FastAPI/HTTP
 (routers/sync_api.py is the thin HTTP wrapper around this module) -- same
 "pure module + router" split as recurrence_expand.py/grid_layout.py
@@ -223,10 +222,10 @@ def _summarize(field_results: dict[str, str]) -> str:
 
 def _op_hlc(op: dict[str, Any]) -> HLC:
     """The single newest HLC an op carries -- the max over a create/
-    field_set's per-field HLCs, or the op's own HLC for delete/label ops.
-    What `apply_batch` sorts a batch by, and what the server's own clock
-    merges past when it applies the op (db.merge_server_hlc -- the server
-    is itself a participant in §3's HLC scheme, 2026-08-18)."""
+        field_set's per-field HLCs, or the op's own HLC for delete/label ops.
+        What `apply_batch` sorts a batch by, and what the server's own clock
+        merges past when it applies the op.
+    """
     if op.get("op_type") in ("create", "field_set"):
         fields = op.get("fields") or {}
         if not fields:
@@ -420,12 +419,6 @@ def _current_field_value(conn: sqlite3.Connection, entity_type: str, uid: str, f
     return None
 
 
-# Tombstone GC retention horizon (§4) -- a device whose cursor predates
-# this can't safely apply an incremental pull (a tombstone it never saw
-# may already be gone) and instead gets told to do a full resync (§8).
-# Slice 1 only needed this for that comparison; slice 7's `purge_expired`
-# below (further down this file) is what actually deletes anything once
-# it's safely past the same horizon.
 RETENTION_DAYS = 90
 
 
@@ -463,22 +456,6 @@ def pull(
     ]
     new_cursor = changes[-1]["hlc"] if changes else cursor
     return {"full_resync": False, "changes": changes, "cursor": new_cursor}
-
-
-# --------------------------------------------------------------------- #
-# 1.8 slice 7 -- "Tombstone GC" (open-priority.md §11 slice 7). `pull()`
-# above (slice 1) already has the *safety* half of §4's retention horizon:
-# a cursor older than RETENTION_DAYS gets a forced full_resync instead of
-# a possibly-incomplete incremental delta. What was still missing is the
-# other half -- actually deleting anything once it's safely past that
-# horizon, so field_versions/sync_applied_ops/the entity tables don't grow
-# forever. `purge_expired` below is that job; it's deliberately a plain
-# function with no scheduling opinion of its own (no cron in this app --
-# routers/sync_api.py's own lazy "check on every pull" trigger, and
-# Settings > Data health's manual one, both just call this the same way
-# routers/tasks.py's own auto-archive check calls db.delete_old_completed_
-# tasks).
-# --------------------------------------------------------------------- #
 
 
 def _purge_expired_tombstones(conn: sqlite3.Connection, cutoff_ms: int) -> dict[str, int]:

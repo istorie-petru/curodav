@@ -2,7 +2,7 @@
 unique link.
 
 This is a clean, minimalist sharing tool -- not a server administration
-panel. A List has one of three visibility states (2026-08-29):
+panel. A List has one of three visibility states:
 
   - `private` (default) -- the original behavior: materialized into a
     Radicale collection, reachable only by whoever has the shared
@@ -28,7 +28,6 @@ on an install that never configured Radicale at all.
 
 from __future__ import annotations
 
-import logging
 import re
 import uuid
 from datetime import datetime, timezone
@@ -36,12 +35,13 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
+from ..log import get_logger
 from .. import clock, db
 from ..deps import get_bridge, get_db, templates
 from ..published_lists import collection_url, materialize, new_public_token, teardown_collection
 
 router = APIRouter(prefix="/published-lists", tags=["published-lists"])
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 ENTITY_TYPES = ["task", "event", "contact"]
 ENTITY_LABELS = {"task": "Tasks", "event": "Events", "contact": "Contacts"}
@@ -84,14 +84,11 @@ def _unique_collection_path(conn, name: str, existing_id: str | None = None) -> 
 
 def _filter_from_form(labels: list[str], exclude_labels: list[str] | None = None) -> dict:
     """Simple filter: items matching ANY selected label, minus anything
-    carrying any of the excluded labels. `evaluate_label_filter`
-    (published_lists.py) already supported a `none` exclude group from
-    day one -- this is just the first UI wiring it up (2026-09-14 direct
-    request: "Published Lists should be able to have negative filtering
-    by labels (separate drop down)"). `none` key is only set when there's
-    something to exclude, matching `all_names`/`any_names`'s existing
-    "empty list, not an empty-but-present key" convention for the
-    unused groups."""
+        carrying any of the excluded labels. `none` key is only set when there's
+        something to exclude, matching `all_names`/`any_names`'s existing
+        "empty list, not an empty-but-present key" convention for the
+        unused groups.
+    """
     result: dict[str, list[str]] = {"any": [n for n in labels if n]}
     excluded = [n for n in (exclude_labels or []) if n]
     if excluded:

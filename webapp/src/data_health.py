@@ -1,7 +1,6 @@
-"""Data health & maintenance (`plans/open.md` § Data health & maintenance,
-`plans/roadmap.md`'s 1.1 side work) -- the verified-backups precondition
+"""Data health & maintenance -- the verified-backups precondition
 1.8 (offline-first editing & synchronization) is gated on: "trusted only
-once verified backups (data health, 1.1) exist" (`plans/STATE.md`).
+once verified backups (data health, 1.1) exist".
 
 Settings > Data health (`routers/settings.py`'s settings_data_health) and
 `scripts/data_health.py` (the CLI) are both thin wrappers around the plain
@@ -342,27 +341,15 @@ def entity_stats(conn: sqlite3.Connection) -> dict[str, int]:
     return export_context(conn)
 
 
-# --------------------------------------------------------------------- #
-# 1.8 slice 7 -- Tombstone GC's own maintenance-service wrapper, same
-# "GUI and CLI share one implementation" shape as every backup action
-# above. `offline_sync.purge_expired` (src/offline_sync.py) does the
-# actual deletion; everything here is bookkeeping around *when* to call
-# it and remembering that it ran, for Settings > Data health's benefit.
-# --------------------------------------------------------------------- #
-
 SYNC_GC_RETENTION_DAYS_KEY = "sync_gc_retention_days"
 SYNC_GC_LAST_RUN_KEY = "sync_gc_last_run"
 
 
 def sync_gc_retention_days(conn: sqlite3.Connection) -> int:
     """The configured tombstone/idempotency-ledger retention horizon (§4)
-    -- "alongside the existing auto-archive-style app_meta presets," per
-    §4's own line. Unset means the sync design's own documented default
-    (`offline_sync.RETENTION_DAYS`, 90 days -- already what `pull()`'s
-    staleness check has used since slice 1); an explicit `"0"` disables
-    physical purging specifically (the staleness-forces-full-resync
-    safety check is a correctness guarantee, not a storage-management
-    knob, and stays in effect either way)."""
+        -- "alongside the existing auto-archive-style app_meta presets," per
+        §4's own line.
+    """
     from . import db, offline_sync
 
     raw = db.get_app_meta(conn, SYNC_GC_RETENTION_DAYS_KEY)
@@ -412,13 +399,11 @@ def run_sync_gc(conn: sqlite3.Connection, *, force: bool = False) -> dict[str, A
 
 
 def _sync_summary(conn: sqlite3.Connection) -> dict[str, Any]:
-    """1.8 slice 6 -- the sync engine (routers/sync_api.py, driven client-
-    side by static/offline_sync_client.js) is now real, so this is no
-    longer the fixed `{"configured": False}` placeholder slices 1-5 left
-    here. "Configured" means at least one device has ever pushed or
-    pulled -- a fresh install with no PWA client installed anywhere still
-    correctly reports unconfigured, since `sync_devices` stays empty until
-    that happens."""
+    """"Configured" means at least one device has ever pushed or
+        pulled -- a fresh install with no PWA client installed anywhere still
+        correctly reports unconfigured, since `sync_devices` stays empty until
+        that happens.
+    """
     from . import db
 
     devices = db.list_sync_devices(conn)
@@ -433,11 +418,11 @@ def _sync_summary(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 def _sync_gc_summary(conn: sqlite3.Connection) -> dict[str, Any]:
-    """1.8 slice 7 -- retention configuration + the last GC run, for
-    Settings > Data health's own Maintenance section. Separate from
-    `_sync_summary` (device push/pull state) since retention/purge is a
-    distinct concern -- a fresh install with no devices yet still has a
-    perfectly real (default) retention horizon to report."""
+    """Separate from
+        `_sync_summary` (device push/pull state) since retention/purge is a
+        distinct concern -- a fresh install with no devices yet still has a
+        perfectly real (default) retention horizon to report.
+    """
     last_run = sync_gc_last_run(conn)
     return {
         "retention_days": sync_gc_retention_days(conn),
@@ -446,14 +431,6 @@ def _sync_gc_summary(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 def health_summary(conn: sqlite3.Connection, db_path: Path, backups_dir: Path) -> dict[str, Any]:
-    """Everything Settings > Data health's page needs in one call --
-    open.md's own list: "database integrity/status; last successful
-    backup; last backup verification; synchronization status ...; storage
-    usage; relevant entity statistics." Sync status reflects `sync_devices`
-    directly (see `_sync_summary`) now that 1.8 slice 6 has shipped a real
-    sync engine -- slices 1-5 left this as a fixed not-yet-available
-    placeholder so this function's own shape wouldn't need to change once
-    it did. `sync_gc` (slice 7) is the retention/purge counterpart."""
     backups = list_backups(backups_dir)
     latest = backups[0] if backups else None
     latest_verified = next((b for b in backups if b["verification"] is not None), None)

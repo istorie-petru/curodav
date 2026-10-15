@@ -1,21 +1,3 @@
-"""The Habits page (`/habits`) -- 2026-09-24, plans/ui-cleanup-2026-09.md
-item 14, slice H2.
-
-A habit is a habit-labeled task; this page renders them through
-habit_view.habit_items, never as task rows, and replaces the Tasks table's
-old Habits group outright (Peter's answer to the plan's question 3).
-Layout, per the Streak-informed plan: a "To do" section (habits whose open
-window isn't kept yet) above an "On track" one, each row with a one-tap
-check-in, the schedule and streak, and a tap-a-day strip of the last seven
-days. Every mutation posts to the existing task completion endpoints;
-static/habit_actions.js fetches them and re-renders `#habits-body` from
-`/habits/regions`.
-
-The standalone Habit entity this router used to own (`habits`/
-`habit_entries`, CRUD + entries endpoints) was removed in slice 1; its
-tables stay physically in an existing cache.sqlite. Any other old
-`/habits/...` URL redirects here.
-"""
 
 from __future__ import annotations
 
@@ -68,14 +50,15 @@ def habits_regions(request: Request, conn=Depends(get_db)):
 
 @router.get("/archived")
 def archived_modal(request: Request, conn=Depends(get_db)):
-    """Item 19 (2026-09-26, "Habits must be archivable") -- habit_view.
-    habit_items already excludes an archived (or done) habit-labeled task
-    from the main page entirely (`_INACTIVE_STATUSES`), same as it always
-    has for "done" -- so once a habit's own Archive button (habit_task_
-    form.html, this same item) is used, this modal is the only place left
-    to see it again or Restore it. Same "behind a header button, not a
-    page section" shape Pauses already established for a similarly rare
-    action -- see that route's own docstring."""
+    """Item 19 -- habit_view.
+        habit_items already excludes an archived (or done) habit-labeled task
+        from the main page entirely (`_INACTIVE_STATUSES`), same as it always
+        has for "done" -- so once a habit's own Archive button (habit_task_
+        form.html, this same item) is used, this modal is the only place left
+        to see it again or Restore it. Same "behind a header button, not a
+        page section" shape Pauses already established for a similarly rare
+        action -- see that route's own docstring.
+    """
     archived = sorted(
         (t for t in db.list_habit_tasks(conn) if t.get("status") == "archived"),
         key=lambda t: t["title"].lower(),
@@ -88,9 +71,6 @@ def archived_modal(request: Request, conn=Depends(get_db)):
 
 @router.get("/pauses")
 def pauses_modal(request: Request, conn=Depends(get_db)):
-    """2026-09-26 (Peter): every pause -- all-habit and single-habit -- in
-    one modal behind the Habits page header's Pauses button, instead of a
-    Vacation section on the page and a Pause section in each habit."""
     today = clock.today().isoformat()
     habits = [
         {"uid": h["uid"], "title": h["title"]}

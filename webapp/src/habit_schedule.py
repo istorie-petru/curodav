@@ -1,5 +1,4 @@
-"""Schedule-aware habit streaks (2026-09-24, plans/ui-cleanup-2026-09.md
-item 14, slice H1).
+"""Schedule-aware habit streaks.
 
 `habit_heatmap.streaks()` walks calendar days, so any habit that isn't
 due every day "broke" its streak on every day it wasn't due: a weekly
@@ -150,17 +149,17 @@ def habit_stats(
 ) -> dict:
     """Streaks and progress for one habit.
 
-    Returns current/longest streak (in `unit`s), completion `rate`
-    (kept / counted windows, None before any window counts), whether the
-    habit is `due_today` (its open window isn't kept yet), and the open
-    window's `period_done`/`period_target` (e.g. 2 of 3 this week).
+        Returns current/longest streak (in `unit`s), completion `rate`
+        (kept / counted windows, None before any window counts), whether the
+        habit is `due_today` (its open window isn't kept yet), and the open
+        window's `period_done`/`period_target` (e.g. 2 of 3 this week).
 
-    `target_per_day` (2026-09-25, UI audit H-01): an amount habit ("8
-    glasses a day") only keeps a day once that day's value reaches the
-    target -- one +1 on 1/8 used to count as a fully kept day (streak,
-    strength, "On track", the widget's "All done"). A logged day below
-    target is a display-only "partial" (habit_view.day_state), never kept.
-    None/<=1 keeps the old any-value-counts rule.
+        `target_per_day`: an amount habit ("8
+        glasses a day") only keeps a day once that day's value reaches the
+        target -- one +1 on 1/8 used to count as a fully kept day (streak,
+        strength, "On track", the widget's "All done"). A logged day below
+        target is a display-only "partial" (habit_view.day_state), never kept.
+        None/<=1 keeps the old any-value-counts rule.
     """
     today = today or date.today()
     if kind == "avoid":

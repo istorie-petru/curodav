@@ -1,32 +1,3 @@
-// Wikilinks & relationships (2026-10-03, roadmap-mvp-to-full-product-
-// checklist's "Wikilinks & relationships" section) -- two parts working
-// together, same split as notebook_footnotes.js:
-//
-// 1. NotebookWikiLink, an Editor.js Inline Tool modeled on
-//    notebook_footnotes.js's NotebookFootnote (render()/surround(range)/
-//    checkState()/renderActions()). Inserts a `<span class="cdx-wikilink"
-//    contenteditable="false" data-target-uid data-target-title
-//    data-target-note-type data-target-color data-target-icon>` marker
-//    right after the cursor/selection (not wrapping any selected text,
-//    same reasoning as Footnote's own marker -- the link's visible text
-//    is always the picked target document's own title, never arbitrary
-//    selected text, which is also what keeps rendering simple: nothing
-//    here has to re-derive a display string later). The marker resolves
-//    to a target document's uid at link-creation time via the search/
-//    pick popover below (roadmap: "not fuzzy title-text matching at
-//    render time") -- once picked, the uid never changes just because
-//    the target's title does later.
-//
-// 2. A live "Links to" list (`renderRelationships`), re-run on every
-//    editor change and after initial load, same "walk the live DOM, re-
-//    run on change" approach notebook_toc.js/notebook_footnotes.js already
-//    use: walks every `.cdx-wikilink` marker in document order, de-dupes
-//    by target uid, and groups them by `data-target-note-type` into
-//    #notebook-relationships-out (the Relationships tab's "Links to"
-//    section). The tab's other section, "Linked from" (backlinks), is
-//    server-rendered instead (routers/notebook.py's document_page) --
-//    see db.list_notebook_backlinks' own docstring for why that half
-//    can't be done this same client-side way.
 (function () {
   function linkIcon() {
     return '<svg class="icon" aria-hidden="true"><use href="#icon-link"></use></svg>';
@@ -37,12 +8,6 @@
     return mount ? mount.getAttribute("data-uid") : "";
   }
 
-  // item G (session 8, 2026-10-03): this document's own url+title, so the
-  // "Links to" list's <a> tags can carry it as back_to/back_label (same
-  // param pair notebook_document.html's server-rendered "Linked from"
-  // list and _widget_notebook_list.html use) -- not document.title (the
-  // browser tab title, which base.html suffixes with " - Curodav"), a
-  // dedicated data-title attribute on the mount instead.
   function mountTitle() {
     var mount = document.getElementById("notebook-editor");
     return mount ? mount.getAttribute("data-title") || "" : "";
@@ -69,7 +34,7 @@
   // the other two entry points don't re-implement the same search call
   // and result-list markup.
   function searchDocuments(query, cb) {
-    var url = "/notebook/search?q=" + encodeURIComponent(query || "") + "&exclude=" + encodeURIComponent(mountUid());
+    var url = "/notebook/link-search?kinds=doc&q=" + encodeURIComponent(query || "") + "&exclude=" + encodeURIComponent(mountUid());
     fetch(url, { headers: { Accept: "application/json" } })
       .then(function (resp) {
         return resp.ok ? resp.json() : [];
@@ -83,22 +48,41 @@
   function renderResultsInto(ul, items, onPick) {
     ul.innerHTML = "";
     if (!items.length) {
-      var empty = document.createElement("li");
-      empty.className = "cdx-wikilink-picker-empty";
-      empty.textContent = "No matching documents";
-      ul.appendChild(empty);
+      ul.appendChild(window.ccEmptyState("No matching documents", "li"));
       return;
     }
-    items.forEach(function (item) {
+    items.forEach(function (item, i) {
       var li = document.createElement("li");
-      li.className = "cdx-wikilink-picker-result";
+      li.className = "cdx-wikilink-picker-result" + (i === 0 ? " is-active" : "");
       li.innerHTML =
         '<svg class="icon icon-sm cal-' + item.color + '" aria-hidden="true"><use href="#icon-' + item.icon + '"></use></svg>' +
-        "<span>" + escapeHtml(item.title) + "</span>";
+        "<span>" + escapeHtml(item.title) + "</span>" +
+        (item.subtitle ? '<span class="cdx-wikilink-picker-sub">' + escapeHtml(item.subtitle) + "</span>" : "");
       li.addEventListener("click", function () {
         onPick(item);
       });
       ul.appendChild(li);
+    });
+  }
+
+  // Up and Down move through the results and Enter picks the highlighted one.
+  function wirePickerKeys(input, ul) {
+    input.addEventListener("keydown", function (e) {
+      var rows = Array.prototype.slice.call(ul.querySelectorAll(".cdx-wikilink-picker-result"));
+      if (!rows.length) return;
+      var at = rows.findIndex(function (r) { return r.classList.contains("is-active"); });
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        e.stopPropagation();
+        rows.forEach(function (r) { r.classList.remove("is-active"); });
+        var next = (Math.max(at, 0) + (e.key === "ArrowDown" ? 1 : rows.length - 1)) % rows.length;
+        rows[next].classList.add("is-active");
+        rows[next].scrollIntoView({ block: "nearest" });
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        (rows[at] || rows[0]).click();
+      }
     });
   }
 
@@ -145,6 +129,7 @@
       self.search(self.input.value);
     }, 200);
     this.input.addEventListener("input", runSearch);
+    wirePickerKeys(this.input, this.results);
     return this.wrap;
   };
   NotebookWikiLink.prototype.search = function (q) {
@@ -237,14 +222,6 @@
     return span;
   };
 
-  // Slash-command entry point -- a block tool so it shows up in Editor.js's
-  // own "/" toolbox (direct request: "should also be possible to be
-  // created with the slash command"). Its render() is just the same
-  // search/pick UI as the inline tool's popover; picking a result replaces
-  // this placeholder block with a plain paragraph whose only content is
-  // the wikilink marker (same markup the inline tool inserts), via
-  // `api.blocks.insert` + `delete` since there's no smaller public API for
-  // "turn this block into that one" that also changes tool type.
   function NotebookWikilinkBlock(params) {
     this.api = params.api;
     this.wrap = null;
@@ -274,6 +251,7 @@
     this.input.addEventListener("keydown", function (e) {
       if (e.key === "Escape") self.cancel();
     });
+    wirePickerKeys(this.input, this.results);
     setTimeout(function () {
       self.input.focus();
       self.search("");
@@ -288,17 +266,6 @@
       });
     });
   };
-  // `getCurrentBlockIndex()` is only as fresh as Editor.js's own click/
-  // focus bookkeeping, which a block picked via mouse click through the
-  // toolbox doesn't reliably update -- confirmed live (2026-10-03, while
-  // building the footnote action menu's own identical block-tool shape,
-  // see the slash-command block's own `ownIndex` below
-  // and [[curodav-webapp-footnote-action-menu]]): a freshly-inserted
-  // placeholder block stayed marked "selected" in the DOM, yet
-  // `getCurrentBlockIndex()`-based deletion silently missed it entirely --
-  // no thrown error, just the wrong block (or none) removed. Deriving the
-  // index from this block's own wrap element instead sidesteps that
-  // bookkeeping altogether.
   NotebookWikilinkBlock.prototype.ownIndex = function () {
     var block = this.api.blocks.getBlockByElement(this.wrap);
     return block ? this.api.blocks.getBlockIndex(block.id) : this.api.blocks.getCurrentBlockIndex();
@@ -327,17 +294,6 @@
     return {};
   };
 
-  // "Links to" -- live, grouped by the target's note_type, same
-  // document-order + de-dupe-by-target shape notebook_toc.js's heading
-  // walk uses, just grouped instead of flat.
-  //
-  // 2026-10-03 (backlog item A, minimalist Relationships empty state): the
-  // whole "Links to" section (heading + nav), not just its inner list, is
-  // now hidden/shown based on whether there's anything to show -- the
-  // "No links yet" placeholder this function used to render *inside* the
-  // nav is gone, replaced by the one shared `#notebook-relationships-empty`
-  // line updateRelationshipsEmptyState() manages below, same minimalism
-  // reasoning as notebook_document.html's own comment on the markup.
   function renderRelationships(mount) {
     var outSection = document.getElementById("notebook-relationships-out-section");
     var nav = document.getElementById("notebook-relationships-out");

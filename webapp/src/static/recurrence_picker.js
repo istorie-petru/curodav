@@ -1,48 +1,3 @@
-// Progressive enhancement for `<input class="recurrence-input" name="recurrence">`
-// (task_form.html/event_form.html/habit_task_form.html's Recurrence field)
-// into a preset picker ("Does not repeat"/"Daily"/"Weekly"/"Every 2 weeks"/
-// "Monthly"/"Yearly", each with an "Ends" sub-choice) instead of asking the
-// user to type raw RRULE syntax directly -- direct feedback: "the modal
-// window should prioritize drop down menus and other input methods, not
-// just text input."
-//
-// 2026-08-14 follow-up ("remove the custom option for recurring") -- the
-// free-text "Custom RRULE" escape hatch (a text input living inside the
-// dropdown panel as its own row) was removed entirely; the fixed presets
-// plus their end-condition are now the only thing this UI can produce. An
-// existing value that doesn't match one of the presets (e.g. a
-// hand-authored `BYDAY=...` rule, or anything an API caller wrote directly)
-// is left with **no preset radio checked** and its raw text shown read-only
-// as the trigger's summary -- `sync()` only ever overwrites the hidden
-// input's value once a preset radio is actually checked, so simply opening
-// and closing this form can never silently clobber a recurrence rule this
-// picker doesn't understand. Selecting any preset does replace it, same as
-// picking a different preset always has.
-//
-// 2026-08-15 follow-up ("just implement odd week, even week recurrence for
-// events") -- first landed as a separate odd/even "Repeats" sub-dropdown
-// under Weekly, snapping the event's start date to match. Immediate
-// follow-up feedback ("rework the every week/two weeks... just have one
-// more Recurrence rule that is Every 2 weeks, this is cleaner") replaced
-// that with a single flat "Every 2 weeks" preset, same shape as Daily/
-// Weekly/Monthly/Yearly -- no extra dropdown, no date-snapping. RFC 5545
-// has no ODD/EVEN keyword: `INTERVAL=2` already alternates weeks all by
-// itself, and *which* weeks it lands on is simply whatever the event's own
-// `start_at` already is -- nothing here needs to compute or care.
-//
-// The underlying real `<input name="recurrence">` is permanently hidden
-// (not conditionally shown/hidden the way it used to be) and keeps its
-// name/value contract exactly as-is -- neither routers/tasks.py's
-// create_task/update_task nor routers/calendar.py's create_event/
-// update_event do any server-side parsing of it beyond passing it
-// straight through, so this is entirely a client-side swap.
-//
-// Same "scan on DOMContentLoaded + MutationObserver for modal-injected
-// content" convention as tag_input.js (read that file's own comment for
-// why a MutationObserver is needed at all: modal.js injects fetched
-// fragments via `body.innerHTML = ...`, which never executes a `<script>`
-// tag inside that HTML). Still works with no JS at all -- it's just a
-// plain (hidden-only-by-CSS-that-never-loaded) text input in that case.
 (function () {
   const enhanced = new WeakSet();
   let uid = 0;
@@ -132,15 +87,6 @@
 
     wrap.appendChild(panel);
 
-    // "Ends" -- its own separate dropdown (same `.multiselect` markup
-    // contract as `wrap` above, so app.js's generic multiselect click/
-    // portal/position handling picks it up for free) rather than a
-    // sub-panel nested inside the FREQ dropdown -- direct feedback ("could
-    // we make ends another drop down menu?"). Only meaningful once a real
-    // preset (not "Does not repeat") is selected -- hidden entirely
-    // otherwise. "Never" (no suffix), "On date" (UNTIL=, the app's
-    // existing dashed-date convention -- see parseValue's own comment
-    // above), or "After N occurrences" (COUNT=).
     const endsWrap = document.createElement("div");
     endsWrap.className = "multiselect widget-list-multiselect recurrence-ends-select";
     endsWrap.setAttribute("data-ms", "");
@@ -182,9 +128,6 @@
       return radio;
     }
 
-    // 2026-09-26: "On date" is the app's date field (_date_time_fields.html
-    // markup, run by date_time_fields.js) -- typed or picked -- instead of
-    // a native date input. `untilInput` is its hidden value.
     const untilField = document.createElement("div");
     untilField.className = "dtf dtf-date dtf--compact recurrence-ends-until";
     untilField.dataset.dtf = "date";
@@ -235,15 +178,6 @@
       neverRadio.checked = true;
     }
 
-    // 2026-09-26 (Peter: "the two new dropdowns side by side, not one
-    // overflowing and the other in its own section") -- both dropdowns go
-    // in one flex row (`.recurrence-preset-row`, style.css) instead of
-    // stacking as plain block siblings; `endsWrap` starting `hidden`
-    // collapses the row to just the preset dropdown until a preset is
-    // actually picked. Insert the row before `input` (still a plain child
-    // of `originalParent` at this point), then move `input` inside `wrap`
-    // last (see the header comment: `input` stays the permanent, hidden
-    // source of truth either dropdown writes into).
     const originalParent = input.parentNode;
     input.setAttribute("autocomplete", "off");
     input.style.display = "none";
@@ -254,12 +188,6 @@
     originalParent.insertBefore(row, input);
     wrap.appendChild(input);
 
-    // Holiday calendar / exclude Saturday / exclude Sunday (event forms
-    // only -- _event_form_fields.html's `.holiday-field`s) only mean
-    // anything once this event actually repeats -- direct feedback ("make
-    // the holiday selector for events to appear only if the event is
-    // recurring"). task_form.html/habit_task_form.html's recurrence field
-    // has no such siblings, so this is just an empty NodeList there.
     const fieldGrid = originalParent.closest(".field-grid") || originalParent.parentNode;
     const holidayFields = fieldGrid ? fieldGrid.querySelectorAll(".holiday-field") : [];
 

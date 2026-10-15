@@ -17,7 +17,31 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .core import _HTML_TAG_RE, _WIKILINK_TARGET_RE, _collect_block_text, get_app_meta, set_app_meta
-from .labels import _attach_tags, _attach_tags_bulk, set_object_labels
+from .labels import _attach_tags, _attach_tags_bulk, list_project_labels, set_object_labels
+
+
+def single_label_tags(conn: sqlite3.Connection, tags: list[str]) -> list[str]:
+    """A note has at most one project and one label: the first project label and the first other label, in the given order."""
+    project_names = {cfg["name"] for cfg in list_project_labels(conn)}
+    project = next((t for t in tags if t in project_names), None)
+    label = next((t for t in tags if t not in project_names), None)
+    return [t for t in (project, label) if t]
+
+
+def enforce_one_label_and_project(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Trims every note that has more than one project or label to the first of each, in the order they were attached.
+
+    Returns one report row per changed note: its uid, title and the labels that were dropped."""
+    report = []
+    rows = conn.execute("SELECT uid, title FROM notebook_documents").fetchall()
+    for row in rows:
+        names = [r[0] for r in conn.execute(
+            "SELECT label_name FROM object_labels WHERE object_type = 'notebook' AND object_id = ? ORDER BY rowid", (row["uid"],))]
+        kept = single_label_tags(conn, names)
+        if len(kept) < len(names):
+            set_object_labels(conn, "notebook", row["uid"], kept)
+            report.append({"uid": row["uid"], "title": row["title"], "kept": kept, "dropped": [n for n in names if n not in kept]})
+    return report
 
 
 def upsert_notebook_document(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
@@ -25,9 +49,17 @@ def upsert_notebook_document(conn: sqlite3.Connection, row: dict[str, Any]) -> N
     tags = data.pop("tags", None)
     properties = data.pop("properties", None)
     cols = ["uid", "title", "content_json", "document_type", "note_type", "is_template", "created_at", "updated_at"]
+    if "journal_week" in data:
+        cols.append("journal_week")
+        data["journal_week"] = data["journal_week"] or ""
+    if "pinned" in data:
+        cols.append("pinned")
+        data["pinned"] = 1 if data["pinned"] else 0
     data["is_template"] = 1 if data.get("is_template") else 0
     if data["is_template"]:
         tags = []
+    elif tags is not None:
+        tags = single_label_tags(conn, tags)
     values = [data.get(c) for c in cols]
     placeholders = ", ".join("?" for _ in cols)
     updates = ", ".join(f"{c}=excluded.{c}" for c in cols if c != "uid")
@@ -88,15 +120,15 @@ def get_notebook_document(conn: sqlite3.Connection, uid: str) -> dict[str, Any] 
 def list_notebook_documents(
     conn: sqlite3.Connection, label: str | None = None, scope: str = "notes"
 ) -> list[dict[str, Any]]:
-    """All documents by default -- the "All documents" safety-net view
-    (STATE.md's MVP-readiness-check gap #2) for anything with no label at
-    all. `label` narrows to one label's membership, for the Groups/Labels
-    widget (Phase 3) -- note that's a different, narrower query than a
-    label/group *page* actually needs (those already aggregate membership
-    themselves via object_labels; this is just the plain per-label list).
+    """All documents by default -- the "All documents" safety-net view for anything with no label at
+        all. `label` narrows to one label's membership, for the Groups/Labels
+        widget (Phase 3) -- note that's a different, narrower query than a
+        label/group *page* actually needs (those already aggregate membership
+        themselves via object_labels; this is just the plain per-label list).
 
-    `scope` is "notes" (the default: templates stay out of every list),
-    "templates" or "all" (backups)."""
+        `scope` is "notes" (the default: templates stay out of every list),
+        "templates" or "all" (backups).
+    """
     clauses: list[str] = []
     params: list[str] = []
     if scope == "notes":
@@ -118,18 +150,205 @@ def list_notebook_documents(
     return _attach_notebook_properties_bulk(conn, docs)
 
 
+def _folder_rows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Every note (no templates) with just what folders need, so content is never loaded for a count."""
+    projects = list_project_labels(conn)
+    open_projects = {c["name"] for c in projects if not c.get("archived_at")}
+    all_projects = {c["name"] for c in projects}
+    rows = [dict(r) for r in conn.execute(
+        "SELECT uid, title, note_type, created_at, updated_at, journal_week, pinned FROM notebook_documents WHERE is_template = 0")]
+    by_uid = {r["uid"]: r for r in rows}
+    for uid, label in conn.execute("SELECT object_id, label_name FROM object_labels WHERE object_type = 'notebook' ORDER BY rowid"):
+        row = by_uid.get(uid)
+        if row is None:
+            continue
+        row.setdefault("tags", []).append(label)
+    for row in rows:
+        tags = row.setdefault("tags", [])
+        if row["journal_week"]:
+            row["folder"] = ("journal", row["journal_week"][:4])
+            continue
+        project = next((t for t in tags if t in open_projects), None)
+        label = next((t for t in tags if t not in all_projects), None)
+        row["folder"] = ("project", project) if project else (("label", label) if label else ("unfiled", ""))
+    return rows
+
+
+def get_journal_template(conn: sqlite3.Connection) -> str:
+    """The uid of the template new journal entries start from, or an empty string."""
+    uid = get_app_meta(conn, "notebook_journal_template") or ""
+    doc = get_notebook_document(conn, uid) if uid else None
+    return uid if doc and doc["is_template"] else ""
+
+
+def set_journal_template(conn: sqlite3.Connection, uid: str) -> None:
+    set_app_meta(conn, "notebook_journal_template", uid or "")
+
+
+def week_key(day) -> str:
+    """The ISO year and week of a date, as `2026-42`."""
+    year, week, _ = day.isocalendar()
+    return f"{year}-{week:02d}"
+
+
+def weeks_in_year(year: int) -> int:
+    from datetime import date
+
+    return date(year, 12, 28).isocalendar()[1]
+
+
+def list_journal_years(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """The years that have journal notes, newest first, with their note counts."""
+    counts: dict[str, int] = {}
+    for row in _folder_rows(conn):
+        if row["folder"][0] == "journal":
+            counts[row["folder"][1]] = counts.get(row["folder"][1], 0) + 1
+    return [{"name": y, "count": c} for y, c in sorted(counts.items(), reverse=True)]
+
+
+def journal_entry_for(conn: sqlite3.Connection, week: str) -> str | None:
+    row = conn.execute("SELECT uid FROM notebook_documents WHERE journal_week = ? AND is_template = 0", (week,)).fetchone()
+    return row["uid"] if row else None
+
+
+def create_journal_entry(conn: sqlite3.Connection, week: str, template_uid: str = "") -> str:
+    """A week's journal note: the existing one, or a new one that starts from the journal template."""
+    existing = journal_entry_for(conn, week)
+    if existing:
+        return existing
+    template = get_notebook_document(conn, template_uid) if template_uid else None
+    content = template["content_json"] if template and template["is_template"] else json.dumps({"blocks": []})
+    now = datetime.now(timezone.utc).isoformat()
+    uid = str(uuid.uuid4())
+    upsert_notebook_document(conn, {
+        "uid": uid, "title": week, "content_json": content, "document_type": "full",
+        "note_type": template["note_type"] if template else "", "created_at": now, "updated_at": now,
+        "journal_week": week, "tags": [],
+        "properties": [{"key": p["key"], "value": p["value"]} for p in template["properties"]] if template else [],
+    })
+    return uid
+
+
+def journal_year_weeks(conn: sqlite3.Connection, year: str, current_week: str) -> list[dict[str, Any]]:
+    """Every week of a year with the note written that week, if any, for the week strip."""
+    notes = {r["journal_week"]: r["uid"] for r in conn.execute(
+        "SELECT uid, journal_week FROM notebook_documents WHERE journal_week LIKE ? AND is_template = 0", (year + "-%",))}
+    return [
+        {"week": f"{year}-{n:02d}", "nr": n, "uid": notes.get(f"{year}-{n:02d}"), "is_current": f"{year}-{n:02d}" == current_week}
+        for n in range(1, weeks_in_year(int(year)) + 1)
+    ]
+
+
+def set_notebook_pinned(conn: sqlite3.Connection, uid: str, pinned: bool) -> None:
+    conn.execute("UPDATE notebook_documents SET pinned = ? WHERE uid = ? AND is_template = 0", (1 if pinned else 0, uid))
+    conn.commit()
+
+
+def list_pinned_notebook_documents(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """The pinned notes, most recently edited first, with the same fields a folder row shows."""
+    rows = sorted((r for r in _folder_rows(conn) if r["pinned"]), key=lambda r: r["updated_at"] or "", reverse=True)
+    looks = notebook_note_type_looks(conn)
+    for row in rows:
+        content = conn.execute("SELECT content_json FROM notebook_documents WHERE uid = ?", (row["uid"],)).fetchone()
+        row["subtitle"] = _first_line(content[0]) if content else ""
+        look = looks.get(row["note_type"] or "", dict(NOTEBOOK_TYPE_LOOK_FALLBACK))
+        row["type_icon"], row["type_color"] = look["icon"], look["color"]
+    return rows
+
+
+def latest_notebook_document(conn: sqlite3.Connection) -> dict[str, Any] | None:
+    """The most recently edited note, for the home's Continue card."""
+    row = conn.execute("SELECT uid, title FROM notebook_documents WHERE is_template = 0 ORDER BY updated_at DESC LIMIT 1").fetchone()
+    return dict(row) if row else None
+
+
+def list_notebook_folders(conn: sqlite3.Connection) -> dict[str, list[dict[str, Any]]]:
+    """The home's folders: open projects first, then labels, with Unfiled last among the labels.
+
+    A note sits in exactly one folder: its open project, else its label, else Unfiled."""
+    from .labels import effective_label_config
+
+    counts: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in _folder_rows(conn):
+        if row["folder"][0] == "journal":
+            continue
+        entry = counts.setdefault(row["folder"], {"kind": row["folder"][0], "name": row["folder"][1], "count": 0, "last": ""})
+        entry["count"] += 1
+        entry["last"] = max(entry["last"], row["updated_at"] or "")
+    out: dict[str, list[dict[str, Any]]] = {"projects": [], "labels": []}
+    for (kind, name), entry in counts.items():
+        if kind != "unfiled":
+            cfg = effective_label_config(conn, name)
+            entry["color"] = cfg.get("color") or "gray"
+            entry["icon"] = cfg.get("icon") or ""
+        else:
+            entry["color"], entry["icon"] = "gray", "inbox"
+        out["projects" if kind == "project" else "labels"].append(entry)
+    out["projects"].sort(key=lambda e: e["last"], reverse=True)
+    out["labels"].sort(key=lambda e: (e["kind"] == "unfiled", e["name"].lower()))
+    return out
+
+
+def list_notebook_folder_documents(
+    conn: sqlite3.Connection, kind: str, name: str, note_type: str = "", sort: str = "created", query: str = "",
+    limit: int = 30, offset: int = 0,
+) -> tuple[list[dict[str, Any]], int]:
+    """One page of a folder's notes and the total, filtered by type and a title search."""
+    rows = [r for r in _folder_rows(conn) if r["folder"] == (kind, name if kind != "unfiled" else "")]
+    if note_type:
+        rows = [r for r in rows if r["note_type"] == note_type]
+    if query:
+        needle = query.lower()
+        rows = [r for r in rows if needle in (r["title"] or "").lower()]
+    if sort == "title":
+        rows.sort(key=lambda r: (r["title"] or "").lower())
+    elif kind == "journal":
+        rows.sort(key=lambda r: r["journal_week"], reverse=True)
+    elif sort == "updated":
+        rows.sort(key=lambda r: r["updated_at"] or "", reverse=True)
+    else:
+        rows.sort(key=lambda r: r["created_at"] or "", reverse=True)
+    total = len(rows)
+    page = rows[offset: offset + limit]
+    for row in page:
+        content = conn.execute("SELECT content_json FROM notebook_documents WHERE uid = ?", (row["uid"],)).fetchone()
+        row["subtitle"] = _first_line(content[0]) if content else ""
+    return page, total
+
+
+def _first_line(content_json: str, limit: int = 110) -> str:
+    """The first line of a note's body text, for the list's subtitle: the first paragraph, quote or list item."""
+    try:
+        blocks = json.loads(content_json or "{}").get("blocks") or []
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        return ""
+    for block in blocks:
+        data = block.get("data") or {}
+        raw = ""
+        if block.get("type") in ("paragraph", "quote"):
+            raw = data.get("text") or ""
+        elif block.get("type") == "list" and data.get("items"):
+            first = data["items"][0]
+            raw = first.get("content", "") if isinstance(first, dict) else str(first)
+        text = html.unescape(_HTML_TAG_RE.sub("", raw)).strip()
+        if text:
+            return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+    return ""
+
+
 def list_notebook_note_types_in_use(conn: sqlite3.Connection) -> list[str]:
-    """The Type picker's suggestion list (2026-10-02 direct request) --
-    same "in use" shape as `list_tag_names_in_use` for Labels, not a
-    hardcoded starter list: whatever `note_type` values currently exist on
-    at least one document, nothing more. A type naturally drops off this
-    list the moment nothing uses it any more (the last document carrying
-    it gets re-typed or deleted) -- there's no separate registry table to
-    clean up, unlike labels' `label_config` (note_type has no config of
-    its own, just this one free-text column), so "in use" and "known" are
-    the same query. `ms_allow_new` on the properties modal's Type field is
-    what lets a brand-new type be typed in the first place; this is just
-    what gets suggested afterward."""
+    """The Type picker's suggestion list --
+        same "in use" shape as `list_tag_names_in_use` for Labels, not a
+        hardcoded starter list: whatever `note_type` values currently exist on
+        at least one document, nothing more. A type naturally drops off this
+        list the moment nothing uses it any more (the last document carrying
+        it gets re-typed or deleted) -- there's no separate registry table to
+        clean up, unlike labels' `label_config` (note_type has no config of
+        its own, just this one free-text column), so "in use" and "known" are
+        the same query. `ms_allow_new` on the properties modal's Type field is
+        what lets a brand-new type be typed in the first place; this is just
+        what gets suggested afterward.
+    """
     rows = conn.execute(
         "SELECT DISTINCT note_type FROM notebook_documents WHERE TRIM(note_type) != '' ORDER BY note_type COLLATE NOCASE"
     ).fetchall()
@@ -174,17 +393,16 @@ def set_notebook_properties(conn: sqlite3.Connection, notebook_uid: str, items: 
 
 
 def list_notebook_property_keys_in_use(conn: sqlite3.Connection) -> list[str]:
-    """The property-key picker's suggestion list (2026-10-02 direct
-    request: "use a drop down similar to the labels one - once a new
-    properties is added, it is available in the list") -- same "in use"
-    shape as `list_notebook_note_types_in_use`/`list_tag_names_in_use`,
-    across every document's properties, not scoped to one document: a key
-    like "DOI" typed on one document should be pickable on another without
-    retyping it. Distinct across the whole table (not just this
-    document's own rows, which `list_notebook_properties` already
-    covers), case-sensitive (keys are display labels like "DOI"/
-    "Institution", not a normalized vocabulary the way note_type's
-    canonical list is proposed to become)."""
+    """The property-key picker's suggestion list -- same "in use"
+        shape as `list_notebook_note_types_in_use`/`list_tag_names_in_use`,
+        across every document's properties, not scoped to one document: a key
+        like "DOI" typed on one document should be pickable on another without
+        retyping it. Distinct across the whole table (not just this
+        document's own rows, which `list_notebook_properties` already
+        covers), case-sensitive (keys are display labels like "DOI"/
+        "Institution", not a normalized vocabulary the way note_type's
+        canonical list is proposed to become).
+    """
     rows = conn.execute(
         "SELECT DISTINCT key FROM notebook_properties WHERE TRIM(key) != '' ORDER BY key COLLATE NOCASE"
     ).fetchall()
@@ -240,14 +458,15 @@ def _next_notebook_field_position(conn: sqlite3.Connection) -> float:
 
 def upsert_notebook_field_config(conn: sqlite3.Connection, row: dict[str, Any]) -> str:
     """Create (no `uid`) or update (existing `uid`) one field definition --
-    same single-call-site contract as upsert_label_config/upsert_holiday. A
-    new field is appended after the last position; an existing field keeps
-    its position unless the caller explicitly reorders it.
+        same single-call-site contract as upsert_label_config/upsert_holiday. A
+        new field is appended after the last position; an existing field keeps
+        its position unless the caller explicitly reorders it.
 
-    `options` (2026-10-02, a backup/restore convenience): same pop-then-
-    write-the-child-rows shape as upsert_notebook_document's `tags`/
-    `properties` -- absent means "leave the option list alone", present
-    (even `[]`) replaces it via set_notebook_field_options."""
+        `options`: same pop-then-
+        write-the-child-rows shape as upsert_notebook_document's `tags`/
+        `properties` -- absent means "leave the option list alone", present
+        (even `[]`) replaces it via set_notebook_field_options.
+    """
     data = dict(row)
     options = data.pop("options", None)
     uid = data.get("uid") or str(uuid.uuid4())
@@ -331,13 +550,13 @@ _NOTEBOOK_BUILTIN_FIELDS_SEEDED_KEY = "notebook_builtin_fields_seeded_v1"
 
 
 def seed_builtin_notebook_fields(conn: sqlite3.Connection) -> None:
-    """title/author/note_type always appear in Settings > Notebook
-    (2026-10-02 direct request) -- see notebook_field_config's own CREATE
-    TABLE comment. Runs once (app_meta marker, same convention as
-    backfill_label_modules/_fix_contacts_widget_default): re-running on
-    every connect would otherwise replace note_type's option list (color/
-    icon) with these defaults on every restart, silently discarding
-    anything the user already repainted from Settings."""
+    """title/author/note_type always appear in Settings > Notebook -- see notebook_field_config's own CREATE
+        TABLE comment. Runs once (app_meta marker, same convention as
+        backfill_label_modules/_fix_contacts_widget_default): re-running on
+        every connect would otherwise replace note_type's option list (color/
+        icon) with these defaults on every restart, silently discarding
+        anything the user already repainted from Settings.
+    """
     if get_app_meta(conn, _NOTEBOOK_BUILTIN_FIELDS_SEEDED_KEY):
         return
     upsert_notebook_field_config(conn, {
@@ -357,13 +576,13 @@ def seed_builtin_notebook_fields(conn: sqlite3.Connection) -> None:
 
 def ensure_notebook_note_type_option(conn: sqlite3.Connection, note_type: str) -> None:
     """A note_type typed for the first time (document_properties_modal's
-    free-text "new type" path -- still possible, the "known inconsistency"
-    its own comment flags) gets a real option row with a neutral fallback
-    look, so it immediately shows up in Settings > Notebook ready to be
-    repainted instead of silently having no editable color/icon anywhere.
-    Called from upsert_notebook_document; a no-op once the value already
-    has an option (every STATE.md starter type, or anything repainted
-    before)."""
+        free-text "new type" path -- still possible, the "known inconsistency"
+        its own comment flags) gets a real option row with a neutral fallback
+        look, so it immediately shows up in Settings > Notebook ready to be
+        repainted instead of silently having no editable color/icon anywhere.
+        Called from upsert_notebook_document; a no-op once the value already
+        has an option.
+    """
     note_type = (note_type or "").strip()
     if not note_type:
         return
@@ -544,6 +763,64 @@ def search_notebook_documents(
     return docs[:limit]
 
 
+def search_link_targets(
+    conn: sqlite3.Connection, q: str = "", exclude_uid: str | None = None, kinds: str = "all", limit: int = 40
+) -> list[dict[str, Any]]:
+    """What the link picker offers: entries first, then notes in the same project, the same label, and all others.
+
+    Each result has a `group` heading, a `kind` (entry or doc), a subtitle and its icon and color. Within a
+    group the order is A to Z. `kinds="doc"` leaves entries out."""
+    q = (q or "").strip().lower()
+    items: list[dict[str, Any]] = []
+    if kinds != "doc":
+        looks = entry_kind_looks(conn)
+        for e in list_glossary_terms(conn):
+            if q and not any(q in n.lower() for n in [e["term"], *e["aliases"]]):
+                continue
+            look = looks.get(e["kind"], {"icon": "tag", "color": "teal"})
+            items.append({"kind": "entry", "uid": e["uid"], "title": e["term"], "subtitle": e["kind"],
+                          "icon": look["icon"], "color": look["color"], "group": "Entries"})
+    rows = [r for r in _folder_rows(conn) if r["uid"] != exclude_uid and (not q or q in (r["title"] or "").lower())]
+    mine = next((r for r in _folder_rows(conn) if r["uid"] == exclude_uid), None)
+    project_names = {c["name"] for c in list_project_labels(conn)}
+    my_projects = {t for t in (mine["tags"] if mine else []) if t in project_names}
+    my_labels = {t for t in (mine["tags"] if mine else []) if t not in project_names}
+    looks = notebook_note_type_looks(conn)
+    docs = []
+    for r in rows:
+        tags = set(r["tags"])
+        group = "Same project" if tags & my_projects else "Same label" if tags & my_labels else "Notes"
+        look = looks.get(r["note_type"] or "", dict(NOTEBOOK_TYPE_LOOK_FALLBACK))
+        folder = r["folder"][1]
+        docs.append({"kind": "doc", "uid": r["uid"], "title": r["title"] or "Untitled", "subtitle": folder or r["note_type"] or "",
+                     "note_type": r["note_type"] or "", "icon": look["icon"], "color": look["color"], "group": group})
+    order = {"Same project": 0, "Same label": 1, "Notes": 2}
+    docs.sort(key=lambda d: (order[d["group"]], d["title"].lower()))
+    return (items + docs)[:limit]
+
+
+def list_document_entry_names(conn: sqlite3.Connection, notebook_uid: str) -> list[dict[str, Any]]:
+    """The entries attached to a note with every name that links them in its text, for the dotted links."""
+    rows = conn.execute(
+        "SELECT t.uid, t.term, t.kind, t.aliases_json FROM notebook_glossary_terms g JOIN glossary_terms t ON t.uid = g.term_uid "
+        "WHERE g.notebook_uid = ?", (notebook_uid,)).fetchall()
+    out = []
+    for r in rows:
+        try:
+            aliases = json.loads(r["aliases_json"] or "[]")
+        except (json.JSONDecodeError, TypeError):
+            aliases = []
+        out.append({"uid": r["uid"], "kind": r["kind"], "names": [n for n in [r["term"], *aliases] if str(n).strip()]})
+    return out
+
+
+def detach_notebook_glossary_term(conn: sqlite3.Connection, notebook_uid: str, term_uid: str) -> None:
+    """Stops linking one entry in one note; it stays off through the exclusion list."""
+    remaining = [r["term_uid"] for r in conn.execute(
+        "SELECT term_uid FROM notebook_glossary_terms WHERE notebook_uid = ? ORDER BY position", (notebook_uid,)) if r["term_uid"] != term_uid]
+    set_notebook_glossary_terms(conn, notebook_uid, remaining)
+
+
 # Close to CSL-JSON's own type vocabulary (the architecture doc's "worth
 # designing columns close to CSL-JSON from the start" note) without
 # adopting its full type list -- same "small, app-defined, not a DB enum
@@ -555,6 +832,7 @@ CITATION_TYPES = [
     ("webpage", "Web page"),
     ("thesis", "Thesis"),
     ("report", "Report"),
+    ("conference-paper", "Conference paper"),
     ("other", "Other"),
 ]
 
@@ -617,36 +895,51 @@ def get_citation(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
     return _attach_citation_authors(dict(row)) if row else None
 
 
+CITATION_EXTRA_FIELDS = ("subtitle", "edition", "volume", "issue", "pages", "publisher", "place", "isbn", "issn",
+                         "accessed", "institution", "degree", "editors", "note")
+_CITATION_BASE_FIELDS = ("type", "title", "authors_json", "year", "container_title", "doi", "url")
+
+
 def upsert_citation(conn: sqlite3.Connection, row: dict[str, Any]) -> str:
-    """Same upsert-by-presence-of-uid shape as upsert_notebook_document.
-    `authors` (a list of {family, given} dicts) is serialized to
-    `authors_json` here, never stored as a bare Python list."""
+    """Creates or updates a citation. `authors` (a list of {family, given}) is stored as `authors_json`.
+
+    A field missing from `row` keeps its stored value on update."""
     now = datetime.now(timezone.utc).isoformat()
     uid = row.get("uid") or str(uuid.uuid4())
-    existing = conn.execute("SELECT uid FROM citations WHERE uid = ?", (uid,)).fetchone()
-    authors_json = json.dumps(row.get("authors") or [])
+    existing = conn.execute("SELECT * FROM citations WHERE uid = ?", (uid,)).fetchone()
+    values = {
+        "type": row.get("type") or "book", "title": row.get("title") or "",
+        "authors_json": json.dumps(row.get("authors") or []), "year": row.get("year") or "",
+        "container_title": row.get("container_title") or "", "doi": row.get("doi") or "", "url": row.get("url") or "",
+    }
+    for name in CITATION_EXTRA_FIELDS:
+        values[name] = row[name] if name in row else (existing[name] if existing else "")
+        values[name] = (values[name] or "").strip()
     if existing:
-        conn.execute(
-            "UPDATE citations SET type = ?, title = ?, authors_json = ?, year = ?, "
-            "container_title = ?, doi = ?, url = ?, updated_at = ? WHERE uid = ?",
-            (
-                row.get("type") or "book", row.get("title") or "", authors_json,
-                row.get("year") or "", row.get("container_title") or "",
-                row.get("doi") or "", row.get("url") or "", now, uid,
-            ),
-        )
+        sets = ", ".join(f"{k} = ?" for k in values) + ", updated_at = ?"
+        conn.execute(f"UPDATE citations SET {sets} WHERE uid = ?", [*values.values(), now, uid])
     else:
+        cols = ["uid", *values, "created_at", "updated_at"]
         conn.execute(
-            "INSERT INTO citations (uid, type, title, authors_json, year, container_title, doi, url, "
-            "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                uid, row.get("type") or "book", row.get("title") or "", authors_json,
-                row.get("year") or "", row.get("container_title") or "",
-                row.get("doi") or "", row.get("url") or "", row.get("created_at") or now, now,
-            ),
+            f"INSERT INTO citations ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})",
+            [uid, *values.values(), row.get("created_at") or now, now],
         )
     conn.commit()
     return uid
+
+
+def get_citation_format(conn: sqlite3.Connection) -> str:
+    from ..citation_formats import DEFAULT_STYLE, STYLES
+
+    value = get_app_meta(conn, "notebook_citation_format")
+    return value if value in STYLES else DEFAULT_STYLE
+
+
+def set_citation_format(conn: sqlite3.Connection, style: str) -> None:
+    from ..citation_formats import STYLES
+
+    if style in STYLES:
+        set_app_meta(conn, "notebook_citation_format", style)
 
 
 def delete_citation(conn: sqlite3.Connection, uid: str) -> None:
@@ -803,15 +1096,11 @@ def list_citation_authors_in_use(conn: sqlite3.Connection) -> list[str]:
 
 def parse_citation_year(year: str) -> int | None:
     """None for blank/non-numeric years (free text -- nothing enforces a
-    4-digit year) -- the one place both the Year-range filter and anything
-    else that needs a real int out of this column should parse it, rather
-    than each caller re-deriving its own check. Plain `int()` rather than
-    an `isdigit()` guard (2026-10-03 fix -- `isdigit()` rejects a leading
-    "-", which silently broke every BCE/negative year, a real case for
-    this app's actual history-coursework use) -- `int()` already handles a
-    leading sign and surrounding whitespace correctly, and raises on
-    anything else (free text like "c. 1850"), which the `except` below
-    turns into the same None every other non-numeric year already got."""
+        4-digit year) -- the one place both the Year-range filter and anything
+        else that needs a real int out of this column should parse it, rather
+        than each caller re-deriving its own check. 1850"), which the `except` below
+        turns into the same None every other non-numeric year already got.
+    """
     year = (year or "").strip()
     if not year:
         return None
@@ -834,25 +1123,41 @@ def citation_year_sort_key(year: str) -> tuple[int, Any]:
     return (1, (year or "").strip().casefold())
 
 
-def list_glossary_terms(conn: sqlite3.Connection, q: str = "") -> list[dict[str, Any]]:
-    """Alphabetical by term -- the global browse view's own order. `q`
-    (optional) is a plain substring match against term or definition,
-    case-insensitive -- the roadmap's "term lookup/search backend"."""
+ENTRY_KIND_DEFAULT = "Term"
+
+
+def _entry_row(row: sqlite3.Row) -> dict[str, Any]:
+    d = dict(row)
+    try:
+        d["aliases"] = [str(x) for x in json.loads(d.pop("aliases_json", "[]") or "[]") if str(x).strip()]
+    except (json.JSONDecodeError, TypeError):
+        d["aliases"] = []
+    d["kind"] = d.get("kind") or ENTRY_KIND_DEFAULT
+    return d
+
+
+def list_glossary_terms(conn: sqlite3.Connection, q: str = "", kind: str = "") -> list[dict[str, Any]]:
+    """Entries, alphabetical by name. `q` is a case-insensitive match on name, alternate names or text; `kind` narrows to one kind."""
     rows = conn.execute("SELECT * FROM glossary_terms ORDER BY term COLLATE NOCASE ASC").fetchall()
-    terms = [dict(r) for r in rows]
+    terms = [_entry_row(r) for r in rows]
+    if kind:
+        terms = [t for t in terms if t["kind"] == kind]
     q = (q or "").strip().casefold()
     if q:
-        terms = [t for t in terms if q in t["term"].casefold() or q in t["definition"].casefold()]
+        terms = [
+            t for t in terms
+            if q in t["term"].casefold() or q in t["definition"].casefold() or any(q in a.casefold() for a in t["aliases"])
+        ]
     return terms
 
 
 def get_glossary_term(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
     row = conn.execute("SELECT * FROM glossary_terms WHERE uid = ?", (uid,)).fetchone()
-    return dict(row) if row else None
+    return _entry_row(row) if row else None
 
 
 def upsert_glossary_term(conn: sqlite3.Connection, row: dict[str, Any]) -> str:
-    """Same upsert-by-presence-of-uid shape as upsert_citation."""
+    """Creates or updates an entry. `kind`, `aliases` and `wiki_uid` are only written when given."""
     now = datetime.now(timezone.utc).isoformat()
     uid = row.get("uid") or str(uuid.uuid4())
     existing = conn.execute("SELECT uid FROM glossary_terms WHERE uid = ?", (uid,)).fetchone()
@@ -866,8 +1171,136 @@ def upsert_glossary_term(conn: sqlite3.Connection, row: dict[str, Any]) -> str:
             "INSERT INTO glossary_terms (uid, term, definition, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
             (uid, row.get("term") or "", row.get("definition") or "", row.get("created_at") or now, now),
         )
+    if row.get("kind") is not None:
+        kind = (row["kind"] or "").strip() or ENTRY_KIND_DEFAULT
+        ensure_entry_kind(conn, kind)
+        conn.execute("UPDATE glossary_terms SET kind = ? WHERE uid = ?", (kind, uid))
+    if row.get("aliases") is not None:
+        aliases = [a.strip() for a in row["aliases"] if a and a.strip()]
+        conn.execute("UPDATE glossary_terms SET aliases_json = ? WHERE uid = ?", (json.dumps(aliases), uid))
+    if row.get("wiki_uid") is not None:
+        conn.execute("UPDATE glossary_terms SET wiki_uid = ? WHERE uid = ?", (row["wiki_uid"] or "", uid))
     conn.commit()
     return uid
+
+
+# Common kinds start with a fitting icon and color; any other kind gets the plain tag, and all can be changed.
+_KIND_STARTER_LOOKS = {
+    "person": ("user", "blue"), "people": ("users", "blue"), "place": ("map-pin", "green"), "event": ("calendar", "orange"),
+    "organization": ("building", "violet"), "institution": ("building", "violet"), "concept": ("lightbulb", "amber"),
+    "war": ("flag", "red"), "period": ("clock", "sand"), "country": ("flag", "sky"), "city": ("map-pin", "green"),
+}
+
+
+def ensure_entry_kind(conn: sqlite3.Connection, name: str) -> None:
+    """A kind typed for the first time gets a default look the user can change later."""
+    name = (name or "").strip()
+    if not name:
+        return
+    if conn.execute("SELECT 1 FROM entry_kinds WHERE name = ?", (name,)).fetchone():
+        return
+    position = (conn.execute("SELECT COALESCE(MAX(position), 0) FROM entry_kinds").fetchone()[0] or 0) + 1
+    icon, color = _KIND_STARTER_LOOKS.get(name.lower(), ("tag", "teal"))
+    conn.execute("INSERT INTO entry_kinds (name, icon, color, position) VALUES (?, ?, ?, ?)", (name, icon, color, position))
+    conn.commit()
+
+
+def list_entry_kinds(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Every kind with its look and its fields (names only, in order)."""
+    ensure_entry_kind(conn, ENTRY_KIND_DEFAULT)
+    rows = conn.execute("SELECT * FROM entry_kinds ORDER BY position, name COLLATE NOCASE").fetchall()
+    fields: dict[str, list[str]] = {}
+    for r in conn.execute("SELECT kind, name FROM entry_kind_fields ORDER BY position, rowid"):
+        fields.setdefault(r["kind"], []).append(r["name"])
+    return [{**dict(r), "fields": fields.get(r["name"], [])} for r in rows]
+
+
+def save_entry_kind(
+    conn: sqlite3.Connection, original: str, name: str, icon: str, color: str, keep_fields: list[str], new_fields: list[str]
+) -> dict[str, str] | None:
+    """Creates a kind (`original` empty) or updates one, renaming it everywhere when its name changes.
+
+    Existing field names never change: only the ones in `keep_fields` stay, and `new_fields` are added.
+    Returns {"field", "message"} when the input is refused."""
+    name = (name or "").strip()
+    if not name:
+        return {"field": "name", "message": "A type needs a name"}
+    if original == ENTRY_KIND_DEFAULT and name != ENTRY_KIND_DEFAULT:
+        return {"field": "name", "message": f"{ENTRY_KIND_DEFAULT} is the default type and keeps its name"}
+    taken = {k["name"].lower() for k in list_entry_kinds(conn) if k["name"] != original}
+    if name.lower() in taken:
+        return {"field": "name", "message": "A type with this name already exists"}
+    existing = [k for k in list_entry_kinds(conn) if k["name"] == original]
+    current_fields = existing[0]["fields"] if existing else []
+    kept = [f for f in current_fields if f in set(keep_fields or [])]
+    added: list[str] = []
+    for f in new_fields or []:
+        f = (f or "").strip()
+        if f and f.lower() not in {x.lower() for x in kept + added}:
+            added.append(f)
+    if original and existing:
+        if original != name:
+            conn.execute("UPDATE entry_kinds SET name = ? WHERE name = ?", (name, original))
+            conn.execute("UPDATE glossary_terms SET kind = ? WHERE kind = ?", (name, original))
+            conn.execute("UPDATE entry_kind_fields SET kind = ? WHERE kind = ?", (name, original))
+        conn.execute("UPDATE entry_kinds SET icon = ?, color = ? WHERE name = ?", (icon or "tag", color or "teal", name))
+        conn.execute("DELETE FROM entry_kind_fields WHERE kind = ?", (name,))
+    else:
+        position = (conn.execute("SELECT COALESCE(MAX(position), 0) FROM entry_kinds").fetchone()[0] or 0) + 1
+        conn.execute("INSERT INTO entry_kinds (name, icon, color, position) VALUES (?, ?, ?, ?)", (name, icon or "tag", color or "teal", position))
+    for position, field in enumerate(kept + added):
+        conn.execute("INSERT INTO entry_kind_fields (kind, name, position) VALUES (?, ?, ?)", (name, field, position))
+    conn.commit()
+    return None
+
+
+def delete_entry_kind(conn: sqlite3.Connection, name: str) -> dict[str, str] | None:
+    """Deletes a kind nobody uses; the default kind and kinds with entries stay."""
+    if name == ENTRY_KIND_DEFAULT:
+        return {"field": "name", "message": f"{ENTRY_KIND_DEFAULT} is the default type and cannot be deleted"}
+    used = conn.execute("SELECT COUNT(*) FROM glossary_terms WHERE kind = ?", (name,)).fetchone()[0]
+    if used:
+        return {"field": "name", "message": f"{used} entr{'ies use' if used != 1 else 'y uses'} this type, change them first"}
+    conn.execute("DELETE FROM entry_kinds WHERE name = ?", (name,))
+    conn.execute("DELETE FROM entry_kind_fields WHERE kind = ?", (name,))
+    conn.commit()
+    return None
+
+
+def set_entry_kind_look(conn: sqlite3.Connection, name: str, icon: str, color: str) -> None:
+    ensure_entry_kind(conn, name)
+    conn.execute("UPDATE entry_kinds SET icon = ?, color = ? WHERE name = ?", (icon or "tag", color or "teal", name))
+    conn.commit()
+
+
+def entry_kind_fields(conn: sqlite3.Connection, kind: str) -> list[str]:
+    return next((k["fields"] for k in list_entry_kinds(conn) if k["name"] == kind), [])
+
+
+def entry_field_values(conn: sqlite3.Connection, term_uid: str, kind: str) -> dict[str, str]:
+    """What an entry holds for each of its kind's fields (stored as titled text boxes named like the field)."""
+    stored = {s["title"]: s["body"] for s in list_glossary_sections(conn, term_uid)}
+    return {name: stored.get(name, "") for name in entry_kind_fields(conn, kind)}
+
+
+def entry_custom_sections(conn: sqlite3.Connection, term_uid: str, kind: str) -> list[dict[str, Any]]:
+    """The titled text boxes of an entry that are not one of its kind's fields."""
+    names = set(entry_kind_fields(conn, kind))
+    return [s for s in list_glossary_sections(conn, term_uid) if s["title"] not in names]
+
+
+def entry_kind_looks(conn: sqlite3.Connection) -> dict[str, dict[str, str]]:
+    return {k["name"]: {"icon": k["icon"], "color": k["color"]} for k in list_entry_kinds(conn)}
+
+
+def list_entry_mentions(conn: sqlite3.Connection, term_uid: str) -> list[dict[str, Any]]:
+    """The notes an entry is attached to, newest edit first."""
+    rows = conn.execute(
+        "SELECT d.uid, d.title, d.note_type FROM notebook_glossary_terms g JOIN notebook_documents d ON d.uid = g.notebook_uid "
+        "WHERE g.term_uid = ? AND d.is_template = 0 ORDER BY d.updated_at DESC",
+        (term_uid,),
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def list_glossary_sections(conn: sqlite3.Connection, term_uid: str) -> list[dict[str, Any]]:
@@ -920,6 +1353,16 @@ def list_notebook_glossary_terms(conn: sqlite3.Connection, notebook_uid: str) ->
         (notebook_uid,),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def group_entries_by_kind(conn: sqlite3.Connection, entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Entries grouped under their kind, in the kinds' own order, each group with its icon and color."""
+    out = []
+    for kind in list_entry_kinds(conn):
+        members = [e for e in entries if (e.get("kind") or ENTRY_KIND_DEFAULT) == kind["name"]]
+        if members:
+            out.append({"kind": kind["name"], "icon": kind["icon"], "color": kind["color"], "entries": members})
+    return out
 
 
 def set_notebook_glossary_terms(conn: sqlite3.Connection, notebook_uid: str, term_uids: list[str]) -> None:
@@ -1030,11 +1473,13 @@ def _detect_glossary_term_uids(conn: sqlite3.Connection, content: dict[str, Any]
     if not text.strip():
         return []
     detected = []
-    for row in conn.execute("SELECT uid, term FROM glossary_terms").fetchall():
-        term = (row["term"] or "").strip().lower()
-        if not term:
-            continue
-        if re.search(r"\b" + re.escape(term) + r"\b", text):
+    for row in conn.execute("SELECT uid, term, aliases_json FROM glossary_terms").fetchall():
+        try:
+            aliases = json.loads(row["aliases_json"] or "[]")
+        except (json.JSONDecodeError, TypeError):
+            aliases = []
+        names = [(row["term"] or "").strip().lower()] + [str(a).strip().lower() for a in aliases]
+        if any(n and re.search(r"\b" + re.escape(n) + r"\b", text) for n in names):
             detected.append(row["uid"])
     return detected
 

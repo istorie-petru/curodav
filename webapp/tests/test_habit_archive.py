@@ -198,7 +198,7 @@ class TestArchivedHabitsModal:
     def test_empty_state_when_nothing_archived(self, conn):
         _habit(conn, "h1", title="Meditate")
         body = habits_router.archived_modal(_request("/habits/archived"), conn=conn).body.decode()
-        assert "No archived habits." in body
+        assert "No archived habits" in body
 
     def test_rendered_row_has_a_restore_form(self, conn):
         _habit(conn, "h1", title="Old habit", status="archived")

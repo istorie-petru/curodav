@@ -1,9 +1,3 @@
-// Settings > Notifications' "Notifications on this device" card (Web Push,
-// 2026-09-24, plans/ui-cleanup-2026-09.md item 7, slice P1; split out of
-// Settings > General into its own page 2026-09-27). Subscribes
-// this browser with the server's VAPID public key (/push/public-key),
-// stores the subscription (/push/subscribe), and can send a test push.
-// Per device: a phone and a laptop each turn it on separately.
 (function () {
   function init() {
   const status = document.getElementById("push-status");
@@ -21,17 +15,10 @@
     enableBtn.hidden = state !== "off";
     testBtn.hidden = state !== "on";
     disableBtn.hidden = state !== "on";
-    // 2026-09-25 (UI audit H-20): while this device gets nothing (off,
-    // blocked, unsupported) the reminder rows dim and say where reminders
-    // go -- they stay editable, since they're app-wide and another device
-    // may have notifications on.
     if (card) card.classList.toggle("is-push-inactive", state !== "on");
     if (inactiveHint) inactiveHint.hidden = state === "on";
   }
 
-  // UI audit H-20: a browser's own error text ("Registration failed -
-  // push service error", "DOMException: ...") means nothing to a person;
-  // say what to try instead.
   function plainError(err) {
     const name = (err && err.name) || "";
     if (name === "NotAllowedError") return "Notifications are blocked for this site. Allow them in the browser's site settings, then try again.";
@@ -40,8 +27,6 @@
     return "Something went wrong on this device. Try again in a moment.";
   }
 
-  // UI audit H-19: one Save for types, time and contact email, saved in
-  // place with a confirmation (no reload that jumped to the page top).
   if (prefsForm) {
     prefsForm.addEventListener("submit", async (e) => {
       e.preventDefault();

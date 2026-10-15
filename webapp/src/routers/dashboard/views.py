@@ -233,24 +233,24 @@ _GROUP_LAYOUT_2026_09_28_KEY = "dashboard_group_layout_migrated_2026_09_28"
 
 def _return_url(label_name: str | None, _legacy: str | None = None, conn=None) -> str:
     """Where a widget-mutating POST should redirect back to -- Home ("/")
-    when the acted-on widget has no page identity, or that label's
-    page otherwise (`/labels/{name}`, routers/label_pages.py -- one URL
-    for every kind of label since labels-as-modules slice b; `conn` is no
-    longer needed and only kept for existing callers). Derived from the
-    widget itself wherever one already exists (edit/resize/stack/unstack/
-    delete/move/reorder below); only add_widget has no existing widget to
-    derive it from, so it takes `label_name` as a hidden form field
-    instead (see _widget_builder_fields.html). `_legacy` accepts a second
-    positional arg so every pre-Phase-2 call site passing (space_uid,
-    project_uid) -- both now the same value, see _widget_row_to_dict's
-    aliasing -- keeps working unchanged; only the first non-empty of the
-    two is used.
+        when the acted-on widget has no page identity, or that label's
+        page otherwise (`/labels/{name}`, routers/label_pages.py -- one URL
+        for every kind of label since labels-as-modules slice b; `conn` is no
+        longer needed and only kept for existing callers). Derived from the
+        widget itself wherever one already exists (edit/resize/stack/unstack/
+        delete/move/reorder below); only add_widget has no existing widget to
+        derive it from, so it takes `label_name` as a hidden form field
+        instead (see _widget_builder_fields.html). `_legacy` accepts a second
+        positional arg so every pre-Phase-2 call site passing (space_uid,
+        project_uid) -- both now the same value, see _widget_row_to_dict's
+        aliasing -- keeps working unchanged; only the first non-empty of the
+        two is used.
 
-    No longer takes an `edit` flag (2026-08-29, sidebar redesign item
-    13d) -- edit mode is a persistent, app-wide Settings > Appearance
-    toggle (EDIT_MODE_KEY) now, not a per-page `?edit=1` query param a
-    redirect needed to preserve, so every caller lands on the plain page
-    URL regardless of whether edit mode is on."""
+        No longer takes an `edit` flag -- edit mode is a persistent, app-wide Settings > Appearance
+        toggle (EDIT_MODE_KEY) now, not a per-page `?edit=1` query param a
+        redirect needed to preserve, so every caller lands on the plain page
+        URL regardless of whether edit mode is on.
+    """
     label_name = label_name or _legacy
     if not label_name:
         return "/"
@@ -262,24 +262,24 @@ def _return_url(label_name: str | None, _legacy: str | None = None, conn=None) -
 
 def widget_page_context(conn, space_uid: str | None = None, project_uid: str | None = None, nav: dict | None = None) -> dict:
     """Every piece of context _widget_workspace.html needs to render one
-    page's widget grid (Add-widget form, live preview pane, the grid
-    itself, each widget's own Filters panel) -- shared by dashboard_view
-    (label_name=None, below) and routers/labels.py's label_detail (a
-    label's generated page) so both pages run through the exact same
-    widget machinery -- add/edit/resize/stack/reorder, all further below
-    -- rather than a second parallel implementation living on the label
-    route. `space_uid`/`project_uid` (kept as this function's own
-    parameter names -- both now the same value, Phase 2 label-space
-    rework) are the label whose page this is; only one is ever passed by
-    any real caller. The widget *options* offered to each page are scoped
-    by _widget_types_for_scope/_widget_views_for_scope/
-    _widget_sources_for_scope and the collection dropdowns by
-    _scoped_collections, so a label page never offers widgets or filters
-    that can't mean anything there. `edit_mode` in the returned context is
-    read straight off EDIT_MODE_KEY (2026-08-29, sidebar redesign item
-    13d) -- no longer a caller-supplied `edit` flag threaded through from
-    a `?edit=1` query param, since edit mode is now a persistent, app-wide
-    Settings > Appearance toggle rather than a per-page one."""
+        page's widget grid (Add-widget form, live preview pane, the grid
+        itself, each widget's own Filters panel) -- shared by dashboard_view
+        (label_name=None, below) and routers/labels.py's label_detail (a
+        label's generated page) so both pages run through the exact same
+        widget machinery -- add/edit/resize/stack/reorder, all further below
+        -- rather than a second parallel implementation living on the label
+        route. `space_uid`/`project_uid` (kept as this function's own
+        parameter names -- both now the same value, Phase 2 label-space
+        rework) are the label whose page this is; only one is ever passed by
+        any real caller. The widget *options* offered to each page are scoped
+        by _widget_types_for_scope/_widget_views_for_scope/
+        _widget_sources_for_scope and the collection dropdowns by
+        _scoped_collections, so a label page never offers widgets or filters
+        that can't mean anything there. `edit_mode` in the returned context is
+        read straight off EDIT_MODE_KEY -- no longer a caller-supplied `edit` flag threaded through from
+        a `?edit=1` query param, since edit mode is now a persistent, app-wide
+        Settings > Appearance toggle rather than a per-page one.
+    """
     _migrate_widget_consolidation(conn)
     _migrate_widget_removal_2026_08_30(conn)
     _migrate_group_layout_2026_09_28(conn)
@@ -311,38 +311,34 @@ def widget_page_context(conn, space_uid: str | None = None, project_uid: str | N
 
 def _page_banner_context(conn, scope: str, name: str | None = None) -> dict:
     """Every piece of context _page_banner.html needs to render one page's
-    banner -- Home ("" scope) and every Space/Project page
-    (routers/labels.py::label_detail, routers/spaces.py::space_detail)
-    all call this the same way. 2026-08-29 (direct request): a page with
-    no banner of its own now falls back to the single default set in
-    Settings > Appearance (deps.py's PAGE_HEADER_BANNER_SCOPE) instead of
-    showing no banner at all -- the same "one default image everywhere,
-    overridable per page" model the narrow header (Tasks/Calendar/...)
-    already uses, extended to the big banner too.
+        banner -- Home ("" scope) and every Space/Project page
+        (routers/labels.py::label_detail, routers/spaces.py::space_detail)
+        all call this the same way.
 
-    `has_own_banner` (not `banner`) is what the "Add banner"/"Change
-    banner" edit-mode button's label reads: it's about whether THIS page
-    has its own override, not whether a banner happens to be showing at
-    all (the default rendering through doesn't mean this page has "added"
-    one). `banner_image_scope` is which banner is actually being
-    rendered (this page's own scope, or the sentinel default scope) --
-    kept separate from `banner_scope` (this page's own identity, always
-    used by the edit button/upload/remove forms regardless of which image
-    is currently showing) so _page_banner.html's `/banners/image` URL
-    points at the right stored image rather than looking up this page's
-    own (unset) scope with the default banner's version hash.
+        `has_own_banner` (not `banner`) is what the "Add banner"/"Change
+        banner" edit-mode button's label reads: it's about whether THIS page
+        has its own override, not whether a banner happens to be showing at
+        all (the default rendering through doesn't mean this page has "added"
+        one). `banner_image_scope` is which banner is actually being
+        rendered (this page's own scope, or the sentinel default scope) --
+        kept separate from `banner_scope` (this page's own identity, always
+        used by the edit button/upload/remove forms regardless of which image
+        is currently showing) so _page_banner.html's `/banners/image` URL
+        points at the right stored image rather than looking up this page's
+        own (unset) scope with the default banner's version hash.
 
-    `name` (2026-09-27, item 10 flairs) -- the label/group/project's own
-    display name, passed through to `db.effective_page_banner` so a page
-    with no upload of its own can still default to a flair match. Only a
-    label/group/project page passes it (routers/label_pages.py); Home
-    leaves it None (no name to match a flair against at all), same as
-    every OTHER scope this function has never applied a flair default to
-    either. Confirmed via AskUserQuestion: a flair default renders here
-    exactly like a real upload, no visual distinction -- so `has_own_
-    banner` (and the Add/Change button label it drives) now also treats a
-    flair match as "has one," the same "no special-casing" answer applied
-    everywhere else this default shows up."""
+        `name` -- the label/group/project's own
+        display name, passed through to `db.effective_page_banner` so a page
+        with no upload of its own can still default to a flair match. Only a
+        label/group/project page passes it (routers/label_pages.py); Home
+        leaves it None (no name to match a flair against at all), same as
+        every OTHER scope this function has never applied a flair default to
+        either. Confirmed via AskUserQuestion: a flair default renders here
+        exactly like a real upload, no visual distinction -- so `has_own_
+        banner` (and the Add/Change button label it drives) now also treats a
+        flair match as "has one," the same "no special-casing" answer applied
+        everywhere else this default shows up.
+    """
     own_banner = db.effective_page_banner(conn, scope, name=name)
     if own_banner:
         return {
@@ -407,18 +403,10 @@ def dashboard_view(
 
 @router.get("/today")
 def today_redirect():
-    """The standalone /today page (1.7 slice 1, "Today -- execution") is
-    retired (1.9 side work) -- its two sections that no existing Dashboard
-    widget covered (Important & urgent, Scheduled work hours today) became
-    the important_urgent/scheduled_work_today widget types; everything else
-    it showed (Due & overdue, today's calendar events) already had a direct
-    Dashboard equivalent (today_agenda). important_urgent has since been
-    removed outright along with the rest of the Importance/Urgency feature
-    -- see src/derived_state.py's module docstring. Kept as a redirect
-    rather than a bare 404, same "any bookmark still lands somewhere real"
-    precedent `routers/calendar.py::week_redirect`/`timetable_view_redirect`
-    already established for the analogous /calendar/timetable retirement --
-    see plans/STATE.md."""
+    """important_urgent has since been
+        removed outright along with the rest of the Importance/Urgency feature
+        -- see src/derived_state.py's module docstring.
+    """
     return RedirectResponse(url="/", status_code=302)
 
 
@@ -556,14 +544,13 @@ def _flatten_customize(contexts: list[dict]) -> list[dict]:
 @router.get("/dashboard/customize")
 def dashboard_customize(request: Request, space_uid: str = "", project_uid: str = "", conn=Depends(get_db)):
     """The Customize modal -- a friendly surface for adding widgets. Shows
-     the two-pane Widget Builder with configuration form + always-live
-     preview -- always available (2026-08-08: the "Custom widgets" toggle
-     that used to gate it is removed, see _modal_widget_customize.html's
-     own comment). Reuses widget_page_context for source/view/range/
-     project/tag/calendar data needed by _widget_builder_fields.html.
-     `space_uid`/`project_uid` (2026-08-05) scope it exactly like the grid
-     it manages -- Home has neither, a Space page passes space_uid, a
-     Project page project_uid."""
+         the two-pane Widget Builder with configuration form + always-live
+         preview -- always available. Reuses widget_page_context for source/view/range/
+         project/tag/calendar data needed by _widget_builder_fields.html.
+         `space_uid`/`project_uid` scope it exactly like the grid
+         it manages -- Home has neither, a Space page passes space_uid, a
+         Project page project_uid.
+    """
     ctx = widget_page_context(conn, space_uid or None, project_uid or None)
     page_label = "Space dashboard" if space_uid else ("Project dashboard" if project_uid else "dashboard")
     ctx.update(
@@ -581,31 +568,31 @@ def dashboard_customize(request: Request, space_uid: str = "", project_uid: str 
 @router.get("/dashboard/widgets/{uid}")
 def widget_card_region(request: Request, uid: str, conn=Depends(get_db)):
     """Async-CRUD single-widget region fragment (features/async-crud.md) --
-    re-renders one plain widget's card (the .widget-card with
-    id="widget-{uid}") so static/async_crud.js's refreshRegion() can swap
-    it in place after a task change instead of reloading the whole page.
-    Shares _widget_card.html/_widget_inner.html with the full grid, so the
-    fragment is pixel-identical to what widget_page_context renders (one
-    source of truth). A stack (or stack child) returns the same card
-    markup, but a stack child has no #widget-<uid> container on the page,
-    so refreshRegion() no-ops for those -- documented scope cut, see
-    _widget_card.html's own comment.
+        re-renders one plain widget's card (the .widget-card with
+        id="widget-{uid}") so static/async_crud.js's refreshRegion() can swap
+        it in place after a task change instead of reloading the whole page.
+        Shares _widget_card.html/_widget_inner.html with the full grid, so the
+        fragment is pixel-identical to what widget_page_context renders (one
+        source of truth). A stack (or stack child) returns the same card
+        markup, but a stack child has no #widget-<uid> container on the page,
+        so refreshRegion() no-ops for those -- documented scope cut, see
+        _widget_card.html's own comment.
 
-    `edit_mode` (2026-08-30 bug fix, direct report -- "saving a widget...
-    not seeing the change only after a hard refresh") used to be
-    hardcoded False here, which was harmless for the one caller that
-    existed at the time (a *task* change refreshing a task-using widget,
-    always skipped in edit mode -- see async_crud.js's cc-entity-changed
-    listener, which never calls this route while editing at all). It
-    stopped being harmless once a widget's OWN Filters/Width edit needed
-    to refresh its own card live (dashboard_widget_preview.js's
-    autosave() below) -- that only ever happens *while* in edit mode (the
-    Filters form only opens there), and a hardcoded False would silently
-    render the refreshed card without its drag handle/Edit/Delete chrome,
-    which is exactly what the old task-change listener's own comment
-    warned against doing. Reads the real, current edit_mode the same way
-    widget_page_context already does, rather than assuming a caller-
-    specific constant."""
+        `edit_mode` used to be
+        hardcoded False here, which was harmless for the one caller that
+        existed at the time (a *task* change refreshing a task-using widget,
+        always skipped in edit mode -- see async_crud.js's cc-entity-changed
+        listener, which never calls this route while editing at all). It
+        stopped being harmless once a widget's OWN Filters/Width edit needed
+        to refresh its own card live (dashboard_widget_preview.js's
+        autosave() below) -- that only ever happens *while* in edit mode (the
+        Filters form only opens there), and a hardcoded False would silently
+        render the refreshed card without its drag handle/Edit/Delete chrome,
+        which is exactly what the old task-change listener's own comment
+        warned against doing. Reads the real, current edit_mode the same way
+        widget_page_context already does, rather than assuming a caller-
+        specific constant.
+    """
     widget = db.get_dashboard_widget(conn, uid)
     if widget is None:
         raise HTTPException(status_code=404, detail=f"widget not found: {uid}")
@@ -668,29 +655,27 @@ def preview_widget(
     space_uid: str = Form(""),
     conn=Depends(get_db),
 ):
-    """Live preview (2026-08-02) -- Source/View/Range/filter changes in the
-    Add-widget or per-widget Filters form fetch this on every change
-    (static/dashboard_widget_preview.js) and swap the result into a
-    preview pane, so you see the *actual* widget -- real data, real
-    render function, same partial template -- before committing to it,
-    not a mockup. `widget.uid` is a placeholder ("preview") since nothing
-    has been saved; the only template that reads it (Mini Calendar's
-    prev/next links) just gets a link that doesn't scroll anywhere
-    meaningful, harmless in a preview pane. `space_uid` (2026-08-02, per-
-    space widgets) and `project_uid` (2026-08-05, per-project widgets) are
-    only ever present when previewing from a Space/Project page's own
-    Customize form -- see add_widget below for why the preview has to
-    auto-scope the same way the real save does. `tags_labels` (2026-08-07)
-    is the Labels chip multiselect's checkboxes -- see _combine_tags.
-    `style`/`show` (2026-08-15 widget consolidation; `show` reworked
-    2026-08-31 into a single multi-value field, see
-    _agenda_show_from_form) are Spaces & Projects' Style radio and
-    Agenda's Show checkboxes; `width` (2026-08-30, reinstated) is the
-    Width radio -- see _config_from_form. The preview
-    card itself ignores width visually either way (`.widget-preview-card`
-    is reset to `position:static; width:auto`, static/style.css), but it's
-    threaded through anyway so the previewed widget's data/behavior stays
-    consistent with what a real save would produce."""
+    """Live preview -- Source/View/Range/filter changes in the
+        Add-widget or per-widget Filters form fetch this on every change
+        (static/dashboard_widget_preview.js) and swap the result into a
+        preview pane, so you see the *actual* widget -- real data, real
+        render function, same partial template -- before committing to it,
+        not a mockup. `widget.uid` is a placeholder ("preview") since nothing
+        has been saved; the only template that reads it (Mini Calendar's
+        prev/next links) just gets a link that doesn't scroll anywhere
+        meaningful, harmless in a preview pane. `space_uid` and `project_uid` are
+        only ever present when previewing from a Space/Project page's own
+        Customize form -- see add_widget below for why the preview has to
+        auto-scope the same way the real save does. `tags_labels`
+        is the Labels chip multiselect's checkboxes -- see _combine_tags.
+        `style`/`show` are Spaces & Projects' Style radio and
+        Agenda's Show checkboxes; `width` is the
+        Width radio -- see _config_from_form. The preview
+        card itself ignores width visually either way (`.widget-preview-card`
+        is reset to `position:static; width:auto`, static/style.css), but it's
+        threaded through anyway so the previewed widget's data/behavior stays
+        consistent with what a real save would produce.
+    """
     if source not in WIDGET_SOURCES:
         return templates.TemplateResponse(
             "_dashboard_widget_preview.html",
@@ -733,22 +718,20 @@ def add_widget(
     space_uid: str = Form(""),
     conn=Depends(get_db),
 ):
-    """`space_uid` (2026-08-02, per-space widgets) and `project_uid`
-    (2026-08-05, per-project widgets) -- hidden fields on the Customize
-    form's widget builder, empty on Home, set to the Space's/Project's own
-    uid on their pages. This is the one mutating route that can't derive
-    its page from an existing widget (there isn't one yet), so it's the
-    one place the page identity is threaded through the form instead of
-    read back off a row. Every widget added from a Space auto-scopes to it
-    via config["group_uid"]; every widget added from a project via
-    config["project_uid"] (the answered "auto-scope" design question,
-    2026-08-02) -- the user never has to pick a Project filter just to
-    keep a widget from leaking other spaces'/projects' data. Widget types
-    excluded for the page's scope (e.g. Spaces & Projects on a project
-    page) are rejected as a no-op the same way an unknown source is, so a
-    stale/excluded combo never silently creates a widget that can't mean
-    anything on the page. `width` (2026-08-30, reinstated manual
-    override) -- see WIDGET_WIDTHS/_widget_width's own comment."""
+    """`space_uid` and `project_uid` -- hidden fields on the Customize
+        form's widget builder, empty on Home, set to the Space's/Project's own
+        uid on their pages. This is the one mutating route that can't derive
+        its page from an existing widget (there isn't one yet), so it's the
+        one place the page identity is threaded through the form instead of
+        read back off a row. Every widget added from a Space auto-scopes to it
+        via config["group_uid"]; every widget added from a project via
+        config["project_uid"] -- the user never has to pick a Project filter just to
+        keep a widget from leaking other spaces'/projects' data. Widget types
+        excluded for the page's scope (e.g. Spaces & Projects on a project
+        page) are rejected as a no-op the same way an unknown source is, so a
+        stale/excluded combo never silently creates a widget that can't mean
+        anything on the page. `width` -- see WIDGET_WIDTHS/_widget_width's own comment.
+    """
     page_label = space_uid or project_uid or None
     if source not in WIDGET_SOURCES:
         return RedirectResponse(url=_return_url(page_label, conn=conn), status_code=303)
@@ -974,26 +957,24 @@ def move_widget(uid: str, direction: str = Form(...), conn=Depends(get_db)):
 @router.post("/dashboard/widgets/{uid}/reorder")
 def reorder_widget(uid: str, after_uid: str = Form(""), conn=Depends(get_db)):
     """JSON-free but still a POST (form body, not JSON, to match the rest
-    of this router) drag-and-drop reorder target -- static/app.js's
-    dashboard drag handler (edit-mode only) posts here after a drop
-    instead of the old move-one-step-at-a-time /move endpoint above
-    (still there, still tested, just no longer the UI's own path -- see
-    plans/webapp-action-pipelines-audit.md's "reload per click" finding).
-    `after_uid` is the uid of the widget this one should land immediately
-    after in the new order, or "" to become the first widget -- computed
-    client-side from wherever the card was dropped, same "read the final
-    DOM order, tell the server where it landed" contract Kanban's own
-    drag-and-drop uses for task status.
+        of this router) drag-and-drop reorder target -- static/app.js's
+        dashboard drag handler (edit-mode only) posts here after a drop
+        instead of the old move-one-step-at-a-time /move endpoint above.
+        `after_uid` is the uid of the widget this one should land immediately
+        after in the new order, or "" to become the first widget -- computed
+        client-side from wherever the card was dropped, same "read the final
+        DOM order, tell the server where it landed" contract Kanban's own
+        drag-and-drop uses for task status.
 
-    Scoped to whichever collection `uid` itself already belongs to
-    (2026-08-02) -- top-level widgets (group_uid IS NULL) if it's a plain
-    widget or a stack container, or that stack's own members if it's
-    inside one (static/app.js's intra-stack drag handler posts here too,
-    not just the top-level one). `after_uid` has to belong to that same
-    collection -- position values aren't comparable across a stack's
-    members and the rest of the dashboard (see the group_uid migration
-    comment in db.py), so an after_uid from the wrong collection is
-    rejected rather than silently doing the wrong math."""
+        Scoped to whichever collection `uid` itself already belongs to -- top-level widgets (group_uid IS NULL) if it's a plain
+        widget or a stack container, or that stack's own members if it's
+        inside one (static/app.js's intra-stack drag handler posts here too,
+        not just the top-level one). `after_uid` has to belong to that same
+        collection -- position values aren't comparable across a stack's
+        members and the rest of the dashboard (see the group_uid migration
+        comment in db.py), so an after_uid from the wrong collection is
+        rejected rather than silently doing the wrong math.
+    """
     moved = db.get_dashboard_widget(conn, uid)
     if moved is None:
         return JSONResponse({"error": "not found"}, status_code=404)

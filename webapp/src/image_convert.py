@@ -1,8 +1,4 @@
-"""Server-side image re-encoding to WebP (2026-09-13, direct request:
-"contact images should be resource efficient (webp) -- I know they can be
-saved inline in the contacts thing [as whatever format the syncing CardDAV
-client chose], I would prefer the frontend to serve webp images not the
-one in vcf directly. Of course they should be the same [visually]").
+"""Of course they should be the same [visually]").
 
 This is the first real image-decoding dependency this app has ever taken
 on -- `image_sniff.py`'s own header comment documents a long-standing,
@@ -16,7 +12,8 @@ possible without a real decoder; there's no way to transcode JPEG/PNG/GIF
 bytes into WebP by just re-arranging bytes. Scoped to `contacts.photo_b64`
 only (the only surface this request named) -- banners and the user's own
 profile photo (routers/banners.py's banner_image, routers/settings.py's
-profile_photo_image) still serve their stored bytes as-is, unchanged."""
+profile_photo_image) still serve their stored bytes as-is, unchanged.
+"""
 
 from __future__ import annotations
 

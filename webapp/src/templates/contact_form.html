@@ -1,21 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{% if contact and not draft_uid %}Edit contact{% else %}New contact{% endif %}{% endblock %}
 {% block content %}
-<!-- see event_form.html for why this is split into .modal-header/
-     .modal-body/.modal-footer, and why Save lives in the footer as a
-     plain button tied back to the form via `form="contact-form"` rather
-     than being nested inside it -- static/modal.js. Contacts have no
-     Delete button here -- deleting a contact happens from
-     contact_detail.html (Archive/Unarchive), not this edit form.
-
-     2026-08-08 view<->edit merge: the footer is the shared _modal_footer.
-     html partial contact_detail.html's view uses too -- same structure,
-     the detail modal's "Edit" link swapped for this "Save" submit button
-     (and, like the view, no Delete, since this template has none either)
-     -- and #modal-target carries the modal-stable-height marker so
-     modal.js keeps the dialog one fixed size in both states while the
-     header/body/footer cross-fade when the Edit link swaps them in
-     place. -->
 <div id="modal-target" class="modal-stable-height">
 <div class="modal-header">
 <h1>{% if contact and not draft_uid %}Edit contact{% else %}New contact{% endif %}</h1>
@@ -24,23 +9,12 @@
 {% if draft_uid %}<span data-discard-url="/contacts/{{ draft_uid }}/discard" hidden></span>{% endif %}
 <div class="card">
 <form method="post" id="contact-form" action="{% if contact and not draft_uid %}/contacts/{{ contact.uid }}{% else %}/contacts{% endif %}" enctype="multipart/form-data" data-cc-change="contact" data-cc-action="{% if contact %}edit{% else %}create{% endif %}">
-    {# 2026-09-14 (quick-add Contact/Label parity): the field grid below
-       used to live inline here -- extracted into _contact_form_fields.html
-       so quick_add.html's Contact panel renders the exact same markup
-       instead of a second, driftable copy. See that partial's own header
-       comment for the parent-context contract. #}
     {% if draft_uid %}<input type="hidden" name="draft_uid" value="{{ draft_uid }}">{% endif %}
     {% include "_contact_form_fields.html" %}
 </form>
 </div>
 </div>
 {% if contact and not draft_uid %}
-<!-- 2026-08-08 direct feedback: Cancel on an edit returns to the detail
-     view modal (footer_back_mode='modal' -- a data-modal link into
-     /contacts/uid), NOT a data-modal-cancel that closes the whole window;
-     the modal's X is the way to fully close. A brand-new contact has no
-     view to return to, so its Cancel is still a plain data-modal-cancel
-     close. -->
 {% set footer_back_url = '/contacts/' ~ contact.uid %}
 {% set footer_back_mode = 'modal' %}
 {% else %}

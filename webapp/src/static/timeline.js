@@ -127,18 +127,6 @@
     let origWidth = 0;
     let startAt = bar.dataset.start;
     let dueAt = bar.dataset.due;
-    // Bug fix ported verbatim from desktop (2026-07-20): a task with no
-    // explicit start_at falls back to due_at as its displayed start (see
-    // timeline_layout.py's _task_dates, same fallback as _bar_rect on the
-    // desktop side). Resizing from the right must freeze that resolved
-    // start_at the instant ANY resize begins -- otherwise, since the
-    // fallback re-resolves from due_at on every re-render, growing due_at
-    // via a right-drag would silently drag start_at along with it and
-    // both edges would walk forward together, indistinguishable from a
-    // move. This is exactly what start_at/dueAt above already capture
-    // (from the rendered data-start, which is already due_at-as-fallback
-    // when unset) -- freezing simply means never re-reading it from a
-    // fresh fallback mid-drag, only from these captured locals.
 
     function hitTest(clientX) {
       const rect = bar.getBoundingClientRect();

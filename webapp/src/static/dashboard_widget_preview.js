@@ -1,62 +1,8 @@
-// Dashboard widget Source/View/Range controls (dashboard.html's Add-widget
-// form and each widget's own Filters form), 2026-08-02. Briefly reworked
-// 2026-08-07 (modal-input-design Phase A) from plain <select>s into a tile
-// picker (Source) and segmented radio controls (View/Range); View/Range
-// reverted back to plain <select>/<option> the same day after user
-// feedback that segmented-radio "dropdowns" were confusing and
-// inconsistent with real dropdowns elsewhere in the app. Reworked again
-// the same day, follow-up round ("View/Range should look the same as
-// list") -- View/Range are now single-select instances of
-// _widget_list_multiselect.html's own trigger+panel component
-// (`.widget-view-select`/`.widget-range-select` mark the `.multiselect`
-// wrapper now, not a `<select>`), since a native `<select>`'s open-list
-// chrome can never be made to look consistent with the rest of the app no
-// matter what CSS is applied to the closed control. Source stays a tile
-// picker (`.tile-select`, real radios); View/Range are real radio inputs
-// too, just presented through the checkbox-dropdown-shaped partial in
-// single-select mode, with data-source/data-has-range/data-views carried
-// on each radio the same way they used to live on `<option>` elements.
-//
-// Two independent jobs:
-//  1. Keep View limited to whatever the current Source actually offers,
-//     and Range limited to whatever the current View actually uses (or
-//     hide Range entirely for a View that doesn't have one at all) --
-//     pure progressive enhancement. Every option stays a real, submittable
-//     radio input the whole time (just hidden, never removed/disabled), so
-//     a no-JS submission still works -- the server's own resolver
-//     (_resolve_selection) already tolerates an inapplicable combo by
-//     falling back to something sane, this only exists to stop a
-//     JS-equipped user from ever *seeing* a combo that wouldn't do what
-//     the labels imply.
-//  2. For any form marked data-preview-url (the Add-widget form and the
-//     Customize modal's Widget Builder): fetch a live, real-data preview
-//     of whatever's currently selected and show it below the form,
-//     debounced so typing in Title/Tags doesn't fire a request per
-//     keystroke.
-//
-// Exposed as CCWidgetPreview.init(root) so the Customize modal can wire up
-// its freshly-injected builder/edit forms (modal.js calls it after the
-// modal body loads); on the normal page it self-initializes over document.
 
 window.CCWidgetPreview = {
   init: function (root) {
     root = root || document;
 
-    // Filters a single-select multiselect's radio rows in place: hides
-    // (never removes) every `.multiselect-option` row whose radio doesn't
-    // satisfy `predicate`, and -- if the currently-checked radio just
-    // became invalid -- checks the first still-valid one instead (firing
-    // a real `change` so app.js's own summary/close-panel handling picks
-    // it up), so the field's value always reflects something actually
-    // visible/choosable.
-    //
-    // 2026-08-08: reads the panel via window.CCMultiselect.panelFor(ms)
-    // instead of `ms.querySelectorAll(".multiselect-panel input")` -- once
-    // app.js's portal fix (same date) moves an opened panel out to
-    // #multiselect-portal so it can render outside a clipping modal, it's
-    // no longer a DOM descendant of `ms` at all, so the old scoped query
-    // would silently find nothing and this function would become a no-op
-    // exactly when a user was actively interacting with the field.
     function filterMsOptions(ms, predicate) {
       const panel = window.CCMultiselect && window.CCMultiselect.panelFor(ms);
       const inputs = panel ? Array.from(panel.querySelectorAll("input")) : [];
@@ -81,35 +27,12 @@ window.CCWidgetPreview = {
       const viewMs = form.querySelector(".widget-view-select");
       const rangeMs = form.querySelector(".widget-range-select");
       const rangeField = form.querySelector(".widget-range-field");
-      // Gated by the checked View's own data-has-limit (2026-08-15,
-      // expanded scope -- generalized from a single hardcoded view-name
-      // check so contact_list_view/important_urgent_view, whose render
-      // functions already read config.limit, can offer the field too; see
-      // WIDGET_VIEWS' own has_limit comment). Mirrors the server-side gate
-      // in the per-widget Filters form (_widget_edit_form.html).
       const limitField = form.querySelector(".widget-limit-field");
-      // Show (2026-08-15 widget consolidation) -- Agenda's tasks/events/
-      // overdue checkboxes, and Style (Spaces & Projects' List/Cards
-      // radio) -- both only make sense once their own View is picked,
-      // same "real inputs, JS only hides" contract Range/Limit already
-      // use (a no-JS submission still posts every field either way, and
-      // the server tolerates an inapplicable one -- see
-      // _config_from_form's own style/show gating).
       const showField = form.querySelector(".widget-show-field");
       const styleField = form.querySelector(".widget-style-field");
-      // Scope (2026-08-15, expanded scope) -- only present in the DOM at
-      // all on a Space/Project page (see _widget_builder_fields.html's own
-      // {% if space_uid or project_uid %} -- Home has nothing to scope),
-      // so this is null and the toggle below is a safe no-op on Home.
       const scopeField = form.querySelector(".widget-scope-field");
       if (!sourceGroup || !viewMs || !rangeMs) return;
 
-      // 2026-08-08: reads via window.CCMultiselect.panelFor(ms) instead of
-      // `container.querySelector(...)` -- same reasoning as filterMsOptions
-      // above. `sourceGroup` (the Data source tile picker) isn't a
-      // `.multiselect` at all and is never portaled, so it's queried
-      // directly as before; only the two multiselect-panel-backed fields
-      // (View/Range) need the indirection.
       function checkedRadio(container, name) {
         return container.querySelector('input[name="' + name + '"]:checked');
       }
@@ -137,21 +60,6 @@ window.CCWidgetPreview = {
         filterMsOptions(rangeMs, (input) => (input.dataset.views || "").split(",").includes(viewValue));
       }
 
-      // 2026-08-08: was `sourceGroup.addEventListener("change", ...)` and
-      // `viewMs.addEventListener("change", syncRangeToView)` -- both relied
-      // on the changed input's `change` event *bubbling up* to that
-      // ancestor element. That still works for sourceGroup (tile radios
-      // never move), but View/Range's radios now live inside
-      // #multiselect-portal while their panel is open, outside `viewMs`'s
-      // DOM subtree entirely, so a change made there would never bubble to
-      // `viewMs` and this sync would silently stop firing on every real
-      // interaction. Delegated on `document` instead, matched by
-      // `e.target.form === form` (the native `.form` property correctly
-      // resolves a control's owning form via its `form="..."` attribute --
-      // _widget_list_multiselect.html's ms_form_id -- regardless of where
-      // in the DOM that control currently sits) plus its `name`, so this
-      // keeps working no matter which multiselect panel is or isn't
-      // currently portaled.
       document.addEventListener("change", (e) => {
         if (e.target.form !== form) return;
         if (e.target.name === "source") {
@@ -222,21 +130,6 @@ window.CCWidgetPreview = {
         }
       }
 
-      // uid + region refresh (2026-08-30 bug fix, direct report -- "saving
-      // a widget... not seeing the change only after a hard refresh, but
-      // the cache is not refreshing"). Root cause traced: this whole
-      // autosave function only ever updated the "Saving…"/"Saved" status
-      // text -- it never told the *actual* widget card sitting on the
-      // page (behind the open Filters modal) that anything changed, so
-      // every field here (Width included) silently went stale until a
-      // full reload re-rendered the whole grid from scratch. Not a
-      // service-worker/HTTP cache problem at all (this app's pages are
-      // network-first, static/sw.js's own fetch handler) -- just a
-      // missing refresh call, same async-CRUD `refreshRegion` mechanism
-      // static/async_crud.js already uses for task changes, applied here
-      // to the widget's own card instead. `form.action` is
-      // "/dashboard/widgets/<uid>/edit"; the card's real container id is
-      // "widget-<uid>" (see _widget_card.html/_widget_workspace.html).
       const uidMatch = String(form.action || "").match(/\/dashboard\/widgets\/([^/]+)\/edit/);
       const widgetUid = uidMatch ? uidMatch[1] : null;
 
@@ -299,21 +192,6 @@ window.CCWidgetPreview = {
         );
       }
 
-      // 'change' covers selects/checkboxes/radios (and number inputs on
-      // blur/spinner) -- nothing left to debounce there. 'input' (typing
-      // in Title/Tags) is debounced so a fast typist doesn't fire a
-      // request per keystroke.
-      //
-      // 2026-08-08: `change` delegated on `document` + `e.target.form ===
-      // form`, not bound directly on `form` -- same reason as
-      // wireSelectForm's sourceGroup/viewMs listeners above: a Labels/Task
-      // lists/Calendars/View/Range checkbox or radio living inside an open
-      // (portaled) multiselect panel is no longer a DOM descendant of
-      // `form` at the moment it changes, so a listener bound on `form`
-      // itself would never see that event. `.form` resolves correctly via
-      // ms_form_id's `form="..."` attribute regardless of current DOM
-      // position; `input`/typing listeners stay bound directly since text/
-      // number fields are never portaled.
       document.addEventListener("change", (e) => {
         if (e.target.form !== form) return;
         dirty = true;
@@ -322,29 +200,6 @@ window.CCWidgetPreview = {
       form.addEventListener("input", scheduleAutosave);
     });
 
-    // "Done" button -- flush every pending autosave (and force a fresh
-    // refreshRegion) before the modal closes. Without this, a field
-    // changed <500ms before clicking Done could still be mid-flight (or
-    // its own refreshRegion call could have silently failed -- see
-    // autosave()'s best-effort `.catch(() => {})` above) when the dialog
-    // closes, leaving the real widget card behind it stale until the next
-    // full reload.
-    //
-    // 2026-08-31 direct report ("editing the filters of a widget doesn't
-    // update the dashboard") traced to this selector: `_widget_edit_modal.
-    // html`'s Done/Cancel link is rendered by _modal_footer.html's cancel
-    // mode as `<a class="btn ghost" data-modal-cancel>`, never `.btn
-    // primary` -- so `root.querySelector("a.btn.primary")` never matched
-    // it at all, and this whole flush-before-close block was silently dead
-    // code (a debounced/in-flight save would still eventually finish and
-    // refresh the card in the background once its own timer/fetch
-    // resolved, since closing this modal doesn't reload or navigate away
-    // -- see modal.js's closeModal, `pendingReload` is never set for a
-    // data-modal-keep-open autosave form -- but there was no guarantee of
-    // *when*, and a failed refreshRegion had no retry at all). Selects by
-    // `[data-modal-cancel]` instead of a class+text combo, since that
-    // attribute is what actually identifies "the control that closes this
-    // modal" regardless of its visual class or label text (Done/Cancel).
     const doneBtn = root.querySelector("[data-modal-cancel]");
     if (doneBtn) {
       doneBtn.addEventListener(
@@ -397,7 +252,7 @@ window.CCWidgetPreview = {
         if (seq === requestSeq) previewContent.innerHTML = html;
       } catch (err) {
         if (seq === requestSeq) {
-          previewContent.innerHTML = '<div class="empty-state" style="padding:16px 0">Could not load preview.</div>';
+          previewContent.replaceChildren(window.ccEmptyState("Could not load preview"));
         }
       }
     }
@@ -407,21 +262,6 @@ window.CCWidgetPreview = {
       debounceTimer = setTimeout(refreshPreview, 350);
     }
 
-    // 'change' (select/checkbox/radio commits, plus number inputs losing
-    // focus or using the spinner) fires once you're done picking, so
-    // there's nothing to debounce -- refresh right away. 'input' (typing
-    // in Title/Tags) is the one case worth debouncing, so a fast typist
-    // doesn't fire a request per keystroke.
-    //
-    // 2026-08-08: delegated on `document` + `e.target.form === previewForm`
-    // rather than bound on `previewForm` directly -- same bubbling problem
-    // as wireSelectForm/autosave above (a portaled multiselect panel's
-    // inputs aren't DOM descendants of the form while open). Registered
-    // after wireSelectForm's own document-level change listener above (script
-    // order = registration order for same-target/same-event listeners), so
-    // by the time this runs, any auto-corrected View/Range/Limit visibility
-    // is already settled and FormData will pick up the final values, not
-    // the stale ones.
     document.addEventListener("change", (e) => {
       if (e.target.form === previewForm) refreshPreview();
     });

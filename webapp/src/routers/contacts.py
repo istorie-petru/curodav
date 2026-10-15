@@ -57,12 +57,12 @@ async def _read_photo(photo: UploadFile | None) -> tuple[str, str] | None:
 
 def _attach_photo_url(contact: dict) -> dict:
     """Every place this router hands a contact dict to a template that
-    might render its avatar (deps.py's avatar() global) attaches
-    `photo_url` here first (2026-08-29, direct request: "better cache
-    these images") -- a real, `?v=`-versioned URL (contact_photo_image
-    below) that avatar() prefers over embedding the photo inline as a
-    `data:` URI. A contact with no photo is untouched (photo_url stays
-    unset, avatar() falls through to the initials fallback)."""
+        might render its avatar (deps.py's avatar() global) attaches
+        `photo_url` here first -- a real, `?v=`-versioned URL (contact_photo_image
+        below) that avatar() prefers over embedding the photo inline as a
+        `data:` URI. A contact with no photo is untouched (photo_url stays
+        unset, avatar() falls through to the initials fallback).
+    """
     if contact.get("photo_b64"):
         contact["photo_url"] = f"/contacts/{contact['uid']}/photo?v={contact.get('photo_version') or ''}"
     return contact
@@ -70,11 +70,9 @@ def _attach_photo_url(contact: dict) -> dict:
 
 def _tags_list(tags: str) -> list[str]:
     """Parses the legacy comma-separated `tags` fallback field (no
-    template posts it any more, but every sibling router keeps this
-    escape hatch). 2026-09-26 (Peter: "Contacts should only allow one
-    label") -- at most the first non-blank entry survives; see
-    `_resolve_contact_label` for the real single-select-field resolver
-    this now only backstops."""
+        template posts it any more, but every sibling router keeps this
+        escape hatch).
+    """
     parts = [t.strip() for t in tags.split(",") if t.strip()]
     return parts[:1]
 
@@ -123,13 +121,10 @@ def _with_contact_project(conn, tags: list[str], project, project_field) -> list
 
 
 def _parse_birthday_field(birthday: str) -> str | None:
-    """Contacts field parity slice 4 of 6 -- validates a create/edit form's
-    raw `birthday` text against db.parse_contact_birthday's two accepted
-    shapes (full "YYYY-MM-DD" or year-less "--MM-DD"), same "reject with a
-    clear 400 rather than silently storing garbage" convention this app's
-    other plain-form validation (e.g. single-project-per-task) already
-    uses. A blank field is "no birthday," not an error -- same as every
-    other optional contact field on this router."""
+    """single-project-per-task) already
+        uses. A blank field is "no birthday," not an error -- same as every
+        other optional contact field on this router.
+    """
     v = (birthday or "").strip()
     if not v:
         return None
@@ -171,14 +166,12 @@ def _address_list(
     types: list[str], po_boxes: list[str], extendeds: list[str], streets: list[str],
     cities: list[str], regions: list[str], postal_codes: list[str], countries: list[str],
 ) -> list[dict]:
-    """Contacts field parity slice 5 of 6 -- zips a create/edit form's eight
-    parallel `address_*[]` arrays into db.set_contact_addresses' per-row
-    shape. Unlike `_phone_email_list`/`_website_list` (one value field), a
-    structured address has seven -- `zip` over eight equal-length lists
-    (the form always submits every field for every row, even ones left
-    blank, since they're all part of the same repeatable-row template) is
-    still the simplest correct way to reconstruct each row; db.
-    set_contact_addresses itself is what actually drops an all-blank row."""
+    """Unlike `_phone_email_list`/`_website_list` (one value field), a
+        structured address has seven -- `zip` over eight equal-length lists
+        (the form always submits every field for every row, even ones left
+        blank, since they're all part of the same repeatable-row template) is
+        still the simplest correct way to reconstruct each row; db. set_contact_addresses itself is what actually drops an all-blank row.
+    """
     return [
         {
             "type": (t or "").strip() or "Other",
@@ -192,9 +185,6 @@ def _address_list(
 
 
 def _social_profile_list(types: list[str], values: list[str]) -> list[dict]:
-    """Contacts field parity slice 6 of 6 -- same zip shape as
-    `_phone_email_list`, for the `social_type[]`/`social_value[]` form
-    arrays into db.set_contact_social_profiles' {"type", "value"} shape."""
     return [
         {"type": (t or "").strip() or "Other", "value": v}
         for t, v in zip(types, values)
@@ -244,17 +234,17 @@ def _contacts_list_context(
 
 
 def _group_contacts_by_label(contacts: list[dict], project_names: set[str] | None = None) -> list[dict]:
-    """2026-09-26 (Peter, confirmed via AskUserQuestion: "section headers
-    per label... same pattern Settings > Projects already uses for its
-    label groups") -- one `{"name": label, "contacts": [...]}` per label
-    actually in use, sorted alphabetically (ungrouped last, same
-    "ungrouped last" convention `routers/labels.py::_labels_context`
-    established), each a real Jinja bucket for _contacts_body.html's
-    section headings. A contact carries at most one label (item 16 --
-    "Contacts should only allow one label"), so this is a clean partition,
-    not a fan-out; within a group/the ungrouped bucket, contacts keep
-    whatever order `db.list_contacts` already returned them in (no new
-    sort -- out of this slice's scope)."""
+    """same pattern Settings > Projects already uses for its
+        label groups") -- one `{"name": label, "contacts": [...]}` per label
+        actually in use, sorted alphabetically (ungrouped last, same
+        "ungrouped last" convention `routers/labels.py::_labels_context`
+        established), each a real Jinja bucket for _contacts_body.html's
+        section headings. A contact carries at most one label (item 16 --
+        "Contacts should only allow one label"), so this is a clean partition,
+        not a fan-out; within a group/the ungrouped bucket, contacts keep
+        whatever order `db.list_contacts` already returned them in (no new
+        sort -- out of this slice's scope).
+    """
     project_names = project_names or set()
     by_label: dict[str, list[dict]] = {}
     unlabeled: list[dict] = []
@@ -333,18 +323,18 @@ def bulk_edit(
 @router.post("/bulk-delete")
 async def bulk_delete_contacts(request: Request, conn=Depends(get_db)):
     """Bulk-select "Delete" bar (contacts_list.html/_contacts_body.html,
-    static/bulk_select.js) -- same JSON endpoint shape as routers/
-    settings.py's bulk_delete_holidays/bulk_delete_time_blocks: a plain
-    loop over the same `db.delete_contact` each row's own detail-modal
-    Delete already calls, no all-or-nothing rollback. Contacts was the one
-    list left out when Labels/Holidays/Time blocks got this (STATE.md
-    backlog item 1) because its rows are a card-list, not a `<table>` --
-    `_contacts_body.html` now wraps each row for a `.row-select` checkbox
-    to attach to, same as every other bulk-select surface. Registered
-    ahead of no conflicting route (contacts.py has no bare `POST /{uid}`
-    that a literal `/bulk-delete` path could collide with), but kept next
-    to list_contacts/contacts_regions for readability, same grouping as
-    the other list-level routes."""
+        static/bulk_select.js) -- same JSON endpoint shape as routers/
+        settings.py's bulk_delete_holidays/bulk_delete_time_blocks: a plain
+        loop over the same `db.delete_contact` each row's own detail-modal
+        Delete already calls, no all-or-nothing rollback. Contacts was the one
+        list left out when Labels/Holidays/Time blocks got this because its rows are a card-list, not a `<table>` --
+        `_contacts_body.html` now wraps each row for a `.row-select` checkbox
+        to attach to, same as every other bulk-select surface. Registered
+        ahead of no conflicting route (contacts.py has no bare `POST /{uid}`
+        that a literal `/bulk-delete` path could collide with), but kept next
+        to list_contacts/contacts_regions for readability, same grouping as
+        the other list-level routes.
+    """
     payload = await request.json()
     uids = payload.get("uids") or []
     if not uids:
@@ -378,11 +368,12 @@ def contacts_regions(
 
 @router.post("/{uid}/archive")
 def archive_contact(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
-    """Item 19 (2026-09-26): archiving is fully reversible (a real
-    `unarchive_contact` below), so this submits for real right away --
-    static/app.js's `data-archive-undo` handler (the row's own kebab item,
-    _contacts_body.html) offers a true Undo that calls `unarchive_contact`
-    below, not a delayed/cancelable send like `data-delete-undo`'s."""
+    """Item 19: archiving is fully reversible (a real
+        `unarchive_contact` below), so this submits for real right away --
+        static/app.js's `data-archive-undo` handler (the row's own kebab item,
+        _contacts_body.html) offers a true Undo that calls `unarchive_contact`
+        below, not a delayed/cancelable send like `data-delete-undo`'s.
+    """
     db.archive_contact(conn, uid)
     return respond(x_requested_with, "/contacts")
 
@@ -478,39 +469,14 @@ async def create_contact(
         "title": _clean_optional(title),
         "role": _clean_optional(role),
         "org": org if org and org.strip().lower() not in ("none", "nothing") else None,
-        # Contacts field parity slice 2 of 6 -- phone/email are multi-value
-        # now (contact_phones/contact_emails), submitted as parallel
-        # phone_type[]/phone_value[] (email_type[]/email_value[]) form
-        # arrays, same `list[str] = Form([])` shape `tags_labels` already
-        # uses on this router -- one Save button, no separate per-row
-        # endpoints (see plans/STATE.md's slice entry for the full
-        # reasoning). The old flat `phone`/`email` columns are no longer
-        # written here at all (db.py's contacts CREATE TABLE comment).
         "phones": _phone_email_list(phone_type, phone_value),
         "emails": _phone_email_list(email_type, email_value),
-        # Contacts field parity slice 3 of 6 -- Website, same multi-value
-        # form-array shape as phone/email above (website_type[]/
-        # website_url[]; the value key is "url" to match db.py's
-        # contact_websites column naming, not "value").
         "websites": _website_list(website_type, website_url),
-        # Contacts field parity slice 5 of 6 -- Address is now the full
-        # structured, multi-value vCard ADR (contact_addresses), submitted
-        # as eight parallel address_*[] form arrays (see _address_list).
-        # The old flat `address` column is no longer written here at all,
-        # same "legacy column frozen, not kept live" convention phone/email
-        # already established.
         "addresses": _address_list(
             address_type, address_po_box, address_extended, address_street,
             address_city, address_region, address_postal_code, address_country,
         ),
-        # Contacts field parity slice 6 of 6 -- Social network
-        # (contact_social_profiles), same multi-value form-array shape as
-        # phone/email/website above.
         "social_profiles": _social_profile_list(social_type, social_value),
-        # Contacts field parity slice 4 of 6 -- Birthday, single-value (no
-        # form-array shape like phone/email/website above -- a contact has
-        # at most one). `_parse_birthday_field` already validated/
-        # normalized it (or raised a 400) before this dict is built.
         "birthday": birthday_value,
         "tags": resolved_tags,
         "notes": notes if notes and notes.strip().lower() not in ("none", "nothing") else None,
@@ -541,42 +507,15 @@ def contact_detail(uid: str, request: Request, conn=Depends(get_db)):
 
 @router.get("/{uid}/photo")
 def contact_photo_image(uid: str, request: Request, conn=Depends(get_db)):
-    """Serves a contact's decoded photo bytes for `<img src>` (2026-08-29,
-    direct request: "better cache these images"). Exact mirror of
-    routers/banners.py's banner_image / routers/settings.py's
-    profile_photo_image -- same problem (a contact's photo used to be
-    embedded as an inline `data:` URI, deps.py's avatar() global, riding
-    along in the HTML of every contact list row that has one, not just
-    the one contact being viewed), same fix (a real, separately cacheable
-    request), same immutable Cache-Control safety argument (the URL's own
-    `?v=` -- contacts.photo_version -- changes whenever the photo does).
-
-    2026-09-13 (direct request: "contact images should be resource
-    efficient (webp) -- I'd prefer the frontend to serve webp images, not
-    the one in vcf directly") -- `contact["photo_type"]` reflects whatever
-    format the photo actually arrived in (a web upload here is JPEG/PNG/
-    GIF/WEBP per `_read_photo`'s own allowlist, but a CardDAV-synced
-    contact's photo is whatever the *syncing client* chose, see
-    vcard_rows.py's own PHOTO-property handling -- completely
-    unconstrained). Every contact photo now transcodes to WebP on the way
-    out via `image_convert.to_webp`, regardless of the stored format, so
-    the served bytes are always WebP even though `photo_b64`/`photo_type`
-    on disk are untouched (still whatever format the source actually was
-    -- this is a serving-time re-encode, not a migration of stored data,
-    so a future vCard export of this same contact is unaffected and still
-    round-trips the original bytes). Falls back to serving the original
-    stored bytes/type verbatim -- the exact old behavior -- if `to_webp`
-    can't decode them (a corrupt or partial sync payload should still
-    serve *something* rather than 404 on a contact that has a photo).
-
-    2026-09-18 (direct report: "contacts page is slow loading all the
-    photos") -- the WebP transcode above used to run fresh on every single
-    request; with N photo-having contacts, a cold page load meant N full
-    Pillow decode/encode cycles serialized behind N requests. Now
-    content-hash-keyed against `settings.photo_cache_dir`: an unchanged
-    photo's transcoded bytes are written once and served straight off disk
-    on every later request (by anyone, any session), and a changed photo
-    naturally gets a new hash -- no explicit cache invalidation needed."""
+    """Serves a contact's decoded photo bytes for `<img src>`. Exact mirror of
+        routers/banners.py's banner_image / routers/settings.py's
+        profile_photo_image -- same problem (a contact's photo used to be
+        embedded as an inline `data:` URI, deps.py's avatar() global, riding
+        along in the HTML of every contact list row that has one, not just
+        the one contact being viewed), same fix (a real, separately cacheable
+        request), same immutable Cache-Control safety argument (the URL's own
+        `?v=` -- contacts.photo_version -- changes whenever the photo does).
+    """
     contact = db.get_contact(conn, uid)
     if not contact or not contact.get("photo_b64"):
         raise HTTPException(404)

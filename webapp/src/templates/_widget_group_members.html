@@ -1,36 +1,3 @@
-<!-- Data: {rows} -- routers/dashboard.py::_render_group_members. Item 20
-     (2026-09-26, "redesign the toolbar's group-labels as a custom
-     dashboard widget: show every label/project under a group with its
-     related data, in the same spirit as the Unscheduled Work mockup").
-
-     2026-09-28, fourth pass (direct request: "always use card grid" --
-     the third pass's count-based list/cards switch, `<= 6 -> list, > 6 ->
-     cards`, is gone; every row renders as a card now regardless of how
-     many there are). Reuses `filled_card` (_widget_items.html) wholesale
-     -- the exact same Material-You tile _widget_spaces_projects.html's
-     ("Groups & Labels") own "cards" style renders for a Space, per the
-     earlier direct request to copy that widget's look. No kebab: a plain
-     `filled_card` is a whole-row `<a>` with nowhere for a second control
-     to live, matching that style's own convention (editing a label from
-     here means opening it, same as clicking a Space tile there) -- the
-     previous passes' `.group-member-row`/`.group-member-list` wrapper-
-     div-plus-kebab shape only existed for the list style, now unused.
-     `_render_group_members` still returns exactly `{rows}`
-     (test_group_members_widget.py's render-function tests do a strict
-     `== {"rows": [...]}` equality check) -- unaffected by this, this file
-     only changed how `rows` gets displayed.
-
-     2026-09-28, fifth pass (direct request: "make the cards smaller, less
-     space around it, and remove the 'Labels in this group' title") --
-     the title's gone via `_widget_inner.html`'s own `widget.type ==
-     'group_members'` special case (kept in edit mode, where the header
-     is how you reorder/edit/remove the widget itself), not anything in
-     this file. The smaller cards ARE scoped here: `.group-member-cards`
-     wraps the grid so the size override (style.css) only ever hits this
-     widget's own tiles, not `.filled-cards-grid`'s other consumer
-     (_widget_spaces_projects.html's "cards" style) -- both share the
-     exact same `filled_card` macro/markup, so a bare `.filled-card`
-     override would have resized Groups & Labels' cards too. -->
 {% from "_widget_items.html" import widget_empty, filled_card %}
 {% if data.rows %}
 <div class="group-member-cards">

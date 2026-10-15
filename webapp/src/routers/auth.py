@@ -1,4 +1,4 @@
-"""Single-user login routes (2026-08-16, src/auth.py).
+"""Single-user login routes.
 
 Three routes:
   - `GET /login`  -- the login page. Renders a minimal standalone template
@@ -19,31 +19,6 @@ Three routes:
 `next` is a same-origin relative path only, validated by the same
 `_safe_next` guard routers/tasks.py's work-session actions use (open-
 redirect safety for a client-submitted redirect target).
-
-2026-08-29: two more routes, the forced first-run setup flow (src/
-auth.py's module docstring, `setup_required`):
-  - `GET /setup` -- the account-creation form. Only rendered when
-    setup_required() is true (a production deploy with no account yet);
-    otherwise redirects away, same as /login's disabled-install redirect.
-    Also offers an optional "connect to Radicale" section (URL only --
-    2026-09-08, "merge the concept of radicale username to the app
-    username": the chosen account username/password double as the
-    Radicale credential, see _save_radicale_fields) when the environment
-    didn't already configure one (see config.py's radicale_env_configured)
-    -- skippable, and editable again later from Settings > General's
-    Account card (routers/settings.py::account_settings) since this page
-    only ever renders once per install.
-  - `POST /setup` -- validates and persists the chosen username/password
-    (hashed) via `auth.set_persisted_credentials`, logs the browser in
-    immediately (no separate trip through /login), and redirects home.
-    Re-checks setup_required() itself too -- the middleware already blocks
-    a configured install from reaching here without a valid session, but
-    the route refuses to ever re-run setup regardless of how it's called.
-    The Radicale URL field is optional and, if blank, silently skipped;
-    persisted via config.RADICALE_*_KEY (config.py's own module docstring
-    covers why the password is stored retrievable, not hashed) -- using
-    the same username/password just chosen above, not a separate pair --
-    when a URL is given.
 """
 
 from __future__ import annotations
@@ -161,14 +136,12 @@ def setup_page(request: Request, conn=Depends(get_db)):
 
 def _save_radicale_fields(conn, url: str, username: str, password: str) -> None:
     """Persists a Radicale connection entered through /setup into app_meta
-    -- see config.py's RADICALE_*_KEY docstring for why the password is
-    stored retrievable. `username`/`password` are the just-chosen account
-    credentials (setup_submit passes its own `username`/`password`, not a
-    separate pair -- 2026-09-08, "merge the concept of radicale username
-    to the app username" -- /setup's form itself only asks for a Radicale
-    URL, see setup.html), so this only needs a URL to actually do
-    anything; a blank URL is "skip Radicale for now," same as leaving the
-    whole optional section untouched always was."""
+        -- see config.py's RADICALE_*_KEY docstring for why the password is
+        stored retrievable. `username`/`password` are the just-chosen account
+        credentials, so this only needs a URL to actually do
+        anything; a blank URL is "skip Radicale for now," same as leaving the
+        whole optional section untouched always was.
+    """
     url = url.strip()
     if url:
         db.set_app_meta(conn, config.RADICALE_URL_KEY, url)

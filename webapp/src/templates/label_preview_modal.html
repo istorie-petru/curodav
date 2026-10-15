@@ -4,13 +4,6 @@
 {% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill, widget_event_icon %}
 {% block title %}{{ label.name }}{% endblock %}
 {% block content %}
-{# A label's preview modal (labels-as-modules slice d, 2026-09-25;
-   routers/label_pages.py::label_preview). Opened by a label pill inside a
-   detail modal or a card (_label_pill.html's `link` argument). Same
-   detail-modal layout as event_detail.html: cover (the label's banner, or
-   a gradient in its color) + title, a meta grid, and the shared footer.
-   "Open page" is a plain link, so it leaves the modal for the full
-   /labels/<name> page; Edit swaps the label form into the modal. #}
 <div id="modal-target" class="modal-stable-height">
 <div class="modal-header">
     <div class="detail-header-inner">
@@ -32,10 +25,6 @@
             <span class="detail-meta-value"><a href="/groups/{{ label.label_group|urlencode }}">{{ icon('layers', 'icon-sm') }} {{ label.label_group }}</a></span>
         </div>
         {% endif %}
-        {# 2026-09-25 (UI audit L6): "Open · due 10 Sep" read the same for
-           a deadline 15 days past as for one 20 days out. The deadline
-           phrase is label_pages.deadline_info's now ("overdue since 10
-           Sep", "due in 5 days", "due 15 Oct"), in its state's color. #}
         {% if label_status %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Status</span>
@@ -71,9 +60,6 @@
 {% endcall %}
 </div>
 
-{# 2026-09-25 (UI audit L11): opened from a pill inside a task/event
-   modal, this preview replaced that modal with no way back. `back_to`
-   (routers/label_pages.py::label_preview's `from`) is that modal's URL. #}
 {% if back_to %}
 {% set footer_back_url = back_to %}
 {% set footer_back_label = 'Back' %}

@@ -1,53 +1,4 @@
-// Visual crop/move/aspect-ratio tool for every image upload in this app
-// (contact photos, the profile-picture row, and -- 2026-08-29, direct
-// request "add the ability to crop, move, aspect ratio modal window after
-// all image uploads" -- Home/label and the global Page header banner too).
-// Originally contact-photo-only (2026-08-08 direct feedback: "uploading an
-// image should allow for cropping and resizing it in a visual manner");
-// generalized rather than forked into a second near-identical file, since
-// the whole editor (drag-to-move, resize handles, ratio presets, rotation,
-// canvas-based crop-and-scale-down output) is identical between an avatar
-// and a banner -- only the *defaults* (starting ratio preset, output size
-// cap, output filename) differ, and those are driven off which CSS class
-// wired the input, not a second copy of this file.
-//
-// Intercepts the file input's own change event, shows a full-screen editor
-// (draggable/resizable crop box locked to the upload kind's own ratio --
-// see KIND_CONFIG -- plus 90-degree rotation), and on Apply replaces the
-// input's file with the cropped/rotated/resized JPEG via DataTransfer --
-// the form still posts a plain file input exactly as before (`name="photo"`
-// for avatars, `name="banner_file"` for banners), no backend change needed
-// either way (routers/settings.py's/contacts.py's/banners.py's upload
-// routes never resized/cropped server-side to begin with -- they just
-// store whatever bytes arrive). If that form carries `data-autosubmit`
-// (settings_your_profile.html's profile-picture row, which has no Save button
-// of its own) OR the input is a banner upload (banner_editor.html's own
-// upload form isn't marked data-autosubmit, but always auto-submitted on
-// file selection even before this editor existed -- see the removed
-// CCBannerUpload.onFile in app.js this replaces), Apply submits the form
-// immediately.
-//
-// A self-contained overlay (own backdrop, own DOM, built at runtime), not
-// a reuse of #modal-overlay/#modal-dialog (base.html) -- contact_form.html
-// (and banner_editor.html) are themselves already rendered *inside* that
-// modal system when opened from Contacts/a page's edit-mode toolbar, so
-// this needs to layer on top of an already-open modal rather than replace
-// it.
-//
-// Exposed as window.CCAvatarCropper.init(root), same re-init-after-inject
-// convention as CCScheduleTable/CCScheduleGrid -- see modal.js's
-// wireContent() comment (which already calls this for every injected
-// modal, so banner_editor.html needed no wiring changes of its own beyond
-// swapping which CSS class its file input carries). Cancelling or closing
-// the editor clears the file input back to empty (no half-applied state).
 (function () {
-  // 2026-09-24 (plans/ui-cleanup-2026-09.md item 16, direct request:
-  // "persistent aspect ratio despite any attempts to resize"): the Free/
-  // Square/4:3/16:9/Banner preset buttons are gone -- every upload kind has
-  // exactly one enforced ratio (KIND_CONFIG's `ratio`), and no resize drag
-  // can break it (see pointerMove/fitToRatio). A photo that doesn't match
-  // is still accepted; it just gets cropped to the ratio here rather than
-  // rejected.
   const STAGE_MAX = 480; // px, the editor's on-screen canvas box
   const MIN_SIDE = 24; // px, smallest the crop box's shorter side may get
 
@@ -57,22 +8,7 @@
   // image itself, so behavior is deterministic per upload surface.
   const KIND_CONFIG = {
     avatar: {
-      // 2026-08-29 (direct request: "convert for smaller sizes... or
-      // compress them a bit") -- was 640px, sized for nothing in
-      // particular ("plenty for an avatar circle"). The largest this app
-      // ever displays an avatar is .avatar-hero (72px, style.css,
-      // _page_banner.html's dashboard-header overlap) -- 240px covers
-      // that at over 3x pixel density (crisp on any real device pixel
-      // ratio) with real headroom to spare, at a fraction of the bytes a
-      // 640px output cost both to store (every contact/the profile photo
-      // lives in the database as base64) and to transfer on first load
-      // of each now-separately-cached image (see contact_photo_image/
-      // profile_photo_image in routers/contacts.py/settings.py).
       maxOutput: 240,
-      // Square crop selector (direct answer, 2026-09-24: "the crop border
-      // selector should be square. Not the avatars that are displayed in
-      // the app" -- `.avatar-circle` stays a circle everywhere it renders;
-      // only what's being cropped is locked to 1:1).
       ratio: 1,
       ratioLabel: "Square (1:1)",
       outputName: "avatar",
@@ -80,22 +16,12 @@
     },
     banner: {
       maxOutput: 2400, // px, matches the old CCBannerUpload's own "long edge" cap -- a banner's own on-screen size (up to the full page width) has no fixed cap the way an avatar circle does, so this stays generous
-      // 5:1, matching banner_editor.html's own guidance text and
-      // `.page-banner`'s desktop aspect-ratio. Phones still display the
-      // banner at 3:1 (object-fit:cover trims the sides there) -- kept as-
-      // is by direct choice, 2026-09-24, over making phones 5:1 too.
       ratio: 5,
       ratioLabel: "Banner (5:1)",
       outputName: "banner",
       alwaysSubmit: true, // banner_editor.html's upload form always auto-submitted on file selection, even before this editor existed
     },
   };
-  // Selector -> kind, checked in order -- .avatar-upload-input keeps its
-  // original meaning (contact photo, profile picture); .banner-upload-input
-  // is the 2026-08-29 addition (banner_editor.html, both Home/label
-  // banners and the global Page header banner -- all three share this one
-  // template/route/CSS class already, see routers/banners.py's own
-  // "one scope value, same route" design).
   const KINDS = [
     { selector: ".avatar-upload-input", kind: "avatar" },
     { selector: ".banner-upload-input", kind: "banner" },
@@ -327,20 +253,6 @@
     }
     overlay.querySelector("[data-cropper-close]").addEventListener("click", () => closeEditor(true));
     overlay.querySelector("[data-cropper-cancel]").addEventListener("click", () => closeEditor(true));
-    // audit-fixes-2.1.md (direct bug report): a click on the backdrop used
-    // to close the editor and discard the in-progress crop/rotate
-    // unconditionally -- including a click that lands on the backdrop only
-    // because the user is mid-drag on a resize handle or the crop box
-    // itself (the pointer briefly leaves the stage during a fast drag).
-    // There is no dirty-state check or confirmation, so this reads as "the
-    // modal doesn't work." Removed entirely; the explicit Close (X) and
-    // Cancel buttons above are the only intentional exits now. No other
-    // outside-click-to-close implementation in this codebase (modal.js's
-    // own backdrop click, the color/icon popover, datetime_picker.js,
-    // reminders_picker.js) has a reusable opt-out flag to reuse instead --
-    // each is its own bespoke listener, so removing this one outright is
-    // consistent with there being no suppression convention already
-    // established elsewhere.
 
     overlay.querySelector("[data-cropper-apply]").addEventListener("click", () => {
       const b = state.box;
@@ -371,18 +283,6 @@
       octx.fillRect(0, 0, out.width, out.height);
       octx.drawImage(state.naturalCanvas, sx, sy, sw, sh, 0, 0, out.width, out.height);
 
-      // WebP output when the browser actually supports *encoding* it (not
-      // just decoding -- toDataURL silently falls back to PNG on a browser
-      // that can't encode WebP, which the data: URL prefix check below
-      // catches), same feature-detect app.js's own now-removed
-      // CCBannerUpload used to do for banners specifically -- generalized
-      // here to every upload kind (2026-08-29, direct request: "convert...
-      // to webp or compress them a bit"). WebP at this quality is
-      // meaningfully smaller than an equivalent-quality JPEG for typical
-      // photo content, and every server-side upload route already accepts
-      // it (routers/contacts.py's/settings.py's/banners.py's own
-      // content-type allowlists all include image/webp already, from
-      // before this change).
       const supportsWebp = out.toDataURL("image/webp").indexOf("data:image/webp") === 0;
       const outType = supportsWebp ? "image/webp" : "image/jpeg";
       const outExt = supportsWebp ? "webp" : "jpg";

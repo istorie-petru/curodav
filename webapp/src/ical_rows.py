@@ -55,27 +55,25 @@ def _dt_to_field(value: date | datetime) -> str:
 
 def _normalize_rrule(recurrence: str, dtstart_is_datetime: bool) -> tuple[str, list[date]]:
     """The app's recurrence strings (both hand-typed in event/task forms
-    and schedule.py-generated) use a dashed ISO-date convention for UNTIL,
-    matching desktop's core/recurrence.py -- e.g. "UNTIL=2026-12-20". RFC
-    5545's RRULE grammar does NOT accept that: `icalendar`'s parser raises
-    ValueError on anything but the compact form ("UNTIL=20261220" or
-    "...T235959"). RFC 5545 also doesn't allow EXDATE inside an RRULE
-    value at all -- it's a distinct top-level property. Both were latent
-    bugs (never hit because no test recurrence string included UNTIL or
-    EXDATE) until the Schedule feature started actually generating both.
+        and schedule.py-generated) use a dashed ISO-date convention for UNTIL,
+        matching desktop's core/recurrence.py -- e.g. RFC
+        5545's RRULE grammar does NOT accept that: `icalendar`'s parser raises
+        ValueError on anything but the compact form ("UNTIL=20261220" or
+        "...T235959"). RFC 5545 also doesn't allow EXDATE inside an RRULE
+        value at all -- it's a distinct top-level property. Both were latent
+        bugs (never hit because no test recurrence string included UNTIL or
+        EXDATE) until the Schedule feature started actually generating both.
 
-    RFC 5545 additionally requires UNTIL's value type to *match DTSTART's*
-    (§3.3.10) -- a DATE-TIME DTSTART with a bare-DATE UNTIL is silently
-    interpreted as "until midnight" by expansion libraries, which drops
-    the final occurrence whenever its time-of-day is after 00:00 (caught
-    by recurrence_expand.py's own test: a Tuesday-10am class with
-    UNTIL=2026-09-22 was missing its Sep-22 occurrence entirely). So this
-    always coerces UNTIL to match `dtstart_is_datetime`, regardless of
-    whether the input string had a time component.
+        RFC 5545 additionally requires UNTIL's value type to *match DTSTART's*
+        (§3.3.10) -- a DATE-TIME DTSTART with a bare-DATE UNTIL is silently
+        interpreted as "until midnight" by expansion libraries, which drops
+        the final occurrence whenever its time-of-day is after 00:00. So this
+        always coerces UNTIL to match `dtstart_is_datetime`, regardless of
+        whether the input string had a time component.
 
-    Returns (rrule_string_safe_for_icalendar, embedded_exdates) -- the
-    caller is responsible for adding those exdates as a proper EXDATE
-    property rather than leaving them in the RRULE string.
+        Returns (rrule_string_safe_for_icalendar, embedded_exdates) -- the
+        caller is responsible for adding those exdates as a proper EXDATE
+        property rather than leaving them in the RRULE string.
     """
     parts = recurrence.split(";")
     safe_parts: list[str] = []

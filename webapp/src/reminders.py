@@ -1,5 +1,4 @@
-"""Reminder scheduling for Web Push (2026-09-24, plans/ui-cleanup-2026-09.md
-item 7, slice P2).
+"""Reminder scheduling for Web Push.
 
 The one reminder primitive the spec allows, plus the one extra mechanism
 it names:
@@ -11,7 +10,7 @@ it names:
 - **Tasks** and **habits** remind on the day they're due: one morning
   digest each (generic when more than one -- "You have 3 tasks due
   today", never a list), at the digest time.
-- A habit with its own **reminder time** (2026-09-25, tasks.reminder_time)
+- A habit with its own **reminder time**
   reminds on its own at that time instead -- only if it's still due (not
   yet done, not paused) when the moment comes -- and is left out of the
   morning digest so it never pings twice. Avoid habits never remind.
@@ -33,14 +32,14 @@ Times are the server's local wall clock -- the same clock event
 
 from __future__ import annotations
 
-import logging
 import threading
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
+from .log import get_logger
 from . import db, habit_view, push, recurrence_expand
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 GRACE = timedelta(minutes=15)
 DIGEST_TIME_KEY = "push_digest_time"

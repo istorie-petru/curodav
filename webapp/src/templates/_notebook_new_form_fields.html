@@ -12,7 +12,7 @@
         {% include "_notebook_new_fields.html" %}
     </div>
     {% set labels_selected = nn.labels_selected %}{% set tag_name_items = nn.tag_name_items %}{% set ms_form_id = 'notebook-new-form' %}
-    {% include "_labels_row.html" %}
+    {% set labels_single = true %}{% include "_labels_row.html" %}
     {% set pf_tags = nn.pf_tags %}{% set pf_form_id = 'notebook-new-form' %}
     {% set project_items = nn.project_items %}{% set project_names = nn.project_names %}
     {% include "_project_field.html" %}

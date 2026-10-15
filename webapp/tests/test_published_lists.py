@@ -494,10 +494,7 @@ class TestCreateModalDropdownsAreCustomStyled:
             }
         )
         resp = router.new_list_modal(request, conn=conn)
-        # Strip the header comment before asserting -- it names the old
-        # <select> element in prose to explain the fix, which would
-        # otherwise be a false-positive match for the literal string.
-        body = resp.body.decode().split("-->", 1)[1]
+        body = resp.body.decode()
         assert "<select" not in body
 
     def test_entity_type_and_visibility_render_as_single_mode_multiselects(self, conn):

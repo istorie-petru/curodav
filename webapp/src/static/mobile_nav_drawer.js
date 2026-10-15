@@ -1,20 +1,3 @@
-// Mobile nav drawer (2026-09-04, plans/STATE.md mobile-nav decision) --
-// wires up the new 3-button `.mobile-tabbar` (Sidebar/Home/Search,
-// base.html) so its Sidebar button opens the existing `.tabbar` (the same
-// rail markup desktop uses, id="mobile-nav-drawer" below the mobile
-// breakpoint) as a bottom-sheet drawer, per the explicit design decision:
-// reuse the real nav content rather than a trimmed-down duplicate.
-//
-// Open/closed state lives on `<html data-mobile-nav-open>`, the same
-// "state on the root element, not a class buried in a component" pattern
-// base.html's own inline <head> script already uses for theme/
-// sidebar-expanded (see that script's own comments) -- style.css's mobile
-// media query keys every drawer/scrim rule off this one attribute.
-//
-// A no-op (early return) on any page that doesn't render `.mobile-tabbar`
-// at all (hide_tabbar pages, e.g. print/embed views) -- same guard shape
-// every other globally-loaded, base.html-scoped script in this app uses
-// (sidebar_tree.js, modal.js, ...).
 (function () {
   const toggle = document.getElementById("mobile-nav-toggle");
   const drawer = document.getElementById("mobile-nav-drawer");

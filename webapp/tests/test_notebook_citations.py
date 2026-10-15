@@ -564,3 +564,23 @@ class TestCitationsFiltersModal:
             req, type=[], author=[], year_from="1900", year_to="", sort="title", conn=conn
         )
         assert resp.context["selected_year_to"] == str(current_year)
+
+
+class TestCitationsSearch:
+    def test_q_filters_by_title_and_author(self, tmp_path):
+        from fastapi.testclient import TestClient
+        from src import db
+        from src.main import app
+        from src.deps import get_db
+        with db.connect(tmp_path / "c.sqlite") as c:
+            db.upsert_citation(c, {"title": "Alpha Book", "authors": [{"family": "Smith", "given": "A"}]})
+            db.upsert_citation(c, {"title": "Beta Paper", "authors": [{"family": "Jones", "given": "B"}]})
+            app.dependency_overrides[get_db] = lambda: c
+            try:
+                cl = TestClient(app)
+                by_title = cl.get("/notebook/citations?q=alpha").text
+                by_author = cl.get("/notebook/citations?q=jones").text
+            finally:
+                app.dependency_overrides.clear()
+        assert "Alpha Book" in by_title and "Beta Paper" not in by_title
+        assert "Beta Paper" in by_author and "Alpha Book" not in by_author

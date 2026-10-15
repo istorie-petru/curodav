@@ -12,11 +12,15 @@ import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import Scope
 
+from .log import get_logger
 from . import db, reminders, sync
 from .auth import AuthMiddleware, CSRFMiddleware
 from .caldav_bridge import CalDavBridge
@@ -24,7 +28,7 @@ from .config import apply_persisted_radicale_overrides, apply_persisted_timezone
 from .security_headers import SecurityHeadersMiddleware
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _BASE_DIR = Path(__file__).resolve().parent
 
@@ -228,6 +232,20 @@ def create_app() -> FastAPI:
 
     from .routers import auth, banners, calendar, contacts, dashboard, export, finance, flairs as flairs_router, habits, label_pages, labels, notebook, projects, public_lists, published_lists, push, pwa, quick_capture, search, secretariat_page, settings, spaces, sync_api, tasks, taxonomy, timeline
 
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error_page(request: Request, exc: StarletteHTTPException):
+        wants_html = "text/html" in request.headers.get("accept", "") and request.headers.get("x-requested-with") != "fetch"
+        if exc.status_code == 404 and wants_html and not request.url.path.startswith("/static"):
+            from .deps import templates
+
+            return templates.TemplateResponse(request, "not_found.html", {}, status_code=404)
+        return await http_exception_handler(request, exc)
+
+    @app.exception_handler(Exception)
+    async def unexpected_error(request: Request, exc: Exception):
+        logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+        return JSONResponse({"detail": "Something went wrong. It was logged."}, status_code=500)
+
     @app.get("/health")
     def health():
         return {"status": "ok"}
@@ -237,14 +255,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard.router)
     app.include_router(secretariat_page.home_router)
     app.include_router(search.router)
-    # 1.8 slice 1 -- the sync API skeleton (routers/sync_api.py,
-    # src/offline_sync.py). No PWA client calls this yet (§11 slices 3+);
-    # it's exercised synthetically by tests today. Named `sync_api` (not
-    # `sync`) to avoid shadowing this module's own already-imported
-    # `sync` (the unrelated Radicale Published-Lists background sync).
     app.include_router(sync_api.router)
-    # 1.8 slice 3 -- the PWA shell's own two routes (GET /sw.js, GET
-    # /offline)
     app.include_router(pwa.router)
     app.include_router(calendar.router)
     app.include_router(calendar.events_router)
@@ -260,10 +271,6 @@ def create_app() -> FastAPI:
     app.include_router(timeline.router)
     app.include_router(tasks.router)
     app.include_router(contacts.router)
-    # Quick Capture (plans/quick-capture.md) -- POST /api/quick-capture +
-    # GET /api/quick-capture/preview, its own tiny router since /api/search
-    # (routers/search.py) already owns the /api/ namespace's other endpoint
-    # and this is a distinct concern (parsing + create, not query).
     app.include_router(quick_capture.router)
     app.include_router(taxonomy.router)
     app.include_router(labels.router)

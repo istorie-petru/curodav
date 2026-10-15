@@ -2,28 +2,6 @@
 {% extends "base.html" %}
 {% block title %}New{% endblock %}
 {% block content %}
-<!-- Merged task/event/contact/label quick-add modal (2026-08-10, grew a
-     Contact and a Label tab 2026-09-14) -- the sidebar's global "+" button
-     opens this single modal instead of separate New task / New event /
-     New contact / New label buttons opening separate forms. All four
-     forms are rendered server-side in the same fragment (sharing their
-     field grids with the standalone forms via _task_form_fields.html /
-     _event_form_fields.html / _contact_form_fields.html /
-     _label_form_fields.html, so there's still exactly one markup contract
-     for each); the tab switcher in the header only toggles which panel is
-     visible (static/quick_add.js, run through static/modal.js's
-     wireContent() hook) and retargets the footer Save button's `form`
-     attribute to whichever form is active. `default_tab` (routers/
-     dashboard.py::quick_add_form) picks which panel starts active --
-     base.html's sidebar link passes it so Contacts/Labels pages still
-     open pre-focused on the right tab instead of always defaulting to
-     Task, same context-awareness the old per-page-branching href used to
-     give Contacts alone.
-
-     #modal-target: static/modal.js fetches this page and injects its
-     .modal-header/.modal-body/.modal-footer into the modal shell (see
-     event_form.html's header comment for the full reasoning), and the
-     modal-stable-height marker keeps the dialog one fixed size. -->
 
      <!-- Why this works (mirrors task_form.html/event_form.html):
      - The Save button lives in the footer, physically outside every
@@ -82,7 +60,7 @@
         {% if fin %}
         {% set quick_add_kind = 'transaction' %}
         <form method="post" id="finance-transaction-form" action="/finance/transactions">
-            {% with t=none, kind='', status='', status_items=fin.status_items, status_fixed=false, task_items=fin.task_items, recurrence='', account_items=fin.account_items, type_items=fin.type_items, amount_text='', tag_items=fin.tag_items, tag_selected=[] %}
+            {% with t=none, kind='', status='posted', status_fixed=false, task_items=fin.task_items, recurrence='', account_items=fin.account_items, type_items=fin.type_items, amount_text='', tag_items=fin.tag_items, tag_selected=[] %}
             {% include "_finance_transaction_fields.html" %}
             {% endwith %}
         </form>

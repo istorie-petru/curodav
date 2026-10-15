@@ -154,22 +154,6 @@ class TestSearchRoute:
         assert json.loads(resp.body.decode()) == []
 
 
-class TestDocumentPageBacklinks:
-    def test_document_page_carries_backlinks(self, conn):
-        _document(conn, uid="d1")
-        _document(conn, uid="d2", title="Linker")
-        db.set_notebook_document_content(conn, "d2", {"blocks": [_wikilink_block("d1")]})
-        req = Request(
-            {
-                "type": "http", "method": "GET", "path": "/notebook/d1", "query_string": b"",
-                "scheme": "http", "server": ("testserver", 80), "root_path": "", "headers": [],
-            }
-        )
-        resp = notebook_router.document_page("d1", req, conn=conn)
-        assert resp.context["backlinks"][0]["uid"] == "d2"
-        assert "Linker" in resp.body.decode()
-
-
 class TestBackupRoundTrip:
     def test_links_are_rebuilt_from_restored_content_not_backed_up_directly(self, conn, tmp_path):
         """notebook_links is a derived cache (db.py's own schema comment) --

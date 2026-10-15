@@ -1,29 +1,3 @@
-{# Date and time fields (2026-09-26, Peter's mockup; replaces the old
-   _datetime_picker.html popover). Each field is a real text box you can
-   type into -- a date as 29/09/2023 (day first), 2023-09-29, 29.09 or
-   "today"/"tomorrow"; a time as 15:30, 1530, 3pm -- with a small button
-   inside it that opens a dropdown: a month calendar for a date, a list of
-   times (every 15 minutes) for a time. A date field holds only a date, a
-   time field only a time. static/date_time_fields.js parses, formats and
-   runs the dropdowns; the server only ever sees the hidden input, in the
-   same format the old picker posted ("YYYY-MM-DD", "HH:MM", or
-   "YYYY-MM-DDTHH:MM" from a range), so no route changed.
-
-   date_field(name, value, ...)  -- one date. `value` "YYYY-MM-DD" (a
-       longer datetime is cut to its date). min/max "YYYY-MM-DD" grey out
-       days in the calendar and reject typed dates outside them.
-   time_field(name, value, ...)  -- one "HH:MM" time.
-   datetime_range(start_name, end_name, start_value, end_value, ...)
-       -- the mockup's "Date & time" block: an optional All day switch in
-       its header (it only shows/hides the time fields), then Start and
-       End, each a date field + a time field. Two hidden inputs carry
-       "YYYY-MM-DDTHH:MM"; an all-day range posts T00:00 .. T23:59 (the
-       app's inclusive all-day convention). Moving the start moves the end
-       with it (same duration); an end before the start snaps after it.
-
-   `role` (internal) ties a date/time field to its range; `input_class`
-   and `attrs` go on the hidden input (the Tasks table's inline due date
-   keeps its class="inline-date" data-uid data-field contract). #}
 
 {% macro _week_start() %}{{ week_start(request) if request is defined else 'monday' }}{% endmacro %}
 

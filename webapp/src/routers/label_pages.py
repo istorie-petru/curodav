@@ -1,12 +1,4 @@
-"""A label's own page, at `/labels/{name}` -- labels-as-modules slice b
-(plans/ui-cleanup-2026-09.md item 4, 2026-09-25).
-
-This replaces the three per-kind pages shipped 2026-09-16: the Space
-dashboard (`/spaces/{name}`), the Project Kanban+Agenda page
-(`/projects/{name}`) and the plain-label Kanban+Agenda page
-(`/settings/labels/{name}`). All three old URLs now redirect here. What the
-page shows depends on the label's module fields, not on what kind of label
-it is:
+"""A label's own page, at `/labels/{name}` -- labels-as-modules slice b.
 
 - `page_type` dashboard: the Home-style customizable widget grid, scoped to this
   label (label_detail.html).
@@ -14,11 +6,6 @@ it is:
 - otherwise: only the sections switched on in the label's settings
   (`agenda_widget`, `contacts_widget`, `notebook_widget`, and
   `tasks_widget` for the Kanban board), in label_sections.html.
-
-Either way, a label with a deadline (or a project) shows its status and the
-archive / unarchive action under the banner (_label_status.html). That's
-the "confirm finished -> archive" flow Peter kept on 2026-09-25, now
-available to any label rather than only projects.
 """
 
 from __future__ import annotations
@@ -51,20 +38,21 @@ def _short_date(d: date, today: date) -> str:
 
 
 def deadline_info(label: dict, today: date | None = None) -> dict | None:
-    """How a label's deadline should read (2026-09-25, UI audit L6). The
-    pill used to be red whether the deadline was 20 days out or 15 days
-    past. Now:
+    """How a label's deadline should read. The
+        pill used to be red whether the deadline was 20 days out or 15 days
+        past. Now:
 
-    - archived: gray "Deadline · 10 Sep" (it's history, no urgency)
-    - overdue: red "Overdue · 10 Sep"
-    - due within 7 days: orange "Due today" / "Due tomorrow" /
-      "Due in 5 days · 30 Sep"
-    - later: neutral gray "Due 15 Oct"
+        - archived: gray "Deadline · 10 Sep" (it's history, no urgency)
+        - overdue: red "Overdue · 10 Sep"
+        - due within 7 days: orange "Due today" / "Due tomorrow" /
+          "Due in 5 days · 30 Sep"
+        - later: neutral gray "Due 15 Oct"
 
-    The date carries its year when it's not this year's. Returns None for a
-    label without a deadline. `state` is for CSS/tests; `color` is the
-    `tag-*` pill color; `text` is the full pill text; `short` is the
-    lowercase phrase the preview modal appends after the status."""
+        The date carries its year when it's not this year's. Returns None for a
+        label without a deadline. `state` is for CSS/tests; `color` is the
+        `tag-*` pill color; `text` is the full pill text; `short` is the
+        lowercase phrase the preview modal appends after the status.
+    """
     if not (label.get("has_deadline") and label.get("deadline_date")):
         return None
     try:
@@ -104,10 +92,9 @@ def _archived_on(label: dict) -> str | None:
 
 def _status_context(conn, label: dict) -> dict:
     """Status + deadline for _label_status.html. Only labels with a
-    deadline or the project flag have a lifecycle; every other label gets
-    None for the status. 2026-09-25 (UI audit L6 + label page flesh-out):
-    also the deadline's state and, for any archived label, the date it was
-    archived (the page shows an "Archived on ... · Unarchive" line)."""
+        deadline or the project flag have a lifecycle; every other label gets
+        None for the status. · Unarchive" line).
+    """
     ctx = {
         "label_deadline": deadline_info(label),
         "label_archived_on": _archived_on(label),
@@ -140,9 +127,10 @@ def _cover_banner(conn, page_key: str, name: str):
 
 
 def _page_common(conn, name: str) -> dict:
-    """Context both label page layouts share (2026-09-25 flesh-out): how
-    many items carry the label, for the one combined "Nothing tagged X
-    yet" empty state."""
+    """Context both label page layouts share: how
+        many items carry the label, for the one combined "Nothing tagged X
+        yet" empty state.
+    """
     return {"label_usage_count": db.label_usage_count(conn, name)}
 
 
@@ -298,12 +286,10 @@ def label_page(name: str, request: Request, conn=Depends(get_db)):
 
 @router.get("/{name}/preview")
 def label_preview(name: str, request: Request, conn=Depends(get_db)):
-    """A label's compact preview modal (labels-as-modules slice d,
-    2026-09-25). A label pill inside a card or a detail modal opens this
-    rather than leaving the page (Peter, 2026-09-24: "context-dependent" --
-    modal from inside a widget/card, full page from the sidebar or a label
-    list). It shows the label's status, group, a short agenda and counts,
-    with an Open page link and an Edit button."""
+    """A label's compact preview modal. A label pill inside a card or a detail modal opens this
+        rather than leaving the page. It shows the label's status, group, a short agenda and counts,
+        with an Open page link and an Edit button.
+    """
     if not _label_exists(conn, name):
         raise HTTPException(404, "No such label")
     label = db.effective_label_config(conn, name)
@@ -328,10 +314,8 @@ def label_preview(name: str, request: Request, conn=Depends(get_db)):
 @router.post("/{name}/archive")
 def archive_label(name: str, x_requested_with: str | None = Header(None), conn=Depends(get_db)):
     """The explicit "this is finished" confirmation. It's never automatic;
-    see db.project_status for how Pending Archiving is computed.
-    2026-09-25: every label page offers Archive in its header now, and a
-    label that only exists through usage has no config row for
-    db.archive_project's UPDATE to hit, so one is created first."""
+        see db.project_status for how Pending Archiving is computed.
+    """
     if not db.get_label_config(conn, name):
         db.upsert_label_config(conn, {"name": name, "created_at": clock.now().isoformat()})
     db.archive_project(conn, name)

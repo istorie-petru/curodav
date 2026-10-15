@@ -1,0 +1,32 @@
+{% from "_inputs.html" import checkbox_input, radio_input %}
+{% from "_label_pill.html" import label_pill with context %}
+{% from "_action_menu.html" import action_menu with context %}
+{# One task as a list row: select box, the title (opens the view modal), its due date, its labels, then at the far
+   right the status, the one inline editor, next to the menu. Everything else is edited in the edit modal.
+   `skip_tag` is the group's own name. #}
+{% macro task_list_row(t, skip_tag='') %}
+<div class="contact-row-wrap task-row{% if t.status in ('done', 'archived') %} task-row-completed{% endif %}" data-uid="{{ t.uid }}">
+    {{ checkbox_input({'class': 'row-select', 'data-uid': (t.uid), 'aria-label': 'Select ' ~ (t.title), 'autocomplete': 'off'}) }}
+    <a class="contact-row task-row-title" href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>
+    <span class="task-row-date{% if t.due_at and t.due_at[:10] < today_iso and t.status not in ('done', 'archived') %} is-overdue{% endif %}">{% if t.due_at %}{{ t.due_at | relative_date }}{% endif %}</span>
+    <span class="task-row-tags">{% for tag in t.tags if tag != skip_tag %}{{ label_pill(tag, 'modal') }}{% endfor %}</span>
+    <div class="multiselect widget-list-multiselect task-status-select" data-ms data-ms-mode="single" data-ms-label="status" data-uid="{{ t.uid }}">
+        <button type="button" class="multiselect-trigger pill-select-trigger pill-{{ status_colors[t.status] }}" aria-haspopup="true" aria-expanded="false">
+            <span class="ms-summary">{{ status_labels[t.status] }}</span>
+            <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
+        </button>
+        <div class="multiselect-panel ms-panel">
+            {% for s in statuses %}
+            <label class="multiselect-option">
+                {{ radio_input({'name': 'task-status-' ~ (t.uid), 'value': s, 'class': 'task-status-radio', 'data-uid': t.uid, 'data-field': 'status', 'data-color': status_colors[s], 'checked': (true if (t.status == s) else false), 'autocomplete': 'off'}) }}
+                <span class="pill-static pill-{{ status_colors[s] }}">{{ status_labels[s] }}</span>
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+    {{ action_menu([
+        {'label': 'Edit task', 'icon': 'edit', 'href': '/tasks/' ~ t.uid ~ '/edit', 'modal': true},
+        {'label': 'Delete task', 'icon': 'trash', 'danger': true, 'form_action': '/tasks/' ~ t.uid ~ '/delete', 'undo': t.title, 'change': 'task'},
+    ], aria_label='More actions for ' ~ t.title) }}
+</div>
+{% endmacro %}

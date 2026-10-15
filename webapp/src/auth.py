@@ -1,4 +1,4 @@
-"""Single-user authentication (side work, 2026-08-16).
+"""Single-user authentication.
 
 The app runs with NO login by default -- the exact behavior it has always
 had (local dev, trusted networks; see deploy/README.md's security note).
@@ -27,67 +27,6 @@ Requests that want JSON (the `/api/*` routes, the async-CRUD `X-Requested-
 With: fetch` header, or an `Accept: application/json`) get a clean 401
 instead of a redirect so fetch-driven surfaces never try to parse the
 login page as JSON -- everything else gets a 302 to `/login?next=<path>`.
-
-2026-08-29: three additions, all still stdlib-only.
-  - A production deploy (`CC_DEPLOY_MODE=production` -- systemd/docker set
-    this; local dev/manual runs default to "local" and are unaffected)
-    with no account configured is forced through `GET/POST /setup`
-    instead of staying open: see `setup_required`, `AuthMiddleware`'s
-    forced-setup branch, and `routers/auth.py`'s setup routes. A
-    /setup-created account is persisted hashed (PBKDF2-HMAC-SHA256,
-    `hash_password`) in `app_meta`, not an env var.
-  - `CSRFMiddleware`: Origin/Referer verification for state-changing
-    requests carrying a session cookie (see its own docstring).
-  - `login_rate_limited`/`record_failed_login`: an in-memory per-IP
-    sliding-window lockout on `POST /login`.
-  - `is_secure_request`: whether the session cookie should carry the
-    `Secure` flag for this request (see its own docstring) -- both deploy
-    configs already pass uvicorn `--proxy-headers`, so this reflects the
-    real scheme even behind a TLS-terminating reverse proxy.
-
-2026-08-30: Settings > General gained an old/new/confirm password-change
-form (`routers/settings.py::change_login_password` -- 2026-09-08:
-superseded by the merged `::account_settings`, same Settings > General
-page, now the "Account" card) -- the always-available counterpart to
-/setup's one-time account creation, since that page only ever renders
-once per install (and, in local/dev mode, never at all -- see
-setup_required). Works whether or not an account exists yet: with none,
-it creates one under a fixed "admin" username with no old-password check;
-with one, the current password must verify first. This is also why
-`auth_enabled` no
-longer special-cases `deploy_mode == "local"` -- a password set through
-this form has to actually take effect immediately, in every deploy mode,
-not just production (see `auth_enabled`'s own docstring for the tradeoff
-that change makes).
-
-2026-09-07: audit fix (session revocation, `documentation/reports/
-full-app-audit-2026-09-07.md`) -- `rotate_session_secret` is now called
-whenever persisted credentials are (re)established (both /setup and
-account_settings), reusing the exact mechanism `routers/settings.py
-::purge_all` already used to force a re-login after a purge: an
-auto-generated session secret lives in `app_meta`, so replacing it makes
-`read_session_token`'s HMAC check fail for every cookie signed under the
-old one. Previously a stolen cookie or the just-replaced password itself
-stayed valid for the rest of the 30-day session, even after the account
-owner changed their password -- see SESSION_MAX_AGE_SECONDS's own
-docstring for the narrower caveat that remains (a fixed `CC_AUTH_SECRET`
-can't be rotated this way).
-
-2026-09-07: second audit fix, same report -- `AuthMiddleware` now logs
-loudly (once per process) the first time it sees a request land on a
-non-loopback interface while running fully open (`deploy_mode == "local"`,
-no account configured). This is deliberately reactive, not a startup-time
-bind-address check: the ASGI app is never told what host/port uvicorn was
-told to `--host` (systemd's unit, `python -m src.main`'s hardcoded
-0.0.0.0, and a bare `uvicorn` CLI invocation all bypass any config this
-module owns), but every request's ASGI scope carries the real local
-socket address that accepted it (`scope["server"]`) -- for a listener
-bound to 0.0.0.0, that is the actual interface IP a connection arrived on,
-not the literal string "0.0.0.0". So the first non-loopback request is
-proof the app is genuinely reachable from somewhere other than the same
-machine, at the exact moment the "no login unless you ask for it" default
-stops being a safe one. See `_is_loopback_host`/`AuthMiddleware.
-_warn_if_exposed`.
 """
 
 from __future__ import annotations
@@ -96,7 +35,6 @@ import base64
 import hashlib
 import hmac
 import json
-import logging
 import secrets
 import time
 from urllib.parse import urlencode, urlsplit
@@ -104,9 +42,10 @@ from urllib.parse import urlencode, urlsplit
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse
 
+from .log import get_logger
 from . import db
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # The cookie name + the app_meta key the auto-generated signing secret is
 # persisted under (see module docstring). Both are module-level constants
@@ -146,29 +85,18 @@ PUBLIC_PATHS = {"/login", "/health"}
 
 def auth_enabled(settings, conn=None) -> bool:
     """Whether login is enforced for this install: true when EITHER the
-    env-var pair (CC_AUTH_USERNAME/PASSWORD, see config.py's docstring) is
-    configured, OR a first-run /setup account (or a password set later
-    through Settings > General, routers/settings.py::account_settings)
-    has been persisted (has_persisted_credentials). A `None` settings
-    (middleware before the lifespan set it, or a bare test app) counts as
-    disabled.
+        env-var pair (CC_AUTH_USERNAME/PASSWORD, see config.py's docstring) is
+        configured, OR a first-run /setup account (or a password set later
+        through Settings > General, routers/settings.py::account_settings)
+        has been persisted (has_persisted_credentials). A `None` settings
+        (middleware before the lifespan set it, or a bare test app) counts as
+        disabled.
 
-    `conn` is optional -- pass one in when the caller already holds it
-    (routers do); otherwise a short-lived connection is opened only when
-    the env pair is absent, the same "conn optional, opened on demand"
-    convention session_secret uses.
-
-    2026-08-30: local/dev installs (deploy_mode == "local") now consult the
-    DB here too, same as production -- previously this short-circuited to
-    False for local mode unconditionally, on the reasoning that the env-var
-    pair was the only way to turn login on there. That made Settings >
-    General's password form silently no-op for the common "just run it
-    locally" case: a password would save to app_meta but never actually be
-    checked. AuthMiddleware._configured still caches the "is this
-    configured" answer on app.state once it flips True (see its own
-    docstring), so the steady-state cost of this change is one extra DB
-    read per request only for the genuinely-still-unconfigured window --
-    zero once an account exists, same as production always paid."""
+        `conn` is optional -- pass one in when the caller already holds it
+        (routers do); otherwise a short-lived connection is opened only when
+        the env pair is absent, the same "conn optional, opened on demand"
+        convention session_secret uses.
+    """
     if not settings:
         return False
     if settings.auth_username and settings.auth_password:
@@ -346,33 +274,30 @@ def _persisted_secret(conn) -> str:
 
 def rotate_session_secret(settings, conn) -> str:
     """Generates and persists a new session-signing secret, invalidating
-    every session cookie already issued: `read_session_token`'s HMAC check
-    fails for a cookie signed under a secret that no longer matches what's
-    in `app_meta`. This is the same mechanism `routers/settings.py::
-    purge_all` already relies on to force a re-login after a purge -- see
-    its comment -- generalized to a second trigger: call this whenever
-    persisted login credentials are (re)established (`set_persisted_
-    credentials`, from either /setup or Settings > General's password-change
-    form), so a stolen cookie -- or a session started under the
-    just-replaced password -- can't keep working past the moment the
-    account owner changes their password. Closes the gap flagged by the
-    2026-09-07 audit (`documentation/reports/full-app-audit-2026-09-07.md`):
-    previously nothing invalidated an outstanding session early, so it
-    stayed valid for the rest of its full 30-day `SESSION_MAX_AGE_SECONDS`
-    regardless of a later password change.
+        every session cookie already issued: `read_session_token`'s HMAC check
+        fails for a cookie signed under a secret that no longer matches what's
+        in `app_meta`. This is the same mechanism `routers/settings.py::
+        purge_all` already relies on to force a re-login after a purge -- see
+        its comment -- generalized to a second trigger: call this whenever
+        persisted login credentials are (re)established (`set_persisted_
+        credentials`, from either /setup or Settings > General's password-change
+        form), so a stolen cookie -- or a session started under the
+        just-replaced password -- can't keep working past the moment the
+        account owner changes their password.
 
-    A no-op returning the existing value when `CC_AUTH_SECRET` is
-    configured (`settings.auth_session_secret`) -- that secret is
-    operator-fixed, never stored in `app_meta`, and can't be rotated from
-    here; the module docstring's "change CC_AUTH_SECRET to force everyone
-    to re-login" is the equivalent action for that configuration.
+        A no-op returning the existing value when `CC_AUTH_SECRET` is
+        configured (`settings.auth_session_secret`) -- that secret is
+        operator-fixed, never stored in `app_meta`, and can't be rotated from
+        here; the module docstring's "change CC_AUTH_SECRET to force everyone
+        to re-login" is the equivalent action for that configuration.
 
-    The caller is responsible for updating any in-process cache of the old
-    value the same way `purge_all` does (`AuthMiddleware` caches the secret
-    on `app.state._cc_auth_secret`) -- otherwise the very request that
-    triggered the rotation would look unauthenticated to itself on its next
-    hit, since the middleware would still be comparing against the secret
-    this call just replaced."""
+        The caller is responsible for updating any in-process cache of the old
+        value the same way `purge_all` does (`AuthMiddleware` caches the secret
+        on `app.state._cc_auth_secret`) -- otherwise the very request that
+        triggered the rotation would look unauthenticated to itself on its next
+        hit, since the middleware would still be comparing against the secret
+        this call just replaced.
+    """
     if settings and settings.auth_session_secret:
         return settings.auth_session_secret
     secret = secrets.token_urlsafe(32)
@@ -524,20 +449,21 @@ class AuthMiddleware:
 
     def _configured(self, settings, scope) -> bool:
         """Cached "does this install have an account yet" check (env pair,
-        a persisted /setup account, or a password set later through
-        Settings > General) -- used by both deploy modes now (2026-08-30):
-        production uses it to decide whether to force /setup, local mode
-        uses it to decide whether a session is required at all. Once True,
-        it stays True for the process lifetime except for Settings > Purge
-        all, which resets the cache (see routers/settings.py::purge_all) --
-        a fresh install then needs to reconfigure, matching a wiped
-        database's actual state. The False path (genuinely not configured
-        yet) re-checks the DB every request, same as _get_secret's own
-        on-demand connection; for production that's expected only for the
-        brief window between install and finishing /setup, and for a local
-        install that never configures anything it's the permanent (if
-        cheap) steady state -- see auth_enabled's docstring for that
-        tradeoff."""
+                a persisted /setup account, or a password set later through
+                Settings > General) -- used by both deploy modes now:
+                production uses it to decide whether to force /setup, local mode
+                uses it to decide whether a session is required at all. Once True,
+                it stays True for the process lifetime except for Settings > Purge
+                all, which resets the cache (see routers/settings.py::purge_all) --
+                a fresh install then needs to reconfigure, matching a wiped
+                database's actual state. The False path (genuinely not configured
+                yet) re-checks the DB every request, same as _get_secret's own
+                on-demand connection; for production that's expected only for the
+                brief window between install and finishing /setup, and for a local
+                install that never configures anything it's the permanent (if
+                cheap) steady state -- see auth_enabled's docstring for that
+                tradeoff.
+        """
         app = scope.get("app")
         state = getattr(app, "state", None)
         if state is not None and getattr(state, "_cc_auth_configured", False):
@@ -548,13 +474,10 @@ class AuthMiddleware:
         return configured
 
     def _warn_if_exposed(self, scope) -> None:
-        """Logs a loud, one-time-per-process warning the first time a
-        request reaches this (unauthenticated) install via a non-loopback
-        interface -- see the 2026-09-07 audit-fix note in this module's
-        docstring for why this is checked here (request-time, off
-        `scope["server"]`) rather than at process startup. Cached on
-        `app.state` the same way `_configured` caches its own answer, so a
-        busy exposed install logs this once, not on every request."""
+        """Cached on
+                `app.state` the same way `_configured` caches its own answer, so a
+                busy exposed install logs this once, not on every request.
+        """
         app = scope.get("app")
         state = getattr(app, "state", None)
         if state is not None and getattr(state, "_cc_exposure_warned", False):

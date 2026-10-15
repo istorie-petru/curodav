@@ -10,23 +10,6 @@ metadata -- is portable too, and provide a full JSON backup/restore
 round-trip so nobody is ever trapped in this app's cache. Each standard-
 format export also double-checks that the synced objects survive an
 app-independent round-trip (ICS/VCF re-parse cleanly).
-
-2026-08-07: the Grades export (/export/grades.csv) is gone along with the
-rest of the Databases/Grades feature -- see features/architecture.md's
-removal note.
-
-2026-08-15: the dedicated /export/schedule.json export is gone along with
-the whole Schedule module -- see plans/STATE.md's removal entry. A class
-was already a real recurring event by 1.6, so nothing schedule-specific
-survives outside the ordinary events/labels exports.
-
-2026-08-08: every db.list_tasks(conn) call here passes
-include_habit_tasks=True -- db.list_tasks defaults to hiding habit-labeled
-tasks (they only show on Tasks > Habits, see routers/tasks.py's
-habits_view), but that exclusion exists for normal *browsing* views, not
-backups -- a habit-labeled task disappearing from tasks.csv/data.json/
-tasks.ics just because of which label it carries would be real, silent
-data loss on restore.
 """
 
 from __future__ import annotations
@@ -64,17 +47,17 @@ def _attachment(filename: str, body: bytes, media_type: str) -> Response:
 
 @router.get("")
 def export_index(request: Request, conn=Depends(get_db)):
-    """2026-08-08: no longer its own page -- direct feedback ("export and
-    backup should be fully with all buttons... in the advanced page") --
-    the standard-format/JSON downloads and restore forms this used to
-    render (export_index.html, deleted) are now inlined directly into
-    Settings > Data & Maintenance (routers/settings.py's
-    settings_data_maintenance, settings_data_maintenance.html's "Export &
-    import" section -- Advanced's old home, folded into that page 2026-08-
-    17) instead of living behind a link to a separate page. This route
-    stays registered as a plain redirect rather than being deleted
-    outright, so an old bookmark/link to /export still lands somewhere
-    real."""
+    """in the advanced page") --
+        the standard-format/JSON downloads and restore forms this used to
+        render (export_index.html, deleted) are now inlined directly into
+        Settings > Data & Maintenance (routers/settings.py's
+        settings_data_maintenance, settings_data_maintenance.html's "Export &
+        import" section -- Advanced's old home, folded into that page 2026-08-
+        17) instead of living behind a link to a separate page. This route
+        stays registered as a plain redirect rather than being deleted
+        outright, so an old bookmark/link to /export still lands somewhere
+        real.
+    """
     return RedirectResponse(url="/settings", status_code=303)
 
 
@@ -207,12 +190,6 @@ def export_events_csv(conn=Depends(get_db)):
 
 @router.get("/contacts.csv")
 def export_contacts_csv(conn=Depends(get_db)):
-    # Contacts field parity slice 2 of 6: `c["phone"]`/`c["email"]` (the
-    # legacy flat columns) are dead going forward -- a contact saved after
-    # this slice always has NULL there even with real phones/emails, so a
-    # plain CSV export needs its own "first entry" read, same convention
-    # contacts_list.html's row subtitle and db._search_contacts' subtitle
-    # use (oldest/lowest-position row, no separate "primary" flag).
     def _first(items: list[dict] | None) -> str:
         return items[0]["value"] if items else ""
 
@@ -241,14 +218,10 @@ def _json_response(filename: str, payload: Any) -> Response:
 @router.get("/labels.json")
 def export_labels_json(conn=Depends(get_db)):
     """Phase 2 (label-space rework): tags, projects, and spaces are all
-    just labels now (see db.py's Phase 2 comments). This exports every
-    label's config plus its current object_labels membership -- the one
-    export for all of it. Consolidated 2026-08-07 from two duplicate
-    routes (`/export/spaces.json` and `/export/tags.json`, which returned
-    byte-identical payloads under different names) into this single one --
-    keeping both was exactly the kind of compatibility-layer cruft this
-    app's own house rules rule out (see features/architecture.md's "no
-    compatibility layer" rule); there was never a real reason for two URLs."""
+        just labels now (see db.py's Phase 2 comments). This exports every
+        label's config plus its current object_labels membership -- the one
+        export for all of it.
+    """
     return _json_response(
         "labels.json",
         {"labels": db.list_labels(conn), "object_labels": data_exchange.object_label_rows(conn)},
@@ -257,24 +230,13 @@ def export_labels_json(conn=Depends(get_db)):
 
 def build_backup_payload(conn) -> dict[str, Any]:
     """The full-backup dict -- every synced object plus all local-only
-    data. Factored out of export_data_json (below) so it has exactly one
-    definition: the download route wraps it as a JSON response,
-    `src/data_health.py`'s create_backup writes the identical dict straight
-    to a file on disk -- Data Health's server-side backups and this route's
-    on-demand download are the same bytes, never two payload-building code
-    paths that could quietly drift apart.
-
-    2026-08-07: no more "grades" key -- the `grades` table (and the rest
-    of Databases/Grades) is removed entirely, not just excluded from the
-    backup.
-
-    2026-08-15: no more "schedule_settings" key or dedicated /schedule.json
-    export -- the whole Schedule module (and its `schedule_settings` table)
-    is removed, see plans/STATE.md's removal entry. "schedule_holidays"
-    stays -- named holiday calendars are a generic mechanism any recurring
-    event can use, unrelated to Schedule specifically. No more
-    "schedule_classes" key either -- a class was already a real event by
-    1.6, already covered by the "events" key above."""
+        data. Factored out of export_data_json (below) so it has exactly one
+        definition: the download route wraps it as a JSON response,
+        `src/data_health.py`'s create_backup writes the identical dict straight
+        to a file on disk -- Data Health's server-side backups and this route's
+        on-demand download are the same bytes, never two payload-building code
+        paths that could quietly drift apart.
+    """
     return {
         "exported_at": _now(),
         "events": db.list_events(conn),
@@ -445,11 +407,10 @@ def _restore_json_text(conn, raw: bytes, skip_existing: bool = False) -> int:
 @router.post("/import/events")
 def import_events(file: UploadFile, conn=Depends(get_db)):
     """Re-import an .ics exported by this app or any CalDAV app into the
-    universal events pool. Phase 1 (label-space rework) dropped
-    `calendars` -- there's no collection to pick anymore, plain SQL write
-    straight into `events` (see db.py's Phase 1 comments). Kept as its own
-    URL after the 2026-08-26 unified-import redesign for old bookmarks and
-    direct callers; the page itself posts to /import/auto now."""
+        universal events pool. Phase 1 (label-space rework) dropped
+        `calendars` -- there's no collection to pick anymore, plain SQL write
+        straight into `events` (see db.py's Phase 1 comments).
+    """
     events_added, _ = _import_ics_text(conn, file.file.read().decode("utf-8"))
     return _redirect_with_note("/settings", f"Imported {events_added} event(s).")
 
@@ -593,19 +554,19 @@ def _import_csv_text(conn, text: str, skip_existing: bool = False) -> str:
 @router.post("/import/auto")
 def import_auto(file: UploadFile, merge: str = Form(""), conn=Depends(get_db)):
     """The unified import endpoint behind Data & Maintenance's single
-    drag-and-drop zone: sniffs the uploaded bytes and dispatches --
-    BEGIN:VCARD -> contacts; BEGIN:VCALENDAR -> events and/or tasks (one
-    walk, both pools); this app's own CSV export shapes -> their pools
-    (2026-08-26 page redesign added the drop zone's .csv acceptance);
-    anything else must parse as a data.json backup or it's rejected.
-    Detection is by *content*, not filename, so a renamed/misnamed file
-    still lands correctly.
+        drag-and-drop zone: sniffs the uploaded bytes and dispatches --
+        BEGIN:VCARD -> contacts; BEGIN:VCALENDAR -> events and/or tasks (one
+        walk, both pools); this app's own CSV export shapes -> their pools;
+        anything else must parse as a data.json backup or it's rejected.
+        Detection is by *content*, not filename, so a renamed/misnamed file
+        still lands correctly.
 
-    `merge`: the zone's "Merge with existing data" checkbox (checked in the
-    UI sends "1"; an unchecked checkbox sends nothing at all, hence the ""
-    default). Checked (the default experience) is today's upsert-merge;
-    unchecked is add-only -- existing uids are left untouched, so a nervous
-    first import can't overwrite anything."""
+        `merge`: the zone's "Merge with existing data" checkbox (checked in the
+        UI sends "1"; an unchecked checkbox sends nothing at all, hence the ""
+        default). Checked (the default experience) is today's upsert-merge;
+        unchecked is add-only -- existing uids are left untouched, so a nervous
+        first import can't overwrite anything.
+    """
     raw = file.file.read()
     skip_existing = merge != "1"
     name = file.filename or ""

@@ -6,25 +6,13 @@
 <div id="modal-target">
 
 {% if request.query_params.get('note') %}
-<div class="settings-hint settings-hint-accent">{{ request.query_params.get('note') }}</div>
+<div class="settings-hint settings-hint-accent" data-dm-flash="note">{{ request.query_params.get('note') }}</div>
 {% endif %}
 {% if request.query_params.get('error') %}
-<div class="settings-hint settings-hint-error">{{ request.query_params.get('error') }}</div>
+<div class="settings-hint settings-hint-error" data-dm-flash="error">{{ request.query_params.get('error') }}</div>
 {% endif %}
 
 <div class="card">
-    <!-- Timezone (2026-09-30, direct report: Web Push notifications
-         arriving about two hours late -- traced to the app running on
-         whatever TZ the host/container happens to start in, since every
-         date.today()/datetime.now() call across the app, src/reminders.py's
-         scheduler included, has always assumed the server's own wall clock
-         IS the user's. See src/config.py's TIMEZONE_KEY comment for the
-         full story. "System default" (empty, listed first so the dropdown
-         partial's single-mode empty-value fallback lands on it, same
-         convention as Hide sleep hours' "Off" above) leaves the host/
-         container's own TZ untouched -- an existing install sees no
-         change until this is actually set. Same dropdown pattern as every
-         other row on this page. -->
     <form class="settings-field-row" method="post" action="/settings/timezone" id="timezone-form">
         <span class="settings-field-label">Timezone
             <span class="settings-field-hint">Used for "today", due dates, and when reminders fire</span>
@@ -55,22 +43,6 @@
         {% set ms_form_id = 'default-currency-form' %}
         {% include "_widget_list_multiselect.html" %}
     </form>
-    <!-- 2026-09-11 direct request: Profile picture, "Your name" (now
-         "Nickname") and the Account (username/password/Radicale URL) card
-         moved to a new Settings > Your Profile page
-         (settings_your_profile.html) -- this page keeps only the
-         format/display preferences below, none of which are about who the
-         user IS. -->
-    <!-- Week starts on (2026-08-08) -- affects Calendar's Month/Week
-         views (routers/calendar.py). 2026-09-24 direct request ("instead
-         of segmented, drop down menu with select one") -- now the same
-         single-select dropdown _widget_builder_fields.html's View/Range
-         fields use (_widget_list_multiselect.html, `ms_mode="single"`),
-         `ms_bare` (this file's own new param) since this row already has
-         its own left-side label. `ms_autosubmit` reuses the exact same
-         `data-change-submit` delegated listener the old segmented radios
-         relied on -- still autosubmits the instant it changes, no
-         separate Save step. -->
     <form class="settings-field-row" method="post" action="/settings/week-start" id="week-start-form">
         <span class="settings-field-label">Week starts on
             <span class="settings-field-hint">Calendar's Month and Week views</span>
@@ -86,12 +58,6 @@
         {% set ms_form_id = 'week-start-form' %}
         {% include "_widget_list_multiselect.html" %}
     </form>
-    <!-- 4-Week view: current week (2026-08-11) -- which of the four rows
-         the Calendar 4-Week view's current week occupies (the window of
-         28 continuous days always shows the current week, placed on the
-         chosen row; see routers/calendar.py's four_week_view). Same
-         dropdown swap as Week starts on above (2026-09-24 direct
-         request). -->
     <form class="settings-field-row" method="post" action="/settings/four-week-position" id="four-week-position-form">
         <span class="settings-field-label">4-Week view: current week
             <span class="settings-field-hint">Calendar's 4-Week view &mdash; which row holds the current week</span>
@@ -107,13 +73,6 @@
         {% set ms_form_id = 'four-week-position-form' %}
         {% include "_widget_list_multiselect.html" %}
     </form>
-    <!-- Recurrence terminology (1.6, "Configurable terminology") -- which
-         label set the recurrence editor's holiday-calendar/weekend
-         controls use (_event_form_fields.html, schedule_classes.html).
-         Presentation-layer only -- the underlying holiday_calendar/
-         exclude_saturday/exclude_sunday fields never change name or
-         meaning. Same dropdown swap as Week starts on above (2026-09-24
-         direct request). -->
     <form class="settings-field-row" method="post" action="/settings/recurrence-terminology" id="recurrence-terminology-form">
         <span class="settings-field-label">Recurrence terminology
             <span class="settings-field-hint">Labels on the event form's holiday/weekend fields</span>
@@ -129,15 +88,8 @@
         {% set ms_form_id = 'recurrence-terminology-form' %}
         {% include "_widget_list_multiselect.html" %}
     </form>
-    <!-- Habit streak terminology (2026-08-28, direct feedback) -- which
-         wording the Habits group's streak readout uses (Tasks table,
-         _habit_row.html via deps.py's habit_streak_text() global).
-         Presentation-layer-only, same dropdown swap as Recurrence
-         terminology above (2026-09-24 direct request). -->
     <form class="settings-field-row" method="post" action="/settings/habit-streak-terminology" id="habit-streak-terminology-form">
         <span class="settings-field-label">Habit streak terminology
-            {# 2026-09-25 (UI audit H-21): the Tasks table's Habits group is
-               gone; the streak text shows on the Habits page and widget. #}
             <span class="settings-field-hint">Wording for habit streaks on the Habits page and the Habit check-in widget</span>
         </span>
         <span class="spacer"></span>
@@ -151,10 +103,6 @@
         {% set ms_form_id = 'habit-streak-terminology-form' %}
         {% include "_widget_list_multiselect.html" %}
     </form>
-    <!-- 24-hour time (2026-08-08) -- affects every server-rendered time
-         in the app (deps.py's fmt_time/fmt_hour filters) plus the
-         Calendar/Schedule drag-preview labels. Same dropdown swap as Week
-         starts on above (2026-09-24 direct request). -->
     <form class="settings-field-row" method="post" action="/settings/time-format" id="time-format-form">
         <span class="settings-field-label">Time format
             <span class="settings-field-hint">Used everywhere a time is shown</span>
@@ -170,28 +118,6 @@
         {% set ms_form_id = 'time-format-form' %}
         {% include "_widget_list_multiselect.html" %}
     </form>
-    <!-- Hide sleep hours in Planner (2026-09-09, direct request) -- Week
-         view's hour grid collapses whatever Sleep-kind window Settings >
-         Sleep & Leisure Time has configured, instead of just hatching it
-         (routers/calendar.py's _sleep_collapse_window/_week_view_context).
-         Off by default. Day view is unaffected regardless of this setting
-         (direct decision, confirmed via AskUserQuestion) -- the hint below
-         says so up front rather than letting someone discover it by
-         checking Day and finding nothing changed.
-
-         Same dropdown swap as Week starts on above (2026-09-24 direct
-         request), with one wrinkle: the submitted value for "Off" has to
-         stay the empty string (routers/settings.py's
-         `set_hide_sleep_hours(enabled: str = Form(""))`), and
-         _widget_list_multiselect.html's single-mode `_sel_item` lookup
-         (its own header comment doesn't call this out) falls back to
-         `ms_items | first` whenever `ms_selected` is falsy -- which an
-         empty-string "Off" always is. Every other single-select caller in
-         the app that uses an empty-string value already works around this
-         by listing that item first (_event_form_fields.html's Holiday
-         calendar "(none)"); Off leads here for the same reason, not
-         because it reads better -- the on/off order flips from the old
-         segmented control's "On, Off" to "Off, On" as a result. -->
     <form class="settings-field-row" method="post" action="/settings/hide-sleep-hours" id="hide-sleep-hours-form">
         <span class="settings-field-label">Hide sleep hours in Planner
             <span class="settings-field-hint">Removes the Sleep time block's hours from the Week grid entirely, instead of just highlighting them. Requires one consistent Sleep window in <a href="/settings/time-blocks">Sleep &amp; Leisure Time</a>. Day view is unaffected.</span>
@@ -207,23 +133,6 @@
         {% set ms_form_id = 'hide-sleep-hours-form' %}
         {% include "_widget_list_multiselect.html" %}
     </form>
-    <!-- Calendar views setting removed 2026-08-29 (STATE.md backlog item 5,
-         direct request) -- the Month/Day switcher's visibility toggle added
-         2026-08-28 is gone; both views are unconditionally available now,
-         same as before that setting existed. -->
-    <!-- Flair languages (2026-09-29, direct request: first step of
-         multilingual support -- explicitly NOT "add 20 new languages,"
-         just a checkbox-dropdown offering English (default) and Romanian)
-         -- which of flairs.FLAIR_KEYWORDS_BY_LANG's keyword tables
-         flairs.match_flair searches when guessing a flair from an
-         event/task/label/group/project's own name. `ms_mode="select"`,
-         same reasoning as Notifications' "Remind me about" row: these are
-         real independent on/off flags (unticking English genuinely means
-         "don't search English keywords," not "no filter, search
-         everything" the way an empty Labels filter elsewhere behaves) --
-         see that row's own comment in settings_notifications.html for the
-         full "select" vs "filter" distinction. Autosubmits like every
-         other row on this page. -->
     <form class="settings-field-row" method="post" action="/settings/flair-languages" id="flair-languages-form">
         <span class="settings-field-label">Flair languages
             <span class="settings-field-hint">Keyword languages used to auto-guess a flair from a name</span>

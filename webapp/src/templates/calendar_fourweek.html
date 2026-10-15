@@ -7,51 +7,16 @@
 {% set _lbl = active_label | default('') %}
 {% set _lq = '&label=' ~ (_lbl|urlencode) if _lbl else '' %}
 {% set calendar_filter_base_url = '/calendar/fourweek?date_=' ~ anchor_iso %}
-<!-- 2026-08-28 "Calendar split into two pages" -- 4-Week is a standalone
-     tabbar destination now (base.html), not one of four tabs inside a
-     shared Month/4-Week/Week/Day subnav -- no more cross-links to the
-     other calendar views here. 2026-08-29 follow-up (sidebar redesign
-     item 13e, direct request): the separate `.toolbar.top-app-bar.
-     toolbar-2row` row is gone -- "+ New event" was redundant with the
-     sidebar's own global quick-add, dropped rather than relocated;
-     prev/next week nav and the label filter now render inside the
-     narrow header's actions slot instead. -->
 <!-- Real page heading, kept sr-only -- same reasoning as tasks_list.html's
      own comment. -->
 <h1 class="sr-only">{{ label_text }}</h1>
 {% call page_header_narrow("Calendar", "calendar") %}
-<!-- 2026-09-09, slice 6 of the "FullCalendar-parity interactions" arc:
-     prev/next now navigate via AJAX (async_calendar.js's new bindCalNav)
-     instead of a full page reload -- the plain <a href> stays as the
-     no-JS fallback/real bookmark target, bindCalNav just intercepts the
-     click when JS is available. cal-nav-label is the new visible
-     date-range label (the sr-only heading above used to be a static
-     "4-Week View" string with no date info at all -- now a real range,
-     same `label_text` value as that heading so the two can never
-     drift). -->
 <a class="icon-btn cal-nav-prev" href="/calendar/fourweek?date_={{ prev_start }}{{ _lq }}" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
 <span class="cal-nav-label" id="cal-nav-label" aria-live="polite">{{ label_text }}</span>
 <a class="icon-btn cal-nav-next" href="/calendar/fourweek?date_={{ next_start }}{{ _lq }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>
 {{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names, event_label_items) }}
 {% endcall %}
 
-<!-- 2026-08-11: the same Month-viewport shell as calendar_month.html
-     (fits the viewport, week rows flex to share the height, day cells drop
-     their fixed-height floor -- see style.css's .month-viewport comment) --
-     always exactly four week rows, and every day is in-window (no
-     .not-in-month cells at all: the window is a continuous 28 days and
-     never bleeds into surrounding weeks/months). `.fourweek-viewport`
-     just trims the height back from Month's 128vh (tuned for up to six
-     rows) so four rows don't stretch across a page-and-a-half.
-
-     2026-08-31: the grid itself moved into _calendar_fourweek_grid.html
-     (its own async-CRUD region, `#fourweek-grid`) instead of being
-     duplicated inline here -- that duplication is exactly what let
-     4-Week's chips drift out of sync with Month's drag hooks (missing
-     `.month-event-item`/`.month-due-task-item`/`data-uid`) in the first
-     place (direct bug report, "drag and drop still is not working ... 4
-     week view"). See that partial's own comment and routers/calendar.py's
-     _four_week_view_context docstring for the full story. -->
 {% include "_calendar_fourweek_grid.html" %}
 {% endblock %}
 {% block extra_scripts %}

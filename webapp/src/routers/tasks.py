@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .. import clock, db, derived_state, finance, finance_stats, habit_heatmap, habit_view, work_sessions
-from ..deps import get_db, respond, templates
+from .. import validation
+from ..deps import get_db, respond, templates, validation_response
 from . import dashboard as dashboard_router
 from . import calendar as calendar_router  # _annotate_calendar_colors, for related events' identity dots
 
@@ -60,14 +61,6 @@ STATUS_COLORS = {
     "done": "green",
     "archived": "gray",
 }
-# 1.1 (virtual & derived states, plans/open-priority.md § Virtual & derived
-# states) introduced two independent 1-3 axes -- Importance and Urgency --
-# replacing the single 1-4 WebDAV `priority` axis. That whole feature (the
-# axes, their filters/sort keys, the task detail meta row, the Dashboard
-# widgets that read them, and the export columns) is removed outright --
-# no longer a feature this app offers. The old `tasks.priority` column
-# stays physically on disk, unused, same "never force-drop old data"
-# convention as every other removed column in db.py.
 
 STATUS_ITEMS = [{"uid": s, "name": STATUS_LABELS[s]} for s in STATUSES]
 
@@ -85,19 +78,12 @@ DONE_STATUSES = ("done", "archived")
 
 def _apply_date_filter(tasks: list[dict], date_filter: str) -> list[dict]:
     """Filters tasks by the real date buckets (today/tomorrow/this_week/
-    this_month). Delegates to src/derived_state.py's `virtual_states`
-    predicate -- the single place per-state membership is computed -- so
-    this filter, the Dashboard's aggregation service, and any future
-    surface agree by construction rather than by each re-implementing the
-    date math.
-
-    Tasks page filter cleanup (2026-08-15, plans/open.md): `overdue`/
-    `important`/`urgent` used to live here too (1.1) but moved to
-    Status/Importance/Urgency filters instead -- all of which are gone
-    entirely as of the 2026-08-28 "major rework" session (item 3,
-    "filtering reduced to date only"), and Importance/Urgency itself is now
-    gone as a feature -- `virtual_states` no longer takes a `label_rules`
-    argument at all."""
+        this_month). Delegates to src/derived_state.py's `virtual_states`
+        predicate -- the single place per-state membership is computed -- so
+        this filter, the Dashboard's aggregation service, and any future
+        surface agree by construction rather than by each re-implementing the
+        date math.
+    """
     if date_filter == "all":
         return tasks
     states = {date_filter}
@@ -109,11 +95,11 @@ def _tags_list(tags: str) -> list[str]:
 
 
 def _work_allocation_context(conn, task: dict) -> dict:
-    """Context keys every task view modal needs for its Work sessions card
-    (1.4, plans/open-priority.md § Work allocations): the scheduled work
-    blocks for this task plus the scheduled/completed/remaining hour totals
-    they add up to. `None` task -> empty, so templates never have to branch
-    on the object existing."""
+    """Context keys every task view modal needs for its Work sessions card: the scheduled work
+        blocks for this task plus the scheduled/completed/remaining hour totals
+        they add up to. `None` task -> empty, so templates never have to branch
+        on the object existing.
+    """
     if task is None:
         return {"work_allocations": [], "work_hours": {"scheduled": 0.0, "completed": 0.0, "remaining": 0.0}}
     allocations = db.list_work_allocations_for_task(conn, task["uid"])
@@ -183,45 +169,36 @@ def _task_context(request: Request) -> dict:
 
 
 def _due_at_key(t: dict) -> str:
-    """The one sort key the reworked Table view still needs -- 2026-08-28
-    "major rework" session (item 3): sorting is no longer user-choosable
-    (the old Title/Status/Due column-header sort links and the `sort`/`dir`
-    query params are gone, along with the importance/urgency sort keys they
-    used to sit next to), every non-Completed group is simply due-date
-    ascending, always. A task with no due date sorts last within its group
-    (the same '9999' sentinel the old due_at sort key already used)."""
+    """A task with no due date sorts last within its group
+        (the same '9999' sentinel the old due_at sort key already used).
+    """
     return t.get("due_at") or "9999"
 
 
 def _build_task_groups(conn, open_tasks: list[dict], completed_tasks: list[dict]) -> list[dict]:
-    """2026-08-28 "major rework" session (item 3): grouping is now always
-    on, in one fixed order -- Project (one group per project label,
-    alphabetical) -> Unassigned (open tasks with no project label) -> Completed (every
-    completed task regardless of project, most-recent-first, always last).
-    `open_tasks` is expected pre-sorted by due date (_due_at_key) -- every
-    group but Completed simply preserves that order, so a project/
-    Unassigned group's own tasks read due-date-ascending for free without
-    re-sorting per bucket. Completed intentionally does NOT nest under its
-    task's project anymore (the pre-rework `group_by=project` grouping did)
-    -- "completed always last" only holds if every completed task, from
-    every project, lands in the one trailing group together.
+    """The list's groups: open projects first, then labels, then tasks with neither, then Completed last.
 
-    Habits H2 (2026-09-24): the Habits group that used to sit between
-    Project and Unassigned is gone -- habits live on /habits now."""
-    buckets: dict[str | None, list[dict]] = {}
-    order: list[str | None] = []
+    A task sits in one group: its open project, else its first label (alphabetically), else No label.
+    `open_tasks` is pre-sorted by due date and each group keeps that order. Completed tasks stay together
+    in the one trailing group, newest change first."""
+    projects = db.list_project_labels(conn)
+    open_projects = {c["name"] for c in projects if not c.get("archived_at")}
+    all_projects = {c["name"] for c in projects}
+    buckets: dict[tuple[str, str], list[dict]] = {}
     for t in open_tasks:
-        proj = db.project_label_for(conn, "task", t["uid"])
-        if proj not in buckets:
-            buckets[proj] = []
-            order.append(proj)
-        buckets[proj].append(t)
-    named = sorted((p for p in order if p is not None), key=str.lower)
-
-    groups = [{"kind": "project", "name": p, "tasks": buckets[p]} for p in named]
-    groups.append({"kind": "unassigned", "name": "Unassigned", "tasks": buckets.get(None, [])})
+        tags = sorted(t.get("tags") or [], key=str.lower)
+        project = next((x for x in tags if x in open_projects), None)
+        label = next((x for x in tags if x not in all_projects), None)
+        key = ("project", project) if project else ("label", label) if label else ("unassigned", "No label")
+        buckets.setdefault(key, []).append(t)
+    rank = {"project": 0, "label": 1, "unassigned": 2}
+    groups = [
+        {"kind": kind, "name": name, "tasks": members}
+        for (kind, name), members in sorted(buckets.items(), key=lambda kv: (rank[kv[0][0]], kv[0][1].lower()))
+    ]
     completed_sorted = sorted(completed_tasks, key=lambda t: t.get("updated_at") or "", reverse=True)
-    groups.append({"kind": "completed", "name": "Completed", "tasks": completed_sorted})
+    if completed_sorted:
+        groups.append({"kind": "completed", "name": "Completed", "tasks": completed_sorted})
     return groups
 
 
@@ -232,20 +209,20 @@ def _tasks_list_context(
     q: str | None = None,
 ) -> dict:
     """Build the full render context for the Table view -- now the *only*
-    Tasks view (2026-08-28 "major rework" session, item 4). Shared between
-    the full page (list_tasks) and the async-CRUD region fragment
-    (tasks_regions, GET /tasks/regions?region=table) so a mutation-triggered
-    region refresh re-renders the exact same markup as the full page --
-    _tasks_body.html is the single source of truth either way
-    (features/async-crud.md).
+        Tasks view. Shared between
+        the full page (list_tasks) and the async-CRUD region fragment
+        (tasks_regions, GET /tasks/regions?region=table) so a mutation-triggered
+        region refresh re-renders the exact same markup as the full page --
+        _tasks_body.html is the single source of truth either way
+        (features/async-crud.md).
 
-    Filtering is date-only now (item 3) -- Status/Importance/Urgency/label
-    filtering, the group-by toggle, sorting-by-column, and pagination are
-    all gone (see this module's other 2026-08-28 comments for why each one
-    went). No pagination in particular: the 1.9 pagination slice already
-    special-cased "grouped mode shows everything, don't paginate it" --
-    grouping is unconditional now, so that's simply the whole page's
-    behavior, not a narrower special case anymore."""
+        Filtering is date-only now (item 3) -- Status/Importance/Urgency/label
+        filtering, the group-by toggle, sorting-by-column, and pagination are
+        all gone. No pagination in particular: the 1.9 pagination slice already
+        special-cased "grouped mode shows everything, don't paginate it" --
+        grouping is unconditional now, so that's simply the whole page's
+        behavior, not a narrower special case anymore.
+    """
     _auto_archive_if_configured(conn)
     tasks = db.list_tasks(conn, q=q)
     tasks = _apply_date_filter(tasks, date_filter)
@@ -258,12 +235,6 @@ def _tasks_list_context(
     open_tasks = [t for t in tasks if t["status"] not in DONE_STATUSES]
     completed_tasks = [t for t in tasks if t["status"] in DONE_STATUSES]
 
-    # 1.5 slice (the deadline-vs-work-allocation surfacing slice, see
-    # plans/open-priority.md § Task model): attach each visible task's
-    # scheduled/completed/remaining hours so _task_row.html can render a
-    # "Scheduled" column distinct from "Due" -- one batched query
-    # (db.task_work_hours_bulk) for the whole page instead of one query per
-    # row.
     _rendered = open_tasks + completed_tasks
     _hours = db.task_work_hours_bulk(conn, [t["uid"] for t in _rendered])
     for t in _rendered:
@@ -326,32 +297,28 @@ def tasks_regions(
 
 @router.get("/board")
 def board_view_redirect():
-    """Kanban is retired (2026-08-28 "major rework" session, item 4) --
-    Table is now the only Tasks view. Redirect rather than a bare 404, same
-    "any bookmark still lands somewhere real" precedent `/projects`'s own
-    retirement established (routers/projects.py). tasks_board.html and this
-    route's old filter-driven column logic are gone; `_apply_status_filter`
-    et al died with them (see this module's other 2026-08-28 comments)."""
+    """Kanban is retired --
+        Table is now the only Tasks view. Redirect rather than a bare 404, same
+        "any bookmark still lands somewhere real" precedent `/projects`'s own
+        retirement established (routers/projects.py). tasks_board.html and this
+        route's old filter-driven column logic are gone; `_apply_status_filter`
+        et al died with them.
+    """
     return RedirectResponse(url="/tasks", status_code=302)
 
 
 @router.get("/habits")
 def habits_view_redirect():
     """Old Tasks > Habits URL -- habits have their own page since habits
-    H2 (2026-09-24, routers/habits.py). Redirect, same precedent as
-    board_view_redirect above."""
+        H2. Redirect, same precedent as
+        board_view_redirect above.
+    """
     return RedirectResponse(url="/habits", status_code=302)
 
 
 @router.post("/habits/settings")
 def save_habit_settings(habit_label: str = Form("Habit"), conn=Depends(get_db)):
-    """Which label marks a task as habit-tracked -- 2026-08-28: the
-    dedicated Tasks > Habits page this used to live on (a collapsible
-    Settings panel at the bottom) is gone, but the setting itself, and this
-    endpoint, are left in place unchanged -- a future slice can surface it
-    somewhere in the merged Table view's Habits group if that turns out to
-    be needed; nothing currently reads this route's redirect target as a
-    real page. Returns to /habits since habits H2."""
+    """Returns to /habits since habits H2."""
     db.save_task_habit_settings(conn, habit_label)
     return RedirectResponse(url="/habits", status_code=303)
 
@@ -431,12 +398,13 @@ def _apply_habit_days(recurrence: str | None, habit_days, present) -> str | None
 
 
 def _apply_habit_repeat(repeat, recurrence, habit_days, habits_per_period, times_week=None, times_month=None):
-    """habit_task_form.html's "How often" choice (2026-09-26): daily /
-    days (the Days dropdown) / week / month (the "N times a week/month"
-    dropdown next to it) / keep (the stored rule, sent back as the hidden
-    `recurrence`). Returns (recurrence, habits_per_period); forms without
-    the field get their own values back unchanged, and _apply_habit_days
-    still runs after."""
+    """habit_task_form.html's "How often" choice: daily /
+        days (the Days dropdown) / week / month (the "N times a week/month"
+        dropdown next to it) / keep (the stored rule, sent back as the hidden
+        `recurrence`). Returns (recurrence, habits_per_period); forms without
+        the field get their own values back unchanged, and _apply_habit_days
+        still runs after.
+    """
     if not isinstance(repeat, str) or not repeat:
         return recurrence, habits_per_period
     if repeat == "daily":
@@ -452,17 +420,16 @@ def _apply_habit_repeat(repeat, recurrence, habit_days, habits_per_period, times
 
 
 def _apply_habit_goal(goal, target_per_day):
-    """The form's "Daily goal" (2026-09-26): "once" is a plain check-off
-    (target 1) whatever the hidden Amount box holds; "amount" keeps the
-    typed number (1 or blank falls back to 1 downstream)."""
+    """The form's "Daily goal": "once" is a plain check-off
+        (target 1) whatever the hidden Amount box holds; "amount" keeps the
+        typed number (1 or blank falls back to 1 downstream).
+    """
     if isinstance(goal, str) and goal == "once":
         return "1"
     return target_per_day
 
 
 def _save_habit_look(conn, uid: str, icon, color) -> None:
-    """2026-09-26: the habit form's icon + colour; anything outside
-    habit_view's lists (or blank) stores the default."""
     icon = icon if isinstance(icon, str) and icon in habit_view.habit_icon_choices() else None
     color = color if isinstance(color, str) and color in habit_view.HABIT_COLORS else None
     db.set_task_habit_look(conn, uid, icon, color)
@@ -525,6 +492,9 @@ def create_task(
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
+    error = validation.task_error(title, start_at, due_at, status, STATUSES)
+    if error:
+        return validation_response(error, x_requested_with, "/tasks")
     tags = dashboard_router._combine_tags(tags, tags_labels)
     tags = dashboard_router._with_project(conn, tags, project, project_field)
     recurrence, habits_per_period = _apply_habit_repeat(
@@ -775,13 +745,12 @@ async def bulk_action(request: Request, conn=Depends(get_db)):
 
 def _is_habit_task(conn, task: dict | None) -> bool:
     """True if `task` carries the configured habit label -- the same test
-    `db.list_habit_tasks`' own filter applies, done directly against a
-    single already-fetched task instead of a second query. Used to route
-    a habit-tracked task's edit/view to the dedicated habit_task_form.html/
-    habit_task_detail.html templates (2026-08-29 direct feedback: "habits
-    should not have in their edit modal a label dropdown, a status
-    dropdown, a due or a start date") instead of the generic task_form.
-    html/task_detail.html every other task uses."""
+        `db.list_habit_tasks`' own filter applies, done directly against a
+        single already-fetched task instead of a second query. Used to route
+        a habit-tracked task's edit/view to the dedicated habit_task_form.html/
+        habit_task_detail.html templates instead of the generic task_form.
+        html/task_detail.html every other task uses.
+    """
     if not task:
         return False
     habit_label = db.get_task_habit_settings(conn)["habit_label"]
@@ -938,6 +907,9 @@ def update_task(
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
+    error = validation.task_error(title, start_at, due_at, status, STATUSES)
+    if error:
+        return validation_response(error, x_requested_with, f"/tasks/{uid}/edit")
     pending_rows = None
     if pending_tx_present == "1":
         pending_rows = _pending_transaction_rows(
@@ -1046,16 +1018,10 @@ _UPDATABLE_FIELDS = {"status", "due_at", "title"}
 @router.post("/{uid}/update-field")
 async def update_field(uid: str, request: Request, conn=Depends(get_db)):
     """Single-field inline edit, used by the Table view's click-to-edit
-    pills/date cells. Deliberately a JSON body, not a Form -- this is
-    only ever called from tasks_table.js via fetch(), never from a plain
-    HTML form/no-JS fallback, unlike every other route in this router. (The
-    Projects page's Kanban board used to call this too for its own per-card
-    status dropdown -- removed 2026-09-02, "no inline editing"; a status
-    change there now happens by opening the task's own edit form instead,
-    which POSTs through the normal `/tasks/{uid}` route, not this one.
-    `tags` was here too, 2026-08-29 - 2026-09-26 -- the Table view's Labels
-    cell was briefly an editable checkbox dropdown, static/tasks_table.js;
-    reverted, "labels should not be inline editable.")"""
+        pills/date cells. Deliberately a JSON body, not a Form -- this is
+        only ever called from tasks_table.js via fetch(), never from a plain
+        HTML form/no-JS fallback, unlike every other route in this router.
+    """
     payload = await request.json()
     field = payload.get("field")
     value = payload.get("value")
@@ -1064,6 +1030,12 @@ async def update_field(uid: str, request: Request, conn=Depends(get_db)):
     existing = db.get_task(conn, uid)
     if existing is None:
         return JSONResponse({"error": "task not found"}, status_code=404)
+    error = validation.task_error(
+        value if field == "title" else "x", existing.get("start_at"), value if field == "due_at" else None,
+        value if field == "status" else None, STATUSES,
+    )
+    if error:
+        return JSONResponse({"error": error["message"]}, status_code=400)
     row = dict(existing)
     if field == "due_at":
         row["due_at"] = value or None
@@ -1100,18 +1072,19 @@ def complete_task(uid: str, x_requested_with: str | None = Header(default=None),
 
 @router.post("/{uid}/archive")
 def archive_task(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
-    """Item 19 (2026-09-26, "Habits must be archivable"): a plain task can
-    already reach "archived" through its own Status dropdown
-    (STATUSES/status_labels above already list it) -- this is a dedicated
-    action for the one caller that has NO status dropdown at all,
-    habit_task_form.html's Archive button ("habits should not have in
-    their edit modal... a status dropdown" -- see that template's own
-    header comment on why this exists as a separate button instead). Same
-    `dict(existing) + one field + upsert_task` shape complete_task above
-    already uses. update_task's own `status` default now falls back to
-    whatever's already on the row (see that route's own comment) instead
-    of hardcoding "active", so a later plain Save on this same habit
-    doesn't silently undo this."""
+    """Item 19: a plain task can
+        already reach "archived" through its own Status dropdown
+        (STATUSES/status_labels above already list it) -- this is a dedicated
+        action for the one caller that has NO status dropdown at all,
+        habit_task_form.html's Archive button ("habits should not have in
+        their edit modal... a status dropdown" -- see that template's own
+        header comment on why this exists as a separate button instead). Same
+        `dict(existing) + one field + upsert_task` shape complete_task above
+        already uses. update_task's own `status` default now falls back to
+        whatever's already on the row (see that route's own comment) instead
+        of hardcoding "active", so a later plain Save on this same habit
+        doesn't silently undo this.
+    """
     row = db.get_task(conn, uid)
     if row:
         row["status"] = "archived"
@@ -1139,20 +1112,11 @@ def _completion_heatmap_weeks(
     completions: dict[str, str], weeks: int = habit_heatmap.DETAIL_WEEKS, today: date | None = None
 ) -> list[list[dict]]:
     """Monday-aligned grid of `weeks` columns x 7 rows ending on `today`,
-    same shape habits' _heatmap_weeks produces (so the shared
-    _habit_heatmap.html macro can paint it). A present date is "full"
-    (level 4 -- there's no target-per-day concept for task check-offs);
-    future days render blank/non-interactive (level -1).
-
-    Default was 12 weeks until 2026-08-29 direct feedback ("the heatmap
-    graph should not have empty space... prefer to show more months, empty
-    cells, but not empty space"): at the heatmap's fixed 11px cell size, 12
-    weeks (~168px) was far narrower than the ~660px modal body
-    habit_task_detail.html renders it in, leaving a large blank gap.
-    Reusing habit_heatmap.DETAIL_WEEKS (53 weeks, "a bit over a year") both
-    fills that width with real grid (extra future days render as blank
-    *cells* within the grid, not blank space around it) and keeps this
-    heatmap visually consistent with the standalone habit detail modal's."""
+        same shape habits' _heatmap_weeks produces (so the shared
+        _habit_heatmap.html macro can paint it). A present date is "full"
+        (level 4 -- there's no target-per-day concept for task check-offs);
+        future days render blank/non-interactive (level -1).
+    """
     today = today or clock.today()
     start = today - timedelta(days=weeks * 7 - 1)
     start -= timedelta(days=start.weekday())  # snap back to the preceding Monday
@@ -1196,19 +1160,12 @@ def toggle_task_completion(
     conn=Depends(get_db),
 ):
     """The heatmap/list toggle for a recurring task's daily check-off: no
-    completion for that date -> record one; already logged -> remove it
-    (back to true "not done", not a hidden zero row). Redirects back to the
-    referer (the tasks list's Today column), falling back to the task's own
-    detail page when there's no referer -- same pattern as the habits
-    toggle.
-
-    2026-08-28 follow-up fix: this endpoint always redirected regardless of
-    `X-Requested-With`, so the Habits group's checkbox (_habit_row.html,
-    posts here for a plain kind='task' habit) never had a JSON success path
-    to key off of -- it fell back to a plain, unenhanced native form submit
-    (no `data-cc-change` was even set), causing a full-page reload/re-
-    navigate on every check-in. Now dual-mode like every other mutation
-    endpoint in this router (deps.respond)."""
+        completion for that date -> record one; already logged -> remove it
+        (back to true "not done", not a hidden zero row). Redirects back to the
+        referer (the tasks list's Today column), falling back to the task's own
+        detail page when there's no referer -- same pattern as the habits
+        toggle.
+    """
     try:
         if date.fromisoformat(completion_date) > clock.today():
             return JSONResponse({"error": "Can't log a day in the future."}, status_code=400)
@@ -1235,17 +1192,14 @@ def set_task_completion(
     conn=Depends(get_db),
 ):
     """Explicit-value counterpart to toggle_task_completion above (a >target_per_day
-    "+1" quick check-in button on Tasks > Habits posts today's date and
-    the pre-computed next value here; referer-aware redirect is what lets
-    that work from the check-in row without bouncing to the task's own
-    detail page). Only relevant for a habit-labeled task with
-    target_per_day > 1 -- a plain checkbox habit (or an ordinary recurring
-    task) never has anything that posts here, it just uses the toggle
-    route above.
-
-    2026-08-28 follow-up fix: same always-redirects gap as the toggle route
-    above -- now dual-mode (deps.respond) so the Habits group's "+1" button
-    can succeed via fetch instead of a full native form submit."""
+        "+1" quick check-in button on Tasks > Habits posts today's date and
+        the pre-computed next value here; referer-aware redirect is what lets
+        that work from the check-in row without bouncing to the task's own
+        detail page). Only relevant for a habit-labeled task with
+        target_per_day > 1 -- a plain checkbox habit (or an ordinary recurring
+        task) never has anything that posts here, it just uses the toggle
+        route above.
+    """
     try:
         if date.fromisoformat(completion_date) > clock.today():
             return JSONResponse({"error": "Can't log a day in the future."}, status_code=400)
@@ -1290,18 +1244,6 @@ def delete_task(uid: str, x_requested_with: str | None = Header(default=None), c
     return respond(x_requested_with, "/tasks")
 
 
-# --------------------------------------------------------------------- #
-# Work allocations -- 1.4, plans/open-priority.md § Work allocations, §
-# Task & calendar semantics. A work allocation is a calendar Event linked
-# to this task via event_task_relations.is_work_allocation=1 (db.py's
-# create_work_allocation) -- a scheduled block of work time, distinct from
-# an ordinary Relations-card link. This is the task-detail form entry point
-# for scheduling one directly (start/end datetime); the project's Week
-# Calendar view (not yet built) will be the drag-and-drop surface for the
-# same underlying operation.
-# --------------------------------------------------------------------- #
-
-
 def _safe_next(next_url: str) -> str | None:
     """A same-origin relative path safe for a RedirectResponse after a
     work-session action -- rejects open-redirect payloads (schemes,
@@ -1325,23 +1267,17 @@ def add_work_allocation(
     conn=Depends(get_db),
 ):
     """The Work sessions card's "+" button and the planning panels' "+" --
-    add a work session with NO date at all. A session added this way is an
-    unscheduled placeholder (no start/end), so the task stays on the
-    planning grids' "Unscheduled work" panel and is placed onto a real slot
-    by dragging it there (the create endpoints'
-    place-the-oldest-undated-session behavior). The old start/end datetime
-    inputs are gone from the modal but still honored here if a caller posts
-    them: a valid pair schedules the session directly, a malformed pair is
-    rejected the same as before (no-op). The panel posts a same-origin
-    `next` path to reload on the grid it was used from; the modal leaves it
-    empty and returns to the task.
-
-    2026-09-26 (item 11, redesigned Unscheduled Work row's own "+" button):
-    dual-mode like every other async-CRUD mutation (`deps.respond`) -- the
-    row now POSTs through `ccApi.post` (project_calendar.js) so the week
-    grid's own region refresh handles it instead of a full page reload; a
-    plain non-JS form (the modal's Work sessions card) still gets its
-    redirect."""
+        add a work session with NO date at all. A session added this way is an
+        unscheduled placeholder (no start/end), so the task stays on the
+        planning grids' "Unscheduled work" panel and is placed onto a real slot
+        by dragging it there (the create endpoints'
+        place-the-oldest-undated-session behavior). The old start/end datetime
+        inputs are gone from the modal but still honored here if a caller posts
+        them: a valid pair schedules the session directly, a malformed pair is
+        rejected the same as before (no-op). The panel posts a same-origin
+        `next` path to reload on the grid it was used from; the modal leaves it
+        empty and returns to the task.
+    """
     task = db.get_task(conn, uid)
     if task is not None:
         if start_at and end_at and end_at > start_at:
@@ -1359,15 +1295,13 @@ def remove_latest_work_allocation(
     conn=Depends(get_db),
 ):
     """The planning grids' "Unscheduled work" panel "−" button -- remove the
-    task's most recently added UNDATED work session, so it undoes the
-    panel's own "+" without ever touching an already-scheduled block (see
-    `db.remove_latest_work_allocation`'s own docstring). No-ops if the task
-    has no undated sessions left to remove, even if it has dated ones; never
-    touches the task. `next`, when present, is the planning page to return
-    to (same-origin path only, see `_safe_next`).
-
-    2026-09-26: dual-mode (see add_work_allocation above) -- the redesigned
-    row's "Remove latest session" kebab item posts through ccApi.post too."""
+        task's most recently added UNDATED work session, so it undoes the
+        panel's own "+" without ever touching an already-scheduled block (see
+        `db.remove_latest_work_allocation`'s own docstring). No-ops if the task
+        has no undated sessions left to remove, even if it has dated ones; never
+        touches the task. `next`, when present, is the planning page to return
+        to (same-origin path only, see `_safe_next`).
+    """
     db.remove_latest_work_allocation(conn, uid)
     return respond(x_requested_with, _safe_next(next) or f"/tasks/{uid}")
 

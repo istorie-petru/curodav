@@ -4,38 +4,8 @@
 {% from "_modal_header_back.html" import modal_header_back %}
 {% block title %}{{ "Edit field" if f else "Add field" }}{% endblock %}
 {% block content %}
-<!-- Settings > Notebook's field edit modal (2026-10-02) -- one form for
-     every field a Notebook document's frontmatter schema entry can carry,
-     same "pattern B" shape as holiday_edit_modal.html: opened empty from
-     "+ Add field" (routers/notebook.py's new_notebook_field_modal, posts
-     to create_notebook_field) or prefilled from a row's Edit button
-     (edit_notebook_field_modal, posts to update_notebook_field).
-
-     The Options section only matters for Select/Multi-select -- shown/
-     hidden via `.notebook-field-form-grid[data-field-type]` (style.css),
-     toggled by static/notebook_field_options_rows.js's Type-change
-     listener, same `data-page`/label_role_picker.js idiom the label
-     form's Page/Sections switch already uses. Left visible-in-the-DOM-but-
-     hidden rather than removed, so switching back to Select restores
-     whatever rows were already typed without losing them.
-
-     Built-in fields (title/author/note_type, 2026-10-02 direct request:
-     "all frontmatter should always appear in the settings... nothing
-     about them can be changed besides the display name") lock every
-     field except Display label down to a plain readonly/disabled
-     presentation -- routers/notebook.py's update_notebook_field ignores
-     whatever a tampered-with POST sends for them anyway, this is just the
-     honest UI for that contract, not the real enforcement. note_type is
-     the one builtin that's also type=select -- its Options section stays
-     fully visible and its Look pickers stay interactive (that's the
-     "change icon and color" part), only each option's value and the Add/
-     Remove controls are locked (`notebook_field_option_row`'s own
-     `locked` param). -->
 <div id="modal-target" class="modal-stable-height">
 <div class="modal-header">
-{# item G (session 8, 2026-10-03): no return_to concept here (no
-   attach-picker ever opens this modal) -- always back to Settings >
-   Notebook, `crumbs` already carries that (_FIELD_SETTINGS_CRUMB). #}
 {{ modal_header_back(crumbs[-1].url if crumbs else '', crumbs[-1].name if crumbs else '') }}
 <h1>{{ "Edit field" if f else "Add field" }}</h1>
 </div>

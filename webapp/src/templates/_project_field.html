@@ -1,14 +1,3 @@
-{# Project dropdown for the task and event forms (project-picker slice,
-   2026-09-25). A project is still stored as one of the item's labels. The
-   form just asks for it separately, because putting a task in a project
-   means something different from tagging it (Peter: "it means different
-   things when the user assigns them"). Single choice, so an item can't be
-   given two projects from here; the server (dashboard._with_project ->
-   db.apply_project_choice) swaps whatever project label the item had for
-   the one picked here, but only when the form carries `project_field`.
-   Renders nothing when the route didn't pass project_picker_context, so
-   the server then leaves the item's labels exactly as posted.
-   Expects: pf_tags (the item's current labels, or a prefill), pf_form_id. #}
 {% if project_items is defined %}
 {% set _current = (pf_tags or []) | select('in', project_names) | list | first %}
 {% set _items = project_items %}

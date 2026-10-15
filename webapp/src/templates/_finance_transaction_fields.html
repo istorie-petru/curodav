@@ -32,11 +32,6 @@
         {% include "_contacts_row.html" %}
         {% if status_fixed %}
         <input type="hidden" name="status" value="scheduled">
-        {% elif not t or copy %}
-        <div class="field">
-            {% set st_name = 'status' %}{% set st_label = 'Status' %}{% set st_items = status_items %}{% set st_selected = status %}{% set st_form_id = 'finance-transaction-form' %}
-            {% include "_status_type_row.html" %}
-        </div>
         {% endif %}
         <div class="field finance-scheduled-only">
             {% set st_name = 'task_uid' %}{% set st_label = 'Task' %}{% set st_items = task_items %}{% set st_selected = t.task_uid if t and t.task_uid else '' %}{% set st_form_id = 'finance-transaction-form' %}

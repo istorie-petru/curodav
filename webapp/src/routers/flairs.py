@@ -1,4 +1,4 @@
-"""Item 10 follow-up (2026-09-27) -- serves an operator-supplied flair
+"""Item 10 follow-up -- serves an operator-supplied flair
 photo straight off disk, from `Settings.flairs_dir` (`CC_FLAIRS_DIR`, see
 config.py's own comment). This is the one route in the whole app that
 serves arbitrary operator-placed files by name -- see `_safe_flair_id`
@@ -13,7 +13,8 @@ own under the documented flair ids -- `documentation/flairs.md` has the
 full list). Mirrors routers/banners.py's own `/banners/image` (read
 bytes, sniff the real content-type rather than trusting the extension,
 long-cache since the URL src/flairs.py builds is already mtime-
-versioned)."""
+versioned).
+"""
 
 from __future__ import annotations
 

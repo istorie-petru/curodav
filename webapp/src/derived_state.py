@@ -1,5 +1,4 @@
-"""Virtual & derived states (1.1, plans/open-priority.md § Virtual & derived
-states): the shared, deterministic derivation of a task's temporal
+"""Virtual & derived states: the shared, deterministic derivation of a task's temporal
 virtual-state membership (Today / Tomorrow / This Week / This Month /
 Overdue).
 

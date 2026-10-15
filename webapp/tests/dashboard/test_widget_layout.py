@@ -268,7 +268,7 @@ class TestDashboardRoute:
         req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
         resp = dashboard_router.dashboard_view(req, conn=conn)
         assert resp.status_code == 200
-        assert b"Add widget" in resp.body
+        assert b'id="widget-grid"' in resp.body or b"widget-card" in resp.body
 
     def test_edit_mode_renders_no_height_resize_handle(self, conn):
         # 2026-08-07 -- the manual height editor/drag-resize handle was

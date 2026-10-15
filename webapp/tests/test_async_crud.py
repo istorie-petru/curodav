@@ -73,7 +73,7 @@ def _task(conn, uid, title=None, status="active", due_at=None, tags=None):
 def _rows(html: str) -> set[str]:
     import re
 
-    return set(re.findall(r'tr[^>]*data-uid="([^"]+)"', html))
+    return set(re.findall(r'class="[^"]*task-row[^"]*"[^>]*data-uid="([^"]+)"', html))
 
 
 class TestTasksRegionFragment:

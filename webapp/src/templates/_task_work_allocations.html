@@ -1,3 +1,4 @@
+{% from "_empty_state.html" import empty_state %}
 {# Work sessions. View modal: read-only list. Edit modal: rows inside the task form, saved with the form's Save
    (routers/tasks.py update_task -> db.sync_work_sessions). Rows post as parallel ws_* arrays. #}
 {% from "_date_time_fields.html" import datetime_range with context %}
@@ -25,7 +26,7 @@
     {% endfor %}
 </ol>
 {% else %}
-<div class="empty-state empty-state-compact">No work sessions</div>
+{{ empty_state('No work sessions', size='compact') }}
 {% endif %}
 {% endmacro %}
 

@@ -1,22 +1,3 @@
-// Notebook Editor mode mount (curodav-notes/documentation/plans/
-// architecture-notes-module-2026-09-29.md §3) -- initializes Editor.js on
-// #notebook-editor, loads content_json via GET .../content, autosaves via
-// PUT .../content (the one JSON-in/out exception documented in
-// routers/notebook.py). Tools: Editor.js's own header/list/table/
-// image(simple-image)/inline-code (vendored UMD bundles), Quote/Callout/
-// Delimiter/Code from first-party notebook_blocks.js and notebook_code.js
-// (2026-10-03 reworks, replacing @editorjs/quote, @editorjs/warning,
-// @editorjs/delimiter, and @editorjs/code outright -- see vendor/
-// NOTICE.md for why each), Footnote (an inline tool, not a block) from
-// first-party notebook_footnotes.js plus FootnoteInsert (a block tool,
-// the "/" slash-menu entry point for the footnote action menu -- item J,
-// session 9a, 2026-10-03), WikiLink (also inline) from first-party
-// notebook_wikilinks.js (2026-10-03, roadmap's "Wikilinks &
-// relationships" section), plus editorjs-drag-drop and editorjs-undo
-// (vendored as dragdrop.umd.js/undo.umd.js) wired up after the editor is
-// ready below. notebook_toc.js's Outline sidebar and notebook_wikilinks.js's
-// own Relationships "Links to" list (2026-10-03) both hook in the same way
-// footnotes does -- re-rendered on ready and on every onChange below.
 (function () {
   var mount = document.getElementById("notebook-editor");
   if (!mount || !window.EditorJS) return;
@@ -41,6 +22,7 @@
       .then(function (resp) {
         if (!resp.ok) throw new Error("save failed");
         failedSaves = 0;
+        document.dispatchEvent(new CustomEvent("notebook-saved"));
       })
       .catch(function () {
         if (failedSaves++ === 0) {
@@ -56,174 +38,259 @@
     }, 1500);
   }
 
-  // Markdown-style fast-writing shortcuts (direct request: "a lot of the
-  // markdown writing conventions should be used for fast writing"). Not
-  // Editor.js's `conversionConfig` mechanism -- that requires every
-  // source/target tool pair to declare matching import/export hooks, a lot
-  // of plumbing across first-party and vendored tools alike for what's
-  // really just "replace this empty paragraph with that other block type."
-  // Instead: a keydown listener on the whole mount (delegation, since
-  // blocks are created/destroyed as the user edits) that only fires when
-  // the current block's entire text content is *exactly* one of the
-  // trigger patterns below with the caret at its very end -- e.g. a block
-  // containing only "#" followed by pressing Space. That guard is what
-  // keeps "it's a #1 priority" or "a - b" from mis-firing mid-sentence.
-  // A plain node-type check on range.startContainer isn't enough here --
-  // a collapsed caret's startContainer is sometimes the editable element
-  // itself (offset = child count, not a character count) rather than a
-  // text node (offset = character count), depending on how the selection
-  // got there. `Range.compareBoundaryPoints` looks like the fix (compare
-  // against a range collapsed to the editable's own true end) but doesn't
-  // actually treat a text-node end point and its parent's equivalent
-  // offset as equal here -- confirmed live, (textNode, textNode.length)
-  // consistently compares as *before* (parentNode, indexOfTextNode + 1)
-  // even though they're the same position. Walking up from the caret
-  // instead -- true iff nothing (no sibling, at any level) follows it on
-  // the way up to `editable` -- sidesteps that mismatch completely since
-  // it never compares across the two point shapes at all.
-  function isCaretAtEnd(editable, range) {
-    var container = range.endContainer;
-    var offset = range.endOffset;
-    if (container.nodeType === Node.TEXT_NODE) {
-      if (offset !== container.textContent.length) return false;
-    } else if (offset !== container.childNodes.length) {
-      return false;
-    }
-    while (container && container !== editable) {
-      if (container.nextSibling) return false;
-      container = container.parentNode;
-    }
-    return container === editable;
-  }
-
   function replaceBlock(editor, index, type, data) {
     editor.blocks.insert(type, data, {}, index, true);
     editor.blocks.delete(index + 1);
   }
 
+  // The text before the caret in a block, and the HTML after it.
+  function splitAtCaret(editable, range) {
+    var head = document.createRange();
+    head.selectNodeContents(editable);
+    head.setEnd(range.startContainer, range.startOffset);
+    var tail = document.createRange();
+    tail.selectNodeContents(editable);
+    tail.setStart(range.startContainer, range.startOffset);
+    var holder = document.createElement("div");
+    holder.appendChild(tail.cloneContents());
+    return { before: head.toString(), rest: holder.innerHTML, restText: holder.textContent };
+  }
+
+  var SKIP = "code, pre, .cdx-code, .cdx-wikilink, .cdx-footnote-list, .cdx-footnote-input, .nbt";
+
+  // Block markers typed at the start of a block: `# `, `- `, `1. `, `> `, `[ ] ` and Enter after ``` or ---.
+  // They work on text that is already written, and keep the text that follows the caret.
   function wireMarkdownShortcuts(editor, mount) {
+    var T = window.NotebookTyping;
     mount.addEventListener("keydown", function (e) {
-      if (e.key !== " " && e.key !== "Enter") return;
       var sel = window.getSelection();
-      if (!sel.rangeCount) return;
+      if (!sel.rangeCount || !sel.getRangeAt(0).collapsed) return;
       var range = sel.getRangeAt(0);
-      if (!range.collapsed) return;
       var node = range.startContainer;
       var el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
       var editable = el && el.closest("[contenteditable=true]");
-      if (!editable || !isCaretAtEnd(editable, range)) return;
-
-      // Deriving the index from the actual element the caret is in (not
-      // `editor.blocks.getCurrentBlockIndex()`) -- that index is only set
-      // by Editor.js's own click/focus bookkeeping, which lags behind a
-      // caret that got there some other way (e.g. arrow-key navigation
-      // right after a block was just inserted), so it can point at the
-      // wrong block or report -1 with no block "current" yet at all.
+      if (!editable || editable.closest(".nbt")) return;
       var block = editor.blocks.getBlockByElement(editable);
-      if (!block || block.name !== "paragraph") return;
+      if (!block) return;
       var index = editor.blocks.getBlockIndex(block.id);
-      var text = editable.textContent;
+      var split = splitAtCaret(editable, range);
+      var key = e.key === " " ? "Space" : e.key;
 
-      if (e.key === " ") {
-        var headerMatch = /^(#{1,5})$/.exec(text);
-        if (headerMatch) {
-          e.preventDefault();
-          replaceBlock(editor, index, "header", { text: "", level: headerMatch[1].length });
-          return;
-        }
-        if (text === "-" || text === "*") {
-          e.preventDefault();
-          replaceBlock(editor, index, "list", {
-            style: "unordered",
-            items: [{ content: "", meta: {}, items: [] }],
-          });
-          return;
-        }
-        if (/^\d+\.$/.test(text)) {
-          e.preventDefault();
-          replaceBlock(editor, index, "list", {
-            style: "ordered",
-            items: [{ content: "", meta: {}, items: [] }],
-          });
-          return;
-        }
-        if (text === ">") {
-          e.preventDefault();
-          replaceBlock(editor, index, "quote", { text: "", caption: "", color: "blue" });
-          return;
-        }
-      } else if (e.key === "Enter") {
-        if (text === "```") {
-          e.preventDefault();
-          replaceBlock(editor, index, "code", { code: "", language: "plaintext" });
-          return;
-        }
-        if (text === "---" || text === "***") {
-          e.preventDefault();
-          replaceBlock(editor, index, "delimiter", { style: "stars" });
-          return;
-        }
+      // Backspace at the start of a heading turns it back into a paragraph instead of merging it away.
+      if (key === "Backspace" && block.name === "header" && split.before === "" && split.restText.trim()) {
+        e.preventDefault();
+        replaceBlock(editor, index, "paragraph", { text: split.rest });
+        return;
       }
+      if (key !== "Space" && key !== "Enter") return;
+      if (block.name === "header" && key === "Space") {
+        var level = T.headingLevelMarker(split.before);
+        if (level) {
+          e.preventDefault();
+          replaceBlock(editor, index, "header", { text: split.rest, level: level });
+        }
+        return;
+      }
+      if (block.name !== "paragraph") return;
+      var marker = T.blockMarker(split.before, key, split.restText);
+      if (!marker) return;
+      e.preventDefault();
+      if (marker.type === "header") replaceBlock(editor, index, "header", { text: split.rest, level: marker.level });
+      else if (marker.type === "list") {
+        var item = { content: split.rest, meta: marker.style === "checklist" ? { checked: marker.checked } : {}, items: [] };
+        replaceBlock(editor, index, "list", { style: marker.style, items: [item] });
+      } else if (marker.type === "quote") replaceBlock(editor, index, "quote", { text: split.rest, caption: "", color: "blue" });
+      else if (marker.type === "code") replaceBlock(editor, index, "code", { code: "", language: "plaintext" });
+      else if (marker.type === "delimiter") replaceBlock(editor, index, "delimiter", { style: "stars" });
     });
   }
 
-  // Typing the closing marker of **bold**, *italic*, _italic_, ~~strike~~ or `code` turns the
-  // span into formatted text right away, so markdown works as the way of writing.
-  var INLINE_RULES = [
-    { re: /(^|[^*])\*\*([^*\s](?:[^*]*[^*\s])?)\*\*$/, tag: "b" },
-    { re: /(^|[^~])~~([^~\s](?:[^~]*[^~\s])?)~~$/, tag: "s" },
-    { re: /(^|[^`])`([^`]+)`$/, tag: "code" },
-    { re: /(^|[^*\w])\*([^*\s](?:[^*]*[^*\s])?)\*$/, tag: "i" },
-    { re: /(^|[^_\w])_([^_\s](?:[^_]*[^_\s])?)_$/, tag: "i" },
-  ];
+  // The caret leaves the block holding `from` for the editable text of the next (or previous) block. It reads the
+  // blocks from the page, because Editor.js's own "current block" can lag behind where the caret really is.
+  window.notebookMoveToBlock = function (from, down) {
+    var block = from.closest(".ce-block");
+    var sibling = block && (down ? block.nextElementSibling : block.previousElementSibling);
+    while (sibling) {
+      var fields = sibling.querySelectorAll("[contenteditable=true]");
+      var target = fields.length ? fields[down ? 0 : fields.length - 1] : null;
+      if (target) {
+        // Going through Editor.js keeps its own idea of the current block right, so its arrow keys keep working.
+        var api = window.notebookEditor;
+        var found = api && api.blocks.getBlockByElement(target);
+        if (found && api.caret.setToBlock(api.blocks.getBlockIndex(found.id), down ? "start" : "end", 0)) return true;
+        target.focus();
+        var range = document.createRange();
+        range.selectNodeContents(target);
+        range.collapse(down);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        return true;
+      }
+      sibling = down ? sibling.nextElementSibling : sibling.previousElementSibling;
+    }
+    return false;
+  };
 
+  // Arrow keys in lists: Down at the end of an item goes to the next item, and from the last item to the next
+  // block; Up at the start of an item goes to the previous item, and from the first item to the previous block.
+  function wireListArrows(editor, mount) {
+    mount.addEventListener(
+      "keydown",
+      function (e) {
+        if ((e.key !== "ArrowDown" && e.key !== "ArrowUp") || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
+        var item = e.target.closest && e.target.closest(".cdx-list__item-content");
+        var sel = window.getSelection();
+        if (!item || !sel.rangeCount || !sel.getRangeAt(0).collapsed) return;
+        var split = splitAtCaret(item, sel.getRangeAt(0));
+        var down = e.key === "ArrowDown";
+        if (down ? split.restText !== "" : split.before !== "") return;
+        var block = item.closest(".ce-block");
+        var items = Array.prototype.slice.call(block.querySelectorAll(".cdx-list__item-content"));
+        var next = items[items.indexOf(item) + (down ? 1 : -1)];
+        e.preventDefault();
+        e.stopPropagation();
+        if (next) {
+          next.focus();
+          var range = document.createRange();
+          range.selectNodeContents(next);
+          range.collapse(down);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        } else window.notebookMoveToBlock(item, down);
+      },
+      true
+    );
+  }
+
+  function insideSkipped(node) {
+    var parent = node && (node.nodeType === Node.TEXT_NODE ? node.parentElement : node);
+    return !parent || parent.closest(SKIP) || !parent.closest(".ce-block");
+  }
+
+  function checkpoint(undo) {
+    if (undo) undo.checkpoint();
+  }
+
+  function elementFor(tags, href) {
+    var inner = null;
+    var outer = null;
+    tags.forEach(function (tag) {
+      var el = document.createElement(tag);
+      if (tag === "code") el.className = "inline-code";
+      if (tag === "a") {
+        el.setAttribute("href", href);
+        el.setAttribute("target", "_blank");
+        el.setAttribute("rel", "nofollow");
+      }
+      if (inner) inner.appendChild(el);
+      else outer = el;
+      inner = el;
+    });
+    return { outer: outer, inner: inner };
+  }
+
+  // Inline markers: `**bold**`, `*italic*`, `_italic_`, `~~strike~~`, `` `code` ``, `***both***` and `[text](url)`
+  // convert when the closing marker is typed, when an opening marker is typed in front of text that already has
+  // its closer, and when text is selected and a marker is typed. Backspace right after a conversion brings the markers back.
   function wireInlineMarkdown(editor, mount) {
+    var T = window.NotebookTyping;
+    var last = null; // {el, tail, rule} of the conversion just made
+
+    function placeCaretIn(node, offset) {
+      var caret = document.createRange();
+      caret.setStart(node, offset);
+      caret.collapse(true);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(caret);
+    }
+
+    mount.addEventListener("keydown", function (e) {
+      var sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      var range = sel.getRangeAt(0);
+      var undo = window.notebookUndo;
+      // Backspace right after a conversion gives back the typed markers.
+      if (e.key === "Backspace" && last && range.collapsed && range.startContainer === last.tail && range.startOffset === 1) {
+        e.preventDefault();
+        checkpoint(undo);
+        var text = document.createTextNode(T.typedForm(last.rule));
+        last.el.replaceWith(text);
+        last.tail.remove();
+        placeCaretIn(text, text.textContent.length);
+        last = null;
+        mount.dispatchEvent(new Event("input", { bubbles: true }));
+        return;
+      }
+      // A marker typed over a selection wraps it.
+      if (range.collapsed || e.ctrlKey || e.metaKey || e.altKey || "*_~`".indexOf(e.key) === -1 || e.key.length !== 1) return;
+      if (insideSkipped(range.commonAncestorContainer)) return;
+      var editable = (range.commonAncestorContainer.nodeType === Node.TEXT_NODE ? range.commonAncestorContainer.parentElement : range.commonAncestorContainer).closest("[contenteditable=true]");
+      if (!editable || !editable.contains(range.startContainer) || !editable.contains(range.endContainer)) return;
+      var ancestor = range.commonAncestorContainer.nodeType === Node.TEXT_NODE ? range.commonAncestorContainer.parentElement : range.commonAncestorContainer;
+      var parent = ancestor && ancestor.tagName === "I" && ancestor.textContent === range.toString() ? ancestor : null;
+      var italic = !!parent;
+      var tag = T.selectionTag(e.key, !!italic);
+      if (!tag) return;
+      e.preventDefault();
+      checkpoint(undo);
+      if (tag === "b" && italic) {
+        var bold = document.createElement("b");
+        while (parent.firstChild) bold.appendChild(parent.firstChild);
+        parent.replaceWith(bold);
+        var again = document.createRange();
+        again.selectNodeContents(bold);
+        sel.removeAllRanges();
+        sel.addRange(again);
+      } else {
+        var wrapper = elementFor([tag]).outer;
+        wrapper.appendChild(range.extractContents());
+        range.insertNode(wrapper);
+        var inside = document.createRange();
+        inside.selectNodeContents(wrapper);
+        sel.removeAllRanges();
+        sel.addRange(inside);
+      }
+      last = null;
+      mount.dispatchEvent(new Event("input", { bubbles: true }));
+      setTimeout(function () { checkpoint(undo); }, 80);
+    });
+
     mount.addEventListener("input", function (e) {
       var sel = window.getSelection();
       var anchor = sel.rangeCount && sel.anchorNode;
       // The zero-width anchor left after a conversion goes as soon as real text follows it.
-      if (anchor && anchor.nodeType === Node.TEXT_NODE && anchor.textContent.length > 1 && anchor.textContent.indexOf("\u200b") !== -1) {
-        var off = sel.anchorOffset - (anchor.textContent.slice(0, sel.anchorOffset).split("\u200b").length - 1);
-        anchor.textContent = anchor.textContent.replace(/\u200b/g, "");
-        var fix = document.createRange();
-        fix.setStart(anchor, Math.max(0, off));
-        fix.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(fix);
+      if (anchor && anchor.nodeType === Node.TEXT_NODE && anchor.textContent.length > 1 && anchor.textContent.indexOf("​") !== -1) {
+        var off = sel.anchorOffset - (anchor.textContent.slice(0, sel.anchorOffset).split("​").length - 1);
+        anchor.textContent = anchor.textContent.replace(/​/g, "");
+        placeCaretIn(anchor, Math.max(0, off));
       }
-      if (e.inputType !== "insertText" || !e.data || "*_~`".indexOf(e.data) === -1) return;
-      if (!sel.rangeCount || !sel.isCollapsed) return;
+      if (e.inputType !== "insertText" || !e.data) return;
+      var typed = e.data.charAt(e.data.length - 1);
+      if (last && "*_~`)".indexOf(typed) === -1) last = null;
+      if ("*_~`)".indexOf(typed) === -1 || !sel.rangeCount || !sel.isCollapsed) return;
       var node = sel.anchorNode;
-      if (!node || node.nodeType !== Node.TEXT_NODE) return;
-      var parent = node.parentElement;
-      if (!parent || parent.closest("code, pre, .cdx-code, .cdx-wikilink, .cdx-footnote-list, .cdx-footnote-input, .nbt")) return;
-      if (!parent.closest(".ce-block")) return;
+      if (!node || node.nodeType !== Node.TEXT_NODE || insideSkipped(node)) return;
       var before = node.textContent.slice(0, sel.anchorOffset);
-      for (var i = 0; i < INLINE_RULES.length; i++) {
-        var m = INLINE_RULES[i].re.exec(before);
-        if (!m) continue;
-        var undo = window.notebookUndo;
-        if (undo) undo.checkpoint();
-        var start = before.length - m[0].length + m[1].length;
-        var range = document.createRange();
-        range.setStart(node, start);
-        range.setEnd(node, before.length);
-        range.deleteContents();
-        var el = document.createElement(INLINE_RULES[i].tag);
-        if (INLINE_RULES[i].tag === "code") el.className = "inline-code";
-        el.textContent = m[2];
-        range.insertNode(el);
-        var tail = document.createTextNode("\u200b");
-        el.after(tail);
-        var caret = document.createRange();
-        caret.setStart(tail, 1);
-        caret.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(caret);
-        mount.dispatchEvent(new Event("input", { bubbles: true }));
-        if (undo) setTimeout(function () { undo.checkpoint(); }, 80);
-        return;
-      }
+      var after = node.textContent.slice(sel.anchorOffset);
+      var rule = T.inlineRule(before, after, typed);
+      if (!rule) return;
+      var undo = window.notebookUndo;
+      checkpoint(undo);
+      var range = document.createRange();
+      range.setStart(node, rule.start);
+      range.setEnd(node, rule.end + rule.consume);
+      range.deleteContents();
+      var made = elementFor(rule.tags, rule.href);
+      made.inner.textContent = rule.content;
+      range.insertNode(made.outer);
+      var tail = document.createTextNode("​");
+      made.outer.after(tail);
+      placeCaretIn(tail, 1);
+      last = { el: made.outer, tail: tail, rule: rule };
+      mount.dispatchEvent(new Event("input", { bubbles: true }));
+      if (undo) setTimeout(function () { undo.checkpoint(); }, 80);
     });
   }
 
@@ -301,19 +368,6 @@
       var editor = new window.EditorJS({
         holder: mount,
         data: initialData,
-        // 2026-10-04 direct request: "on new notes, there should be some
-        // default text" -- Editor.js's own top-level `placeholder` option
-        // (not saved content, no server/content_json change needed) shows
-        // this as grayed-out hint text on the first block while the whole
-        // document is still empty, exactly the built-in behavior the
-        // vendored bundle already had the CSS for (editorjs.css's
-        // `[data-placeholder-active]:focus:before{content:attr(data-
-        // placeholder-active)}`) but nothing had ever set this option to
-        // turn it on. Confirmed live that attribute is only ever read on
-        // `:focus` (not just `:empty`), so `autofocus` is paired with it
-        // below -- without it, a brand-new document's placeholder would
-        // only appear after the user's first click into the body, which
-        // isn't "there should be default text" (visible immediately).
         placeholder: "Start writing...",
         tunes: ["align", "blockColor", "duplicate"],
         autofocus: true,
@@ -327,6 +381,7 @@
           code: window.NotebookCode,
           table: { class: window.NotebookTable, inlineToolbar: true },
           delimiter: window.NotebookDelimiter,
+          timeline: { class: window.NotebookTimeline, inlineToolbar: true },
           callout: { class: window.NotebookCallout, inlineToolbar: true },
           image: { class: window.SimpleImage, inlineToolbar: true },
           inlineCode: window.NotebookInlineCode,
@@ -359,6 +414,7 @@
       if (window.notebookWireMentions) window.notebookWireMentions(mount);
       if (window.notebookWireBlockDrag) window.notebookWireBlockDrag(mount);
       wireMarkdownShortcuts(editor, mount);
+      wireListArrows(editor, mount);
       wireInlineMarkdown(editor, mount);
       wireMarkdownPaste(editor, mount);
       mount.addEventListener(

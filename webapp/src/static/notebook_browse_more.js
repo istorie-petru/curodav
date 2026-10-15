@@ -5,12 +5,10 @@
     const btn = e.target.closest("#notebook-load-more");
     if (!btn) return;
     e.preventDefault();
-    const params = new URLSearchParams(window.location.search);
-    params.delete("limit");
-    params.set("offset", btn.dataset.nextOffset);
+    const url = btn.dataset.rowsUrl + "&offset=" + encodeURIComponent(btn.dataset.nextOffset);
     btn.setAttribute("aria-busy", "true");
     try {
-      const resp = await fetch("/notebook/rows?" + params.toString(), { headers: { "X-Requested-With": "fetch" } });
+      const resp = await fetch(url, { headers: { "X-Requested-With": "fetch" } });
       if (!resp.ok) throw new Error("load failed");
       const data = await resp.json();
       document.getElementById("notebook-rows").insertAdjacentHTML("beforeend", data.html);

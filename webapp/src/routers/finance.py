@@ -57,9 +57,6 @@ def transactions(request: Request, month: str = "", account: str = "", conn=Depe
     })
 
 
-STATUS_ITEMS = [{"uid": "posted", "name": "Posted"}, {"uid": "scheduled", "name": "Scheduled"}]
-
-
 def _task_items(conn) -> list[dict]:
     return [_NONE] + [{"uid": t["uid"], "name": t["title"]} for t in db.list_tasks(conn) if t.get("status") not in ("done", "archived")]
 
@@ -69,7 +66,7 @@ def transaction_form_context(request: Request, conn, txn: dict | None, action: s
     accounts = finance.list_accounts(conn)
     return {
         "request": request, "t": txn, "copy": copy, "form_action": action, "kind": (txn or {}).get("type", ""),
-        "status": "scheduled" if scheduled else ("posted" if copy else ""), "status_items": [_NONE] + STATUS_ITEMS, "status_fixed": scheduled,
+        "status": "scheduled" if scheduled else "posted", "status_fixed": scheduled,
         "task_items": _task_items(conn), "recurrence": (txn or {}).get("recurrence") or "",
         "account_items": [_NONE] + [{"uid": a["uid"], "name": f"{a['short']} ({a['currency']})"} for a in accounts],
         "type_items": [_NONE] + [{"uid": k, "name": n} for k, n in finance_stats.TRANSACTION_TYPES],
@@ -127,8 +124,6 @@ def _save_scheduled(conn, data: dict, x_requested_with, uid: str | None):
 def _save_transaction(conn, data: dict, x_requested_with, uid: str | None):
     if data.get("status") == "scheduled":
         return _save_scheduled(conn, data, x_requested_with, uid)
-    if not data.get("status") and uid is None:
-        return _error_response({"field": "status", "message": "Choose a status"}, x_requested_with, "/finance/transactions")
     clean, error = finance.validate_transaction(conn, data)
     if error:
         return _error_response(error, x_requested_with, "/finance/transactions")

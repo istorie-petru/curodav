@@ -1,5 +1,4 @@
-"""Timeline (Gantt) view -- retired 2026-08-28 ("major rework" session,
-item 4: "Tasks page: table view only... disable Kanban and Timeline
+"""disable Kanban and Timeline
 entirely"). This module used to own `GET /tasks/timeline` (the Gantt page
 itself), `POST /tasks/timeline/create` (click-drag-to-create), and two
 drag-interaction endpoints (`timeline-reschedule`/`timeline-lane`); all
@@ -15,7 +14,8 @@ deliberately left on disk, unimported by anything live -- same "don't
 force-drop old code/data for a presentation-only retirement" convention
 `routers/projects.py`'s own promote/demote/dates left untouched. Nothing
 else in this app imports from this module (confirmed via grep before this
-rewrite), so this is a safe, isolated file-level swap."""
+rewrite), so this is a safe, isolated file-level swap.
+"""
 
 from __future__ import annotations
 

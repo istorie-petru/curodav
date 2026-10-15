@@ -1,6 +1,5 @@
 """Pulled Radicale's calendar/tasks/contacts collections into the local
-SQLite cache (db.py) prior to the Phase 1 label-space rework
-(2026-08-06, see features/architecture.md §1). That's no longer
+SQLite cache (db.py) prior to the Phase 1 label-space rework. That's no longer
 what this module does.
 
 Per §1 of the plan: the base pool (`tasks`/`events`/`contacts`) is now
@@ -12,7 +11,7 @@ tasks.py, routers/calendar.py, routers/contacts.py write straight to
 db.py, no bridge call in that path (see each router's own module
 docstring).
 
-Phase 6 (published Lists, 2026-08-07) gave this module a real job again:
+Phase 6 gave this module a real job again:
 `full_refresh` now materializes every `published_lists` row (see
 src/published_lists.py's `materialize_all`) -- a List is a named subset of
 the base pool, filtered by a boolean label expression, kept in sync as its
@@ -27,15 +26,15 @@ this app already made for the old Radicale-polling design pre-Phase-1).
 
 from __future__ import annotations
 
-import logging
 import sqlite3
 import threading
 
+from .log import get_logger
 from . import db
 from .caldav_bridge import CalDavBridge
 from .published_lists import materialize_all
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def full_refresh(bridge: CalDavBridge, conn: sqlite3.Connection) -> None:

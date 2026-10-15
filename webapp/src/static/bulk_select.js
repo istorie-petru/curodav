@@ -1,97 +1,3 @@
-// Generic checkbox-based bulk-select + "Delete selected" bar for
-// table-like list surfaces (2026-08-29, STATE.md backlog item 1, direct
-// request: "bulk actions on tables... Tasks first, since it's the
-// precedent; then Habits, Contacts, Labels, Holidays, Time blocks, etc.
-// wherever a table exists"). static/tasks_table.js is that precedent and
-// keeps its own bespoke implementation unchanged (it has richer per-
-// domain bulk actions -- status/tag -- plus async-CRUD region-swap
-// reconciliation neither Labels nor Contacts need the same way: their
-// region refresh either swaps a persistent container's innerHTML in
-// place (Labels) or re-inits this module's listeners on cc-region-swapped
-// (Contacts, see contacts_list.html) instead of a bespoke reconciler;
-// Holidays/Time Blocks have no live region at all and genuinely stay
-// full-reload-on-mutation); this module
-// factors out just the reusable selection mechanics -- checkbox tracking,
-// shift-click range select, press-and-drag "paint" across the checkbox
-// column, the bar's show/hide/count -- for every other simple settings
-// table's "Delete selected" bar. Habit rows inside the Tasks table are a
-// third case, deliberately NOT wired to this module -- they share the
-// Tasks page's own `#task-table`/bulk-actions-bar and selection Set, see
-// static/tasks_table.js's own comment on habit-row deletion.
-//
-// window.CCBulkSelect.init({
-//   tableId          -- id of the table (or any container) whose
-//                       `.row-select` checkboxes this instance owns --
-//                       scopes every query so two independent instances
-//                       on one page (e.g. Sleep Time + Leisure Time) never
-//                       see each other's checkboxes or drag-paint into
-//                       each other.
-//   barId            -- id of this instance's own bulk-actions-bar
-//                       (same `.bulk-actions-bar` markup/CSS Tasks uses,
-//                       hidden via `style="display:none"` until a row is
-//                       selected).
-//   countId          -- id of the "<span class=bulk-count>" inside the bar.
-//   clearId          -- id of the bar's "Clear" button.
-//   deleteButtonId   -- id of the bar's "Delete" button.
-//   deleteUrl        -- fetch() target for the bulk delete POST, always
-//                       sent as JSON `{uids: [...]}`.
-//   changeType       -- (2026-09-28, Contacts/Labels) when set, a
-//                       successful bulk delete dispatches cc-entity-
-//                       changed with this type instead of reloading the
-//                       page, same claim protocol every other async-CRUD
-//                       mutation uses (ccApi.dispatchChange) -- lets a
-//                       page's existing live region (e.g. contacts_list.js/
-//                       labels_manage.js's own cc-entity-changed listener)
-//                       pick up the delete instead of a full reload.
-//                       Falls back to a reload if nothing on the page
-//                       claims the event, or if window.ccApi isn't loaded.
-//                       Omit entirely for a table with no live region
-//                       (Holidays, Time Blocks) -- reload stays correct
-//                       there.
-//   itemLabel        -- singular noun for confirm/toast copy, e.g. "label".
-//   confirmMessage   -- optional `(count) => string` overriding the
-//                       default "Delete N selected X(s)? This cannot be
-//                       undone." (Labels' bulk delete is really "clear
-//                       usage," not an irreversible row delete, so it
-//                       supplies its own wording -- see
-//                       labels_manage.html.)
-//   editButtonId     -- (Phase D) id of the bar's Edit button
-//                       (`bulk_actions_bar(edit=true)`); with editModalUrl
-//                       it opens the bulk edit modal for the selection.
-//   editModalUrl     -- GET URL of that modal; `?uids=a,b` is appended.
-//   mergeButtonId    -- (2026-09-13, Labels only) id of the bar's optional
-//                       Merge button (`_bulk_actions_bar.html`'s
-//                       `merge_label` param). Omit entirely for every
-//                       table that has no merge concept.
-//   mergeModalUrl    -- base URL for the merge picker modal (a GET,
-//                       opened via `window.CCModal.open` -- merging needs
-//                       a real destination picker, not a yes/no confirm-
-//                       sheet). The selected uids are appended as
-//                       `?uids=a,b,c`; the modal itself renders the
-//                       destination picker and posts elsewhere. Requires
-//                       at least 2 rows selected (merging one label into
-//                       itself is meaningless) -- fewer just shows a
-//                       toast instead of opening the modal.
-//   rowSelector      -- (2026-09-14, contacts_list.html) CSS selector for
-//                       "the whole selectable row" a checkbox belongs to,
-//                       toggled `.is-selected` for styling -- default "tr"
-//                       (every existing caller is a real `<table>`).
-//                       Contacts' card-list rows aren't `<tr>`s, so that
-//                       caller passes ".contact-row-wrap" (the div wrapping
-//                       each checkbox + the row's own `<a>`, see
-//                       _contacts_body.html's own comment on why the row
-//                       needed restructuring for this).
-// })
-//
-// Re-init safety (2026-09-14): contacts_list.html calls init() again after
-// every async-CRUD region swap of its container (a fresh server-rendered
-// fragment, so the previous `table`/`bar` element references + their
-// document-level pointermove/pointerup drag-paint listeners are orphaned
-// otherwise -- no existing caller re-initialized on the same page before
-// this, so nothing tore old listeners down). `instances` tracks one
-// teardown function per `tableId`; a second init() for the same id runs
-// the previous instance's teardown first so orphaned listeners don't pile
-// up release after release.
 (function () {
   const instances = {};
 
@@ -99,11 +5,6 @@
     const table = document.getElementById(cfg.tableId);
     const bar = document.getElementById(cfg.barId);
     const countEl = cfg.countId ? document.getElementById(cfg.countId) : null;
-    // 2026-09-12: the actions slot itself (bar's parent) needs to know
-    // whether `bar` is currently visible, not just `bar` itself --
-    // style.css's "hide the actions slot when it has nothing to show"
-    // rule keys off this class, since CSS has no "is this sibling
-    // currently displayed" selector.
     const actionsSlot = bar ? bar.closest(".page-header-narrow-actions") : null;
     if (instances[cfg.tableId]) {
       instances[cfg.tableId]();
@@ -122,21 +23,6 @@
       return cb.closest(rowSelector);
     }
 
-    // 2026-09-13 (direct request: "row-select should not persist between
-    // page refresh") -- `selected` above is already a fresh, empty Set on
-    // every init() (this module keeps no localStorage/sessionStorage
-    // state anywhere). The actual bug was the browser's own form-control
-    // state restoration -- Chrome (and others) can re-apply a checkbox's
-    // last `.checked` value across a plain reload purely from DOM
-    // position, independent of any app-level persistence, regardless of
-    // `<form>` wrapping -- so a bfcache/reload-restored checkbox could
-    // show visually checked while `selected` (rebuilt empty) has no
-    // matching uid: no highlighted row, no bulk bar, a checkbox stuck
-    // showing a selection that no longer exists anywhere. Force every
-    // `.row-select` this instance owns back to unchecked (and drop any
-    // stray `.is-selected` from a prior render) right at init, same
-    // "selected Set is the sole source of truth" contract `setSelected`
-    // already keeps everywhere else in this file.
     checkboxes().forEach((cb) => {
       cb.checked = false;
       const row = rowFor(cb);
@@ -161,52 +47,10 @@
       } else {
         bar.style.display = "none";
         if (actionsSlot) actionsSlot.classList.remove("has-visible-bulk-bar");
-        // 2026-09-12: countEl used to live inside `bar` itself, so hiding
-        // `bar` hid it too regardless of its text. It's now rendered in
-        // _page_header_narrow.html's title_extra slot instead (a sibling
-        // of the title, not nested in `bar`) so the count can sit on the
-        // header's first row on mobile -- style.css's `.bulk-count:empty`
-        // rule is what actually re-hides it now, so it has to be cleared
-        // back to empty here, not left showing a stale "N selected".
         if (countEl) countEl.textContent = "";
       }
     }
 
-    // Click (plain or shift-range) -- scoped to this table so a second
-    // CCBulkSelect instance elsewhere on the page doesn't also react.
-    //
-    // 2026-09-15 bugfix (direct report: "clicking works, but it
-    // immediately deselects -- happens on any page", i.e. every
-    // CCBulkSelect caller -- Holidays/Labels/Time Blocks/Contacts alike --
-    // not just Contacts; this handler and the pointerdown one below are
-    // unchanged from the original 2026-08-29 implementation, so this was a
-    // pre-existing bug surfaced by testing the new Contacts caller, not
-    // something the Contacts change introduced). Root cause: the
-    // pointerdown handler below already calls `setSelected(cb, paintValue)`
-    // -- flipping `cb.checked` itself -- so that a real press-and-drag
-    // paints the row the drag *started* on, not just the ones the pointer
-    // crosses afterward. But the browser doesn't know that already
-    // happened: when the matching `click` fires right after (mouseup on
-    // the same element, the plain-click case, not a drag), its own native
-    // activation behavior toggles `checked` a SECOND time -- right back to
-    // whatever it was *before* the pointerdown. Net effect on an ordinary,
-    // no-drag click: the box visibly flips checked, then the trailing
-    // native click flips it straight back to unchecked -- reads as "it
-    // immediately deselects," and always did, for every table this module
-    // has ever driven; a real multi-row drag just never exercised this
-    // path (mouseup lands on a different element, so no `click` ever
-    // fires on the origin checkbox to conflict with pointerdown's own
-    // change). `e.preventDefault()` here blocks that native toggle -- a
-    // checkbox's default click behavior can be canceled from a `click`
-    // listener (not from `pointerdown`/`mousedown`, which was tried first
-    // and confirmed via a real Chrome/Puppeteer click -- not just a
-    // synthetic `.click()` call, which never exercises the native
-    // pointerdown-then-click sequence at all -- that canceling pointerdown
-    // does NOT suppress the later click's own default action). With the
-    // native toggle suppressed, pointerdown's `setSelected` call is the
-    // sole source of truth for `cb.checked` in both the plain-click and
-    // drag cases, and this handler only needs to run the shift-range logic
-    // off of whatever state pointerdown already established.
     function onTableClick(e) {
       const cb = e.target.closest && e.target.closest(".row-select");
       if (!cb) return;

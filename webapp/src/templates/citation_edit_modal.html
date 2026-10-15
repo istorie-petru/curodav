@@ -4,25 +4,8 @@
 {% from "_modal_header_back.html" import modal_header_back %}
 {% block title %}{{ "Edit citation" if c else "Add citation" }}{% endblock %}
 {% block content %}
-<!-- Citations library create/edit modal (2026-10-03, curodav-notes
-     STATE.md's "citations are the priority feature" decision) -- same
-     Settings "Pattern B" shape as notebook_field_edit_modal.html: opened
-     empty from "+ New citation" (routers/notebook.py's new_citation_modal,
-     posts to create_citation) or prefilled from a row's Edit button
-     (edit_citation_modal, posts to update_citation). Columns kept close
-     to CSL-JSON (db.CITATION_TYPES' own comment) -- type/title/structured
-     authors/year/container-title/DOI/URL -- without adopting its full
-     type vocabulary or field set; everything beyond this (page/location
-     references, tags/status, edition metadata) is a separate, unsequenced
-     checklist item, not part of this core slice. -->
 <div id="modal-target" class="modal-stable-height">
 <div class="modal-header">
-{# item G (session 8, 2026-10-03): return_to (set when this modal was
-   opened from an attach picker's "+ New citation" link, item I) wins
-   over the library's own hardcoded crumb -- that's the "whatever opened
-   me" case the roadmap item describes; the plain "Edit"/"+ New citation"
-   entry from the library page itself has no return_to, so it falls back
-   to `crumbs` (already `_CITATIONS_CRUMB`, Notebook home). #}
 {{ modal_header_back(return_to or (crumbs[-1].url if crumbs else ''), 'Back' if return_to else (crumbs[-1].name if crumbs else '')) }}
 <h1>{{ "Edit citation" if c else "Add citation" }}</h1>
 </div>
@@ -49,10 +32,26 @@
             <label>Year</label>
             {{ text_input({'name': 'year', 'value': (c.year if c else '')}) }}
         </div>
-        <div class="field field-wide">
-            <label>Container title</label>
-            {{ text_input({'name': 'container_title', 'value': (c.container_title if c else '')}) }}
+        {% macro cfield(name, label, types, wide=false, labels='') %}
+        <div class="field{% if wide %} field-wide{% endif %}" data-cite-types="{{ types }}"{% if labels %} data-cite-labels="{{ labels }}"{% endif %}>
+            <label>{{ label }}</label>
+            {{ text_input({'name': name, 'value': (c[name] if c else '')}) }}
         </div>
+        {% endmacro %}
+        {{ cfield('subtitle', 'Subtitle', 'book chapter report thesis', true) }}
+        {{ cfield('container_title', 'Container', 'chapter article-journal webpage conference-paper', true, 'article-journal:Journal;chapter:Book title;webpage:Website;conference-paper:Proceedings') }}
+        {{ cfield('editors', 'Editors', 'chapter conference-paper', true) }}
+        {{ cfield('edition', 'Edition', 'book') }}
+        {{ cfield('volume', 'Volume', 'book chapter article-journal') }}
+        {{ cfield('issue', 'Issue', 'article-journal') }}
+        {{ cfield('pages', 'Pages', 'chapter article-journal conference-paper') }}
+        {{ cfield('publisher', 'Publisher', 'book chapter report conference-paper') }}
+        {{ cfield('place', 'Place of publication', 'book chapter report conference-paper') }}
+        {{ cfield('institution', 'Institution', 'thesis report') }}
+        {{ cfield('degree', 'Degree', 'thesis') }}
+        {{ cfield('isbn', 'ISBN', 'book chapter') }}
+        {{ cfield('issn', 'ISSN', 'article-journal') }}
+        {{ cfield('accessed', 'Accessed', 'webpage') }}
         <div class="field">
             <label>DOI</label>
             {{ text_input({'name': 'doi', 'value': (c.doi if c else '')}) }}
@@ -60,6 +59,10 @@
         <div class="field">
             <label>URL</label>
             {{ text_input({'name': 'url', 'value': (c.url if c else '')}, 'url') }}
+        </div>
+        <div class="field field-wide">
+            <label>Note</label>
+            {{ text_input({'name': 'note', 'value': (c.note if c else '')}) }}
         </div>
         <div class="field field-wide" data-repeatable-rows-scope>
             <div class="field-label-row">
@@ -81,13 +84,6 @@
 </form>
 </div>
 </div>
-{# item I (2026-10-03 modal-stack fix): opened from the Bibliography
-   attach-picker's "+ New citation" link, return_to carries that picker's
-   own URL so Cancel swaps back into it (footer_back_mode "modal", same
-   fragment-swap the view<->edit merge already uses) instead of closing
-   the whole overlay back to the bare document page. Falls back to the
-   plain library-list Cancel when opened directly (e.g. /notebook/
-   citations' own "+ New citation", no picker to return to). #}
 {% set footer_back_url = return_to if return_to else '/notebook/citations' %}
 {% set footer_back_mode = 'modal' if return_to else 'cancel' %}
 {% set footer_back_label = 'Cancel' %}

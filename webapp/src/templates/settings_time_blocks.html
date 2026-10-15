@@ -6,35 +6,13 @@
 {% from "_bulk_actions_bar.html" import bulk_actions_bar, bulk_count %}
 {% from "_row_action_buttons.html" import row_action_buttons %}
 {% from "_empty_state_row.html" import empty_state_row %}
-{# Bulk actions -- 2026-08-29 (STATE.md backlog item 1, direct request:
-   "bulk actions on tables"), relocated into the header's actions slot
-   2026-09-13 (audit-fixes-2.1.md) -- see _bulk_actions_bar.html's own
-   header comment. 2026-09-12: count span moved to title_extra -- see
-   that partial's own comment. #}
 {% call page_header_narrow("Sleep & Leisure Time", "moon", title_extra=bulk_count("time-blocks")) %}
 {{ bulk_actions_bar("time-blocks") }}
 {% endcall %}
 <!-- see event_form.html for why this is wrapped -- static/modal.js -->
 <div id="modal-target">
 
-<!-- 2026-09-07 (audit-fixes-2.0.md item 8) / 2026-09-08 (direct request):
-     the per-group h2.section-label this .settings-group wrapper used to
-     carry is gone, along with every other Settings section-label.
-
-     2026-09-08 follow-up (direct request): Sleep and Leisure used to be
-     two separate tables/bulk-select instances/"+ Add" rows here -- one
-     merged table now, with a per-row "Type" pill (red for Sleep, green
-     for Leisure, matching the Week/Day grid's own hatching colors --
-     routers/calendar.py's `_time_block_overlays`) standing in for what
-     table a row used to live in. routers/settings.py::settings_time_blocks
-     concatenates sleep_blocks + leisure_blocks (each already ordered by
-     start_time) into one `time_blocks` list, Sleep rows first -- see that
-     function's own comment for why concatenation rather than a single
-     alphabetical-by-kind query. -->
 <div class="settings-group">
-<!-- 2026-08-29 (STATE.md backlog item 7, direct request): wrapper markup
-     matches _tasks_body.html's exact "card table-scroll" single-div
-     convention now, same as the Labels/Holidays tables. -->
 <div class="card table-scroll table-responsive" id="time-block-table-wrapper">
         <table id="time-block-table">
             <thead>
@@ -85,9 +63,6 @@
                 {% else %}
                     {{ empty_state_row(6, "No time blocks configured yet") }}
                 {% endif %}
-                <!-- 2026-08-29 (STATE.md backlog item 7): same full-row
-                     "+ Add X" convention as _tasks_body.html's
-                     .task-add-row. -->
                 <tr class="task-add-row">
                     <td colspan="6"><a href="/settings/time-blocks/new" data-modal>{{ icon('plus', 'icon-sm') }} Add time block</a></td>
                 </tr>

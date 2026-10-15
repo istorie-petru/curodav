@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import re
 import sqlite3
 from contextlib import contextmanager
@@ -15,10 +14,11 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterator
 
+from ..log import get_logger
 from .schema import SCHEMA_SQL
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, coldef: str) -> None:
@@ -58,42 +58,39 @@ def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
 
 
 def _relax_legacy_not_null(conn: sqlite3.Connection, table: str, columns: tuple[str, ...]) -> None:
-    """Fix for a real bug (found 2026-08-07 via a live crash report, not a
-    test -- the test suite always connects to a brand-new tmp_path
-    database via `SCHEMA_SQL`'s current CREATE TABLE, so it never
-    exercises what an *existing*, pre-label-space-rework cache.sqlite
-    actually looks like on disk).
+    """Fix for a real bug.
 
-    Every Phase 1/2/5 column-removal comment in this file says some
-    version of "the old column stays physically present, deliberately,
-    nothing reads/writes it anymore" -- true, and deliberately so:
-    scripts/migrate_labels.py still needs to read `calendar_path`/
-    `list_path`/`addressbook_path` (which collection an object used to
-    live in) on a pre-migration database, so those columns and their
-    *data* must not be dropped or destroyed before that script has had a
-    chance to run. But several of them (`href`, `etag`, and the
-    `*_path` columns themselves, at minimum) were originally declared
-    NOT NULL with no default. Once upsert_event/upsert_task/
-    upsert_contact correctly stopped supplying a value for them, every
-    INSERT against an existing database that still physically has that
-    NOT NULL constraint started failing outright:
-    `sqlite3.IntegrityError: NOT NULL constraint failed: events.href` --
-    not a hypothetical, this is the exact error a real user hit trying
-    to create an event.
+        Every Phase 1/2/5 column-removal comment in this file says some
+        version of "the old column stays physically present, deliberately,
+        nothing reads/writes it anymore" -- true, and deliberately so:
+        scripts/migrate_labels.py still needs to read `calendar_path`/
+        `list_path`/`addressbook_path` (which collection an object used to
+        live in) on a pre-migration database, so those columns and their
+        *data* must not be dropped or destroyed before that script has had a
+        chance to run. But several of them (`href`, `etag`, and the
+        `*_path` columns themselves, at minimum) were originally declared
+        NOT NULL with no default. Once upsert_event/upsert_task/
+        upsert_contact correctly stopped supplying a value for them, every
+        INSERT against an existing database that still physically has that
+        NOT NULL constraint started failing outright:
+        `sqlite3.IntegrityError: NOT NULL constraint failed: events.href` --
+        not a hypothetical, this is the exact error a real user hit trying
+        to create an event.
 
-    Fix: relax the NOT NULL constraint in place -- keep the column, keep
-    every existing row's value, just stop requiring a value on new
-    writes. SQLite has no `ALTER TABLE ... ALTER COLUMN` for constraints,
-    so this does the standard rebuild: create a shadow table with the
-    exact same columns/types/data (including every other column and
-    every existing row, untouched) except the target columns lose their
-    NOT NULL, copy the data across, drop the old table, rename the
-    shadow into place, then recreate whatever indexes existed on it.
-    Guarded to only run when at least one target column is both present
-    AND still actually NOT NULL (`PRAGMA table_info`'s notnull flag) --
-    a no-op on a brand-new database, and a no-op the second time this
-    runs against an already-fixed one, so it's safe to call on every
-    startup rather than needing its own one-time-migration bookkeeping."""
+        Fix: relax the NOT NULL constraint in place -- keep the column, keep
+        every existing row's value, just stop requiring a value on new
+        writes. SQLite has no `ALTER TABLE ... ALTER COLUMN` for constraints,
+        so this does the standard rebuild: create a shadow table with the
+        exact same columns/types/data (including every other column and
+        every existing row, untouched) except the target columns lose their
+        NOT NULL, copy the data across, drop the old table, rename the
+        shadow into place, then recreate whatever indexes existed on it.
+        Guarded to only run when at least one target column is both present
+        AND still actually NOT NULL (`PRAGMA table_info`'s notnull flag) --
+        a no-op on a brand-new database, and a no-op the second time this
+        runs against an already-fixed one, so it's safe to call on every
+        startup rather than needing its own one-time-migration bookkeeping.
+    """
     info = conn.execute(f"PRAGMA table_info({table})").fetchall()
     by_name = {row[1]: row for row in info}
     needs_fix = any(
@@ -151,12 +148,6 @@ def init_schema(conn: sqlite3.Connection) -> None:
     from .pages import migrate_label_page_type
     from .notebook import seed_builtin_notebook_fields
     conn.executescript(SCHEMA_SQL)
-    # 1.8 slice 1 -- §4's tombstone model ("deleting an entity offline is a
-    # delete operation, not a row removal ... this design adds one
-    # (deleted_at + the deleting op's HLC)"). A plain sync-unaware write
-    # (every existing router) never sets this column and nothing existing
-    # reads it -- it's additive, inert until the sync API (routers/
-    # sync_api.py) is actually used.
     _ensure_column(conn, "tasks", "deleted_at", "TEXT")
     _ensure_column(conn, "events", "deleted_at", "TEXT")
     _ensure_column(conn, "contacts", "deleted_at", "TEXT")
@@ -187,34 +178,10 @@ def init_schema(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "contacts", "photo_b64", "TEXT")
     _ensure_column(conn, "contacts", "photo_type", "TEXT")
     _ensure_column(conn, "contacts", "photo_version", "TEXT")
-    # Contacts field parity with Nextcloud Contacts (open.md), slice 1 of 6
-    # (Title -> Phone/Email -> Website -> Birthday -> Address -> Social
-    # network, per the build order recorded there). Title is the vCard
-    # TITLE property (a person's job title, e.g. "Software Engineer") --
-    # distinct from `org` (their organization's name, vCard ORG). Same
-    # "column added after the table already existed on disk" situation as
-    # photo_b64/photo_type immediately above.
     _ensure_column(conn, "contacts", "title", "TEXT")
     _ensure_column(conn, "contacts", "pseudonym", "TEXT")
     _ensure_column(conn, "contacts", "role", "TEXT")
-    # Contacts field parity slice 2 of 6 -- Phone/Email. contact_phones/
-    # contact_emails (SCHEMA_SQL above) are brand-new tables, so `CREATE
-    # TABLE IF NOT EXISTS` already handles a pre-slice-2 database (unlike a
-    # column added to an existing table, no _ensure_column needed for the
-    # tables themselves). What DOES need a migration is the *data*: a
-    # pre-slice-2 database has real values sitting in the now-dead
-    # `contacts.phone`/`contacts.email` columns that would otherwise vanish
-    # from view the moment the UI stops reading them. Runs on every
-    # connect, same as every other migration in this function -- see
-    # migrate_legacy_contact_phone_email's own docstring for why it's safe
-    # to call unconditionally (idempotent).
     migrate_legacy_contact_phone_email(conn)
-    # Contacts field parity slice 5 of 6 -- Address. contact_addresses
-    # (SCHEMA_SQL above) is a brand-new table, same "CREATE TABLE IF NOT
-    # EXISTS already handles it" situation as contact_websites -- the
-    # migration below only needs to move the *data* sitting in the now-
-    # dead `contacts.address` column. Runs on every connect, same
-    # idempotence contract as migrate_legacy_contact_phone_email.
     migrate_legacy_contact_address(conn)
     _ensure_column(conn, "contacts", "birthday", "TEXT")
     _ensure_column(conn, "contacts", "archived_at", "TEXT")
@@ -389,24 +356,16 @@ def _row_to_dict(row: sqlite3.Row, json_fields: tuple[str, ...]) -> dict[str, An
 
 class MultipleProjectLabelsError(ValueError):
     """Raised by upsert_task when its `tags` would give a task more than one
-    is_project=1 label at once (1.5, § Task model: "never multiple projects
-    at once, because multiple project ownership would make workload,
-    progress, deadlines, and scheduling ambiguous"). Carries the offending
-    project label names so the caller (routers/tasks.py) can surface a
-    clear 400, the same "raise, don't silently corrupt or 500" pattern
-    db.find_overlapping_project's callers already follow for the sibling
-    "projects may not overlap" rule -- except here there's no confirm-anyway
-    escape hatch, since the rule has no legitimate override the way a
-    calendar overlap does.
-
-    Deliberately checked only at this write boundary (upsert_task's `tags`
-    argument), not as a stored CHECK constraint or a startup scan: a task
-    that already carries two project labels via a pre-1.5 data state (direct
-    DB edit, restored backup, etc.) is left exactly as-is until the next time
-    something calls upsert_task with a new tags list for it -- see
-    plans/open-priority.md § Task model and this rule's own test coverage in
-    test_single_project_per_task.py for the "don't silently corrupt existing
-    data" requirement."""
+        is_project=1 label at once (1.5, § Task model: "never multiple projects
+        at once, because multiple project ownership would make workload,
+        progress, deadlines, and scheduling ambiguous"). Carries the offending
+        project label names so the caller (routers/tasks.py) can surface a
+        clear 400, the same "raise, don't silently corrupt or 500" pattern
+        db.find_overlapping_project's callers already follow for the sibling
+        "projects may not overlap" rule -- except here there's no confirm-anyway
+        escape hatch, since the rule has no legitimate override the way a
+        calendar overlap does.
+    """
 
     def __init__(self, project_names: list[str], noun: str = "task"):
         self.project_names = list(project_names)
@@ -415,25 +374,26 @@ class MultipleProjectLabelsError(ValueError):
 
 
 def purge_all_data(conn: sqlite3.Connection) -> None:
-    """Settings' "Purge all" (2026-08-07) -- a full data wipe, confirmed
-    explicitly by the user as "everything in the app," not just tasks.
-    Deletes every row from every table this schema defines, including
-    app_meta -- clearing app_meta's seeded-dashboard flags is
-    deliberate, not collateral damage: it means the next visit to Home
-    (or any label page) re-seeds a fresh default widget layout instead
-    of landing on a permanently empty grid, same "purge should leave a
-    usable app, not a bricked one" reasoning as a fresh install.
+    """Settings' "Purge all" -- a full data wipe, confirmed
+        explicitly by the user as "everything in the app," not just tasks.
+        Deletes every row from every table this schema defines, including
+        app_meta -- clearing app_meta's seeded-dashboard flags is
+        deliberate, not collateral damage: it means the next visit to Home
+        (or any label page) re-seeds a fresh default widget layout instead
+        of landing on a permanently empty grid, same "purge should leave a
+        usable app, not a bricked one" reasoning as a fresh install.
 
-    Known limitation, not silently swept under the rug: this only
-    clears this app's own SQLite tables. Any collection a Published
-    List (published_lists table) had already materialized into Radicale
-    is NOT torn down here -- doing that needs a live CalDavBridge, which
-    this function deliberately doesn't take a dependency on (a purge
-    button living in Settings has no natural bridge to inject without
-    threading Radicale credentials through a page that otherwise never
-    touches them). The orphaned Radicale collection is harmless (nothing
-    still points at it from this app) but won't disappear from Radicale
-    itself without manual cleanup there."""
+        Known limitation, not silently swept under the rug: this only
+        clears this app's own SQLite tables. Any collection a Published
+        List (published_lists table) had already materialized into Radicale
+        is NOT torn down here -- doing that needs a live CalDavBridge, which
+        this function deliberately doesn't take a dependency on (a purge
+        button living in Settings has no natural bridge to inject without
+        threading Radicale credentials through a page that otherwise never
+        touches them). The orphaned Radicale collection is harmless (nothing
+        still points at it from this app) but won't disappear from Radicale
+        itself without manual cleanup there.
+    """
     tables = [
         "events", "tasks", "contacts", "task_checklist_items",
         "event_task_relations", "object_labels", "label_config",
@@ -467,15 +427,6 @@ def _hours_between(start_at: str | None, end_at: str | None) -> float:
         return 0.0
     return max((end - start).total_seconds() / 3600.0, 0.0)
 
-# Contacts field parity slice 4 of 6 -- Birthday. Single-value, so there's
-# no *_TYPES vocabulary the way phone/email/website have one -- just the
-# two accepted storage shapes (see upsert_contact's ensure_column comment
-# for why raw text, not a `date`). `parse_contact_birthday` is what
-# routers/contacts.py calls to validate a create/edit form's raw
-# `birthday` field before it ever reaches upsert_contact -- returns the
-# canonical stored string, or raises ValueError on anything else (leading/
-# trailing whitespace tolerated, an empty string is the caller's job to
-# treat as "no birthday" before calling this at all).
 _BIRTHDAY_FULL_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _BIRTHDAY_YEARLESS_RE = re.compile(r"^--\d{2}-\d{2}$")
 
@@ -532,19 +483,16 @@ _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 
 def annotate_item_colors(conn: sqlite3.Connection, items: list[dict[str, Any]], *, key: str = "calendar_color") -> list[dict[str, Any]]:
     """A task/event row's display color is its first label's color
-    (alphabetical, for a stable pick when it carries more than one),
-    falling back to 'blue' for an unlabeled row -- moved here from
-    routers/calendar.py's `_annotate_calendar_colors` (2026-08-07 fix,
-    kept there as a thin wrapper for its own existing call sites/tests) so
-    routers/dashboard.py and routers/projects.py can reuse it too without
-    importing routers/calendar, which already imports routers/dashboard
-    (a real circular-import risk, not a style preference). Mutates and
-    returns the same list. `key` defaults to `calendar_color` (the name
-    every calendar template already reads via `cal-{{ e.calendar_color
-    }}`) but the Agenda-style widgets reuse this for a plain `.cal-*` dot
-    under the same key, direct request: "the color... of an event/task
-    should be as the label's, not default on blue or any other accent
-    color"."""
+        (alphabetical, for a stable pick when it carries more than one),
+        falling back to 'blue' for an unlabeled row -- moved here from
+        routers/calendar.py's `_annotate_calendar_colors` so
+        routers/dashboard.py and routers/projects.py can reuse it too without
+        importing routers/calendar, which already imports routers/dashboard
+        (a real circular-import risk, not a style preference). Mutates and
+        returns the same list. of an event/task
+        should be as the label's, not default on blue or any other accent
+        color".
+    """
     from .labels import effective_label_config
     color_by_label: dict[str, str] = {}
     for item in items:
@@ -561,14 +509,12 @@ def annotate_item_colors(conn: sqlite3.Connection, items: list[dict[str, Any]], 
 
 def _mirror_legacy_module_fields(row: dict[str, Any], existing: dict[str, Any], data: dict[str, Any]) -> None:
     """Translates the legacy Space/Project fields (generate_space,
-    parent_name, a project's end_date) into the module fields, using the
-    same rules as backfill_label_modules. Since labels-as-modules slice c
-    (2026-09-25) nothing in the app writes those legacy fields; the one
-    remaining source is restoring a backup taken before 2026-09-25
-    (routers/export.py upserts its label rows as-is). Without this, such a
-    restore would bring labels back ungrouped and unpinned. A new-field key
-    passed explicitly in `row` always wins, so a newer backup's own values
-    are kept. It only ever turns things on; it never guesses an "off"."""
+        parent_name, a project's end_date) into the module fields, using the
+        same rules as backfill_label_modules. Without this, such a
+        restore would bring labels back ungrouped and unpinned. A new-field key
+        passed explicitly in `row` always wins, so a newer backup's own values
+        are kept. It only ever turns things on; it never guesses an "off".
+    """
     def put(key: str, value: Any) -> None:
         if key not in row:
             data[key] = value
@@ -617,12 +563,13 @@ _SEASON_DATE_FIELD = {"task": "due_at", "event": "start_at"}
 
 def season_for_date(value: Any) -> str | None:
     """Meteorological Northern-Hemisphere season for a stored start_at/
-    due_at value ("2026-09-07" or a full "...T..." datetime string) --
-    Dec/Jan/Feb winter, Mar/Apr/May spring, Jun/Jul/Aug summer, Sep/Oct/Nov
-    autumn. None for anything missing or unparseable (a bare date's first
-    10 characters cover both shapes) -- callers treat that exactly like
-    "no season resolved" and fall through to the next tier rather than
-    guessing a season for a malformed value."""
+        due_at value --
+        Dec/Jan/Feb winter, Mar/Apr/May spring, Jun/Jul/Aug summer, Sep/Oct/Nov
+        autumn. None for anything missing or unparseable (a bare date's first
+        10 characters cover both shapes) -- callers treat that exactly like
+        "no season resolved" and fall through to the next tier rather than
+        guessing a season for a malformed value.
+    """
     if not value or not isinstance(value, str):
         return None
     try:
@@ -690,17 +637,6 @@ def clear_profile_photo(conn: sqlite3.Connection) -> None:
     set_app_meta(conn, PROFILE_PHOTO_TYPE_KEY, "")
     set_app_meta(conn, PROFILE_PHOTO_VERSION_KEY, "")
 
-
-# --------------------------------------------------------------------- #
-# 1.8 slice 1 -- field-HLC shadow store (plans/open-priority.md §
-# Offline-first editing & synchronization §§6, 9). See field_versions'
-# own CREATE TABLE comment for what this table does and doesn't store.
-# The comparison/apply *logic* (§§6-7) lives in src/offline_sync.py, kept
-# pure and independent of routers/HTTP -- these are just the plain reads/
-# writes against the shadow-store tables themselves, same "db.py never
-# contains a router-shaped decision" convention as everywhere else in
-# this file.
-# --------------------------------------------------------------------- #
 
 # The entity tables and per-field sync whitelist, shared by offline_sync.py
 # (which only ever receives *device* ops) and the server-write recording
@@ -829,14 +765,6 @@ def max_field_hlc(conn: sqlite3.Connection) -> tuple[int, int, str] | None:
         "ORDER BY hlc_physical DESC, hlc_logical DESC, hlc_device_id DESC LIMIT 1"
     ).fetchone()
     return (row[0], row[1], row[2]) if row else None
-
-
-# --------------------------------------------------------------------- #
-# 1.8 slice 2 -- sync_conflicts (§§7b/c, 9). See the table's own CREATE
-# TABLE comment for what it's for. Plain CRUD helpers only -- the actual
-# decision of *when* a conflict is worth recording lives in
-# src/offline_sync.py, same layering as the field-HLC shadow store above.
-# --------------------------------------------------------------------- #
 
 
 def _hlc_to_str(hlc: tuple[int, int, str]) -> str:

@@ -739,6 +739,9 @@
         if (edgeOf(cell, down ? "end" : "start") && (down ? pos.r + 1 < rows : pos.r > 0)) {
           e.preventDefault();
           self.focusCell(pos.r + (down ? 1 : -1), pos.c, down ? false : true);
+        } else if (edgeOf(cell, down ? "end" : "start") && window.notebookMoveToBlock) {
+          // Past the last row (or before the first) the caret leaves the table for the next or previous block.
+          if (window.notebookMoveToBlock(cell, down)) e.preventDefault();
         }
       } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
         var right = e.key === "ArrowRight";

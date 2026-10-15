@@ -666,63 +666,11 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (request.mode === "navigate") {
-    // Network-first for real page loads: this app's pages are server-
-    // rendered from live SQLite state (main.py's own comment on why
-    // full-page HTTP caching is deliberately avoided), so a page that
-    // *can* reach the network must never be served a stale cached copy.
-    // 2026-09-09: this used to fall back to a cached copy of /offline on a
-    // genuine network failure -- that page (and the whole client-side
-    // Offline Mode feature) was purged, direct request, so a failed
-    // navigation now just fails, the same as it would with no service
-    // worker installed at all.
     event.respondWith(fetch(request));
     return;
   }
 
   if (new URL(request.url).pathname.startsWith("/static/")) {
-    // Cache-first for static assets: every static URL this app renders
-    // is already cache-busted with a `?v=<mtime>` query string
-    // (deps.py's static_url()) whenever the underlying file changes, so
-    // the plain un-versioned path cached here can never silently serve
-    // stale content under a *new* version's URL -- a changed file simply
-    // gets requested under a different URL than the one already cached.
-    // Falls back to the network (and refreshes the cache entry) for
-    // anything not in the precache list above.
-    //
-    // 2026-08-18 -- `ignoreSearch` fallback: pages request these assets
-    // with the `?v=` suffix, and `caches.match` never matches that against
-    // the precached un-versioned entry, so the precache only actually
-    // served anything for assets the runtime path had ALSO cached under
-    // their versioned URL during a controlled online visit. (Originally
-    // motivated by /offline-only scripts that were never requested by a
-    // normal page visit and so never runtime-cached -- those scripts and
-    // that page are gone now, 2026-09-09, but the general staleness gap
-    // this fallback closes is still real for any precached-but-not-yet-
-    // runtime-cached asset, see v41 below.) The versioned-exact match is
-    // tried first (a runtime-cached copy is the freshest thing the SW
-    // knows); the ignoreSearch match against the un-versioned precache
-    // entry is the fallback.
-    //
-    // v41 (2026-08-30): root-cause fix for the actual bug behind every one
-    // of the v15-v33 "I edited a file, the browser still shows the old
-    // version" reports -- this wasn't just a "forgot to bump CACHE_NAME"
-    // problem, the fallback ORDER was wrong. The old code tried the exact
-    // versioned match, and on a miss went straight to the ignoreSearch
-    // precache/runtime-cache match -- BEFORE ever trying the network. Once
-    // any old version of a file had been cached (either precached
-    // unversioned at install, or runtime-cached under a previous `?v=`),
-    // ignoreSearch always matched it by path, so a new `?v=` request was
-    // served that stale entry directly and NEVER reached the network --
-    // even while fully online. That's exactly the reported symptom: a hard
-    // refresh works (it bypasses the SW entirely), but a normal navigation
-    // to another page re-requests the asset through the SW and gets the
-    // stale ignoreSearch hit again. Fixed by trying the network *before*
-    // the ignoreSearch fallback: an exact cache hit is still served
-    // instantly (fast path for a version already fetched), but any miss
-    // now goes to the network first and only falls back to the stale
-    // ignoreSearch precache entry if that fetch itself fails (genuinely
-    // offline) -- which is what the ignoreSearch fallback was actually
-    // meant for (see the 2026-08-18 note above).
     event.respondWith(
       caches.match(request).then(
         (cached) =>
@@ -741,11 +689,6 @@ self.addEventListener("fetch", (event) => {
   // default browser network handling, no caching.
 });
 
-// Web Push (2026-09-24, plans/ui-cleanup-2026-09.md item 7, slice P1) --
-// src/push.py sends a small JSON payload {title, body, url, tag}; show it
-// as a notification, and on click focus an open app tab (navigating it to
-// `url`) or open a new one. Same-origin paths only: a payload can never
-// send the user off-site.
 self.addEventListener("push", (event) => {
   let data = {};
   try {

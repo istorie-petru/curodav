@@ -1,0 +1,9 @@
+{# The weeks of a year as a strip: filled when the week has a note, a ring on this week, the open note marked. #}
+{% macro journal_strip(weeks, active_week='', sticky=false) %}
+<form method="post" action="/notebook/journal/week" class="journal-strip{% if sticky %} is-sticky{% endif %}" aria-label="Weeks of the year">
+    {% for w in weeks %}
+    {% if w.uid %}<a class="journal-day has-note{% if w.is_current %} is-today{% endif %}{% if w.week == active_week %} is-active{% endif %}" href="/notebook/{{ w.uid }}" title="Week {{ w.nr }}">{{ w.nr }}</a>
+    {% else %}<button type="submit" name="week" value="{{ w.week }}" class="journal-day{% if w.is_current %} is-today{% endif %}" title="Write week {{ w.nr }}">{{ w.nr }}</button>{% endif %}
+    {% endfor %}
+</form>
+{% endmacro %}

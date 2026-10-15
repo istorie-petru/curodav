@@ -41,7 +41,6 @@ TYPE_ABBREVIATIONS = {"expense": "Exp", "income": "Inc", "transfer": "Trf"}
 
 
 def short_date(day: str) -> str:
-    """'2026-04-05' as '05 Apr'."""
     d = datetime.strptime(day, "%Y-%m-%d")
     return d.strftime("%d %b")
 

@@ -1,0 +1,15 @@
+{% from "_empty_state.html" import empty_state %}
+<div class="notebook-glossary-list" data-glossary-list>
+{% if entry_groups %}
+{% for g in entry_groups %}
+<div class="notebook-entry-group">
+    <div class="notebook-entry-kind"><span class="cell-tag cal-{{ g.color }}">{{ icon(g.icon, 'icon-sm') }} {{ g.kind }}</span></div>
+    <ul class="notebook-bibliography-sidebar-list">
+        {% for t in g.entries %}<li><a href="/notebook/glossary/{{ t.uid }}" data-modal>{{ t.term }}</a>{% if t.definition %} -- {{ t.definition }}{% endif %}</li>{% endfor %}
+    </ul>
+</div>
+{% endfor %}
+{% else %}
+{{ empty_state('No entries attached yet', size='compact') }}
+{% endif %}
+</div>

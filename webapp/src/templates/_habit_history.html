@@ -1,8 +1,3 @@
-{# Habit history pieces (2026-09-26, Peter) -- habit_view.history():
-   the week / month grid a period habit shows instead of the day heatmap,
-   and the insights bars (moved from the view modal to the Habits page's
-   expandable row). Bar heights go through data-style (CSP: no inline
-   style). #}
 {% macro period_grid(periods) %}
 <div class="habit-periods habit-periods-{{ periods.unit }}" role="img"
      aria-label="{{ 'Last 52 weeks' if periods.unit == 'week' else 'Last 12 months' }}: {{ periods.cells|selectattr('done')|list|length }} kept">

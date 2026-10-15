@@ -241,12 +241,9 @@ class TestRouter:
         assert resp.context["active_tab"] == "notebook"
         assert "Thesis Notes" in body
 
-    def test_list_documents_row_links_to_the_properties_modal(self, conn):
-        # Phase 1 (roadmap-browser-modal-properties-2026-10-02.md) -- the
-        # All Documents list had no entry point to the properties modal
-        # before this; every row should link to it now.
+    def test_a_folder_row_links_to_the_properties_modal(self, conn):
         _document(conn, uid="d1", title="Thesis Notes")
-        resp = notebook_router.list_documents(_bare_request(), conn=conn)
+        resp = notebook_router.folder_view(_bare_request(), kind="unfiled", conn=conn)
         assert '/notebook/d1/properties' in resp.body.decode()
 
     def test_list_documents_empty_state(self, conn):
@@ -353,89 +350,6 @@ class TestDocumentPageSidebarLayout:
         assert "A History of Something" in body
 
 
-class TestBrowseFiltering:
-    """Browse page's filing-rail redesign (notebook-browse-page-widget-
-    plans.md, 2026-10-02) -- routers/notebook.py's `_notebook_browse_context`.
-    Rail counts are always global (unaffected by the current filter); each
-    facet pick is a single-select-per-dimension, AND-combined across
-    dimensions, same convention described in that plan's own notes."""
-
-    def _seed(self, conn):
-        _document(conn, uid="d1", title="Thesis", note_type="person", tags=["History"])
-        _document(conn, uid="d2", title="Essay", note_type="research", tags=["History", "Uni"])
-        _document(conn, uid="d3", title="Appendix", note_type="research", tags=["Uni"])
-        _document(conn, uid="d4", title="Blank", note_type="", tags=[])
-        db.upsert_label_config(conn, {"name": "History", "label_group": "School"})
-        db.upsert_label_config(conn, {"name": "Uni", "label_group": "School"})
-
-    def _list(self, conn, **params):
-        # Calling the route function directly (not through FastAPI's real
-        # routing) means Query/str params only ever get their Python
-        # defaults -- a `query_string` on the bare Request is never parsed
-        # this way, same gotcha routers/notebook.py's own `_s()` helper
-        # exists for -- so every filter here is passed as an explicit
-        # kwarg, not baked into the Request.
-        kwargs = {"note_type": "", "label": "", "group": "", "sort": "updated"}
-        kwargs.update(params)
-        return notebook_router.list_documents(_bare_request(), conn=conn, **kwargs)
-
-    def test_rail_counts_are_global_not_post_filter(self, conn):
-        self._seed(conn)
-        resp = self._list(conn, note_type="research")
-        ctx = resp.context
-        assert ctx["total_documents"] == 4
-        assert {t["name"]: t["count"] for t in ctx["type_rows"]} == {"person": 1, "research": 2}
-        assert {l["name"]: l["count"] for l in ctx["label_rows"]} == {"History": 2, "Uni": 2}
-        # The TYPE rail has no bucket for blank note_type (d4) -- matches
-        # the mockup, which shows no "untyped" row either.
-        assert len(ctx["type_rows"]) == 2
-
-    def test_note_type_filters_the_list(self, conn):
-        self._seed(conn)
-        resp = self._list(conn, note_type="person")
-        assert [d["uid"] for d in resp.context["documents"]] == ["d1"]
-        assert resp.context["active_note_type"] == "person"
-        assert resp.context["notebook_filter_active"] is True
-
-    def test_label_filters_the_list(self, conn):
-        self._seed(conn)
-        resp = self._list(conn, label="Uni")
-        assert sorted(d["uid"] for d in resp.context["documents"]) == ["d2", "d3"]
-
-    def test_group_filters_by_every_member_labels_docs(self, conn):
-        self._seed(conn)
-        resp = self._list(conn, group="School")
-        assert sorted(d["uid"] for d in resp.context["documents"]) == ["d1", "d2", "d3"]
-        assert {g["name"]: g["count"] for g in resp.context["group_rows"]} == {"School": 3}
-
-    def test_dimensions_and_combine(self, conn):
-        self._seed(conn)
-        resp = self._list(conn, note_type="research", label="History")
-        assert [d["uid"] for d in resp.context["documents"]] == ["d2"]
-        assert resp.context["notebook_filter_active"] is True
-
-    def test_sort_title_reorders_without_changing_the_set(self, conn):
-        self._seed(conn)
-        resp = self._list(conn, sort="title")
-        assert [d["title"] for d in resp.context["documents"]] == ["Appendix", "Blank", "Essay", "Thesis"]
-
-    def test_unfiltered_view_is_not_filter_active(self, conn):
-        self._seed(conn)
-        assert self._list(conn).context["notebook_filter_active"] is False
-
-    def test_no_matches_gets_its_own_empty_state(self, conn):
-        self._seed(conn)
-        body = self._list(conn, note_type="nope").body.decode()
-        assert "No documents match this filter" in body
-        assert "No documents yet" not in body
-
-    def test_rows_carry_their_navigation_target_and_leading_icon(self, conn):
-        self._seed(conn)
-        body = self._list(conn).body.decode()
-        assert 'data-row-href="/notebook/d1"' in body
-        assert '#icon-user' in body  # d1's note_type is "person"
-
-
 class TestCreateDocument:
     def test_create_document_with_label_json_response(self, conn):
         resp = notebook_router.create_document(label="University", x_requested_with="fetch", conn=conn)
@@ -518,7 +432,7 @@ class TestCreateDocument:
             "d1", title="D1", note_type="", note_type_new="",
             tags_labels=["University", "History"], property_key=[], property_value=[], conn=conn,
         )
-        assert sorted(db.get_notebook_document(conn, "d1")["tags"]) == ["History", "University"]
+        assert db.get_notebook_document(conn, "d1")["tags"] == ["University"]
 
     def test_properties_modal_has_labels_and_project_as_two_dropdowns_and_kind_as_a_dropdown(self, conn):
         _document(conn, uid="d1")

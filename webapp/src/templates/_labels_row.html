@@ -2,13 +2,15 @@
    Set `labels_selected` (the item's current label names) before including.
    Projects have their own dropdown (_project_field.html), so they are
    left out of this list. #}
+{% set _single = labels_single | default(false) %}
 <div class="field">
     {% set ms_name = 'tags_labels' %}
     {% set ms_icon = 'tag' %}
-    {% set ms_label = 'Labels' %}
-    {% set ms_items = tag_name_items | rejectattr('uid', 'in', project_names | default([])) | list %}
-    {% set ms_selected = labels_selected %}
-    {% set ms_mode = 'select' %}
+    {% set ms_label = 'Label' if _single else 'Labels' %}
+    {% set _label_items = tag_name_items | rejectattr('uid', 'in', project_names | default([])) | list %}
+    {% set ms_items = ([{'uid': '', 'name': 'No label'}] + _label_items) if _single else _label_items %}
+    {% set ms_selected = (labels_selected | first | default('')) if _single else labels_selected %}
+    {% set ms_mode = 'single' if _single else 'select' %}
     {% set ms_allow_new = true %}
     {% set ms_pill = true %}
     {% include "_widget_list_multiselect.html" %}

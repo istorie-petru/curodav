@@ -3,14 +3,6 @@
 {% block title %}{% if group %}Edit group{% else %}New group{% endif %}{% endblock %}
 {% block content %}
 {% from "_look_picker.html" import look_picker %}
-{# A group's create/edit modal (routers/label_pages.py new_group_modal /
-   edit_group_modal; 2026-09-25 UI audit L3 + flesh-out item 7, reworked
-   2026-09-26 for standalone groups). Name; Look (colour + icon, with the
-   banner's square upload button at the end of its row once the group
-   exists); Labels as a checkbox dropdown (a label is in at most one
-   group, so ticking one moves it here). Renaming onto another group's
-   name merges the two (db.rename_group). Cancel on an existing group
-   goes back to its view modal. #}
 <div id="modal-target">
 <div class="modal-header">
 <h1>{% if group %}Edit group{% else %}New group{% endif %}</h1>

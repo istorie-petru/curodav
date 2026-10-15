@@ -1,21 +1,3 @@
-// Code block with language-based syntax highlighting (2026-10-03, direct
-// request) -- replaces @editorjs/code outright (vendor file removed, see
-// vendor/NOTICE.md) since that tool is a plain textarea with no
-// highlighting hooks at all. Backed by Prism.js (vendor/prism.js, MIT,
-// core + a curated set of language components concatenated in their
-// required dependency order -- see NOTICE.md for the exact list/order,
-// required before any version bump).
-//
-// Technique: the classic "transparent textarea over a highlighted <pre>"
-// overlay (what CodeMirror/react-simple-code-editor-style editors use
-// for a real, editable, syntax-colored code box without reimplementing
-// text editing) -- a real <textarea> sits on top with transparent text
-// and a visible caret, so typing/selection/undo/paste all work exactly
-// like a normal textarea; a <pre><code> immediately behind it, identical
-// font metrics, shows Prism's colored token spans. The two are kept the
-// same height by auto-growing the textarea to its scrollHeight on every
-// input (avoids needing to sync independent internal scroll positions
-// between the two layers).
 (function () {
   var LANGUAGES = {
     plaintext: "Plain text",

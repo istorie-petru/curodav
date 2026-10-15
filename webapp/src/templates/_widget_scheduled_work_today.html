@@ -1,9 +1,3 @@
-<!-- Data: {sessions: [{event, task, hours}, ...], total_hours, today} -- see
-     routers/dashboard.py::_render_scheduled_work_today. Today's scheduled
-     work-allocation sessions plus a completed-hours total (ported from the
-     retired /today page's own "scheduled hours today" stat + schedule list,
-     1.9 side work -- see plans/STATE.md). Stat + rows + hours pill all
-     render through the shared library macros (_widget_items.html). -->
 {% from "_widget_items.html" import widget_empty, widget_pill, widget_link_row, stat_block %}
 <div class="at-a-glance-row">
     {{ stat_block(data.total_hours ~ 'h', 'Scheduled today') }}

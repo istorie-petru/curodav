@@ -137,3 +137,67 @@ def test_archive_button_lives_only_in_the_edit_footer():
         if re.search(r"""action="[^"]*/(un)?archive\b[^"]*"[^>]*>\s*<button[^>]*class="btn""", text):
             offenders.append(name)
     assert not offenders, f"Archive is an icon-only footer button (footer_archive_url): {offenders}"
+
+
+def test_empty_states_are_only_built_by_the_empty_state_component():
+    """An empty list, page or dropdown uses `empty_state`, so its icon, title and action look the same everywhere."""
+    offenders = [
+        name
+        for name, text in _templates()
+        if name not in ("_empty_state.html", "_empty_state_row.html") and re.search(r'class="(?:[^"]*\s)?empty-state[\s"]', text)
+    ]
+    assert not offenders, f"hand-built empty state in: {offenders}; use the empty_state macro"
+
+
+def test_scripts_build_empty_states_only_with_the_shared_helper():
+    """A script that shows "nothing here" calls `ccEmptyState`, the script-built twin of the macro."""
+    offenders = [
+        name
+        for name, text in _scripts()
+        if re.search(r"className\s*=\s*[\"'][^\"']*(?:empty-state|-empty)[\"']", text)
+    ]
+    assert not offenders, f"hand-built empty state in: {offenders}; use window.ccEmptyState"
+
+
+def _dropdown_html(template: str, count: int) -> str:
+    from src.deps import templates
+
+    if template == "_filter_dropdown.html":
+        context = {"fd_name": "x", "fd_label": "Thing", "fd_items": [{"value": str(i), "name": f"Item {i}"} for i in range(count)], "fd_selected": []}
+    else:
+        context = {"ms_name": "x", "ms_label": "Thing", "ms_items": [{"uid": str(i), "name": f"Item {i}"} for i in range(count)], "ms_selected": []}
+    return templates.env.get_template(template).render(**context)
+
+
+def test_a_dropdown_gets_its_search_box_only_above_seven_items():
+    """Seven items fit on screen without searching; more than seven need the search box, with no per-site flag."""
+    for template in ("_filter_dropdown.html", "_widget_list_multiselect.html"):
+        assert "multiselect-search-input" not in _dropdown_html(template, 7), template
+        assert "multiselect-search-input" in _dropdown_html(template, 8), template
+
+
+def test_there_is_only_one_modal_window_so_modals_never_nest():
+    """base.html owns the one modal overlay; a template or script that builds its own would nest a window over a window."""
+    own_overlay = re.compile(r"""(?:id|class)=["'][^"']*modal-(?:overlay|dialog)|className\s*=\s*["'][^"']*modal-(?:overlay|dialog)""")
+    offenders = [name for name, text in _templates() if name != "base.html" and own_overlay.search(text)]
+    offenders += [name for name, text in _scripts() if own_overlay.search(text)]
+    assert not offenders, f"builds its own modal window: {offenders}"
+
+# Each canonical row's own markup, and the one template that may contain it.
+CANONICAL_ROW_MARKUP = {
+    "look-trigger": "_look_picker.html",
+    "look-panel": "_look_picker.html",
+    "recurrence-input": "_form_rows.html",
+    "reminders-input": "_form_rows.html",
+}
+
+
+def test_canonical_rows_are_only_built_by_their_macro():
+    """The look picker, recurrence and reminder rows are written once, so a hand-built copy cannot drift from them."""
+    offenders = [
+        f"{name} ({marker})"
+        for name, text in _templates()
+        for marker, owner in CANONICAL_ROW_MARKUP.items()
+        if name != owner and re.search(rf'class="[^"]*\b{marker}\b', text)
+    ]
+    assert not offenders, f"hand-built canonical row: {offenders}"

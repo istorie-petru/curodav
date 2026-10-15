@@ -1,68 +1,3 @@
-/* Notebook's own patches on top of the vendored Editor.js CSS
-   (static/notebook/vendor/*.css) -- first-party code, not vendored, so it
-   lives next to vendor/ rather than inside it. Two unrelated concerns
-   share this one file because both are "Notebook's visual adjustments to
-   third-party chrome," not unrelated features (a third, text selection,
-   joined 2026-10-04 -- see its own section at the end):
-
-   1. Dark theme (2026-10-02) -- Editor.js's own CSS is light-theme-only
-      (hardcoded colors, no awareness of this app's theme). Scoped under
-      [data-theme="dark"], the exact attribute base.html's inline
-      before-first-paint <script> sets on <html> -- see style.css's own
-      :root/[data-theme="dark"] custom-property blocks for the token
-      names reused below (--bg-elevated, --fg-primary, --fg-secondary,
-      --border, --border-strong, --row-hover, --accent-neutral-subtle,
-      --control-bg). Most of Editor.js's chrome already keys off ITS OWN
-      local custom properties (e.g. `.ce-popover{--color-background:
-      white; ...}`) -- redefining those under [data-theme="dark"] is
-      enough for everything that reads them, and a selector like
-      `[data-theme="dark"] .ce-popover` is always more specific than
-      Editor.js's own bare `.ce-popover`, so this wins regardless of
-      which CSS file loaded first -- no !important needed anywhere in
-      this file. A handful of elements have no local custom property
-      (hardcoded colors) and get direct overrides instead.
-
-   2. Focus-ring scoping (2026-10-02, direct request, corrected same day
-      after the first two attempts targeted the wrong rule) -- the block-
-      picker popover's search field rings only its bare `<input>` on
-      focus, not the icon beside it. Two wrong diagnoses before the real
-      one, kept here since the trail matters for whoever touches this
-      next:
-        a. First guess: style.css's `a:focus-visible, button:focus-
-           visible, [tabindex]:focus-visible { outline: ... }`. Scoped a
-           `button, [tabindex]` copy of it to #notebook-editor -- no
-           visible change, because Editor.js's chrome (`.ce-toolbar__
-           plus`, `.ce-popover-item`, etc.) is plain `<div>`/`<span>` with
-           no tabindex at all; it tracks "active" via its own CSS modifier
-           classes, not real DOM focus. That selector list never matched
-           anything in here to begin with.
-        b. Second guess: broadened the scoped rule to `#notebook-editor
-           *:focus-visible { outline: none }`, reasoning the real
-           focusable elements (`.cdx-search-field__input`, `.ce-code__
-           textarea`, `.cdx-input`) just needed a wider selector. Still
-           didn't fix the actual visible ring, because the ring was never
-           an `outline` in the first place.
-        c. The real cause (confirmed by direct request): style.css's
-           shared form-control base -- `input:focus, select:focus,
-           textarea:focus { outline:none; border-color:var(--accent-
-           neutral); box-shadow:0 0 0 3px var(--accent-neutral-subtle); }`
-           (style.css's own "Form controls" section: "the one shared base
-           every input/select/textarea in the app inherits," ~81 fields
-           across every template) -- applies directly to the bare
-           `.cdx-search-field__input` the instant it's focused, since it's
-           a real `<input>`. A `box-shadow` draws around exactly the
-           element it's on, not a sibling icon, which is the actual gap:
-           not a stray outline, a box-shadow ring too narrow to cover the
-           field's icon.
-      Not touching that shared rule itself -- it's core, load-bearing
-      styling for every form field in the app, wildly disproportionate to
-      change (or remove and replace with some other signal) over one
-      search box in one feature. Scoped instead: suppress it on the bare
-      input, reproduce the identical look on the `.cdx-search-field`
-      wrapper's `:focus-within` state so the ring wraps the icon too. The
-      `*:focus-visible{outline:none}` rule from guess (b) stays anyway --
-      harmless, and cheap insurance if a future custom block ever is a
-      real `<button>`. */
 
 /* ----------------------- 1. Dark theme ----------------------- */
 
@@ -128,20 +63,6 @@
   background-color: var(--row-hover);
 }
 
-/* 2026-10-04 direct report: the "+" (and block-settings) button had the
-   wrong colors specifically on mobile in dark mode -- editorjs.css's own
-   mobile-only rule (`@media (max-width:650px){.ce-toolbar__plus{...}}`)
-   redraws these as a small floating white card (`background-color:#fff`,
-   a light `border`/`box-shadow`) for the touch-sized tap target, a
-   second, separate hardcoding from the plain desktop version above that
-   the dark-theme `color` override here never reached -- the icon turned
-   --fg-primary (light) but still sat on that same hardcoded white box,
-   same low-contrast "light-on-light" failure mode editor-theme.css's own
-   new text-selection fix (further down this file) hit for a different
-   element. Scoped to the same 650px breakpoint as the rule it's
-   patching, not the 860px breakpoint the Document page's own sidebar
-   layout uses elsewhere -- this is Editor.js's own internal mobile
-   cutoff, unrelated to that one. */
 @media (max-width: 650px) {
   [data-theme="dark"] .ce-toolbar__plus,
   [data-theme="dark"] .ce-toolbar__settings-btn {
@@ -300,29 +221,6 @@
 
 /* ------------------- 3. Border-radius tokens ------------------- */
 
-/* Editor.js ships its own hardcoded pixel radii (6px/7px/3px/5px/10px,
-   scattered per element, no shared scale) -- direct request, 2026-10-02,
-   to bring these in line with this app's own --radius-* scale instead.
-   Mapped by matching each Editor.js element to its closest shape/role
-   equivalent already in style.css, not by guesswork:
-     .ce-popover (a floating dropdown panel)   <-> .multiselect-panel
-                                                    -> --radius-md (12px)
-     .ce-popover-item (a row inside that panel) <-> .multiselect-option
-                                                    -> --radius-sm (8px)
-     .ce-toolbar__plus/__settings-btn,
-     .cdx-settings-button (icon-only buttons)   <-> .icon-btn
-                                                    -> --radius-control (12px)
-     .cdx-search-field, .cdx-input
-     (real text inputs)                         <-> this app's own form
-                                                      controls (style.css
-                                                      :1566 etc.)
-                                                    -> --radius-control (12px)
-     .cdx-notify (a toast)                      <-> .toast
-                                                    -> --radius-md (12px)
-   Each of these had its own local custom property upstream
-   (`--border-radius`) in most cases, same "redefine Editor.js's own
-   variable" technique section 1 above uses -- not scoped to
-   [data-theme="dark"] this time, these apply in both themes. */
 .ce-popover {
   --border-radius: var(--radius-md);
 }
@@ -368,26 +266,6 @@
 
 /* ------------------- 4. Word wrap ------------------- */
 
-/* Direct report, 2026-10-03: long unbroken text overflows instead of
-   wrapping. Checked each block type live (paragraph/header/quote/
-   callout/list item/table cell all already wrap correctly, confirmed via
-   scrollWidth===clientWidth -- editorjs.css's own `.ce-paragraph` etc.
-   inherit a working `overflow-wrap` from somewhere upstream already) --
-   the one real, reproducible case was the code block (@editorjs/code's
-   `white-space:pre;overflow-x:auto`, deliberate upstream choice to
-   preserve exact formatting and scroll sideways instead of wrapping).
-   That tool was replaced outright the same day (notebook_code.js, for
-   the syntax-highlighting request below) -- its own CSS
-   (notebook_code.css) wraps by construction, so there's nothing left to
-   fix here for code specifically; this section now covers only the
-   defensive hardening below.
-
-   `break-word` (what every block already resolves to) still has edge
-   cases it won't wrap (e.g. a long run with no soft-wrap opportunity at
-   all in some engines); `anywhere` is strictly more aggressive and
-   correct for prose content where there's no formatting to preserve, so
-   applied directly to every text-bearing surface rather than relying on
-   inheritance from elsewhere. */
 .ce-paragraph,
 .ce-header,
 .cdx-nb-quote__text,
@@ -401,21 +279,6 @@
 
 /* ------------------- 5. Slash-menu item sizing ------------------- */
 
-/* Direct report, 2026-10-03: the block-picker ("+"/"/") list rows feel
-   cramped -- editorjs.css's own defaults (`--icon-size:20px`,
-   `--item-padding:3px`, giving a 26px row) were sized for a short,
-   mostly-icon-only list; this editor's list has grown past a dozen
-   entries (Text/Heading/3 list types/Quote/Code/Table/Delimiter/
-   Callout, plus Convert-to variants), so bigger, more touch-friendly
-   rows read better than the stock sizing. Both are the component's own
-   custom properties (`.ce-popover{--icon-size:...; --item-padding:...}`
-   in editorjs.css) -- redefining them here is the same technique as the
-   radius-token section above, not a layout rebuild; `--item-height`
-   itself is computed from these two upstream (`calc(var(--icon-size) + 2
-   * var(--item-padding))`), so it grows automatically without needing
-   its own override. Width bumped slightly too so the extra padding
-   doesn't crowd longer labels like "Unordered List" against the panel
-   edge. */
 .ce-popover {
   --icon-size: 16px;
   --item-padding: 5px;
@@ -442,20 +305,6 @@
 
 /* ----------------------- 3. Text selection ----------------------- */
 
-/* 2026-10-04 direct report: editorjs.css's own `::selection` rule
-   (`.codex-editor ::selection{background-color:#d4ecff}`) is a light-
-   theme-only hardcoded hex with no text-color pairing of its own --
-   fine over dark body text in light mode, but in dark mode
-   (--fg-primary is #f5f5f7, near-white) that same near-white text sits
-   on a near-white highlight with nothing to separate them, reading as
-   "selection looks the same color as the text." Same selector
-   specificity as the vendor rule (`.codex-editor ::selection`), so this
-   wins purely by loading after editorjs.css (see this file's own header
-   comment) -- no !important needed. Uses the app's own --accent/--fg-
-   on-accent pairing (already proven readable together everywhere else
-   buttons use it) instead of a bespoke highlight color, and covers both
-   themes at once since neither token is redefined under
-   [data-theme="dark"]. */
 .codex-editor ::selection {
   background-color: var(--accent);
   color: var(--fg-on-accent);

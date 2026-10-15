@@ -4,44 +4,12 @@
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_bulk_actions_bar.html" import bulk_actions_bar, bulk_count %}
-<!-- 2026-08-07: dropped the include of _settings_nav.html that used to
-     sit here -- Contacts is a primary tabbar destination now (base.html),
-     not a Settings sub-page, so the Settings segmented strip doesn't
-     belong on it anymore. See _settings_nav.html's own comment.
-     2026-08-29 follow-up (sidebar redesign item 13e, direct request): the
-     separate `.toolbar.top-app-bar.toolbar-2row` row is gone -- the old
-     inline search box and "+ New" button were redundant with the
-     sidebar's own global quick-add (context-aware to /contacts/new on
-     this page, 13c)/Search destinations, so both are dropped rather than
-     relocated. The Label filter dropdown is the one real, non-duplicated
-     control left -- it now renders inside the narrow header's actions
-     slot. `q` (the old search box's value) has no visible control left,
-     but a bookmarked/deep-linked `?q=...` URL still works -- carried
-     through as a hidden field so choosing a Label filter doesn't
-     silently drop it. -->
 <!-- Real page heading, kept sr-only -- same reasoning as tasks_list.html's
      own comment: the narrow header's title is a <h2>, and this page's old
      toolbar row was its only h1, so it's restored standalone here. -->
 <h1 class="sr-only">Contacts</h1>
 {% call page_header_narrow("Contacts", "address-book", title_extra=bulk_count("contacts")) %}
-{# Bulk-select "Delete" bar -- same _bulk_actions_bar.html macro/static/
-   bulk_select.js pattern Labels/Holidays/Time Blocks already use, hidden
-   until a row is checked. Contacts was the one list left out of that
-   2026-08-29 pass (STATE.md backlog item 1) because its rows are a
-   card-list, not a `<table>` -- _contacts_body.html now wraps each row
-   for a `.row-select` checkbox to attach to (see that template's own
-   comment), so this is otherwise identical to settings_holidays.html's
-   own call site. 2026-09-12: the count span itself moved up to
-   title_extra above (see _bulk_actions_bar.html's own comment). #}
 {{ bulk_actions_bar("contacts", edit=true) }}
-<!-- This form's own visible content is always empty (just an optional
-     hidden `q` field) -- what it's actually for is being a submit target
-     the Label filter's checkbox inputs below (when contact_tags exist)
-     point at via `form="contacts-filters-form"` (_filter_dropdown.html's
-     fd_form_id), so it has to stay in the DOM even with no `q` and no
-     tags to filter by. style.css's "hide the actions slot when it has
-     nothing to show" rule (2026-09-12) knows to look past `.filter-bar`
-     specifically for exactly this reason -- see that rule's own comment. -->
 <form method="get" action="/contacts" class="filter-bar" id="contacts-filters-form">
     {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
     {# Direct request: "the label filter... normally is filtered to show
@@ -63,19 +31,6 @@
 {% set fd_form_id = 'contacts-filters-form' %}
 {% include '_filter_dropdown.html' %}
 {% endif %}
-{# Item 19 (2026-09-26) gave Archived its own bare checkbox+label toggle,
-   separate from the Label filter dropdown (routers/contacts.py's own
-   comment explains why "Archived" itself is no longer one of the real
-   labels in that dropdown's item list). 2026-09-27 direct feedback: that
-   plain toggle "doesn't work as expected" -- reverted to the original
-   shape, a `_filter_dropdown.html` dropdown of its own (same fancy-
-   dropdown component the Label filter next to it uses, just one checkbox
-   item), defaulting unchecked like every other filter here that isn't
-   explicitly active. The underlying functionality item 19 added is
-   unchanged -- `fd_name='archived'` still posts `archived=1` into this
-   same shared form, still resolved server-side against the real
-   `contacts.archived_at` column (`show_archived` above), not the old
-   fake-label suppression hack. #}
 {% set fd_name = 'archived' %}
 {% set fd_label = 'Archived' %}
 {% set fd_items = [{'value': '1', 'name': 'Show archived'}] %}

@@ -2,37 +2,6 @@
 {% extends "base.html" %}
 {% block title %}{{ form_title }}{% endblock %}
 {% block content %}
-<!-- One form for every field (2026-08-17 settings HTML uniformity pass,
-     SETTINGS_UI_GUIDE.md pattern B) -- replaces the Holidays table's old
-     inline-editable cells (per-field PATCH via static/settings_holidays.js).
-     2026-09-11: Start/End date auto-sync (picking whichever one is still
-     empty fills it with the other's value; once both are set, they're
-     independent) is wired by static/holiday_date_sync.js, loaded globally
-     in base.html and re-initialized by modal.js's wireContent() the same
-     way as this page's other field-linking scripts (see e.g. the Role
-     picker note in label_edit_modal.html) -- no extra_scripts block here,
-     per this comment's own note below.
-     2026-09-12 (audit-fixes-2.1.md, "only day hollydays, withot the
-     year"): "Repeats every year" checkbox for a fixed-date holiday (e.g. a
-     national/religious holiday on the same month+day every year) --
-     stored as a year-less "--MM-DD" (db.parse_holiday_date/
-     is_year_agnostic_holiday_date), the same convention Contacts' Birthday
-     field already uses. No picker change needed: Start/End still pick a
-     real calendar date (so month+day are easy to click), the checkbox
-     alone decides whether the year gets kept or thrown away on save; an
-     existing year-agnostic holiday's Start/End show a placeholder year
-     (routers/settings.py's edit_holiday_modal, db.holiday_date_picker_value)
-     purely so the picker has a real date to highlight while editing.
-     Same shape as label_edit_modal.html: opened empty from the "+ Add
-     holiday" toolbar button (routers/settings.py::new_holiday_modal, posts
-     to create_holiday) or prefilled from a row's Edit button
-     (edit_holiday_modal, posts to update_holiday). The calendar name uses
-     the same pick-or-create single-mode multiselect as the labels fields
-     (_widget_list_multiselect.html), so a holiday calendar is either chosen
-     from an existing one or originated here. Delete lives in the shared
-     modal footer as a confirm-only action (holiday deletion is
-     irreversible -- no undo), pointing at the unchanged
-     /settings/holidays/{uid}/delete endpoint. -->
 <div id="modal-target" class="modal-height-md">
 <div class="modal-header">
 <h1>{{ form_title }}</h1>

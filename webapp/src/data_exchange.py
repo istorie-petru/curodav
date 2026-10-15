@@ -181,10 +181,10 @@ def notebook_citation_rows(conn) -> list[dict[str, Any]]:
 
 def notebook_glossary_term_rows(conn) -> list[dict[str, Any]]:
     """Flat join rows, same "separate flat export key" treatment as
-    _export_notebook_citations above (2026-10-03 direct follow-up, "add a
-    sidebar tab" -- the per-document attach table). `auto` (roadmap item H,
-    session 7) round-trips too, so a restored document doesn't lose the
-    manual-vs-auto-detected distinction on its attached terms."""
+        _export_notebook_citations above. `auto` (roadmap item H,
+        session 7) round-trips too, so a restored document doesn't lose the
+        manual-vs-auto-detected distinction on its attached terms.
+    """
     rows = conn.execute(
         "SELECT notebook_uid, term_uid, position, created_at, auto FROM notebook_glossary_terms"
     ).fetchall()
@@ -205,11 +205,11 @@ def notebook_glossary_excluded_rows(conn) -> list[dict[str, Any]]:
 
 def glossary_reference_rows(conn) -> list[dict[str, Any]]:
     """Flat join rows (term_uid, ref_type, ref_uid, position, created_at) --
-    same "separate flat export key" treatment as the two functions above
-    (roadmap item F, 2026-10-03). Raw table rows, not
-    db.list_glossary_term_references' resolved-name shape -- a backup
-    should round-trip the actual stored reference, not a name that was
-    only ever a read-time convenience."""
+        same "separate flat export key" treatment as the two functions above. Raw table rows, not
+        db.list_glossary_term_references' resolved-name shape -- a backup
+        should round-trip the actual stored reference, not a name that was
+        only ever a read-time convenience.
+    """
     rows = conn.execute(
         "SELECT term_uid, ref_type, ref_uid, position, created_at FROM glossary_term_references"
     ).fetchall()

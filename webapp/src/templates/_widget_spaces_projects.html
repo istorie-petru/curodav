@@ -1,34 +1,8 @@
-<!-- Data: {style, previews} (style="list") or {style, cards} (style="cards")
-     -- see routers/dashboard.py::_render_spaces_projects. Consolidated
-     Spaces & Projects widget (2026-08-15 widget consolidation) replacing
-     project_preview/filled_cards -- style="list" reuses project_preview's
-     own rows, style="cards" reuses filled_cards' own Material-You-style
-     filled squares. Cards render through the shared filled_card macro, the
-     empty states through widget_empty (_widget_items.html). The list
-     style's project pill is deliberately NOT widget_pill -- it's a
-     .cell-tag.cal-* swatch (the label's own identity color, UI guide §6's
-     one allowed identity palette), a genuinely different kind of colored
-     chip from a status pill.
-
-     2026-08-30: "cards" style absorbed the retired Quick Links widget
-     (direct request, "merge the quick links and spaces & projects into
-     one data source") -- an unscoped instance's cards now include every
-     open project alongside every Space, same set Quick Links used to
-     render on its own. Each card's href/icon/meta come precomputed from
-     the render function now (every card points at /labels/<name>; a
-     Space gets an "N projects" caption, a project a plain "Project"
-     caption) rather than this template hardcoding the
-     Space path and project-count caption inline -- one shape covers both
-     kinds of card. This "cards" style also renders bare, no .widget-card
-     chrome -- see routers/dashboard.py::_is_bare_tile_widget /
-     .widget-card--bare (static/style.css). -->
 {% from "_widget_items.html" import widget_empty, filled_card %}
 {% if data.style == 'cards' %}
 {% if data.cards %}
 <div class="filled-cards-grid">
     {% for card in data.cards %}
-    {# 2026-09-25: a label card's caption carries its deadline state
-       ("Project · Overdue · 10 Sep") when it has one. #}
     {{ filled_card(card.name, card.href, card.color, icon_name=card.icon, description=card.description, meta=card.meta) }}
     {% endfor %}
 </div>

@@ -114,11 +114,8 @@ class TestPageHeaderNarrowRollout:
         _assert_narrow_header(resp.body.decode(), "Search", "command")
 
     def test_notebook(self, conn):
-        # 2026-10-02: the Browse page's filing-rail redesign renamed the
-        # header title from "Notebook" (redundant with the nav tab) to
-        # "Browse" -- the icon stays the same.
         resp = notebook_router.list_documents(_bare_request("/notebook"), conn=conn)
-        _assert_narrow_header(resp.body.decode(), "Browse", "notebook")
+        _assert_narrow_header(resp.body.decode(), "Notebook", "notebook")
 
     def test_settings_index(self, conn):
         st = fake_app().state.settings
@@ -395,5 +392,5 @@ class TestPageHeaderBanner:
         self._set_banner(conn)
         resp = banners_router.banner_editor(_bare_request("/banners/editor"), scope="__page_header__", page_url="/settings/appearance", conn=conn)
         body = resp.body.decode()
-        assert "Remove" in body
+        assert "Clear" in body
         assert 'name="scope" value="__page_header__"' in body

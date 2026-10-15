@@ -1,33 +1,23 @@
 {% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
+{% from "_inputs.html" import search_input %}
 {% block title %}Citations{% endblock %}
+{% block main_class %}notebook-plain-title{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
-{% from "_row_action_buttons.html" import row_action_buttons %}
-{% from "_empty_state_row.html" import empty_state_row %}
-<!-- Citations library (2026-10-03, curodav-notes STATE.md's "citations are
-     the priority feature" decision) -- the global, cross-document pool of
-     citation records, server-rendered Jinja2 (architecture-notes-module-
-     2026-09-29.md §5), same Field/Type/Default/Required/Actions-shaped
-     table + Edit-opens-a-modal interaction as Settings > Notebook. Reached
-     from the Browse page's header (notebook_list.html); not itself a
-     top-level nav entry -- same "generated/secondary pages are reached
-     via links, not extra tabs" rule the rest of Notebook already follows. -->
+{% from "_action_menu.html" import action_menu with context %}
 {% call page_header_narrow("Citations", "book-open") %}
-    {# Filters (2026-10-03, direct request) -- a modal, not an inline
-       fancy-dropdown bar like every other list page in this app (Tasks/
-       Calendar/Contacts), a deliberate one-off because this library is
-       expected to grow very large and four filter dimensions (Type/
-       Author/Year/Sort) don't fit the header comfortably. See routers/
-       notebook.py's citations_filters_modal docstring. The label shows
-       how many filters are currently applied so it's obvious at a glance
-       whether the list is narrowed. #}
+    <form method="get" action="/notebook/citations" class="form-inline notebook-glossary-search-form">
+        {% for k in ('type','author') %}{% for v in request.query_params.getlist(k) %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}{% endfor %}
+        {% for k in ('year_from','year_to','sort','sort2') %}{% if request.query_params.get(k) %}<input type="hidden" name="{{ k }}" value="{{ request.query_params.get(k) }}">{% endif %}{% endfor %}
+        {{ search_input({'name': 'q', 'value': q, 'aria-label': 'Search citations', 'autocomplete': 'off'}) }}
+    </form>
     <a href="/notebook/citations/filters{% if current_query %}?{{ current_query }}{% endif %}" data-modal class="btn ghost" title="Filter and sort citations">{{ icon('filter', 'icon-sm') }} Filters{% if active_filter_count %} ({{ active_filter_count }}){% endif %}</a>
     <a href="/notebook/citations/new" data-modal class="btn primary" title="Add citation">{{ icon('plus', 'icon-sm') }} Add citation</a>
 {% endcall %}
 <div id="modal-target">
 <div class="settings-group">
-{% if active_filter_count and not citations %}
+{% if (active_filter_count or q) and not citations %}
 {# Two distinct empty states (same "no documents at all" vs. "filters
    narrowed it to nothing" rule notebook_list.html's Browse page already
    follows) -- this one skips the table/empty_state_row below entirely
@@ -35,45 +25,30 @@
    plainly hiding real citations. #}
 {% call empty_state('No citations match the current filters', size='compact') %}<a href="/notebook/citations">Clear filters</a>{% endcall %}
 {% else %}
-<div class="card table-scroll table-responsive" id="citations-table-wrapper">
-    <table id="citations-table" class="entity-table notebook-browse-table">
-        <thead>
-            <tr>
-                <th class="col-name">Title</th>
-                <th class="col-meta col-opt-2">Authors</th>
-                <th class="col-meta col-opt-1">Year</th>
-                <th class="col-meta col-opt-2">Type</th>
-                <th class="col-actions"><span class="sr-only">Actions</span></th>
-            </tr>
-        </thead>
-        <tbody id="citations-body">
-            {% if citations %}
-                {% for c in citations %}
-                <tr class="entity-row" data-uid="{{ c.uid }}">
-                    <td class="col-name"><div class="label-cell"><span class="label-name">{{ c.title }}</span></div></td>
-                    <td class="col-meta col-opt-2">{{ c.display_authors or '—' }}</td>
-                    <td class="col-meta col-opt-1">{{ c.year or '—' }}</td>
-                    <td class="col-meta col-opt-2"><span class="cell-tag">{{ c.type_label }}</span></td>
-                    <td class="col-actions">
-                        {{ row_action_buttons(
-                            "/notebook/citations/" ~ c.uid ~ "/edit",
-                            "/notebook/citations/" ~ c.uid ~ "/delete",
-                            "citation",
-                            'Delete "' ~ c.title ~ '"? Any document this is attached to loses it from its bibliography too.'
-                        ) }}
-                    </td>
-                </tr>
-                {% endfor %}
-            {% else %}
-                {{ empty_state_row(5, "No citations yet") }}
-            {% endif %}
-            <tr class="task-add-row">
-                <td colspan="5"><a href="/notebook/citations/new" data-modal>{{ icon('plus', 'icon-sm') }} Add citation</a></td>
-            </tr>
-        </tbody>
-    </table>
+{% if citations %}
+<div class="card contact-list notebook-folder-list" id="citations-list">
+    {% for c in citations %}
+    <div class="contact-row-wrap" data-uid="{{ c.uid }}">
+        <a class="contact-row" href="/notebook/citations/{{ c.uid }}/edit" data-modal>
+            <span class="notebook-row-icon">{{ icon('book-open', 'icon-sm') }}</span>
+            <span class="contact-row-main">
+                <span class="contact-row-name">{{ c.title }}</span>
+                <span class="contact-row-sub">{{ c.display_authors or 'No author' }}{% if c.year %} · {{ c.year }}{% endif %}</span>
+            </span>
+            <span class="notebook-row-edited">{{ c.type_label }}</span>
+        </a>
+        {{ action_menu([
+            {'label': 'Edit', 'icon': 'edit', 'href': '/notebook/citations/' ~ c.uid ~ '/edit', 'modal': true},
+            {'label': 'Delete citation', 'icon': 'trash', 'danger': true, 'form_action': '/notebook/citations/' ~ c.uid ~ '/delete', 'confirm': 'Delete "' ~ c.title ~ '"? Any document this is attached to loses it from its bibliography too.'},
+        ], aria_label='More actions for ' ~ c.title) }}
+    </div>
+    {% endfor %}
 </div>
+{% else %}
+{{ empty_state('No citations yet', icon_name='book-open') }}
 {% endif %}
+{% endif %}
+
 </div>
 </div>
 {% endblock %}

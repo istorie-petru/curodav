@@ -98,6 +98,19 @@ def _table(content: list[list[str]], notes: list[str]) -> str:
     return "\n".join(lines)
 
 
+def _timeline_lines(data: dict, notes: list[str]) -> list[str]:
+    """A timeline as a list: "- date: title, description" for each entry that has any text."""
+    lines = []
+    for item in data.get("items") or []:
+        when = (item.get("date") or "").strip()
+        title = inline_to_markdown(item.get("title") or "", notes).strip()
+        text = inline_to_markdown(item.get("description") or "", notes).strip()
+        body = " ".join(part for part in (f"**{title}**" if title else "", text) if part)
+        if when or body:
+            lines.append("- " + (f"{when}: " if when and body else when) + body)
+    return lines
+
+
 def blocks_to_markdown(blocks: list[dict]) -> str:
     notes: list[str] = []
     parts = []
@@ -117,6 +130,8 @@ def blocks_to_markdown(blocks: list[dict]) -> str:
             parts.append(f"```{data.get('language', '') if data.get('language') != 'plaintext' else ''}\n{data.get('code', '')}\n```")
         elif kind == "delimiter":
             parts.append("---")
+        elif kind == "timeline":
+            parts.append("\n".join(_timeline_lines(data, notes)))
         elif kind == "table":
             parts.append(_table(data.get("content", []), notes))
         elif kind == "image":
@@ -283,6 +298,8 @@ def note_to_markdown(doc: dict, blocks: list[dict]) -> str:
         head["type"] = doc["note_type"]
     if doc.get("is_template"):
         head["template"] = True
+    if doc.get("journal_week"):
+        head["week"] = doc["journal_week"]
     if doc.get("tags"):
         head["labels"] = doc["tags"]
     for prop in doc.get("properties", []):

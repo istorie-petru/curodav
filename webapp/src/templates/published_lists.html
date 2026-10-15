@@ -1,3 +1,4 @@
+{% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
 {% block title %}Published Lists{% endblock %}
 {% block content %}
@@ -10,24 +11,6 @@
 
 <div class="published-lists-page">
     {% if lists %}
-    <!-- 2026-09-08 (direct request: "rework the table in the spirit of any
-         other table in the app... it should have an edit button. No
-         inline editing."): was its own hand-rolled `.lists-table-
-         container`/`.lists-table` chrome (flat border, tinted thead,
-         roomier padding, a bespoke mobile stacked-row layout) predating
-         the `.card.table-scroll` + plain `<table>` convention every other
-         table in the app settled on (_tasks_body.html, settings_holidays.
-         html, settings_data_maintenance.html's conflicts table) --
-         swapped onto that same convention here; the generic `table`/
-         `thead th`/`tbody td` rules in style.css now do the chrome, no
-         table-specific overrides needed (style.css's old `.lists-table*`
-         block, mobile-stack media query included, is gone with this).
-         Visibility's inline auto-submitting `<select>` (a live write on
-         every change, no confirmation) is also gone -- it was the one
-         piece of inline editing left on this page, and the request was
-         explicit: no inline editing. It's now a plain read-only pill
-         (below), and both Visibility and every other editable field live
-         behind the new Edit button instead. -->
     <div class="card table-scroll table-responsive">
         <table>
             <thead>
@@ -103,11 +86,7 @@
         </table>
     </div>
     {% else %}
-    <div class="empty-state empty-state-rich">
-        <div class="empty-state-icon">{{ icon('share-2', 'icon-lg') }}</div>
-        <h2 class="empty-state-title">No lists published yet</h2>
-        <p class="empty-state-text">Click <strong>"+ New List"</strong> to share your tasks, events, or contacts -- optionally filtered by label.</p>
-    </div>
+    {{ empty_state('No lists published yet', icon_name='share-2', text='Create a list to share your tasks, events or contacts, optionally filtered by label.') }}
     {% endif %}
 </div>
 {% endblock %}

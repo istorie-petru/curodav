@@ -1,5 +1,4 @@
-"""Web Push endpoints (2026-09-24, plans/ui-cleanup-2026-09.md item 7,
-slice P1). The browser side is static/push_settings.js (Settings >
+"""Web Push endpoints. The browser side is static/push_settings.js (Settings >
 General's Notifications card); delivery is src/push.py.
 
 - GET  /push/public-key   -> {"key": <applicationServerKey>}

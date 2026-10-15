@@ -1,16 +1,3 @@
-// Sidebar redesign slice 13a (2026-08-29, plans/STATE.md item 13a) --
-// collapsible rail width + per-space collapsible project tree.
-//
-// The rail-wide expanded/collapsed state is APPLIED before first paint by
-// an inline script in base.html's <head> (same reasoning as the theme
-// toggle there: doing it here, after DOMContentLoaded, would paint the
-// 80px rail first and jump to 240px on every load for anyone who'd chosen
-// expanded). This file only has to: (1) keep the toggle button in sync
-// with whatever the head script already applied, and (2) wire per-space
-// chevrons, which have no pre-paint flash problem since collapsed
-// (aria-expanded="false") is what the server already rendered for any
-// space whose child isn't the current page -- see base.html's ns.child_active
-// note for the one case that needs a real default.
 (function () {
   const EXPANDED_KEY = "commandCenterWeb.sidebarExpanded";
   const CHILD_KEY_PREFIX = "commandCenterWeb.sidebarTreeOpen."; // + space name
@@ -33,20 +20,6 @@
       toggle.title = expanded ? "Collapse sidebar" : "Expand sidebar";
       toggle.setAttribute("aria-label", toggle.title);
     }
-    // Toggling data-sidebar-expanded changes `main`'s own width (its
-    // margin-left jumps 80px <-> 240px, see style.css) without the browser
-    // viewport itself resizing -- any page that lays itself out in JS off a
-    // measured container width (app.js's dashboard masonry `layout()`,
-    // 80px<->240px query above) only ever listens for a real `resize`
-    // event, so widget cards kept their old pixel left/top/width from
-    // before the toggle and visibly misaligned/overlapped (direct feedback:
-    // "the dashboard... just moves the content away"). Dispatching a
-    // synthetic `resize` reuses that existing listener/debounce instead of
-    // adding a second layout-recompute path. Fired twice: once immediately
-    // (covers browsers/reduced-motion where the width change is instant)
-    // and once after `.tabbar`'s own width transition finishes
-    // (--dur-normal, 160ms -- style.css) so a mid-transition measurement
-    // isn't used as the final width.
     window.dispatchEvent(new Event("resize"));
     setTimeout(() => window.dispatchEvent(new Event("resize")), 180);
   }

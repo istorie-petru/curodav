@@ -1,43 +1,5 @@
 {% from "_inputs.html" import text_input %}
 {% from "_date_time_fields.html" import date_field with context %}
-{# Notebook's document-properties modal (2026-10-02, direct request) --
-   replaces the Editor page's old inline title textbox + bare header
-   delete button with the app's standard "edit a record via modal"
-   pattern (contact_form.html/_modal_footer.html/_widget_list_
-   multiselect.html, all reused as-is). Reachable both as a real page
-   (GET /notebook/{uid}/properties, works with no JS) and as an in-place
-   modal (data-modal from notebook_document.html's header), same dual-mode
-   contract every other form template in this app follows.
-
-   Covers title, label(s) (object_labels, object_type='notebook' --
-   STATE.md's Groups/Labels mechanism, reused with no new plumbing), and
-   note_type (still a free-text column at the DB level, MVP scope -- see
-   db.py's notebook_documents schema comment; the picker below offers
-   STATE.md's starter canonical list as *suggestions*, not an enforced
-   set, via the same ms_allow_new "pick one or type your own" mechanism
-   Settings > Holidays' Calendar field already uses).
-
-   Delete moved here from the page header (routers/notebook.py's
-   delete_document route itself is unchanged, just relocated to this
-   modal's footer) since the header's icon slot now opens this modal
-   instead.
-
-   Custom properties (2026-10-02, curodav-notes/documentation/plans/
-   architecture-notes-module-2026-09-29.md §4 + STATE.md) -- arbitrary
-   user-named key/value rows (institution, author(s), DOI, date, ...),
-   added below the title/type/labels grid. Same repeatable-row idiom
-   contact_form.html's phone/email rows established (clone a <template>
-   row client-side, submit the whole ordered list as parallel form arrays
-   on this same Save button), but not that script/those CSS classes --
-   its own small static/notebook_properties_rows.js and neutral
-   .notebook-property-row classes instead of borrowing contacts' markup.
-   The key cell (2026-10-02, direct request: "use a drop down similar to
-   the labels one") is _notebook_property_key_picker.html's per-row
-   dropdown -- every key already used on any document, plus free-text for
-   a new one -- not a plain text input; see that macro's own header
-   comment for the full picker/proxy mechanism. The value cell stays a
-   plain text input (property values are genuinely free text, not a
-   reusable vocabulary the way keys are). #}
 {% extends "base.html" %}
 {% from "_notebook_property_key_picker.html" import notebook_property_key_picker %}
 {% from "_modal_header_back.html" import modal_header_back %}
@@ -58,7 +20,7 @@
         </div>
         {% if not document.is_template %}
         {% set ms_form_id = 'notebook-properties-form' %}
-        {% include "_labels_row.html" %}
+        {% set labels_single = true %}{% include "_labels_row.html" %}
         {% set pf_form_id = 'notebook-properties-form' %}
         {% include "_project_field.html" %}
         {% endif %}
@@ -117,6 +79,7 @@
 </form>
 </div>
 </div>
+{% set footer_extra_html %}{% if not document.is_template %}<form method="post" action="/notebook/{{ document.uid }}/pin" class="form-inline"><input type="hidden" name="pinned" value="{{ '0' if document.pinned else '1' }}"><button type="submit" class="btn ghost" title="{{ 'Unpin' if document.pinned else 'Pin to the top of the Notebook' }}" aria-label="{{ 'Unpin' if document.pinned else 'Pin to the top of the Notebook' }}">{{ icon('pin', 'icon-sm') }} {{ 'Unpin' if document.pinned else 'Pin' }}</button></form>{% endif %}<a href="/notebook/{{ document.uid }}/export.md" class="btn ghost" download title="Export to Markdown" aria-label="Export to Markdown">{{ icon('download', 'icon-sm') }} Export</a>{% endset %}
 {% set footer_back_url = '/notebook/' ~ document.uid %}
 {% set footer_back_mode = 'cancel' %}
 {% set footer_back_label = 'Cancel' %}

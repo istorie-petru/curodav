@@ -1,29 +1,3 @@
-// Icon-only accessible names (audit-fixes-2.0.md slice 5, documentation/
-// reports/full-app-audit-2026-09-07.md finding: "icon-only buttons relying
-// on `title` alone with no `aria-label`" -- row-delete buttons, Edit/Delete
-// icon links across settings pages, swatch pickers, work-session/relation
-// remove buttons, etc.). `title` alone gives icon-only controls a *hover*
-// label but is an unreliable accessible-name source (some AT/browser combos
-// don't expose it at all), and the audit found ~20 call sites relying on it
-// with no `aria-label` fallback.
-//
-// Landed as one shared, global default instead of hand-editing every call
-// site (the audit's own suggestion) -- this app already has one icon-button
-// idiom (`.icon-btn` is the sole icon-button class app-wide, see the audit's
-// UI-consistency section) but the bare `title`-only pattern also shows up on
-// several non-`.icon-btn` elements (`.icon-picker-current`,
-// `.color-swatch-current`, `.checklist-check`, `.checklist-delete`, the
-// icon/color swatch `<label>`s), so this scans for the underlying pattern
-// (a `[title]` with no accessible name of its own and no visible text)
-// rather than one specific class -- it also means any future icon-only
-// control gets a correct name for free, with nothing to remember to add.
-//
-// Elements with real visible text (e.g. _calendar_week_grid.html's all-day
-// task links, which render an icon *and* the title as text) are left alone
-// -- their accessible name already comes from that text, and overwriting it
-// with just the `title` string would make it *less* accurate (WCAG 2.5.3
-// wants any visible label text to remain part of the accessible name), not
-// more.
 (function () {
   var NAMEABLE_TAGS = /^(BUTTON|A|LABEL|INPUT)$/;
   var SELECTOR = "[title]:not([aria-label]):not([aria-labelledby])";

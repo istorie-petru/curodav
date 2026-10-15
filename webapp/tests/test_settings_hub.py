@@ -139,6 +139,7 @@ class TestSettingsHub:
             "/settings/finance-accounts",
             "/settings/time-blocks",
             "/settings/data-maintenance",
+            "/settings/logs",
             # "/settings/flairs" was a hub category briefly (2026-09-29) --
             # moved into a modal button on Settings > Appearance the same
             # day (HUB_CATEGORIES' own comment); /settings/flairs itself

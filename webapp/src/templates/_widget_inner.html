@@ -15,17 +15,6 @@
 {% set widget = wc.widget %}
 {% set spec = wc.spec %}
 {% set data = wc.data %}
-{# 2026-09-28 (direct request, "remove the labels in this group title"):
-   `group_members` is the one widget type that hides its own header text
-   outside edit mode -- in edit_mode the header (title, drag handle,
-   Edit/Delete) still renders as normal, since those controls are how the
-   widget gets reordered/removed/retitled from the customization UI; a
-   plain viewer just gets the card grid with no title bar/border eating
-   space above it. Scoped to this one type rather than a general "widgets
-   can hide their own title" option -- no other widget has asked for
-   this, and `_render_group_members`'s own page (a group's dashboard)
-   already says "labels in this group" via the page's own title, making
-   this widget's header redundant there specifically. #}
 {% if edit_mode or widget.type != 'group_members' %}
 <div class="card-title widget-header">
     {% if edit_mode and not in_stack %}
@@ -35,17 +24,6 @@
     {% endif %}
     <h2>{{ widget.title or (spec.label if spec else widget.type) }}</h2>
     <div class="spacer"></div>
-    {# 2026-09-28 (direct request, "the habit-widget-summary should be on
-       the same row as widget-header but on the far right"): was its own
-       `<p>` above the habit list inside `.widget-content`
-       (_widget_habit_checkin.html) -- moved here, after the spacer, so
-       the same flex row that already pushes the edit-mode Edit/Delete
-       controls to the far right does the same for this summary in view
-       mode (and sits just left of those controls in edit mode, rather
-       than fighting them for the same "far right" spot). Scoped to this
-       one widget type directly, same as the `group_members` header-hiding
-       special case above this macro -- `data` is `wc.data`, already in
-       scope from the `{% set data = wc.data %}` above. #}
     {% if widget.type == 'habit_checkin' and data %}
     {% if data.all_done %}
     <p class="habit-widget-summary is-all-done">{{ icon('party-popper', 'icon-sm') }} <span>All done for now</span></p>
@@ -67,20 +45,11 @@
 </div>
 {% endif %}
 
-<!-- Content height (2026-08-07 -- manual height editor/drag-resize
-     removed per direct feedback: a widget's height should just be
-     "how much content it is", no scrollbar, unless it goes over a
-     max height. .widget-content's CSS max-height (static/style.css)
-     is one flat value shared by every widget type, a backstop only --
-     each widget's own item-count limit (e.g. _render_contact_list's
-     `limit`) is what normally keeps content within bounds. Applied to
-     just this data area, not the whole card, so the header above and
-     the Filters panel below always stay their own natural size. -->
 <div class="card-body widget-content">
 {% if spec %}
 {% include spec.template %}
 {% else %}
-<div class="empty-state">Unknown widget type &ldquo;{{ widget.type }}&rdquo;.</div>
+{% from "_empty_state.html" import empty_state %}{{ empty_state("Unknown widget type " ~ widget.type, size="compact") }}
 {% endif %}
 </div>
 

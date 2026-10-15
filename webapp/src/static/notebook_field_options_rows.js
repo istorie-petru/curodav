@@ -1,38 +1,3 @@
-// Settings > Notebook field edit modal (2026-10-02,
-// templates/notebook_field_edit_modal.html /
-// templates/_notebook_field_option_row.html):
-//
-// 1. Type -> Options visibility. Same `data-page`/label_role_picker.js
-//    idiom the label form's Page/Sections switch already uses -- a
-//    change listener on the Type field's radios (ms_mode="single", see
-//    _widget_list_multiselect.html) sets `data-field-type` on the
-//    enclosing `.notebook-field-form-grid`, driving style.css's
-//    `[data-field-type]` show/hide of `.notebook-field-options-field`.
-//
-// 2. Option rows' color/icon proxy sync. Each row's Look picker
-//    (_look_picker.html, reused unchanged) uses row-scoped radio names
-//    (`option_color_radio__{row_key}` / `option_icon_radio__{row_key}`)
-//    instead of the shared `option_color`/`option_icon` the form actually
-//    needs to submit -- same "many independent pickers, one shared
-//    submitted name" problem notebook_properties_rows.js already solved
-//    for the property-key picker, generalized to two proxies. Unlike that
-//    file's radio->proxy sync, this derives the proxy id from the radio's
-//    OWN name (row_key is the suffix after the `__`) instead of a
-//    `data-proxy-target` attribute -- avoids touching the shared
-//    look_picker macro's markup at all.
-//
-// 3. Add/remove rows, same `data-repeatable-add`/`data-repeatable-remove`/
-//    `<template>` idiom as notebook_properties_rows.js, but this file's
-//    own clone rewriting: a cloned row carries THREE separate ids that all
-//    share the same baked-in "tmpl" placeholder (the look_picker trigger's
-//    id, its "-label" id, and the two hidden proxies' ids) plus two radio
-//    group names -- simplest correct fix is one textual
-//    s/tmpl/{token}/g over the template's serialized HTML before it's
-//    parsed back into real DOM nodes, rather than visiting each attribute
-//    individually. Safe here specifically because "tmpl" is this file's
-//    own naming convention, never real user-facing text (a value/color/
-//    icon the user actually picks can't contain it as a standalone token
-//    in these particular attributes).
 (function () {
   let cloneCounter = 0;
 

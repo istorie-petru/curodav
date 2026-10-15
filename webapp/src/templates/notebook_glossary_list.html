@@ -1,78 +1,53 @@
+{% extends "base.html" %}
 {% from "_inputs.html" import search_input %}
 {% from "_empty_state.html" import empty_state %}
-{% extends "base.html" %}
-{% block title %}Glossary{% endblock %}
-{% block content %}
+{% from "_section_row.html" import section_row %}
+{% from "_action_menu.html" import action_menu with context %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
-{% from "_row_action_buttons.html" import row_action_buttons %}
-{% from "_empty_state_row.html" import empty_state_row %}
-<!-- Glossary library (2026-10-03, roadmap-mvp-to-full-product-checklist's
-     "Glossary" section, "almost the same as citations") -- the global,
-     cross-document pool of term/definition pairs, server-rendered Jinja2,
-     same Field/Type/Actions-shaped table + Edit-opens-a-modal interaction
-     as the Citations library/Settings > Notebook. Reached from the Browse
-     page's header (notebook_list.html); not itself a top-level nav entry.
-     No Filters modal (unlike Citations) -- just two fields, so a plain
-     `q` search box covers the roadmap's "term lookup/search backend". -->
-{% call page_header_narrow("Glossary", "tag") %}
-    {# Search (2026-10-03 direct follow-up, "move the searchbar to the
-       headerbar") -- a plain GET form in the header actions slot, same
-       "real navigation, no client-side filtering" convention the rest of
-       this app's list pages use. #}
-    <form method="get" action="/notebook/glossary" class="form-inline notebook-glossary-search-form">
-        {{ search_input({'name': 'q', 'value': (q), 'aria-label': 'Search terms', 'autocomplete': 'off'}) }}
+{% block title %}Entries - Notebook{% endblock %}
+{% block main_class %}main-full-width notebook-main notebook-folder-page{% endblock %}
+{% block content %}
+{% call page_header_narrow("Entries", "tag", title_extra='<span class="notebook-browse-doc-count">' ~ total ~ ' entr' ~ ('ies' if total != 1 else 'y') ~ '</span>') %}
+    <form method="get" action="/notebook/glossary" id="entries-form" class="form-inline notebook-glossary-search-form">
+        <div class="notebook-folder-filters">
+        {{ search_input({'name': 'q', 'value': (q), 'aria-label': 'Search entries', 'autocomplete': 'off'}) }}
+        {% set fd_name = 'kind' %}
+        {% set fd_label = 'Kind' %}
+        {% set fd_items = kind_items %}
+        {% set fd_selected = kind %}
+        {% set fd_mode = 'single' %}
+        {% set fd_form_id = 'entries-form' %}
+        {% include '_filter_dropdown.html' %}
+        </div>
     </form>
-    <a href="/notebook/glossary/new" data-modal class="btn primary" title="Add term">{{ icon('plus', 'icon-sm') }} Add term</a>
+    <a href="/notebook/glossary/new" data-modal class="btn primary" title="Add entry" data-fab>{{ icon('plus', 'icon-sm') }} New</a>
 {% endcall %}
-<div id="modal-target">
-<div class="settings-group">
-{% if q and not terms %}
-{% call empty_state('No terms match "' ~ q ~ '"', size='compact') %}<a href="/notebook/glossary">Clear search</a>{% endcall %}
+<div class="notebook-folder-body" id="entries-body">
+{% if groups %}
+<div class="card contact-list notebook-folder-list">
+    {% for g in groups %}
+    {% call section_row(g.entries | length ~ ' entr' ~ ('ies' if g.entries | length != 1 else 'y')) %}<span class="cell-tag cal-{{ g.color }}">{{ icon(g.icon, 'icon-sm') }} {{ g.kind }}</span> <a href="/settings/notebook/entry-kinds/edit?name={{ g.kind | urlencode }}" data-modal class="icon-btn" title="Edit the {{ g.kind }} type" aria-label="Edit the {{ g.kind }} type">{{ icon('edit', 'icon-sm') }}</a>{% endcall %}
+    {% for e in g.entries %}
+    <div class="contact-row-wrap" data-uid="{{ e.uid }}">
+        <a class="contact-row" href="/notebook/glossary/{{ e.uid }}" data-modal>
+            <span class="notebook-row-icon">{{ icon(g.icon, 'icon-sm cal-' ~ g.color) }}</span>
+            <span class="contact-row-main">
+                <span class="contact-row-name">{{ e.term }}</span>
+                <span class="contact-row-sub">{{ e.definition }}</span>
+            </span>
+        </a>
+        {{ action_menu([
+            {'label': 'Edit entry', 'icon': 'edit', 'href': '/notebook/glossary/' ~ e.uid ~ '/edit', 'modal': true},
+            {'label': 'Delete entry', 'icon': 'trash', 'danger': true, 'form_action': '/notebook/glossary/' ~ e.uid ~ '/delete', 'undo': e.term},
+        ], aria_label='More actions for ' ~ e.term) }}
+    </div>
+    {% endfor %}
+    {% endfor %}
+</div>
+{% elif q or kind %}
+{% call empty_state('No entries match', icon_name='search', size='compact') %}<a href="/notebook/glossary">Clear search</a>{% endcall %}
 {% else %}
-<div class="card table-scroll table-responsive" id="glossary-table-wrapper">
-    <table id="glossary-table" class="entity-table notebook-browse-table">
-        <thead>
-            <tr>
-                <th class="col-name">Term</th>
-                <th class="col-meta col-opt-2">Definition</th>
-                {# References (item F, 2026-10-03) -- in its own dedicated
-                   column, not inline superscripts, per the roadmap item's
-                   own split between browse-table and in-document rendering
-                   (the latter depends on item H's auto-detected inline
-                   occurrences, not built yet -- see
-                   [[curodav-webapp-modal-stack-cancel-fix]]'s sibling memory
-                   for this session's own notes). #}
-                <th class="col-meta col-opt-2">References</th>
-                <th class="col-actions"><span class="sr-only">Actions</span></th>
-            </tr>
-        </thead>
-        <tbody id="glossary-body">
-            {% if terms %}
-                {% for t in terms %}
-                <tr class="entity-row" data-uid="{{ t.uid }}">
-                    <td class="col-name"><div class="label-cell"><span class="label-name">{{ t.term }}</span></div></td>
-                    <td class="col-meta col-opt-2"><div class="glossary-definition" title="{{ t.definition }}">{{ t.definition or '—' }}</div></td>
-                    <td class="col-meta col-opt-2">{{ t.references | map(attribute='name') | join(', ') if t.references else '—' }}</td>
-                    <td class="col-actions">
-                        {{ row_action_buttons(
-                            "/notebook/glossary/" ~ t.uid ~ "/edit",
-                            "/notebook/glossary/" ~ t.uid ~ "/delete",
-                            "term",
-                            'Delete "' ~ t.term ~ '"?'
-                        ) }}
-                    </td>
-                </tr>
-                {% endfor %}
-            {% else %}
-                {{ empty_state_row(4, "No terms yet") }}
-            {% endif %}
-            <tr class="task-add-row">
-                <td colspan="4"><a href="/notebook/glossary/new" data-modal>{{ icon('plus', 'icon-sm') }} Add term</a></td>
-            </tr>
-        </tbody>
-    </table>
-</div>
+{% call empty_state('No entries yet', icon_name='tag', text='Terms, people, places and events live here.') %}<a href="/notebook/glossary/new" data-modal class="btn primary">{{ icon('plus') }} New entry</a>{% endcall %}
 {% endif %}
-</div>
 </div>
 {% endblock %}

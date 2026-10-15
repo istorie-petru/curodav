@@ -60,12 +60,9 @@ def test_autofill_brings_back_a_term_the_user_removed(conn):
     assert db.list_notebook_glossary_terms(conn, "d1")[0]["term"] == "Hoplite"
 
 
-def test_the_route_and_the_list_partial(conn):
+def test_the_autofill_route_reports_what_it_added(conn):
     db.upsert_glossary_term(conn, {"term": "Hoplite", "definition": "A soldier"})
     _doc(conn, "hoplite")
     resp = notebook_router.autofill_document_glossary("d1", conn=conn)
     assert json.loads(resp.body)["added"] == ["Hoplite"]
-    request = Request({"type": "http", "method": "GET", "path": "/", "query_string": b"", "scheme": "http",
-                       "server": ("testserver", 80), "root_path": "", "headers": []})
-    assert "Hoplite" in notebook_router.document_glossary_list("d1", request, conn=conn).body.decode()
     assert notebook_router.autofill_document_glossary("missing", conn=conn).status_code == 404

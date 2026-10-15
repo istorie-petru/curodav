@@ -1,25 +1,3 @@
-// Labels manage page search (2026-08-08 Settings redesign; generalized
-// 2026-08-15 when labels_manage.html's markup changed from a <table> to a
-// plain <div> list, and again the same day when Spaces became real group
-// headers -- side work, direct feedback: "the table should be transformed
-// into a simple list" / "the spaces list should be displayed differently
-// and all their children be always in their group"). Filters the
-// already-rendered rows client-side, same "no round trip for a page this
-// size" reasoning as app.js's multiselect summaries.
-//
-// Each group is a `[data-label-group]`. Its header is either a Space's own
-// row (which is ALSO a `[data-label-row]`, carrying both attributes at
-// once -- routers/labels.py::manage_labels' Space groups) or a plain text
-// "Ungrouped" divider with no `data-label-name` of its own. Two passes:
-//   1. every `[data-label-row]:not([data-label-group-header])` (a group's
-//      ordinary/child rows) hides/shows on its own name match, same as
-//      before.
-//   2. the header shows if EITHER its own name matches (so searching a
-//      Space's own name keeps that Space's row visible even if none of
-//      its children match) OR any child in its group matched in pass 1 --
-//      a Space with a matching child should still show as context for
-//      that child, not disappear along with an unrelated non-match on its
-//      own name.
 (function () {
   let input;
   let list;

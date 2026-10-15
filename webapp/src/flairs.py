@@ -1,49 +1,12 @@
-"""Item 10 (2026-09-27), Peter's queued list: "google-calendar-flairs/ ...
-is the reference for a new feature: dynamically attach a photo to an
+"""is the reference for a new feature: dynamically attach a photo to an
 event/task/habit/label/group/project based on a keyword list matched
 against its name (a big-but-reasonable keyword list per photo)."
-
-2026-09-27, follow-up (direct correction): the first version of this
-feature bundled 79 real photos straight from that reference folder
-into `webapp/src/static/flairs/` and shipped them in the repo. Peter
-caught a real problem with that: those photos are Google's own
-production "flairs" images (https://gstatic.com/tmly/.../flairs/...) --
-copyrighted material this project has no license to redistribute, bundle,
-or ship in a public repo, self-hosted app or not. Nothing here ships a
-single photo byte anymore. What ships instead:
-
-  - `FLAIR_KEYWORDS` below -- pure keyword DATA, not an image. Built from
-    the reference folder's own `mapping.csv` (310 rows, real keyword
-    research Peter had already done against Google's real feature) plus a
-    modest set of additional synonyms (deduced from each photo's own
-    FILENAME and existing keywords only, never by viewing an image --
-    confirmed via AskUserQuestion; see the git history on this file's
-    previous version for the exact reasoning/exclusions, still valid,
-    just not re-copied here to keep this docstring from growing forever).
-  - A DYNAMIC photo source instead of a bundled one: `configure()` below
-    points this module at a directory the operator supplies themselves
-    (`Settings.flairs_dir`, `CC_FLAIRS_DIR` -- defaults next to the
-    SQLite cache, same "outside the installed app, inside the user's own
-    persistent data directory" convention `CC_BACKUP_DIR`/
-    `CC_PHOTO_CACHE_DIR` already established in config.py, deliberately
-    NOT `webapp/src/static/` -- that directory ships with the app/gets
-    replaced on every deploy, exactly the "symlink space" this must
-    avoid). `flair_image_url` below only ever returns a URL for a flair
-    id whose file the operator has actually placed there themselves --
-    see `documentation/flairs.md` for the full supported id list and
-    exactly where to put files, including which id needs which filename.
-    An id with no file on disk simply contributes no banner anywhere
-    (same as it never matched at all) -- this is not an error state, a
-    fresh install has zero photos configured until the operator adds
-    some, same as a fresh install has no uploaded banners either.
 
   The four reference season photos (spring/summer/autumn/winter), and
   later the 12 month photos, are deliberately not KEYS in this table --
   matched by DATE, not name, so there's no `FLAIR_KEYWORDS["summer"]`
-  entry to string-match against an object's title (see the 2026-09-29
-  note further down for the full history and why). They DO still use
-  this module's `flair_image_url` as their actual photo source, though
-  (2026-09-29, direct request) -- db.py's `banner_for_object` calls it
+  entry to string-match against an object's title. They DO still use
+  this module's `flair_image_url` as their actual photo source, though -- db.py's `banner_for_object` calls it
   directly with the season/month word as the id, bypassing `match_flair`
   entirely, so an operator drops `summer.jpg`/`july.jpg` under
   `flairs_dir` exactly like any other flair and it's picked up with no
@@ -68,12 +31,6 @@ this same follow-up, deliberately NOT mirroring Google's own internal
 flair-id spelling, since this table is no longer a thin wrapper around
 their asset naming at all once the actual bytes stopped coming from
 them.
-
-2026-09-29 (direct request: "update the keywords to cover all files in
-the folders", after the reference folder was itself reorganized/renamed
-into flairs-dir-ready photos + icons/ + unmatched/) -- 24 more flair ids
-added on top of the original 79, covering every file that folder
-reorganization turned up:
 
   - 18 real event-type icons Google's own asset set has that the
     original 336-row keyword research never covered (no CSV row at all,
@@ -101,20 +58,6 @@ reorganization turned up:
     can false-positive) -- accepted via AskUserQuestion, priority 5 (the
     loosest tier) on all 8 so `match_flair`'s tie-break always prefers a
     more specific competing match on the same name where one exists.
-
-    Months and seasons are deliberately NOT in this table at all, even
-    though the reorganized reference folder has a photo for each --
-    direct correction after an initial version of this same slice DID
-    add them here as priority-5 keywords (`"march"`, `"summer"`, ...).
-    That was wrong for a reason specific to these two categories and
-    not the 8 scenery words above: a month/season isn't really a
-    *keyword* an event's name happens to contain, it's a property of
-    the event's own due/start DATE, which db.py already computes
-    directly (no string-matching needed or wanted). Keyword-matching
-    "June" against an event's title is both redundant with that (most
-    June-dated events don't say "June" in the title, and the ones that
-    do already resolve correctly via the date) and a pure false-positive
-    generator for the ones that don't.
 
     That said (same day, direct follow-up: "the months/seasons should
     work through the flairs system, even the default ones") they DO use
@@ -154,7 +97,8 @@ reorganization turned up:
     insecure, but still wrong, so this was left alone rather than
     guessed at. `icons/` in the reference folder holds these as-is for
     whoever converts them (rasterize to PNG, or add real SVG
-    sanitization + sniffing) -- a deliberate follow-up, not done here."""
+    sanitization + sniffing) -- a deliberate follow-up, not done here.
+"""
 
 from __future__ import annotations
 
@@ -471,39 +415,40 @@ def flair_image_url(flair_id: str) -> str | None:
 
 def match_flair(name: str | None, languages: Iterable[str] = ("en",)) -> str | None:
     """The flair (if any) whose keyword list best matches `name` -- a
-    task/event/habit-task's own title, or a label/group/project's own
-    name. Case-insensitive substring match (a keyword phrase anywhere in
-    the name counts, not just a whole-word/whole-name match -- "Weekly
-    yoga class" matches "yoga" the same as a name that's just "Yoga").
-    Ties (a name matching keywords from more than one flair) break on the
-    lower `priority` number winning -- confirmed via AskUserQuestion as
-    the tie-break rule, using the reference data's own confidence
-    ranking rather than e.g. preferring whichever matched phrase is
-    longest. A further tie (same priority, more than one flair) breaks on
-    the longest matching keyword phrase, then alphabetically by flair id
-    -- both deterministic, neither was asked about since a same-priority
-    collision is rare enough in practice not to be a real product
-    decision either way.
+        task/event/habit-task's own title, or a label/group/project's own
+        name. Case-insensitive substring match (a keyword phrase anywhere in
+        the name counts, not just a whole-word/whole-name match -- "Weekly
+        yoga class" matches "yoga" the same as a name that's just "Yoga").
+        Ties (a name matching keywords from more than one flair) break on the
+        lower `priority` number winning -- confirmed via AskUserQuestion as
+        the tie-break rule, using the reference data's own confidence
+        ranking rather than e.g. preferring whichever matched phrase is
+        longest. A further tie (same priority, more than one flair) breaks on
+        the longest matching keyword phrase, then alphabetically by flair id
+        -- both deterministic, neither was asked about since a same-priority
+        collision is rare enough in practice not to be a real product
+        decision either way.
 
-    `languages` (2026-09-29, multilingual support first slice) -- which
-    of `FLAIR_KEYWORDS_BY_LANG`'s tables to search, in caller-resolved
-    order (db.active_flair_languages reads Settings > General's "Flair
-    languages" checkbox-dropdown; every call site not yet updated for
-    that setting keeps the default `("en",)`, i.e. searches exactly like
-    before this parameter existed). Matches from every requested language
-    feed the SAME best-candidate comparison above -- a Romanian keyword
-    can beat an English one on priority/length the same way two English
-    keywords would, there's no separate "prefer this language" tier. An
-    unrecognized language code (a stale stored value from a since-removed
-    language) is silently skipped rather than raising, same "tolerate a
-    now-invalid stored setting instead of crashing on it" leniency the
-    rest of this app's app_meta readers already apply.
+        `languages` -- which
+        of `FLAIR_KEYWORDS_BY_LANG`'s tables to search, in caller-resolved
+        order (db.active_flair_languages reads Settings > General's "Flair
+        languages" checkbox-dropdown; every call site not yet updated for
+        that setting keeps the default `("en",)`, i.e. searches exactly like
+        before this parameter existed). Matches from every requested language
+        feed the SAME best-candidate comparison above -- a Romanian keyword
+        can beat an English one on priority/length the same way two English
+        keywords would, there's no separate "prefer this language" tier. An
+        unrecognized language code (a stale stored value from a since-removed
+        language) is silently skipped rather than raising, same "tolerate a
+        now-invalid stored setting instead of crashing on it" leniency the
+        rest of this app's app_meta readers already apply.
 
-    Deliberately independent of whether `flair_image_url` would actually
-    find a file for the winning id -- this is pure keyword matching over
-    the full DATA table regardless of which photos an operator has
-    gotten around to supplying yet; callers are the ones that fall
-    through to "no banner" when the matched id has no file configured."""
+        Deliberately independent of whether `flair_image_url` would actually
+        find a file for the winning id -- this is pure keyword matching over
+        the full DATA table regardless of which photos an operator has
+        gotten around to supplying yet; callers are the ones that fall
+        through to "no banner" when the matched id has no file configured.
+    """
     if not name:
         return None
     lowered = name.lower()

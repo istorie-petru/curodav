@@ -1,42 +1,5 @@
-{# One habit on the Habits page (habits H2) -- one item from
-   habit_view.habit_items. Every control is a plain POST form (no-JS
-   fallback); static/habit_actions.js submits them with fetch and refreshes
-   #habits-body. The check-in posts to the same task completion endpoints
-   the Dashboard widget uses.
-
-   2026-09-25 (UI audit): an amount habit is only done at its target
-   (H-01) -- below it the check reads n/target with a lighter "partial"
-   fill, and so do its strip days (H-02). No "--" in any copy (H-21). #}
-{# 2026-09-26 (Peter): two shapes.
-   - Habits page: a contact-row-sized row (34px check, title over
-     "schedule . streak", 30px days, a chevron). The chevron opens the
-     habit's history below the row -- year heatmap, or the week/month
-     grid for a period habit, plus insights (`h.history`, set by
-     routers/habits.py; habit_day.js keeps it open across refreshes).
-   - compact (dashboard widget): one row -- check, title, days. Nothing
-     else, at any width.
-   The strip is the current calendar week from the configured first day
-   (habit_view.week_strip); days after today are shown, not clickable.
-   The habit's own icon replaces the check glyph and its colour
-   (`habit-c-<name>`, style.css --habit-accent) paints the done states. #}
 {% from "_habit_heatmap.html" import heatmap %}
 {% from "_habit_history.html" import period_grid, insights_block %}
-{# The check/log/relapse control shared by every habit toggle in the app
-   (Habits page & Dashboard widget rows below, the Agenda widget's habit
-   rows in _widget_agenda.html, the Calendar day-grid's all-day habit
-   chips in _calendar_day_grid.html) -- 2026-09-28 checkbox consolidation:
-   before this, each of those three surfaces hand-rolled its own copy of
-   this same avoid/quantity/toggle form trio with its own CSS
-   (.agenda-habit-check, .allday-habit), so only this, the most-used
-   surface, ever got a fix or a new state. `extra_class` lets a caller
-   size/shape it for its own row (e.g. ' habit-check-widget', the one
-   compact-widget-row size every Dashboard widget check shares) without a
-   second CSS block re-declaring the base layout, hover and is-done/
-   is-partial/is-relapse rules (style.css's `.habit-check-btn` family).
-   Every field this macro reads (`done_today`, `partial_today`,
-   `today_value`, `is_avoid`, `relapsed_today`, `icon`, `unit`,
-   `remaining_today`) comes from habit_view.py's `habit_item`/
-   `habits_for_day`, which now share that naming on purpose. #}
 {% macro habit_check_control(h, extra_class='') %}
 {% if h.is_avoid %}
 {# Habits H5: an avoid habit logs relapses -- same toggle endpoint. #}
@@ -71,15 +34,6 @@
 {% macro habit_page_row(h, compact=false) %}
 <li class="habit-card{% if compact %} is-compact{% endif %}{% if h.color %} habit-c-{{ h.color }}{% endif %}{% if h.done_today and not h.is_avoid %} is-done-today{% endif %}{% if h.is_avoid %} is-avoid{% endif %}" data-uid="{{ h.uid }}">
     <div class="habit-card-check">
-        {# 2026-09-28 (direct feedback: "font size/weight/checkbox hover bg
-           still not the same between widgets"): the compact Dashboard
-           widget row now sizes its check with the exact same
-           `.habit-check-widget` modifier the Agenda widget's rows use
-           (below/`_widget_agenda.html`), instead of a second, slightly
-           different size reached via the ambient `.is-compact` ancestor
-           selector -- one literal size (and therefore one hover box, one
-           icon size) for every compact widget row in the app, not two
-           that happened to be close. #}
         {{ habit_check_control(h, ' habit-check-widget' if compact else '') }}
     </div>
     <div class="habit-card-main">
@@ -103,8 +57,6 @@
             {% if d.is_future %}
             <span class="habit-day is-future" title="{{ d.day_name }} {{ d.iso }}"><span class="habit-day-initial" aria-hidden="true">{{ d.initial }}</span><span class="sr-only">{{ d.day_name }} {{ d.iso }}, later this week</span></span>
             {% elif h.is_quantity %}
-            {# 2026-09-25: an amount habit's day opens the small amount
-               popup (static/habit_day.js), target as the placeholder. #}
             <button type="button" class="habit-day habit-amount-trigger{{ _cls }}"
                     data-url="{{ h.plus_url }}" data-date="{{ d.iso }}" data-value="{{ d.value|int if d.value else '' }}"
                     data-target="{{ h.target|int }}" data-unit="{{ h.unit }}"
@@ -131,9 +83,6 @@
     {% if h.history %}
     <div class="habit-panel" id="habit-panel-{{ h.uid }}" hidden>
         {% if h.history.periods %}{{ period_grid(h.history.periods) }}
-        {# 2026-09-26 (Peter): the panel's heatmap is clickable -- a day
-           toggles through habit_actions.js (page refresh), an amount
-           habit's day opens the amount popup. #}
         {% elif h.history.heatmap %}{{ heatmap(h.uid, h.history.heatmap, extra_class='heatmap-wide' ~ (' heatmap-avoid' if h.is_avoid else ''), interactive=true,
                                               form_class='habit-action',
                                               amount={'url': h.plus_url, 'target': h.target, 'unit': h.unit} if h.is_quantity else none) }}{% endif %}

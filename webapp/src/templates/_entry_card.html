@@ -1,0 +1,8 @@
+<div class="entry-card">
+    <div class="entry-card-head">{{ icon(look.icon, 'icon-sm cal-' ~ look.color) }} <span class="entry-card-name">{{ entry.term }}</span> <span class="cell-tag cal-{{ look.color }}">{{ entry.kind }}</span></div>
+    {% if entry.definition %}<div class="entry-card-text">{{ entry.definition }}</div>{% endif %}
+    <div class="entry-card-links">
+        <a href="/notebook/glossary/{{ entry.uid }}" data-modal>Read more</a>
+        {% if wiki %}<a href="/notebook/{{ wiki.uid }}">{{ wiki.title or 'Wiki note' }}</a>{% endif %}
+    </div>
+</div>
