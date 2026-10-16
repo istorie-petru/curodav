@@ -44,7 +44,7 @@
 
 <!-- 2. System Status -- compact dashboard of three status cards replacing the old
      Health status + Maintenance & upkeep sections. Each card shows status prominently
-     with a subtle tinted background, and a three-dot menu for actions. -->
+     with a subtle tinted background, ; actions live in the sections below. -->
 <div class="settings-group">
     <div class="system-status-grid" role="region" aria-label="System status overview">
 
@@ -54,27 +54,7 @@
         {% set db_status_icon = 'check-circle' if integrity.ok else 'alert-circle' %}
         <div class="status-card {{ db_status_class }}">
             <div class="status-card-header">
-                <span class="status-card-title">{{ icon('database', 'icon-sm') }} Database</span>
-                <div class="action-menu" aria-label="Database actions">
-                    <button type="button" class="action-menu-trigger" aria-label="Database actions" aria-haspopup="true" aria-expanded="false">{{ icon('more', 'icon-sm') }}</button>
-                    <div class="action-menu-panel" role="menu">
-                        <div class="action-menu-section">
-                            <form class="form-contents" method="post" action="/settings/data-health/integrity-check">
-                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('eye', 'icon-sm') }} Check integrity</button>
-                            </form>
-                            <form class="form-contents" method="post" action="/settings/data-health/repair" data-confirm-sheet="Compact and reindex the database? This rebuilds every index and reclaims disk space -- safe, but takes a moment on a large database.">
-                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('tool', 'icon-sm') }} Compact &amp; reindex</button>
-                            </form>
-                            <form class="form-contents" method="post" action="/settings/purge-completed" data-confirm-sheet="Delete every completed task ({{ completed_task_count }} task{{ 's' if completed_task_count != 1 else '' }})? This cannot be undone.">
-                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('trash-2', 'icon-sm') }} Purge completed ({{ completed_task_count }})</button>
-                            </form>
-                        </div>
-                        <div class="action-menu-section">
-                            <button type="button" class="action-menu-item danger" role="menuitem" data-action="purge-all">{{ icon('shield', 'icon-sm') }} Reset database (purge all)</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+                <span class="status-card-title">{{ icon('database', 'icon-sm') }} Database</span>            </div>
             <div class="status-card-status {{ db_status_class }}">
                 <svg class="icon" aria-hidden="true"><use href="#icon-{{ db_status_icon }}"></use></svg>
                 <span>{{ db_status_text }}</span>
@@ -110,31 +90,7 @@
         {% endif %}
         <div class="status-card {{ backup_status_class }}">
             <div class="status-card-header">
-                <span class="status-card-title">{{ icon('archive', 'icon-sm') }} Backup</span>
-                <div class="action-menu" aria-label="Backup actions">
-                    <button type="button" class="action-menu-trigger" aria-label="Backup actions" aria-haspopup="true" aria-expanded="false">{{ icon('more', 'icon-sm') }}</button>
-                    <div class="action-menu-panel" role="menu">
-                        <div class="action-menu-section">
-                            <form class="form-contents" method="post" action="/settings/data-health/backup">
-                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('archive', 'icon-sm') }} Backup now</button>
-                            </form>
-                            <a class="action-menu-item" role="menuitem" href="/export/data.json">{{ icon('download', 'icon-sm') }} Download full backup</a>
-                        </div>
-                        {% if latest_backup %}
-                        <div class="action-menu-section">
-                            <form class="form-contents" method="post" action="/settings/data-health/verify">
-                                <input type="hidden" name="filename" value="{{ latest_backup.filename }}">
-                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('check-square', 'icon-sm') }} Verify integrity</button>
-                            </form>
-                            <form class="form-contents" method="post" action="/settings/data-health/restore" data-confirm-sheet="Restore {{ latest_backup.filename }}? Your current data will be backed up first, then replaced with this backup's contents.">
-                                <input type="hidden" name="filename" value="{{ latest_backup.filename }}">
-                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('repeat', 'icon-sm') }} Restore this backup</button>
-                            </form>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
+                <span class="status-card-title">{{ icon('archive', 'icon-sm') }} Backup</span>            </div>
             <div class="status-card-status {{ backup_status_class }}">
                 <svg class="icon" aria-hidden="true"><use href="#icon-{{ backup_status_icon }}"></use></svg>
                 <span>{{ backup_status_text }}</span>
@@ -160,22 +116,7 @@
         {% endif %}
         <div class="status-card {{ sync_status_class }}">
             <div class="status-card-header">
-                <span class="status-card-title">{{ icon('repeat', 'icon-sm') }} Sync</span>
-                <div class="action-menu" aria-label="Sync actions">
-                    <button type="button" class="action-menu-trigger" aria-label="Sync actions" aria-haspopup="true" aria-expanded="false">{{ icon('more', 'icon-sm') }}</button>
-                    <div class="action-menu-panel" role="menu">
-                        <div class="action-menu-section">
-                            <a class="action-menu-item" role="menuitem" href="/export/modal" data-modal>{{ icon('share-2', 'icon-sm') }} Export data&hellip;</a>
-                            <a class="action-menu-item" role="menuitem" href="/export/import-modal" data-modal>{{ icon('upload', 'icon-sm') }} Import data&hellip;</a>
-                        </div>
-                        <div class="action-menu-section">
-                            <form class="form-contents" method="post" action="/settings/data-health/sync-gc">
-                                <button type="submit" class="action-menu-item" role="menuitem">{{ icon('trash-2', 'icon-sm') }} Clean up now</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            </div>
+                <span class="status-card-title">{{ icon('repeat', 'icon-sm') }} Sync</span>            </div>
             <div class="status-card-status {{ sync_status_class }}">
                 <svg class="icon" aria-hidden="true"><use href="#icon-{{ sync_status_icon }}"></use></svg>
                 <span>{{ sync_status_text }}</span>

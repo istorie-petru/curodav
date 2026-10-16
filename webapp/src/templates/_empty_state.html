@@ -4,7 +4,7 @@
 {% macro empty_state(title, icon_name=none, text=none, size='') %}
 <div class="empty-state{% if size == '' %} empty-state-rich{% endif %}{% if size %} empty-state-{{ size }}{% endif %}">
     {% if icon_name %}<div class="empty-state-icon">{{ icon(icon_name) }}</div>{% endif %}
-    <div class="empty-state-title">{{ title }}</div>
+    <div class="empty-state-title">{{ title | phrase }}</div>
     {% if text %}<div class="empty-state-text">{{ text }}</div>{% endif %}
     {% if caller is defined %}{{ caller() }}{% endif %}
 </div>

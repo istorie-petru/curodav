@@ -82,18 +82,18 @@
             <span class="detail-meta-value">{% for tag in contact.tags %}{{ label_pill(tag, 'modal') }} {% endfor %}</span>
         </div>
         {% endif %}
-        {% set _involved = contact_objects(request, contact.uid) %}
-        {% if _involved.tasks or _involved.events %}
-        <div class="detail-meta-item detail-meta-wide">
-            <span class="detail-meta-label">Involved in</span>
-            <span class="detail-meta-value">{% for t in _involved.tasks %}<a href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>{% if not loop.last or _involved.events %}, {% endif %}{% endfor %}{% for e in _involved.events %}<a href="/events/{{ e.uid }}" data-modal>{{ e.title }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
-        </div>
-        {% endif %}
     </div>
     {% if not (contact.phones or contact.emails or contact.websites or contact.addresses or contact.social_profiles or contact.birthday or contact.tags or contact.notes) %}
     {% call empty_state('No other details yet', size='compact') %}<a href="/contacts/{{ contact.uid }}/edit" data-modal>Add some</a>{% endcall %}
     {% endif %}
 {% endcall %}
+{% set _involved = contact_objects(request, contact.uid) %}
+{% if _involved.tasks or _involved.events %}
+{% call detail_section('Relations', (_involved.tasks | length) + (_involved.events | length)) %}
+{% from "_relation_rows.html" import relation_rows %}
+{{ relation_rows(_involved) }}
+{% endcall %}
+{% endif %}
 {% if contact.notes %}
 {% call detail_section('Notes') %}<p class="detail-text">{{ contact.notes }}</p>{% endcall %}
 {% endif %}

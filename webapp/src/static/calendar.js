@@ -17,6 +17,8 @@
   const DAY_HEIGHT_PX = window.CCSleepCollapse ? window.CCSleepCollapse.dayHeightPx(PX_PER_HOUR) : 24 * PX_PER_HOUR;
   const toRealMin = window.CCSleepCollapse ? window.CCSleepCollapse.toReal : (m) => m;
   const CLICK_THRESHOLD_PX = 4;
+  const HOLD_MS = 250; // touch: hold this long before a move starts
+  const HOLD_SLOP_PX = 8; // touch: finger travel that counts as a scroll, not a hold
 
   function snap(px) {
     return Math.round(px / SNAP_PX) * SNAP_PX;
@@ -254,8 +256,48 @@
       });
     }
 
+    // Touch: a short hold (HOLD_MS) arms the move so a swipe over an event
+    // still scrolls the grid; after arming, touchmove is cancelled so the
+    // finger drags the block instead.
+    let holdTimer = null;
+    let armed = false;
+    function cancelHold() {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+      document.removeEventListener("pointermove", holdMove);
+      document.removeEventListener("pointerup", cancelHold);
+      document.removeEventListener("pointercancel", cancelHold);
+    }
+    let holdX = 0;
+    let holdY = 0;
+    function holdMove(e) {
+      if (Math.abs(e.clientX - holdX) > HOLD_SLOP_PX || Math.abs(e.clientY - holdY) > HOLD_SLOP_PX) cancelHold();
+    }
+    el.addEventListener("touchmove", (e) => {
+      if (armed && e.cancelable) e.preventDefault();
+    }, { passive: false });
+    el.addEventListener("pointerup", () => { armed = false; });
+    el.addEventListener("pointercancel", () => { armed = false; });
+    el.addEventListener("contextmenu", (e) => { if (armed || holdTimer) e.preventDefault(); });
+
     el.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
+      if (e.pointerType === "touch") {
+        holdX = e.clientX;
+        holdY = e.clientY;
+        const isResize = handle && e.target === handle;
+        document.addEventListener("pointermove", holdMove);
+        document.addEventListener("pointerup", cancelHold);
+        document.addEventListener("pointercancel", cancelHold);
+        holdTimer = setTimeout(() => {
+          cancelHold();
+          armed = true;
+          if (navigator.vibrate) navigator.vibrate(10);
+          el.classList.add("dragging");
+          begin({ clientX: holdX, clientY: holdY }, isResize);
+        }, HOLD_MS);
+        return;
+      }
       e.preventDefault(); // stop native text-selection/link-drag ghost while dragging
       begin(e, handle && e.target === handle);
     });

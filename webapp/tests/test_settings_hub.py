@@ -102,7 +102,7 @@ class TestSettingsHub:
         resp = settings_router.settings_index(_request(), conn=conn)
         assert resp.status_code == 200
         body = resp.body.decode()
-        for name in ("General", "Your Profile", "Notifications", "Appearance", "Taxonomy &amp; Data", "Sleep &amp; Leisure Time", "Data &amp; Maintenance", "Published lists"):
+        for name in ("General", "Your Profile", "Notifications", "Appearance", "Labels", "Groups", "Projects", "Holidays", "Sleep &amp; Leisure Time", "Data &amp; Maintenance", "Published lists"):
             assert name in body
         # Habits is not a hub category (2026-08-08 follow-up #3): it's
         # reached from Tasks > Habits, so a hub shortcut would duplicate
@@ -134,7 +134,10 @@ class TestSettingsHub:
             "/settings/your-profile",
             "/settings/notifications",  # 2026-09-27
             "/settings/appearance",
-            "/settings/taxonomy",  # labels, groups, projects, holidays
+            "/settings/labels",
+            "/settings/groups",
+            "/settings/projects",
+            "/settings/holidays",
             "/settings/notebook",  # 2026-10-02
             "/settings/finance-accounts",
             "/settings/time-blocks",

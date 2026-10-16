@@ -147,16 +147,14 @@ class TestSettingsNotebookPage:
         # seed_builtin_notebook_fields, so the "no fields at all" empty
         # state this page used to have is no longer reachable.
         body = notebook_router.settings_notebook(_request(), conn=conn).body.decode()
-        from src.routers import taxonomy
-        body = taxonomy.page_response(conn, _request("/settings/taxonomy"), "frontmatter").body.decode()
+        body = notebook_router.settings_notebook(_request(), conn=conn).body.decode()
         assert "No frontmatter fields defined yet" not in body
         assert 'href="/settings/notebook/new"' in body
         assert "Title" in body and "Author" in body and "Type" in body
 
     def test_lists_existing_fields_as_rows_with_edit_buttons(self, conn):
         db.upsert_notebook_field_config(conn, {"key": "institution", "label": "Institution", "type": "text", "default_value": "UBB"})
-        from src.routers import taxonomy
-        body = taxonomy.page_response(conn, _request("/settings/taxonomy"), "frontmatter").body.decode()
+        body = notebook_router.settings_notebook(_request(), conn=conn).body.decode()
         assert "Institution" in body and "text" in body and "UBB" in body
         assert "Edit field" in body and "Delete field" in body
 
@@ -164,7 +162,7 @@ class TestSettingsNotebookPage:
 class TestOldFrontmatterUrl:
     def test_redirects_to_the_notebook_page(self):
         resp = notebook_router.settings_frontmatter()
-        assert resp.status_code == 303 and resp.headers["location"] == "/settings/taxonomy?view=frontmatter"
+        assert resp.status_code == 303 and resp.headers["location"] == "/settings/notebook"
 
 
 class TestFieldModal:
@@ -185,7 +183,7 @@ class TestFieldModal:
 
     def test_unknown_uid_redirects_to_the_list(self, conn):
         resp = notebook_router.edit_notebook_field_modal("nope", _request(), conn=conn)
-        assert resp.status_code == 303 and resp.headers["location"] == "/settings/taxonomy?view=frontmatter"
+        assert resp.status_code == 303 and resp.headers["location"] == "/settings/notebook"
 
 
 def _custom_fields(conn):
@@ -204,7 +202,7 @@ def _with_types(conn, *types):
 class TestCreateUpdateDelete:
     def test_create_a_text_field(self, conn):
         resp = notebook_router.create_notebook_field(label="Institution", type="text", default_value="UBB", conn=conn)
-        assert resp.status_code == 303 and resp.headers["location"] == "/settings/taxonomy?view=frontmatter"
+        assert resp.status_code == 303 and resp.headers["location"] == "/settings/notebook"
         fields = _custom_fields(conn)
         assert len(fields) == 1
         assert re.fullmatch(r"institution_[a-z0-9]{4}", fields[0]["key"]) and fields[0]["default_value"] == "UBB"
@@ -334,8 +332,7 @@ class TestBuiltinFields:
         assert db.get_notebook_field_config(conn, uid) is not None
 
     def test_settings_table_has_no_delete_button_for_builtins(self, conn):
-        from src.routers import taxonomy
-        body = taxonomy.page_response(conn, _request("/settings/taxonomy"), "frontmatter").body.decode()
+        body = notebook_router.settings_notebook(_request(), conn=conn).body.decode()
         assert "/settings/notebook/builtin-title/delete" not in body
         assert "/settings/notebook/builtin-title/edit" in body
 

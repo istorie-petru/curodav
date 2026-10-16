@@ -14,44 +14,66 @@
 
 {% include "_settings_status_cards.html" %}
 
+{# Sections: Backups, Export and import, Cleanup, Connection, Danger zone. #}
+<h2 class="settings-section-title">Backups</h2>
 <div class="settings-group">
     <div class="card">
-        <p class="settings-hint">Current URL: <code>{{ radicale_url }}</code></p>
-        <p class="settings-hint">Source: {{ radicale_source }}</p>
-        {% if radicale_public_url %}
-        <p class="settings-hint">Public URL (Published Lists' subscribe links): <code>{{ radicale_public_url }}</code></p>
-        {% endif %}
-        {% if radicale_public_url_warning %}
-        <p class="settings-hint settings-hint-error">{{ radicale_public_url_warning }}</p>
-        {% endif %}
-        {% if radicale_env_drift %}
-        <p class="settings-hint settings-hint-error">{{ radicale_env_drift }}</p>
-        {% endif %}
-        <p class="settings-hint">Manage the connection (username, password, URL) from <a href="/settings/your-profile">Settings &gt; Your Profile</a>.</p>
-        <form class="settings-field-row" method="post" action="/settings/radicale/test-connection">
-            <span class="settings-field-label">Test connection
-                <span class="settings-field-hint">Sends a live, authenticated request to Radicale right now and reports what happens</span>
-            </span>
-            <span class="spacer"></span>
-            <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Test connection</button>
-        </form>
-    </div>
-</div>
-<hr class="settings-divider">
-
-<div class="settings-group">
-    <div class="card">
-        {% if restart_available %}
         <div class="settings-field-row">
-            <span class="settings-field-label">Restart app
-                <span class="settings-field-hint">Applies any saved login/Radicale change from Your Profile -- the app is unreachable for a few seconds</span>
+            <span class="settings-field-label">Back up now
+                <span class="settings-field-hint">{% if latest_backup %}Latest: {{ latest_backup.created_at | fmt_dt }}{% else %}No backups yet{% endif %}</span>
             </span>
             <span class="spacer"></span>
-            <form method="post" action="/settings/restart" data-confirm-sheet="Restart the app now? It will be unreachable for a few seconds while it comes back up.">
-                <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Restart app</button>
-            </form>
+            <form class="form-contents" method="post" action="/settings/data-health/backup"><button type="submit" class="btn ghost">{{ icon('archive', 'icon-sm') }} Back up</button></form>
+        </div>
+        <div class="settings-field-row">
+            <span class="settings-field-label">Download full backup
+                <span class="settings-field-hint">Everything as one file</span>
+            </span>
+            <span class="spacer"></span>
+            <a class="btn ghost" href="/export/data.json">{{ icon('download', 'icon-sm') }} Download</a>
+        </div>
+        {% if latest_backup %}
+        <div class="settings-field-row">
+            <span class="settings-field-label">Verify integrity
+                <span class="settings-field-hint">Checks the file can be read</span>
+            </span>
+            <span class="spacer"></span>
+            <form class="form-contents" method="post" action="/settings/data-health/verify"><input type="hidden" name="filename" value="{{ latest_backup.filename }}"><button type="submit" class="btn ghost">{{ icon('check-square', 'icon-sm') }} Verify</button></form>
+        </div>
+        <div class="settings-field-row">
+            <span class="settings-field-label">Restore this backup
+                <span class="settings-field-hint">Your current data is backed up first</span>
+            </span>
+            <span class="spacer"></span>
+            <form class="form-contents" method="post" action="/settings/data-health/restore" data-confirm-sheet="Restore {{ latest_backup.filename }}? Your current data will be backed up first, then replaced with this backup's contents."><input type="hidden" name="filename" value="{{ latest_backup.filename }}"><button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Restore</button></form>
         </div>
         {% endif %}
+    </div>
+</div>
+
+<h2 class="settings-section-title">Export and import</h2>
+<div class="settings-group">
+    <div class="card">
+        <div class="settings-field-row">
+            <span class="settings-field-label">Export
+                <span class="settings-field-hint">Standard files or a spreadsheet</span>
+            </span>
+            <span class="spacer"></span>
+            <a class="btn ghost" href="/export/modal" data-modal>{{ icon('share-2', 'icon-sm') }} Export</a>
+        </div>
+        <div class="settings-field-row">
+            <span class="settings-field-label">Import
+                <span class="settings-field-hint">From files or a spreadsheet</span>
+            </span>
+            <span class="spacer"></span>
+            <a class="btn ghost" href="/export/import-modal" data-modal>{{ icon('upload', 'icon-sm') }} Import</a>
+        </div>
+    </div>
+</div>
+
+<h2 class="settings-section-title">Cleanup</h2>
+<div class="settings-group">
+    <div class="card">
         <form class="settings-field-row" method="post" action="/settings/task-auto-archive" id="task-auto-archive-form">
             <span class="settings-field-label">Auto-archive completed tasks
                 <span class="settings-field-hint">Deletes done/archived tasks once they're this old</span>
@@ -84,6 +106,83 @@
             {% set ms_form_id = 'sync-retention-form' %}
             {% include "_widget_list_multiselect.html" %}
         </form>
+        <div class="settings-field-row">
+            <span class="settings-field-label">Purge completed ({{ completed_task_count }})
+                <span class="settings-field-hint">Deletes every done or archived task</span>
+            </span>
+            <span class="spacer"></span>
+            <form class="form-contents" method="post" action="/settings/purge-completed" data-confirm-sheet="Delete every completed task ({{ completed_task_count }} task{{ 's' if completed_task_count != 1 else '' }})? This cannot be undone."><button type="submit" class="btn ghost">{{ icon('trash-2', 'icon-sm') }} Purge</button></form>
+        </div>
+        <div class="settings-field-row">
+            <span class="settings-field-label">Clean up sync leftovers
+                <span class="settings-field-hint">Removes deleted items older than the retention above</span>
+            </span>
+            <span class="spacer"></span>
+            <form class="form-contents" method="post" action="/settings/data-health/sync-gc"><button type="submit" class="btn ghost">{{ icon('trash-2', 'icon-sm') }} Clean up</button></form>
+        </div>
+        <div class="settings-field-row">
+            <span class="settings-field-label">Check integrity
+                <span class="settings-field-hint">Reads the whole database for problems</span>
+            </span>
+            <span class="spacer"></span>
+            <form class="form-contents" method="post" action="/settings/data-health/integrity-check"><button type="submit" class="btn ghost">{{ icon('eye', 'icon-sm') }} Check</button></form>
+        </div>
+        <div class="settings-field-row">
+            <span class="settings-field-label">Compact and reindex
+                <span class="settings-field-hint">Rebuilds indexes and reclaims disk space</span>
+            </span>
+            <span class="spacer"></span>
+            <form class="form-contents" method="post" action="/settings/data-health/repair" data-confirm-sheet="Compact and reindex the database? This rebuilds every index and reclaims disk space -- safe, but takes a moment on a large database."><button type="submit" class="btn ghost">{{ icon('tool', 'icon-sm') }} Run</button></form>
+        </div>
+    </div>
+</div>
+
+<h2 class="settings-section-title">Connection</h2>
+<div class="settings-group">
+    <div class="card">
+        <p class="settings-hint">Current URL: <code>{{ radicale_url }}</code></p>
+        <p class="settings-hint">Source: {{ radicale_source }}</p>
+        {% if radicale_public_url %}
+        <p class="settings-hint">Public URL (Published Lists' subscribe links): <code>{{ radicale_public_url }}</code></p>
+        {% endif %}
+        {% if radicale_public_url_warning %}
+        <p class="settings-hint settings-hint-error">{{ radicale_public_url_warning }}</p>
+        {% endif %}
+        {% if radicale_env_drift %}
+        <p class="settings-hint settings-hint-error">{{ radicale_env_drift }}</p>
+        {% endif %}
+        <p class="settings-hint">Manage the connection (username, password, URL) from <a href="/settings/your-profile">Settings &gt; Your Profile</a>.</p>
+        <form class="settings-field-row" method="post" action="/settings/radicale/test-connection">
+            <span class="settings-field-label">Test connection
+                <span class="settings-field-hint">Sends a live, authenticated request to Radicale right now and reports what happens</span>
+            </span>
+            <span class="spacer"></span>
+            <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Test connection</button>
+        </form>
+        {% if restart_available %}
+        <div class="settings-field-row">
+            <span class="settings-field-label">Restart app
+                <span class="settings-field-hint">Applies any saved login/Radicale change from Your Profile -- the app is unreachable for a few seconds</span>
+            </span>
+            <span class="spacer"></span>
+            <form method="post" action="/settings/restart" data-confirm-sheet="Restart the app now? It will be unreachable for a few seconds while it comes back up.">
+                <button type="submit" class="btn ghost">{{ icon('repeat', 'icon-sm') }} Restart app</button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<h2 class="settings-section-title is-danger">Danger zone</h2>
+<div class="settings-group">
+    <div class="card danger-zone">
+        <div class="settings-field-row">
+            <span class="settings-field-label">Reset database
+                <span class="settings-field-hint">Removes all your data</span>
+            </span>
+            <span class="spacer"></span>
+            <button type="button" class="btn ghost danger" data-action="purge-all">{{ icon('shield', 'icon-sm') }} Reset</button>
+        </div>
     </div>
 </div>
 

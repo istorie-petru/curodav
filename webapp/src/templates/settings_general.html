@@ -73,34 +73,19 @@
         {% set ms_form_id = 'four-week-position-form' %}
         {% include "_widget_list_multiselect.html" %}
     </form>
-    <form class="settings-field-row" method="post" action="/settings/recurrence-terminology" id="recurrence-terminology-form">
-        <span class="settings-field-label">Recurrence terminology
-            <span class="settings-field-hint">Labels on the event form's holiday/weekend fields</span>
+    <form class="settings-field-row" method="post" action="/settings/terminology" id="terminology-form">
+        <span class="settings-field-label">Terminology
+            <span class="settings-field-hint">Standard or playful wording for recurrence fields and habit streaks</span>
         </span>
         <span class="spacer"></span>
         {% set ms_name = 'terminology' %}
         {% set ms_mode = 'single' %}
-        {% set ms_label = 'Recurrence terminology' %}
+        {% set ms_label = 'Terminology' %}
         {% set ms_items = [{'uid': 'standard', 'name': 'Standard'}, {'uid': 'playful', 'name': 'Playful'}] %}
-        {% set ms_selected = current_recurrence_terminology %}
+        {% set ms_selected = current_terminology %}
         {% set ms_autosubmit = true %}
         {% set ms_bare = true %}
-        {% set ms_form_id = 'recurrence-terminology-form' %}
-        {% include "_widget_list_multiselect.html" %}
-    </form>
-    <form class="settings-field-row" method="post" action="/settings/habit-streak-terminology" id="habit-streak-terminology-form">
-        <span class="settings-field-label">Habit streak terminology
-            <span class="settings-field-hint">Wording for habit streaks on the Habits page and the Habit check-in widget</span>
-        </span>
-        <span class="spacer"></span>
-        {% set ms_name = 'terminology' %}
-        {% set ms_mode = 'single' %}
-        {% set ms_label = 'Habit streak terminology' %}
-        {% set ms_items = [{'uid': 'standard', 'name': 'Standard'}, {'uid': 'playful', 'name': 'Playful'}] %}
-        {% set ms_selected = current_habit_streak_terminology %}
-        {% set ms_autosubmit = true %}
-        {% set ms_bare = true %}
-        {% set ms_form_id = 'habit-streak-terminology-form' %}
+        {% set ms_form_id = 'terminology-form' %}
         {% include "_widget_list_multiselect.html" %}
     </form>
     <form class="settings-field-row" method="post" action="/settings/time-format" id="time-format-form">

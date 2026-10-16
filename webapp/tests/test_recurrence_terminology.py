@@ -69,17 +69,17 @@ class TestSettingsRoute:
     def test_renders_the_toggle(self, conn):
         resp = settings_router.settings_general(_bare_request("/settings/general"), conn=conn)
         body = resp.body.decode()
-        assert 'action="/settings/recurrence-terminology"' in body
-        assert resp.context["current_recurrence_terminology"] == "standard"
+        assert 'action="/settings/terminology"' in body
+        assert resp.context["current_terminology"] == "standard"
 
     def test_set_route_stores_playful(self, conn):
-        resp = settings_router.set_recurrence_terminology(terminology="playful", conn=conn)
+        resp = settings_router.set_terminology(terminology="playful", conn=conn)
         assert resp.status_code == 303
         assert resp.headers["location"] == "/settings/general"
         assert db.get_app_meta(conn, deps.RECURRENCE_TERMINOLOGY_KEY) == "playful"
 
     def test_set_route_rejects_unrecognized_values(self, conn):
-        settings_router.set_recurrence_terminology(terminology="silly", conn=conn)
+        settings_router.set_terminology(terminology="silly", conn=conn)
         assert db.get_app_meta(conn, deps.RECURRENCE_TERMINOLOGY_KEY) == "standard"
 
 

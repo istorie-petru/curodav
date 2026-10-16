@@ -38,7 +38,7 @@ from . import db
 
 
 _ALL_OBJECT_IDS = {
-    "task": lambda conn: db.list_tasks(conn),
+    "task": lambda conn: db.list_tasks(conn, include_habit_tasks=True),
     "event": lambda conn: db.list_events(conn),
     "contact": lambda conn: db.list_contacts(conn),
 }
@@ -85,8 +85,8 @@ def evaluate_label_filter(
         result -= exclude_ids
 
     if entity_type == "contact":
-        archived_uids = {c["uid"] for c in db.list_contacts(conn, include_archived=True) if c.get("archived_at")}
-        result -= archived_uids
+        visible_uids = {c["uid"] for c in db.list_contacts(conn)}
+        result &= visible_uids
 
     return sorted(result)
 

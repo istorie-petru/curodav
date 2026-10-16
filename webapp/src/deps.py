@@ -18,7 +18,7 @@ from jinja2 import pass_context
 from jinja2.ext import Extension
 from markupsafe import Markup, escape
 
-from . import db, habit_heatmap, habit_view, recurrence_text
+from . import db, habit_heatmap, habit_view, recurrence_text, terminology
 from .caldav_bridge import CalDavBridge
 
 WEEK_START_KEY = "calendar_week_start"
@@ -34,7 +34,11 @@ FOUR_WEEK_POSITION_KEY = "calendar_four_week_position"
 # saturday/exclude_sunday) never change name or meaning; only their
 # on-screen label does. Same memoized app_meta pattern as every other
 # display preference here.
+# One merged "Terminology" setting (4.3.0) drives every playful wording
+# (recurrence labels, habit streaks, ...). The stored key keeps its old
+# name so no data moves; the retired habit key is only a fallback read.
 RECURRENCE_TERMINOLOGY_KEY = "recurrence_terminology"
+TERMINOLOGY_KEY = RECURRENCE_TERMINOLOGY_KEY
 HABIT_STREAK_TERMINOLOGY_KEY = "habit_streak_terminology"
 EDIT_MODE_KEY = "edit_mode_enabled"
 ACCENT_COLOR_KEY = "accent_color"
@@ -428,26 +432,32 @@ def _page_header_banner(request: Request) -> dict | None:
 templates.env.globals["page_header_banner"] = _page_header_banner
 
 
-def _recurrence_terminology(request: Request) -> str:
-    """"standard" (default) or "playful" -- see RECURRENCE_TERMINOLOGY_KEY
-    above. Read by _event_form_fields.html/schedule_classes.html/schedule_
-    class_form.html to pick which label set the holiday-calendar/weekend-
-    exclusion controls display; never read by any router or db.py
-    accessor, since the fields themselves are unaffected."""
-    return _cached_app_meta(request, RECURRENCE_TERMINOLOGY_KEY, "standard")
-
-
-templates.env.globals["recurrence_terminology"] = _recurrence_terminology
-
-
-def _habit_streak_terminology(request: Request) -> str:
-    """"standard" (default) or "playful" -- see HABIT_STREAK_TERMINOLOGY_KEY
-    above. Read directly by settings_general.html's toggle; every other
-    caller should use habit_streak_text() below instead of reading this
-    and calling habit_heatmap.streak_text itself."""
+def _terminology(request: Request) -> str:
+    """"standard" (default) or "playful": the one wording setting for the
+    whole app. Presentation-layer only; the underlying fields never change.
+    A retired per-feature habit-streak value still counts as playful until
+    the merged setting is saved once."""
+    value = _cached_app_meta(request, TERMINOLOGY_KEY, "")
+    if value:
+        return value
     return _cached_app_meta(request, HABIT_STREAK_TERMINOLOGY_KEY, "standard")
 
 
+_recurrence_terminology = _terminology
+_habit_streak_terminology = _terminology
+templates.env.globals["terminology"] = _terminology
+
+
+def _phrase(text):
+    """Playful wording for `text` when the Terminology setting is playful; otherwise `text` unchanged."""
+    request = terminology.current_request.get()
+    if request is None or not isinstance(text, str):
+        return text
+    return terminology.playful_text(text) if _terminology(request) == "playful" else text
+
+
+templates.env.filters["phrase"] = _phrase
+templates.env.globals["recurrence_terminology"] = _terminology
 templates.env.globals["habit_streak_terminology"] = _habit_streak_terminology
 
 

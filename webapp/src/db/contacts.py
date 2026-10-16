@@ -810,19 +810,52 @@ def list_object_contacts(conn: sqlite3.Connection, object_type: str, object_id: 
     return [dict(r) for r in rows]
 
 
-def list_contact_objects(conn: sqlite3.Connection, contact_uid: str) -> dict[str, list[dict[str, Any]]]:
-    """The tasks and events that involve a contact, for the contact's page."""
+def list_contact_objects(conn: sqlite3.Connection, contact_uid: str, now_iso: str | None = None) -> dict[str, list[dict[str, Any]]]:
+    """The tasks and events that involve a contact, for the contact's page.
+    The occurrences of a repeating event come back as one entry per series:
+    `series` is true, `uid` is the next upcoming occurrence (or the last one),
+    with the rule, the count and the next few dates."""
+    from .. import clock
+
+    now_iso = now_iso or clock.local_now().isoformat(timespec="minutes")
     tasks = conn.execute(
         "SELECT t.uid, t.title FROM object_contacts oc JOIN tasks t ON t.uid = oc.object_id "
         "WHERE oc.object_type = 'task' AND oc.contact_uid = ? ORDER BY t.title",
         (contact_uid,),
     ).fetchall()
-    events = conn.execute(
-        "SELECT e.uid, e.title FROM object_contacts oc JOIN events e ON e.uid = oc.object_id "
-        "WHERE oc.object_type = 'event' AND oc.contact_uid = ? ORDER BY e.title",
+    rows = conn.execute(
+        "SELECT e.uid, e.title, e.start_at, e.series_uid, s.rule FROM object_contacts oc "
+        "JOIN events e ON e.uid = oc.object_id LEFT JOIN event_series s ON s.uid = e.series_uid "
+        "WHERE oc.object_type = 'event' AND oc.contact_uid = ? ORDER BY e.start_at, e.title",
         (contact_uid,),
     ).fetchall()
-    return {"tasks": [dict(r) for r in tasks], "events": [dict(r) for r in events]}
+    events: list[dict[str, Any]] = []
+    series: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        r = dict(r)
+        if not r["series_uid"]:
+            events.append({"uid": r["uid"], "title": r["title"], "start_at": r["start_at"], "series": False})
+            continue
+        group = series.get(r["series_uid"])
+        if group is None:
+            group = {"uid": r["uid"], "title": r["title"], "series": True, "rule": r["rule"], "count": 0, "upcoming": [],
+                     "start_at": r["start_at"]}
+            series[r["series_uid"]] = group
+            events.append(group)
+        group["count"] += 1
+        if (r["start_at"] or "") >= now_iso:
+            group["upcoming"].append({"uid": r["uid"], "start_at": r["start_at"]})
+        else:
+            group["last"] = {"uid": r["uid"], "start_at": r["start_at"]}
+    for g in series.values():
+        nxt = g["upcoming"][0] if g["upcoming"] else g.get("last")
+        if nxt:
+            g["uid"], g["start_at"] = nxt["uid"], nxt["start_at"]
+        g["is_past"] = not g["upcoming"]
+        g["more"] = g["upcoming"][1:6]
+        g["remaining"] = max(0, len(g["upcoming"]) - 1)
+    events.sort(key=lambda e: (e["title"] or "").lower())
+    return {"tasks": [dict(r) for r in tasks], "events": events}
 
 
 _CONTACTS_WIDGET_DEFAULT_FIXED_KEY = "label_modules_contacts_default_fixed"

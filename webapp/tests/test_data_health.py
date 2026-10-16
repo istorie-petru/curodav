@@ -383,7 +383,8 @@ class TestDataMaintenanceRedesign2026_08_26:
         # Database card's own confirm-toast trigger (2026-09-09: a plain
         # button that opens a ccConfirmSheet, not a link to a modal page --
         # see data_maintenance.js).
-        assert "Danger zone" not in body
+        # 4.3.0: the reset sits in a Danger zone section at the bottom of the page.
+        assert "Danger zone" in body and 'data-action="purge-all"' in body
         assert 'action="/settings/purge-all"' not in body
         assert 'data-action="purge-all"' in body
 

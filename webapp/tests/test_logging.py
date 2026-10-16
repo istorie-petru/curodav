@@ -12,8 +12,8 @@ def test_the_log_view_filters_by_level():
     logger.error("it broke")
     messages = lambda level: [e["message"] for e in log.entries(level, after=start)]
     assert messages("all") == ["quiet detail", "something happened", "careful", "it broke"]
-    assert messages("important") == ["something happened", "careful", "it broke"]
-    assert messages("warnings") == ["careful", "it broke"]
+    assert messages("important") == ["something happened"]
+    assert messages("warnings") == ["careful"]
     assert messages("errors") == ["it broke"]
 
 

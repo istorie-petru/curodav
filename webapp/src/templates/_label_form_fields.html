@@ -58,6 +58,20 @@
     {% set ms_wide = true %}
     {% set ms_extra_class = '' %}
     {% include "_widget_list_multiselect.html" %}
+    {% if is_project_form %}
+    {% set ms_name = 'auto_labels' %}
+    {% set ms_mode = 'select' %}
+    {% set ms_label = 'Auto labels' %}{% set ms_placeholder = 'None' %}
+    {% set ms_icon = 'tag' %}
+    {% set ms_items = auto_label_items | default([]) %}
+    {% set ms_selected = auto_labels_selected | default([]) %}
+    {% set ms_allow_new = false %}
+    {% set ms_pill = true %}
+    {% set ms_wide = true %}
+    {% set ms_form_id = 'label-form' %}
+    {% set ms_extra_class = 'label-auto-labels-field' %}
+    {% include "_widget_list_multiselect.html" %}
+    {% endif %}
     <div class="field field-wide">
         <label for="label-description-input">Description</label>
         {{ textarea_input({'id': 'label-description-input', 'name': 'description', 'rows': '2', 'maxlength': '500'}, p.description or '' if p else '') }}

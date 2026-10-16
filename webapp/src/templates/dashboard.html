@@ -3,7 +3,7 @@
 {% block title %}Dashboard{% endblock %}
 {% block main_class %}main-full-width main-shell{% endblock %}
 {% block content %}
-{% call page_header_narrow(greeting, 'home', banner=banner, banner_image_scope=banner_image_scope) %}
+{% call page_header_narrow(greeting | phrase, 'home', banner=banner, banner_image_scope=banner_image_scope) %}
     {% if edit_mode %}
     <a href="/dashboard/customize{% if space_uid %}?space_uid={{ space_uid }}{% endif %}" data-modal data-modal-size="wide" class="btn ghost">{{ icon('plus', 'icon-sm') }} New widget</a>
     <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>

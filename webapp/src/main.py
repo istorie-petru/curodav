@@ -222,6 +222,16 @@ def create_app() -> FastAPI:
     # overhead would net-lose.
     app.add_middleware(GZipMiddleware, minimum_size=1024)
 
+    @app.middleware("http")
+    async def _remember_request(request, call_next):
+        from . import terminology
+
+        token = terminology.current_request.set(request)
+        try:
+            return await call_next(request)
+        finally:
+            terminology.current_request.reset(token)
+
     app.add_middleware(CSRFMiddleware)
 
     app.add_middleware(AuthMiddleware)

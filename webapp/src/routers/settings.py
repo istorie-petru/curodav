@@ -76,6 +76,7 @@ from ..deps import (
     EDIT_MODE_KEY,
     FOUR_WEEK_POSITION_KEY,
     HABIT_STREAK_TERMINOLOGY_KEY,
+    TERMINOLOGY_KEY,
     HIDE_SLEEP_HOURS_KEY,
     PAGE_HEADER_BANNER_SCOPE,
     RECURRENCE_TERMINOLOGY_KEY,
@@ -100,7 +101,10 @@ HUB_CATEGORIES = [
     {"url": "/settings/your-profile", "icon": "user-check", "name": "Your Profile", "desc": "Profile picture, nickname, login & security"},
     {"url": "/settings/notifications", "icon": "bell", "name": "Notifications", "desc": "Push notifications, reminder types, morning digest"},
     {"url": "/settings/appearance", "icon": "sun", "name": "Appearance", "desc": "Theme"},
-    {"url": "/settings/taxonomy", "icon": "layers", "name": "Taxonomy & Data", "desc": "Labels, groups, projects, frontmatter fields, tags and holidays in one table"},
+    {"url": "/settings/labels", "icon": "tag", "name": "Labels", "desc": "Names, colors and groups for everything you tag"},
+    {"url": "/settings/groups", "icon": "folder", "name": "Groups", "desc": "Collections of labels"},
+    {"url": "/settings/projects", "icon": "folder-plus", "name": "Projects", "desc": "Labels with a due date and their own page"},
+    {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Holiday calendars and dates"},
     {"url": "/settings/notebook", "icon": "file-text", "name": "Notebook", "desc": "Document sidebar layout"},
     {"url": "/settings/finance-accounts", "icon": "credit-card", "name": "Finance accounts", "desc": "Money accounts, currencies and opening balances"},
     {"url": "/settings/time-blocks", "icon": "moon", "name": "Sleep & Leisure Time", "desc": "Weekly hours the Week/Day grid highlights and warns about"},
@@ -173,8 +177,9 @@ def settings_general(request: Request, conn=Depends(get_db)):
             # 1.6 ("Configurable terminology") -- "standard" or "playful"
             # labels on the recurrence editor's holiday-calendar/weekend
             # controls. See deps.py's RECURRENCE_TERMINOLOGY_KEY comment.
-            "current_recurrence_terminology": db.get_app_meta(conn, RECURRENCE_TERMINOLOGY_KEY) or "standard",
-            "current_habit_streak_terminology": db.get_app_meta(conn, HABIT_STREAK_TERMINOLOGY_KEY) or "standard",
+            "current_terminology": db.get_app_meta(conn, TERMINOLOGY_KEY)
+            or db.get_app_meta(conn, HABIT_STREAK_TERMINOLOGY_KEY)
+            or "standard",
             "current_hide_sleep_hours": db.get_app_meta(conn, HIDE_SLEEP_HOURS_KEY) == "1",
             "current_flair_languages": db.active_flair_languages(conn),
             "flair_language_options": [
@@ -701,29 +706,11 @@ def set_four_week_position(position: str = Form("1"), conn=Depends(get_db)):
     return RedirectResponse(url="/settings/general", status_code=303)
 
 
-@router.post("/settings/recurrence-terminology")
-def set_recurrence_terminology(terminology: str = Form("standard"), conn=Depends(get_db)):
-    """1.6 ("Configurable terminology") -- "standard" or "playful" labels
-    on the recurrence editor's holiday-calendar/weekend controls. Only
-    ever stores one of the two offered choices; anything else falls back
-    to "standard", same "unrecognized value -> the default, not silently
-    picking something the UI never offered" convention as set_week_start/
-    set_four_week_position above. Presentation-layer only -- the
-    underlying holiday_calendar/exclude_saturday/exclude_sunday fields on
-    events and schedule_settings never change name or meaning."""
-    db.set_app_meta(conn, RECURRENCE_TERMINOLOGY_KEY, "playful" if terminology == "playful" else "standard")
-    return RedirectResponse(url="/settings/general", status_code=303)
-
-
-@router.post("/settings/habit-streak-terminology")
-def set_habit_streak_terminology(terminology: str = Form("standard"), conn=Depends(get_db)):
-    """"Habit streak terminology" -- "standard" or "playful" wording for
-    the Habits group's streak readout (Tasks table, _habit_row.html via
-    deps.py's habit_streak_text() global). Only ever stores one of the two
-    offered choices; anything else falls back to "standard", same
-    convention as set_recurrence_terminology above. Presentation-layer
-    only -- the underlying current_streak integer never changes."""
-    db.set_app_meta(conn, HABIT_STREAK_TERMINOLOGY_KEY, "playful" if terminology == "playful" else "standard")
+@router.post("/settings/terminology")
+def set_terminology(terminology: str = Form("standard"), conn=Depends(get_db)):
+    """The one "standard" or "playful" wording setting. Anything else
+    falls back to "standard". Presentation-layer only."""
+    db.set_app_meta(conn, TERMINOLOGY_KEY, "playful" if terminology == "playful" else "standard")
     return RedirectResponse(url="/settings/general", status_code=303)
 
 

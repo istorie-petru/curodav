@@ -14,14 +14,14 @@
 
 <div class="settings-group">
 <div class="card table-scroll table-responsive" id="time-block-table-wrapper">
-        <table id="time-block-table">
+        <table id="time-block-table" class="entity-table">
             <thead>
                 <tr>
                     <th class="col-checkbox"></th>
-                    <th>Block</th>
+                    <th class="col-name">Block</th>
                     <th class="col-opt-2">Type</th>
-                    <th>Hours</th>
-                    <th>Days</th>
+                    <th class="col-nowrap">Hours</th>
+                    <th class="col-opt-1">Days</th>
                     <th class="col-actions-narrow">Actions</th>
                 </tr>
             </thead>
@@ -32,7 +32,7 @@
                         <td>
                             {{ checkbox_input({'class': 'row-select', 'data-uid': (b.uid), 'aria-label': 'Select ' ~ (b.label or (b.kind ~ ' time block')), 'autocomplete': 'off'}) }}
                         </td>
-                        <td>
+                        <td class="col-name">
                             <div class="label-cell">
                                 <span class="label-name">{{ b.label or '(untitled)' }}</span>
                             </div>
@@ -44,10 +44,10 @@
                             <span class="pill-static pill-green">{{ icon('sun', 'icon-sm') }} Leisure</span>
                             {% endif %}
                         </td>
-                        <td>
+                        <td class="col-nowrap">
                             <span class="settings-hint">{{ b.start_time }}&ndash;{{ b.end_time }}</span>
                         </td>
-                        <td>
+                        <td class="col-opt-1">
                             <span class="settings-hint">{{ b.days_label }}</span>
                         </td>
                         <td>

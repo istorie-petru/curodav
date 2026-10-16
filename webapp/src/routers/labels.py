@@ -296,6 +296,18 @@ def _label_role(cfg: dict) -> str:
 _ROLE_SORT_RANK = {"project": 0, "none": 1}
 
 
+def _auto_label_items(conn, own_name: str) -> list[dict]:
+    """Every other plain label, for a project's Auto labels field."""
+    names = {n for n in db.list_all_label_names(conn)} | {l["name"] for l in db.list_labels(conn)}
+    return [{"uid": n, "name": n} for n in sorted(names, key=str.lower) if n.lower() != own_name.lower()]
+
+
+@router.get("/{name}/auto-labels")
+def auto_labels_json(name: str, conn=Depends(get_db)):
+    """Labels a project adds to an item the moment it is picked in a modal."""
+    return JSONResponse(db.get_auto_labels(conn, name))
+
+
 @router.get("/{name}/edit")
 def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
     """The label edit modal -- uses the unified label_form_modal.html."""
@@ -311,6 +323,8 @@ def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
             "role": _label_role(cfg),
             "is_project_form": bool(cfg.get("is_project")),
             "group_options": [g["name"] for g in db.list_groups(conn)],
+            "auto_label_items": _auto_label_items(conn, name),
+            "auto_labels_selected": db.get_auto_labels(conn, name),
             "banner": banner,
         },
     )
@@ -346,6 +360,7 @@ def update_label(
     notebook_widget: str = Form(""),
     sidebar_pin: str = Form(""),
     widget_pin: str = Form(""),
+    auto_labels: list[str] | None = Form(None),
     request: Request = None,
     conn=Depends(get_db),
 ):
@@ -376,6 +391,8 @@ def update_label(
     # the label's page (routers/label_pages.py), not a side effect of
     # changing the role.
     db.upsert_label_config(conn, row)
+    if row["is_project"]:
+        db.set_auto_labels(conn, name, auto_labels or [])
     if renamed_from and request is not None:
         ref = urlparse(request.headers.get("referer") or "")
         if unquote(ref.path) == f"/labels/{renamed_from}":
@@ -452,6 +469,8 @@ def new_label_modal(request: Request, project: bool = False, return_to: str = ""
             "role": "project" if project else "none",
             "is_project_form": bool(project),
             "group_options": [g["name"] for g in db.list_groups(conn)],
+            "auto_label_items": _auto_label_items(conn, ""),
+            "auto_labels_selected": db.get_auto_labels(conn, copy) if prefill else [],
             "return_to": return_to,
         },
     )
@@ -474,6 +493,7 @@ def create_label(
     notebook_widget: str = Form(""),
     sidebar_pin: str = Form(""),
     widget_pin: str = Form(""),
+    auto_labels: list[str] | None = Form(None),
     conn=Depends(get_db),
 ):
     """Create a new label with zero items attached -- labels are first-class
@@ -500,6 +520,8 @@ def create_label(
         **page,
     }
     db.upsert_label_config(conn, row)
+    if row["is_project"]:
+        db.set_auto_labels(conn, new_name, auto_labels or [])
     return RedirectResponse(url="/settings/projects" if row["is_project"] else "/settings/labels", status_code=303)
 
 

@@ -1,7 +1,7 @@
-"""Settings > Taxonomy & Data: labels, projects, groups and holidays in one
-table. A dropdown in the header picks the view; switching swaps only the rows
-and column captions (`/settings/taxonomy/rows`). The old per-list URLs
-(/settings/labels, ...) still work and open this page on their view."""
+"""Settings pages for labels, groups, projects and holidays: one shared table
+builder, one page per view. Frontmatter fields and transaction tags render
+the same rows inside Notebook and Finance settings. `/settings/taxonomy/rows`
+reloads the rows after a change."""
 
 from __future__ import annotations
 
@@ -17,10 +17,13 @@ VIEWS = {
     "labels": {"name": "Labels", "noun": "label", "url": "/settings/labels", "new_url": "/settings/labels/new", "cols": ["Label", "Group", "Usage"]},
     "groups": {"name": "Groups", "noun": "group", "url": "/settings/groups", "new_url": "/groups/new", "cols": ["Group", "Labels", "Usage"]},
     "projects": {"name": "Projects", "noun": "project", "url": "/settings/projects", "new_url": "/settings/projects/new", "cols": ["Project", "Due", "Usage"]},
-    "tags": {"name": "Transaction tags", "noun": "tag", "url": "/settings/taxonomy?view=tags", "new_url": "/finance/tags/new", "cols": ["Tag", "Look", "Usage"]},
-    "frontmatter": {"name": "Frontmatter", "noun": "field", "url": "/settings/taxonomy?view=frontmatter", "new_url": "/settings/notebook/new", "cols": ["Field", "Type", "Default"]},
+    "tags": {"name": "Transaction tags", "noun": "tag", "url": "/settings/finance-accounts", "new_url": "/finance/tags/new", "cols": ["Tag", "Look", "Usage"]},
+    "frontmatter": {"name": "Frontmatter", "noun": "field", "url": "/settings/notebook", "new_url": "/settings/notebook/new", "cols": ["Field", "Type", "Default"]},
     "holidays": {"name": "Holidays", "noun": "holiday", "url": "/settings/holidays", "new_url": "/settings/holidays/new", "cols": ["Holiday", "Calendar", "Date range"]},
 }
+
+
+_PAGE_ICONS = {"labels": "tag", "groups": "folder", "projects": "folder-plus", "holidays": "calendar", "tags": "tag", "frontmatter": "file-text"}
 
 
 def _view_key(view: str) -> str:
@@ -52,15 +55,10 @@ def page_response(conn, request: Request, view: str):
     ctx.update({
         "active_tab": "labels",
         "crumbs": [{"url": "/settings", "name": "Settings"}],
-        "title": "Taxonomy & Data",
-        "views": [{"value": k, "name": v["name"]} for k, v in VIEWS.items()],
+        "title": VIEWS[view]["name"],
+        "page_icon": _PAGE_ICONS[view],
     })
     return templates.TemplateResponse("taxonomy.html", ctx)
-
-
-@router.get("")
-def taxonomy_page(request: Request, view: str = "labels", conn=Depends(get_db)):
-    return page_response(conn, request, view)
 
 
 @router.get("/rows")

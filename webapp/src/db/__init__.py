@@ -108,6 +108,8 @@ from .labels import (
     set_group_members,
     set_group_style,
     set_object_labels,
+    get_auto_labels,
+    set_auto_labels,
     set_object_project_label_uniform,
     unarchive_label,
     upsert_label_config,

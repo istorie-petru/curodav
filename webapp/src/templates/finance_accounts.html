@@ -37,4 +37,24 @@
     </table>
 </div>
 </div>
+<hr class="settings-divider">
+<div class="settings-group">
+<div class="card table-scroll table-responsive">
+    <table class="entity-table labels-table">
+        <thead>
+            <tr>
+                <th class="col-select"><span class="sr-only">Select</span></th>
+                <th class="col-name">Tag</th>
+                <th class="col-meta col-opt-2">Look</th>
+                <th class="col-meta col-opt-1">Usage</th>
+                <th class="col-actions">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set view = 'tags' %}{% set noun = 'tag' %}{% set new_url = '/finance/tags/new' %}
+            {% include "_taxonomy_rows.html" %}
+        </tbody>
+    </table>
+</div>
+</div>
 {% endblock %}

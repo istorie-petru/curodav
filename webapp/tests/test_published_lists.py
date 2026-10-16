@@ -165,6 +165,17 @@ class TestEvaluateLabelFilter:
         assert set(evaluate_label_filter(conn, "task", None)) == {"t1", "t2"}
         assert evaluate_label_filter(conn, "task", {"none": ["University"]}) == ["t2"]
 
+    def test_everything_includes_habit_tasks(self, conn):
+        _make_task(conn, "t1", "A", [])
+        _make_task(conn, "t2", "Run", ["Habit"])
+        assert set(evaluate_label_filter(conn, "task", {})) == {"t1", "t2"}
+
+    def test_contacts_exclude_archived_in_both_paths(self, conn):
+        db.upsert_contact(conn, {"uid": "c1", "full_name": "A", "tags": ["U"], "created_at": _now()})
+        db.upsert_contact(conn, {"uid": "c2", "full_name": "B", "tags": ["U"], "created_at": _now(), "archived_at": _now()})
+        assert evaluate_label_filter(conn, "contact", {}) == ["c1"]
+        assert evaluate_label_filter(conn, "contact", {"any": ["U"]}) == ["c1"]
+
     def test_scoped_to_entity_type(self, conn):
         _make_task(conn, "t1", "A", ["University"])
         db.upsert_event(conn, {"uid": "e1", "title": "Lecture", "description": "", "all_day": 0, "status": "active", "tags": ["University"], "created_at": _now()})

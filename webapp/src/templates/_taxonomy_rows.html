@@ -137,6 +137,6 @@
 {% endfor %}
 {% if not holidays %}{{ empty_state_row(5, "No holidays configured yet", css_class='empty-state') }}{% endif %}
 {% endif %}
-<tr class="task-add-row">
+{% if not hide_add_row | default(false) %}<tr class="task-add-row">
     <td colspan="5"><a href="{{ new_url }}" data-modal{% if view != 'holidays' %} data-modal-size="wide"{% endif %}>{{ icon('plus', 'icon-sm') }} Add {{ noun }}</a></td>
-</tr>
+</tr>{% endif %}

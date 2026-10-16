@@ -190,6 +190,7 @@ def accounts_page(request: Request, conn=Depends(get_db)):
     return templates.TemplateResponse("finance_accounts.html", {
         "request": request, "crumbs": [{"url": "/settings", "name": "Settings"}], "active_tab": "settings_finance_accounts", "accounts": accounts,
         "type_names": dict(finance_stats.ACCOUNT_TYPES), "money": finance_stats.format_money,
+        "tags": finance.list_tags(conn),
     })
 
 
@@ -268,16 +269,16 @@ def new_tag_modal(request: Request, conn=Depends(get_db)):
 def edit_tag_modal(request: Request, name: str = "", conn=Depends(get_db)):
     tag = finance.get_tag(conn, name)
     if tag is None:
-        return RedirectResponse(url="/settings/taxonomy?view=tags", status_code=303)
+        return RedirectResponse(url="/settings/finance-accounts", status_code=303)
     return templates.TemplateResponse("finance_tag_modal.html", _tag_context_modal(request, conn, tag))
 
 
 def _save_tag(conn, name: str, x_requested_with, old: str | None, color: str = "gray", icon: str = ""):
     clean, error = finance.validate_tag(conn, name, old, color if color in COLORS else "gray", icon)
     if error:
-        return _error_response(error, x_requested_with, "/settings/taxonomy")
+        return _error_response(error, x_requested_with, "/settings/finance-accounts")
     finance.save_tag(conn, clean, old)
-    return respond(x_requested_with, "/settings/taxonomy?view=tags")
+    return respond(x_requested_with, "/settings/finance-accounts")
 
 
 @router.post("/tags")
@@ -290,11 +291,11 @@ def create_tag(name: str = Form(""), color: str = Form("gray"), icon: str = Form
 def update_tag(name: str = Form(""), old_name: str = Form(""),
                color: str = Form("gray"), icon: str = Form(""), x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     if finance.get_tag(conn, old_name) is None:
-        return RedirectResponse(url="/settings/taxonomy?view=tags", status_code=303)
+        return RedirectResponse(url="/settings/finance-accounts", status_code=303)
     return _save_tag(conn, name, x_requested_with, old_name, color, icon)
 
 
 @router.post("/tags/delete")
 def delete_tag(name: str = "", x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     finance.delete_tag(conn, name)
-    return respond(x_requested_with, "/settings/taxonomy?view=tags")
+    return respond(x_requested_with, "/settings/finance-accounts")

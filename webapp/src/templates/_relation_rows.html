@@ -1,0 +1,27 @@
+{# View-modal Relations rows: tasks and events; the occurrences of a repeating event are one row per series. #}
+{% macro relation_rows(items) -%}
+<ul class="relation-list">
+    {% for t in items.tasks %}
+    <li class="relation-row"><span class="relation-icon">{{ icon('check-square', 'icon-sm') }}</span><a class="relation-title" href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a></li>
+    {% endfor %}
+    {% for e in items.events %}
+    {% if e.series %}
+    <li class="relation-row relation-series{% if e.is_past %} is-past{% endif %}">
+        <span class="relation-icon">{{ icon('repeat', 'icon-sm') }}</span>
+        <div class="relation-main">
+            <a class="relation-title" href="/events/{{ e.uid }}" data-modal>{{ e.title }}</a>
+            <span class="relation-meta">{{ e.rule | recurrence_text or 'Repeats' }}{% if e.is_past %} · ended {{ e.start_at[:10] | holiday_date }}{% else %} · next {{ e.start_at[:10] | holiday_date }}{% endif %}</span>
+            {% if e.remaining %}
+            <details class="relation-more">
+                <summary>{{ e.remaining }} more</summary>
+                <ul>{% for o in e.more %}<li><a href="/events/{{ o.uid }}" data-modal>{{ o.start_at[:10] | holiday_date }}</a></li>{% endfor %}{% if e.remaining > e.more | length %}<li class="relation-meta">and {{ e.remaining - (e.more | length) }} later</li>{% endif %}</ul>
+            </details>
+            {% endif %}
+        </div>
+    </li>
+    {% else %}
+    <li class="relation-row"><span class="relation-icon">{{ icon('calendar', 'icon-sm') }}</span><a class="relation-title" href="/events/{{ e.uid }}" data-modal>{{ e.title }}</a>{% if e.start_at %}<span class="relation-meta">{{ e.start_at[:10] | holiday_date }}</span>{% endif %}</li>
+    {% endif %}
+    {% endfor %}
+</ul>
+{%- endmacro %}

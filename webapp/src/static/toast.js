@@ -19,6 +19,9 @@
 
   function ccToast({ message, title, icon, className, actions, actionLabel, onAction, duration = 4500, variant = "default", persistent = false, typedConfirm }) {
     const config = VARIANT_CONFIG[variant] || VARIANT_CONFIG.default;
+    const phrase = window.ccPhrase || ((t) => t);
+    message = phrase(message);
+    title = phrase(title);
     const titleText = title || config.title;
     const key = dedupeKey({ variant, title: titleText, message });
     const now = Date.now();

@@ -4,6 +4,17 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.3.0]
+
+- Mobile: the header and bottom navbar stay put on every page and only the content scrolls. Task rows and the Sleep & Leisure table no longer overflow. In the planner, a touch hold of 250 ms starts moving an event, and a swipe still scrolls.
+- Settings: Taxonomy & Data is split back into Labels, Groups, Projects and Holidays pages; transaction tags moved to Finance accounts and frontmatter fields to Notebook settings, where Entry types and fields share one table card with a toolbar and view dropdown. Data & Maintenance is reorganised into Backups, Export and import, Cleanup, Connection and a Danger zone.
+- Logs: one thin card per distinct message with a count and a copy button; each filter shows only its own category.
+- Projects: an "Auto labels" field applies labels when the project is added to an item, live in the modal.
+- Contacts: Relations shows a repeating event as one row with its rule, next date and more dates.
+- Published lists: "everything" now includes habit tasks and leaves out archived and draft contacts.
+- Banners: crop ratio is 9:1 and the header height follows it.
+- Terminology: one Standard / Playful setting (replaces two); playful wording now also covers empty states, some toasts and the greeting.
+
 ## [4.2.0]
 
 - Notebook: notes now live in generated folders (by project, then label, plus Unfiled), with gradient folder icons, a Contacts-style list per folder, pinned notes on the Notebook home, and a Back button. Folders sort by date created by default. A note has at most one label and one project (migration 10 merges extras and keeps a report).

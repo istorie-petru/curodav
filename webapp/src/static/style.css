@@ -4,6 +4,7 @@
 /* --------------------------------------------------------------------- */
 
 :root{
+  --banner-ratio-n:9;
   color-scheme:light;
 
   /* --accent's default here is the "Blue" accent preset (Settings >
@@ -877,6 +878,8 @@ label.seg-btn[hidden]{display:none;}
 
 .col-checkbox{width:26px;}
 .col-actions-narrow{width:100px;}
+.col-nowrap{white-space:nowrap;}
+.entity-table .col-actions-narrow{width:1%; white-space:nowrap;}
 
 .svg-sprite{display:none;}
 
@@ -2073,6 +2076,7 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
   font-size:var(--text-xs); line-height:1.3; box-shadow:0 1px 2px rgba(0,0,0,.1); text-decoration:none; display:block; color:#fff;
   cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; z-index:3;
 }
+@media (pointer:coarse){ .time-event{touch-action:pan-y; -webkit-touch-callout:none;} }
 .time-event:hover{text-decoration:none; filter:brightness(1.08);}
 /* While actively dragging, the block should look locked to the grid it's
    snapped into (a solid outline + slight lift), not like it's floating
@@ -2737,6 +2741,20 @@ main.main-shell > .toolbar.top-app-bar{
     height:calc(100vh - 64px);
     height:calc(100dvh - 64px);
     padding-bottom:var(--space-3);
+  }
+}
+
+/* Phones: header strip and bottom nav stay put on every page; only the
+   content scrolls. Shell and calendar pages already manage their own
+   scrolling, so they are excluded. */
+@media (max-width:720px){
+  main:not(.main-shell):not(.main-calendar){
+    height:calc(100vh - 64px); height:calc(100dvh - 64px);
+    flex:none; overflow-y:auto; overscroll-behavior:contain; padding-top:0;
+  }
+  main:not(.main-shell):not(.main-calendar) > .page-header-narrow,
+  main:not(.main-shell):not(.main-calendar) > .page-banner-wrap{
+    position:sticky; top:0; z-index:var(--z-sticky, 5); margin-top:var(--space-3);
   }
 }
 
@@ -4159,6 +4177,21 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 @media (min-width:721px){
   .page-header-narrow{height:48px;}
 }
+/* A banner header has the banner's own shape (--banner-ratio, the crop
+   editor's ratio), so the picture is never cropped further. The empty
+   ::before sets the row's minimum height from the width; content that
+   needs more room (wrapped actions on a phone) just makes it taller. */
+.page-header-narrow.has-banner{height:auto;}
+.page-header-narrow.has-banner::before{
+  content:""; flex:none; width:0;
+  padding-top:calc((100% + 2 * var(--space-3) + 2px) / var(--banner-ratio-n, 9) - 2 * var(--space-2) - 2px);
+}
+@media (max-width:720px){
+  .page-header-narrow.has-banner::before{
+    padding-top:calc((100% + 2 * var(--space-3) + 2px) / var(--banner-ratio-n, 9) - 2 * var(--space-3) - 2px);
+  }
+}
+@media (min-width:721px){ .page-header-narrow.has-banner{max-height:160px;} }
 .page-header-narrow-bg{
   position:absolute; inset:0; width:100%; height:100%;
   object-fit:cover; z-index:0;
@@ -5049,7 +5082,7 @@ main.notebook-browse-page .notebook-page-layout .notebook-rail-pill-count{font-w
 
 /* Touch: selection is by long press (touch_select.js), so the checkbox column is hidden. */
 @media (hover:none) and (pointer:coarse){
-  .col-select, td:has(> .row-select), .contact-row-wrap > .row-select{display:none;}
+  .col-select, .col-checkbox, td:has(> .row-select), .contact-row-wrap > .row-select{display:none;}
   body.touch-selecting :is(tr, .contact-row-wrap){-webkit-user-select:none; user-select:none; -webkit-touch-callout:none;}
 }
 
@@ -5164,9 +5197,18 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .sidebar-allday-row.is-past{opacity:.5;}
 
 .log-view{display:flex; flex-direction:column; gap:var(--space-3);}
-.log-lines{max-height:60vh; overflow:auto; font-family:var(--font-mono, monospace); font-size:var(--text-sm); white-space:pre-wrap; word-break:break-word;}
-.log-line{padding:2px 0; color:var(--fg-secondary);}
-.log-line.is-error, .log-line.is-critical{color:var(--danger);}
+.log-lines{display:flex; flex-direction:column; gap:var(--space-2); max-height:70vh; overflow:auto;}
+.log-card{border:1px solid var(--border); border-radius:var(--radius-md); padding:var(--space-1) var(--space-3); background:var(--bg-elevated);}
+.log-card.is-warning{border-left:3px solid var(--warning, var(--border-strong));}
+.log-card.is-error, .log-card.is-critical{border-left:3px solid var(--danger);}
+.log-card-head{display:flex; align-items:center; gap:var(--space-2); min-height:40px;}
+.log-card-toggle{flex:1 1 auto; min-width:0; display:flex; align-items:baseline; gap:var(--space-3); background:none; border:0; padding:0; text-align:left; color:var(--fg-primary); font:inherit; cursor:pointer;}
+.log-card-title{flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.log-card-meta{flex:none; display:flex; gap:var(--space-2); color:var(--fg-tertiary); font-size:var(--text-sm);}
+.log-card-count{flex:none;}
+.log-card-count[hidden]{display:none;}
+.log-card-body{margin:0 0 var(--space-2); font-family:var(--font-mono, monospace); font-size:var(--text-sm); white-space:pre-wrap; word-break:break-word; color:var(--fg-secondary); max-height:40vh; overflow:auto;}
+@media (max-width:720px){ .log-card-component{display:none;} }
 
 /* Notebook folders: the data's own color as a soft gradient, its icon centered on the body. */
 .folder-icon{--folder-c:var(--tag-gray-fg); --folder-w:64px; position:relative; display:inline-block; width:var(--folder-w); height:calc(var(--folder-w) * .8); flex:none;}
@@ -5233,7 +5275,7 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .task-row-date.is-overdue{color:var(--danger);}
 .task-row-tags{margin-left:auto;}
 .task-row-tags{flex:none; display:flex; justify-content:flex-end; gap:var(--space-1); max-width:30%; overflow:hidden;}
-@media (max-width:720px){ .task-row{flex-wrap:wrap;} .task-row-date, .task-row-tags{display:none;} .task-row-title{flex-basis:60%; max-width:none;} }
+@media (max-width:720px){ .task-row-date, .task-row-tags{display:none;} .task-row-title{flex:1 1 0; max-width:none;} .task-row .task-status-select{width:auto; max-width:118px;} }
 
 .task-list .contact-row.task-row-title{padding-block:0;}
 .task-list .section-row:not(:first-child){margin-top:var(--space-2);}
@@ -5253,3 +5295,23 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 }
 /* A note with no headings shows no empty Outline card above the editor. */
 .notebook-stacked-section:has(#notebook-toc .empty-state){display:none;}
+
+.relation-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:var(--space-2);}
+.relation-row{display:flex; align-items:flex-start; gap:var(--space-2); min-height:24px;}
+.relation-icon{flex:none; color:var(--fg-tertiary); display:flex; align-items:center; height:24px;}
+.relation-main{display:flex; flex-direction:column; min-width:0;}
+.relation-title{min-width:0; overflow:hidden; text-overflow:ellipsis; line-height:24px;}
+.relation-meta{color:var(--fg-secondary); font-size:var(--text-sm);}
+.relation-row > .relation-meta{margin-left:auto; line-height:24px;}
+.relation-series.is-past{opacity:.6;}
+.relation-more summary{cursor:pointer; color:var(--fg-secondary); font-size:var(--text-sm);}
+.relation-more ul{list-style:none; margin:var(--space-1) 0 0; padding:0; display:flex; flex-direction:column; gap:2px; font-size:var(--text-sm);}
+
+.settings-section-title{margin:var(--space-5) 0 var(--space-2); padding:0 var(--space-1); font-size:var(--text-sm); font-weight:var(--font-weight-bold); letter-spacing:.06em; text-transform:uppercase; color:var(--fg-secondary);}
+.settings-section-title.is-danger{color:var(--danger);}
+.card.danger-zone{border-color:var(--danger);}
+.table-toolbar{display:flex; align-items:center; gap:var(--space-2); padding:var(--space-2) var(--space-3); border-bottom:1px solid var(--separator);}
+.table-toolbar .table-toolbar-search{min-width:0;}
+.table-toolbar .search-field{flex:1 1 160px; min-width:0; max-width:320px;}
+.table-toolbar .spacer{flex:1 1 0;}
+.table-toolbar [hidden], table[hidden]{display:none !important;}

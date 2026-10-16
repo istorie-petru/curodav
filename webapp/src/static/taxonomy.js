@@ -1,10 +1,8 @@
-// Settings > Taxonomy & Data: one table, a view dropdown in the header.
-// Switching views swaps only the rows and column captions; the bulk bar is
-// re-bound to the new view's rows.
+// Labels, groups, projects and holidays settings pages: reloads the rows
+// after a change and binds the bulk bar to the page's view.
 (function () {
     const box = document.getElementById("taxonomy-table");
-    const form = document.getElementById("taxonomy-view-form");
-    if (!box || !form) return;
+    if (!box) return;
     const body = document.getElementById("taxonomy-body");
     let view = box.dataset.view || "labels";
 
@@ -49,11 +47,6 @@
         }
     }
 
-    form.addEventListener("submit", (e) => {
-        e.preventDefault();
-        const picked = form.elements.view ? form.elements.view.value : new FormData(form).get("view");
-        load(picked || view);
-    });
 
     document.addEventListener("cc-entity-changed", (e) => {
         const type = e.detail && e.detail.type;

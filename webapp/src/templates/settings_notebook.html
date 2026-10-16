@@ -21,21 +21,6 @@
         {% set ms_form_id = 'notebook-layout-form' %}
         {% include "_widget_list_multiselect.html" %}
     </form>
-    <div class="settings-field-row">
-        <span class="settings-field-label">Entry types
-            <span class="settings-field-hint">Each type has a look and its own fields. A field name cannot change once it is created</span>
-        </span>
-        <span class="spacer"></span>
-        <a href="/settings/notebook/entry-kinds/new" data-modal class="btn ghost btn-sm">{{ icon('plus', 'icon-sm') }} New</a>
-    </div>
-    {% for k in entry_kinds %}
-    <div class="settings-field-row">
-        <span class="settings-field-label"><span class="cell-tag cal-{{ k.color }}">{{ icon(k.icon, 'icon-sm') }} {{ k.name }}</span>
-            <span class="settings-field-hint">{{ k.fields | join(', ') if k.fields else 'No fields' }}</span></span>
-        <span class="spacer"></span>
-        <a href="/settings/notebook/entry-kinds/edit?name={{ k.name | urlencode }}" data-modal class="icon-btn" title="Edit {{ k.name }}" aria-label="Edit {{ k.name }}">{{ icon('edit', 'icon-sm') }}</a>
-    </div>
-    {% endfor %}
     <form class="settings-field-row" method="post" action="/settings/notebook/journal-template" id="journal-template-form">
         <span class="settings-field-label">Journal template
             <span class="settings-field-hint">New journal entries start from this template</span>
@@ -68,5 +53,61 @@
     </form>
 </div>
 </div>
+<hr class="settings-divider">
+<div class="settings-group">
+<div class="card table-scroll table-responsive nb-tables" id="nb-tables" data-view="entry-types">
+    <form method="get" action="/settings/notebook" class="table-toolbar" id="nb-view-form">
+        {% set fd_name = 'view' %}
+        {% set fd_label = 'Table' %}
+        {% set fd_items = [{'value': 'entry-types', 'name': 'Entry types'}, {'value': 'fields', 'name': 'Frontmatter fields'}] %}
+        {% set fd_selected = 'entry-types' %}
+        {% set fd_mode = 'single' %}
+        {% set fd_form_id = 'nb-view-form' %}
+        {% include '_filter_dropdown.html' %}
+        {% from "_inputs.html" import search_input %}
+        {{ search_input({'type': 'search', 'id': 'nb-table-search', 'class': 'table-toolbar-search', 'aria-label': 'Search this table'}) }}
+        <span class="spacer"></span>
+        <a href="/settings/notebook/entry-kinds/new" data-modal data-nb-add="entry-types" class="btn ghost btn-sm btn-icon-only" title="Add entry type" aria-label="Add entry type">{{ icon('plus', 'icon-sm') }}</a>
+        <a href="/settings/notebook/new" data-modal data-nb-add="fields" class="btn ghost btn-sm btn-icon-only" title="Add field" aria-label="Add field" hidden>{{ icon('plus', 'icon-sm') }}</a>
+    </form>
+    <table class="entity-table labels-table" id="nb-table-entry-types">
+        <thead>
+            <tr>
+                <th class="col-name">Type</th>
+                <th class="col-meta col-opt-1">Fields</th>
+                <th class="col-actions">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for k in entry_kinds %}
+            <tr class="entity-row">
+                <td class="col-name"><div class="label-cell"><span class="cell-tag cal-{{ k.color }}">{{ icon(k.icon, 'icon-sm') }} {{ k.name }}</span></div></td>
+                <td class="col-meta col-opt-1">{{ k.fields | join(', ') if k.fields else 'No fields' }}</td>
+                <td class="col-actions"><div class="action-buttons"><a href="/settings/notebook/entry-kinds/edit?name={{ k.name | urlencode }}" data-modal class="icon-btn" title="Edit {{ k.name }}" aria-label="Edit {{ k.name }}">{{ icon('edit', 'icon-sm') }}</a></div></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <table class="entity-table labels-table" id="nb-table-fields" hidden>
+        <thead>
+            <tr>
+                <th class="col-select"><span class="sr-only">Select</span></th>
+                <th class="col-name">Field</th>
+                <th class="col-meta col-opt-2">Type</th>
+                <th class="col-meta col-opt-1">Default</th>
+                <th class="col-actions">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set view = 'frontmatter' %}{% set noun = 'field' %}{% set new_url = '/settings/notebook/new' %}
+            {% set hide_add_row = true %}
+            {% include "_taxonomy_rows.html" %}
+        </tbody>
+    </table>
 </div>
+</div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script defer src="{{ static_url('notebook_settings_tables.js') }}"></script>
 {% endblock %}

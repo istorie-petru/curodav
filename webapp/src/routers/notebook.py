@@ -814,7 +814,7 @@ async def put_document_content(uid: str, request: Request, conn=Depends(get_db))
 
 field_settings_router = APIRouter(prefix="/settings/notebook", tags=["notebook-field-settings"])
 
-_FIELD_SETTINGS_CRUMB = [{"url": "/settings/taxonomy?view=frontmatter", "name": "Taxonomy & Data"}]
+_FIELD_SETTINGS_CRUMB = [{"url": "/settings/notebook", "name": "Notebook"}]
 
 
 def _field_option_rows_from_form(values: list[str], colors: list[str], icons: list[str]) -> list[dict]:
@@ -858,6 +858,7 @@ def settings_notebook(request: Request, conn=Depends(get_db)):
             "citation_format": db.get_citation_format(conn),
             "journal_template": db.get_journal_template(conn),
             "entry_kinds": db.list_entry_kinds(conn),
+            "fields": [{**f, "templates": db.list_templates_using_field(conn, f["key"])} for f in db.list_notebook_field_config(conn)],
             "journal_templates": [{"uid": "", "name": "None"}] + [
                 {"uid": t["uid"], "name": t["title"] or "Untitled"} for t in db.list_notebook_documents(conn, scope="templates")],
             "citation_styles": [{"uid": k, "name": v} for k, v in citation_formats.STYLES.items()],
@@ -932,7 +933,7 @@ frontmatter_settings_router = APIRouter(prefix="/settings/frontmatter", tags=["n
 @frontmatter_settings_router.get("")
 def settings_frontmatter():
     """Old bookmark: the frontmatter fields live in Taxonomy & Data."""
-    return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
+    return RedirectResponse(url="/settings/notebook", status_code=303)
 
 
 @field_settings_router.post("/layout")
@@ -959,7 +960,7 @@ def new_notebook_field_modal(request: Request, conn=Depends(get_db)):
 def edit_notebook_field_modal(uid: str, request: Request, conn=Depends(get_db)):
     field = db.get_notebook_field_config(conn, uid)
     if field is None:
-        return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
+        return RedirectResponse(url="/settings/notebook", status_code=303)
     context = _field_edit_context(request, conn, field, f"/settings/notebook/{uid}/update")
     context["using_templates"] = db.list_templates_using_field(conn, field["key"])
     return templates.TemplateResponse("notebook_field_edit_modal.html", context)
@@ -977,7 +978,7 @@ def create_notebook_field(
 ):
     label = _s(label)
     if not label:
-        return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
+        return RedirectResponse(url="/settings/notebook", status_code=303)
     uid = db.upsert_notebook_field_config(
         conn,
         {
@@ -987,7 +988,7 @@ def create_notebook_field(
     )
     if type in db.NOTEBOOK_FIELD_OPTION_TYPES:
         db.set_notebook_field_options(conn, uid, _field_option_rows_from_form(option_value, option_color, option_icon))
-    return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
+    return RedirectResponse(url="/settings/notebook", status_code=303)
 
 
 def _rebuild_builtin_options(existing_options: list[dict], colors: list[str], icons: list[str]) -> list[dict]:
@@ -1020,7 +1021,7 @@ def update_notebook_field(
 ):
     existing = db.get_notebook_field_config(conn, uid)
     if existing is None:
-        return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
+        return RedirectResponse(url="/settings/notebook", status_code=303)
     if existing["builtin"]:
         label = _s(label) or existing["label"]
         db.upsert_notebook_field_config(conn, {
@@ -1031,11 +1032,11 @@ def update_notebook_field(
             db.set_notebook_field_options(
                 conn, uid, _rebuild_builtin_options(existing["options"], option_color, option_icon)
             )
-        return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
+        return RedirectResponse(url="/settings/notebook", status_code=303)
 
     label = _s(label)
     if not label:
-        return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
+        return RedirectResponse(url="/settings/notebook", status_code=303)
     db.upsert_notebook_field_config(
         conn,
         {
@@ -1052,7 +1053,7 @@ def update_notebook_field(
         # applies on read; this is that same rule's write-time mirror, so
         # a later switch back to Select doesn't resurrect stale options.
         db.set_notebook_field_options(conn, uid, [])
-    return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
+    return RedirectResponse(url="/settings/notebook", status_code=303)
 
 
 @field_settings_router.post("/{uid}/delete")
@@ -1060,7 +1061,7 @@ def delete_notebook_field(uid: str, conn=Depends(get_db)):
     existing = db.get_notebook_field_config(conn, uid)
     if existing is not None and not existing["builtin"]:
         db.delete_notebook_field_config(conn, uid)
-    return RedirectResponse(url="/settings/taxonomy?view=frontmatter", status_code=303)
+    return RedirectResponse(url="/settings/notebook", status_code=303)
 
 
 citations_router = APIRouter(prefix="/notebook/citations", tags=["notebook-citations"])

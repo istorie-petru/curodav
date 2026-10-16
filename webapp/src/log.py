@@ -2,8 +2,8 @@
 
 Every module gets its logger from `get_logger`. Lines go to the console (the
 service journal under systemd) and to an in-memory ring that the live log view
-in Settings reads, so both show the same stream at the same four levels:
-all (debug), important (info), warnings and errors.
+in Settings reads, so both show the same stream in four views:
+all, important (info only), warnings and errors.
 """
 
 from __future__ import annotations
@@ -16,7 +16,8 @@ import threading
 from collections import deque
 
 ROOT_NAME = "curodav"
-LEVELS = {"all": logging.DEBUG, "important": logging.INFO, "warnings": logging.WARNING, "errors": logging.ERROR}
+# Each view shows exactly its own category ("all" shows everything).
+LEVELS = {"all": None, "important": {"info"}, "warnings": {"warning"}, "errors": {"error", "critical"}}
 RING_SIZE = 2000
 
 _SECRET = re.compile(r"(?i)\b(password|passwd|token|secret|recovery|session|cookie|authorization)(\s*[=:]\s*)\S+")
@@ -82,8 +83,8 @@ def get_logger(name: str) -> logging.Logger:
 
 
 def entries(level: str = "important", after: int = 0, limit: int = 500) -> list[dict]:
-    """Ring entries at or above the named level, newer than `after`, oldest first."""
-    floor = LEVELS.get(level, logging.INFO)
+    """Ring entries in the named category, newer than `after`, oldest first."""
+    wanted = LEVELS.get(level, LEVELS["important"])
     with _lock:
         snapshot = list(_ring)
-    return [e for e in snapshot if e["id"] > after and logging.getLevelName(e["level"].upper()) >= floor][-limit:]
+    return [e for e in snapshot if e["id"] > after and (wanted is None or e["level"] in wanted)][-limit:]

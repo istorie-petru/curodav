@@ -23,6 +23,7 @@ _LABEL_MODULE_COLUMNS = (
     ("tasks_widget", "INTEGER NOT NULL DEFAULT 1"),
     ("contacts_widget", "INTEGER NOT NULL DEFAULT 1"),
     ("notebook_widget", "INTEGER NOT NULL DEFAULT 1"),
+    ("auto_labels", "TEXT"),
 )
 
 
@@ -165,20 +166,48 @@ def set_object_labels(conn: sqlite3.Connection, object_type: str, object_id: str
     """Replaces every label currently on (object_type, object_id) with
         exactly `label_names` -- the common "save this object's label picker"
         write shape, one transaction instead of a diff of adds/removes.
+        A label that is new on the object brings along its auto labels
+        (see `get_auto_labels`); labels already on the object do not, so a
+        label removed by hand stays removed on later saves.
     """
+    previous = {n.lower() for n in list_labels_for_object(conn, object_type, object_id)}
     conn.execute(
         "DELETE FROM object_labels WHERE object_type = ? AND object_id = ?", (object_type, object_id)
     )
     seen: set[str] = set()
-    for name in label_names or []:
-        name = (name or "").strip()
-        if name and name.lower() not in seen:
-            seen.add(name.lower())
-            name = _resolve_label_name(conn, name)
-            conn.execute(
-                "INSERT OR IGNORE INTO object_labels (object_type, object_id, label_name) VALUES (?, ?, ?)",
-                (object_type, object_id, name),
-            )
+    queue = [(n or "").strip() for n in label_names or []]
+    while queue:
+        name = queue.pop(0)
+        if not name or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        name = _resolve_label_name(conn, name)
+        conn.execute(
+            "INSERT OR IGNORE INTO object_labels (object_type, object_id, label_name) VALUES (?, ?, ?)",
+            (object_type, object_id, name),
+        )
+        if name.lower() not in previous:
+            queue.extend(get_auto_labels(conn, name))
+    conn.commit()
+
+
+def get_auto_labels(conn: sqlite3.Connection, name: str) -> list[str]:
+    """Labels a label applies automatically when it is added to an item."""
+    row = conn.execute("SELECT auto_labels FROM label_config WHERE name = ? COLLATE NOCASE", (name,)).fetchone()
+    try:
+        names = json.loads(row["auto_labels"]) if row and row["auto_labels"] else []
+    except (TypeError, ValueError):
+        return []
+    return [n for n in names if isinstance(n, str) and n.strip()]
+
+
+def set_auto_labels(conn: sqlite3.Connection, name: str, labels: list[str]) -> None:
+    clean = []
+    for n in labels if isinstance(labels, (list, tuple)) else []:
+        n = (n or "").strip()
+        if n and n.lower() != name.lower() and n.lower() not in {c.lower() for c in clean}:
+            clean.append(n)
+    conn.execute("UPDATE label_config SET auto_labels = ? WHERE name = ?", (json.dumps(clean) if clean else None, name))
     conn.commit()
 
 
@@ -342,6 +371,7 @@ _LABEL_CONFIG_DEFAULTS: dict[str, Any] = {
     "tasks_widget": 1,
     "contacts_widget": 1,
     "notebook_widget": 1,
+    "auto_labels": None,
 }
 
 # The labels-as-modules boolean flags -- normalized to 0/1 on write and to
@@ -857,6 +887,7 @@ def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None
         conn.execute("UPDATE object_labels SET label_name = ? WHERE label_name = ?", (new_name, old_name))
         conn.execute("UPDATE label_config SET name = ? WHERE name = ?", (new_name, old_name))
         conn.execute("UPDATE label_config SET parent_name = ? WHERE parent_name = ?", (new_name, old_name))
+        _rename_in_auto_labels(conn, old_name, new_name)
         conn.commit()
         return
     collision = new_name.lower() in {n.lower() for n in list_all_label_names(conn)} or bool(get_label_config(conn, new_name))
@@ -866,7 +897,18 @@ def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None
     conn.execute("UPDATE object_labels SET label_name = ? WHERE label_name = ?", (new_name, old_name))
     conn.execute("UPDATE label_config SET name = ? WHERE name = ?", (new_name, old_name))
     conn.execute("UPDATE label_config SET parent_name = ? WHERE parent_name = ?", (new_name, old_name))
+    _rename_in_auto_labels(conn, old_name, new_name)
     conn.commit()
+
+
+def _rename_in_auto_labels(conn: sqlite3.Connection, old_name: str, new_name: str) -> None:
+    for row in conn.execute("SELECT name, auto_labels FROM label_config WHERE auto_labels IS NOT NULL").fetchall():
+        names = get_auto_labels(conn, row["name"])
+        if old_name in names:
+            conn.execute(
+                "UPDATE label_config SET auto_labels = ? WHERE name = ?",
+                (json.dumps([new_name if n == old_name else n for n in names]), row["name"]),
+            )
 
 
 def merge_labels(conn: sqlite3.Connection, source_name: str, dest_name: str) -> None:

@@ -70,3 +70,20 @@ def test_a_typed_name_creates_a_contact_or_reuses_one_by_name(conn):
     created = db.get_contact(conn, uids[2])
     assert created["full_name"] == "Zed Zane"
     assert len(uids) == 3
+
+
+def test_a_repeating_event_is_one_entry_per_series_in_the_relations(conn):
+    from datetime import date
+
+    from src import event_series
+
+    _contact(conn, "c1", "Dana")
+    row = {"uid": "e1", "title": "Standup", "description": "", "all_day": 0, "status": "active", "tags": [],
+           "start_at": "2026-10-19T09:00:00", "end_at": "2026-10-19T09:30:00", "created_at": datetime.now(timezone.utc).isoformat()}
+    event_series.create_series(conn, row, "FREQ=WEEKLY;COUNT=6", today=date(2026, 10, 19), contacts=["c1"])
+    involved = db.list_contact_objects(conn, "c1", now_iso="2026-10-20T00:00")
+    assert len(involved["events"]) == 1
+    entry = involved["events"][0]
+    assert entry["series"] and entry["count"] == 6 and entry["remaining"] == 4
+    assert entry["start_at"].startswith("2026-10-26")
+    assert not entry["is_past"]

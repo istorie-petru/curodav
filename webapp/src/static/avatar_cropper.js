@@ -16,8 +16,8 @@
     },
     banner: {
       maxOutput: 2400, // px, matches the old CCBannerUpload's own "long edge" cap -- a banner's own on-screen size (up to the full page width) has no fixed cap the way an avatar circle does, so this stays generous
-      ratio: 5,
-      ratioLabel: "Banner (5:1)",
+      ratio: 9,
+      ratioLabel: "Banner (9:1)",
       outputName: "banner",
       alwaysSubmit: true, // banner_editor.html's upload form always auto-submitted on file selection, even before this editor existed
     },

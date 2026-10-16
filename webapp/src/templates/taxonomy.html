@@ -1,20 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Taxonomy &amp; Data{% endblock %}
+{% block title %}{{ title }} - Settings{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_bulk_actions_bar.html" import bulk_actions_bar, bulk_count %}
 {% set _count %}{{ bulk_count("labels") }}{{ bulk_count("holidays") }}{% endset %}
-{% call page_header_narrow("Taxonomy & Data", "layers", title_extra=_count) %}
+{% call page_header_narrow(title, page_icon, title_extra=_count) %}
 {{ bulk_actions_bar("labels", merge_label="Merge", edit=true) }}
 {{ bulk_actions_bar("holidays") }}
-<form method="get" action="/settings/taxonomy" class="filter-bar" id="taxonomy-view-form"></form>
-{% set fd_name = 'view' %}
-{% set fd_label = 'View' %}
-{% set fd_items = views %}
-{% set fd_selected = view %}
-{% set fd_mode = 'single' %}
-{% set fd_form_id = 'taxonomy-view-form' %}
-{% include '_filter_dropdown.html' %}
 {% endcall %}
 <div id="modal-target">
 <div class="card table-scroll table-responsive" id="taxonomy-table-wrapper">

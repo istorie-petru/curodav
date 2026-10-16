@@ -1,6 +1,6 @@
 {% from "_inputs.html" import search_input %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-terminology="{{ terminology(request) if request is defined else 'standard' }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -252,6 +252,7 @@
     </div>
 </div>
 
+<script defer src="{{ static_url('phrases.js') }}"></script>
 <script defer src="{{ static_url('toast.js') }}"></script>
 <script defer src="{{ static_url('app.js') }}"></script>
 <script defer src="{{ static_url('icon_library.js') }}" data-src="{{ static_url('icons/lucide-library.svg') }}"></script>
@@ -293,6 +294,7 @@
      page is only opened via data-modal, modal.js's wireContent() calls
      CCLabelFormPicker.init(body) against the freshly-injected content. -->
 <script defer src="{{ static_url('label_form_picker.js') }}"></script>
+<script defer src="{{ static_url('label_auto_apply.js') }}"></script>
 <script defer src="{{ static_url('event_format_toggle.js') }}"></script>
 <script defer src="{{ static_url('holiday_date_sync.js') }}"></script>
 <script defer src="{{ static_url('notebook_properties_rows.js') }}"></script>
