@@ -1,0 +1,31 @@
+/* Figure block (notebook_image.js). Sizes go through custom properties the script sets by CSSOM (CSP: no style attributes). */
+.nb-fig { position: relative; display: inline-block; width: var(--nb-fig-w, 100%); max-width: 100%; margin: 0.6em 0; text-align: left; }
+.nb-fig__grid { display: grid; grid-template-columns: repeat(var(--nb-fig-cols, 1), minmax(0, 1fr)); gap: 8px; }
+.nb-fig__tile { position: relative; border-radius: 4px; overflow: hidden; background: var(--bg-elevated); }
+.nb-fig__img { display: block; width: 100%; height: auto; max-height: 70vh; object-fit: contain; }
+.nb-fig__tile[draggable="true"] { cursor: grab; }
+.nb-fig__tile.is-dragging { opacity: 0.4; }
+.nb-fig__tile.is-over { outline: 2px solid var(--accent-neutral); outline-offset: -2px; }
+.nb-fig__empty { display: flex; justify-content: center; padding: 28px 0; border: 1px dashed var(--border-strong); border-radius: 6px; }
+.nb-fig__add { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--border-strong); border-radius: 6px; background: transparent; color: var(--fg-primary); font: inherit; cursor: pointer; }
+.nb-fig__handle { position: absolute; top: 0; right: 0; bottom: 0; width: 12px; padding: 0; border: 0; background: transparent; cursor: ew-resize; opacity: 0; touch-action: none; }
+.nb-fig__handle::after { content: ""; position: absolute; top: 50%; left: 6px; width: 4px; height: 40px; margin-top: -20px; border-radius: 2px; background: var(--accent-neutral); }
+.nb-fig:hover .nb-fig__handle, .nb-fig.is-resizing .nb-fig__handle, .nb-fig__handle:focus-visible { opacity: 1; }
+.nb-fig__caption { margin-top: 6px; font-size: 0.9em; line-height: 1.5; color: var(--fg-secondary); }
+.nb-fig__label { margin-right: 0.4em; font-weight: 600; color: var(--fg-primary); }
+.nb-fig__credit { display: block; font-size: 0.9em; color: var(--fg-tertiary, var(--fg-secondary)); }
+
+.nb-fig-menu { display: flex; flex-direction: column; gap: 10px; min-width: 260px; max-width: 320px; padding: 8px; }
+.nb-fig-menu__field { display: flex; flex-direction: column; gap: 4px; }
+.nb-fig-menu__label { font-size: 0.85em; color: var(--fg-secondary); }
+.nb-fig-menu__input { width: 100%; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--bg-elevated); color: var(--fg-primary); font: inherit; resize: vertical; }
+.nb-fig-menu__switch { display: flex; align-items: center; gap: 10px; }
+.nb-fig-menu__cols { display: flex; gap: 6px; }
+.nb-fig-menu__col.is-active { background: var(--accent-neutral-subtle); }
+.nb-fig-menu__images { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
+.nb-fig-menu__image { display: flex; align-items: flex-end; gap: 8px; }
+.nb-fig-menu__thumb { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; flex: none; }
+.nb-fig-menu__grow { flex: 1; min-width: 0; }
+.nb-fig-menu__addbtn { display: inline-flex; align-items: center; gap: 6px; width: auto; padding: 0 10px; }
+.nb-fig [hidden], .nb-fig[hidden] { display: none !important; }
+.nb-fig { content-visibility: auto; contain-intrinsic-size: auto 240px; }

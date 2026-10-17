@@ -48,7 +48,7 @@ def notes_files(conn) -> list[tuple[str, bytes]]:
         if name.lower() in used:
             name = f"{folder}/{_safe_name(doc['title'])} ({doc['uid'][:6]}).md"
         used.add(name.lower())
-        blocks = (db.get_notebook_document_content(conn, doc["uid"]) or {}).get("blocks", [])
+        blocks = db.inline_content_images(conn, db.get_notebook_document_content(conn, doc["uid"]) or {}).get("blocks", [])
         files.append((name, notebook_markdown.note_to_markdown(doc, blocks).encode("utf-8")))
     return files
 
@@ -165,6 +165,16 @@ def import_glossary_csv(conn, text: str, skip_existing: bool) -> int:
 def object_label_rows(conn) -> list[dict[str, Any]]:
     rows = conn.execute("SELECT object_type, object_id, label_name FROM object_labels").fetchall()
     return [dict(r) for r in rows]
+
+
+def notebook_image_rows(conn) -> list[dict]:
+    """Every stored figure picture, base64 so the JSON backup carries them."""
+    import base64
+
+    return [
+        {"id": r["id"], "mime": r["mime"], "data_b64": base64.b64encode(r["data"]).decode("ascii")}
+        for r in conn.execute("SELECT id, mime, data FROM notebook_images").fetchall()
+    ]
 
 
 def notebook_citation_rows(conn) -> list[dict[str, Any]]:

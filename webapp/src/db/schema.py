@@ -1211,6 +1211,22 @@ CREATE TABLE IF NOT EXISTS notebook_links (
     PRIMARY KEY (source_uid, target_uid)
 );
 
+-- Pictures used by figures (2026-10-17): kept once by content hash instead of inside every note's JSON, so a
+-- save and the undo history stay small. A note holds only /notebook/images/<id>. notebook_image_refs is rebuilt
+-- on every save (like notebook_links) and tells which pictures are still used.
+CREATE TABLE IF NOT EXISTS notebook_images (
+    id TEXT PRIMARY KEY,
+    mime TEXT NOT NULL,
+    data BLOB NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS notebook_image_refs (
+    doc_uid TEXT NOT NULL,
+    image_id TEXT NOT NULL,
+    PRIMARY KEY (doc_uid, image_id)
+);
+CREATE INDEX IF NOT EXISTS idx_notebook_image_refs_image ON notebook_image_refs(image_id);
+
 CREATE INDEX IF NOT EXISTS idx_notebook_links_source ON notebook_links(source_uid);
 CREATE INDEX IF NOT EXISTS idx_notebook_links_target ON notebook_links(target_uid);
 """

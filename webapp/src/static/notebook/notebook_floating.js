@@ -3,6 +3,9 @@
 // another floating element opens. A submenu counts as part of its parent, so opening it keeps the
 // parent open. Elements register with open() and say how to close themselves.
 // Rule text: curodav-notes/documentation/rules/frontend-conventions.md.
+// The one color palette of the Notebook editor: inline color, table cells, block color, quote and timeline all use it.
+window.NotebookPalette = ["red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "gray"];
+
 (function () {
   var stack = [];
 

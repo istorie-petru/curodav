@@ -5,6 +5,8 @@ Part of the db package; src/db/__init__.py re-exports every name.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import html
 import json
 import random
@@ -13,7 +15,7 @@ import sqlite3
 import string
 import unicodedata
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .core import _HTML_TAG_RE, _WIKILINK_TARGET_RE, _collect_block_text, get_app_meta, set_app_meta
@@ -642,7 +644,101 @@ def get_notebook_document_content(conn: sqlite3.Connection, uid: str) -> dict[st
         return {"blocks": []}
 
 
+# ---- Figure pictures: stored once by content hash, referenced from notes by URL ----
+IMAGE_URL_PREFIX = "/notebook/images/"
+_IMAGE_ID_RE = re.compile(r"^[0-9a-f]{64}$")
+_DATA_URL_RE = re.compile(r"^data:(image/(?:jpeg|png|gif|webp));base64,(.*)$", re.DOTALL)
+
+
+def store_notebook_image(conn: sqlite3.Connection, data: bytes, mime: str) -> str:
+    """Saves a picture (idempotent: the id is the SHA-256 of its bytes) and returns the id."""
+    image_id = hashlib.sha256(data).hexdigest()
+    conn.execute(
+        "INSERT OR IGNORE INTO notebook_images (id, mime, data, created_at) VALUES (?, ?, ?, ?)",
+        (image_id, mime, data, datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+    return image_id
+
+
+def get_notebook_image(conn: sqlite3.Connection, image_id: str) -> dict[str, Any] | None:
+    if not _IMAGE_ID_RE.match(image_id or ""):
+        return None
+    row = conn.execute("SELECT id, mime, data FROM notebook_images WHERE id = ?", (image_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def _image_blocks(content: dict[str, Any]):
+    for block in content.get("blocks", []) or []:
+        if isinstance(block, dict) and block.get("type") == "image" and isinstance(block.get("data"), dict):
+            yield block["data"]
+
+
+def externalize_content_images(conn: sqlite3.Connection, content: dict[str, Any]) -> bool:
+    """Moves every embedded picture of a content dict into the image store, in place. Returns whether anything changed."""
+    changed = False
+    for data in _image_blocks(content):
+        entries = data.get("images") if isinstance(data.get("images"), list) else []
+        legacy = isinstance(data.get("url"), str) and data["url"].startswith("data:")
+        if legacy:  # a figure saved by the old image block
+            entries = [{"src": data.pop("url"), "alt": data.get("caption", "")}]
+            data["images"] = entries
+            changed = True
+        for entry in entries:
+            match = _DATA_URL_RE.match(entry.get("src", "")) if isinstance(entry, dict) else None
+            if match:
+                try:
+                    raw = base64.b64decode(match.group(2), validate=False)
+                except ValueError:
+                    continue
+                entry["src"] = IMAGE_URL_PREFIX + store_notebook_image(conn, raw, match.group(1))
+                changed = True
+    return changed
+
+
+def inline_content_images(conn: sqlite3.Connection, content: dict[str, Any]) -> dict[str, Any]:
+    """A copy of the content with stored pictures turned back into data URLs, for export."""
+    content = json.loads(json.dumps(content))
+    for data in _image_blocks(content):
+        for entry in data.get("images") or []:
+            src = entry.get("src", "") if isinstance(entry, dict) else ""
+            if src.startswith(IMAGE_URL_PREFIX):
+                image = get_notebook_image(conn, src[len(IMAGE_URL_PREFIX):])
+                if image:
+                    entry["src"] = f"data:{image['mime']};base64,{base64.b64encode(image['data']).decode('ascii')}"
+    return content
+
+
+def _rebuild_notebook_image_refs(conn: sqlite3.Connection, uid: str, content: dict[str, Any]) -> None:
+    used = {
+        entry["src"][len(IMAGE_URL_PREFIX):]
+        for data in _image_blocks(content) for entry in data.get("images") or []
+        if isinstance(entry, dict) and str(entry.get("src", "")).startswith(IMAGE_URL_PREFIX)
+    }
+    conn.execute("DELETE FROM notebook_image_refs WHERE doc_uid = ?", (uid,))
+    conn.executemany("INSERT OR IGNORE INTO notebook_image_refs (doc_uid, image_id) VALUES (?, ?)", [(uid, i) for i in used])
+    # A picture nobody uses any more goes, unless it was uploaded in the last day and its note is still unsaved.
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    conn.execute(
+        "DELETE FROM notebook_images WHERE created_at < ? AND id NOT IN (SELECT image_id FROM notebook_image_refs)", (cutoff,)
+    )
+
+
+def migrate_document_images(conn: sqlite3.Connection, uid: str) -> None:
+    """Moves a note's embedded pictures into the store the first time it is opened after the update."""
+    row = conn.execute("SELECT content_json FROM notebook_documents WHERE uid = ?", (uid,)).fetchone()
+    if row is None or "data:image" not in (row["content_json"] or ""):
+        return
+    content = get_notebook_document_content(conn, uid)
+    if content is not None and externalize_content_images(conn, content):
+        updated = conn.execute("SELECT updated_at FROM notebook_documents WHERE uid = ?", (uid,)).fetchone()["updated_at"]
+        conn.execute("UPDATE notebook_documents SET content_json = ?, updated_at = ? WHERE uid = ?", (json.dumps(content), updated, uid))
+        _rebuild_notebook_image_refs(conn, uid, content)
+        conn.commit()
+
+
 def set_notebook_document_content(conn: sqlite3.Connection, uid: str, content: dict[str, Any]) -> bool:
+    externalize_content_images(conn, content)
     cur = conn.execute(
         "UPDATE notebook_documents SET content_json = ?, updated_at = ? WHERE uid = ?",
         (json.dumps(content), datetime.now(timezone.utc).isoformat(), uid),
@@ -651,6 +747,7 @@ def set_notebook_document_content(conn: sqlite3.Connection, uid: str, content: d
         _rebuild_notebook_links(conn, uid, content)
         _rebuild_notebook_glossary_terms(conn, uid, content)
         _rebuild_notebook_bibliography_from_footnotes(conn, uid, content)
+        _rebuild_notebook_image_refs(conn, uid, content)
     conn.commit()
     return cur.rowcount > 0
 
@@ -1482,6 +1579,10 @@ def _detect_glossary_term_uids(conn: sqlite3.Connection, content: dict[str, Any]
     text = _extract_notebook_plain_text(content)
     if not text.strip():
         return []
+    # Looking names up in the set of the note's words is about 45 times faster than one regular expression per
+    # entry; only names with spaces or punctuation fall back to a phrase search, and only when every word of
+    # the name is in the note at all.
+    words = set(re.findall(r"\w+", text))
     detected = []
     for row in conn.execute("SELECT uid, term, aliases_json FROM glossary_terms").fetchall():
         try:
@@ -1489,8 +1590,15 @@ def _detect_glossary_term_uids(conn: sqlite3.Connection, content: dict[str, Any]
         except (json.JSONDecodeError, TypeError):
             aliases = []
         names = [(row["term"] or "").strip().lower()] + [str(a).strip().lower() for a in aliases]
-        if any(n and re.search(r"\b" + re.escape(n) + r"\b", text) for n in names):
-            detected.append(row["uid"])
+        for n in names:
+            if not n:
+                continue
+            tokens = re.findall(r"\w+", n)
+            if not tokens or not all(t in words for t in tokens):
+                continue
+            if re.fullmatch(r"\w+", n) or re.search(r"\b" + re.escape(n) + r"\b", text):
+                detected.append(row["uid"])
+                break
     return detected
 
 
@@ -1611,6 +1719,7 @@ def list_glossary_term_references(conn: sqlite3.Connection, term_uid: str) -> li
                 continue
             row["name"] = format_citation_display(c)
             row["pages"] = format_page_range(row["page_start"], row["page_end"])
+            row["is_web"] = (c.get("type") or "") == "webpage"
         else:
             continue
         out.append(row)
@@ -1620,6 +1729,8 @@ def list_glossary_term_references(conn: sqlite3.Connection, term_uid: str) -> li
 def format_page_range(start: str, end: str) -> str:
     """"pp. 12-20", "p. 12" or "" -- the entry reference's page span as shown."""
     start, end = (start or "").strip(), (end or "").strip()
+    if start.lower().startswith(("http://", "https://")):
+        return start  # a web page reference keeps its address where a page number would go
     if start and end and start != end:
         return f"pp. {start}\u2013{end}"
     return f"p. {start or end}" if start or end else ""

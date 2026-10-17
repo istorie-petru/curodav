@@ -55,7 +55,7 @@
 {% endif %}
 {% call detail_section('References', count=references|length) %}
     {% if references %}
-    <ul class="entry-mentions">{% for r in references %}<li><a href="/notebook/citations/{{ r.ref_uid }}?return_to=/notebook/glossary/{{ entry.uid }}" data-modal>{{ r.name }}</a>{% if r.pages %} <span class="detail-meta-label">{{ r.pages }}</span>{% endif %}</li>{% endfor %}</ul>
+    <ul class="entry-mentions">{% for r in references %}<li><a href="/notebook/citations/{{ r.ref_uid }}?return_to=/notebook/glossary/{{ entry.uid }}" data-modal>{{ r.name }}</a>{% if r.pages %} {% if r.pages.lower().startswith(("http://", "https://")) %}<a class="detail-meta-label" href="{{ r.pages }}" target="_blank" rel="noopener noreferrer">{{ r.pages }}</a>{% else %}<span class="detail-meta-label">{{ r.pages }}</span>{% endif %}{% endif %}</li>{% endfor %}</ul>
     {% else %}
     <span class="detail-meta-label">No references yet</span>
     {% endif %}

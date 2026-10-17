@@ -1,0 +1,21 @@
+{% from "_inputs.html" import text_input %}
+{# One reference of an entry: a single-choice citation dropdown with its start and end page on the same row. #}
+<div class="entry-ref-row" data-repeatable-row>
+    {% set ms_form_id = 'glossary-term-form' %}
+    {% set ms_name = 'refkey_' ~ ref_i %}
+    {% set ms_label = 'Reference' %}
+    {% set ms_items = [{'uid': '', 'name': 'None'}] + reference_items %}
+    {% set ms_selected = ('citation:' ~ ref.ref_uid) if ref else '' %}
+    {% set ms_mode = 'single' %}
+    {% set ms_allow_new = false %}
+    {% set ms_search_always = true %}
+    {% set ms_wide = false %}
+    {% set ms_pill = false %}
+    {% set ms_extra_class = 'entry-ref-pick' %}
+    {% include "_widget_list_multiselect.html" %}
+    {% set _web = ref and ref.is_web %}
+    <div class="field entry-ref-url"{% if not _web %} hidden{% endif %}><label>Page URL</label>{{ text_input({'name': 'refurl_' ~ ref_i, 'value': (ref.page_start if _web else ''), 'form': 'glossary-term-form', 'disabled': (not _web) or none}) }}</div>
+    <div class="field entry-ref-page"{% if _web %} hidden{% endif %}><label>From page</label>{{ text_input({'name': 'refstart_' ~ ref_i, 'value': (ref.page_start if ref and not _web else ''), 'form': 'glossary-term-form', 'disabled': _web or none}) }}</div>
+    <div class="field entry-ref-page"{% if _web %} hidden{% endif %}><label>To page</label>{{ text_input({'name': 'refend_' ~ ref_i, 'value': (ref.page_end if ref and not _web else ''), 'form': 'glossary-term-form', 'disabled': _web or none}) }}</div>
+    <button type="button" class="icon-btn" data-repeatable-remove title="Remove reference" aria-label="Remove reference">{{ icon('x', 'icon-sm') }}</button>
+</div>

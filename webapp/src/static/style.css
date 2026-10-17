@@ -4177,15 +4177,17 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 @media (min-width:721px){
   .page-header-narrow{height:48px;}
 }
-/* A banner header has the crop editor's shape (--banner-ratio-n, kept in
-   sync with avatar_cropper.js), clamped so it is never taller than 88px nor
-   shorter than 56px; past the clamp the picture is cover-cropped. */
+/* A banner header has exactly the crop editor's shape (--banner-ratio-n, kept in sync with avatar_cropper.js):
+   full width and a height that is always width / ratio, never clamped; the picture is cover-cropped to it. */
 .page-header-narrow.has-banner{
+  box-sizing:border-box; width:100%; flex:none;
   height:auto; aspect-ratio:var(--banner-ratio-n, 12) / 1;
-  min-height:56px; max-height:88px;
+  min-height:0; max-height:none;
 }
 @media (max-width:720px){
+  /* On phones the controls need 56px; below that width the ratio gives way to them. */
   .page-header-narrow.has-banner{
+    min-height:56px;
     flex-wrap:wrap; justify-content:flex-start;
     align-content:center; padding-top:var(--space-2); padding-bottom:var(--space-2);
   }
@@ -4887,13 +4889,18 @@ html[data-notebook-sidebar-collapsed] .notebook-sidebar{display:none;}
 /* Distinct size per level and more air before a new heading. */
 /* A small space after a heading, always smaller than the one before it. */
 #notebook-editor .ce-header{padding-top:0; padding-bottom:.3em;}
-#notebook-editor h1.ce-header{font-size:2em; margin-top:1.6em;}
-#notebook-editor h2.ce-header{font-size:1.65em; margin-top:1.4em;}
-#notebook-editor h3.ce-header{font-size:1.4em; margin-top:1.2em;}
-#notebook-editor h4.ce-header{font-size:1.2em; margin-top:1em;}
-#notebook-editor h5.ce-header{font-size:1.05em; margin-top:.9em;}
-#notebook-editor .ce-block:first-child h1.ce-header, #notebook-editor .ce-block:first-child h2.ce-header,
-#notebook-editor .ce-block:first-child h3.ce-header{margin-top:0;}
+/* The space before a heading sits on its block, not inside it, so the block's handle lines up with the heading text. */
+#notebook-editor h1.ce-header{font-size:2em; margin-top:0;}
+#notebook-editor h2.ce-header{font-size:1.65em; margin-top:0;}
+#notebook-editor h3.ce-header{font-size:1.4em; margin-top:0;}
+#notebook-editor h4.ce-header{font-size:1.2em; margin-top:0;}
+#notebook-editor h5.ce-header{font-size:1.05em; margin-top:0;}
+#notebook-editor .ce-block:has(h1.ce-header){margin-top:3.2em;}
+#notebook-editor .ce-block:has(h2.ce-header){margin-top:2.3em;}
+#notebook-editor .ce-block:has(h3.ce-header){margin-top:1.7em;}
+#notebook-editor .ce-block:has(h4.ce-header){margin-top:1.2em;}
+#notebook-editor .ce-block:has(h5.ce-header){margin-top:.95em;}
+#notebook-editor .ce-block:first-child:has(.ce-header){margin-top:0;}
 
 .notebook-sidebar-panel-header{display:flex; justify-content:flex-end; margin-bottom:var(--space-2);}
 .notebook-bibliography-sidebar-list{
@@ -4935,20 +4942,6 @@ html[data-notebook-sidebar-collapsed] .notebook-sidebar{display:none;}
    `--tag-blue-fg` already flips darker-on-light/lighter-on-dark (see its
    definition), which is exactly the contrast behavior asked for here. */
 #notebook-editor a:not(.cdx-wikilink){color:var(--tag-blue-fg);}
-
-/* Wikilink inline tool's search/pick popover (renderActions) -- same
-   sizing as `.cdx-footnote-input`'s own inline-toolbar box, but a text
-   input + live result list instead of a single textarea. Reused as-is
-   for the slash-command block variant (NotebookWikilinkBlock) and the
-   `[[`-triggered floating popup, both in notebook_wikilinks.js. */
-.cdx-wikilink-picker{display:block; width:260px; margin:4px 6px;}
-.cdx-wikilink-modal-picker{width:auto; margin:0;}
-.cdx-wikilink-picker-results{list-style:none; margin:4px 0 0; padding:0; max-height:220px; overflow-y:auto;}
-.cdx-wikilink-picker-result{
-  display:flex; align-items:center; gap:var(--space-2); padding:6px 8px; border-radius:var(--radius-sm);
-  font-size:14px; cursor:pointer;
-}
-.cdx-wikilink-picker-result:hover, .cdx-wikilink-picker-result.is-active{background:var(--bg-secondary);}
 
 /* Citation create/edit modal's repeatable author rows (citation_edit_
    modal.html) -- the row's own `.contact-multi-row` class (required for
@@ -5328,8 +5321,10 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .citation-author-field input{width:100%; box-sizing:border-box;}
 
 /* Entry references: one row per picked citation, its name and two small page boxes. */
-.entry-ref-rows{display:flex; flex-direction:column; gap:var(--space-2); margin-top:var(--space-2);}
+.entry-ref-rows{display:flex; flex-direction:column; gap:var(--space-2);}
 .entry-ref-row{display:flex; align-items:flex-end; gap:var(--space-2);}
-.entry-ref-name{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-bottom:8px; color:var(--fg-primary);}
+.entry-ref-row .entry-ref-pick{flex:1; min-width:0; margin:0;}
 .entry-ref-row .field{flex:none; width:96px; margin:0;}
+.entry-ref-row .field.entry-ref-pick{flex:1; width:auto;}
 .entry-ref-row .field input{width:100%; box-sizing:border-box;}
+.entry-ref-block > .icon-btn{margin-top:var(--space-2);}

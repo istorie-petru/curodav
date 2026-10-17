@@ -55,9 +55,6 @@
 .nb-swatch.nb-tc-gray{color:var(--tag-gray-fg);}
 .nb-swatch.nb-hl-gray{background:var(--tag-gray-bg);}
 
-.nb-more-item{display:flex; align-items:center; justify-content:center; width:28px; height:28px; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--fg-primary); cursor:pointer;}
-.nb-more-item:hover{background:var(--bg-hover, var(--bg-secondary));}
-.nb-more-item.is-active{background:var(--accent-neutral-subtle); color:var(--accent);}
 
 /* Inline code in the accent blue (the text-safe tone), in both themes. */
 #notebook-editor code.inline-code, [data-theme="dark"] #notebook-editor code.inline-code{
@@ -78,8 +75,7 @@ html .ce-inline-toolbar .ce-popover-item[data-item-name="convert-to"] .ce-popove
   html .ce-popover-item:hover:not(.ce-popover-item--disabled),
   html .ce-toolbar__plus:hover,
   html .ce-toolbar__settings-btn:hover{background-color:var(--accent-neutral-hover);}
-  html .nb-more-item:hover{background:var(--accent-neutral-hover);}
-}
+  html }
 
 /* Block text and background colors, from the app's tag color pairs. */
 .nb-block-color[data-bg]{border-radius:var(--radius-sm);}
@@ -101,3 +97,13 @@ html .ce-inline-toolbar .ce-popover-item[data-item-name="convert-to"] .ce-popove
 .nb-block-color[data-bg="pink"]{background:var(--tag-pink-bg);}
 .nb-block-color[data-text="gray"]{color:var(--tag-gray-fg);}
 .nb-block-color[data-bg="gray"]{background:var(--tag-gray-bg);}
+.nb-actions-row{display:flex; gap:2px; padding:3px;}
+.nb-actions-btn{display:flex; align-items:center; justify-content:center; width:28px; height:28px; padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--fg-primary); cursor:pointer;}
+.nb-actions-btn:hover:not(:disabled){background:var(--accent-neutral-hover);}
+.nb-actions-btn:disabled{color:var(--fg-tertiary); cursor:default;}
+.nb-actions-btn.is-active{background:var(--accent-neutral-subtle); color:var(--accent);}
+.nb-actions-btn.is-danger:hover:not(:disabled){color:var(--tag-red-fg);}
+/* Editor.js adds its own move and delete rows; the block actions row replaces them. */
+.ce-popover__items [data-item-name="move-up"], .ce-popover__items [data-item-name="delete"], .ce-popover__items [data-item-name="move-down"]{display:none;}
+.nb-actions-sep{flex:none; align-self:stretch; width:1px; margin:4px 3px; background:var(--border);}
+.nb-actions-row{align-items:center;}

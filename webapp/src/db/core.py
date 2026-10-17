@@ -408,7 +408,7 @@ def purge_all_data(conn: sqlite3.Connection) -> None:
         # Auto-detect override bookkeeping (item H, session 7) -- same
         # "purge wipes everything" treatment as the glossary tables above.
         "notebook_glossary_excluded_terms",
-        "notebook_links",
+        "notebook_links", "notebook_images", "notebook_image_refs",
         # Personal finance (Phase P) -- same "purge wipes everything".
         "finance_accounts", "finance_transactions", "finance_scheduled", "finance_scheduled_tags", "finance_tags", "finance_transaction_tags",
     ]
@@ -469,7 +469,8 @@ def _collect_block_text(value: Any, out: list[str]) -> None:
     uids`'s own comment uses, just scoped to a block's `data` rather than
     the whole serialized dict."""
     if isinstance(value, str):
-        out.append(value)
+        if not value.startswith("data:"):  # an embedded image is not prose, and can be megabytes
+            out.append(value)
     elif isinstance(value, dict):
         for v in value.values():
             _collect_block_text(v, out)

@@ -11,6 +11,8 @@
     return e;
   }
 
+  var COLORS = window.NotebookPalette;
+
   function NotebookTimeline(params) {
     this.api = params.api;
     this.readOnly = params.readOnly;
@@ -18,6 +20,7 @@
     var items = Array.isArray(d.items) && d.items.length ? d.items : [{ title: "", description: "", date: "" }];
     this.data = {
       showDates: !!d.showDates,
+      color: COLORS.indexOf(d.color) !== -1 ? d.color : "",
       items: items.map(function (i) {
         return { title: String(i.title || ""), description: String(i.description || ""), date: String(i.date || "") };
       }),
@@ -68,6 +71,8 @@
   NotebookTimeline.prototype.render = function () {
     var self = this;
     var wrapper = el("div", "nbtl");
+    this.wrapper = wrapper;
+    this.applyLook();
     this.data.items.forEach(function (item) {
       wrapper.appendChild(self.row(item));
     });
@@ -79,6 +84,13 @@
     });
     this.wrapper = wrapper;
     return wrapper;
+  };
+
+  // Color and the date column are plain attributes and classes the stylesheet reads.
+  NotebookTimeline.prototype.applyLook = function () {
+    if (this.data.color) this.wrapper.setAttribute("data-color", this.data.color);
+    else this.wrapper.removeAttribute("data-color");
+    this.wrapper.classList.toggle("has-dates", !!this.data.showDates);
   };
 
   NotebookTimeline.prototype.touch = function () {
@@ -185,27 +197,48 @@
         date: r.querySelector(".nbtl-date").textContent.trim(),
       };
     });
-    return { showDates: this.data.showDates, items: items.length ? items : [{ title: "", description: "", date: "" }] };
+    return { showDates: this.data.showDates, color: this.data.color, items: items.length ? items : [{ title: "", description: "", date: "" }] };
   };
 
   NotebookTimeline.prototype.validate = function (data) {
     return data.items.some(function (i) { return i.title || i.description || i.date; });
   };
 
+  // One row of icon buttons: the line color, then the dates switch.
   NotebookTimeline.prototype.renderSettings = function () {
     var self = this;
-    var btn = el("div", "cdx-settings-button", { title: "Show dates" });
-    btn.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#icon-calendar"></use></svg>';
-    btn.classList.toggle("cdx-settings-button--active", this.data.showDates);
-    btn.addEventListener("click", function () {
-      self.data.showDates = !self.data.showDates;
-      btn.classList.toggle("cdx-settings-button--active", self.data.showDates);
-      self.rows().forEach(function (r) {
-        self.showDate(r.querySelector(".nbtl-date"), self.data.showDates);
+    var row = el("div", "nb-actions-row", { role: "group", "aria-label": "Timeline options" });
+    function swatch(color, label) {
+      var b = el("button", "nb-actions-btn nbtl-swatch", { type: "button", title: label, "aria-label": label + " color", "data-color": color });
+      b.appendChild(el("span", "nbtl-swatch-dot"));
+      b.classList.toggle("is-active", self.data.color === color);
+      b.addEventListener("click", function () {
+        window.notebookCommit(self.api, self.wrapper, function () {
+          self.data.color = color;
+          self.applyLook();
+          row.querySelectorAll(".nbtl-swatch").forEach(function (x) { x.classList.toggle("is-active", x === b); });
+        });
       });
-      self.touch();
+      row.appendChild(b);
+    }
+    swatch("", "Neutral");
+    COLORS.forEach(function (c) { swatch(c, c.charAt(0).toUpperCase() + c.slice(1)); });
+    row.appendChild(el("span", "nb-actions-sep"));
+    var dates = el("button", "nb-actions-btn", { type: "button", title: "Show dates", "aria-label": "Show dates" });
+    dates.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#icon-calendar"></use></svg>';
+    dates.classList.toggle("is-active", this.data.showDates);
+    dates.addEventListener("click", function () {
+      window.notebookCommit(self.api, self.wrapper, function () {
+        self.data.showDates = !self.data.showDates;
+        dates.classList.toggle("is-active", self.data.showDates);
+        self.applyLook();
+        self.rows().forEach(function (r) {
+          self.showDate(r.querySelector(".nbtl-date"), self.data.showDates);
+        });
+      });
     });
-    return btn;
+    row.appendChild(dates);
+    return { type: "html", element: row };
   };
 
   window.NotebookTimeline = NotebookTimeline;

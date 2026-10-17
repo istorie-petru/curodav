@@ -1,5 +1,6 @@
 """Shared pytest setup: orders core tests first and provides the clock fixture."""
 
+import shutil
 from datetime import date, datetime, time, timezone
 
 import pytest
@@ -35,3 +36,11 @@ def local_today():
     clock.set_override(datetime.combine(date.today(), time(12, 0), tzinfo=timezone.utc))
     yield
     clock.set_override(None)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """A green run leaves nothing in the temp folder (each test's database is megabytes); a red one keeps the failed tests' folders."""
+    if exitstatus == 0:
+        base = session.config._tmp_path_factory.getbasetemp() if hasattr(session.config, "_tmp_path_factory") else None
+        if base is not None:
+            shutil.rmtree(base, ignore_errors=True)

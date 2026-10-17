@@ -6,7 +6,7 @@
   var M = window.NotebookTableModel;
   if (!M) return;
 
-  var COLORS = ["red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "gray"];
+  var COLORS = window.NotebookPalette;
 
   function svg(paths) {
     return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + "</svg>";
@@ -175,7 +175,8 @@
     this.wrapper.appendChild(scroll);
     this.table = table;
     if (!this.readOnly) {
-      this.wrapper.appendChild(this.addButton("row"));
+      this.wrapper.appendChild(this.edge("row"));
+      this.wrapper.appendChild(this.edge("col"));
     }
     this.refresh();
   };
@@ -193,14 +194,15 @@
     return g;
   };
 
-  NotebookTable.prototype.addButton = function (kind) {
+  // A thin strip on the bottom and right edge that widens into an icon on hover.
+  NotebookTable.prototype.edge = function (kind) {
     var b = document.createElement("button");
     b.type = "button";
-    b.className = "nbt-add nbt-add-" + kind;
+    b.className = "nbt-edge nbt-edge-" + kind;
     b.tabIndex = -1;
-    b.textContent = "+";
-    b.title = "Add row";
+    b.title = kind === "row" ? "Add row" : "Add column";
     b.setAttribute("aria-label", b.title);
+    b.innerHTML = ICONS.insertBefore;
     return b;
   };
 
@@ -504,7 +506,7 @@
     });
   };
 
-  NotebookTable.prototype.openMenu = function (anchor, items, level) {
+  NotebookTable.prototype.openMenu = function (anchor, items, level, bar, below) {
     var self = this;
     level = level || 0;
     var existing = this.menuEntries[level];
@@ -519,10 +521,16 @@
       }
     });
     var menu = document.createElement("div");
-    menu.className = "nbt-menu";
+    menu.className = "nbt-menu" + (bar ? " nbt-menu-bar" : "");
     menu.dataset.level = level;
     menu.setAttribute("role", "menu");
     items.forEach(function (item) {
+      if (item.sep) {
+        var sep = document.createElement("span");
+        sep.className = "nb-actions-sep";
+        menu.appendChild(sep);
+        return;
+      }
       if (item.heading) {
         var h = document.createElement("div");
         h.className = "nbt-menu-heading";
@@ -537,23 +545,28 @@
       icon.className = "nbt-menu-icon";
       icon.innerHTML = item.icon || "";
       b.appendChild(icon);
-      var label = document.createElement("span");
-      label.className = "nbt-menu-label";
-      label.textContent = item.label;
-      b.appendChild(label);
+      if (bar) {
+        b.title = item.disabled && item.hint ? item.hint : item.label;
+        b.setAttribute("aria-label", item.label);
+      } else {
+        var label = document.createElement("span");
+        label.className = "nbt-menu-label";
+        label.textContent = item.label;
+        b.appendChild(label);
+      }
       if (item.children) {
         var chev = document.createElement("span");
         chev.className = "nbt-menu-chevron";
-        chev.innerHTML = ICONS.right;
+        chev.innerHTML = bar ? ICONS.down : ICONS.right;
         b.appendChild(chev);
       }
       if (item.active) b.classList.add("is-active");
       if (item.disabled) {
         b.disabled = true;
-        if (item.hint) b.title = item.hint;
+        if (item.hint && !bar) b.title = item.hint;
       } else if (item.children) {
         b.addEventListener("click", function () {
-          self.openMenu(b, item.children, level + 1);
+          self.openMenu(b, item.children, level + 1, false, bar);
         });
       } else {
         b.addEventListener("click", function () {
@@ -574,9 +587,10 @@
     self.menuEntries[level] = menu._entry;
     var width = menu.offsetWidth;
     var height = menu.offsetHeight;
-    var left = level ? rect.right + 4 : rect.left;
-    var top = level ? rect.top - 4 : rect.bottom + 4;
-    if (left + width > window.innerWidth - 8) left = level ? rect.left - width - 4 : window.innerWidth - width - 8;
+    var side = level && !below;
+    var left = side ? rect.right + 4 : rect.left;
+    var top = side ? rect.top - 4 : rect.bottom + 4;
+    if (left + width > window.innerWidth - 8) left = side ? rect.left - width - 4 : window.innerWidth - width - 8;
     if (top + height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - height - 8);
     menu.style.left = Math.max(8, left) + "px";
     menu.style.top = top + "px";
@@ -623,20 +637,26 @@
       };
     }
     var moveHint = "Moving is off while the table has merged cells.";
+    function alignIcon(v) { return v === "left" ? ICONS.alignLeft : v === "center" ? ICONS.alignCenter : v === "right" ? ICONS.alignRight : ICONS.alignAuto; }
     return [
-      { label: "Insert column left", icon: ICONS.insertBefore, onClick: function () { self.syncFromDom(); self.apply(M.insertCol(model, c), { r: 0, c: c }); } },
-      { label: "Insert column right", icon: ICONS.insertBefore, onClick: function () { self.syncFromDom(); self.apply(M.insertCol(model, c + 1), { r: 0, c: c + 1 }); } },
-      { heading: "Align" },
-      { label: "Automatic", icon: ICONS.alignAuto, active: !align, onClick: setAlign("") },
-      { label: "Left", icon: ICONS.alignLeft, active: align === "left", onClick: setAlign("left") },
-      { label: "Center", icon: ICONS.alignCenter, active: align === "center", onClick: setAlign("center") },
-      { label: "Right", icon: ICONS.alignRight, active: align === "right", onClick: setAlign("right") },
-      { heading: "Sort" },
-      { label: "Sort ascending", icon: ICONS.sortAsc, disabled: !sortable, hint: hint, onClick: sortBy("asc") },
-      { label: "Sort descending", icon: ICONS.sortDesc, disabled: !sortable, hint: hint, onClick: sortBy("desc") },
-      { heading: "Move" },
+      { label: "Insert", icon: ICONS.insertBefore, children: [
+        { label: "Insert column left", icon: ICONS.left, onClick: function () { self.syncFromDom(); self.apply(M.insertCol(model, c), { r: 0, c: c }); } },
+        { label: "Insert column right", icon: ICONS.right, onClick: function () { self.syncFromDom(); self.apply(M.insertCol(model, c + 1), { r: 0, c: c + 1 }); } },
+      ] },
+      { label: "Align", icon: alignIcon(align), children: [
+        { label: "Automatic", icon: ICONS.alignAuto, active: !align, onClick: setAlign("") },
+        { label: "Left", icon: ICONS.alignLeft, active: align === "left", onClick: setAlign("left") },
+        { label: "Center", icon: ICONS.alignCenter, active: align === "center", onClick: setAlign("center") },
+        { label: "Right", icon: ICONS.alignRight, active: align === "right", onClick: setAlign("right") },
+      ] },
+      { label: "Sort", icon: ICONS.sortAsc, disabled: !sortable, hint: hint, children: [
+        { label: "Sort ascending", icon: ICONS.sortAsc, onClick: sortBy("asc") },
+        { label: "Sort descending", icon: ICONS.sortDesc, onClick: sortBy("desc") },
+      ] },
+      { sep: true },
       { label: "Move left", icon: ICONS.left, disabled: c === 0 || !!model.merges.length, hint: moveHint, onClick: function () { reorder(c - 1); } },
       { label: "Move right", icon: ICONS.right, disabled: c >= cols - 1 || !!model.merges.length, hint: moveHint, onClick: function () { reorder(c + 1); } },
+      { sep: true },
       { label: "Delete column", icon: ICONS.trash, disabled: cols <= 1, onClick: function () { self.syncFromDom(); self.apply(M.deleteCol(model, c), { r: 0, c: Math.max(0, c - 1) }); } },
     ];
   };
@@ -654,10 +674,14 @@
     }
     var moveHint = "Moving is off while the table has merged cells.";
     return [
-      { label: "Insert row above", icon: ICONS.insertBefore, onClick: function () { self.syncFromDom(); self.apply(M.insertRow(model, r), { r: r, c: 0 }); } },
-      { label: "Insert row below", icon: ICONS.insertBefore, onClick: function () { self.syncFromDom(); self.apply(M.insertRow(model, r + 1), { r: r + 1, c: 0 }); } },
+      { label: "Insert", icon: ICONS.insertBefore, children: [
+        { label: "Insert row above", icon: ICONS.up, onClick: function () { self.syncFromDom(); self.apply(M.insertRow(model, r), { r: r, c: 0 }); } },
+        { label: "Insert row below", icon: ICONS.down, onClick: function () { self.syncFromDom(); self.apply(M.insertRow(model, r + 1), { r: r + 1, c: 0 }); } },
+      ] },
+      { sep: true },
       { label: "Move up", icon: ICONS.up, disabled: r === 0 || !!model.merges.length, hint: moveHint, onClick: function () { reorder(r - 1); } },
       { label: "Move down", icon: ICONS.down, disabled: r >= rows - 1 || !!model.merges.length, hint: moveHint, onClick: function () { reorder(r + 1); } },
+      { sep: true },
       { label: "Delete row", icon: ICONS.trash, disabled: rows <= 1, onClick: function () { self.syncFromDom(); self.apply(M.deleteRow(model, r), { r: Math.max(0, r - 1), c: 0 }); } },
     ];
   };
@@ -759,7 +783,7 @@
     var dragging = false;
     var pointing = false;
     w.addEventListener("mousedown", function (e) {
-      if (e.target.closest(".nbt-bar, .nbt-grip, .nbt-add")) return;
+      if (e.target.closest(".nbt-bar, .nbt-grip, .nbt-edge")) return;
       var cell = e.target.closest(".nbt-cell");
       if (!cell) { self.clearSelection(); return; }
       var pos = self.position(cell);
@@ -801,13 +825,18 @@
       var grip = e.target.closest(".nbt-grip");
       if (grip) {
         var index = Number(grip.dataset.index);
-        self.openMenu(grip, grip.classList.contains("nbt-grip-col") ? self.columnItems(index) : self.rowItems(index));
+        self.openMenu(grip, grip.classList.contains("nbt-grip-col") ? self.columnItems(index) : self.rowItems(index), 0, true);
         return;
       }
-      var add = e.target.closest(".nbt-add");
-      if (add) {
+      var edge = e.target.closest(".nbt-edge");
+      if (edge) {
         self.syncFromDom();
-        self.apply(M.insertRow(self.model, self.model.content.length), { r: self.model.content.length, c: 0 });
+        if (edge.classList.contains("nbt-edge-row")) {
+          self.apply(M.insertRow(self.model, self.model.content.length), { r: self.model.content.length, c: 0 });
+        } else {
+          var cols = M.colCount(self.model.content);
+          self.apply(M.insertCol(self.model, cols), { r: 0, c: cols });
+        }
       }
     });
 
@@ -997,16 +1026,49 @@
         },
       };
     }
+    var bar = document.createElement("div");
+    bar.className = "nb-actions-row";
+    function tool(title, icon, active, onClick) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "nb-actions-btn";
+      b.title = title;
+      b.setAttribute("aria-label", title);
+      b.innerHTML = icon;
+      b.classList.toggle("is-active", !!active);
+      b.addEventListener("click", onClick);
+      bar.appendChild(b);
+    }
+    function flip(key) {
+      return function () {
+        self.syncFromDom();
+        self.opts[key] = !self.opts[key];
+        self.numericCols = null;
+        self.build();
+        self.changed();
+        bar.querySelectorAll("button[data-opt]").forEach(function (x) { x.classList.toggle("is-active", !!self.opts[x.dataset.opt]); });
+      };
+    }
+    [["Header row", ICONS.row, "withHeadings"], ["Header column", ICONS.col, "headerColumn"], ["Show cell references", ICONS.refs, "showRefs"],
+      ["Compact", ICONS.dense, "dense"], ["Striped rows", ICONS.stripes, "striped"]].forEach(function (t) {
+      tool(t[0], t[1], self.opts[t[2]], flip(t[2]));
+      bar.lastChild.dataset.opt = t[2];
+    });
+    var sep = document.createElement("span");
+    sep.className = "nb-actions-sep";
+    bar.appendChild(sep);
     // Markdown is what copying the selected block gives, so it leads; CSV is an export and goes last.
-    return [
-      copy("Copy as Markdown", ICONS.markdown, M.toMarkdown, "Copied as Markdown"),
-      toggle("Header row", ICONS.row, "withHeadings"),
-      toggle("Header column", ICONS.col, "headerColumn"),
-      toggle("Show cell references", ICONS.refs, "showRefs"),
-      toggle("Compact", ICONS.dense, "dense"),
-      toggle("Striped rows", ICONS.stripes, "striped"),
-      copy("Export as CSV", ICONS.csv, M.toCsv, "Copied as CSV"),
-    ];
+    function copyTool(title, icon, make, done) {
+      tool(title, icon, false, function () {
+        self.syncFromDom();
+        navigator.clipboard.writeText(make(M.evaluate(self.model.content, self.model.merges))).then(function () {
+          window.ccToast({ message: done });
+        });
+      });
+    }
+    copyTool("Copy as Markdown", ICONS.markdown, M.toMarkdown, "Copied as Markdown");
+    copyTool("Export as CSV", ICONS.csv, M.toCsv, "Copied as CSV");
+    return [{ type: "html", element: bar }];
   };
 
   window.NotebookTable = NotebookTable;

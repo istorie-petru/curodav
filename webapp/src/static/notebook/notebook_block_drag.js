@@ -74,8 +74,36 @@
     setTimeout(checkpoint, 80);
   }
 
+  // The dotted drop line (Editor.js marks the block under a dragged block with ce-block--drop-target) and
+  // our own drop line must never outlive the drag: a missed dragleave, a drop outside the editor or a mouse
+  // released outside the window used to leave them behind.
+  function clearDropMarks() {
+    document.querySelectorAll(".ce-block--drop-target").forEach(function (b) { b.classList.remove("ce-block--drop-target"); });
+    if (line) { line.remove(); line = null; }
+    document.body.classList.remove("nb-dragging-blocks");
+  }
+
+  function wireDropCleanup() {
+    ["dragend", "drop", "mouseup", "pointerup", "touchend"].forEach(function (type) {
+      document.addEventListener(type, function () { setTimeout(clearDropMarks, 0); }, true);
+    });
+    document.addEventListener("dragleave", function (e) {
+      if (!e.relatedTarget) clearDropMarks();
+    }, true);
+    window.addEventListener("blur", clearDropMarks);
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape") clearDropMarks(); }, true);
+    // While dragging over the editor only the block under the pointer keeps the mark.
+    document.addEventListener("dragover", function (e) {
+      var over = e.target.closest && e.target.closest(".ce-block");
+      setTimeout(function () {
+        document.querySelectorAll(".ce-block--drop-target").forEach(function (b) { if (b !== over) b.classList.remove("ce-block--drop-target"); });
+      }, 0);
+    }, true);
+  }
+
   function wire(el) {
     mount = el;
+    wireDropCleanup();
     document.addEventListener("keydown", function (e) {
       if ((e.key !== "Delete" && e.key !== "Backspace") || e.ctrlKey || e.metaKey) return;
       if (!mount.isConnected || !selectedIndexes().length) return;
@@ -120,6 +148,11 @@
     }, true);
     document.addEventListener("mousemove", function (e) {
       if (!drag) return;
+      if (!e.buttons) {  // the button was released where no mouseup reaches the page
+        drag = null;
+        clearDropMarks();
+        return;
+      }
       if (!drag.moved && Math.abs(e.clientY - drag.y) + Math.abs(e.clientX - drag.x) < 4) return;
       drag.moved = true;
       document.body.classList.add("nb-dragging-blocks");

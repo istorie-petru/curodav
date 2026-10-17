@@ -307,7 +307,22 @@ class TestGlossaryTermReferences:
         resp = notebook_router.edit_glossary_term_modal("t1", _bare_request(), conn=conn)
         assert resp.context["selected_reference_keys"] == ["citation:c1"]
         assert [i["uid"] for i in resp.context["reference_items"]] == ["citation:c1"]
-        assert "ms_search_always" not in resp.body.decode() and 'aria-label="Search references"' in resp.body.decode()
+        assert "ms_search_always" not in resp.body.decode() and 'aria-label="Search reference"' in resp.body.decode()
+
+    def test_reference_rows_carry_their_own_pages_and_skip_empty_and_repeated_choices(self):
+        pages = {
+            "refkey_0": "citation:c1", "refstart_0": "10", "refend_0": "12",
+            "refkey_1": "", "refstart_1": "5",
+            "refkey_2": "citation:c1", "refstart_2": "99",
+            "refkey_nabc1": "citation:c2", "refend_nabc1": "40",
+        }
+        assert notebook_router._parse_reference_keys([], pages) == [("citation", "c1", "10", "12"), ("citation", "c2", "", "40")]
+
+    def test_a_web_reference_keeps_its_address_and_only_http_addresses(self):
+        pages = {"refkey_0": "citation:c1", "refurl_0": "https://example.org/a", "refstart_0": "5",
+                 "refkey_1": "citation:c2", "refurl_1": "javascript:alert(1)"}
+        assert notebook_router._parse_reference_keys([], pages) == [("citation", "c1", "https://example.org/a", ""), ("citation", "c2", "", "")]
+        assert db.format_page_range("https://example.org/a", "") == "https://example.org/a"
 
     def test_library_page_shows_reference_names(self, conn):
         _document(conn, uid="d1", title="Further Reading Doc")

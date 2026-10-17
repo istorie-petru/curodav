@@ -24,7 +24,7 @@ import uuid
 from datetime import datetime, timezone
 from urllib.parse import quote, urlencode
 
-from fastapi import APIRouter, Depends, Form, Header, Query, Request
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from .. import citation_formats, clock, db, notebook_fields, notebook_find, notebook_mentions
@@ -477,6 +477,35 @@ def mention_candidates(kind: str = "", q: str = "", conn=Depends(get_db)):
 _NOTEBOOK_HOME_CRUMB = [{"url": "/notebook", "name": "Notebook"}]
 
 
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
+
+
+@router.post("/images")
+async def upload_image(request: Request, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    """A figure's picture, sent as the raw request body; returns the URL a note refers to it by."""
+    from ..image_sniff import sniff_image_type
+
+    data = await request.body()
+    kind = sniff_image_type(data[:32]) if data else None
+    if kind is None:
+        return JSONResponse({"error": "Only JPEG, PNG, GIF and WebP images can be added"}, status_code=415)
+    if len(data) > MAX_IMAGE_BYTES:
+        return JSONResponse({"error": "That image is too large"}, status_code=413)
+    image_id = db.store_notebook_image(conn, data, f"image/{kind}")
+    return JSONResponse({"id": image_id, "url": db.IMAGE_URL_PREFIX + image_id})
+
+
+@router.get("/images/{image_id}")
+def serve_image(image_id: str, conn=Depends(get_db)):
+    image = db.get_notebook_image(conn, image_id)
+    if image is None:
+        raise HTTPException(404)
+    return Response(
+        content=image["data"], media_type=image["mime"],
+        headers={"Cache-Control": "private, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff"},
+    )
+
+
 @router.get("/{uid}")
 def document_page(uid: str, request: Request, back_to: str = "", back_label: str = "", conn=Depends(get_db)):
     """`back_to`/`back_label` --
@@ -545,7 +574,7 @@ def export_document_markdown(uid: str, conn=Depends(get_db)):
     doc = db.get_notebook_document(conn, uid)
     if doc is None:
         return RedirectResponse(url="/notebook", status_code=303)
-    blocks = (db.get_notebook_document_content(conn, uid) or {}).get("blocks", [])
+    blocks = db.inline_content_images(conn, db.get_notebook_document_content(conn, uid) or {}).get("blocks", [])
     name = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', " ", doc["title"] or "Untitled").strip(" .") or "Untitled"
     return Response(
         notebook_markdown.note_to_markdown(doc, blocks), media_type="text/markdown; charset=utf-8",
@@ -798,6 +827,7 @@ def update_document_glossary(
 # instead of this app's normal server-rendered-fragment convention.
 @router.get("/{uid}/content")
 def get_document_content(uid: str, conn=Depends(get_db)):
+    db.migrate_document_images(conn, uid)
     content = db.get_notebook_document_content(conn, uid)
     if content is None:
         return JSONResponse({"error": "document not found"}, status_code=404)
@@ -1507,13 +1537,16 @@ def _glossary_reference_items(conn) -> list[dict]:
     second round-trip -- the two uid spaces can't actually collide (both
     are independent uuid4s), but the prefix is still the honest encoding
     of what PRIMARY KEY (term_uid, ref_type, ref_uid) stores."""
-    return [{"uid": f"citation:{c['uid']}", "name": db.format_citation_display(c)} for c in db.list_citations(conn)]
+    return [
+        {"uid": f"citation:{c['uid']}", "name": db.format_citation_display(c), "data": {"web": "1"} if c.get("type") == "webpage" else {}}
+        for c in db.list_citations(conn)
+    ]
 
 
 async def _reference_pages(request: Request) -> dict:
     """The per-reference page boxes of an entry form (`refstart:<uid>` / `refend:<uid>`)."""
     form = await request.form()
-    return {k: str(v).strip() for k, v in form.items() if k.startswith(("refstart:", "refend:"))}
+    return {k: str(v).strip() for k, v in form.items() if k.startswith(("refstart:", "refend:", "refkey_", "refstart_", "refend_", "refurl_"))}
 
 
 def _parse_reference_keys(keys: list[str], pages: dict | None = None) -> list[tuple[str, str, str, str]]:
@@ -1532,6 +1565,20 @@ def _parse_reference_keys(keys: list[str], pages: dict | None = None) -> list[tu
         if sep and ref_type == "citation" and ref_uid:
             pages = pages if isinstance(pages, dict) else {}
             out.append((ref_type, ref_uid, pages.get(f"refstart:{ref_uid}", ""), pages.get(f"refend:{ref_uid}", "")))
+    # Rows of the entry form: `refkey_<n>` holds the chosen citation, `refstart_<n>` and `refend_<n>` its pages.
+    pages = pages if isinstance(pages, dict) else {}
+    seen = {(o[0], o[1]) for o in out}
+    rows = sorted((k.removeprefix("refkey_") for k in pages if k.startswith("refkey_")), key=lambda n: (len(n), n))
+    for n in rows:
+        ref_type, sep, ref_uid = pages[f"refkey_{n}"].partition(":")
+        if sep and ref_type == "citation" and ref_uid and (ref_type, ref_uid) not in seen:
+            seen.add((ref_type, ref_uid))
+            url = pages.get(f"refurl_{n}", "")
+            if url:
+                # A web page reference stores its address in the start-page slot; only http(s) addresses are kept.
+                out.append((ref_type, ref_uid, url if url.lower().startswith(("http://", "https://")) else "", ""))
+            else:
+                out.append((ref_type, ref_uid, pages.get(f"refstart_{n}", ""), pages.get(f"refend_{n}", "")))
     return out
 
 

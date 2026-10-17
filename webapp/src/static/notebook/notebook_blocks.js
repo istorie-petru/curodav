@@ -25,6 +25,16 @@
     );
   }
 
+  // One menu change = one undo step, and the editor is told the block changed so it saves.
+  window.notebookCommit = function (api, wrapper, change) {
+    var undo = window.notebookUndo;
+    if (undo) undo.checkpoint();
+    change();
+    var block = api && api.blocks && api.blocks.getBlockByElement ? api.blocks.getBlockByElement(wrapper) : null;
+    if (block && block.dispatchChange) block.dispatchChange();
+    if (undo) setTimeout(function () { undo.checkpoint(); }, 80);
+  };
+
   function el(tag, cls, attrs) {
     var e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -43,7 +53,7 @@
   // alignment setting and quote-mark icon, which were the parts of the
   // old look that prompted the rework.
 
-  var COLORS = ["blue", "green", "yellow", "purple", "red"];
+  var COLORS = window.NotebookPalette;
 
   function colorPicker(current, onPick) {
     var wrap = el("div", "cdx-nb-color-picker");
@@ -107,8 +117,10 @@
   NotebookQuote.prototype.renderSettings = function () {
     var self = this;
     return colorPicker(this.data.color, function (color) {
-      self.data.color = color;
-      self.wrapper.setAttribute("data-color", color);
+      window.notebookCommit(self.api, self.wrapper, function () {
+        self.data.color = color;
+        self.wrapper.setAttribute("data-color", color);
+      });
     });
   };
 
@@ -190,13 +202,15 @@
       btn.innerHTML = icon(meta.icon);
       if (key === self.data.type) btn.classList.add("nb-type-swatch--active");
       btn.addEventListener("click", function () {
-        self.data.type = key;
-        wrap.querySelectorAll(".nb-type-swatch").forEach(function (b) {
-          b.classList.remove("nb-type-swatch--active");
+        window.notebookCommit(self.api, self.wrapper, function () {
+          self.data.type = key;
+          wrap.querySelectorAll(".nb-type-swatch").forEach(function (b) {
+            b.classList.remove("nb-type-swatch--active");
+          });
+          btn.classList.add("nb-type-swatch--active");
+          self.wrapper.setAttribute("data-color", meta.color);
+          self.iconWrap.innerHTML = icon(meta.icon);
         });
-        btn.classList.add("nb-type-swatch--active");
-        self.wrapper.setAttribute("data-color", meta.color);
-        self.iconWrap.innerHTML = icon(meta.icon);
       });
       wrap.appendChild(btn);
     });
@@ -209,9 +223,11 @@
     titleToggle.innerHTML = icon("eye");
     titleToggle.classList.toggle("nb-title-toggle--active", this.data.hideTitle);
     titleToggle.addEventListener("click", function () {
-      self.data.hideTitle = !self.data.hideTitle;
-      self.titleEl.hidden = self.data.hideTitle;
-      titleToggle.classList.toggle("nb-title-toggle--active", self.data.hideTitle);
+      window.notebookCommit(self.api, self.wrapper, function () {
+        self.data.hideTitle = !self.data.hideTitle;
+        self.titleEl.hidden = self.data.hideTitle;
+        titleToggle.classList.toggle("nb-title-toggle--active", self.data.hideTitle);
+      });
     });
     var outer = el("div", "cdx-nb-callout-settings");
     outer.appendChild(wrap);
@@ -233,6 +249,7 @@
   };
 
   function NotebookDelimiter(params) {
+    this.api = params.api;
     var d = params.data || {};
     this.data = {
       style: DELIMITER_STYLES[d.style] ? d.style : "stars",
@@ -253,19 +270,43 @@
   NotebookDelimiter.prototype.renderSettings = function () {
     var self = this;
     var ICONS = { stars: "star", line: "minus", dots: "more" };
-    return Object.keys(DELIMITER_STYLES).map(function (key) {
-      return {
-        icon: icon(ICONS[key]),
-        title: DELIMITER_STYLES[key].label,
-        isActive: self.data.style === key,
-        closeOnActivate: true,
-        onActivate: function () {
+    var row = el("div", "nb-actions-row", { role: "group", "aria-label": "Divider style" });
+    Object.keys(DELIMITER_STYLES).forEach(function (key) {
+      var b = el("button", "nb-actions-btn", { type: "button", title: DELIMITER_STYLES[key].label, "aria-label": DELIMITER_STYLES[key].label });
+      b.innerHTML = icon(ICONS[key]);
+      b.classList.toggle("is-active", self.data.style === key);
+      b.addEventListener("click", function () {
+        window.notebookCommit(self.api, self.wrapper, function () {
           self.data.style = key;
           self.wrapper.setAttribute("data-style", key);
-        },
-      };
+        });
+        row.querySelectorAll(".nb-actions-btn").forEach(function (x) { x.classList.toggle("is-active", x === b); });
+      });
+      row.appendChild(b);
     });
+    return { type: "html", element: row };
   };
+
+  // The vendored Header lists its five levels as five menu rows; this keeps the tool and shows one icon row.
+  if (window.Header) {
+    window.NotebookHeader = class NotebookHeader extends window.Header {
+      renderSettings() {
+        var self = this;
+        var row = el("div", "nb-actions-row", { role: "group", "aria-label": "Heading level" });
+        this.levels.forEach(function (level) {
+          var b = el("button", "nb-actions-btn", { type: "button", title: "Heading " + level.number, "aria-label": "Heading " + level.number });
+          b.innerHTML = level.svg;
+          b.classList.toggle("is-active", self.currentLevel.number === level.number);
+          b.addEventListener("click", function () {
+            self.setLevel(level.number);
+            self.api.toolbar.close();
+          });
+          row.appendChild(b);
+        });
+        return { type: "html", element: row };
+      }
+    };
+  }
 
   window.NotebookQuote = NotebookQuote;
   window.NotebookCallout = NotebookCallout;

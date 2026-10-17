@@ -9,20 +9,29 @@
   // No save-status text: a failed save raises one error toast (and again
   // only after a later save succeeds and fails anew), so a normal save is
   // silent.
-  function save(editor) {
-    editor
+  // The last blocks that reached the server (as JSON), so a save with nothing new in it sends nothing.
+  var lastSaved = null;
+  var KEEPALIVE_LIMIT = 60000;
+
+  function save(editor, leaving) {
+    return editor
       .save()
       .then(function (data) {
+        var blocks = JSON.stringify(data.blocks);
+        if (blocks === lastSaved) return null;
+        var body = JSON.stringify(data);
         return fetch(contentUrl, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data),
+          body: body,
+          // A request started while the page is going away survives it only with keepalive, which has a size limit.
+          keepalive: !!leaving && body.length < KEEPALIVE_LIMIT,
+        }).then(function (resp) {
+          if (!resp.ok) throw new Error("save failed");
+          lastSaved = blocks;
+          failedSaves = 0;
+          document.dispatchEvent(new CustomEvent("notebook-saved"));
         });
-      })
-      .then(function (resp) {
-        if (!resp.ok) throw new Error("save failed");
-        failedSaves = 0;
-        document.dispatchEvent(new CustomEvent("notebook-saved"));
       })
       .catch(function () {
         if (failedSaves++ === 0) {
@@ -373,7 +382,7 @@
         autofocus: true,
         tools: {
           header: {
-            class: window.Header,
+            class: window.NotebookHeader || window.Header,
             config: { levels: [1, 2, 3, 4, 5], defaultLevel: 2 },
           },
           list: { class: window.EditorjsList, inlineToolbar: true },
@@ -383,7 +392,7 @@
           delimiter: window.NotebookDelimiter,
           timeline: { class: window.NotebookTimeline, inlineToolbar: true },
           callout: { class: window.NotebookCallout, inlineToolbar: true },
-          image: { class: window.SimpleImage, inlineToolbar: true },
+          image: window.NotebookImage,
           inlineCode: window.NotebookInlineCode,
           strike: window.NotebookStrike,
           color: window.NotebookColor,
@@ -404,6 +413,7 @@
           if (window.notebookRenderToc) {
             window.notebookRenderToc(mount);
           }
+          if (window.notebookRenumberFigures) window.notebookRenumberFigures(mount);
           if (window.notebookRenderRelationships) {
             window.notebookRenderRelationships(mount);
           }
@@ -411,6 +421,22 @@
         },
       });
       window.notebookEditor = editor;
+      editor.isReady.then(function () {
+        return editor.save();
+      }).then(function (data) {
+        if (lastSaved === null) lastSaved = JSON.stringify(data.blocks);
+      });
+      // Closing the tab or leaving the page inside the wait before an autosave must not lose what was just typed.
+      function saveNow() {
+        if (!saveTimer) return;
+        clearTimeout(saveTimer);
+        saveTimer = null;
+        save(editor, true);
+      }
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "hidden") saveNow();
+      });
+      window.addEventListener("pagehide", saveNow);
       if (window.notebookWireMentions) window.notebookWireMentions(mount);
       if (window.notebookWireBlockDrag) window.notebookWireBlockDrag(mount);
       wireMarkdownShortcuts(editor, mount);
@@ -444,6 +470,9 @@
           });
         });
       }
+      editor.isReady.then(function () {
+        if (window.notebookRenumberFigures) window.notebookRenumberFigures(mount);
+      });
       if (window.notebookRenderFootnoteList) {
         editor.isReady.then(function () {
           window.notebookRenderFootnoteList(mount);

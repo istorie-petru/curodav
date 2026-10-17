@@ -166,20 +166,6 @@
   }
 }
 
-/* Image block caption placeholder (simpleimage.css) -- same pattern as
-   the quote/callout placeholders above. Its "with background"/"with
-   border" style variants (toggled via block settings) are also hardcoded
-   light-gray, which reads wrong floating behind a photo in dark mode. */
-[data-theme="dark"] .cdx-simple-image__caption[contentEditable=true][data-placeholder]:before {
-  color: var(--fg-secondary);
-}
-[data-theme="dark"] .cdx-simple-image__picture--with-background {
-  background: var(--bg-elevated);
-}
-[data-theme="dark"] .cdx-simple-image__picture--with-border {
-  border-color: var(--border-strong);
-}
-
 /* Inline code (inlinecode.css) -- hardcoded light-pink/dark-red pair,
    no local custom property upstream. Same hue mapping as Callout's
    "Danger" tone (--tag-red-*) rather than inventing a new color, since

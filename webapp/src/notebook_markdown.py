@@ -135,13 +135,22 @@ def blocks_to_markdown(blocks: list[dict]) -> str:
         elif kind == "table":
             parts.append(_table(data.get("content", []), notes))
         elif kind == "image":
-            parts.append(f"![{inline_to_markdown(data.get('caption', ''))}]({data.get('url', '')})")
+            parts.append(_figure(data))
         elif kind == "html":
             parts.append(data.get("html", ""))
         elif data.get("text"):
             parts.append(inline_to_markdown(data["text"], notes))
     parts += [f"[^{n}]: {text}" for n, text in enumerate(notes, start=1)]
     return "\n\n".join(p for p in parts if p.strip()) + "\n"
+
+
+def _figure(data: dict) -> str:
+    images = data.get("images") or ([{"src": data["url"], "alt": data.get("caption", "")}] if data.get("url") else [])
+    lines = [f"![{inline_to_markdown(i.get('alt', ''))}]({i.get('src', '')})" for i in images]
+    text = " ".join(t for t in (inline_to_markdown(data.get("caption", "")), inline_to_markdown(data.get("credit", ""))) if t)
+    if text:
+        lines.append(f"*{text}*")
+    return "\n\n".join(lines)
 
 
 # Markdown -> blocks

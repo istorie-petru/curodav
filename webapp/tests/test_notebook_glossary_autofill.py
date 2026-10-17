@@ -66,3 +66,23 @@ def test_the_autofill_route_reports_what_it_added(conn):
     resp = notebook_router.autofill_document_glossary("d1", conn=conn)
     assert json.loads(resp.body)["added"] == ["Hoplite"]
     assert notebook_router.autofill_document_glossary("missing", conn=conn).status_code == 404
+
+
+def test_embedded_images_are_not_scanned_as_text():
+    from src.db import notebook as nb
+    content = {"blocks": [{"type": "image", "data": {"images": [{"src": "data:image/png;base64,Term3alpha" * 1000, "alt": "plain alt"}], "caption": "A cap"}}]}
+    text = nb._extract_notebook_plain_text(content)
+    assert "term3alpha" not in text and "plain alt" in text and "a cap" in text
+
+
+def test_detection_by_word_lookup_matches_words_phrases_and_aliases(tmp_path):
+    from src import db
+    from src.db import notebook as nb
+    with db.connect(tmp_path / "c.sqlite") as conn:
+        for uid, term, aliases in [("a", "Feudalism", []), ("b", "Divine right", []), ("d", "Serfdom", ["villeinage"]), ("e", "Fealty", [])]:
+            db.upsert_glossary_term(conn, {"uid": uid, "term": term, "definition": "", "aliases": aliases})
+        text = "Under <b>feudalism</b> the divine right of kings, not divine rights; villeinage; unfealty"
+        content = {"blocks": [{"type": "paragraph", "data": {"text": text}}]}
+        assert sorted(nb._detect_glossary_term_uids(conn, content)) == ["a", "b", "d"]
+        content["blocks"][0]["data"]["text"] = "divine rights only, and right divine"
+        assert nb._detect_glossary_term_uids(conn, content) == []

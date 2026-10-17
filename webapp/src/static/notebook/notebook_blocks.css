@@ -34,6 +34,35 @@
   --nb-color-bg: var(--tag-red-bg);
 }
 
+.cdx-nb-quote[data-color="orange"],
+.cdx-nb-callout[data-color="orange"],
+.nb-color-swatch[data-color="orange"],
+.nb-type-swatch[data-color="orange"] {
+  --nb-color-fg: var(--tag-orange-fg);
+  --nb-color-bg: var(--tag-orange-bg);
+}
+.cdx-nb-quote[data-color="teal"],
+.cdx-nb-callout[data-color="teal"],
+.nb-color-swatch[data-color="teal"],
+.nb-type-swatch[data-color="teal"] {
+  --nb-color-fg: var(--tag-teal-fg);
+  --nb-color-bg: var(--tag-teal-bg);
+}
+.cdx-nb-quote[data-color="pink"],
+.cdx-nb-callout[data-color="pink"],
+.nb-color-swatch[data-color="pink"],
+.nb-type-swatch[data-color="pink"] {
+  --nb-color-fg: var(--tag-pink-fg);
+  --nb-color-bg: var(--tag-pink-bg);
+}
+.cdx-nb-quote[data-color="gray"],
+.cdx-nb-callout[data-color="gray"],
+.nb-color-swatch[data-color="gray"],
+.nb-type-swatch[data-color="gray"] {
+  --nb-color-fg: var(--tag-gray-fg);
+  --nb-color-bg: var(--tag-gray-bg);
+}
+
 /* ----------------------- Quote ----------------------- */
 
 .cdx-nb-quote {
@@ -161,9 +190,12 @@
   align-items: center;
   justify-content: center;
   margin: 0;
-  min-height: 1.7em;
+  min-height: 2.4em; /* the height of an empty paragraph block */
   color: var(--fg-secondary);
 }
+/* Space before and after sits on the block, so its handle stays level with the divider. */
+.ce-block:has(.cdx-nb-delimiter) { margin-block: var(--space-3); }
+.ce-block:first-child:has(.cdx-nb-delimiter) { margin-top: 0; }
 .cdx-nb-delimiter[data-style="stars"]::before {
   content: "* * *";
   font-size: 1.2em;
@@ -173,9 +205,6 @@
   content: "\2022 \2022 \2022";
   font-size: 1.1em;
   letter-spacing: 0.4em;
-}
-.cdx-nb-delimiter[data-style="line"] {
-  min-height: 1.7em;
 }
 .cdx-nb-delimiter[data-style="line"]::before {
   content: "";
@@ -217,9 +246,13 @@
 /* Timeline block (notebook_timeline.js): a vertical line with a bullet per entry; title and description start on the bullet's row. */
 .nbtl{position:relative; padding:var(--space-1) 0;}
 .nbtl-item{position:relative; display:flex; align-items:baseline; gap:var(--space-3); padding:2px 0 var(--space-2);}
-.nbtl-item::before{content:""; position:absolute; left:calc(var(--nbtl-date-w, 0px) + 5px); top:1.2em; bottom:-1px; width:2px; background:var(--border);}
-.nbtl-item:last-child::before{display:none;}
-.nbtl-bullet{position:relative; flex:none; width:12px; height:12px; border-radius:50%; background:var(--fg-tertiary); align-self:flex-start; margin-top:.45em; z-index:1;}
+/* The line hangs from each bullet (an absolutely placed child keeps the bullet's own x), so it stays between the circles whatever the date column holds. */
+.nbtl-bullet{flex:none; width:12px; height:12px; border-radius:50%; background:var(--nbtl-fg, var(--fg-tertiary)); align-self:flex-start; margin-top:.45em;}
+.nbtl-bullet::after{content:""; position:absolute; top:calc(.45em + 14px); bottom:-1px; margin-left:5px; width:2px; background:var(--nbtl-line, var(--border));}
+.nbtl-item:last-child .nbtl-bullet::after{display:none;}
+.nbtl.has-dates .nbtl-date{width:96px; min-width:96px; text-align:right;}
+.nbtl[data-color]{--nbtl-line:color-mix(in srgb, var(--nbtl-fg) 45%, transparent);}
+.nbtl-swatch-dot{width:12px; height:12px; border-radius:50%; background:var(--nbtl-fg, var(--fg-tertiary));}
 .nbtl-text{flex:1; min-width:0; overflow-wrap:anywhere; display:flex; flex-direction:column;}
 .nbtl-title, .nbtl-desc{display:block;}
 .nbtl-title, .nbtl-desc, .nbtl-date{outline:none;}
@@ -231,3 +264,12 @@
 /* Air around the larger blocks, so they do not sit tight against the text above and below. */
 .ce-block .cdx-nb-quote, .ce-block .cdx-nb-callout, .ce-block .cdx-nb-code, .ce-block .nbtl{margin-block:var(--space-4);}
 .nbtl{padding-block:var(--space-1);}
+.nbtl[data-color="blue"], .nbtl-swatch[data-color="blue"]{--nbtl-fg:var(--tag-blue-fg);}
+.nbtl[data-color="green"], .nbtl-swatch[data-color="green"]{--nbtl-fg:var(--tag-green-fg);}
+.nbtl[data-color="yellow"], .nbtl-swatch[data-color="yellow"]{--nbtl-fg:var(--tag-yellow-fg);}
+.nbtl[data-color="purple"], .nbtl-swatch[data-color="purple"]{--nbtl-fg:var(--tag-purple-fg);}
+.nbtl[data-color="red"], .nbtl-swatch[data-color="red"]{--nbtl-fg:var(--tag-red-fg);}
+.nbtl[data-color="orange"], .nbtl-swatch[data-color="orange"]{--nbtl-fg:var(--tag-orange-fg);}
+.nbtl[data-color="teal"], .nbtl-swatch[data-color="teal"]{--nbtl-fg:var(--tag-teal-fg);}
+.nbtl[data-color="pink"], .nbtl-swatch[data-color="pink"]{--nbtl-fg:var(--tag-pink-fg);}
+.nbtl[data-color="gray"], .nbtl-swatch[data-color="gray"]{--nbtl-fg:var(--tag-gray-fg);}

@@ -104,3 +104,17 @@ def test_a_timeline_with_rich_text_exports_as_markdown():
     from src.notebook_markdown import blocks_to_markdown
     out = blocks_to_markdown([{"type": "timeline", "data": {"items": [{"title": "<b>First</b>", "description": "Desc <i>one</i>", "date": ""}]}}])
     assert out == "- **First** *Desc one*" or "First" in out and "<" not in out
+
+
+def test_a_figure_exports_each_image_then_its_caption_and_credit():
+    blocks = [{"type": "image", "data": {
+        "images": [{"src": "data:image/png;base64,AA", "alt": "Left"}, {"src": "data:image/png;base64,BB", "alt": "Right"}],
+        "caption": "Two views", "credit": "Source: lab"}}]
+    out = md.blocks_to_markdown(blocks)
+    assert out.startswith("![Left](data:image/png;base64,AA)\n\n![Right](data:image/png;base64,BB)")
+    assert "*Two views Source: lab*" in out
+
+
+def test_a_figure_saved_by_the_old_image_block_still_exports():
+    out = md.blocks_to_markdown([{"type": "image", "data": {"url": "data:image/png;base64,AA", "caption": "Old"}}])
+    assert "![Old](data:image/png;base64,AA)" in out

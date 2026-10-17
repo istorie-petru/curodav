@@ -1,6 +1,0 @@
-/* Extracted from simpleimage.umd.js's self-injected <style> (see NOTICE.md) --
-   loaded via <link> instead of the bundle's own runtime injection because
-   this app's CSP (style-src with a per-request nonce, no 'unsafe-inline')
-   blocks unnonced inline <style> tags; a same-origin linked stylesheet
-   needs no nonce at all. */
-.cdx-simple-image .cdx-loader{min-height:200px}.cdx-simple-image .cdx-input{margin-top:10px}.cdx-simple-image img{max-width:100%;vertical-align:bottom}.cdx-simple-image__caption[contentEditable=true][data-placeholder]:empty:before{position:absolute;content:attr(data-placeholder);color:#707684;font-weight:400;opacity:0}.cdx-simple-image__caption[contentEditable=true][data-placeholder]:empty:before{opacity:1}.cdx-simple-image__caption[contentEditable=true][data-placeholder]:empty:focus:before{opacity:0}.cdx-simple-image__picture--with-background{background:#eff2f5;padding:10px}.cdx-simple-image__picture--with-background img{display:block;max-width:60%;margin:0 auto}.cdx-simple-image__picture--with-border{border:1px solid #e8e8eb;padding:1px}.cdx-simple-image__picture--stretched img{max-width:none;width:100%}

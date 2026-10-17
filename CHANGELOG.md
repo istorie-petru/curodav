@@ -4,6 +4,20 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.4.0]
+
+- Notebook figures: the image block is now a figure with a grid of up to 12 images in 1 to 4 columns, mouse resize and drag to reorder, a caption, source line and optional "Figure N." numbering edited in the block menu, and lazy-loaded downscaled images. Old image blocks load as one-image figures; Markdown export includes the caption.
+- Notebook tables: the + button is replaced by hover strips on the bottom and right edge; column, row and block menus are compact icon toolbars with short dropdowns; columns wrap between words instead of splitting them.
+- Notebook menus: the block menu uses icon rows for alignment, heading level, divider style and Duplicate, Move and Delete; the endnote menu is icon-only; the wikilink picker no longer leaves a placeholder behind.
+- Timeline: a color per timeline, the line stays between the circles when dates are shown, dates share one column width.
+- Editor fixes: a heading's handle sits level with its text; dividers are as tall as an empty block with spacing; menu changes on dividers, quotes, callouts and timelines now save and undo as one step.
+- Entries: each reference is one row with a single-choice citation dropdown and its start and end page; a + button adds another row. A reference to a web page citation takes the page's address (http or https) instead of page numbers and shows it as a link.
+- Banners: the header banner is exactly 12:1 at every desktop width (no 56 to 88px clamp); on phones it keeps a 56px minimum so the controls fit.
+- Notebook images and saving: figure pictures are kept once in an image store (a 15-photo note went from 7 MB to under 300 KB and from a 6.7 second save to 0.3 seconds); entry detection is about 45 times faster; saves send nothing when nothing changed and happen when the page is left. Existing notes convert when opened.
+- Notebook consistency: one nine-color palette for inline color, tables, quotes and timelines; one wikilink picker for the toolbar button, the slash command and `[[`; alignment only in the block menu; one icon-row style across notebook menus.
+- Editor: the dotted drop line shown while moving a block no longer stays behind after the drop, a cancelled drag or a mouse released outside the window.
+- Tests: a green run leaves no files in the temp folder.
+
 ## [4.3.1]
 
 - Banners: the header banner is 12:1 (the crop shape), at most 88px and at least 56px tall; header icons and buttons line up and stay on one row on phones.

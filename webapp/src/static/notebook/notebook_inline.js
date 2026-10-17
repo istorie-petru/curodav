@@ -1,10 +1,10 @@
 // Notebook inline text tools (Phase H): strikethrough, combined text and
-// highlight color, the More menu (subscript, superscript, alignment) and
+// highlight color, the More menu (subscript, superscript) and
 // remove formatting, plus the alignment block tune. Same inline-tool shape
 // as notebook_footnotes.js: render() button, surround(range), checkState().
 // Feature notes: curodav-notes/documentation/features/notebook-editor.md.
 (function () {
-  var COLORS = ["red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "gray"];
+  var COLORS = window.NotebookPalette;
   var FORMAT_TAGS = ["B", "STRONG", "I", "EM", "U", "S", "MARK", "CODE", "SUB", "SUP", "A"];
   var KEEP_CLASSES = ["cdx-footnote-ref", "cdx-wikilink"];
 
@@ -221,14 +221,7 @@
     return !!mark;
   };
 
-  // ---- More menu: subscript, superscript, alignment -----------------
-  function currentBlockWrapper() {
-    var sel = window.getSelection();
-    var node = sel && sel.anchorNode;
-    var el = node && (node.nodeType === Node.TEXT_NODE ? node.parentElement : node);
-    return el && el.closest ? el.closest(".nb-align") : null;
-  }
-
+  // ---- More menu: subscript, superscript -----------------
   // The toolbar's tool instances are recreated every time it opens, so the
   // "keep the More panel open after an action" flag lives here. It clears on
   // a click outside the toolbar, Escape, or a collapsed selection.
@@ -273,13 +266,10 @@
     [
       ["sub", ICONS.sub, "Subscript"],
       ["sup", ICONS.sup, "Superscript"],
-      ["left", ICONS.left, "Align left"],
-      ["center", ICONS.center, "Align center"],
-      ["right", ICONS.right, "Align right"],
     ].forEach(function (item) {
       var b = document.createElement("button");
       b.type = "button";
-      b.className = "nb-more-item";
+      b.className = "nb-actions-btn";
       b.innerHTML = item[1];
       b.title = item[2];
       b.setAttribute("aria-label", item[2]);
@@ -296,17 +286,6 @@
   };
   NotebookMore.prototype.run = function (action) {
     moreKeepOpen = true;
-    if (action === "left" || action === "center" || action === "right") {
-      var wrap = currentBlockWrapper();
-      if (wrap) {
-        wrap.setAttribute("data-align", action);
-        var editor = window.notebookEditor;
-        var block = editor && editor.blocks.getBlockByElement(wrap);
-        if (block && block.dispatchChange) block.dispatchChange();
-      }
-      this.markState();
-      return;
-    }
     var sel = window.getSelection();
     if (!sel.rangeCount) return;
     var tag = action === "sub" ? "SUB" : "SUP";
@@ -328,13 +307,11 @@
   };
   NotebookMore.prototype.markState = function () {
     if (!this.panel) return;
-    var wrap = currentBlockWrapper();
-    var align = (wrap && wrap.getAttribute("data-align")) || "left";
     var sub = !!findScript("SUB");
     var sup = !!findScript("SUP");
-    this.panel.querySelectorAll(".nb-more-item").forEach(function (b) {
+    this.panel.querySelectorAll(".nb-actions-btn").forEach(function (b) {
       var a = b.getAttribute("data-action");
-      b.classList.toggle("is-active", a === align || (a === "sub" && sub) || (a === "sup" && sup));
+      b.classList.toggle("is-active", (a === "sub" && sub) || (a === "sup" && sup));
     });
   };
   NotebookMore.prototype.surround = function () {};
@@ -401,22 +378,34 @@
     this.wrapper.appendChild(content);
     return this.wrapper;
   };
+  // One row of three icon buttons in the block menu instead of three list items.
   NotebookAlignTune.prototype.render = function () {
     var self = this;
-    return ["left", "center", "right"].map(function (align) {
-      return {
-        icon: ICONS[align],
-        title: "Align " + align,
-        onActivate: function () {
-          self.data = align;
-          if (self.wrapper) self.wrapper.setAttribute("data-align", align);
-          if (self.block && self.block.dispatchChange) self.block.dispatchChange();
-        },
-        isActive: self.wrapper ? self.wrapper.getAttribute("data-align") === align : self.data === align,
-        closeOnActivate: true,
-        toggle: "nb-align",
-      };
+    var row = document.createElement("div");
+    row.className = "nb-actions-row";
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", "Align");
+    function current() {
+      return (self.wrapper && self.wrapper.getAttribute("data-align")) || self.data;
+    }
+    ["left", "center", "right"].forEach(function (align) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "nb-actions-btn";
+      b.title = "Align " + align;
+      b.setAttribute("aria-label", "Align " + align);
+      b.dataset.align = align;
+      b.innerHTML = ICONS[align];
+      b.addEventListener("click", function () {
+        self.data = align;
+        if (self.wrapper) self.wrapper.setAttribute("data-align", align);
+        if (self.block && self.block.dispatchChange) self.block.dispatchChange();
+        row.querySelectorAll(".nb-actions-btn").forEach(function (x) { x.classList.toggle("is-active", x.dataset.align === align); });
+      });
+      b.classList.toggle("is-active", current() === align);
+      row.appendChild(b);
     });
+    return { type: "html", element: row };
   };
   NotebookAlignTune.prototype.save = function () {
     return { align: (this.wrapper && this.wrapper.getAttribute("data-align")) || this.data };

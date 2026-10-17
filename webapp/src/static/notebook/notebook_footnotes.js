@@ -406,27 +406,30 @@
     if (!mark) return;
     var generated = !!mark.getAttribute("data-footnote-kind");
     var menu = document.createElement("div");
-    menu.className = "cdx-footnote-menu";
+    menu.className = "cdx-footnote-menu nb-actions-row";
     menu.setAttribute("role", "menu");
     menu.dataset.for = li.id;
     var items = generated
-      ? [["Regenerate", function () { openCitationModal(li); }], ["Remove generation", function () { removeGeneration(mark); }]]
-      : [["Generate citation", function () { openCitationModal(li); }]];
+      ? [["Regenerate", "edit-3", function () { openCitationModal(li); }], ["Remove generation", "x", function () { removeGeneration(mark); }]]
+      : [["Generate citation", "sparkles", function () { openCitationModal(li); }]];
     items.forEach(function (item) {
       var b = document.createElement("button");
       b.type = "button";
+      b.className = "nb-actions-btn";
       b.setAttribute("role", "menuitem");
-      b.textContent = item[0];
+      b.title = item[0];
+      b.setAttribute("aria-label", item[0]);
+      b.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#icon-' + item[1] + '"></use></svg>';
       b.addEventListener("click", function () {
         closeEntryMenu();
-        item[1]();
+        item[2]();
       });
       menu.appendChild(b);
     });
     var rect = anchor.getBoundingClientRect();
     menu.style.position = "fixed";
     menu.style.top = rect.bottom + 4 + "px";
-    menu.style.left = Math.max(8, rect.right - 180) + "px";
+    menu.style.left = Math.max(8, rect.right - 64) + "px";
     document.body.appendChild(menu);
     menu._entry = window.NotebookFloating.open(menu, function () { menu.remove(); }, null, anchor);
   }

@@ -14,7 +14,9 @@ app-independent round-trip (ICS/VCF re-parse cleanly).
 
 from __future__ import annotations
 
+import base64
 import csv
+import hashlib
 import io
 import json
 import re
@@ -250,6 +252,7 @@ def build_backup_payload(conn) -> dict[str, Any]:
         "event_task_relations": db.list_event_task_relations(conn),
         "notebook_documents": db.list_notebook_documents(conn, scope="all"),
         "notebook_field_config": db.list_notebook_field_config(conn),
+        "notebook_images": data_exchange.notebook_image_rows(conn),
         "citations": db.list_citations(conn),
         "notebook_citations": data_exchange.notebook_citation_rows(conn),
         "glossary_terms": db.list_glossary_terms(conn),
@@ -738,6 +741,10 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
             conn, row["event_uid"], row["task_uid"], row.get("is_work_allocation", 0)
         )
         db.restore_work_session_fields(conn, row)
+    for row in payload.get("notebook_images", []):
+        data = base64.b64decode(row.get("data_b64", ""))
+        if db.get_notebook_image(conn, hashlib.sha256(data).hexdigest()) is None:
+            db.store_notebook_image(conn, data, row.get("mime", "image/png"))
     for row in payload.get("notebook_documents", []):
         db.upsert_notebook_document(conn, row)
         count += 1

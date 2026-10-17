@@ -54,25 +54,16 @@
         {% set ms_allow_new = false %}
         {% set ms_wide = true %}
         {% include "_widget_list_multiselect.html" %}
-        <div class="field field-wide">
-            {% set ms_allow_new = false %}
-            {% set ms_mode = 'select' %}
-            {% set ms_form_id = 'glossary-term-form' %}
-            {% set ms_name = 'reference_keys' %}
-            {% set ms_label = 'References' %}
-            {% set ms_search_always = true %}
-            {% set ms_items = reference_items %}
-            {% set ms_selected = selected_reference_keys %}
-            {% include "_widget_list_multiselect.html" %}
-            <div class="entry-ref-rows" id="entry-reference-rows" data-form="glossary-term-form">
-                {% for r in selected_references %}
-                <div class="entry-ref-row" data-key="citation:{{ r.ref_uid }}">
-                    <span class="entry-ref-name">{{ r.name }}</span>
-                    <div class="field"><label>From page</label>{{ text_input({'name': 'refstart:' ~ r.ref_uid, 'value': r.page_start, 'form': 'glossary-term-form'}) }}</div>
-                    <div class="field"><label>To page</label>{{ text_input({'name': 'refend:' ~ r.ref_uid, 'value': r.page_end, 'form': 'glossary-term-form'}) }}</div>
-                </div>
+        <div class="field field-wide entry-ref-block" data-repeatable-rows-scope>
+            <div class="entry-ref-rows" id="entry-reference-rows">
+                {% for r in (selected_references or [none]) %}
+                {% set ref_i = loop.index0 %}
+                {% set ref = r %}
+                {% include "_entry_reference_row.html" %}
                 {% endfor %}
             </div>
+            <template id="entry-reference-template">{% set ref_i = '__I__' %}{% set ref = none %}{% include "_entry_reference_row.html" %}</template>
+            <button type="button" class="icon-btn" data-entry-ref-add title="Add reference" aria-label="Add reference">{{ icon('plus', 'icon-sm') }}</button>
         </div>
         {% for kg in kind_field_groups %}
         <div class="field field-wide entry-kind-fields" data-kind-fields="{{ kg.name }}"{% if kg.name != current_kind %} hidden{% endif %}>

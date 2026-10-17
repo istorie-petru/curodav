@@ -10,7 +10,6 @@ why below.**
 | header.umd.js      | @editorjs/header    | 2.8.9   | `Header`        |
 | list.umd.js        | @editorjs/list      | 2.0.9   | `EditorjsList`  |
 | dragdrop.umd.js    | editorjs-drag-drop  | 1.1.16  | `DragDrop`      |
-| simpleimage.umd.js | @editorjs/simple-image | 1.6.0 | `SimpleImage` |
 | inlinecode.umd.js  | @editorjs/inline-code  | 1.5.2 | `InlineCode`  |
 | undo.umd.js        | editorjs-undo       | 2.0.28  | `Undo`          |
 | prism.js           | prismjs             | 1.29.0  | `Prism`         |
@@ -126,3 +125,5 @@ CSS, a hint-alignment snippet, a notify/toast CSS, and the built-in
 Paragraph tool's own CSS) -- all of those go into the one `editorjs.css`.
 
 `table.umd.js`/`table.css` (@editorjs/table) were removed 2026-10-10: the table is a first-party tool now (`notebook_table.js`), which loads the old tool's saved data unchanged.
+
+`simpleimage` (2026-10-17) was removed: the figure block is now first-party (`../notebook_image.js`).

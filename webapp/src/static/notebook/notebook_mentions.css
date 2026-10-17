@@ -19,7 +19,6 @@
 .cdx-mention-row-sub{flex:none; color:var(--fg-tertiary); font-size:var(--text-sm);}
 .cdx-mention-group{padding:6px 10px 2px; color:var(--fg-tertiary); font-size:var(--text-sm);}
 #notebook-editor data.cdx-mention[data-kind="entry"]{background:transparent; text-decoration:underline dotted; text-underline-offset:3px; padding:0;}
-.cdx-wikilink-picker-sub{margin-left:auto; color:var(--fg-tertiary); font-size:var(--text-sm);}
 ::highlight(cdx-entry-link){text-decoration:underline dotted; text-underline-offset:3px;}
 #notebook-editor.has-entry-hover{cursor:default;}
 .cdx-entry-card-pop{position:fixed; z-index:10050; max-width:340px; padding:var(--space-1); background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md); box-shadow:var(--elevation-2);}

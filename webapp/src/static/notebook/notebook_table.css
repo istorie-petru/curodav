@@ -4,7 +4,7 @@
 .nbt-scroll{overflow-x:auto; isolation:isolate;}
 .nbt-table{width:100%; border-collapse:collapse; table-layout:auto;}
 .nbt-table td{position:relative; border:1px solid var(--border); padding:0; vertical-align:top; min-width:48px;}
-.nbt-cell{padding:4px 8px; min-height:1.5em; outline:none; word-break:break-word; font-weight:var(--font-weight-regular);}
+.nbt-cell{padding:4px 8px; min-height:1.5em; outline:none; font-weight:var(--font-weight-regular);}
 .nbt-cell:focus{box-shadow:inset 0 0 0 2px var(--accent);}
 .nbt-head{background:var(--accent-neutral-subtle);}
 .nbt.has-selection .nbt-cell:focus{box-shadow:none;}
@@ -29,11 +29,17 @@
 .nbt.show-refs .nbt-grip{opacity:1; font-size:10px; color:var(--fg-secondary);}
 .nbt.show-refs .nbt-grip-col{height:14px; left:30%; right:30%;}
 .nbt.show-refs .nbt-grip-row{width:14px; top:30%; bottom:30%;}
-.nbt-add{position:absolute; z-index:1; width:22px; height:22px; padding:0; border:0; border-radius:50%; background:var(--accent-neutral-subtle-strong);
-  color:var(--fg-secondary); cursor:pointer; opacity:0; line-height:1;}
-.nbt-add-row{bottom:-11px; left:50%;}
-.nbt:hover .nbt-add, .nbt:focus-within .nbt-add{opacity:1;}
-.nbt-add:hover{background:var(--accent-neutral-hover); color:var(--fg-primary);}
+.nbt-edge{position:absolute; z-index:1; display:flex; align-items:center; justify-content:center; padding:0; border:0; border-radius:var(--radius-pill, 999px);
+  background:var(--accent-neutral-subtle-strong); color:var(--fg-secondary); cursor:pointer; opacity:0; overflow:hidden; transition:opacity .12s, height .12s, width .12s;}
+.nbt-edge .icon, .nbt-edge svg{width:0; height:0;}
+.nbt-edge-row{left:25%; right:25%; bottom:-6px; height:4px;}
+.nbt-edge-col{top:25%; bottom:25%; right:-6px; width:4px;}
+.nbt:hover .nbt-edge, .nbt:focus-within .nbt-edge{opacity:.5;}
+.nbt .nbt-edge:hover, .nbt .nbt-edge:focus-visible{opacity:1; background:var(--accent-neutral-hover); color:var(--fg-primary);}
+.nbt .nbt-edge-row:hover{height:20px; bottom:-14px;}
+.nbt .nbt-edge-col:hover{width:20px; right:-14px;}
+.nbt .nbt-edge:hover svg{width:14px; height:14px;}
+.nbt-edge::after{content:""; position:absolute; inset:-6px;}
 .nbt-bar{position:absolute; z-index:3; display:flex; gap:2px; padding:3px; background:var(--bg-elevated); border:1px solid var(--border);
   border-radius:var(--radius-md); box-shadow:var(--elevation-2);}
 .nbt-bar button{display:flex; align-items:center; justify-content:center; width:28px; height:28px; padding:0; border:0; background:none;
@@ -91,3 +97,9 @@
 .nbt-cell[data-locked]::-webkit-scrollbar{display:none;}
 .nbt-grip::after{content:""; position:absolute; inset:-5px 0;}
 .nbt-grip-row::after{inset:0 -5px;}
+.nbt-menu-bar{flex-direction:row; align-items:center; min-width:0; gap:2px; padding:3px; max-height:none; overflow:visible;}
+.nbt-menu.nbt-menu-bar > button{width:auto; min-width:28px; height:28px; gap:2px; justify-content:center; padding:0 6px;}
+.nbt-menu-bar .nbt-menu-icon{color:inherit;}
+.nbt-menu button{padding:5px 8px;}
+/* Columns size to their words: lines wrap between words, and a word only breaks when it cannot fit at all. */
+.nbt-cell{word-break:normal; overflow-wrap:break-word; hyphens:manual;}

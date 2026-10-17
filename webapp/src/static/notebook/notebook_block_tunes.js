@@ -1,4 +1,4 @@
-// Block menu tunes for the Notebook editor: block text and background color, and Duplicate.
+// Block menu tunes for the Notebook editor: block text and background color, and the Duplicate, Move and Delete row.
 // Feature notes: curodav-notes/documentation/features/notebook-editor.md.
 (function () {
   var COPY_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
@@ -105,7 +105,12 @@
     return { text: this.data.text || "", bg: this.data.bg || "" };
   };
 
-  // ---- Duplicate: a copy of the block (content, alignment and color) right after it ----
+  // ---- Block actions: duplicate, move up, move down and delete as one row of icon buttons ----
+  // Replaces the list items Editor.js adds for move and delete (hidden in notebook_inline.css).
+  var UP_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>';
+  var DOWN_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+  var TRASH_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>';
+
   function NotebookDuplicate(params) {
     this.api = params.api;
     this.block = params.block;
@@ -113,18 +118,44 @@
   NotebookDuplicate.isTune = true;
   NotebookDuplicate.prototype.render = function () {
     var self = this;
-    return {
-      icon: COPY_ICON,
-      title: "Duplicate",
-      onActivate: function () {
-        self.block.save().then(function (saved) {
-          if (!saved) return;
-          var index = self.api.blocks.getBlockIndex(self.block.id);
-          var copy = self.api.blocks.insert(saved.tool, saved.data, {}, index + 1, true);
-          if (copy && saved.tunes && copy.id) self.api.blocks.update(copy.id, saved.data, saved.tunes);
-        });
-      },
-    };
+    var api = this.api;
+    var row = document.createElement("div");
+    row.className = "nb-actions-row";
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", "Block actions");
+    function index() {
+      return api.blocks.getBlockIndex(self.block.id);
+    }
+    function tool(title, icon, disabled, onClick, danger) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "nb-actions-btn" + (danger ? " is-danger" : "");
+      b.title = title;
+      b.setAttribute("aria-label", title);
+      b.innerHTML = icon;
+      b.disabled = !!disabled;
+      b.addEventListener("click", function () {
+        var undo = window.notebookUndo;
+        if (undo) undo.checkpoint();
+        onClick();
+        api.toolbar.close();
+        if (undo) setTimeout(function () { undo.checkpoint(); }, 80);
+      });
+      row.appendChild(b);
+    }
+    var at = index();
+    var count = api.blocks.getBlocksCount();
+    tool("Duplicate", COPY_ICON, false, function () {
+      self.block.save().then(function (saved) {
+        if (!saved) return;
+        var copy = api.blocks.insert(saved.tool, saved.data, {}, index() + 1, true);
+        if (copy && saved.tunes && copy.id) api.blocks.update(copy.id, saved.data, saved.tunes);
+      });
+    });
+    tool("Move up", UP_ICON, at <= 0, function () { api.blocks.move(at - 1, at); });
+    tool("Move down", DOWN_ICON, at >= count - 1, function () { api.blocks.move(at + 1, at); });
+    tool("Delete", TRASH_ICON, false, function () { api.blocks.delete(index()); }, true);
+    return { type: "html", element: row };
   };
   NotebookDuplicate.prototype.save = function () {
     return {};
