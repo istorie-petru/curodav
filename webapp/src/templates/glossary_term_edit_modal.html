@@ -1,15 +1,4 @@
 {% from "_inputs.html" import text_input, textarea_input %}
-{% macro section_row(row) %}
-<div class="glossary-section-edit" data-repeatable-row>
-    <div class="field-label-row">
-        <label>Title</label>
-        <button type="button" class="icon-btn" data-repeatable-remove title="Remove section" aria-label="Remove section">{{ icon('x', 'icon-sm') }}</button>
-    </div>
-    {{ text_input({'name': 'section_title', 'value': (row.title if row else '')}) }}
-    <label>Text</label>
-    {{ textarea_input({'name': 'section_body', 'rows': '4'}, row.body if row else '') }}
-</div>
-{% endmacro %}
 {% extends "base.html" %}
 {% from "_modal_header_back.html" import modal_header_back %}
 {% block title %}{{ "Edit entry" if t else "New entry" }}{% endblock %}
@@ -44,6 +33,8 @@
         <div class="field field-wide">
             <label>Short text</label>
             {{ textarea_input({'name': 'definition', 'rows': '4'}, t.definition if t else '') }}
+            {% set sref_prefix = 'mref' %}{% set sref = section_refs.get('main') %}
+            {% include "_section_reference_row.html" %}
         </div>
         {% set ms_form_id = 'glossary-term-form' %}
         {% set ms_name = 'wiki_uid' %}
@@ -54,9 +45,10 @@
         {% set ms_allow_new = false %}
         {% set ms_wide = true %}
         {% include "_widget_list_multiselect.html" %}
+        {% if selected_references %}
         <div class="field field-wide entry-ref-block" data-repeatable-rows-scope>
             <div class="entry-ref-rows" id="entry-reference-rows">
-                {% for r in (selected_references or [none]) %}
+                {% for r in selected_references %}
                 {% set ref_i = loop.index0 %}
                 {% set ref = r %}
                 {% include "_entry_reference_row.html" %}
@@ -65,12 +57,16 @@
             <template id="entry-reference-template">{% set ref_i = '__I__' %}{% set ref = none %}{% include "_entry_reference_row.html" %}</template>
             <button type="button" class="icon-btn" data-entry-ref-add title="Add reference" aria-label="Add reference">{{ icon('plus', 'icon-sm') }}</button>
         </div>
+        {% endif %}
         {% for kg in kind_field_groups %}
+        {% set gi = loop.index0 %}
         <div class="field field-wide entry-kind-fields" data-kind-fields="{{ kg.name }}"{% if kg.name != current_kind %} hidden{% endif %}>
             {% for f in kg.fields %}
             <div class="field field-wide">
                 <label>{{ f }}</label>
                 {{ textarea_input({'name': 'kfield:' ~ kg.name ~ ':' ~ f, 'rows': '3'}, field_values[f] if kg.name == current_kind and field_values else '') }}
+                {% set sref_prefix = 'fref_' ~ gi ~ '_' ~ loop.index0 %}{% set sref = section_refs.get('field:' ~ f) if kg.name == current_kind else none %}
+                {% include "_section_reference_row.html" %}
             </div>
             {% endfor %}
         </div>
@@ -78,10 +74,10 @@
         <div class="field field-wide" data-repeatable-rows-scope>
             <div class="field-label-row">
                 <label>Sections</label>
-                <button type="button" class="icon-btn" data-repeatable-add="glossary-section-rows" data-repeatable-template="glossary-section-template" title="Add section" aria-label="Add section">{{ icon('plus', 'icon-sm') }}</button>
+                <button type="button" class="icon-btn" data-entry-section-add title="Add section" aria-label="Add section">{{ icon('plus', 'icon-sm') }}</button>
             </div>
-            <div id="glossary-section-rows">{% for row in sections %}{{ section_row(row) }}{% endfor %}</div>
-            <template id="glossary-section-template">{{ section_row(none) }}</template>
+            <div id="glossary-section-rows">{% for sec in sections %}{% set sec_id = 's' ~ loop.index %}{% set sec_n = loop.index %}{% include "_entry_section_row.html" %}{% endfor %}</div>
+            <template id="glossary-section-template">{% set sec = none %}{% set sec_id = '__S__' %}{% set sec_n = 0 %}{% include "_entry_section_row.html" %}</template>
         </div>
     </div>
 </form>

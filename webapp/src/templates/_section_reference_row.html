@@ -1,0 +1,20 @@
+{% from "_inputs.html" import text_input %}
+{# The one reference of a section: a single-choice citation dropdown with its pages (or the page's address, for a web page) on one row. #}
+<div class="entry-ref-row entry-ref-single">
+    {% set ms_form_id = 'glossary-term-form' %}
+    {% set ms_name = sref_prefix ~ '_key' %}
+    {% set ms_label = 'Reference' %}
+    {% set ms_items = [{'uid': '', 'name': 'None'}] + reference_items %}
+    {% set ms_selected = ('citation:' ~ sref.ref_uid) if sref else '' %}
+    {% set ms_mode = 'single' %}
+    {% set ms_allow_new = false %}
+    {% set ms_search_always = true %}
+    {% set ms_wide = false %}
+    {% set ms_pill = false %}
+    {% set ms_extra_class = 'entry-ref-pick' %}
+    {% include "_widget_list_multiselect.html" %}
+    {% set _web = sref and sref.is_web %}
+    <div class="field entry-ref-url"{% if not _web %} hidden{% endif %}><label>Page URL</label>{{ text_input({'name': sref_prefix ~ '_url', 'value': (sref.page_start if _web else ''), 'form': 'glossary-term-form', 'disabled': (not _web) or none}) }}</div>
+    <div class="field entry-ref-page"{% if _web %} hidden{% endif %}><label>From page</label>{{ text_input({'name': sref_prefix ~ '_start', 'value': (sref.page_start if sref and not _web else ''), 'form': 'glossary-term-form', 'disabled': _web or none}) }}</div>
+    <div class="field entry-ref-page"{% if _web %} hidden{% endif %}><label>To page</label>{{ text_input({'name': sref_prefix ~ '_end', 'value': (sref.page_end if sref and not _web else ''), 'form': 'glossary-term-form', 'disabled': _web or none}) }}</div>
+</div>

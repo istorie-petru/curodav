@@ -4,6 +4,10 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.4.1]
+
+- Entries: every section (the short text, each field of the kind, and each extra section) has one bibliography reference with its pages, or the page's address for a web page, shown under its text in the entry view. The general reference list stays only on entries that already have one, and the citation view still lists the entries that cite it.
+
 ## [4.4.0]
 
 - Notebook figures: the image block is now a figure with a grid of up to 12 images in 1 to 4 columns, mouse resize and drag to reorder, a caption, source line and optional "Figure N." numbering edited in the block menu, and lazy-loaded downscaled images. Old image blocks load as one-image figures; Markdown export includes the caption.

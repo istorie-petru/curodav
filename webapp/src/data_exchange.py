@@ -226,5 +226,9 @@ def glossary_reference_rows(conn) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def glossary_section_ref_rows(conn) -> list[dict[str, Any]]:
+    return [dict(r) for r in conn.execute("SELECT term_uid, section_key, citation_uid, page_start, page_end FROM glossary_section_refs")]
+
+
 def glossary_section_rows(conn) -> list[dict[str, Any]]:
     return [dict(r) for r in conn.execute("SELECT uid, term_uid, title, body, position FROM glossary_term_sections")]

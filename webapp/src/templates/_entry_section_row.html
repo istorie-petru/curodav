@@ -1,0 +1,15 @@
+{% from "_inputs.html" import text_input, textarea_input %}
+{# An extra section of an entry: title, text and its one reference. sec_id keeps the reference fields apart from other rows. #}
+<div class="glossary-section-edit" data-repeatable-row>
+    <input type="hidden" name="section_id" value="{{ sec_id }}" form="glossary-term-form">
+    <div class="field-label-row">
+        <label>Title</label>
+        <button type="button" class="icon-btn" data-repeatable-remove title="Remove section" aria-label="Remove section">{{ icon('x', 'icon-sm') }}</button>
+    </div>
+    {{ text_input({'name': 'section_title', 'value': (sec.title if sec else '')}) }}
+    <label>Text</label>
+    {{ textarea_input({'name': 'section_body', 'rows': '4'}, sec.body if sec else '') }}
+    {% set sref_prefix = 'sref_' ~ sec_id %}
+    {% set sref = section_refs.get('extra:' ~ sec_n) if sec else none %}
+    {% include "_section_reference_row.html" %}
+</div>

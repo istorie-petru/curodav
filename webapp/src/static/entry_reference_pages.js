@@ -1,7 +1,19 @@
-// Entry edit modal: each reference is one row (citation dropdown, start page, end page); the + button adds a row from the template.
+// Entry edit modal: older general references are rows (citation dropdown and pages) that a + button adds to; a + button on Sections adds an extra section with its own reference.
 (function () {
   let counter = 0;
   document.addEventListener("click", (e) => {
+    const add = e.target.closest && e.target.closest("[data-entry-section-add]");
+    if (add) {
+      e.preventDefault();
+      const list = document.getElementById("glossary-section-rows");
+      const tpl = document.getElementById("glossary-section-template");
+      if (!list || !tpl) return;
+      counter += 1;
+      list.insertAdjacentHTML("beforeend", tpl.innerHTML.replaceAll("__S__", "n" + Date.now().toString(36) + counter));
+      const input = list.lastElementChild && list.lastElementChild.querySelector('input[name="section_title"]');
+      if (input) input.focus();
+      return;
+    }
     const btn = e.target.closest && e.target.closest("[data-entry-ref-add]");
     if (!btn) return;
     e.preventDefault();

@@ -324,6 +324,39 @@ class TestGlossaryTermReferences:
         assert notebook_router._parse_reference_keys([], pages) == [("citation", "c1", "https://example.org/a", ""), ("citation", "c2", "", "")]
         assert db.format_page_range("https://example.org/a", "") == "https://example.org/a"
 
+    def test_each_section_keeps_its_own_single_reference(self, conn):
+        _citation(conn, uid="c1")
+        _citation(conn, uid="c2", type="webpage", title="Site")
+        _term(conn, uid="t1")
+        pages = {
+            "mref_key": "citation:c1", "mref_start": "3", "mref_end": "9",
+                        "sref_a_key": "citation:c1", "sref_a_start": "1",
+            "sref_b_key": "", "sref_b_start": "4",
+        }
+        refs = notebook_router._entry_section_refs(conn, "Term", pages, ["a", "b"], ["First", "Second"], ["x", "y"])
+        assert refs["main"] == ("c1", "3", "9") and refs["extra:1"] == ("c1", "1", "") and "extra:2" not in refs
+        db.set_glossary_section_refs(conn, "t1", refs)
+        stored = db.list_glossary_section_refs(conn, "t1")
+        assert stored["main"]["pages"] == "pp. 3\u20139" and stored["extra:1"]["pages"] == "p. 1" and stored["main"]["name"]
+        assert [e["uid"] for e in db.list_entries_citing(conn, "c1")] == ["t1", "t1"]
+        db.delete_citation(conn, "c1")
+        assert db.list_glossary_section_refs(conn, "t1") == {}
+
+    def test_a_reference_on_a_kind_field_is_keyed_by_the_field_name(self, conn):
+        _citation(conn, uid="c1")
+        assert db.save_entry_kind(conn, "", "Person", "user", "blue", [], ["Birth", "Death"]) is None
+        groups = [k["name"] for k in db.list_entry_kinds(conn) if k["fields"]]
+        gi = groups.index("Person")
+        refs = notebook_router._entry_section_refs(conn, "Person", {f"fref_{gi}_1_key": "citation:c1", f"fref_{gi}_1_start": "12"}, [], [], [])
+        assert refs == {"field:Death": ("c1", "12", "")}
+        assert notebook_router._entry_section_refs(conn, "Term", {f"fref_{gi}_1_key": "citation:c1"}, [], [], []) == {}
+
+    def test_a_web_section_reference_keeps_its_address_and_a_bad_scheme_is_dropped(self):
+        ok = notebook_router._section_ref({"mref_key": "citation:c", "mref_url": "https://a.org/p", "mref_start": "4"}, "mref")
+        bad = notebook_router._section_ref({"mref_key": "citation:c", "mref_url": "javascript:alert(1)"}, "mref")
+        assert ok == ("c", "https://a.org/p", "") and bad == ("c", "", "")
+        assert notebook_router._section_ref({"mref_key": ""}, "mref") is None
+
     def test_library_page_shows_reference_names(self, conn):
         _document(conn, uid="d1", title="Further Reading Doc")
         _citation(conn, uid="c1")

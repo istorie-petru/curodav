@@ -1191,6 +1191,18 @@ CREATE TABLE IF NOT EXISTS glossary_term_references (
 
 CREATE INDEX IF NOT EXISTS idx_glossary_term_references_term ON glossary_term_references(term_uid);
 
+-- One bibliography reference per section of an entry (2026-10-17): the main section ('main'), a kind field
+-- ('field:<name>') or an extra section ('extra:<n>', n counting the extras in saved order). The page slot holds
+-- a web address instead of page numbers when the citation is a web page. Replaced whole on every entry save.
+CREATE TABLE IF NOT EXISTS glossary_section_refs (
+    term_uid TEXT NOT NULL,
+    section_key TEXT NOT NULL,
+    citation_uid TEXT NOT NULL,
+    page_start TEXT NOT NULL DEFAULT '',
+    page_end TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (term_uid, section_key)
+);
+
 -- Wikilinks & relationships (2026-10-03, roadmap-mvp-to-full-product-
 -- checklist's "Wikilinks & relationships" section) -- a derived cache,
 -- fully rebuilt from a document's own content_json every time it's saved

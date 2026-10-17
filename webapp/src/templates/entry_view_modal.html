@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% from "_modal_header_back.html" import modal_header_back %}
 {% from "_detail_section.html" import detail_section %}
+{% macro ref_line(ref, entry_uid) %}{% if ref %}
+            <span class="detail-meta-value entry-section-ref"><a href="/notebook/citations/{{ ref.ref_uid }}?return_to=/notebook/glossary/{{ entry_uid }}" data-modal>{{ ref.name }}</a>{% if ref.pages %} {% if ref.pages.lower().startswith(("http://", "https://")) %}<a class="detail-meta-label" href="{{ ref.pages }}" target="_blank" rel="noopener noreferrer">{{ ref.pages }}</a>{% else %}<span class="detail-meta-label">{{ ref.pages }}</span>{% endif %}{% endif %}</span>
+        {% endif %}{% endmacro %}
 {% block title %}{{ entry.term }}{% endblock %}
 {% block content %}
 <div id="modal-target" class="modal-stable-height">
@@ -25,6 +28,12 @@
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">Short text</span>
             <span class="detail-meta-value entry-section-body">{{ entry.definition }}</span>
+            {{ ref_line(section_refs.get('main'), entry.uid) }}
+        </div>
+        {% elif section_refs.get('main') %}
+        <div class="detail-meta-item detail-meta-wide">
+            <span class="detail-meta-label">Short text</span>
+            {{ ref_line(section_refs.get('main'), entry.uid) }}
         </div>
         {% endif %}
         {% if wiki %}
@@ -42,24 +51,26 @@
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">{{ name }}</span>
             <span class="detail-meta-value entry-section-body">{{ value }}</span>
+            {{ ref_line(section_refs.get('field:' ~ name), entry.uid) }}
         </div>
         {% endfor %}
         {% for s in sections %}
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">{{ s.title or 'Note' }}</span>
             <span class="detail-meta-value entry-section-body">{{ s.body }}</span>
+            {{ ref_line(section_refs.get('extra:' ~ loop.index), entry.uid) }}
         </div>
         {% endfor %}
     </div>
 {% endcall %}
 {% endif %}
+{% if references %}
 {% call detail_section('References', count=references|length) %}
     {% if references %}
     <ul class="entry-mentions">{% for r in references %}<li><a href="/notebook/citations/{{ r.ref_uid }}?return_to=/notebook/glossary/{{ entry.uid }}" data-modal>{{ r.name }}</a>{% if r.pages %} {% if r.pages.lower().startswith(("http://", "https://")) %}<a class="detail-meta-label" href="{{ r.pages }}" target="_blank" rel="noopener noreferrer">{{ r.pages }}</a>{% else %}<span class="detail-meta-label">{{ r.pages }}</span>{% endif %}{% endif %}</li>{% endfor %}</ul>
-    {% else %}
-    <span class="detail-meta-label">No references yet</span>
     {% endif %}
 {% endcall %}
+{% endif %}
 {% call detail_section('Mentioned in', count=mentions|length) %}
     {% if mentions %}
     <ul class="entry-mentions">{% for m in mentions %}<li><a href="/notebook/{{ m.uid }}">{{ m.title or 'Untitled' }}</a></li>{% endfor %}</ul>

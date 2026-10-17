@@ -259,6 +259,7 @@ def build_backup_payload(conn) -> dict[str, Any]:
         "notebook_glossary_terms": data_exchange.notebook_glossary_term_rows(conn),
         "glossary_term_references": data_exchange.glossary_reference_rows(conn),
         "glossary_term_sections": data_exchange.glossary_section_rows(conn),
+        "glossary_section_refs": data_exchange.glossary_section_ref_rows(conn),
         # Auto-detect override bookkeeping (roadmap item H, session 7) --
         # same "can't ride along nested under one document" treatment as
         # notebook_glossary_terms above.
@@ -765,6 +766,8 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
         )
     for row in payload.get("glossary_term_sections", []):
         db.restore_glossary_section(conn, row)
+    for row in payload.get("glossary_section_refs", []):
+        db.set_glossary_section_ref(conn, row["term_uid"], row["section_key"], row["citation_uid"], row.get("page_start", ""), row.get("page_end", ""))
     for row in payload.get("glossary_term_references", []):
         db.attach_glossary_term_reference(
             conn, row["term_uid"], row["ref_type"], row["ref_uid"], row.get("position", 0), row.get("created_at"),

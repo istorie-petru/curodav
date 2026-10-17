@@ -1546,7 +1546,7 @@ def _glossary_reference_items(conn) -> list[dict]:
 async def _reference_pages(request: Request) -> dict:
     """The per-reference page boxes of an entry form (`refstart:<uid>` / `refend:<uid>`)."""
     form = await request.form()
-    return {k: str(v).strip() for k, v in form.items() if k.startswith(("refstart:", "refend:", "refkey_", "refstart_", "refend_", "refurl_"))}
+    return {k: str(v).strip() for k, v in form.items() if k.startswith(("refstart:", "refend:", "refkey_", "refstart_", "refend_", "refurl_", "mref_", "fref_", "sref_"))}
 
 
 def _parse_reference_keys(keys: list[str], pages: dict | None = None) -> list[tuple[str, str, str, str]]:
@@ -1580,6 +1580,48 @@ def _parse_reference_keys(keys: list[str], pages: dict | None = None) -> list[tu
             else:
                 out.append((ref_type, ref_uid, pages.get(f"refstart_{n}", ""), pages.get(f"refend_{n}", "")))
     return out
+
+
+def _section_ref(pages: dict, prefix: str) -> tuple[str, str, str] | None:
+    """The reference chosen in one section's row: (citation uid, page start, page end), or None. A web page
+    reference carries its address (http or https only) in the page slot."""
+    pages = pages if isinstance(pages, dict) else {}
+    ref_type, sep, ref_uid = pages.get(f"{prefix}_key", "").partition(":")
+    if not (sep and ref_type == "citation" and ref_uid):
+        return None
+    url = pages.get(f"{prefix}_url", "")
+    if url:
+        return (ref_uid, url if url.lower().startswith(("http://", "https://")) else "", "")
+    return (ref_uid, pages.get(f"{prefix}_start", ""), pages.get(f"{prefix}_end", ""))
+
+
+def _entry_section_refs(conn, kind: str, pages, section_ids, section_title, section_body) -> dict:
+    """{section key: reference} from the entry form: the main section, each field of the kind, each kept extra section."""
+    refs = {}
+    main = _section_ref(pages, "mref")
+    if main:
+        refs["main"] = main
+    groups = [k for k in db.list_entry_kinds(conn) if k["fields"]]
+    for gi, group in enumerate(groups):
+        if group["name"] != kind:
+            continue
+        for fi, name in enumerate(group["fields"]):
+            ref = _section_ref(pages, f"fref_{gi}_{fi}")
+            if ref:
+                refs[f"field:{name}"] = ref
+    fields = set(db.entry_kind_fields(conn, kind))
+    ids = section_ids if isinstance(section_ids, list) else []
+    titles = section_title if isinstance(section_title, list) else []
+    bodies = section_body if isinstance(section_body, list) else []
+    n = 0
+    for i, (t, b) in enumerate(zip(titles, bodies)):
+        if (t or "").strip() in fields or not ((t or "").strip() or (b or "").strip()):
+            continue
+        n += 1
+        ref = _section_ref(pages, f"sref_{ids[i]}") if i < len(ids) else None
+        if ref:
+            refs[f"extra:{n}"] = ref
+    return refs
 
 
 async def _kind_field_values(request: Request) -> dict:
@@ -1619,6 +1661,7 @@ def _glossary_edit_context(request: Request, t: dict | None, form_action: str, c
         "selected_reference_keys": [f"{r['ref_type']}:{r['ref_uid']}" for r in selected if r["ref_type"] == "citation"],
         "selected_references": [r for r in selected if r["ref_type"] == "citation"],
         "sections": db.entry_custom_sections(conn, t["uid"], t["kind"]) if t else [],
+        "section_refs": db.list_glossary_section_refs(conn, t["uid"]) if t else {},
         "kind_field_groups": [k for k in db.list_entry_kinds(conn) if k["fields"]],
         "field_values": db.entry_field_values(conn, t["uid"], t["kind"]) if t else {},
         "current_kind": t["kind"] if t else "Term",
@@ -1691,6 +1734,7 @@ def entry_view_modal(uid: str, request: Request, return_to: str = "", conn=Depen
             "sections": db.entry_custom_sections(conn, uid, entry["kind"]),
             "field_values": {k: v for k, v in db.entry_field_values(conn, uid, entry["kind"]).items() if v},
             "references": references,
+            "section_refs": db.list_glossary_section_refs(conn, uid),
             "mentions": db.list_entry_mentions(conn, uid),
             "wiki": db.get_notebook_document(conn, entry["wiki_uid"]) if entry["wiki_uid"] else None,
             "return_to": _safe_return_to(return_to),
@@ -1720,6 +1764,7 @@ def create_glossary_term(
     reference_keys: list[str] = Form([]),
     section_title: list[str] = Form([]),
     section_body: list[str] = Form([]),
+    section_id: list[str] = Form([]),
     kfields=Depends(_kind_field_values),
     ref_pages=Depends(_reference_pages),
     x_requested_with: str | None = Header(default=None),
@@ -1730,7 +1775,9 @@ def create_glossary_term(
         return RedirectResponse(url="/notebook/glossary", status_code=303)
     uid = db.upsert_glossary_term(conn, {"term": term, "definition": definition.strip(), "kind": _s(kind_new) or _s(kind), **_entry_extras(aliases, wiki_uid)})
     db.set_glossary_term_references(conn, uid, _parse_reference_keys(reference_keys, ref_pages))
-    db.set_glossary_sections(conn, uid, _entry_sections(conn, db.get_glossary_term(conn, uid)["kind"], kfields, section_title, section_body))
+    entry_kind = db.get_glossary_term(conn, uid)["kind"]
+    db.set_glossary_sections(conn, uid, _entry_sections(conn, entry_kind, kfields, section_title, section_body))
+    db.set_glossary_section_refs(conn, uid, _entry_section_refs(conn, entry_kind, ref_pages, section_id, section_title, section_body))
     return respond(x_requested_with, "/notebook/glossary", uid=uid)
 
 
@@ -1746,6 +1793,7 @@ def update_glossary_term(
     reference_keys: list[str] = Form([]),
     section_title: list[str] = Form([]),
     section_body: list[str] = Form([]),
+    section_id: list[str] = Form([]),
     kfields=Depends(_kind_field_values),
     ref_pages=Depends(_reference_pages),
     x_requested_with: str | None = Header(default=None),
@@ -1759,7 +1807,9 @@ def update_glossary_term(
     term = term.strip() or existing["term"]
     db.upsert_glossary_term(conn, {"uid": uid, "term": term, "definition": definition.strip(), "kind": _s(kind_new) or _s(kind), **_entry_extras(aliases, wiki_uid)})
     db.set_glossary_term_references(conn, uid, _parse_reference_keys(reference_keys, ref_pages))
-    db.set_glossary_sections(conn, uid, _entry_sections(conn, db.get_glossary_term(conn, uid)["kind"], kfields, section_title, section_body))
+    entry_kind = db.get_glossary_term(conn, uid)["kind"]
+    db.set_glossary_sections(conn, uid, _entry_sections(conn, entry_kind, kfields, section_title, section_body))
+    db.set_glossary_section_refs(conn, uid, _entry_section_refs(conn, entry_kind, ref_pages, section_id, section_title, section_body))
     return respond(x_requested_with, "/notebook/glossary")
 
 

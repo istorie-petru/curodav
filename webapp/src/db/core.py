@@ -408,7 +408,7 @@ def purge_all_data(conn: sqlite3.Connection) -> None:
         # Auto-detect override bookkeeping (item H, session 7) -- same
         # "purge wipes everything" treatment as the glossary tables above.
         "notebook_glossary_excluded_terms",
-        "notebook_links", "notebook_images", "notebook_image_refs",
+        "notebook_links", "notebook_images", "notebook_image_refs", "glossary_section_refs",
         # Personal finance (Phase P) -- same "purge wipes everything".
         "finance_accounts", "finance_transactions", "finance_scheduled", "finance_scheduled_tags", "finance_tags", "finance_transaction_tags",
     ]

@@ -1043,6 +1043,7 @@ def delete_citation(conn: sqlite3.Connection, uid: str) -> None:
     conn.execute("DELETE FROM citations WHERE uid = ?", (uid,))
     conn.execute("DELETE FROM notebook_citations WHERE citation_uid = ?", (uid,))
     conn.execute("DELETE FROM glossary_term_references WHERE ref_type = 'citation' AND ref_uid = ?", (uid,))
+    conn.execute("DELETE FROM glossary_section_refs WHERE citation_uid = ?", (uid,))
     conn.commit()
 
 
@@ -1403,9 +1404,11 @@ def list_entry_mentions(conn: sqlite3.Connection, term_uid: str) -> list[dict[st
 def list_entries_citing(conn: sqlite3.Connection, citation_uid: str) -> list[dict[str, Any]]:
     """The entries that list a citation as a reference, with their page span."""
     rows = conn.execute(
-        "SELECT t.uid, t.term, r.page_start, r.page_end FROM glossary_term_references r JOIN glossary_terms t ON t.uid = r.term_uid "
-        "WHERE r.ref_type = 'citation' AND r.ref_uid = ? ORDER BY t.term COLLATE NOCASE",
-        (citation_uid,),
+        "SELECT * FROM (SELECT t.uid, t.term, r.page_start, r.page_end FROM glossary_term_references r JOIN glossary_terms t ON t.uid = r.term_uid "
+        "WHERE r.ref_type = 'citation' AND r.ref_uid = ? "
+        "UNION ALL SELECT t.uid, t.term, s.page_start, s.page_end FROM glossary_section_refs s JOIN glossary_terms t ON t.uid = s.term_uid "
+        "WHERE s.citation_uid = ?) ORDER BY term COLLATE NOCASE",
+        (citation_uid, citation_uid),
     ).fetchall()
     return [{**dict(r), "pages": format_page_range(r["page_start"], r["page_end"])} for r in rows]
 
@@ -1439,7 +1442,44 @@ def restore_glossary_section(conn: sqlite3.Connection, row: dict[str, Any]) -> N
     conn.commit()
 
 
+def set_glossary_section_refs(conn: sqlite3.Connection, term_uid: str, refs: dict[str, tuple[str, str, str]]) -> None:
+    """Replaces an entry's per-section references: {section_key: (citation_uid, page_start, page_end)}."""
+    conn.execute("DELETE FROM glossary_section_refs WHERE term_uid = ?", (term_uid,))
+    for key, (citation_uid, start, end) in refs.items():
+        if citation_uid:
+            conn.execute(
+                "INSERT OR REPLACE INTO glossary_section_refs (term_uid, section_key, citation_uid, page_start, page_end) VALUES (?, ?, ?, ?, ?)",
+                (term_uid, key, citation_uid, (start or "").strip(), (end or "").strip()),
+            )
+    conn.commit()
+
+
+def set_glossary_section_ref(conn: sqlite3.Connection, term_uid: str, key: str, citation_uid: str, start: str = "", end: str = "") -> None:
+    """One reference, added or replaced; used when a backup is restored."""
+    conn.execute(
+        "INSERT OR REPLACE INTO glossary_section_refs (term_uid, section_key, citation_uid, page_start, page_end) VALUES (?, ?, ?, ?, ?)",
+        (term_uid, key, citation_uid, start or "", end or ""),
+    )
+    conn.commit()
+
+
+def list_glossary_section_refs(conn: sqlite3.Connection, term_uid: str) -> dict[str, dict[str, Any]]:
+    """The entry's per-section references by section key, with the citation's display name and the page text.
+    A reference to a deleted citation is left out."""
+    out = {}
+    for r in conn.execute("SELECT section_key, citation_uid, page_start, page_end FROM glossary_section_refs WHERE term_uid = ?", (term_uid,)).fetchall():
+        c = get_citation(conn, r["citation_uid"])
+        if c is None:
+            continue
+        out[r["section_key"]] = {
+            "ref_uid": r["citation_uid"], "name": format_citation_display(c), "page_start": r["page_start"], "page_end": r["page_end"],
+            "pages": format_page_range(r["page_start"], r["page_end"]), "is_web": (c.get("type") or "") == "webpage",
+        }
+    return out
+
+
 def delete_glossary_term(conn: sqlite3.Connection, uid: str) -> None:
+    conn.execute("DELETE FROM glossary_section_refs WHERE term_uid = ?", (uid,))
     conn.execute("DELETE FROM glossary_terms WHERE uid = ?", (uid,))
     conn.execute("DELETE FROM notebook_glossary_terms WHERE term_uid = ?", (uid,))
     conn.execute("DELETE FROM glossary_term_references WHERE term_uid = ?", (uid,))
