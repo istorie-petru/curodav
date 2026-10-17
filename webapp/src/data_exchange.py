@@ -211,7 +211,7 @@ def glossary_reference_rows(conn) -> list[dict[str, Any]]:
         only ever a read-time convenience.
     """
     rows = conn.execute(
-        "SELECT term_uid, ref_type, ref_uid, position, created_at FROM glossary_term_references"
+        "SELECT term_uid, ref_type, ref_uid, position, created_at, page_start, page_end FROM glossary_term_references"
     ).fetchall()
     return [dict(r) for r in rows]
 

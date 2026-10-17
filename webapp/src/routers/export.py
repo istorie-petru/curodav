@@ -760,7 +760,8 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
         db.restore_glossary_section(conn, row)
     for row in payload.get("glossary_term_references", []):
         db.attach_glossary_term_reference(
-            conn, row["term_uid"], row["ref_type"], row["ref_uid"], row.get("position", 0), row.get("created_at")
+            conn, row["term_uid"], row["ref_type"], row["ref_uid"], row.get("position", 0), row.get("created_at"),
+            row.get("page_start", ""), row.get("page_end", ""),
         )
     # Auto-detect override bookkeeping (roadmap item H, session 7) -- order
     # doesn't matter relative to the two blocks above (it has no FK target

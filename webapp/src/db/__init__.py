@@ -363,6 +363,8 @@ from .notebook import (
     ensure_notebook_note_type_option,
     format_citation_authors,
     format_citation_display,
+    format_page_range,
+    list_entries_citing,
     get_citation,
     get_glossary_term,
     get_notebook_document,

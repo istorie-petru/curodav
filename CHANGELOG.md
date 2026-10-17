@@ -4,6 +4,12 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.3.1]
+
+- Banners: the header banner is 12:1 (the crop shape), at most 88px and at least 56px tall; header icons and buttons line up and stay on one row on phones.
+- Entries: each reference links to its citation and can carry a start and end page (migration 17).
+- Citations: a view modal; the main author sits near the top of the edit modal, other authors at the bottom, with labelled first and last name boxes. Entry and citation view modals share one sectioned layout.
+
 ## [4.3.0]
 
 - Mobile: the header and bottom navbar stay put on every page and only the content scrolls. Task rows and the Sleep & Leisure table no longer overflow. In the planner, a touch hold of 250 ms starts moving an event, and a swipe still scrolls.
@@ -12,7 +18,7 @@ tagged release. Format loosely follows
 - Projects: an "Auto labels" field applies labels when the project is added to an item, live in the modal.
 - Contacts: Relations shows a repeating event as one row with its rule, next date and more dates.
 - Published lists: "everything" now includes habit tasks and leaves out archived and draft contacts.
-- Banners: crop ratio is 9:1 and the header height follows it.
+- Banners: crop ratio is 12:1 and the header height follows it, between 56px and 88px.
 - Terminology: one Standard / Playful setting (replaces two); playful wording now also covers empty states, some toasts and the greeting.
 
 ## [4.2.0]

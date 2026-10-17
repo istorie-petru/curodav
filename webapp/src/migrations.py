@@ -154,6 +154,13 @@ def _entry_kinds_get_fields(conn: sqlite3.Connection) -> None:
     )
 
 
+def _references_get_pages(conn: sqlite3.Connection) -> None:
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(glossary_term_references)")}
+    for column in ("page_start", "page_end"):
+        if column not in existing:
+            conn.execute(f"ALTER TABLE glossary_term_references ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "notebook documents get an is_template flag", _note_templates),
     Migration(2, "frontmatter fields lose the required column", _field_config_without_required, destructive=True),
@@ -171,6 +178,7 @@ MIGRATIONS: list[Migration] = [
     Migration(14, "notes can be pinned", _notes_can_be_pinned),
     Migration(15, "journal notes become weekly", _journal_notes_become_weekly, destructive=True),
     Migration(16, "entry kinds get fixed-name fields", _entry_kinds_get_fields),
+    Migration(17, "entry references get start and end pages", _references_get_pages),
 ]
 
 

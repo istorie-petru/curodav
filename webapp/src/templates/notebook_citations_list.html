@@ -29,7 +29,7 @@
 <div class="card contact-list notebook-folder-list" id="citations-list">
     {% for c in citations %}
     <div class="contact-row-wrap" data-uid="{{ c.uid }}">
-        <a class="contact-row" href="/notebook/citations/{{ c.uid }}/edit" data-modal>
+        <a class="contact-row" href="/notebook/citations/{{ c.uid }}" data-modal>
             <span class="notebook-row-icon">{{ icon('book-open', 'icon-sm') }}</span>
             <span class="contact-row-main">
                 <span class="contact-row-name">{{ c.title }}</span>

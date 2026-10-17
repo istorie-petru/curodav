@@ -1184,6 +1184,8 @@ CREATE TABLE IF NOT EXISTS glossary_term_references (
     ref_uid TEXT NOT NULL,
     position REAL NOT NULL DEFAULT 0,
     created_at TEXT,
+    page_start TEXT NOT NULL DEFAULT '',
+    page_end TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (term_uid, ref_type, ref_uid)
 );
 

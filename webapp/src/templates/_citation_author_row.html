@@ -17,8 +17,14 @@
    this file did) makes the Remove button a silent no-op. #}
 {% macro citation_author_row(family, given) %}
 <div class="citation-author-row contact-multi-row">
-    {{ text_input({'name': 'author_family', 'value': (family or '')}) }}
-    {{ text_input({'name': 'author_given', 'value': (given or '')}) }}
+    <div class="citation-author-field">
+        <label>Last name</label>
+        {{ text_input({'name': 'author_family', 'value': (family or '')}) }}
+    </div>
+    <div class="citation-author-field">
+        <label>First name</label>
+        {{ text_input({'name': 'author_given', 'value': (given or '')}) }}
+    </div>
     <button type="button" class="checklist-delete" data-repeatable-remove title="Remove author" aria-label="Remove author">{{ icon('x') }}</button>
 </div>
 {% endmacro %}

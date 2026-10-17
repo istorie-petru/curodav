@@ -1303,6 +1303,16 @@ def list_entry_mentions(conn: sqlite3.Connection, term_uid: str) -> list[dict[st
     return [dict(r) for r in rows]
 
 
+def list_entries_citing(conn: sqlite3.Connection, citation_uid: str) -> list[dict[str, Any]]:
+    """The entries that list a citation as a reference, with their page span."""
+    rows = conn.execute(
+        "SELECT t.uid, t.term, r.page_start, r.page_end FROM glossary_term_references r JOIN glossary_terms t ON t.uid = r.term_uid "
+        "WHERE r.ref_type = 'citation' AND r.ref_uid = ? ORDER BY t.term COLLATE NOCASE",
+        (citation_uid,),
+    ).fetchall()
+    return [{**dict(r), "pages": format_page_range(r["page_start"], r["page_end"])} for r in rows]
+
+
 def list_glossary_sections(conn: sqlite3.Connection, term_uid: str) -> list[dict[str, Any]]:
     rows = conn.execute("SELECT * FROM glossary_term_sections WHERE term_uid = ? ORDER BY position, rowid", (term_uid,)).fetchall()
     return [dict(r) for r in rows]
@@ -1583,7 +1593,7 @@ def list_glossary_term_references(conn: sqlite3.Connection, term_uid: str) -> li
     dropped from the result (nothing to resolve a name from, and nothing
     useful to link to), rather than rendering a broken entry."""
     rows = conn.execute(
-        "SELECT ref_type, ref_uid, position, created_at FROM glossary_term_references "
+        "SELECT ref_type, ref_uid, position, created_at, page_start, page_end FROM glossary_term_references "
         "WHERE term_uid = ? ORDER BY position ASC, created_at ASC",
         (term_uid,),
     ).fetchall()
@@ -1600,13 +1610,22 @@ def list_glossary_term_references(conn: sqlite3.Connection, term_uid: str) -> li
             if c is None:
                 continue
             row["name"] = format_citation_display(c)
+            row["pages"] = format_page_range(row["page_start"], row["page_end"])
         else:
             continue
         out.append(row)
     return out
 
 
-def set_glossary_term_references(conn: sqlite3.Connection, term_uid: str, refs: list[tuple[str, str]]) -> None:
+def format_page_range(start: str, end: str) -> str:
+    """"pp. 12-20", "p. 12" or "" -- the entry reference's page span as shown."""
+    start, end = (start or "").strip(), (end or "").strip()
+    if start and end and start != end:
+        return f"pp. {start}\u2013{end}"
+    return f"p. {start or end}" if start or end else ""
+
+
+def set_glossary_term_references(conn: sqlite3.Connection, term_uid: str, refs: list[tuple[str, ...]]) -> None:
     """Replaces a term's whole reference list -- same "delete, then
     re-insert in the given order" convention as set_notebook_citations.
     `refs` is a list of (ref_type, ref_uid) pairs, already deduplicated by
@@ -1617,24 +1636,27 @@ def set_glossary_term_references(conn: sqlite3.Connection, term_uid: str, refs: 
     (term_uid, ref_type, ref_uid) actually enforces)."""
     now = datetime.now(timezone.utc).isoformat()
     conn.execute("DELETE FROM glossary_term_references WHERE term_uid = ?", (term_uid,))
-    for position, (ref_type, ref_uid) in enumerate(dict.fromkeys(refs)):
-        if ref_type not in GLOSSARY_REFERENCE_TYPES:
+    seen = set()
+    for position, (ref_type, ref_uid, *pages) in enumerate(refs):
+        if ref_type not in GLOSSARY_REFERENCE_TYPES or (ref_type, ref_uid) in seen:
             continue
+        seen.add((ref_type, ref_uid))
+        start, end = (pages + ["", ""])[:2]
         conn.execute(
-            "INSERT INTO glossary_term_references (term_uid, ref_type, ref_uid, position, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (term_uid, ref_type, ref_uid, position, now),
+            "INSERT INTO glossary_term_references (term_uid, ref_type, ref_uid, position, created_at, page_start, page_end) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (term_uid, ref_type, ref_uid, position, now, (start or "").strip(), (end or "").strip()),
         )
     conn.commit()
 
 
-def attach_glossary_term_reference(conn: sqlite3.Connection, term_uid: str, ref_type: str, ref_uid: str, position: float = 0, created_at: str | None = None) -> None:
+def attach_glossary_term_reference(conn: sqlite3.Connection, term_uid: str, ref_type: str, ref_uid: str, position: float = 0, created_at: str | None = None, page_start: str = "", page_end: str = "") -> None:
     """Idempotent single-row attach -- used by export.py's backup restore,
     same shape as attach_notebook_citation/attach_notebook_glossary_term."""
     conn.execute(
-        "INSERT OR REPLACE INTO glossary_term_references (term_uid, ref_type, ref_uid, position, created_at) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (term_uid, ref_type, ref_uid, position, created_at or datetime.now(timezone.utc).isoformat()),
+        "INSERT OR REPLACE INTO glossary_term_references (term_uid, ref_type, ref_uid, position, created_at, page_start, page_end) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (term_uid, ref_type, ref_uid, position, created_at or datetime.now(timezone.utc).isoformat(), page_start or "", page_end or ""),
     )
     conn.commit()
 

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% from "_modal_header_back.html" import modal_header_back %}
+{% from "_detail_section.html" import detail_section %}
+{% block title %}{{ c.title }}{% endblock %}
+{% block content %}
+<div id="modal-target" class="modal-stable-height">
+<div class="modal-header">
+{% if return_to %}{{ modal_header_back(return_to, 'Back') }}{% endif %}
+<h1>{{ c.title }}</h1>
+</div>
+<div class="modal-body">
+{% call detail_section('Citation') %}
+    <div class="detail-meta-grid">
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Type</span>
+            <span class="detail-meta-value">{{ type_label }}</span>
+        </div>
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Year</span>
+            <span class="detail-meta-value">{{ c.year or 'None' }}</span>
+        </div>
+        <div class="detail-meta-item detail-meta-wide">
+            <span class="detail-meta-label">{{ 'Authors' if c.authors|length > 1 else 'Author' }}</span>
+            <span class="detail-meta-value">{{ authors or 'None' }}</span>
+        </div>
+        {% if c.subtitle %}
+        <div class="detail-meta-item detail-meta-wide">
+            <span class="detail-meta-label">Subtitle</span>
+            <span class="detail-meta-value">{{ c.subtitle }}</span>
+        </div>
+        {% endif %}
+    </div>
+{% endcall %}
+{% if rows %}
+{% call detail_section('Details') %}
+    <div class="detail-meta-grid">
+        {% for label, value in rows %}
+        <div class="detail-meta-item{% if label in ('Container', 'Editors', 'DOI', 'URL', 'Note') %} detail-meta-wide{% endif %}">
+            <span class="detail-meta-label">{{ label }}</span>
+            {% if label == 'URL' %}<a class="detail-meta-value" href="{{ value }}" target="_blank" rel="noopener noreferrer">{{ value }}</a>
+            {% else %}<span class="detail-meta-value">{{ value }}</span>{% endif %}
+        </div>
+        {% endfor %}
+    </div>
+{% endcall %}
+{% endif %}
+{% call detail_section('Cited by entries', count=entries|length) %}
+    {% if entries %}
+    <ul class="entry-mentions">{% for e in entries %}<li><a href="/notebook/glossary/{{ e.uid }}?return_to=/notebook/citations/{{ c.uid }}" data-modal>{{ e.term }}</a>{% if e.pages %} <span class="detail-meta-label">{{ e.pages }}</span>{% endif %}</li>{% endfor %}</ul>
+    {% else %}
+    <span class="detail-meta-label">No entries yet</span>
+    {% endif %}
+{% endcall %}
+</div>
+{% set footer_back_url = return_to if return_to else '/notebook/citations' %}
+{% set footer_back_mode = 'modal' if return_to else 'cancel' %}
+{% set footer_back_label = 'Back' if return_to else 'Done' %}
+{% set footer_delete_url = '/notebook/citations/' ~ c.uid ~ '/delete' %}
+{% set footer_delete_mode = 'confirm' %}
+{% set footer_delete_label = 'Delete "' ~ c.title ~ '"? Any document this is attached to loses it from its bibliography too.' %}
+{% set footer_primary_href = '/notebook/citations/' ~ c.uid ~ '/edit' %}
+{% set footer_primary_label = 'Edit' %}
+{% set footer_primary_icon = 'edit' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

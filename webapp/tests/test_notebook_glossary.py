@@ -315,8 +315,24 @@ class TestGlossaryTermReferences:
         _term(conn, uid="t1", term="Mercantilism")
         db.set_glossary_term_references(conn, "t1", [("notebook", "d1"), ("citation", "c1")])
         body = notebook_router.entry_view_modal("t1", _bare_request(), conn=conn).body.decode()
-        assert "Further reading" in body
+        assert "References" in body
         assert "Further Reading Doc" not in body
+
+    def test_reference_pages_saved_and_linked(self, conn):
+        _citation(conn, uid="c1")
+        _term(conn, uid="t1", term="Mercantilism")
+        db.set_glossary_term_references(conn, "t1", [("citation", "c1", "12", "20")])
+        ref = db.list_glossary_term_references(conn, "t1")[0]
+        assert (ref["page_start"], ref["page_end"], ref["pages"]) == ("12", "20", "pp. 12\u201320")
+        body = notebook_router.entry_view_modal("t1", _bare_request(), conn=conn).body.decode()
+        assert 'href="/notebook/citations/c1' in body
+        assert "pp. 12\u201320" in body
+        assert db.list_entries_citing(conn, "c1")[0]["uid"] == "t1"
+
+    def test_citation_view_modal_renders(self, conn):
+        _citation(conn, uid="c1")
+        body = notebook_router.citation_view_modal("c1", _bare_request(), conn=conn).body.decode()
+        assert "Cited by entries" in body
 
 
 class TestBackupRoundTrip:

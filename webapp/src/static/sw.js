@@ -591,7 +591,7 @@
 // and the inline tool, ":" icon picker; style.css, app.js and the notebook scripts changed.
 // v144 (2026-10-11): the Look picker is a color row above an icon sidebar and grid; look_picker.js and style.css changed.
 // v145 (2026-10-11): soft label colors on the light theme, themed minimalist scrollbars; style.css changed.
-const CACHE_NAME = "cc-shell-v145";
+const CACHE_NAME = "cc-shell-v146";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

@@ -17,6 +17,15 @@
             <label>Title</label>
             {{ text_input({'name': 'title', 'value': (c.title if c else ''), 'required': true, 'autofocus': true}) }}
         </div>
+        {% set main_author = (c.authors[0] if c and c.authors else {}) %}
+        <div class="field">
+            <label>Main author: last name</label>
+            {{ text_input({'name': 'author_family', 'value': main_author.get('family', '')}) }}
+        </div>
+        <div class="field">
+            <label>Main author: first name</label>
+            {{ text_input({'name': 'author_given', 'value': main_author.get('given', '')}) }}
+        </div>
         <div class="field">
             {% set ms_mode = 'single' %}
             {% set ms_form_id = 'citation-form' %}
@@ -66,14 +75,12 @@
         </div>
         <div class="field field-wide" data-repeatable-rows-scope>
             <div class="field-label-row">
-                <label>Authors</label>
+                <label>Other authors</label>
                 <button type="button" class="icon-btn" data-repeatable-add="citation-author-rows" data-repeatable-template="citation-author-row-template" title="Add author" aria-label="Add author">{{ icon('plus', 'icon-sm') }}</button>
             </div>
             <div id="citation-author-rows">
-                {% for a in (c.authors if c else []) %}
+                {% for a in ((c.authors if c else [])[1:]) %}
                 {{ citation_author_row(a.family, a.given) }}
-                {% else %}
-                {{ citation_author_row('', '') }}
                 {% endfor %}
             </div>
             <template id="citation-author-row-template">
