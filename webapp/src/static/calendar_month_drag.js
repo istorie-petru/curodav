@@ -156,10 +156,11 @@
     }
 
     el.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || e.pointerType === "touch") return;
       e.preventDefault(); // stop native text-selection/link-drag ghost while dragging
       begin(e);
     });
+    window.CCTouchHold.bind(el, begin);
     el.addEventListener("click", (e) => {
       if (dragging) {
         e.preventDefault();
@@ -348,11 +349,12 @@
     }
 
     el.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || e.pointerType === "touch") return;
       e.preventDefault(); // stop native text-selection/link-drag ghost while dragging
       const which = handleLeft && e.target === handleLeft ? "resize-left" : handleRight && e.target === handleRight ? "resize-right" : "move";
       begin(e, which);
     });
+    window.CCTouchHold.bind(el, (e) => begin(e, "move"));
     el.addEventListener("click", (e) => {
       // `dragging` is already reset to false inside end() by the time this
       // native click fires (pointerup always precedes click) -- unlike

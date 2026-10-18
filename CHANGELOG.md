@@ -4,6 +4,13 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.4.3]
+
+- Radicale: when the connection fails at startup (wrong credentials or server down), the background sync no longer starts or claims to run, and a rejected login logs one clear line with the URL and user instead of a traceback.
+- Fix: events, tasks and contacts with `::` or other unsafe characters in their ID (birthday events) are stored under a safe file name, so Radicale accepts them.
+- Fix: a repeating task with no start or due date no longer publishes an invalid repeat rule.
+- Fix: in the four-week and month views, holding an event or bar for a moment lets you drag it to another day on a phone; a swipe still scrolls.
+
 ## [4.4.2]
 
 - Repeating events: choosing "Apply changes to" comes first in the edit form, and while it says "This event" the recurrence, holiday calendar and weekend fields are locked, so saving one occurrence never changes the series. Changing the rule with "This and following" or "All events" asks for confirmation, since it rebuilds the affected events.

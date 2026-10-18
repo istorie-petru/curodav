@@ -133,8 +133,8 @@ def task_row_to_ical(row: dict[str, Any]) -> bytes:
     # on export anymore. (The old `tasks.parent_uid` column stays
     # physically on disk, unused; a pre-1.2 VTODO that still carries a
     # RELATED-TO is simply ignored on import below.)
-    if row.get("recurrence"):
-        anchor = row.get("start_at") or row.get("due_at") or ""
+    anchor = row.get("start_at") or row.get("due_at") or ""
+    if row.get("recurrence") and anchor:  # an RRULE with no DTSTART/DUE is invalid and makes Radicale log errors
         is_datetime = len(anchor) > 10
         rrule_str, embedded_exdates = _normalize_rrule(row["recurrence"], is_datetime)
         try:

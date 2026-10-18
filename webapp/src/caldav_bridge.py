@@ -14,6 +14,7 @@ these results into the local SQLite cache db.py serves reads from.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 from urllib.parse import urlparse as _urlparse
 from xml.etree import ElementTree as ET
@@ -28,6 +29,13 @@ from .ical_rows import event_row_to_ical, ical_to_event_row, ical_to_task_row, t
 from .vcard_rows import contact_row_to_vcard, vcard_to_contact_row
 
 _DAV_NS = {"d": "DAV:"}
+
+
+def resource_name(uid: str) -> str:
+    """Filename stem for a UID. Radicale's path check rejects characters
+    like ':' (birthday event UIDs are 'birthday::<contact uid>'); the UID
+    itself stays untouched inside the iCal/vCard body."""
+    return re.sub(r"[^A-Za-z0-9._@-]", "_", uid)
 
 
 class CalDavBridge:
@@ -72,7 +80,7 @@ class CalDavBridge:
         base = str(collection.url)
         if not base.endswith("/"):
             base += "/"
-        return f"{base}{uid}.ics"
+        return f"{base}{resource_name(uid)}.ics"
 
     def _get_by_uid_direct(
         self, collection: caldav.Calendar, uid: str, cls: type
@@ -147,7 +155,10 @@ class CalDavBridge:
             obj.save()
         except NotFoundError:
             try:
-                obj = cal.save_event(ical=ics)
+                obj = caldav.Event(
+                    self.client, url=self._object_url(cal, row["uid"]), parent=cal, data=ics
+                )
+                obj.save()
             except PutError:
                 # The direct lookup said "not found" but the server rejected
                 # the create as a conflict anyway -- something else already
@@ -221,7 +232,10 @@ class CalDavBridge:
             obj.save()
         except NotFoundError:
             try:
-                obj = cal.save_todo(ical=ics)
+                obj = caldav.Todo(
+                    self.client, url=self._object_url(cal, row["uid"]), parent=cal, data=ics
+                )
+                obj.save()
             except PutError:
                 # Same race as save_event_row -- see its comment.
                 obj = self._get_by_uid_direct(cal, row["uid"], caldav.Todo)
@@ -382,7 +396,7 @@ class CardDavClient:
         return f"{parsed.scheme}://{parsed.netloc}"
 
     def put(self, uid: str, vcard_text: str, etag: str | None = None) -> str:
-        url = f"{self._collection_url}{uid}.vcf"
+        url = f"{self._collection_url}{resource_name(uid)}.vcf"
         headers = {"Content-Type": "text/vcard"}
         if etag:
             headers["If-Match"] = etag
@@ -391,7 +405,7 @@ class CardDavClient:
         return url
 
     def delete(self, uid: str) -> None:
-        url = f"{self._collection_url}{uid}.vcf"
+        url = f"{self._collection_url}{resource_name(uid)}.vcf"
         resp = httpx.delete(url, auth=self._auth)
         if resp.status_code not in (200, 204, 404):
             resp.raise_for_status()

@@ -152,9 +152,17 @@ async def lifespan(app: FastAPI):
     # None bridge, and a restart re-attempts the connection.
     try:
         bridge = CalDavBridge(settings)
-    except Exception:
+    except Exception as exc:
         bridge = None
-        logger.exception("Radicale unreachable at startup; running without the sync bridge")
+        if type(exc).__name__ == "AuthorizationError":
+            logger.error(
+                "Radicale rejected the credentials (401) at %s for user %r; running without the "
+                "sync bridge. Check CC_RADICALE_USER/CC_RADICALE_PASSWORD against Radicale's users file.",
+                settings.radicale_base_url,
+                settings.radicale_username,
+            )
+        else:
+            logger.exception("Radicale unreachable at startup; running without the sync bridge")
     else:
         if settings.deploy_mode == "production" and uses_default_radicale_credentials(settings):
             raise RuntimeError(
@@ -176,23 +184,28 @@ async def lifespan(app: FastAPI):
     # *entire* app over what might be one bad object in one calendar. If
     # this does fail, the cache just stays empty/stale until the
     # background sync thread's own retry loop (started below) succeeds.
-    with db.connect(settings.db_path) as conn:
-        try:
-            sync.full_refresh(bridge, conn)
-        except Exception:
-            logger.exception("Initial Radicale sync failed at startup; continuing with an empty/stale cache")
+    stop_event = None
+    if bridge is not None:
+        with db.connect(settings.db_path) as conn:
+            try:
+                sync.full_refresh(bridge, conn)
+            except Exception:
+                logger.exception("Initial Radicale sync failed at startup; continuing with an empty/stale cache")
 
-    thread, stop_event = sync.start_background_sync(
-        bridge, settings.db_path, settings.sync_interval_seconds
-    )
+        _thread, stop_event = sync.start_background_sync(
+            bridge, settings.db_path, settings.sync_interval_seconds
+        )
+        logger.info(
+            "Started background Radicale sync every %ss", settings.sync_interval_seconds
+        )
+    else:
+        logger.warning("Background Radicale sync not started (no bridge); restart to retry")
     _reminder_thread, reminder_stop = reminders.start_scheduler(settings.db_path)
-    logger.info(
-        "Started background Radicale sync every %ss", settings.sync_interval_seconds
-    )
 
     yield
 
-    stop_event.set()
+    if stop_event is not None:
+        stop_event.set()
     reminder_stop.set()
 
 

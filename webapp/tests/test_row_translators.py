@@ -182,3 +182,18 @@ class TestContactRow:
         result = vcard_to_contact_row(card)
 
         assert result["uid"]
+
+
+def test_resource_name_is_path_safe_and_keeps_plain_uids():
+    from src.caldav_bridge import resource_name
+
+    assert resource_name("birthday::a65d4526-848f") == "birthday__a65d4526-848f"
+    assert resource_name("a65d4526-848f-4774") == "a65d4526-848f-4774"
+
+
+def test_task_without_dates_has_no_rrule():
+    from src.ical_rows import task_row_to_ical
+
+    base = {"uid": "t1", "title": "x", "recurrence": "FREQ=DAILY"}
+    assert b"RRULE" not in task_row_to_ical(base)
+    assert b"RRULE" in task_row_to_ical({**base, "due_at": "2026-10-20"})
