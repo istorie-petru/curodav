@@ -3,6 +3,12 @@
 {% from "_form_rows.html" import title_row, title_date_row, recurrence_row, reminder_row %}
     {% set ms_form_id = 'event-form' %}
     <div class="field-grid">
+        {% if series_member | default(false) %}
+        <div class="field field-wide">
+            {% set st_name = 'series_scope' %}{% set st_label = 'Apply changes to' %}{% set st_items = series_scope_items %}{% set st_selected = 'this' %}{% set st_form_id = 'event-form' %}
+            {% include "_status_type_row.html" %}
+        </div>
+        {% endif %}
         {% call title_date_row(event.title if event else (prefill_title or ''), qa=(quick_add_kind | default(''))) %}
         <div class="field field-wide event-start-end-field">
             {% from "_date_time_fields.html" import datetime_range with context %}
@@ -27,13 +33,8 @@
         {% include "_contacts_row.html" %}
         {# reminders_picker.js and recurrence_picker.js upgrade these two inputs in place; routers/calendar.py still takes the raw values. #}
         {{ reminder_row(event.reminders|join(', ') if event else '', wide=true) }}
+        <div class="series-only"{% if series_member | default(false) %} data-series-only inert{% endif %}>
         {{ recurrence_row(event.recurrence if event and event.recurrence not in (None, 'None', 'Nothing') else '', wide=true) }}
-        {% if series_member | default(false) %}
-        <div class="field field-wide">
-            {% set st_name = 'series_scope' %}{% set st_label = 'Apply changes to' %}{% set st_items = series_scope_items %}{% set st_selected = 'this' %}{% set st_form_id = 'event-form' %}
-            {% include "_status_type_row.html" %}
-        </div>
-        {% endif %}
         <!-- 1.6 ("Configurable terminology"): the field names/values below
              (holiday_calendar/exclude_saturday/exclude_sunday) never
              change -- only the on-screen label does, per Settings >
@@ -59,6 +60,7 @@
         ] %}
         {% include "_widget_list_multiselect.html" %}
         {% set ms_extra_checkboxes = [] %}
+        </div>
 
         {% set _has_location = event and event.location and event.location not in (None, 'None', 'Nothing') %}
         {% set _has_meeting = event and event.meeting_url and event.meeting_url not in (None, 'None', 'Nothing') %}

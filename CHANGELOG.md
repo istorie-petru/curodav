@@ -4,6 +4,13 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.4.2]
+
+- Repeating events: choosing "Apply changes to" comes first in the edit form, and while it says "This event" the recurrence, holiday calendar and weekend fields are locked, so saving one occurrence never changes the series. Changing the rule with "This and following" or "All events" asks for confirmation, since it rebuilds the affected events.
+- Fix: changing the rule of "All events" from a later occurrence no longer deletes the earlier ones; the series keeps its first date.
+- Holidays: adding, changing or removing a holiday in Settings, or changing a series' weekend or holiday settings, now updates its existing events (events moved or deleted by hand are left alone).
+- Fix: extending an open-ended series no longer copies a single renamed or relocated occurrence into the new events; a day shift that would break an every-other-week rule is refused.
+
 ## [4.4.1]
 
 - Entries: every section (the short text, each field of the kind, and each extra section) has one bibliography reference with its pages, or the page's address for a web page, shown under its text in the entry view. The general reference list stays only on entries that already have one, and the citation view still lists the entries that cite it.

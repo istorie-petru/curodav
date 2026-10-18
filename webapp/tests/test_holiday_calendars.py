@@ -149,7 +149,7 @@ class TestOrdinaryEventHolidayPolicy:
             all_day="", location="", meeting_url="", tags="",
             recurrence="FREQ=WEEKLY;UNTIL=2026-10-01", reminders="",
             holiday_calendar="Romania", exclude_saturday="1", exclude_sunday="",
-            conn=conn,
+            series_scope="all", conn=conn,
         )
         updated = db.get_event(conn, event["uid"])
         assert updated["holiday_calendar"] == "Romania"

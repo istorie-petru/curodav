@@ -68,7 +68,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from .. import log as app_log
 from ..log import get_logger
-from .. import clock, auth, config, data_health, db, env_file, finance, finance_stats, flairs, offline_sync, push, release, reminders
+from .. import clock, auth, config, data_health, db, env_file, event_series, finance, finance_stats, flairs, offline_sync, push, release, reminders
 from ..image_sniff import sniff_image_type
 from ..deps import (
     ACCENT_COLOR_KEY,
@@ -988,12 +988,8 @@ def create_holiday(
     year_agnostic: str = Form(""),
     conn=Depends(get_db),
 ):
-    # No _regenerate_all(conn) call needed -- a recurring event only ever
-    # stores *which* holiday calendar it references (holiday_calendar),
-    # never the dates themselves; those are looked up fresh on every read
-    # (recurrence_expand.expand_events), so adding a holiday takes effect
-    # immediately without touching any event row. Same behavior as the old
-    # /schedule/holidays route this replaces.
+    # Repeating events are real rows now: event_series.reconcile_holidays brings them in line.
+    before = db.list_holidays_by_calendar(conn)
     db.upsert_holiday(
         conn,
         {
@@ -1003,6 +999,7 @@ def create_holiday(
             "date_to": _parse_holiday_date_field(date_to, bool(year_agnostic)),
         },
     )
+    event_series.reconcile_holidays(conn, before)
     return RedirectResponse(url="/settings/holidays", status_code=303)
 
 
@@ -1024,6 +1021,7 @@ def update_holiday(
     holiday = db.get_holiday(conn, uid)
     if holiday is None:
         raise HTTPException(404, "Holiday not found")
+    before = db.list_holidays_by_calendar(conn)
     db.upsert_holiday(
         conn,
         {
@@ -1034,12 +1032,15 @@ def update_holiday(
             "date_to": _parse_holiday_date_field(date_to, bool(year_agnostic)),
         },
     )
+    event_series.reconcile_holidays(conn, before)
     return RedirectResponse(url="/settings/holidays", status_code=303)
 
 
 @router.post("/settings/holidays/{uid}/delete")
 def delete_holiday(uid: str, conn=Depends(get_db)):
+    before = db.list_holidays_by_calendar(conn)
     db.delete_holiday(conn, uid)
+    event_series.reconcile_holidays(conn, before)
     return RedirectResponse(url="/settings/holidays", status_code=303)
 
 
@@ -1054,8 +1055,10 @@ async def bulk_delete_holidays(request: Request, conn=Depends(get_db)):
     uids = payload.get("uids") or []
     if not uids:
         return JSONResponse({"error": "no holidays selected"}, status_code=400)
+    before = db.list_holidays_by_calendar(conn)
     for uid in uids:
         db.delete_holiday(conn, uid)
+    event_series.reconcile_holidays(conn, before)
     return JSONResponse({"ok": True, "count": len(uids)})
 
 

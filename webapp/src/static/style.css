@@ -1828,6 +1828,8 @@ img.avatar-circle{object-fit:cover;}
    higher-specificity override -- same reason .event-start-end-field above
    can't just rely on `hidden` either. */
 .field.holiday-field[hidden]{display:none;}
+.series-only{display:contents;}
+.series-only[inert] > .field{opacity:.5;}
 .field.widget-show-field[hidden]{display:none;}
 .field.widget-limit-field[hidden]{display:none;}
 .field.widget-style-field[hidden]{display:none;}

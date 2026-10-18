@@ -145,6 +145,9 @@ def test_the_edit_form_asks_which_events_to_change(conn):
     rows = _create(conn)
     body = calendar_router.edit_event_form(rows[1]["uid"], _request(), conn=conn).body.decode()
     assert 'name="series_scope"' in body and "This and following events" in body
+    # the scope comes first, and the series-wide fields stay locked until it is widened
+    assert body.index('name="series_scope"') < body.index('name="title"') < body.index('name="recurrence"')
+    assert 'data-series-only inert' in body
 
 
 # ---- the migration of legacy repeating events
@@ -222,3 +225,62 @@ def test_synced_events_with_a_rule_arrive_as_one_time_events():
     rows = [ical_rows.ical_to_event_row(c, one_time=True) for c in Calendar.from_ical(ics).walk("VEVENT")]
     assert rows[0]["recurrence"] is None and rows[0]["exdates"] == [] and rows[0]["uid"] == "x1"
     assert rows[1]["uid"].startswith("x1-") and rows[1]["uid"] != "x1" and rows[1]["recurrence"] is None
+
+
+def test_changing_the_rule_of_all_events_from_a_later_occurrence_keeps_the_series_start(conn):
+    rows = _create(conn, rule="FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;COUNT=6")
+    third = rows[2]
+    event_series.change_rule(conn, third["uid"], "all", "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;COUNT=8", dict(third, recurrence=None), None)
+    left = event_series.members(conn, db.get_event(conn, rows[0]["uid"])["series_uid"])
+    assert _starts(left)[:3] == ["2026-10-05T09:00", "2026-10-19T09:00", "2026-11-02T09:00"] and len(left) == 8
+
+
+def test_a_customised_last_occurrence_is_not_copied_into_topped_up_rows(conn):
+    rows = _create(conn, rule="FREQ=WEEKLY;BYDAY=MO", start="2026-10-05T09:00")
+    db.upsert_event(conn, dict(rows[-1], title="Exam", location="Hall 9"))
+    event_series.ensure_horizon(conn, date.today() + timedelta(days=400))
+    added = event_series.members(conn, rows[0]["series_uid"])[len(rows):]
+    assert added and {r["title"] for r in added} == {"Standup"}
+
+
+def test_a_holiday_added_later_removes_the_rows_it_covers_and_removing_it_brings_them_back(conn):
+    rows = _create(conn, rule="FREQ=WEEKLY;BYDAY=MO;COUNT=4", holiday="Uni")
+    before = db.list_holidays_by_calendar(conn)
+    db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "Uni", "label": "Break", "date_from": "2026-10-12", "date_to": "2026-10-12"})
+    assert event_series.reconcile_holidays(conn, before) == 1
+    assert "2026-10-12T09:00" not in _starts(event_series.members(conn, rows[0]["series_uid"]))
+    before = db.list_holidays_by_calendar(conn)
+    db.delete_holiday(conn, "h1")
+    event_series.reconcile_holidays(conn, before)
+    assert "2026-10-12T09:00" in _starts(event_series.members(conn, rows[0]["series_uid"]))
+
+
+def test_a_manually_deleted_occurrence_is_not_brought_back_by_a_holiday_change(conn):
+    rows = _create(conn, rule="FREQ=WEEKLY;BYDAY=MO;COUNT=4", holiday="Uni")
+    db.delete_event(conn, rows[1]["uid"])
+    before = db.list_holidays_by_calendar(conn)
+    db.upsert_holiday(conn, {"uid": "h2", "calendar_name": "Uni", "label": "x", "date_from": "2026-10-19", "date_to": "2026-10-19"})
+    event_series.reconcile_holidays(conn, before)
+    assert _starts(event_series.members(conn, rows[0]["series_uid"])) == ["2026-10-05T09:00", "2026-10-26T09:00"]
+
+
+def test_a_weekend_policy_edited_on_all_events_is_applied_to_existing_rows(conn):
+    rows = _create(conn, rule="FREQ=DAILY;COUNT=7", start="2026-10-05T09:00", end="")
+    first = db.get_event(conn, rows[0]["uid"])
+    row = dict(first, exclude_saturday=True, exclude_sunday=True)
+    calendar_router._save_series_edit(conn, first["uid"], first, row, "all", None, None)
+    assert len(event_series.members(conn, first["series_uid"])) == 5
+
+
+def test_a_one_occurrence_save_never_changes_the_series_policy(conn):
+    rows = _create(conn, rule="FREQ=DAILY;COUNT=3", start="2026-10-05T09:00", end="", holiday="Uni")
+    first = db.get_event(conn, rows[0]["uid"])
+    calendar_router._save_series_edit(conn, first["uid"], first, dict(first, holiday_calendar=None), "this", None, None)
+    assert db.get_event(conn, first["uid"])["holiday_calendar"] == "Uni"
+
+
+def test_a_day_shift_that_would_split_an_every_other_week_rule_is_refused():
+    assert event_series.shift_rule("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TU", 1) == "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,WE"
+    with pytest.raises(event_series.CannotShift):
+        event_series.shift_rule("FREQ=WEEKLY;INTERVAL=2;BYDAY=SA,SU", 1)
+

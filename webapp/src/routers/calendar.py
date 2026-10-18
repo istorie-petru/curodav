@@ -1345,7 +1345,9 @@ def _save_series_edit(conn, uid: str, existing: dict, row: dict, scope: str, rul
     fields = {k: row[k] for k in ("title", "description", "location", "meeting_url", "all_day", "reminders",
                                   "holiday_calendar", "exclude_saturday", "exclude_sunday")}
     if scope == "this":
-        db.upsert_event(conn, dict(row, series_uid=existing["series_uid"], recurrence=None))
+        # The weekend and holiday policy belongs to the series; a one-occurrence save never changes it.
+        keep = {k: existing.get(k) for k in ("holiday_calendar", "exclude_saturday", "exclude_sunday")}
+        db.upsert_event(conn, dict(row, series_uid=existing["series_uid"], recurrence=None, **keep))
         if contacts is not None:
             db.set_object_contacts(conn, "event", uid, contacts)
         return

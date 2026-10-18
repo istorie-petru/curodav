@@ -58,6 +58,9 @@ def shift_rule(rule: str, delta_days: int) -> str:
             if token not in _DAYS:
                 raise CannotShift("ordinal weekdays")
             days.append(_DAYS[(_DAYS.index(token) + delta_days) % 7])
+        weeks = {(_DAYS.index(t.strip().upper()) + delta_days) // 7 for t in parts["BYDAY"].split(",")}
+        if len(weeks) > 1 and int(parts.get("INTERVAL", "1") or 1) > 1:
+            raise CannotShift("days that would land in different weeks of an every-other-week rule")
         parts["BYDAY"] = ",".join(days)
     elif freq == "MONTHLY" and "BYMONTHDAY" in parts:
         try:
@@ -257,13 +260,30 @@ def ensure_horizon(conn, today: date | None = None) -> int:
         rows = members(conn, series["uid"])
         if not rows:
             continue
-        template = rows[-1]
+        template = _template_row(rows)
         after = datetime.fromisoformat(series["extended_until"] + "T23:59:59") if series["extended_until"] else _minute(template["start_at"])
         limit = datetime.combine(target, datetime.max.time()).replace(microsecond=0)
         added += _generate(conn, series, template, None, after, limit)
         series["extended_until"] = target.isoformat()
         _save_series(conn, series)
     return added
+
+
+def _template_row(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """The row new occurrences copy: the latest row of the most common shape among the last ones, so a single
+    customised occurrence (a renamed exam, another room) is not passed on to the rows added later."""
+    recent = rows[-12:]
+
+    def shape(r):
+        a, b = _minute(r["start_at"]), _minute(r.get("end_at"))
+        return (r.get("title"), r.get("description"), r.get("location"), r.get("meeting_url"), bool(r.get("all_day")),
+                tuple(r.get("tags") or []), tuple(r.get("reminders") or []), (b - a) if a and b else None)
+
+    counts: dict[Any, int] = {}
+    for r in recent:
+        counts[shape(r)] = counts.get(shape(r), 0) + 1
+    best = max(counts.values())
+    return next(r for r in reversed(recent) if counts[shape(r)] == best)
 
 
 _last_ensure: date | None = None
@@ -275,6 +295,69 @@ def ensure_horizon_daily(conn) -> None:
     if _last_ensure != today:
         _last_ensure = today
         ensure_horizon(conn, today)
+
+
+# ---------------------------------------------------------------- weekend and holiday policy
+
+_POLICY_KEYS = ("holiday_calendar", "exclude_saturday", "exclude_sunday")
+
+
+def _policy_of(source: dict[str, Any]) -> dict[str, Any]:
+    return {"holiday_calendar": source.get("holiday_calendar") or None, "exclude_saturday": 1 if source.get("exclude_saturday") else 0,
+            "exclude_sunday": 1 if source.get("exclude_sunday") else 0}
+
+
+def reconcile_policy(conn, series: dict[str, Any], old: dict[str, Any], new: dict[str, Any], old_cal=None, new_cal=None,
+                     since: datetime | None = None) -> int:
+    """Brings a series' existing rows in line with a changed weekend or holiday policy: rows that now fall on an
+    excluded day are removed, and occurrences the old policy had skipped but the new one allows are created.
+    Occurrences someone deleted or moved by hand are left alone. Returns the number of rows changed."""
+    rows = members(conn, series["uid"])
+    if not rows or (old == new and old_cal is new_cal):
+        return 0
+    old_cal = old_cal if old_cal is not None else db.list_holidays_by_calendar(conn)
+    new_cal = new_cal if new_cal is not None else old_cal
+    anchor = _minute(series["anchor"])
+    rule, rule_exdates = _rrule(series["rule"], anchor)
+    end = datetime.combine(date.fromisoformat(series["extended_until"]), datetime.max.time()) if series.get("extended_until") \
+        else _minute(rows[-1]["start_at"]) + timedelta(days=1)
+    end = max(end, _minute(rows[-1]["start_at"]))
+    template = _template_row(rows)
+    start0, end0 = _minute(template["start_at"]), _minute(template.get("end_at"))
+    duration = (end0 - start0) if (start0 and end0 and end0 >= start0) else None
+    contacts = [c["uid"] for c in db.list_object_contacts(conn, "event", template["uid"])]
+    at = {_minute(r["start_at"]): r for r in rows}
+    changed = 0
+    for occ in rule.between(max(anchor, since) if since else anchor, end, inc=True):
+        if occ.date() in set(rule_exdates):
+            continue
+        was = recurrence_expand.is_excluded_by_policy(occ.date(), old, old_cal)
+        now = recurrence_expand.is_excluded_by_policy(occ.date(), new, new_cal)
+        if now and not was and occ in at:
+            db.delete_event(conn, at[occ]["uid"])
+            changed += 1
+        elif was and not now and occ not in at:
+            uid = str(uuid.uuid4())
+            db.upsert_event(conn, _occurrence_row(template, occ, duration, uid, series["uid"]))
+            if contacts:
+                db.set_object_contacts(conn, "event", uid, contacts)
+            changed += 1
+    if not members(conn, series["uid"]):
+        conn.execute("DELETE FROM event_series WHERE uid = ?", (series["uid"],))
+        conn.commit()
+    return changed
+
+
+def reconcile_holidays(conn, before: dict[str, list[dict[str, Any]]]) -> int:
+    """A holiday calendar changed in Settings (`before` is its state beforehand): every series using a calendar
+    follows it, without touching occurrences that were moved or deleted by hand."""
+    after = db.list_holidays_by_calendar(conn)
+    changed = 0
+    for name in {n for n in {*before, *after} if before.get(n) != after.get(n)}:
+        for s in conn.execute("SELECT * FROM event_series WHERE holiday_calendar = ?", (name,)).fetchall():
+            policy = _policy_of(dict(s))
+            changed += reconcile_policy(conn, dict(s), policy, policy, before, after)
+    return changed
 
 
 # ---------------------------------------------------------------- scoped operations
@@ -389,9 +472,17 @@ def apply_edit(conn, uid: str, scope: str, fields: dict[str, Any], delta_start: 
     series0 = get_series(conn, (db.get_event(conn, uid) or {}).get("series_uid"))
     if series0:
         delta_start = _safe_delta(series0["rule"], delta_start)
+    new_policy = _policy_of(fields) if scope != "this" and all(k in fields for k in _POLICY_KEYS) else None
+    if series0 and new_policy and new_policy != _policy_of(series0):
+        since = _minute(db.get_event(conn, uid)["start_at"]) if scope == "following" else None
+        reconcile_policy(conn, series0, _policy_of(series0), new_policy, since=since)
     if scope == "following":
         split_following(conn, uid, delta_start)
     rows = scope_rows(conn, uid, scope)
+    if new_policy and rows and rows[0].get("series_uid"):
+        policy_series = get_series(conn, rows[0]["series_uid"])
+        if policy_series:
+            _save_series(conn, dict(policy_series, **new_policy))
     if scope == "all" and delta_start and rows:
         series = get_series(conn, rows[0].get("series_uid"))
         if series:
@@ -423,6 +514,13 @@ def change_rule(conn, uid: str, scope: str, new_rule: str, base: dict[str, Any],
     old_series_uid = event.get("series_uid")
     rows = scope_rows(conn, uid, "all" if scope == "all" else "following")
     keep = rows[0] if scope == "all" else event
+    if scope == "all" and keep["uid"] != event["uid"]:
+        # The edit was made on a later occurrence: the series still starts where it did, with the new time of day.
+        s0, e0 = _minute(event["start_at"]), _minute(event.get("end_at"))
+        s1, e1 = _minute(base["start_at"]), _minute(base.get("end_at"))
+        first = _minute(keep["start_at"])
+        base = dict(base, start_at=_fmt(first + (s1 - s0), base["start_at"]) if s0 and s1 else keep["start_at"],
+                    end_at=_fmt(first + (s1 - s0) + (e1 - s1), base["end_at"]) if s0 and s1 and e1 and base.get("end_at") else base.get("end_at"))
     for r in rows:
         if r["uid"] != keep["uid"]:
             db.delete_event(conn, r["uid"])
