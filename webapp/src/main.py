@@ -175,23 +175,12 @@ async def lifespan(app: FastAPI):
             )
     app.state.bridge = bridge
 
-    # Populate the cache synchronously once at startup so the first page
-    # load has real data instead of an empty database until the first
-    # background poll completes. full_refresh already isolates failures
-    # per-collection (see sync.py), but this call itself must not be
-    # allowed to raise either -- letting a Radicale-side error escape
-    # here would fail FastAPI's lifespan startup and refuse to boot the
-    # *entire* app over what might be one bad object in one calendar. If
-    # this does fail, the cache just stays empty/stale until the
-    # background sync thread's own retry loop (started below) succeeds.
+    # The sync only materializes published Lists into Radicale (nothing the
+    # pages read), and the thread's first tick runs right away. It must not
+    # run before the port opens: a large first sync once outlasted the
+    # deploy health check and got a healthy release rolled back.
     stop_event = None
     if bridge is not None:
-        with db.connect(settings.db_path) as conn:
-            try:
-                sync.full_refresh(bridge, conn)
-            except Exception:
-                logger.exception("Initial Radicale sync failed at startup; continuing with an empty/stale cache")
-
         _thread, stop_event = sync.start_background_sync(
             bridge, settings.db_path, settings.sync_interval_seconds
         )

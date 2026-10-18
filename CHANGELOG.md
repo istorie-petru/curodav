@@ -4,6 +4,10 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.4.5]
+
+- Fix: the first Radicale sync no longer runs before the app opens its port. With a working Radicale and many published items it could take minutes, so the deploy health check failed and `curodav-ctl update` never finished. It now runs in the background thread alongside normal use.
+
 ## [4.4.4]
 
 - Radicale: requests to the server time out after 15 seconds, so a hung Radicale can no longer block the background sync and delay shutdown or a deploy's health check.
