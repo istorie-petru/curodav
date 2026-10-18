@@ -30,6 +30,11 @@ from .vcard_rows import contact_row_to_vcard, vcard_to_contact_row
 
 _DAV_NS = {"d": "DAV:"}
 
+# Without this, a hung Radicale request blocks the background sync thread
+# (sync.py's run_periodic) past systemd's TimeoutStopSec on shutdown, which
+# gets the process SIGKILLed and can cost a deploy's health check its window.
+_RADICALE_REQUEST_TIMEOUT_SECONDS = 15
+
 
 def resource_name(uid: str) -> str:
     """Filename stem for a UID. Radicale's path check rejects characters
@@ -45,6 +50,7 @@ class CalDavBridge:
             url=settings.radicale_base_url,
             username=settings.radicale_username,
             password=settings.radicale_password,
+            timeout=_RADICALE_REQUEST_TIMEOUT_SECONDS,
         )
         self.principal = self.client.principal()
         # Multi-calendar: lazily-populated cache of CalDAV Calendar objects

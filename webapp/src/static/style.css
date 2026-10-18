@@ -4197,6 +4197,19 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
   .page-header-narrow.has-banner .page-header-narrow-actions{flex:1 1 0; min-width:0; flex-wrap:nowrap; justify-content:flex-end;}
   .page-header-narrow.has-banner .cal-nav-label{flex:0 1 auto; min-width:0; max-width:none; font-size:var(--text-sm);}
 }
+/* Phones: the strip is as tall as its tallest control plus 4px above and below, never a fixed height or a ratio,
+   so a wrapping row grows instead of clipping. The back arrow is 36px here (the 44px touch size would set the height). */
+@media (max-width:720px){
+  .page-header-narrow, .page-header-narrow.has-banner{
+    aspect-ratio:auto; height:auto; min-height:46px;
+    padding-top:var(--space-1); padding-bottom:var(--space-1);
+  }
+  .page-header-narrow .page-header-narrow-back{width:36px; height:36px;}
+  .page-header-narrow{flex-wrap:wrap; justify-content:flex-start; align-content:center;}
+  .page-header-narrow .page-header-narrow-title{flex:0 1 auto; min-width:5.5em;}
+  .page-header-narrow .page-header-narrow-actions{flex:1 1 0; min-width:0; flex-wrap:nowrap; justify-content:flex-end;}
+  .page-header-narrow .cal-nav-label{flex:0 1 auto; min-width:0; max-width:none; font-size:var(--text-sm);}
+}
 .page-header-narrow-bg{
   position:absolute; inset:0; width:100%; height:100%;
   object-fit:cover; z-index:0;

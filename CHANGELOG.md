@@ -4,6 +4,11 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.4.4]
+
+- Radicale: requests to the server time out after 15 seconds, so a hung Radicale can no longer block the background sync and delay shutdown or a deploy's health check.
+- Phones: the header strip is 46px tall (was 56px, or about 72px without a banner) and always as tall as its tallest control, so a wrapping row grows instead of clipping; pages without a banner use the same single row.
+
 ## [4.4.3]
 
 - Radicale: when the connection fails at startup (wrong credentials or server down), the background sync no longer starts or claims to run, and a rejected login logs one clear line with the URL and user instead of a traceback.
