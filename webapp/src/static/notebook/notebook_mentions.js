@@ -255,6 +255,9 @@
       var gap = document.createTextNode("\u00a0");
       inserted.after(gap);
       inserted = gap;
+    } else if (item.kind === "icon" && item.char) {
+      inserted = document.createTextNode(item.char);
+      range.insertNode(inserted);
     } else {
       inserted = chipFor(item);
       range.insertNode(inserted);

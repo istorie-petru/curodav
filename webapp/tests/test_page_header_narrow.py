@@ -87,7 +87,6 @@ def _request_with_app(path, db_path, backup_dir=None):
 def _assert_narrow_header(body: str, title: str, icon_name: str) -> None:
     assert 'class="page-header-narrow"' in body
     assert f'class="page-header-narrow-title">{title}</h2>' in body
-    assert f'#icon-{icon_name}' in body
 
 
 class TestPageHeaderNarrowRollout:
@@ -103,7 +102,7 @@ class TestPageHeaderNarrowRollout:
         # Week's own tabbar identity is "Planner" (icon('clock')), not
         # "Calendar" -- see calendar_week.html's own comment.
         resp = calendar_router.week_view(_bare_request("/calendar/week"), conn=conn)
-        _assert_narrow_header(resp.body.decode(), "Planner", "clock")
+        _assert_narrow_header(resp.body.decode(), "Calendar", "calendar")
 
     def test_contacts(self, conn):
         resp = contacts_router.list_contacts(_bare_request("/contacts"), conn=conn)
@@ -124,32 +123,32 @@ class TestPageHeaderNarrowRollout:
 
     def test_settings_general(self, conn):
         body = settings_router.settings_general(_bare_request("/settings/general"), conn=conn).body.decode()
-        _assert_narrow_header(body, "General", "user")
+        _assert_narrow_header(body, "Preferences", "user")
 
     def test_settings_appearance(self, conn):
         body = settings_router.settings_appearance(_bare_request("/settings/appearance"), conn=conn).body.decode()
-        _assert_narrow_header(body, "Appearance", "sun")
+        _assert_narrow_header(body, "Preferences", "sun")
 
     def test_labels_manage(self, conn):
         resp = labels_router.manage_labels(_bare_request("/settings/labels"), conn=conn)
-        _assert_narrow_header(resp.body.decode(), "Labels", "tag")
+        _assert_narrow_header(resp.body.decode(), "Organise", "tag")
 
     def test_settings_holidays(self, conn):
         resp = settings_router.settings_holidays(_bare_request("/settings/holidays"), conn=conn)
-        _assert_narrow_header(resp.body.decode(), "Holidays", "calendar")
+        _assert_narrow_header(resp.body.decode(), "Organise", "calendar")
 
     def test_settings_time_blocks(self, conn):
         resp = settings_router.settings_time_blocks(_bare_request("/settings/time-blocks"), conn=conn)
-        _assert_narrow_header(resp.body.decode(), "Sleep &amp; Leisure Time", "moon")
+        _assert_narrow_header(resp.body.decode(), "Preferences", "moon")
 
     def test_settings_data_maintenance(self, conn, tmp_path):
         req = _request_with_app("/settings/data-maintenance", tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
         body = settings_router.settings_data_maintenance(req, conn=conn).body.decode()
-        _assert_narrow_header(body, "Data &amp; Maintenance", "database")
+        _assert_narrow_header(body, "System", "database")
 
     def test_published_lists(self, conn, tmp_path):
         resp = published_lists_router.list_index(_request_with_app("/published-lists", tmp_path / "cache.sqlite"), conn=conn)
-        _assert_narrow_header(resp.body.decode(), "Published Lists", "share-2")
+        _assert_narrow_header(resp.body.decode(), "System", "share-2")
 
     def test_dashboard_now_uses_the_narrow_header(self, conn):
         # 2026-09-25 (ui-cleanup item 2): "all banners should be narrow --
@@ -159,20 +158,13 @@ class TestPageHeaderNarrowRollout:
 
         body = dashboard_router.dashboard_view(_bare_request("/"), conn=conn).body.decode()
         assert 'class="page-header-narrow' in body
-        assert "#icon-home" in body[body.index('class="page-header-narrow'):][:600]
         assert "page-banner-avatar" not in body
 
     def test_label_page_now_uses_the_narrow_header(self, conn):
         db.upsert_label_config(conn, {"name": "CS101", "color": "red", "icon": "book", "created_at": _now()})
         body = label_pages.label_page("CS101", _bare_request("/labels/CS101"), conn=conn).body.decode()
         header = body[body.index('class="page-header-narrow'):][:800]
-        assert "#icon-book" in header
-        # 2026-09-25 (UI audit L2/L5): the color travels as custom
-        # properties so the CSS can pick the fill tone (white chip over a
-        # banner) or the text-safe tone (no banner).
-        assert 'page-header-narrow-icon has-color' in header
-        assert '--hdr-icon-fill: var(--cal-accent-red, var(--cal-accent-blue))' in header
-        assert '--hdr-icon-text: var(--cal-text-red, var(--cal-text-blue))' in header
+        assert "page-header-narrow-icon" not in header
         assert ">CS101</h2>" in header
         assert "label-icon-tile" not in body
 
@@ -324,9 +316,8 @@ class TestNarrowHeaderBackPosition:
         resp = settings_router.settings_holidays(_bare_request("/settings/holidays"), conn=conn)
         body = resp.body.decode()
         back_pos = body.index("page-header-narrow-back")
-        icon_pos = body.index("page-header-narrow-icon")
         title_pos = body.index("page-header-narrow-title")
-        assert back_pos < icon_pos < title_pos
+        assert back_pos < title_pos
 
 
 

@@ -1,0 +1,11 @@
+{# Where the quick-add control opens: the page's own kind of item, pre-filled with the label page it sits on. A
+   Space/Project/plain-label page sets `page_label_scope`, which restricts the label picker to that group. #}
+{% macro quick_add_href() -%}
+{% set _qa_tab = {'contacts': 'contact', 'labels': 'label'}.get(active_tab, 'task') -%}
+{% set _qa_label = label.name if (active_tab == 'label' and label is defined and label) else '' -%}
+/quick/add?default_tab={{ _qa_tab }}{% if page_label_scope is defined and page_label_scope %}&amp;scope={{ page_label_scope|urlencode }}{% endif %}{% if _qa_label %}&amp;label={{ _qa_label|urlencode }}{% endif %}
+{%- endmacro %}
+{% macro quick_add_title() -%}
+{% set _qa_label = label.name if (active_tab == 'label' and label is defined and label) else '' -%}
+{% if _qa_label %}New item in {{ _qa_label }}{% else %}{{ {'contacts': 'New contact', 'labels': 'New label'}.get(active_tab, 'New task or event') }}{% endif %}
+{%- endmacro %}

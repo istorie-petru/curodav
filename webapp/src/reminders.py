@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
 from .log import get_logger
-from . import db, habit_view, push, recurrence_expand
+from . import db, habit_view, perf, push, recurrence_expand
 
 log = get_logger(__name__)
 
@@ -279,7 +279,8 @@ def _loop(db_path, stop_event: threading.Event) -> None:
     while not stop_event.is_set():
         try:
             with db.connect(db_path) as conn:
-                run_once(conn)
+                with perf.timed("background", "reminder check"):
+                    run_once(conn)
         except Exception:
             log.exception("Reminder tick failed; will retry next minute")
         stop_event.wait(TICK_SECONDS)

@@ -42,8 +42,8 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _request(path="/"):
-    return Request({"type": "http", "method": "GET", "path": path, "headers": []})
+def _request(path="/", query=b""):
+    return Request({"type": "http", "method": "GET", "path": path, "query_string": query, "headers": []})
 
 
 def _make_label(conn, name):
@@ -732,18 +732,19 @@ class TestBannerRendersOnTaskDetailAndKanban:
         db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "page_type": "sections", "created_at": _now()})
         _set_remote(conn, scope="Garden", image_url="https://cdn.example.com/project.jpg")
         db.upsert_task(conn, {"uid": "t1", "title": "Water the plants", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
-        resp = label_pages.label_page("Garden", _request("/labels/Garden"), conn=conn)
+        resp = label_pages.label_page("Garden", _request("/labels/Garden", b"view=board"), conn=conn)
         card = [t for t in resp.context["columns"]["active"] if t["uid"] == "t1"][0]
-        assert card["banner"]["image_url"] == "https://cdn.example.com/project.jpg"
+        assert card["strip"]["banner"]["image_url"] == "https://cdn.example.com/project.jpg"
         body = resp.body.decode()
-        assert 'class="kanban-card-banner"' in body
+        assert 'class="kanban-card-strip"' in body
         assert 'src="https://cdn.example.com/project.jpg"' in body
 
     def test_kanban_card_has_no_banner_markup_when_none_resolves(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "page_type": "sections", "created_at": _now()})
         db.upsert_task(conn, {"uid": "t1", "title": "Water the plants", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
-        resp = label_pages.label_page("Garden", _request("/labels/Garden"), conn=conn)
-        assert "kanban-card-banner" not in resp.body.decode()
+        resp = label_pages.label_page("Garden", _request("/labels/Garden", b"view=board"), conn=conn)
+        body = resp.body.decode()
+        assert "<img src=" not in body.split('class="kanban-card-strip')[1].split("</div>")[0]
 
 
 class TestNarrowDashboardHeaders:
@@ -771,7 +772,6 @@ class TestNarrowDashboardHeaders:
         _set_remote(conn, cached=True, scope="group:Uni")
         body = label_pages.group_page("Uni", _request("/groups/Uni"), conn=conn).body.decode()
         assert "/banners/image?scope=group%3AUni&amp;v=" in body
-        assert "#icon-layers" in body[body.index('class="page-header-narrow'):][:600]
 
     def test_home_has_no_avatar_even_with_a_photo(self, conn):
         db.set_profile_photo(conn, base64.b64encode(b"img").decode("ascii"), "jpeg")

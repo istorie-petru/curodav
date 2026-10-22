@@ -11,7 +11,7 @@
    base.html's extra_head block comment and
    static/notebook/vendor/NOTICE.md for why (CSP blocks unnonced inline
    <style>, which is all a third-party vendored bundle can produce). #}
-<link rel="stylesheet" href="{{ static_url('notebook/vendor/editorjs.css') }}">
+{% if new_editor %}<link rel="stylesheet" href="{{ static_url('notebook/notebook_tiptap.css') }}">{% else %}<link rel="stylesheet" href="{{ static_url('notebook/vendor/editorjs.css') }}">{% endif %}
 <link rel="stylesheet" href="{{ static_url('notebook/vendor/header.css') }}">
 <link rel="stylesheet" href="{{ static_url('notebook/vendor/list.css') }}">
 <link rel="stylesheet" href="{{ static_url('notebook/notebook_table.css') }}">
@@ -46,7 +46,7 @@
 {% if sidebar_layout == 'sidebar' %}
 <div class="notebook-page-layout main-shell-body">
     <div class="notebook-page-main">
-        <div id="notebook-editor" class="card" data-uid="{{ document.uid }}" data-title="{{ document.title }}" data-content-url="/notebook/{{ document.uid }}/content"></div>
+        <div id="notebook-editor" class="card" data-uid="{{ document.uid }}" data-title="{{ document.title }}" data-content-url="/notebook/{{ document.uid }}/content" data-editor-choice="{{ editor_choice }}" data-toolbar-icons="{{ toolbar_icons }}"></div>
         <noscript><p class="empty-state-text">Editing a document requires JavaScript. The title above can still be changed without it.</p></noscript>
     </div>
     <aside class="notebook-sidebar">
@@ -101,7 +101,7 @@
                 {{ empty_state('No headings yet', size='compact') }}
             </nav>
         </div>
-        <div id="notebook-editor" class="card" data-uid="{{ document.uid }}" data-title="{{ document.title }}" data-content-url="/notebook/{{ document.uid }}/content"></div>
+        <div id="notebook-editor" class="card" data-uid="{{ document.uid }}" data-title="{{ document.title }}" data-content-url="/notebook/{{ document.uid }}/content" data-editor-choice="{{ editor_choice }}" data-toolbar-icons="{{ toolbar_icons }}"></div>
         <noscript><p class="empty-state-text">Editing a document requires JavaScript. The title above can still be changed without it.</p></noscript>
         {% if citations %}
         <div class="card notebook-bibliography-footer notebook-stacked-section">
@@ -129,6 +129,19 @@
 {% endif %}
 {% endblock %}
 {% block extra_scripts %}
+{% if new_editor %}
+<script defer src="{{ static_url('perf_client.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_floating.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_toc.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_mentions.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_wikilinks.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_footnotes.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_glossary_autofill.js') }}"></script>
+<script defer src="{{ static_url('notebook/vendor/prism.js') }}"></script>
+<script defer src="{{ static_url('notebook/vendor/tiptap.bundle.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_tiptap_toolbar.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_tiptap.js') }}"></script>
+{% else %}
 <script defer src="{{ static_url('notebook/vendor/editorjs.umd.js') }}"></script>
 <script defer src="{{ static_url('notebook/vendor/header.umd.js') }}"></script>
 <script defer src="{{ static_url('notebook/vendor/list.umd.js') }}"></script>
@@ -154,7 +167,9 @@
 <script defer src="{{ static_url('notebook/notebook_markdown.js') }}"></script>
 <script defer src="{{ static_url('notebook/notebook_typing.js') }}"></script>
 <script defer src="{{ static_url('notebook/notebook_undo.js') }}"></script>
+<script defer src="{{ static_url('perf_client.js') }}"></script>
 <script defer src="{{ static_url('notebook/notebook_editor.js') }}"></script>
+{% endif %}
 <script defer src="{{ static_url('notebook/notebook_entries.js') }}"></script>
 <script defer src="{{ static_url('notebook_sidebar.js') }}"></script>
 {% endblock %}

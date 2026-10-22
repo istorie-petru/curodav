@@ -21,6 +21,10 @@
 <div class="modal-body">
 {% call detail_section('Details') %}
     <div class="detail-meta-grid">
+        {% set _projects = project_label_names(request) %}
+        {% set _proj = (event.tags or []) | select('in', _projects) | list %}
+        {% set _plain = (event.tags or []) | reject('in', _projects) | list %}
+        {% set _people = object_contacts(request, 'event', event.uid) %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Start</span>
             <span class="detail-meta-value"><span class="color-dot cal-{{ event.calendar_color }}"></span>{% if event.all_day %}{{ event.start_at | relative_date }} (all day){% else %}{{ event.start_at | relative_date }} {{ event.start_at | fmt_time }}{% endif %}</span>
@@ -31,33 +35,6 @@
             <span class="detail-meta-value">{% if event.all_day %}{{ event.end_at | relative_date }}{% else %}{{ event.end_at | relative_date }} {{ event.end_at | fmt_time }}{% endif %}</span>
         </div>
         {% endif %}
-        {% if event.location %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Location</span>
-            <span class="detail-meta-value">{{ event.location }}</span>
-        </div>
-        {% endif %}
-        {% if event.meeting_url %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Meeting</span>
-            <span class="detail-meta-value"><a href="{{ event.meeting_url }}" target="_blank" rel="noopener">{{ icon('external-link', 'icon-sm') }} Join</a></span>
-        </div>
-        {% endif %}
-        {% if event.recurrence %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Recurrence</span>
-            <span class="detail-meta-value">{{ event.recurrence | recurrence_text }}</span>
-        </div>
-        {% endif %}
-        {% if event.reminders %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Reminders</span>
-            <span class="detail-meta-value">{% for m in event.reminders %}{{ m }} min{% if not loop.last %}, {% endif %}{% endfor %} before</span>
-        </div>
-        {% endif %}
-        {% set _projects = project_label_names(request) %}
-        {% set _proj = (event.tags or []) | select('in', _projects) | list %}
-        {% set _plain = (event.tags or []) | reject('in', _projects) | list %}
         {% if _proj %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Project</span>
@@ -70,11 +47,34 @@
             <span class="detail-meta-value">{% for tag in _plain %}{{ label_pill(tag, 'modal') }} {% endfor %}</span>
         </div>
         {% endif %}
-        {% set _people = object_contacts(request, 'event', event.uid) %}
         {% if _people %}
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">Contacts</span>
             <span class="detail-meta-value">{% for p in _people %}<a href="/contacts/{{ p.uid }}" data-modal>{{ p.full_name or 'Unnamed' }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
+        </div>
+        {% endif %}
+        {% if event.reminders %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Reminders</span>
+            <span class="detail-meta-value">{% for m in event.reminders %}{{ m }} min{% if not loop.last %}, {% endif %}{% endfor %} before</span>
+        </div>
+        {% endif %}
+        {% if event.recurrence %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Recurrence</span>
+            <span class="detail-meta-value">{{ event.recurrence | recurrence_text }}</span>
+        </div>
+        {% endif %}
+        {% if event.location %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Location</span>
+            <span class="detail-meta-value">{{ event.location }}</span>
+        </div>
+        {% endif %}
+        {% if event.meeting_url %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Meeting</span>
+            <span class="detail-meta-value"><a href="{{ event.meeting_url }}" target="_blank" rel="noopener">{{ icon('external-link', 'icon-sm') }} Join</a></span>
         </div>
         {% endif %}
     </div>

@@ -166,19 +166,19 @@ document.addEventListener("submit", function (e) {
     if (!form || !form.matches || !form.matches("[data-cc-complete]")) return;
     e.preventDefault();
     var btn = form.querySelector("button[type='submit']");
+    // The check shows as done at once; a failed save puts it back.
+    var wasDone = !!btn && btn.classList.contains("is-done");
     if (btn) {
+      btn.classList.add("is-done");
       btn.disabled = true;
-      btn.classList.add("is-loading");
     }
     post(form.action, form, { change: { type: "task", action: "complete", uid: uidFromUrl(form.action) } })
       .catch(function (err) {
+        if (btn && !wasDone) btn.classList.remove("is-done");
         window.ccToast({ message: err.message || "Could not mark that done.", variant: "error" });
       })
       .finally(function () {
-        if (btn) {
-          btn.disabled = false;
-          btn.classList.remove("is-loading");
-        }
+        if (btn) btn.disabled = false;
       });
   });
 

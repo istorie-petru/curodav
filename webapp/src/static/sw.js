@@ -593,31 +593,18 @@
 // v145 (2026-10-11): soft label colors on the light theme, themed minimalist scrollbars; style.css changed.
 // v147 (2026-10-17): the notebook figure block (notebook_image.js and .css), compact table, block and endnote menus, timeline colors, one-row entry references, exact 12:1 banner header, image store upload, one palette and wikilink picker; notebook scripts, style.css and notebook CSS changed.
 // v148 (2026-10-17): one reference per entry section; entry_reference_pages.js and style.css changed.
-const CACHE_NAME = "cc-shell-v148";
+// v149 (2026-10-22): the worker no longer answers page navigations (that added a hop to every page load) and only
+// serves /static/ files cache-first by their exact versioned URL; the three script bundles replace ~46 script files.
+const CACHE_NAME = "cc-shell-v149";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",
   "/static/style.css",
-  "/static/toast.js",
-  "/static/app.js",
-  "/static/sidebar_tree.js",
-  "/static/mobile_nav_drawer.js",
-  "/static/a11y_icon_labels.js",
-  "/static/dynamic_styles.js",
-  "/static/modal.js",
-  "/static/habit_day.js",
+  "/static/bundle_a.js",
+  "/static/bundle_b.js",
+  "/static/bundle_c.js",
+  "/static/icon_library.js",
   "/static/look_picker.js",
-  "/static/search_field.js",
-  "/static/tag_input.js",
-  "/static/recurrence_picker.js",
-  "/static/reminders_picker.js",
-  "/static/stepper.js",
-  "/static/dashboard_widget_preview.js",
-  "/static/avatar_cropper.js",
-  "/static/task_habit_field_toggle.js",
-  "/static/event_format_toggle.js",
-  "/static/command_palette.js",
-  "/static/quick_add.js",
   "/static/pwa.js",
   "/static/favicon-16.png",
   "/static/favicon-32.png",
@@ -664,11 +651,6 @@ self.addEventListener("fetch", (event) => {
   // features/architecture.md) always go straight to the network
   // untouched.
   if (request.method !== "GET" || new URL(request.url).origin !== self.location.origin) {
-    return;
-  }
-
-  if (request.mode === "navigate") {
-    event.respondWith(fetch(request));
     return;
   }
 

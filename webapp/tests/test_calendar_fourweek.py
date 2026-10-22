@@ -393,7 +393,7 @@ class TestFourWeekViewTemplate:
         resp = calendar_router.calendar_root_redirect(label="Work")
         assert resp.headers["location"] == "/calendar/fourweek?label=Work"
 
-    def test_tabbar_has_calendar_and_week_only(self, conn):
+    def test_tabbar_has_calendar_only(self, conn):
         # base.html carries exactly two calendar-domain tabbar entries now:
         # "Calendar" (data-tab="calendar", -> 4-Week) and "Planner"
         # (data-tab="calendar_week" -- visible label renamed from "Week"
@@ -402,7 +402,7 @@ class TestFourWeekViewTemplate:
         # both retired the same session they were added/considered.
         body = calendar_router.four_week_view(_bare_request(), conn=conn).body.decode()
         assert 'data-tab="calendar"' in body
-        assert 'data-tab="calendar_week"' in body
+        assert 'data-tab="calendar_week"' not in body
         assert 'data-tab="calendar_fourweek"' not in body
         assert 'data-tab="calendar_day"' not in body
         assert 'href="/calendar/fourweek" data-tab="calendar"' in body

@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from ... import clock, db, derived_state, habit_view, recurrence_expand
 from ...deps import EDIT_MODE_KEY, PAGE_HEADER_BANNER_SCOPE, get_db, templates
 
-from .widgets import _agenda_show_from_form, _combine_tags, _greeting_for_hour, _now, _render_agenda, _render_at_a_glance, _render_contact_list, _render_group_members, _render_habit_checkin, _render_mini_month_calendar, _render_notebook_list, _render_scheduled_work_today, _render_spaces_projects, _render_weekly_schedule, _widget_width
+from .widgets import _filtered_tasks, _scope_child_names, _agenda_show_from_form, _combine_tags, _greeting_for_hour, _now, _render_agenda, _render_at_a_glance, _render_contact_list, _render_group_members, _render_habit_checkin, _render_mini_month_calendar, _render_notebook_list, _render_scheduled_work_today, _render_spaces_projects, _render_weekly_schedule, _widget_width
 from .layout import _backfill_mini_calendar_widget, _build_widget_contexts, _config_from_form, _dissolve_if_singleton, _dissolve_stack, _ensure_default_label_widgets, _ensure_default_widgets, _excluded_widget_types, _migrate_group_layout_2026_09_28, _migrate_widget_consolidation, _migrate_widget_removal_2026_08_30, _page_scope, _resolve_selection, _scoped_collections, _selection_from_widget, _widget_context, _widget_sources_for_scope, _widget_types_for_scope, _widget_views_for_scope
 
 
@@ -363,6 +363,21 @@ def dashboard_view(
     conn=Depends(get_db),
 ):
     page_type = db.get_home_page_type(conn)
+    from .. import label_pages, secretariat_page
+
+    view = label_pages.requested_view(request)
+    if view:
+        banner_ctx = _page_banner_context(conn, "")
+        if view == "agenda":
+            return secretariat_page.render(
+                conn, request, scope_key=None, title="Home", icon_name="home", icon_color=None,
+                banner_ctx=banner_ctx, page_url="/", header_edit_url="/home/page", view="agenda",
+            )
+        tasks = [t for t in _filtered_tasks(conn, {"label_name": None}, open_only=False) if t["status"] != "archived"]
+        label = {"name": "Home", "icon": "home", "color": "blue", "tasks_widget": 1}
+        return label_pages.scope_board_page(
+            conn, request, _scope_child_names(conn, None), None, label, tasks, "/", banner_ctx, "/home/page"
+        )
     if page_type != "dashboard":
         from .. import label_pages, secretariat_page
 
@@ -410,14 +425,33 @@ def today_redirect():
     return RedirectResponse(url="/", status_code=302)
 
 
+def _quick_next_rows(conn, q: str) -> list[dict]:
+    from ... import quick_next
+    from ..dashboard import widgets
+
+    q = q.strip()
+    if q:
+        return quick_next.from_search(db.search_entities(conn, q=q, types=["task", "event", "contact"], limit=20))
+    today = clock.today()
+    config = {"label_name": None}
+    tasks = widgets._filtered_tasks(conn, config)
+    events = widgets._filtered_events_expanded(conn, config, today, today + timedelta(days=quick_next.CURATED_DAYS))
+    return quick_next.curated(today, tasks, events)
+
+
+@router.get("/quick/next")
+def quick_next_rows(request: Request, q: str = "", conn=Depends(get_db)):
+    return templates.TemplateResponse("_quick_next_rows.html", {"request": request, "next_rows": _quick_next_rows(conn, q), "q": q.strip()})
+
+
 @router.get("/quick/add")
 def quick_add_form(
-    request: Request, default_tab: str = "task", scope: str = "", label: str = "", conn=Depends(get_db)
+    request: Request, default_tab: str = "task", scope: str = "", label: str = "", focus: str = "", conn=Depends(get_db)
 ):
     from ..labels import COLORS, LABEL_ICON_GROUPS
     from ..tasks import STATUS_ITEMS, STATUSES
 
-    if default_tab not in ("task", "event", "contact", "label", "transaction", "note"):
+    if default_tab not in ("task", "event", "contact", "label"):
         default_tab = "task"
 
     tag_names = db.list_tag_names_in_use(conn)
@@ -428,17 +462,14 @@ def quick_add_form(
     label = (label or "").strip()
     if label and label not in tag_names:
         tag_names = sorted(tag_names + [label], key=str.lower)
-    from ..finance import transaction_form_context
-    from ..notebook import new_note_context
-
-    fin = transaction_form_context(request, conn, None, "/finance/transactions")
     return templates.TemplateResponse(
         "quick_add.html",
         {
             "request": request,
             "active_tab": "dashboard",
-            "fin": fin if fin["account_items"][1:] else None,
-            "nn": new_note_context(request, conn),
+            "next_rows": _quick_next_rows(conn, ""),
+            "focus_search": focus == "search",
+            "q": "",
             "default_tab": default_tab,
             # Task-side context -- the shared field-grid partial
             # (_task_form_fields.html) needs the same items new_task_form

@@ -105,26 +105,9 @@
           <button type="button" id="sidebar-expand-toggle" class="tab-btn sidebar-expand-toggle" title="Expand sidebar" aria-label="Expand sidebar" aria-pressed="false">{{ icon('sidebar') }}</button>
           <span class="sidebar-app-name">Command Center</span>
         </div>
-        {% if not edit_mode %}
-        {% set _qa_defaults = {'contacts': ('contact', 'New contact'), 'labels': ('label', 'New label'), 'finance': ('transaction', 'New transaction'), 'notebook': ('note', 'New note')} %}
-        {% set _qa_tab, _qa_title = _qa_defaults.get(active_tab, ('task', 'New task or event')) %}
-        {% set _qa_label = label.name if (active_tab == 'label' and label is defined and label) else '' %}
-        {% if _qa_label %}{% set _qa_title = 'New item in ' ~ _qa_label %}{% endif %}
-        {# Direct request: "On space's dashboard, project pages or label's
-           page, the label selector should only have labels from that
-           group." A Space/Project/plain-label page sets `page_label_scope`
-           (routers/spaces.py, routers/projects.py, routers/labels.py) to
-           its own name; quick_add_form (routers/dashboard.py) resolves
-           that into the actual restricted label list via
-           db.label_selector_scope. Every other page never sets this key,
-           so the picker stays unscoped there, unchanged. #}
-        <a href="/quick/add?default_tab={{ _qa_tab }}{% if page_label_scope is defined and page_label_scope %}&amp;scope={{ page_label_scope|urlencode }}{% endif %}{% if _qa_label %}&amp;label={{ _qa_label|urlencode }}{% endif %}" data-modal class="tab-btn sidebar-quick-add" title="{{ _qa_title }}" aria-label="{{ _qa_title }}">{{ icon('plus') }}<span>New</span></a>
-        {% endif %}
         <a href="/" data-tab="dashboard" class="tab-btn {% if active_tab == 'dashboard' %}active{% endif %}" title="Home" aria-label="Home">{{ icon('home') }}<span>Home</span></a>
-        <a href="/calendar/fourweek" data-tab="calendar" class="tab-btn {% if active_tab == 'calendar' %}active{% endif %}" title="Calendar" aria-label="Calendar">{{ icon('calendar') }}<span>Calendar</span></a>
-        <a href="/calendar/week" data-tab="calendar_week" class="tab-btn {% if active_tab == 'calendar_week' %}active{% endif %}" title="Planner" aria-label="Planner">{{ icon('clock') }}<span>Planner</span></a>
-        <a href="/tasks" data-tab="tasks" class="tab-btn {% if active_tab == 'tasks' %}active{% endif %}" title="Tasks" aria-label="Tasks">{{ icon('check-square') }}<span>Tasks</span></a>
-        <a href="/habits" data-tab="habits" class="tab-btn {% if active_tab == 'habits' %}active{% endif %}" title="Habits" aria-label="Habits">{{ icon('repeat') }}<span>Habits</span></a>
+        <a href="/calendar/fourweek" data-tab="calendar" class="tab-btn {% if active_tab in ('calendar', 'calendar_week') %}active{% endif %}" title="Calendar" aria-label="Calendar">{{ icon('calendar') }}<span>Calendar</span></a>
+        <a href="/tasks" data-tab="tasks" class="tab-btn {% if active_tab in ('tasks', 'habits') %}active{% endif %}" title="Tasks" aria-label="Tasks">{{ icon('check-square') }}<span>Tasks</span></a>
         <a href="/notebook" data-tab="notebook" class="tab-btn {% if active_tab == 'notebook' %}active{% endif %}" title="Notebook" aria-label="Notebook">{{ icon('notebook') }}<span>Notebook</span></a>
         <a href="/finance" data-tab="finance" class="tab-btn {% if active_tab == 'finance' %}active{% endif %}" title="Finance" aria-label="Finance">{{ icon('dollar-sign') }}<span>Finance</span></a>
         <a href="/contacts" data-tab="contacts" class="tab-btn {% if active_tab == 'contacts' %}active{% endif %}" title="Contacts" aria-label="Contacts">{{ icon('address-book') }}<span>Contacts</span></a>
@@ -177,7 +160,6 @@
              clickable entry point plus a real /search fallback for no-JS
              (command_palette.js preventDefaults the click and opens the
              overlay instead of navigating when JS is available). -->
-        <a href="/search" data-tab="search" data-command-palette-open class="tab-btn {% if active_tab == 'search' %}active{% endif %}" title="Search" aria-label="Search">{{ icon('command') }}<span>Search</span></a>
         <a href="/settings" data-tab="settings" class="tab-btn {% if active_tab and (active_tab.startswith('settings') or active_tab in ('labels', 'published_lists', 'export')) %}active{% endif %}" title="Settings" aria-label="Settings">{{ icon('settings') }}<span>Settings</span></a>
     </nav>
     <nav class="mobile-tabbar" role="navigation" aria-label="Main (mobile)">
@@ -252,62 +234,14 @@
     </div>
 </div>
 
-<script defer src="{{ static_url('phrases.js') }}"></script>
-<script defer src="{{ static_url('toast.js') }}"></script>
-<script defer src="{{ static_url('app.js') }}"></script>
+<script type="speculationrules" nonce="{{ csp_nonce() }}">{"prefetch":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/static/*","/api/*","/login*","/setup*","/logout*","/download*","/export*","/public/*","/*.md"]}},{"not":{"selector_matches":"[data-modal], [download], [target=_blank], [data-no-prefetch]"}}]},"eagerness":"moderate"}]}</script>
+<script defer src="{{ static_url('bundle_a.js') }}"></script>
 <script defer src="{{ static_url('icon_library.js') }}" data-src="{{ static_url('icons/lucide-library.svg') }}"></script>
-<script defer src="{{ static_url('touch_select.js') }}"></script>
-<script defer src="{{ static_url('sidebar_tree.js') }}"></script>
-<script defer src="{{ static_url('mobile_nav_drawer.js') }}"></script>
-<script defer src="{{ static_url('a11y_icon_labels.js') }}"></script>
-<script defer src="{{ static_url('icon_buttons.js') }}"></script>
-<script defer src="{{ static_url('dynamic_styles.js') }}"></script>
-<script defer src="{{ static_url('search_field.js') }}"></script>
-<script defer src="{{ static_url('modal.js') }}"></script>
-<script defer src="{{ static_url('habit_day.js') }}"></script>
+<script defer src="{{ static_url('bundle_b.js') }}"></script>
 <script defer src="{{ static_url('look_picker.js') }}" data-categories-src="{{ static_url('icons/lucide-categories.json') }}"></script>
-<!-- async-CRUD (features/async-crud.md) -- ccApi.post/refreshRegion + the
-     cc-entity-changed event bus + the generic data-cc-complete handler.
-     Loaded before every page/extra script so modal.js, app.js and each
-     page's own listeners can rely on window.ccApi existing. -->
-<script defer src="{{ static_url('async_crud.js') }}"></script>
-<script defer src="{{ static_url('inline_edit.js') }}"></script><script defer src="{{ static_url('tag_input.js') }}"></script>
-<script defer src="{{ static_url('recurrence_picker.js') }}"></script>
-<script defer src="{{ static_url('series_scope.js') }}"></script>
-<script defer src="{{ static_url('reminders_picker.js') }}"></script>
-<script defer src="{{ static_url('date_time_fields.js') }}"></script>
-<script defer src="{{ static_url('stepper.js') }}"></script>
-<script defer src="{{ static_url('dashboard_widget_preview.js') }}"></script>
-<!-- Contact photo crop/resize tool (contact_form.html's .avatar-upload-input)
-     -- loaded globally for the same reason as the Widget scripts above:
-     contact_form.html is normally injected into the modal via innerHTML,
-     which never runs <script> tags, so modal.js's wireContent() calls
-     CCAvatarCropper.init(body) against the freshly-injected content. -->
-<script defer src="{{ static_url('avatar_cropper.js') }}"></script>
-<script defer src="{{ static_url('upload_zone.js') }}"></script>
-<script defer src="{{ static_url('contact_draft.js') }}"></script>
-<script defer src="{{ static_url('contact_phone_email_rows.js') }}"></script>
-<script defer src="{{ static_url('entry_reference_pages.js') }}"></script>
-<script defer src="{{ static_url('citation_fields.js') }}"></script>
-<script defer src="{{ static_url('entry_fields.js') }}"></script>
- <script defer src="{{ static_url('task_habit_field_toggle.js') }}"></script>
-<script defer src="{{ static_url('label_role_picker.js') }}"></script>
-<!-- label_form_modal.html's Space/Project checkbox toggles -- same reason:
-     page is only opened via data-modal, modal.js's wireContent() calls
-     CCLabelFormPicker.init(body) against the freshly-injected content. -->
-<script defer src="{{ static_url('label_form_picker.js') }}"></script>
-<script defer src="{{ static_url('label_auto_apply.js') }}"></script>
-<script defer src="{{ static_url('event_format_toggle.js') }}"></script>
-<script defer src="{{ static_url('holiday_date_sync.js') }}"></script>
-<script defer src="{{ static_url('notebook_properties_rows.js') }}"></script>
-<script defer src="{{ static_url('notebook_field_options_rows.js') }}"></script>
-<script defer src="{{ static_url('notebook_new_note.js') }}"></script>
-<script defer src="{{ static_url('smart_region.js') }}"></script>
-<script defer src="{{ static_url('finance_task_rows.js') }}"></script>
-<script defer src="{{ static_url('finance_transaction_form.js') }}"></script>
-<script defer src="{{ static_url('calendar_past.js') }}"></script>
-<script defer src="{{ static_url('command_palette.js') }}"></script>
-<script defer src="{{ static_url('quick_add.js') }}"></script>
+{# The three bundles join the scripts every page loads (async_crud, modal, the picker and form scripts that wire
+   modal content); scripts/build_static_bundle.py lists them and a core test keeps the bundles current. #}
+<script defer src="{{ static_url('bundle_c.js') }}"></script>
 {% block extra_scripts %}{% endblock %}
 </body>
 </html>

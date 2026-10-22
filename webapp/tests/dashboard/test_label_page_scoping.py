@@ -658,37 +658,25 @@ class TestQuickAddContactAndLabelTabs:
     _label_form_fields.html partials, same one-markup-contract pattern
     Task/Event already established."""
 
-    def test_route_renders_all_four_forms(self, conn):
-        resp = dashboard_router.quick_add_form(_request("/quick/add"), conn=conn)
-        body = resp.body.decode()
-        assert 'id="task-form"' in body
-        assert 'id="event-form"' in body
-        assert 'id="contact-form"' in body
-        assert 'id="label-form"' in body
-        # Contact-specific field present...
-        assert 'name="full_name"' in body
-        assert 'enctype="multipart/form-data"' in body
-        # ...and label-specific fields present.
-        assert 'name="new_name"' in body
-        assert 'name="label_group"' in body
+    def test_the_universal_window_offers_only_task_and_event(self, conn):
+        body = dashboard_router.quick_add_form(_request("/quick/add"), conn=conn).body.decode()
+        assert 'id="task-form"' in body and 'id="event-form"' in body
+        assert 'id="contact-form"' not in body and 'id="label-form"' not in body
 
-    def test_contact_and_label_tabs_present(self, conn):
-        resp = dashboard_router.quick_add_form(_request("/quick/add"), conn=conn)
-        body = resp.body.decode()
-        assert 'data-quick-add-tab="contact"' in body
-        assert 'data-quick-add-tab="label"' in body
-
-    def test_contact_and_label_forms_post_to_the_real_create_routes(self, conn):
-        resp = dashboard_router.quick_add_form(_request("/quick/add"), conn=conn)
-        body = resp.body.decode()
-        assert 'id="contact-form" action="/contacts"' in body
-        assert 'id="label-form" action="/settings/labels/create"' in body
+    def test_contact_and_label_forms_live_on_their_own_pages(self, conn):
+        contact = dashboard_router.quick_add_form(_request("/quick/add"), default_tab="contact", conn=conn).body.decode()
+        assert 'id="contact-form" action="/contacts"' in contact and 'name="full_name"' in contact
+        assert 'enctype="multipart/form-data"' in contact and 'id="task-form"' not in contact
+        label = dashboard_router.quick_add_form(_request("/quick/add"), default_tab="label", conn=conn).body.decode()
+        assert 'id="label-form" action="/settings/labels/create"' in label and 'name="label_group"' in label
+        assert 'id="task-form"' not in label
 
     def test_default_tab_query_param_picks_the_active_panel_and_save_target(self, conn):
         for tab, form_id in (("task", "task-form"), ("event", "event-form"), ("contact", "contact-form"), ("label", "label-form")):
             resp = dashboard_router.quick_add_form(_request("/quick/add"), default_tab=tab, conn=conn)
             body = resp.body.decode()
             assert f'name="qa_type_{tab}"' in body and "quick-add-tabs" not in body
+            assert (f'data-qa-kind-btn="{tab}"' in body) == (tab in ("task", "event"))
             assert f'data-active="{tab}"' in body
             assert f'form="{form_id}"' in body
 

@@ -30,8 +30,8 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _request(path="/"):
-    return Request({"type": "http", "method": "GET", "path": path, "query_string": b"", "scheme": "http",
+def _request(path="/", query=b""):
+    return Request({"type": "http", "method": "GET", "path": path, "query_string": query, "scheme": "http",
                     "server": ("testserver", 80), "root_path": "", "headers": []})
 
 
@@ -77,7 +77,7 @@ class TestPages:
         db.upsert_label_config(conn, {"name": "Gym", "page_type": "secretariat"})
         _task(conn, "mine", ["Gym"])
         _task(conn, "other", ["Work"])
-        resp = label_pages.label_page("Gym", _request("/labels/Gym"), conn=conn)
+        resp = label_pages.label_page("Gym", _request("/labels/Gym", b"view=agenda"), conn=conn)
         body = resp.body.decode()
         assert resp.template.name == "secretariat.html"
         assert "Task mine" in body and "Task other" not in body
@@ -96,13 +96,20 @@ class TestPages:
         db.set_home_page_type(conn, "sections")
         assert dashboard_router.dashboard_view(_request(), conn=conn).template.name == "label_sections.html"
 
-    @pytest.mark.parametrize("page_type, template", [
-        ("secretariat", "secretariat.html"), ("sections", "label_sections.html"), ("dashboard", "label_detail.html")])
-    def test_group_page_follows_its_page_type(self, conn, page_type, template):
+    @pytest.mark.parametrize("page_type", ["secretariat", "sections", "dashboard"])
+    def test_group_page_is_the_overview_whatever_the_old_page_type(self, conn, page_type):
         db.set_group_members(conn, "Uni", [])
         db.upsert_label_config(conn, {"name": "Essay", "label_group": "Uni"})
         db.set_group_page_type(conn, "Uni", page_type)
-        assert label_pages.group_page("Uni", _request("/groups/Uni"), conn=conn).template.name == template
+        assert label_pages.group_page("Uni", _request("/groups/Uni"), conn=conn).template.name == "label_sections.html"
+
+    @pytest.mark.parametrize("view, template", [("agenda", "secretariat.html"), ("board", "scope_board.html")])
+    def test_group_and_home_views(self, conn, view, template):
+        db.set_group_members(conn, "Uni", [])
+        db.upsert_label_config(conn, {"name": "Essay", "label_group": "Uni"})
+        query = f"view={view}".encode()
+        assert label_pages.group_page("Uni", _request("/groups/Uni", query), conn=conn).template.name == template
+        assert dashboard_router.dashboard_view(_request("/", query), conn=conn).template.name == template
 
     def test_group_sections_cover_the_member_labels_only(self, conn):
         db.upsert_label_config(conn, {"name": "Essay", "label_group": "Uni"})

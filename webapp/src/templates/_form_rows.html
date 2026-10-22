@@ -7,7 +7,7 @@
 {% set ms_extra_class = 'quick-add-type-field' %}
     {% set ms_name = 'qa_type_' ~ kind %}{% set ms_label = 'Type' %}{% set ms_mode = 'single' %}{% set ms_selected = kind %}
     {% set ms_form_id = 'quick-add-type' %}{% set ms_wide = false %}
-    {% set ms_items = [{'uid': 'task', 'name': 'Task', 'data': {'quick-add-tab': 'task'}}, {'uid': 'event', 'name': 'Event', 'data': {'quick-add-tab': 'event'}}, {'uid': 'contact', 'name': 'Contact', 'data': {'quick-add-tab': 'contact'}}, {'uid': 'label', 'name': 'Label', 'data': {'quick-add-tab': 'label'}}, {'uid': 'transaction', 'name': 'Transaction', 'data': {'quick-add-tab': 'transaction'}}, {'uid': 'note', 'name': 'Note', 'data': {'quick-add-tab': 'note'}}] %}
+    {% set ms_items = [{'uid': 'task', 'name': 'Task', 'data': {'quick-add-tab': 'task'}}, {'uid': 'event', 'name': 'Event', 'data': {'quick-add-tab': 'event'}}, {'uid': 'contact', 'name': 'Contact', 'data': {'quick-add-tab': 'contact'}}, {'uid': 'label', 'name': 'Label', 'data': {'quick-add-tab': 'label'}}] %}
     {% include "_widget_list_multiselect.html" %}
 {% endmacro %}
 
@@ -45,4 +45,18 @@
     <label>Reminders</label>
     <input type="text" name="reminders" class="reminders-input" value="{{ value }}">
 </div>
+{% endmacro %}
+
+
+{# Details: the second section of every add and edit form. Main rows come first; everything optional sits behind this
+   toggle (closed unless `open`, which edit forms set when a detail already has a value). Use as
+   {{ details_start(open) }} ...rows... {{ details_end() }}. #}
+{% macro details_start(open=false) %}
+<details class="form-details field-wide"{% if open %} open{% endif %}>
+    <summary class="form-details-toggle">{{ icon('chevron-right', 'icon-sm') }}<span>Details</span></summary>
+    <div class="field-grid form-details-grid">
+{% endmacro %}
+{% macro details_end() %}
+    </div>
+</details>
 {% endmacro %}

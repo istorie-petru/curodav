@@ -30,7 +30,7 @@ import sqlite3
 import threading
 
 from .log import get_logger
-from . import db
+from . import db, perf
 from .caldav_bridge import CalDavBridge
 from .published_lists import materialize_all
 
@@ -60,7 +60,8 @@ def run_periodic(
     while not stop_event.is_set():
         try:
             with db.connect(db_path) as conn:
-                full_refresh(bridge, conn)
+                with perf.timed("background", "radicale sync"):
+                    full_refresh(bridge, conn)
         except Exception:
             logger.exception("Background sync failed; will retry next interval")
         stop_event.wait(interval_seconds)

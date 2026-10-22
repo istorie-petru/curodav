@@ -1,4 +1,5 @@
 {% from "_inputs.html" import text_input, textarea_input %}
+{% from "_form_rows.html" import details_start, details_end %}
 {% set p = l or prefill|default(none) %}
 <div class="field-grid label-form-grid" data-page="{{ p.page_type if p else 'sections' }}">
     {% if quick_add_kind | default('') %}{% from "_form_rows.html" import quick_add_type_field %}{{ quick_add_type_field(quick_add_kind) }}{% endif %}
@@ -22,6 +23,7 @@
     {% set ms_extra_class = 'label-group-field' %}
     {% include "_widget_list_multiselect.html" %}
     {% if is_project_form and not l %}<input type="hidden" name="role" value="project">{% endif %}
+    {{ details_start(l is not none and l) }}
     <input type="hidden" name="page_fields" value="1">
     {% if is_project_form or (p and p.has_deadline) %}
     {% from "_date_time_fields.html" import date_field with context %}
@@ -30,13 +32,6 @@
         {{ date_field('deadline_date', p.deadline_date if (p and p.has_deadline) else '', label='Deadline') }}
     </div>
     {% endif %}
-    {% set ms_name = 'page_type' %}
-    {% set ms_mode = 'single' %}
-    {% set ms_label = 'Page' %}
-    {% set ms_items = [{'uid': 'sections', 'name': 'Sections'}, {'uid': 'dashboard', 'name': 'Widget dashboard'}, {'uid': 'secretariat', 'name': 'Secretariat'}] %}
-    {% set ms_selected = p.page_type if p else 'sections' %}
-    {% set ms_extra_class = 'label-page-field' %}
-    {% include "_widget_list_multiselect.html" %}
     {% set ms_name = 'sections' %}
     {% set ms_mode = 'names' %}
     {% set ms_label = 'Sections' %}
@@ -76,4 +71,5 @@
         <label for="label-description-input">Description</label>
         {{ textarea_input({'id': 'label-description-input', 'name': 'description', 'rows': '2', 'maxlength': '500'}, p.description or '' if p else '') }}
     </div>
+    {{ details_end() }}
 </div>

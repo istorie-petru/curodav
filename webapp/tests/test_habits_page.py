@@ -128,7 +128,7 @@ class TestPage:
 
     def test_nav_has_habits_link(self, conn):
         _, body = _page(conn)
-        assert 'href="/habits" data-tab="habits" class="tab-btn active"' in body
+        assert 'href="/tasks" data-tab="tasks" class="tab-btn active"' in body
 
 
 class TestHabitDays:

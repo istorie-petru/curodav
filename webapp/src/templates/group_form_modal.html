@@ -19,11 +19,6 @@
         {% if group %}{% set _scope = 'group:' ~ group.name %}<a href="/banners/editor?scope={{ _scope|urlencode }}&amp;page_url={{ ('/groups/' ~ group.name ~ '/edit')|urlencode }}&amp;from_modal=1" data-modal class="look-side-btn" title="{{ 'Change banner' if banner else 'Add banner' }}" aria-label="{{ 'Change banner' if banner else 'Add banner' }}">{{ icon('upload') }}</a>{% endif %}
         {% endcall %}
         <input type="hidden" name="members_submitted" value="1">
-        {% set st_name = 'page_type' %}{% set st_label = 'Page' %}
-        {% set st_items = [] %}
-        {% for key, name in page_types %}{% set _ = st_items.append({'uid': key, 'name': name}) %}{% endfor %}
-        {% set st_selected = page_type %}{% set st_form_id = 'group-form' %}
-        {% include "_status_type_row.html" %}
         {% set ms_name = 'members' %}
         {% set ms_mode = 'select' %}
         {% set ms_label = 'Labels' %}

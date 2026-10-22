@@ -318,9 +318,9 @@ class TestContactFormAvatarUploadAndFieldOrder:
 
     def test_contact_form_fields_follow_the_approved_order(self, conn):
         body = contacts_router.new_contact_form(_request("/contacts/new"), conn=conn).body.decode()
-        order = ["photo-field-row", "<label>Pseudonym</label>", "<label>Honorary title</label>",
-                 "<label>Organization</label>", "<label>Role</label>", "<label>Phone</label>",
-                 "<label>Email</label>", "<label>Website</label>", "<label>Address</label>",
+        order = ["photo-field-row", "<label>Phone</label>", "<label>Email</label>", "form-details-toggle",
+                 "<label>Pseudonym</label>", "<label>Honorary title</label>",
+                 "<label>Organization</label>", "<label>Role</label>", "<label>Website</label>", "<label>Address</label>",
                  "<label>Birthday", "<label>Social network</label>", "<label>Notes</label>"]
         positions = [_index(body, marker) for marker in order]
         assert positions == sorted(positions)

@@ -6,7 +6,7 @@
 {% from "_bulk_actions_bar.html" import bulk_button %}
 <h1 class="sr-only">Tasks</h1>
 {% set _bulk_count_html %}<span id="bulk-count" class="bulk-count"></span>{% endset %}
-{% call page_header_narrow("Tasks", "check-square", title_extra=_bulk_count_html) %}
+{% call page_header_narrow("Tasks", "check-square", title_extra=_bulk_count_html, views=header_views("tasks", "list")) %}
 <div class="bulk-actions-bar" id="bulk-actions-bar">
     {{ bulk_button('bulk-clear', 'Clear', 'x') }}
     {{ bulk_button('bulk-edit', 'Edit', 'edit') }}

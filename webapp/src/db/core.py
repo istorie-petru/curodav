@@ -309,8 +309,36 @@ def init_schema(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+# Schema setup and migrations are idempotent but cost milliseconds. Startup and scripts run them on every connect;
+# the request path passes reuse_schema=True and skips them for a database this process already set up.
+_initialized: set[tuple[str, int]] = set()
+
+
+def _init_once(conn: sqlite3.Connection, db_path: Path, reuse_schema: bool) -> None:
+    if not reuse_schema:
+        init_schema(conn)
+        try:
+            _initialized.add((str(db_path), db_path.stat().st_ino))
+        except OSError:
+            pass
+        return
+    try:
+        key = (str(db_path), db_path.stat().st_ino)
+    except OSError:
+        key = None
+    if key is not None and key in _initialized:
+        return
+    init_schema(conn)
+    if key is None:
+        try:
+            key = (str(db_path), db_path.stat().st_ino)
+        except OSError:
+            return
+    _initialized.add(key)
+
+
 @contextmanager
-def connect(db_path: Path) -> Iterator[sqlite3.Connection]:
+def connect(db_path: Path, reuse_schema: bool = False) -> Iterator[sqlite3.Connection]:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     # check_same_thread=False: FastAPI's `get_db` dependency (deps.py) is a
     # sync generator, which normally runs in the threadpool same as sync
@@ -325,8 +353,14 @@ def connect(db_path: Path) -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # WAL lets reads run beside a write; NORMAL sync is safe under WAL and skips an fsync per commit.
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute("PRAGMA cache_size = -16000")
+    conn.execute("PRAGMA temp_store = MEMORY")
+    conn.execute("PRAGMA busy_timeout = 5000")
     try:
-        init_schema(conn)
+        _init_once(conn, db_path, reuse_schema)
         yield conn
     finally:
         conn.close()

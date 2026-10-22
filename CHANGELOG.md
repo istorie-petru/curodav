@@ -4,6 +4,24 @@ All notable changes to this project are documented here, one entry per
 tagged release. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+## [4.5.0]
+
+- Kanban cards: a short banner strip on top (the project's banner or color, else the label's), label icons next to the title and the project always as a pill; clearer card borders and a lift on hover.
+- Bulk edit of labels and projects also sets group, end date (deadline for plain labels), removes it, and archives or restores. Tables with row checkboxes get a select-all checkbox in the header.
+- Header bar: no page icon, bare sidebar and back buttons, one glass look for secondary controls, an accent quick-add and a search button on the right, and a view switch next to them. Search and New leave the sidebar; Planner and Habits leave it too and become views of Calendar (4 weeks, Day, Plan) and Tasks (List, Board, Habits). Tasks has a Board of all open tasks.
+- Home, groups and labels get three views: Overview (at a glance, labels in a group, agenda, contacts, notes), Agenda and Board. The per-label widget dashboard and Secretariat page types no longer apply to labels and groups.
+- Settings: the hub lists five pages (Account, Preferences, Organise, Modules, System); each page switches between its subsections with the header views (for example Organise: Labels, Groups, Projects, Holidays). The search box is gone. The Page type field is gone from label and group forms.
+- New window: the plus button and Ctrl+K open one window with the task or event form on the left and what is coming up (or the matches for the title you type) on the right. Contacts and labels are added from their own pages. Label and Project share one row in every form. Every header has a back chevron (to the parent page, or Home), and Home shows a home icon. The header search button is gone, the sidebar toggle of Notes sits next to the plus, active views get an underline, and Home has no views, filter or edit button.
+
+- Page header: one flat bar fixed to the top of the window at full width and 56px tall at any width, with the sidebar beneath it and its toggle first in the bar. Controls that do not fit move into a ⋯ menu; the Notes editor toolbar sits flat under it, each row on one line.
+
+- Timing tracking, kept small: the app times startup, the Radicale sync and reminder ticks, the main pages (Home, Tasks, Calendar, Contacts, Notebook) and, in the browser, the Notebook editor (opening, typing lag, change handling, saving). Only daily totals are stored in the local database for 30 days; nothing leaves the machine. The log stays quiet for a single slow moment and warns, once a day per item, only when something is slow often, much slower than the week before, or extremely slow. Settings > Logs shows a Timings table with a trend.
+
+- Notebook editor: notes now open in a new editor (Tiptap) with standard mouse, selection and arrow-key behavior, markdown shortcuts as you type (`#`, `-`, `>`, `[ ]`, `**bold**`, `> [!tip] `, and so on) and a toolbar under the header. Quote, callout, timeline, divider, tables, figures, endnotes, `[[` links, mentions and the outline are ported. Markdown is recognized the way Obsidian does it: pasted Markdown becomes blocks (headings, lists, task lists, tables, callouts), and `**bold**`, `*italic*`, `~~strike~~`, `==mark==`, `` `code` `` and links are found anywhere in a paragraph, whichever marker was typed first and however long ago. The editor stays minimal: block colors, text alignment and merged or colored table cells are dropped on the first save. Only a note with markup the editor cannot hold (raw HTML blocks) opens in the old editor; `?editor=legacy` forces it. The toolbar icons are Lucide font characters. Stored notes keep the same format, so search, links and Markdown export are unchanged. The editor bundle is built from `tools/editor-bundle` and committed.
+- Icons as text: Lucide's icon font is bundled; the `:` picker inserts the icon as a character that can be typed and pasted, and callouts draw their icons from the font.
+
 ## [4.4.5]
 
 - Fix: the first Radicale sync no longer runs before the app opens its port. With a working Radicale and many published items it could take minutes, so the deploy health check failed and `curodav-ctl update` never finished. It now runs in the background thread alongside normal use.

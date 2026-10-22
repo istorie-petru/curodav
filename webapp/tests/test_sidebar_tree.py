@@ -156,7 +156,7 @@ class TestSidebarQuickAdd:
         body = resp.body.decode()
         # 2026-09-25 (UI audit L1): a label's page opens the Task tab with
         # the label prefilled (it used to open New label).
-        assert 'href="/quick/add?default_tab=task&amp;label=Solo" data-modal class="tab-btn sidebar-quick-add"' in body
+        assert 'class="header-add" href="/quick/add?default_tab=task&amp;label=Solo"' in body
 
     def test_contacts_page_points_quick_add_at_contact_tab(self, conn):
         # 2026-09-14 (direct request, "the quick add should support both
@@ -167,9 +167,9 @@ class TestSidebarQuickAdd:
         # Contact via `default_tab`.
         resp = contacts_router.list_contacts(_request("/contacts", conn), conn=conn)
         body = resp.body.decode()
-        assert 'href="/quick/add?default_tab=contact" data-modal class="tab-btn sidebar-quick-add"' in body
+        assert 'class="header-add" href="/quick/add?default_tab=contact"' in body
 
     def test_labels_manage_page_points_quick_add_at_label_tab(self, conn):
         resp = labels_router.manage_labels(_request("/settings/labels", conn), conn=conn)
         body = resp.body.decode()
-        assert 'href="/quick/add?default_tab=label" data-modal class="tab-btn sidebar-quick-add"' in body
+        assert 'class="header-add" href="/quick/add?default_tab=label"' in body

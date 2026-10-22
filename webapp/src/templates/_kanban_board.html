@@ -1,0 +1,45 @@
+{# The status board shared by label pages and Tasks > Board; drag and drop in static/tasks_board.js. #}
+{% from "_empty_state.html" import empty_state %}
+{% from "_label_pill.html" import label_pill with context %}
+<div class="kanban-board-wrap">
+<div class="kanban-board" id="kanban-board">
+    {% for status in board_statuses %}
+    <div class="kanban-column" data-status="{{ status }}">
+        <div class="kanban-column-head">
+            <span class="cell-tag tag-{{ status_colors[status] }}">{{ status_labels[status] }}</span>
+            <span class="kanban-count">{{ columns[status]|length }}</span>
+        </div>
+        <div class="kanban-cards" data-status="{{ status }}">
+            {% for t in columns[status] %}
+            {% set _s = t.strip %}
+            <div class="kanban-card" data-uid="{{ t.uid }}" data-status="{{ t.status }}">
+                {% if _s.scope %}
+                <div class="kanban-card-strip{% if not _s.banner %} cell-tag cal-{{ label_color(request, _s.scope) }}{% endif %}">
+                    {% if _s.banner %}
+                    {% if _s.banner.version %}
+                    <img src="/banners/image?scope={{ _s.banner.scope|urlencode }}&amp;v={{ _s.banner.version }}" alt="" draggable="false">
+                    {% else %}
+                    <img src="{{ _s.banner.image_url }}" alt="" referrerpolicy="no-referrer" draggable="false">
+                    {% endif %}
+                    {% endif %}
+                </div>
+                {% endif %}
+                <div class="kanban-card-body">
+                    <div class="kanban-card-head">
+                        {% for tag in _s.labels %}{% set _li = label_icon(request, tag) %}{% if _li %}<span class="kanban-card-icon cal-{{ label_color(request, tag) }}" title="{{ tag }}">{{ icon(_li, 'icon-sm') }}</span>{% endif %}{% endfor %}
+                        <a class="kanban-card-title" href="/tasks/{{ t.uid }}" data-modal draggable="false">{{ t.title }}</a>
+                    </div>
+                    <div class="kanban-card-meta">
+                        {% if t.due_at %}<span class="cell-tag tag-gray">{{ t.due_at | relative_date }}</span>{% endif %}
+                        {% if _s.project %}{{ label_pill(_s.project, 'modal') }}{% endif %}
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            {{ empty_state('No tasks', size='compact') }}
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+</div>

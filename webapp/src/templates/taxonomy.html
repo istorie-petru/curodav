@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_inputs.html" import checkbox_input %}
 {% block title %}{{ title }} - Settings{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
@@ -14,7 +15,7 @@
         <table class="entity-table labels-table">
             <thead>
                 <tr>
-                    <th class="col-select"><span class="sr-only">Select</span></th>
+                    <th class="col-select">{{ checkbox_input({'class': 'select-all', 'aria-label': 'Select all', 'autocomplete': 'off'}) }}</th>
                     <th class="col-name" id="taxonomy-th-0">{{ spec.cols[0] }}</th>
                     <th class="col-meta col-opt-2" id="taxonomy-th-1">{{ spec.cols[1] }}</th>
                     <th class="col-meta col-opt-1" id="taxonomy-th-2">{{ spec.cols[2] }}</th>

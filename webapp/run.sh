@@ -25,6 +25,7 @@ fi
 
 echo "==> Syncing dependencies (uv sync)..."
 uv sync
+uv run python scripts/build_static_bundle.py
 
 RADICALE_CONFIG=".dev/radicale/config"
 RADICALE_STORAGE=".dev/radicale/collections"

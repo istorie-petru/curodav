@@ -405,13 +405,14 @@
      const wasOpen = overlay.classList.contains("is-open");
      if (trigger) trigger.classList.add("is-loading");
      let html;
+     const endBusy = window.ccBusy ? window.ccBusy.begin() : null;
      try {
-       const resp = await fetch(url);
-       html = await resp.text();
+       html = await (window.ccPrefetch ? window.ccPrefetch.text(url) : fetch(url).then((resp) => resp.text()));
      } catch (err) {
        window.location.href = url; // offline/network failure -- fall back to a normal navigation
        return;
      } finally {
+       if (endBusy) endBusy();
        if (trigger) trigger.classList.remove("is-loading");
      }
      const fragment = injectModalContent(html);
@@ -441,7 +442,7 @@
      document.body.classList.add("modal-open");
      if (dialog) {
        const size = trigger ? trigger.getAttribute("data-modal-size") : null;
-       dialog.classList.toggle("is-wide", size === "wide");
+       dialog.classList.toggle("is-wide", size === "wide" || !!(body && body.querySelector("[data-modal-wide]")));
      }
      // Show/hide the modal header based on whether the fragment
      // populated it -- the close button stays visible regardless

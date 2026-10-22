@@ -28,6 +28,8 @@ const container = mk({
 const save = mk({});
 global.document = {
   addEventListener: (type, fn) => { listeners[type] = fn; },
+  querySelector: () => null,
+  querySelectorAll: () => [],
   getElementById: (id) => (id === "quick-add-panels" ? container : id === "quick-add-save" ? save : null),
 };
 global.window = {};

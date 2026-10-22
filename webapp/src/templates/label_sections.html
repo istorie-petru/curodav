@@ -7,7 +7,7 @@
 {% block main_class %}main-full-width{% endblock %}
 
 {% block content %}
-{% call page_header_narrow(label.name, label.icon or 'tag', banner=banner, banner_image_scope=banner_image_scope, icon_color=label.color) %}
+{% call page_header_narrow(label.name, label.icon or 'tag', banner=banner, banner_image_scope=banner_image_scope, icon_color=label.color, views=header_views("scope", scope_view|default("overview"), page_url)) %}
     {% if edit_mode %}
     <a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ page_url|urlencode }}" data-modal class="btn ghost">{{ icon('image', 'icon-sm') }}{% if has_own_banner %} Change banner{% else %} Add banner{% endif %}</a>
     {% endif %}
@@ -28,7 +28,25 @@
 {% set show_agenda = label.agenda_widget and agenda_items %}
 {% set show_contacts = label.contacts_widget and contacts %}
 {% set show_notebook = label.notebook_widget and notebook_documents.documents %}
-{% set show_tasks = label.tasks_widget and (columns.values() | map('length') | sum) %}
+
+{% if glance %}
+<div class="card widget-card-static">
+    <div class="card-title widget-header"><h2>{{ icon('check-square', 'icon-sm') }} At a glance</h2></div>
+    <div class="card-body widget-content">
+    {% set data = glance %}
+    {% include "_widget_at_a_glance.html" %}
+    </div>
+</div>
+{% endif %}
+{% if group_members and group_members.rows %}
+<div class="card widget-card-static">
+    <div class="card-title widget-header"><h2>{{ icon('tag', 'icon-sm') }} Labels</h2></div>
+    <div class="card-body widget-content">
+    {% set data = group_members %}
+    {% include "_widget_group_members.html" %}
+    </div>
+</div>
+{% endif %}
 
 <!-- Agenda: future events tagged with this label, its own deadline, and
      open due-dated tasks, in one chronological list. -->
@@ -77,44 +95,7 @@
 
 {% endif %}
 
-<!-- Tasks: every non-archived task carrying this label on a Kanban board
-     grouped by status (drag and drop via static/tasks_board.js). -->
-{% if show_tasks %}
-<div class="card-title widget-header label-section-heading"><h2>{{ icon('check-square', 'icon-sm') }} Tasks</h2></div>
-<div class="kanban-board-wrap">
-<div class="kanban-board" id="kanban-board">
-    {% for status in board_statuses %}
-    <div class="kanban-column" data-status="{{ status }}">
-        <div class="kanban-column-head">
-            <span class="cell-tag tag-{{ status_colors[status] }}">{{ status_labels[status] }}</span>
-            <span class="kanban-count">{{ columns[status]|length }}</span>
-        </div>
-        <div class="kanban-cards" data-status="{{ status }}">
-            {% for t in columns[status] %}
-            <div class="kanban-card" data-uid="{{ t.uid }}" data-status="{{ t.status }}">
-                {% if t.banner %}
-                {% if t.banner.version %}
-                <img class="kanban-card-banner" src="/banners/image?scope={{ t.banner.scope|urlencode }}&amp;v={{ t.banner.version }}" alt="" draggable="false">
-                {% else %}
-                <img class="kanban-card-banner" src="{{ t.banner.image_url }}" alt="" referrerpolicy="no-referrer" draggable="false">
-                {% endif %}
-                {% endif %}
-                <a class="kanban-card-title" href="/tasks/{{ t.uid }}" data-modal draggable="false">{{ t.title }}</a>
-                <div class="kanban-card-meta">
-                    {% if t.due_at %}<span class="cell-tag tag-gray">{{ t.due_at | relative_date }}</span>{% endif %}
-                    {% for tag in t.tags %}{% if tag != label.name %}{{ label_pill(tag, 'modal') }}{% endif %}{% endfor %}
-                </div>
-            </div>
-            {% else %}
-            {{ empty_state('No tasks', size='compact') }}
-            {% endfor %}
-        </div>
-    </div>
-    {% endfor %}
-</div>
-</div>
-{% endif %}
-{% if not (show_agenda or show_contacts or show_notebook or show_tasks) %}
+{% if not (show_agenda or show_contacts or show_notebook) %}
 {% if label.agenda_widget or label.contacts_widget or label.notebook_widget or label.tasks_widget %}
 {{ empty_state('Nothing here yet', size='compact') }}
 {% else %}
@@ -123,4 +104,3 @@
 {% endif %}
 {% endif %}
 {% endblock %}
-{% block extra_scripts %}{% if label.tasks_widget %}<script defer src="{{ static_url('tasks_board.js') }}"></script>{% endif %}{% endblock %}

@@ -9,6 +9,7 @@ import base64
 import hashlib
 import logging
 import sqlite3
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -21,7 +22,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import Scope
 
 from .log import get_logger
-from . import db, reminders, sync
+from . import db, perf, reminders, sync
 from .auth import AuthMiddleware, CSRFMiddleware
 from .caldav_bridge import CalDavBridge
 from .config import apply_persisted_radicale_overrides, apply_persisted_timezone, load_settings, uses_default_radicale_credentials
@@ -124,6 +125,8 @@ class _VersionedStaticFiles(StaticFiles):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    boot = time.perf_counter()
+    steps: dict[str, float] = {}
     settings = load_settings()
 
     with db.connect(settings.db_path) as _conn:
@@ -137,6 +140,7 @@ async def lifespan(app: FastAPI):
 
         auth_core.ensure_recovery_token(_conn)
     app.state.settings = settings
+    steps["database"] = time.perf_counter() - boot
 
     from . import flairs
 
@@ -150,6 +154,7 @@ async def lifespan(app: FastAPI):
     # keeps running without sync/published lists; the background thread and
     # the Settings > Published lists surface both degrade gracefully on the
     # None bridge, and a restart re-attempts the connection.
+    bridge_started = time.perf_counter()
     try:
         bridge = CalDavBridge(settings)
     except Exception as exc:
@@ -174,6 +179,7 @@ async def lifespan(app: FastAPI):
                 "production."
             )
     app.state.bridge = bridge
+    steps["radicale connection"] = time.perf_counter() - bridge_started
 
     # The sync only materializes published Lists into Radicale (nothing the
     # pages read), and the thread's first tick runs right away. It must not
@@ -190,12 +196,21 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("Background Radicale sync not started (no bridge); restart to retry")
     _reminder_thread, reminder_stop = reminders.start_scheduler(settings.db_path)
+    perf_stop = perf.start_flusher(settings.db_path)
+
+    total_ms = (time.perf_counter() - boot) * 1000
+    breakdown = ", ".join(f"{name} {round(seconds * 1000)} ms" for name, seconds in steps.items())
+    perf.record("startup", "ready", total_ms, breakdown)
+    logger.info("Ready to serve after %d ms (%s)", round(total_ms), breakdown)
+    for name, seconds in steps.items():
+        perf.record("startup", name, seconds * 1000)
 
     yield
 
     if stop_event is not None:
         stop_event.set()
     reminder_stop.set()
+    perf_stop.set()
 
 
 def create_app() -> FastAPI:
@@ -240,9 +255,11 @@ def create_app() -> FastAPI:
 
     app.add_middleware(SecurityHeadersMiddleware)
 
+    app.add_middleware(perf.TimingMiddleware)
+
     app.mount("/static", _VersionedStaticFiles(directory=_BASE_DIR / "static"), name="static")
 
-    from .routers import auth, banners, calendar, contacts, dashboard, export, finance, flairs as flairs_router, habits, label_pages, labels, notebook, projects, public_lists, published_lists, push, pwa, quick_capture, search, secretariat_page, settings, spaces, sync_api, tasks, taxonomy, timeline
+    from .routers import auth, banners, calendar, contacts, dashboard, export, finance, flairs as flairs_router, habits, label_pages, labels, notebook, perf as perf_router, projects, public_lists, published_lists, push, pwa, quick_capture, search, secretariat_page, settings, spaces, sync_api, tasks, taxonomy, timeline
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error_page(request: Request, exc: StarletteHTTPException):
@@ -301,6 +318,7 @@ def create_app() -> FastAPI:
     app.include_router(finance.router)
     app.include_router(finance.settings_router)
     app.include_router(push.router)
+    app.include_router(perf_router.router)
     app.include_router(banners.router)
     app.include_router(flairs_router.router)
     app.include_router(settings.router)

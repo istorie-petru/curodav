@@ -89,7 +89,7 @@ class TestSettingsHolidaysPage:
     def test_hub_links_to_holidays(self, conn):
         resp = settings_router.settings_index(_request("/settings"), conn=conn)
         body = resp.body.decode()
-        assert 'href="/settings/holidays"' in body
+        assert "Organise" in body and "/settings/holidays" in [c["url"] for c in settings_router.HUB_CATEGORIES]
 
 
 class TestHolidayDateRangeDisplay:

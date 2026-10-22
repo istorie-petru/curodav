@@ -8,6 +8,7 @@
   async function refresh(url, fallback) {
     if (controller) controller.abort();
     controller = new AbortController();
+    const endBusy = window.ccBusy ? window.ccBusy.begin() : null;
     try {
       const resp = await fetch(url, { headers: { "X-Requested-With": "fetch" }, signal: controller.signal });
       if (!resp.ok) throw new Error("refresh failed");
@@ -32,6 +33,8 @@
     } catch (err) {
       if (err.name === "AbortError") return;
       fallback();
+    } finally {
+      if (endBusy) endBusy();
     }
   }
 

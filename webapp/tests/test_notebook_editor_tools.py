@@ -90,7 +90,7 @@ class TestEditorPage:
         db.upsert_notebook_document(conn, {"uid": "d1", "title": "Doc", "content_json": '{"blocks": []}',
                                            "document_type": "full", "note_type": "", "created_at": now,
                                            "updated_at": now, "tags": []})
-        return notebook_router.document_page(uid="d1", request=_request("/notebook/d1"), conn=conn).body.decode()
+        return notebook_router.document_page(uid="d1", request=_request("/notebook/d1"), editor="legacy", conn=conn).body.decode()
 
     def test_the_page_loads_the_text_tools_and_has_no_save_status(self, conn):
         body = self._page(conn)
@@ -112,7 +112,7 @@ class TestEndnotes:
         db.upsert_notebook_document(conn, {"uid": "d1", "title": "Doc", "content_json": '{"blocks": []}',
                                            "document_type": "full", "note_type": "", "created_at": now,
                                            "updated_at": now, "tags": []})
-        return notebook_router.document_page(uid="d1", request=_request("/notebook/d1"), conn=conn).body.decode()
+        return notebook_router.document_page(uid="d1", request=_request("/notebook/d1"), editor="legacy", conn=conn).body.decode()
 
     def test_endnotes_cannot_be_created_from_the_slash_menu(self, conn):
         editor_js = (Path(MARKDOWN_JS).parent / "notebook_editor.js").read_text()

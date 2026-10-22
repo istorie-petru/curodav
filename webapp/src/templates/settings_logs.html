@@ -11,5 +11,20 @@
     <div class="log-lines" id="log-lines" aria-live="off"></div>
     <div id="log-empty">{{ empty_state('No log lines at this level yet', icon_name='list', size='compact') }}</div>
 </div>
+<div class="card" id="timings">
+    <h2>Timings, last 7 days</h2>
+    {% if timings %}
+    <table>
+        <thead><tr><th>Kind</th><th>Name</th><th>Calls</th><th>Average</th><th>Trend</th><th>Slowest</th><th>Slow</th></tr></thead>
+        <tbody>
+        {% for t in timings %}
+        <tr><td>{{ t.kind }}</td><td>{{ t.name }}</td><td>{{ t.count }}</td><td>{{ t.average_ms }} ms</td><td>{{ t.trend }}</td><td>{{ t.max_ms }} ms</td><td>{{ t.slow }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    {{ empty_state('No timings recorded yet', icon_name='list', size='compact') }}
+    {% endif %}
+</div>
 <script defer src="{{ static_url('settings_logs.js') }}"></script>
 {% endblock %}

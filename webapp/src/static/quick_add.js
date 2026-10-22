@@ -32,6 +32,29 @@
     }
   }
 
+  function markSearchBoxes() {
+    document.querySelectorAll('.quick-add-panel input[name="title"]').forEach((box) => box.setAttribute("data-qa-search", "1"));
+  }
+
+  function setKind(kind) {
+    const container = document.getElementById("quick-add-panels");
+    if (!container) return;
+    const from = container.querySelector(".quick-add-panel.is-active input[data-qa-search]");
+    const text = from ? from.value : "";
+    document.querySelectorAll("[data-qa-kind-btn]").forEach((b) => b.classList.toggle("is-active", b.dataset.qaKindBtn === kind));
+    setActive(container, kind);
+    const to = container.querySelector(".quick-add-panel.is-active input[data-qa-search]");
+    if (to) {
+      if (text && !to.value) to.value = text;
+      to.focus();
+    }
+  }
+
+  function onClick(e) {
+    const t = e.target.closest && e.target.closest("[data-qa-kind-btn]");
+    if (t) setKind(t.dataset.qaKindBtn);
+  }
+
   let bound = false;
   window.CCQuickAdd = {
     onChange,
@@ -39,7 +62,9 @@
       if (!bound) {
         bound = true;
         document.addEventListener("change", onChange);
+        document.addEventListener("click", onClick);
       }
+      markSearchBoxes();
       const container = document.getElementById("quick-add-panels");
       if (container) setActive(container, container.dataset.active || "task");
     },

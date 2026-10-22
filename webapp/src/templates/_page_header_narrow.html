@@ -88,9 +88,17 @@
    _bulk_actions_bar.html's new `bulk_count()` macro and each call site's
    own comment. Empty string by default (`title_extra=''`), so pages with
    nothing to add here render exactly as before. #}
-{% macro page_header_narrow(title, icon_name, title_extra='', banner=none, banner_image_scope=none, icon_color=none, sidebar_toggle=false) %}
+{# 2026-10-22: on desktop the header is one flat bar fixed to the top of the window, full width, with the sidebar
+   beneath it: the sidebar button first, then back arrow, icon and title, then the page's controls on the same line.
+   `.page-header-rows` takes further rows (the Notes editor toolbar). Phones keep the strip as it was. #}
+{% from "_quick_add_target.html" import quick_add_href, quick_add_title with context %}
+{% macro page_header_narrow(title, icon_name, title_extra='', banner=none, banner_image_scope=none, icon_color=none, sidebar_toggle=false, views=none, quick_add=true) %}
+{% set _sg = settings_group(request) if views is none else none %}
+{% set _views = _sg.views if _sg else views %}
+{% set _title = _sg.title if _sg else title %}
 {% set _banner = banner if banner is not none else page_header_banner(request) %}
 {% set _scope = banner_image_scope if banner is not none else '__page_header__' %}
+<div class="page-header-region">
 <div class="page-header-narrow{% if _banner %} has-banner{% endif %}">
     {% if _banner %}
     {% if _banner.version %}
@@ -99,20 +107,32 @@
     <img class="page-header-narrow-bg" src="{{ _banner.image_url }}" alt="" referrerpolicy="no-referrer">
     {% endif %}
     {% endif %}
+    <button type="button" class="icon-btn page-header-menu" data-sidebar-toggle title="Expand sidebar" aria-label="Expand sidebar" aria-pressed="false">{{ icon('sidebar', 'icon-sm') }}</button>
     {% if crumbs is defined and crumbs %}
     <a class="icon-btn page-header-narrow-back" href="{{ crumbs[-1].url }}" aria-label="Back to {{ crumbs[-1].name }}" title="Back to {{ crumbs[-1].name }}">{{ icon('chevron-left', 'icon-sm') }}</a>
+    {% elif request.scope.get('path', '/') == '/' %}
+    <a class="icon-btn page-header-narrow-back" href="/" aria-label="Home" title="Home">{{ icon('home', 'icon-sm') }}</a>
+    {% else %}
+    <a class="icon-btn page-header-narrow-back" href="/" aria-label="Back to Home" title="Back to Home">{{ icon('chevron-left', 'icon-sm') }}</a>
     {% endif %}
-    <span class="page-header-narrow-icon{% if icon_color %} has-color{% endif %}"{% if icon_color %} data-style="--hdr-icon-fill: var(--cal-accent-{{ icon_color }}, var(--cal-accent-blue)); --hdr-icon-text: var(--cal-text-{{ icon_color }}, var(--cal-text-blue))"{% endif %}>{{ icon(icon_name|default('layout')) }}</span>
-    <h2 class="page-header-narrow-title">{{ title }}</h2>
+    <h2 class="page-header-narrow-title">{{ _title }}</h2>
     {% if title_extra %}{{ title_extra }}{% endif %}
     <div class="spacer"></div>
-    {% if caller or sidebar_toggle %}
-    <div class="page-header-narrow-actions">
-        {% if caller %}{{ caller() }}{% endif %}
-        {% if sidebar_toggle %}
-        <button type="button" id="notebook-sidebar-toggle" class="icon-btn" title="Collapse sidebar" aria-label="Collapse sidebar" aria-pressed="true">{{ icon('sidebar', 'icon-sm notebook-sidebar-toggle-icon') }}</button>
-        {% endif %}
-    </div>
+    {% if caller %}
+    <div class="page-header-narrow-actions">{{ caller() }}</div>
     {% endif %}
+    {% if _views %}
+    <nav class="header-views" aria-label="Views">
+        {% for v in _views %}<a class="header-view{% if v.active %} active{% endif %}" href="{{ v.url }}"{% if v.active %} aria-current="page"{% endif %}>{{ v.label }}</a>{% endfor %}
+    </nav>
+    {% endif %}
+    {% if sidebar_toggle %}
+    <button type="button" id="notebook-sidebar-toggle" class="icon-btn header-icon" title="Collapse sidebar" aria-label="Collapse sidebar" aria-pressed="true">{{ icon('sidebar', 'icon-sm notebook-sidebar-toggle-icon') }}</button>
+    {% endif %}
+    {% if quick_add and not edit_mode %}
+    <a class="header-add" href="{{ quick_add_href() }}" data-modal title="{{ quick_add_title() }}" aria-label="{{ quick_add_title() }}">{{ icon('plus', 'icon-sm') }}</a>
+    {% endif %}
+</div>
+<div class="page-header-rows"></div>
 </div>
 {% endmacro %}

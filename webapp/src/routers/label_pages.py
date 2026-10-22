@@ -1,9 +1,8 @@
 """A label's own page, at `/labels/{name}` -- labels-as-modules slice b.
 
-- `page_type` dashboard: the Home-style customizable widget grid, scoped to this
-  label (label_detail.html).
-- `page_type` secretariat: the agenda-style Secretariat (secretariat.html).
-- otherwise: only the sections switched on in the label's settings
+- `?view=agenda`: the agenda-style Secretariat (secretariat.html), scoped to this label.
+- `?view=board`: every open task of the label on a status board (scope_board.html).
+- otherwise the Overview: only the sections switched on in the label's settings
   (`agenda_widget`, `contacts_widget`, `notebook_widget`, and
   `tasks_widget` for the Kanban board), in label_sections.html.
 """
@@ -11,7 +10,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote
 
 from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
@@ -25,6 +24,13 @@ from . import tasks as tasks_router
 MAX_AGENDA_HABITS = 2
 
 router = APIRouter(prefix="/labels", tags=["label-pages"])
+
+
+def requested_view(request: Request) -> str:
+    """The page's `?view=` choice (agenda or board); anything else is the Overview."""
+    query = parse_qs(request.scope.get("query_string", b"").decode())
+    value = (query.get("view") or [""])[0]
+    return value if value in ("agenda", "board") else ""
 
 
 def label_url(name: str) -> str:
@@ -212,6 +218,15 @@ def _sections_page(conn, request: Request, name: str, label: dict):
     return templates.TemplateResponse("label_sections.html", ctx)
 
 
+def scope_board_page(conn, request: Request, scope: set[str] | None, scope_key: str | None, label: dict,
+                     tasks: list[dict], page_url: str, banner_ctx: dict, header_edit_url: str | None):
+    """The Board view of a label, group or Home: every open task in scope, by status."""
+    ctx = _sections_context(conn, request, scope, scope_key, label, tasks)
+    ctx.update({"page_url": page_url, "header_edit_url": header_edit_url})
+    ctx.update(banner_ctx)
+    return templates.TemplateResponse("scope_board.html", ctx)
+
+
 def _pooled_sections_page(conn, request: Request, scope_key: str | None, title: str, icon: str, color: str,
                           page_url: str, banner_ctx: dict, header_edit_url: str):
     """The Sections page type for Home (scope_key None) and groups: the same
@@ -237,7 +252,7 @@ def _sections_context(conn, request: Request, scope: set[str] | None, scope_key:
     columns: dict[str, list] = {s: [] for s in board_statuses}
     if label.get("tasks_widget"):
         for t in tasks:
-            t["banner"] = db.banner_for_task(conn, t)
+            t["strip"] = db.card_strip(conn, t)
             columns.setdefault(t["status"], []).append(t)
 
     agenda_items = _agenda_items(conn, scope, label, tasks, 8) if label.get("agenda_widget") else []
@@ -252,9 +267,16 @@ def _sections_context(conn, request: Request, scope: set[str] | None, scope_key:
         # section and the Notebook List widget cannot drift apart.
         notebook_documents = dashboard_router._render_notebook_list(conn, {"label_name": scope_key})
 
+    glance = dashboard_router._render_at_a_glance(conn, {"label_name": scope_key}) if tasks else None
+    group_members = (
+        dashboard_router._render_group_members(conn, {"label_name": scope_key})
+        if scope_key and scope_key.startswith(db.GROUP_KEY_PREFIX) else None
+    )
     return {
         "request": request,
-        "active_tab": "label" if scope_key else "dashboard",
+        "glance": glance,
+        "group_members": group_members,
+        "active_tab": ("group" if scope_key.startswith(db.GROUP_KEY_PREFIX) else "label") if scope_key else "dashboard",
         "label": label,
         "agenda_items": agenda_items,
         "contacts": contacts,
@@ -274,13 +296,19 @@ def label_page(name: str, request: Request, conn=Depends(get_db)):
     if not _label_exists(conn, name):
         return RedirectResponse(url="/settings/labels", status_code=303)
     label = db.effective_label_config(conn, name)
-    if label.get("page_type") == "secretariat":
+    view = requested_view(request)
+    if view == "agenda":
         return secretariat_page.render(
             conn, request, scope_key=name, title=name, icon_name=label.get("icon") or "tag", icon_color=label.get("color"),
             banner_ctx=dashboard_router._page_banner_context(conn, name, name=name), page_url=label_url(name), label=label,
+            view="agenda",
         )
-    if label.get("page_type") == "dashboard":
-        return _dashboard_page(conn, request, name, label)
+    if view == "board":
+        tasks = [t for t in db.list_tasks_sharing_labels(conn, [name]) if t["status"] != "archived"]
+        return scope_board_page(
+            conn, request, {name}, name, {**label, "tasks_widget": 1}, tasks, label_url(name),
+            dashboard_router._page_banner_context(conn, name, name=name), None,
+        )
     return _sections_page(conn, request, name, label)
 
 
@@ -451,41 +479,30 @@ def group_page(name: str, request: Request, conn=Depends(get_db)):
         # than a blank page.
         return RedirectResponse(url="/settings/groups", status_code=303)
     name = db.get_group(conn, name)["name"]
-    members = db.group_member_names(conn, name)
     key = db.group_page_key(name)
     style = db.get_group_style(conn, name)
-    page_type = db.get_group_page_type(conn, name)
-    if page_type != "dashboard":
-        banner_ctx = dashboard_router._page_banner_context(conn, key, name=name)
-        icon_name = style["icon"] or db.GROUP_DEFAULT_ICON
-        edit_url = f"/groups/{quote(name)}/edit"
-        if page_type == "secretariat":
-            return secretariat_page.render(
-                conn, request, scope_key=key, title=name, icon_name=icon_name, icon_color=style["color"],
-                banner_ctx=banner_ctx, page_url=group_url(name), header_edit_url=edit_url,
-            )
-        return _pooled_sections_page(
-            conn, request, key, name, icon_name, style["color"], group_url(name), banner_ctx, edit_url
+    banner_ctx = dashboard_router._page_banner_context(conn, key, name=name)
+    icon_name = style["icon"] or db.GROUP_DEFAULT_ICON
+    edit_url = f"/groups/{quote(name)}/edit"
+    view = requested_view(request)
+    if view == "agenda":
+        return secretariat_page.render(
+            conn, request, scope_key=key, title=name, icon_name=icon_name, icon_color=style["color"],
+            banner_ctx=banner_ctx, page_url=group_url(name), header_edit_url=edit_url, view="agenda",
         )
-    dashboard_router._ensure_default_label_widgets(conn, key)
-    ctx = dashboard_router.widget_page_context(conn, project_uid=key)
-    ctx.update(
-        {
-            "request": request,
-            "active_tab": "group",
-            "label": {"name": name, "uid": key, "icon": style["icon"] or db.GROUP_DEFAULT_ICON, "color": style["color"],
-                      "description": None},
-            "group_style": style,
-            "group_labels": [db.effective_label_config(conn, n) for n in members],
-            "page_label_scope": key,
-            "label_status": None,
-            "profile_photo": db.get_profile_photo(conn),
-            "display_name": db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY),
-            "page_url": group_url(name),
-        }
+    if view == "board":
+        tasks = [
+            t for t in dashboard_router._filtered_tasks(conn, {"label_name": key}, open_only=False)
+            if t["status"] != "archived"
+        ]
+        label = {"name": name, "icon": icon_name, "color": style["color"], "tasks_widget": 1}
+        return scope_board_page(
+            conn, request, dashboard_router._scope_child_names(conn, key), key, label, tasks, group_url(name),
+            banner_ctx, edit_url,
+        )
+    return _pooled_sections_page(
+        conn, request, key, name, icon_name, style["color"], group_url(name), banner_ctx, edit_url
     )
-    ctx.update(dashboard_router._page_banner_context(conn, key, name=name))
-    return templates.TemplateResponse("label_detail.html", ctx)
 
 
 @group_router.get("/{name}/edit")

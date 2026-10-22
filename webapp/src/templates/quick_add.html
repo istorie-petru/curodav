@@ -22,14 +22,22 @@
        content automatically -- nothing to rebind here beyond the tab
        switch. -->
 {% set default_tab = default_tab|default('task') %}
-{% set _quick_add_form_ids = {'task': 'task-form', 'event': 'event-form', 'contact': 'contact-form', 'label': 'label-form', 'transaction': 'finance-transaction-form', 'note': 'notebook-new-form'} %}
 <div id="modal-target" class="modal-stable-height">
+{% set _kinds = [default_tab] if default_tab in ('contact', 'label') else ['task', 'event'] %}
+{% set _kind_meta = {'task': ('Task', 'check-square'), 'event': ('Event', 'calendar'), 'contact': ('Contact', 'user'), 'label': ('Label', 'tag')} %}
 <div class="modal-header">
-<h1>New</h1>
+<h1>{% if _kinds | length == 1 %}New {{ _kind_meta[_kinds[0]][0] | lower }}{% else %}New{% endif %}</h1>
 </div>
 <div class="modal-body">
-<div class="card">
+<div class="qa-split{% if _kinds | length > 1 %} qa-with-side{% endif %}"{% if _kinds | length > 1 %} data-modal-wide{% endif %}>
+<div class="qa-create">
+{% if _kinds | length > 1 %}
+<div class="qa-kinds" role="tablist" aria-label="Type">
+    {% for k in _kinds %}<button type="button" class="qa-kind{% if k == default_tab %} is-active{% endif %}" data-qa-kind-btn="{{ k }}" role="tab">{{ icon(_kind_meta[k][1], 'icon-sm') }}{{ _kind_meta[k][0] }}</button>{% endfor %}
+</div>
+{% endif %}
 <div class="quick-add-panels" id="quick-add-panels" data-active="{{ default_tab }}">
+    {% if 'task' in _kinds %}
     <section class="quick-add-panel{% if default_tab == 'task' %} is-active{% endif %}" data-quick-add-panel="task" role="tabpanel" aria-label="New task">
         {% set quick_add_kind = 'task' %}
         <form method="post" id="task-form" action="/tasks">
@@ -37,6 +45,8 @@
             {% include "_task_form_fields.html" %}
         </form>
     </section>
+    {% endif %}
+    {% if 'event' in _kinds %}
     <section class="quick-add-panel{% if default_tab == 'event' %} is-active{% endif %}" data-quick-add-panel="event" role="tabpanel" aria-label="New event">
         {% set quick_add_kind = 'event' %}
         <form method="post" id="event-form" action="/events">
@@ -44,42 +54,36 @@
             {% include "_event_form_fields.html" %}
         </form>
     </section>
-    <section class="quick-add-panel{% if default_tab == 'contact' %} is-active{% endif %}" data-quick-add-panel="contact" role="tabpanel" aria-label="New contact">
+    {% endif %}
+    {% if 'contact' in _kinds %}
+    <section class="quick-add-panel is-active" data-quick-add-panel="contact" role="tabpanel" aria-label="New contact">
         {% set quick_add_kind = 'contact' %}
         <form method="post" id="contact-form" action="/contacts" enctype="multipart/form-data">
             {% include "_contact_form_fields.html" %}
         </form>
     </section>
-    <section class="quick-add-panel{% if default_tab == 'label' %} is-active{% endif %}" data-quick-add-panel="label" role="tabpanel" aria-label="New label">
+    {% endif %}
+    {% if 'label' in _kinds %}
+    <section class="quick-add-panel is-active" data-quick-add-panel="label" role="tabpanel" aria-label="New label">
         {% set quick_add_kind = 'label' %}
         <form method="post" id="label-form" action="/settings/labels/create">
             {% include "_label_form_fields.html" %}
         </form>
     </section>
-    <section class="quick-add-panel{% if default_tab == 'transaction' %} is-active{% endif %}" data-quick-add-panel="transaction" role="tabpanel" aria-label="New transaction">
-        {% if fin %}
-        {% set quick_add_kind = 'transaction' %}
-        <form method="post" id="finance-transaction-form" action="/finance/transactions">
-            {% with t=none, kind='', status='posted', status_fixed=false, task_items=fin.task_items, recurrence='', account_items=fin.account_items, type_items=fin.type_items, amount_text='', tag_items=fin.tag_items, tag_selected=[] %}
-            {% include "_finance_transaction_fields.html" %}
-            {% endwith %}
-        </form>
-        {% else %}
-        {% call empty_state('No accounts yet', size='compact') %}<a href="/settings/finance-accounts/new" data-modal>Add an account</a>{% endcall %}
-        {% endif %}
-    </section>
-    <section class="quick-add-panel{% if default_tab == 'note' %} is-active{% endif %}" data-quick-add-panel="note" role="tabpanel" aria-label="New note">
-        {% set quick_add_kind = 'note' %}
-        <form method="post" id="notebook-new-form" action="/notebook" data-follow-redirect data-fields-url="/notebook/new/fields">
-            {% include "_notebook_new_form_fields.html" %}
-        </form>
-    </section>
+    {% endif %}
 </div>
+</div>
+{% if _kinds | length > 1 %}
+<aside class="qa-next" aria-label="Coming up and matches">
+    <h2 class="qa-side-title" id="qa-side-title">Coming up</h2>
+    <div id="qa-next-list" class="qa-next-list">{% include "_quick_next_rows.html" %}</div>
+</aside>
+{% endif %}
 </div>
 </div>
 {% set footer_back_url = '#' %}
 {% set footer_back_label = 'Cancel' %}
-{% set footer_primary_form = _quick_add_form_ids[default_tab] %}
+{% set footer_primary_form = default_tab ~ '-form' %}
 {% set footer_primary_id = 'quick-add-save' %}
 {% set footer_primary_label = 'Save' %}
 {% set footer_primary_icon = 'check-square' %}

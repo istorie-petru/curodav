@@ -8,6 +8,7 @@ curodav-notes/documentation/features/home-and-secretariat.md.
 from datetime import date, timedelta
 
 MAX_HABITS = 2
+MAX_NOTES = 6
 UPCOMING_EVENT_DAYS = 3
 
 
@@ -24,11 +25,16 @@ def _is_open(task: dict) -> bool:
     return task.get("status") not in ("done", "archived")
 
 
+def pinned_first(notes: list[dict]) -> list[dict]:
+    """Pinned notes lead; each group keeps its incoming (newest edited first) order."""
+    return sorted(notes, key=lambda n: not n.get("pinned"))[:MAX_NOTES]
+
+
 def end_of_week(today: date) -> date:
     return today + timedelta(days=6 - today.weekday())
 
 
-def build(today: date, tasks: list[dict], events: list[dict], habits: list[dict]) -> dict:
+def build(today: date, tasks: list[dict], events: list[dict], habits: list[dict], notes: list[dict] | None = None) -> dict:
     """The four Secretariat sections.
 
     `events` must already be expanded into occurrences. Overdue open tasks
@@ -72,4 +78,5 @@ def build(today: date, tasks: list[dict], events: list[dict], habits: list[dict]
         "tasks_today": [{"task": t, "overdue": _is_open(t) and _day(t["due_at"]) < today_iso} for t in due_today],
         "tasks_week": due_week,
         "reminders": reminders,
+        "notes": pinned_first(notes or []),
     }

@@ -1,6 +1,6 @@
 {% from "_inputs.html" import text_input, textarea_input %}
 {% from "_date_time_fields.html" import datetime_range with context %}
-{% from "_form_rows.html" import title_row, title_date_row, recurrence_row, reminder_row %}
+{% from "_form_rows.html" import title_row, title_date_row, recurrence_row, reminder_row, details_start, details_end %}
     {% set ms_form_id = 'event-form' %}
     <div class="field-grid">
         {% if series_member | default(false) %}
@@ -24,11 +24,12 @@
             {{ datetime_range('occ_start_at', 'occ_end_at', occurrence.start, occurrence.end, title='This occurrence only', required=true) }}
         </div>
         {% endif %}
+        {% set labels_selected = event.tags if event else (prefill_tags or []) %}
+        {% include "_labels_row.html" %}
         {% set pf_tags = event.tags if event else (prefill_tags or []) %}
         {% set pf_form_id = 'event-form' %}
         {% include "_project_field.html" %}
-        {% set labels_selected = event.tags if event else (prefill_tags or []) %}
-        {% include "_labels_row.html" %}
+        {{ details_start(event and (event.description or event.location or event.meeting_url or event.reminders or event.recurrence not in (None, 'None', 'Nothing', ''))) }}
         {% set contacts_object_type = 'event' %}{% set contacts_object_id = event.uid if event else '' %}
         {% include "_contacts_row.html" %}
         {# reminders_picker.js and recurrence_picker.js upgrade these two inputs in place; routers/calendar.py still takes the raw values. #}
@@ -90,4 +91,5 @@
             <label>Description</label>
             {{ textarea_input({'name': 'description', 'rows': '3'}, event.description if event else '') }}
         </div>
+        {{ details_end() }}
     </div>

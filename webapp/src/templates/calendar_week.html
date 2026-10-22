@@ -16,7 +16,7 @@
      this page's old toolbar row was the only h1 carrying the specific
      week's date range, so it's restored standalone here. -->
 <h1 class="sr-only">{{ label_text }}</h1>
-{% call page_header_narrow("Planner", "clock", sidebar_toggle=true) %}
+{% call page_header_narrow("Calendar", "calendar", sidebar_toggle=true, views=header_views("calendar", "plan", _lbl, today_iso)) %}
 <a class="icon-btn cal-nav-prev" href="/calendar/week?date_={{ prev_week }}{{ _lq }}" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
 <span class="cal-nav-label" id="cal-nav-label" aria-live="polite">{{ label_text }}</span>
 <a class="icon-btn cal-nav-next" href="/calendar/week?date_={{ next_week }}{{ _lq }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>

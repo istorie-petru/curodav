@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import db
+from . import db, icon_font
 
 LIMIT = 8
 
@@ -42,6 +42,6 @@ def items(conn, query: str, limit: int = LIMIT) -> list[dict[str, Any]]:
 def icons(names, query: str, limit: int = 12) -> list[dict[str, Any]]:
     """Icon names containing the query, those starting with it first."""
     query = (query or "").lower()
-    matches = [n for n in names if query in n]
+    matches = [n for n in names if query in n and icon_font.glyph(n)]
     matches.sort(key=lambda n: (not n.startswith(query), n))
-    return [{"kind": "icon", "name": n, "title": n} for n in matches[:limit]]
+    return [{"kind": "icon", "name": n, "title": n, "char": icon_font.glyph(n)} for n in matches[:limit]]

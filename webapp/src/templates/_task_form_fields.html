@@ -1,5 +1,5 @@
 {% from "_inputs.html" import number_input, textarea_input %}
-{% from "_form_rows.html" import title_row, title_date_row, recurrence_row %}
+{% from "_form_rows.html" import title_row, title_date_row, recurrence_row, details_start, details_end %}
     {% set ms_form_id = 'task-form' %}
     <div class="field-grid">
         {% from "_date_time_fields.html" import date_field with context %}
@@ -13,14 +13,15 @@
             {{ date_field('due_at', task.due_at[:10] if task and task.due_at else '', label='Due date') }}
         </div>
         {% endcall %}
-        {% set st_name = 'status' %}{% set st_label = 'Status' %}{% set st_items = status_items %}
-        {% set st_selected = task.status if task else '' %}{% set st_form_id = 'task-form' %}
-        {% include "_status_type_row.html" %}
+        {% set labels_selected = task.tags if task else (prefill_tags or []) %}
+        {% include "_labels_row.html" %}
         {% set pf_tags = task.tags if task else (prefill_tags or []) %}
         {% set pf_form_id = 'task-form' %}
         {% include "_project_field.html" %}
-        {% set labels_selected = task.tags if task else (prefill_tags or []) %}
-        {% include "_labels_row.html" %}
+        {% set st_name = 'status' %}{% set st_label = 'Status' %}{% set st_items = status_items %}
+        {% set st_selected = task.status if task else '' %}{% set st_form_id = 'task-form' %}
+        {% include "_status_type_row.html" %}
+        {{ details_start(task and (task.description or task.recurrence not in (None, 'None', 'Nothing', ''))) }}
         {% set contacts_object_type = 'task' %}{% set contacts_object_id = task.uid if task else '' %}
         {% include "_contacts_row.html" %}
         {{ recurrence_row(task.recurrence if task else '') }}
@@ -56,4 +57,5 @@
             <label>Description</label>
             {{ textarea_input({'name': 'description', 'rows': '3'}, task.description if task else '') }}
         </div>
+        {{ details_end() }}
     </div>

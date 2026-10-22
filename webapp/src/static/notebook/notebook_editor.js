@@ -3,6 +3,26 @@
   if (!mount || !window.EditorJS) return;
 
   var contentUrl = mount.getAttribute("data-content-url");
+  var openedAt = performance.now();
+
+  function measure(name, since) {
+    if (window.ccPerf) window.ccPerf.add(name, performance.now() - since);
+  }
+
+  // Time from a keypress until the browser has handled it and painted.
+  mount.addEventListener(
+    "keydown",
+    function (e) {
+      if (e.key.length !== 1 || e.ctrlKey || e.metaKey) return;
+      var pressed = performance.now();
+      requestAnimationFrame(function () {
+        setTimeout(function () {
+          measure("editor typing", pressed);
+        }, 0);
+      });
+    },
+    true
+  );
   var saveTimer = null;
   var failedSaves = 0;
 
@@ -20,6 +40,7 @@
         var blocks = JSON.stringify(data.blocks);
         if (blocks === lastSaved) return null;
         var body = JSON.stringify(data);
+        var startedSave = performance.now();
         return fetch(contentUrl, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -28,6 +49,7 @@
           keepalive: !!leaving && body.length < KEEPALIVE_LIMIT,
         }).then(function (resp) {
           if (!resp.ok) throw new Error("save failed");
+          measure("editor save", startedSave);
           lastSaved = blocks;
           failedSaves = 0;
           document.dispatchEvent(new CustomEvent("notebook-saved"));
@@ -407,6 +429,7 @@
           wikilinkInsert: window.NotebookWikilinkBlock,
         },
         onChange: function () {
+          var changed = performance.now();
           if (window.notebookRenderFootnoteList) {
             window.notebookRenderFootnoteList(mount);
           }
@@ -418,10 +441,12 @@
             window.notebookRenderRelationships(mount);
           }
           scheduleSave(editor);
+          measure("editor change", changed);
         },
       });
       window.notebookEditor = editor;
       editor.isReady.then(function () {
+        measure("editor open", openedAt);
         return editor.save();
       }).then(function (data) {
         if (lastSaved === null) lastSaved = JSON.stringify(data.blocks);

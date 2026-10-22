@@ -67,8 +67,10 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from .. import log as app_log
+from .. import perf
 from ..log import get_logger
 from .. import clock, auth, config, data_health, db, env_file, event_series, finance, finance_stats, flairs, offline_sync, push, release, reminders
+from ..header_views import SETTINGS_GROUPS
 from ..image_sniff import sniff_image_type
 from ..deps import (
     ACCENT_COLOR_KEY,
@@ -96,22 +98,18 @@ from .tasks import TASK_AUTO_ARCHIVE_DAYS_KEY
 router = APIRouter(tags=["settings"])
 logger = get_logger(__name__)
 
-HUB_CATEGORIES = [
-    {"url": "/settings/general", "icon": "user", "name": "General", "desc": "Week start, time format, and other display preferences"},
-    {"url": "/settings/your-profile", "icon": "user-check", "name": "Your Profile", "desc": "Profile picture, nickname, login & security"},
-    {"url": "/settings/notifications", "icon": "bell", "name": "Notifications", "desc": "Push notifications, reminder types, morning digest"},
-    {"url": "/settings/appearance", "icon": "sun", "name": "Appearance", "desc": "Theme"},
-    {"url": "/settings/labels", "icon": "tag", "name": "Labels", "desc": "Names, colors and groups for everything you tag"},
-    {"url": "/settings/groups", "icon": "folder", "name": "Groups", "desc": "Collections of labels"},
-    {"url": "/settings/projects", "icon": "folder-plus", "name": "Projects", "desc": "Labels with a due date and their own page"},
-    {"url": "/settings/holidays", "icon": "calendar", "name": "Holidays", "desc": "Holiday calendars and dates"},
-    {"url": "/settings/notebook", "icon": "file-text", "name": "Notebook", "desc": "Document sidebar layout"},
-    {"url": "/settings/finance-accounts", "icon": "credit-card", "name": "Finance accounts", "desc": "Money accounts, currencies and opening balances"},
-    {"url": "/settings/time-blocks", "icon": "moon", "name": "Sleep & Leisure Time", "desc": "Weekly hours the Week/Day grid highlights and warns about"},
-    {"url": "/settings/logs", "icon": "list", "name": "Logs", "desc": "What the app is doing, live, by level"},
-    {"url": "/settings/data-maintenance", "icon": "database", "name": "Data & Maintenance", "desc": "Backups, integrity, sync conflicts, export, purge"},
-    {"url": "/published-lists", "icon": "share-2", "name": "Published lists", "desc": "Subscribable filtered calendars/lists"},
+HUB_DESCRIPTIONS = {
+    "Account": "Profile picture, nickname, login and security, notifications",
+    "Preferences": "Display preferences, theme and header banner, sleep and leisure hours",
+    "Organise": "Labels, groups, projects and holiday calendars",
+    "Modules": "Notebook layout and entry types, finance accounts",
+    "System": "Backups and maintenance, published lists, logs",
+}
+HUB_GROUPS = [
+    {"url": g["items"][0][1], "icon": g["icon"], "name": g["name"], "desc": HUB_DESCRIPTIONS[g["name"]], "views": [{"name": text, "url": url} for text, url in g["items"]]}
+    for g in SETTINGS_GROUPS
 ]
+HUB_CATEGORIES = [{"url": v["url"], "name": v["name"], "group": g["name"]} for g in HUB_GROUPS for v in g["views"]]
 
 # Breadcrumb roots shared by every settings_*.html page below.
 _ROOT_CRUMB = [{"url": "/settings", "name": "Settings"}]
@@ -137,6 +135,7 @@ def settings_index(request: Request, conn=Depends(get_db)):
     ctx = {
         "request": request,
         "active_tab": "settings",
+        "groups": HUB_GROUPS,
         "categories": HUB_CATEGORIES,
         "conflict_count": len(status["conflicts"]),
         "release_version": release.VERSION,
@@ -195,10 +194,17 @@ def settings_general(request: Request, conn=Depends(get_db)):
 
 
 @router.get("/settings/logs")
-def settings_logs(request: Request):
+def settings_logs(request: Request, conn=Depends(get_db)):
     return templates.TemplateResponse(
         "settings_logs.html",
-        {"request": request, "active_tab": "settings_logs", "crumbs": _ROOT_CRUMB, "title": "Logs", "levels": list(app_log.LEVELS)},
+        {
+            "request": request,
+            "active_tab": "settings_logs",
+            "crumbs": _ROOT_CRUMB,
+            "title": "Logs",
+            "levels": list(app_log.LEVELS),
+            "timings": perf.summary(conn)[:15],
+        },
     )
 
 

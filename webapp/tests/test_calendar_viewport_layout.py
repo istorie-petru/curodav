@@ -112,7 +112,7 @@ class TestAgendaTabRemovedFromSegmentedNav:
         # ">Week<" is base.html's sidebar tab for /calendar/week -- renamed
         # to ">Planner<" 2026-08-29 (STATE.md backlog item 10); the route
         # and everything else about that page are unchanged.
-        assert ">Month<" in body and ">Planner<" in body and ">Day<" in body
+        assert ">Month<" in body and ">Day<" in body
         assert ">Agenda<" not in body
         assert "/calendar/agenda" not in body
 

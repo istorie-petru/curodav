@@ -37,7 +37,7 @@ def _templates():
 
 def _scripts():
     for path in sorted(STATIC_DIR.rglob("*.js")):
-        if "vendor" in path.parts:
+        if "vendor" in path.parts or path.name.startswith("bundle_"):  # bundles repeat the scripts they join
             continue
         yield path.relative_to(STATIC_DIR).as_posix(), _JS_COMMENTS.sub("", path.read_text(encoding="utf-8"))
 

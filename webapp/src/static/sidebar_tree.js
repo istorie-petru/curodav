@@ -14,24 +14,24 @@
       document.documentElement.removeAttribute("data-sidebar-expanded");
       localStorage.removeItem(EXPANDED_KEY);
     }
-    const toggle = document.getElementById("sidebar-expand-toggle");
-    if (toggle) {
+    document.querySelectorAll("#sidebar-expand-toggle, [data-sidebar-toggle]").forEach((toggle) => {
       toggle.setAttribute("aria-pressed", expanded ? "true" : "false");
       toggle.title = expanded ? "Collapse sidebar" : "Expand sidebar";
       toggle.setAttribute("aria-label", toggle.title);
-    }
+    });
     window.dispatchEvent(new Event("resize"));
     setTimeout(() => window.dispatchEvent(new Event("resize")), 180);
   }
 
   function initExpandToggle() {
-    const toggle = document.getElementById("sidebar-expand-toggle");
-    if (!toggle || toggle.dataset.bound) return;
-    toggle.dataset.bound = "1";
-    // Sync the button's own state with what the head script already
+    // Sync the buttons' own state with what the head script already
     // applied -- this file loads after that inline script has run.
     setExpanded(isExpanded());
-    toggle.addEventListener("click", () => setExpanded(!isExpanded()));
+    document.querySelectorAll("#sidebar-expand-toggle, [data-sidebar-toggle]").forEach((toggle) => {
+      if (toggle.dataset.bound) return;
+      toggle.dataset.bound = "1";
+      toggle.addEventListener("click", () => setExpanded(!isExpanded()));
+    });
   }
 
   // Per-space project-tree toggles. A space with no stored preference keeps

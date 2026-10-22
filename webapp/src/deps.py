@@ -13,12 +13,14 @@ from typing import Iterator
 
 from fastapi import Request
 from fastapi.responses import JSONResponse, RedirectResponse
+
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 from jinja2.ext import Extension
 from markupsafe import Markup, escape
 
 from . import db, habit_heatmap, habit_view, recurrence_text, terminology
+from .header_views import header_views, settings_group
 from .caldav_bridge import CalDavBridge
 
 WEEK_START_KEY = "calendar_week_start"
@@ -150,6 +152,8 @@ templates.env.globals["icon_exists"] = lambda name: bool(name) and name in _spri
 
 
 templates.env.globals["icon"] = _icon
+templates.env.globals["header_views"] = header_views
+templates.env.globals["settings_group"] = settings_group
 
 
 @pass_context
@@ -255,7 +259,7 @@ def _sidebar_groups(request: Request) -> list[dict]:
         a DB error should degrade to an empty section, not a 500.
     """
     try:
-        with db.connect(request.app.state.settings.db_path) as conn:
+        with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
             groups = db.list_groups(conn)
             for g in groups:
                 g["children"] = [l for l in g["labels"] if l.get("sidebar_pin")]
@@ -273,7 +277,7 @@ def _sidebar_pinned(request: Request) -> list[dict]:
     group's chevron instead, so it's never listed twice. Same error
     handling as _sidebar_groups."""
     try:
-        with db.connect(request.app.state.settings.db_path) as conn:
+        with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
             rows = conn.execute(
                 "SELECT name FROM label_config WHERE sidebar_pin = 1 AND archived_at IS NULL "
                 "AND TRIM(COALESCE(label_group, '')) = '' ORDER BY name COLLATE NOCASE"
@@ -306,7 +310,7 @@ def _cached_app_meta(request: Request, key: str, default: str) -> str:
     if key in cache:
         return cache[key]
     try:
-        with db.connect(request.app.state.settings.db_path) as conn:
+        with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
             value = db.get_app_meta(conn, key) or default
     except Exception:
         value = default
@@ -421,7 +425,7 @@ def _page_header_banner(request: Request) -> dict | None:
     if hasattr(request.state, cache_attr):
         return getattr(request.state, cache_attr)
     try:
-        with db.connect(request.app.state.settings.db_path) as conn:
+        with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
             banner = db.get_page_banner(conn, PAGE_HEADER_BANNER_SCOPE)
     except Exception:
         banner = None
@@ -529,7 +533,7 @@ def _label_icon(request: Request, label: str) -> str:
     if label in cache:
         return cache[label]
     try:
-        with db.connect(request.app.state.settings.db_path) as conn:
+        with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
             cfg = db.effective_label_config_ci(conn, label or "")
             icon_name = cfg.get("icon") or ""
     except Exception:
@@ -561,7 +565,7 @@ def _label_color(request: Request, label: str) -> str:
     if label in cache:
         return cache[label]
     try:
-        with db.connect(request.app.state.settings.db_path) as conn:
+        with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
             cfg = db.effective_label_config_ci(conn, label or "")
             color = cfg.get("color") or "blue"
     except Exception:
@@ -576,7 +580,7 @@ templates.env.globals["label_color"] = _label_color
 def _contact_items(request: Request) -> list[dict[str, str]]:
     """Every contact as a {uid, name} pair, for the Contacts row's dropdown."""
     try:
-        with db.connect(request.app.state.settings.db_path) as conn:
+        with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
             return [{"uid": c["uid"], "name": c["full_name"] or "Unnamed"} for c in db.list_contacts(conn)]
     except Exception:
         return []
@@ -587,7 +591,7 @@ def _object_contact_uids(request: Request, object_type: str, object_id: str) -> 
     if not object_id:
         return []
     try:
-        with db.connect(request.app.state.settings.db_path) as conn:
+        with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
             return [c["uid"] for c in db.list_object_contacts(conn, object_type, object_id)]
     except Exception:
         return []
@@ -595,7 +599,7 @@ def _object_contact_uids(request: Request, object_type: str, object_id: str) -> 
 
 def _object_contacts(request: Request, object_type: str, object_id: str) -> list[dict]:
     try:
-        with db.connect(request.app.state.settings.db_path) as conn:
+        with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
             return db.list_object_contacts(conn, object_type, object_id)
     except Exception:
         return []
@@ -603,7 +607,7 @@ def _object_contacts(request: Request, object_type: str, object_id: str) -> list
 
 def _contact_objects(request: Request, contact_uid: str) -> dict:
     try:
-        with db.connect(request.app.state.settings.db_path) as conn:
+        with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
             return db.list_contact_objects(conn, contact_uid)
     except Exception:
         return {"tasks": [], "events": []}
@@ -628,7 +632,7 @@ def _project_label_names(request: Request) -> frozenset[str]:
     if cached is not None:
         return cached
     try:
-        with db.connect(request.app.state.settings.db_path) as conn:
+        with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
             names = frozenset(p["name"] for p in db.list_project_labels(conn))
     except Exception:
         names = frozenset()
@@ -828,7 +832,7 @@ templates.env.filters["fmt_address"] = _fmt_address
 
 
 def get_db(request: Request) -> Iterator[sqlite3.Connection]:
-    with db.connect(request.app.state.settings.db_path) as conn:
+    with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
         from . import event_series
 
         event_series.ensure_horizon_daily(conn)  # open-ended series get their next occurrences created, once a day

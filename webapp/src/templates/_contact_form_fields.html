@@ -1,4 +1,5 @@
 {% from "_inputs.html" import file_input, text_input, textarea_input %}
+{% from "_form_rows.html" import details_start, details_end %}
 {% set ms_form_id = 'contact-form' %}
 {% from "_contact_type_picker.html" import contact_type_picker with context %}
 <div class="field-grid">
@@ -25,22 +26,6 @@
                 {{ text_input({'name': 'full_name', 'required': true, 'value': (contact.full_name if contact else '')}) }}
             </div>
         </div>
-    </div>
-    <div class="field">
-        <label>Pseudonym</label>
-        {{ text_input({'name': 'pseudonym', 'value': (contact.pseudonym if contact else '')}) }}
-    </div>
-    <div class="field">
-        <label>Honorary title</label>
-        {{ text_input({'name': 'title', 'value': (contact.title if contact else '')}) }}
-    </div>
-    <div class="field">
-        <label>Organization</label>
-        {{ text_input({'name': 'org', 'value': (contact.org if contact else '')}) }}
-    </div>
-    <div class="field">
-        <label>Role</label>
-        {{ text_input({'name': 'role', 'value': (contact.role if contact else '')}) }}
     </div>
     <div class="field field-wide" data-repeatable-rows-scope>
         <div class="field-label-row">
@@ -85,6 +70,37 @@
                 <button type="button" class="checklist-delete" data-repeatable-remove title="Remove email" aria-label="Remove email">{{ icon('x') }}</button>
             </div>
         </template>
+    </div>
+    <div class="field">
+        {% set ms_name = 'tags_labels' %}
+        {% set ms_icon = 'tag' %}
+        {% set ms_label = 'Label' %}
+        {% set ms_items = [{'uid': '__no_label__', 'name': 'No label'}] + (tag_name_items | rejectattr('uid', 'in', project_names | default([])) | list) %}
+        {% set _labels = (contact.tags or []) | reject('in', project_names | default([])) | list if contact else [] %}
+        {% set ms_selected = (_labels[0] if _labels else '__no_label__') if contact else ((prefill_tags or []) | first | default('__no_label__')) %}
+        {% set ms_mode = 'single' %}
+        {% set ms_allow_new = true %}
+        {% set ms_pill = true %}
+        {% include "_widget_list_multiselect.html" %}
+    </div>
+    {% set pf_tags = contact.tags if contact else (prefill_tags or []) %}{% set pf_form_id = 'contact-form' %}
+    {% include "_project_field.html" %}
+    {{ details_start(contact is not none and contact) }}
+    <div class="field">
+        <label>Pseudonym</label>
+        {{ text_input({'name': 'pseudonym', 'value': (contact.pseudonym if contact else '')}) }}
+    </div>
+    <div class="field">
+        <label>Honorary title</label>
+        {{ text_input({'name': 'title', 'value': (contact.title if contact else '')}) }}
+    </div>
+    <div class="field">
+        <label>Organization</label>
+        {{ text_input({'name': 'org', 'value': (contact.org if contact else '')}) }}
+    </div>
+    <div class="field">
+        <label>Role</label>
+        {{ text_input({'name': 'role', 'value': (contact.role if contact else '')}) }}
     </div>
     <div class="field field-wide" data-repeatable-rows-scope>
         <div class="field-label-row">
@@ -173,21 +189,8 @@
         </template>
     </div>
     <div class="field field-wide">
-        {% set ms_name = 'tags_labels' %}
-        {% set ms_icon = 'tag' %}
-        {% set ms_label = 'Label' %}
-        {% set ms_items = [{'uid': '__no_label__', 'name': 'No label'}] + (tag_name_items | rejectattr('uid', 'in', project_names | default([])) | list) %}
-        {% set _labels = (contact.tags or []) | reject('in', project_names | default([])) | list if contact else [] %}
-        {% set ms_selected = (_labels[0] if _labels else '__no_label__') if contact else ((prefill_tags or []) | first | default('__no_label__')) %}
-        {% set ms_mode = 'single' %}
-        {% set ms_allow_new = true %}
-        {% set ms_pill = true %}
-        {% include "_widget_list_multiselect.html" %}
-    </div>
-    {% set pf_tags = contact.tags if contact else (prefill_tags or []) %}{% set pf_form_id = 'contact-form' %}
-    {% include "_project_field.html" %}
-    <div class="field field-wide">
         <label>Notes</label>
         {{ textarea_input({'name': 'notes', 'rows': '3'}, contact.notes if contact else '') }}
     </div>
+    {{ details_end() }}
 </div>

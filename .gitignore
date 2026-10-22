@@ -65,3 +65,4 @@ webapp/encrypted.data
 # Editor / OS state that sometimes leaks in despite the patterns above.
 .idea/
 .vscode/
+tools/editor-bundle/node_modules/

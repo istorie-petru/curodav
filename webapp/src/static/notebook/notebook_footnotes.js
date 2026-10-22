@@ -204,7 +204,8 @@
       var noteText = mark.getAttribute("data-note") || "";
       var body = li.querySelector(".cdx-footnote-text");
       if (kind) {
-        if (body.textContent !== noteText) body.textContent = noteText;
+        var generated = sanitizeNoteHtml(noteText);
+        if (body.innerHTML !== generated) body.innerHTML = generated;
       } else if (document.activeElement !== body) {
         var html = sanitizeNoteHtml(noteText);
         if (body.innerHTML !== html) body.innerHTML = html;
@@ -366,10 +367,27 @@
   ];
 
   function markFor(li) {
-    return document.getElementById("fn-ref-" + li.id.slice(3));
+    return document.getElementById("fn-ref-" + li.id.slice(3)) || document.querySelector('#notebook-editor .cdx-footnote-ref[data-note-id="' + li.id.slice(3) + '"]');
+  }
+
+  // The new editor keeps the endnote in its document, so its markers are changed through a bridge instead of in the DOM.
+  function writeMark(mark, attrs) {
+    var bridge = window.notebookEndnoteBridge;
+    if (bridge) {
+      bridge.update(mark.getAttribute("data-note-id"), attrs);
+      return;
+    }
+    Object.keys(attrs).forEach(function (name) {
+      if (attrs[name] === null) mark.removeAttribute(name);
+      else mark.setAttribute(name, attrs[name]);
+    });
   }
 
   function refresh(mark) {
+    if (window.notebookEndnoteBridge) {
+      window.notebookEndnoteBridge.refresh();
+      return;
+    }
     var mount = mark.closest("#notebook-editor");
     if (!mount) return;
     renderFootnoteList(mount);
@@ -436,9 +454,7 @@
 
   // Back to manual editing: the generated text stays as the entry's text.
   function removeGeneration(mark) {
-    mark.setAttribute("data-note", escapeHtml(mark.getAttribute("data-note") || ""));
-    mark.removeAttribute("data-footnote-kind");
-    mark.removeAttribute("data-footnote-data");
+    writeMark(mark, { "data-note": escapeHtml(mark.getAttribute("data-note") || ""), "data-footnote-kind": null, "data-footnote-data": null });
     refresh(mark);
   }
 
@@ -517,9 +533,7 @@
       fetch("/notebook/citations/footnote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
         .then(function (resp) { if (!resp.ok) throw new Error("format failed"); return resp.json(); })
         .then(function (result) {
-          mark.setAttribute("data-note", result.text);
-          mark.setAttribute("data-footnote-kind", kind);
-          mark.setAttribute("data-footnote-data", JSON.stringify(data));
+          writeMark(mark, { "data-note": result.text, "data-footnote-kind": kind, "data-footnote-data": JSON.stringify(data) });
           refresh(mark);
           window.CCModal.close();
         })
@@ -619,5 +633,6 @@
   }
 
   window.NotebookFootnote = NotebookFootnote;
+  window.notebookEndnoteMenuButton = buildEntryMenuButton;
   window.notebookRenderFootnoteList = renderFootnoteList;
 })();

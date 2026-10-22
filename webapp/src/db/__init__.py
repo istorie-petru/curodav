@@ -132,6 +132,7 @@ from .pages import (
     _widget_row_to_dict,
     active_flair_languages,
     banner_for_object,
+    card_strip,
     clear_page_banner,
     delete_dashboard_widget,
     delete_time_block,

@@ -186,8 +186,8 @@ class TestSeededAsQuarterColumn:
 
     def test_group_page_route_seeds_it_end_to_end(self, conn):
         _group(conn)
-        resp = label_pages.group_page("Uni", _request(), conn=conn)
-        assert resp.status_code == 200
+        assert label_pages.group_page("Uni", _request(), conn=conn).status_code == 200
+        dashboard_router._ensure_default_label_widgets(conn, "group:Uni")
         widgets = db.list_dashboard_widgets(conn, label_name="group:Uni")
         matches = [w for w in widgets if w["type"] == "group_members"]
         assert len(matches) == 1

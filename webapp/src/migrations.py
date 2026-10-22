@@ -161,6 +161,14 @@ def _references_get_pages(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE glossary_term_references ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
 
 
+def _timing_statistics(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS perf_daily (day TEXT NOT NULL, kind TEXT NOT NULL, name TEXT NOT NULL, "
+        "count INTEGER NOT NULL DEFAULT 0, total_ms REAL NOT NULL DEFAULT 0, max_ms REAL NOT NULL DEFAULT 0, "
+        "slow INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, kind, name))"
+    )
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "notebook documents get an is_template flag", _note_templates),
     Migration(2, "frontmatter fields lose the required column", _field_config_without_required, destructive=True),
@@ -179,6 +187,7 @@ MIGRATIONS: list[Migration] = [
     Migration(15, "journal notes become weekly", _journal_notes_become_weekly, destructive=True),
     Migration(16, "entry kinds get fixed-name fields", _entry_kinds_get_fields),
     Migration(17, "entry references get start and end pages", _references_get_pages),
+    Migration(18, "timing statistics per day", _timing_statistics),
 ]
 
 

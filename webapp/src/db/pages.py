@@ -419,6 +419,20 @@ def effective_page_banner(conn: sqlite3.Connection, page_key: str, name: str | N
     return None
 
 
+def card_strip(conn: sqlite3.Connection, task: dict[str, Any]) -> dict[str, Any]:
+    """What a board card shows: the project pill, the labels whose icons sit by the title, and the strip on top
+    (the project's banner, else the first label's, else none)."""
+    project = project_label_for(conn, "task", task["uid"]) if task.get("uid") else None
+    labels = [t for t in (task.get("tags") or []) if t != project]
+    scope = project or (labels[0] if labels else None)
+    banner = None
+    if scope:
+        banner = effective_page_banner(conn, scope, name=scope)
+        if banner:
+            banner["scope"] = scope
+    return {"project": project, "labels": labels, "scope": scope, "banner": banner}
+
+
 def banner_for_object(conn: sqlite3.Connection, object_type: str, obj: dict[str, Any]) -> dict[str, Any] | None:
     """No new storage: a label's banner
         already exists (get_page_banner/routers/banners.py, keyed by label

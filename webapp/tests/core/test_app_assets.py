@@ -53,3 +53,15 @@ def test_scripts_never_set_a_style_attribute():
     """The CSP blocks style attributes; a hidden <svg> given one by script showed up 150px tall and brought back the page scrollbar."""
     offenders = [p.name for p in STATIC_DIR.glob("*.js") if re.search(r"setAttribute\(\s*[\"']style[\"']", p.read_text())]
     assert offenders == []
+
+
+def test_script_bundles_are_current():
+    """Pages load three joined script files; edit the source scripts, then run scripts/build_static_bundle.py."""
+    import importlib.util
+
+    path = STATIC_DIR.parent.parent / "scripts" / "build_static_bundle.py"
+    spec = importlib.util.spec_from_file_location("build_static_bundle", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    stale = [name for name, text in module.build().items() if (STATIC_DIR / name).read_text() != text]
+    assert stale == [], f"stale bundles: {stale}; run scripts/build_static_bundle.py"

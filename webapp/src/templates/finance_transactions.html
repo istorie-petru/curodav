@@ -30,6 +30,7 @@
         {% set filter_specs = [{'name': 'account', 'label': 'Account', 'items': account_items, 'selected': account}] %}
         {% include "_finance_filters.html" %}
     </form>
+    <a href="/finance/transactions/new" data-modal class="btn primary" data-fab title="New transaction">{{ icon('plus', 'icon-sm') }} New</a>
 {% endcall %}
 <div class="settings-group" id="finance-ledger" data-smart-region>
 {% if pending %}

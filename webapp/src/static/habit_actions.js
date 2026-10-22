@@ -50,6 +50,19 @@
 
   document.addEventListener("cc-region-swapped", (e) => restoreFocus((e.detail || {}).id));
 
+  function flipToggle(btn) {
+    if (!btn || btn.classList.contains("habit-check-avoid")) return null;
+    const card = btn.closest(".habit-card");
+    const wasDone = btn.classList.contains("is-done");
+    const apply = (done) => {
+      btn.classList.toggle("is-done", done);
+      btn.setAttribute("aria-pressed", done ? "true" : "false");
+      if (card) card.classList.toggle("is-done-today", done);
+    };
+    apply(!wasDone);
+    return () => apply(wasDone);
+  }
+
   document.addEventListener("submit", async (e) => {
     const form = e.target;
     if (!form.matches || !form.matches("form.habit-action")) return;
@@ -63,10 +76,13 @@
     if (!region) return; // not in a live region -- plain form post
     e.preventDefault();
     const btn = form.querySelector("button");
-    if (btn) btn.disabled = true;
+    // A plain done/undone toggle shows its result at once and is put back if the save fails.
+    const undo = form.classList.contains("habit-toggle") ? flipToggle(btn) : null;
+    if (btn && !undo) btn.disabled = true;
     try {
       await postForm(form.action, new FormData(form));
     } catch (err) {
+      if (undo) undo();
       if (btn) btn.disabled = false;
       window.ccToast({ message: err.message, variant: "error" });
       return;

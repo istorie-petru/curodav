@@ -68,7 +68,7 @@
   function renderToc(mount) {
     var nav = document.getElementById("notebook-toc");
     if (!nav) return;
-    var headers = mount.querySelectorAll(".ce-header");
+    var headers = mount.querySelectorAll(".ce-header, .ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror h4, .ProseMirror h5");
     nav.innerHTML = "";
     if (!headers.length) {
       nav.appendChild(window.ccEmptyState("No headings yet"));
@@ -85,22 +85,24 @@
       // fills with "Block «header» skipped because saved data is invalid"
       // in a tight loop). Skipping the write when the id already matches
       // keeps this idempotent.
-      if (h.id !== id) h.id = id;
+      var live = !!h.closest(".ProseMirror");
+      if (!live && h.id !== id) h.id = id;
       var level = Number(h.tagName.slice(1));
       var label = computeLabel(counters, level);
       // Same idempotency guard as the id write above, and for the same
       // reason -- this attribute lives on the heading element itself
       // (inside Editor.js's observed redactor), not on a node outside it
       // like the sidebar <a> below.
-      if (h.dataset.tocLabel !== label) h.dataset.tocLabel = label;
+      if (!live && h.dataset.tocLabel !== label) h.dataset.tocLabel = label;
       // The editing view shows only the number; the word stays in the outline.
       var num = label.replace(/^[A-Za-z]+ /, "");
-      if (h.dataset.tocNum !== num) h.dataset.tocNum = num;
+      if (!live && h.dataset.tocNum !== num) h.dataset.tocNum = num;
       var a = document.createElement("a");
       a.className = "notebook-toc-item";
       a.href = "#" + id;
       a.dataset.level = String(level);
       a.dataset.tocTarget = id;
+      a.dataset.tocIndex = String(i);
       a.textContent = label + " — " + (h.textContent || "Untitled heading");
       nav.appendChild(a);
     });
@@ -116,6 +118,10 @@
     if (!link) return;
     e.preventDefault();
     var target = document.getElementById(link.getAttribute("data-toc-target"));
+    if (!target) {
+      var live = document.querySelectorAll("#notebook-editor .ProseMirror h1, #notebook-editor .ProseMirror h2, #notebook-editor .ProseMirror h3, #notebook-editor .ProseMirror h4, #notebook-editor .ProseMirror h5");
+      target = live[Number(link.getAttribute("data-toc-index"))];
+    }
     if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 

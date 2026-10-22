@@ -31,35 +31,37 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _request(path="/labels/X"):
+def _request(path="/labels/X", query=b""):
     return Request({
-        "type": "http", "method": "GET", "path": path, "query_string": b"",
+        "type": "http", "method": "GET", "path": path, "query_string": query,
         "scheme": "http", "server": ("testserver", 80), "root_path": "", "headers": [],
     })
 
 
-def _page(conn, name):
-    return label_pages.label_page(name, _request(f"/labels/{name}"), conn=conn)
+def _page(conn, name, view=""):
+    return label_pages.label_page(name, _request(f"/labels/{name}", f"view={view}".encode() if view else b""), conn=conn)
 
 
 class TestWhichPage:
-    def test_label_with_a_dashboard_gets_the_widget_grid(self, conn):
+    def test_a_label_page_is_always_the_overview(self, conn):
         db.upsert_label_config(conn, {"name": "Gym", "page_type": "dashboard"})
         resp = _page(conn, "Gym")
-        assert resp.template.name == "label_detail.html"
+        assert resp.template.name == "label_sections.html"
         assert resp.context["active_tab"] == "label"
-        assert resp.context["group_labels"] == []
-        # Seeded with the Home-style default layout on first visit.
-        assert db.list_dashboard_widgets(conn, label_name="Gym")
+
+    def test_the_views_are_overview_agenda_and_board(self, conn):
+        db.upsert_label_config(conn, {"name": "Gym"})
+        assert _page(conn, "Gym", "agenda").template.name == "secretariat.html"
+        assert _page(conn, "Gym", "board").template.name == "scope_board.html"
+        assert _page(conn, "Gym", "nonsense").template.name == "label_sections.html"
 
     def test_label_without_a_dashboard_gets_the_sections_page(self, conn):
         db.upsert_label_config(conn, {"name": "Gym"})
         assert _page(conn, "Gym").template.name == "label_sections.html"
 
-    def test_a_project_defaults_to_a_dashboard(self, conn):
-        # Backfilled/mirrored in slice a: a project's page was a real page.
+    def test_a_project_page_is_the_overview_too(self, conn):
         db.upsert_label_config(conn, {"name": "Trip", "is_project": 1})
-        assert _page(conn, "Trip").template.name == "label_detail.html"
+        assert _page(conn, "Trip").template.name == "label_sections.html"
 
 
 class TestSections:
@@ -81,7 +83,9 @@ class TestSections:
         assert [c["uid"] for c in resp.context["contacts"]] == ["c1"]
         assert [d["uid"] for d in resp.context["notebook_documents"]["documents"]] == ["n1"]
         assert [t["uid"] for t in resp.context["columns"]["active"]] == ["t1"]
-        assert "kanban-board" in body and 'src="/static/tasks_board.js' in body
+        assert "kanban-board" not in body
+        board = _page(conn, "Gym", "board")
+        assert "kanban-board" in board.body.decode() and 'src="/static/tasks_board.js' in board.body.decode()
         assert "> Contacts</h2>" in body and "> Agenda</h2>" in body and "> Notebook</h2>" in body
 
     def test_switched_off_sections_are_not_rendered(self, conn):
@@ -91,7 +95,6 @@ class TestSections:
         assert resp.context["agenda_items"] == [] and resp.context["contacts"] == []
         assert resp.context["notebook_documents"] == {}
         assert "> Agenda</h2>" not in body and "> Contacts</h2>" not in body and "> Notebook</h2>" not in body
-        assert "kanban-board" in body
 
     def test_no_kanban_means_no_board_script(self, conn):
         self._seed(conn, tasks_widget=0)
@@ -127,10 +130,9 @@ class TestGroupPage:
     def test_renders_a_dashboard_with_its_members(self, conn):
         self._group(conn)
         resp = label_pages.group_page("Uni", _request("/groups/Uni"), conn=conn)
-        assert resp.template.name == "label_detail.html"
-        assert resp.context["label"]["uid"] == "group:Uni"
-        assert [l["name"] for l in resp.context["group_labels"]] == ["Art", "Maths"]
-        assert resp.context["page_label_scope"] == "group:Uni"
+        assert resp.template.name == "label_sections.html"
+        assert resp.context["label"]["name"] == "Uni"
+        assert sorted(r["label"]["name"] for r in resp.context["group_members"]["rows"]) == ["Art", "Maths"]
         body = resp.body.decode()
         # 2026-09-26 (item 20): the old always-visible plain toolbar
         # (`class="toolbar group-labels"`) is gone -- replaced by a
@@ -144,11 +146,6 @@ class TestGroupPage:
         # 2026-09-28 (direct request, "always use card grid"): the widget
         # renders every row as a `filled_card` tile now, not a list.
         assert 'class="filled-cards-grid"' in body
-        # Seeded with the default layout under the group key, plus the
-        # group_members widget.
-        widgets = db.list_dashboard_widgets(conn, label_name="group:Uni")
-        assert widgets
-        assert any(w["type"] == "group_members" for w in widgets)
 
     def test_widgets_are_scoped_to_the_members(self, conn):
         from src.routers import dashboard as dashboard_router
@@ -191,9 +188,9 @@ class TestStatusRow:
         assert "/archive" not in body
 
     def test_status_row_is_on_the_dashboard_page_too(self, conn):
-        db.upsert_label_config(conn, {"name": "Trip", "is_project": 1})
+        db.upsert_label_config(conn, {"name": "Trip", "is_project": 1, "agenda_widget": 0})
         resp = _page(conn, "Trip")
-        assert resp.template.name == "label_detail.html"
+        assert resp.template.name == "label_sections.html"
         assert "label-status" in resp.body.decode()
 
 
@@ -267,9 +264,7 @@ class TestFormFields:
         body = labels_router.edit_label_modal("Gym", _request("/settings/labels/Gym/edit"), conn=conn).body.decode()
         assert 'name="page_fields" value="1"' in body
         assert 'name="deadline_date"' in body and "2026-12-01" in body
-        # 2026-09-26: Page is a dropdown; Sections hide (CSS) with a dashboard.
-        assert _checked(body, "page_type", "dashboard")
-        assert 'data-page="dashboard"' in body
+        assert 'name="page_type"' not in body
         assert 'name="start_date"' not in body and 'name="end_date"' not in body
 
     def test_update_writes_group_and_pins(self, conn):
@@ -283,7 +278,7 @@ class TestFormFields:
         body = labels_router.new_label_modal(_request("/settings/labels/new"), conn=conn).body.decode()
         for name in ("agenda_widget", "tasks_widget", "contacts_widget", "notebook_widget"):
             assert _checked(body, name, "1")
-        assert _checked(body, "page_type", "sections")
+        assert 'name="page_type"' not in body
         assert '<span class="ms-summary">Agenda, Tasks, Contacts, Notebook</span>' in body
 
 
@@ -422,11 +417,12 @@ class TestLabelPillLinks:
 
     def test_kanban_card_pills_open_the_preview(self, conn):
         db.upsert_label_config(conn, {"name": "Gym"})
+        db.upsert_label_config(conn, {"name": "Legs", "is_project": 1})
         db.upsert_task(conn, {"uid": "t1", "title": "Squats", "description": "", "status": "active",
                               "tags": ["Gym", "Legs"], "created_at": _now()})
-        body = _page(conn, "Gym").body.decode()
+        body = _page(conn, "Gym", "board").body.decode()
         assert 'href="/labels/Legs/preview" data-modal' in body
-        assert 'href="/labels/Gym/preview"' not in body  # the page's own label isn't repeated
+        assert 'href="/labels/Gym/preview"' not in body  # labels show as icons, only the project is a pill
 
     def test_tasks_table_pills_link_to_the_preview(self, conn):
         """2026-09-26 follow-up (_task_row.html's own header comment):

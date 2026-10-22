@@ -588,27 +588,73 @@ def bulk_merge_labels(uids: list[str] = Form([]), dest_name: str = Form(...), co
 
 @router.get("/bulk-edit-modal")
 def bulk_edit_modal(uids: str, request: Request, conn=Depends(get_db)):
-    """Bulk-select "Edit": sets the same color on every selected label."""
-    fields = [{"name": "color", "label": "Color", "kind": "select", "options": [(c, c.title()) for c in COLORS]}]
+    """Bulk-select "Edit": color, group, end date and archive state for every selected label or project."""
+    names = [n for n in uids.split(",") if n]
+    projects = bool(names) and all((db.get_label_config(conn, n) or {}).get("is_project") for n in names)
+    noun = "project" if projects else "label"
+    fields = [
+        {"name": "color", "label": "Color", "kind": "select", "options": [(c, c.title()) for c in COLORS]},
+        {"name": "label_group", "label": "Group", "kind": "select",
+         "options": [(_NO_GROUP, "No group")] + [(g["name"], g["name"]) for g in db.list_groups(conn)]},
+        {"name": "end_date", "label": "End date" if projects else "Deadline", "kind": "date"},
+        {"name": "clear_end", "label": "Remove end date" if projects else "Remove deadline", "kind": "select",
+         "options": [("1", "Remove it")]},
+        {"name": "archive", "label": "Archive", "kind": "select", "options": [("archive", "Archive"), ("restore", "Restore")]},
+    ]
     return templates.TemplateResponse(
         "bulk_edit_modal.html",
-        {"request": request, "uids": [n for n in uids.split(",") if n], "noun": "label", "fields": fields,
-         "post_url": "/settings/labels/bulk-edit", "change_type": "label", "back_url": "/settings/labels"},
+        {"request": request, "uids": names, "noun": noun, "fields": fields,
+         "post_url": "/settings/labels/bulk-edit", "change_type": "label",
+         "back_url": "/settings/projects" if projects else "/settings/labels"},
     )
 
 
+_NO_GROUP = "__none__"
+
+
 @router.post("/bulk-edit")
-def bulk_edit_labels(uids: list[str] = Form([]), color: str = Form(""), conn=Depends(get_db)):
+def bulk_edit_labels(
+    uids: list[str] = Form([]),
+    color: str = Form(""),
+    label_group: str = Form(""),
+    end_date: str = Form(""),
+    clear_end: str = Form(""),
+    archive: str = Form(""),
+    conn=Depends(get_db),
+):
+    # Direct (non-request) calls leave an unset Form param as FastAPI's marker object, so non-strings count as blank.
+    color, label_group, end_date, clear_end, archive = (v if isinstance(v, str) else "" for v in (color, label_group, end_date, clear_end, archive))
     if color and color not in COLORS:
         raise HTTPException(400, f"unknown color '{color}'")
+    end_date = end_date.strip()[:10]
+    if end_date:
+        try:
+            date.fromisoformat(end_date)
+        except ValueError:
+            raise HTTPException(400, "End date must be a date (YYYY-MM-DD).")
     for name in uids:
-        if not color:
-            continue
         # A label that is only in use (no settings row yet) gets one.
         config = db.get_label_config(conn, name) or {"name": name, "created_at": _now()}
-        config["color"] = color
-        db.upsert_label_config(conn, config)
-    return RedirectResponse(url="/settings/labels", status_code=303)
+        row = {"name": name, "created_at": config.get("created_at") or _now()}
+        if color:
+            row["color"] = color
+        if label_group:
+            row["label_group"] = None if label_group == _NO_GROUP else _clean_group(label_group)
+        if end_date or clear_end:
+            value = end_date or None
+            if config.get("is_project"):
+                row["end_date"] = value
+            else:
+                row["has_deadline"] = 1 if value else 0
+                row["deadline_date"] = value
+        if len(row) > 2:
+            db.upsert_label_config(conn, row)
+        if archive == "archive":
+            db.archive_project(conn, name)
+        elif archive == "restore":
+            db.unarchive_label(conn, name)
+    projects = bool(uids) and all((db.get_label_config(conn, n) or {}).get("is_project") for n in uids)
+    return RedirectResponse(url="/settings/projects" if projects else "/settings/labels", status_code=303)
 
 
 @router.post("/{name}/set")

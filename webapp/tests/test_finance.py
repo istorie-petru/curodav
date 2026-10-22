@@ -287,18 +287,14 @@ def test_accounts_live_in_settings_and_the_transactions_page_does_not_link_to_th
     from src.routers import settings as settings_router
     assert "/settings/finance-accounts" in {c["url"] for c in settings_router.HUB_CATEGORIES}
     body = router.transactions(_request(), conn=conn).body.decode()
-    assert "/finance/accounts" not in body and 'href="/finance/transactions/new"' not in body and "Import CSV" not in body
+    assert "/finance/accounts" not in body and 'href="/finance/transactions/new"' in body and "Import CSV" not in body
 
 
-def test_the_quick_add_modal_offers_a_transaction_tab_once_an_account_exists(conn):
+def test_the_quick_add_modal_no_longer_offers_transactions(conn):
     from src.routers import dashboard
-    body = dashboard.quick_add_form(_request("/quick/add"), default_tab="transaction", conn=conn).body.decode()
-    assert 'data-quick-add-tab="transaction"' in body and "No accounts yet" in body and 'id="finance-transaction-form"' not in body
     account(conn)
     body = dashboard.quick_add_form(_request("/quick/add"), default_tab="transaction", conn=conn).body.decode()
-    assert 'id="finance-transaction-form"' in body and 'name="amount"' in body
-
-
+    assert 'data-quick-add-tab="transaction"' not in body and 'id="finance-transaction-form"' not in body
 
 
 def test_the_overview_page_is_gone_and_the_finance_tab_opens_transactions():
@@ -357,11 +353,10 @@ def test_transfers_move_money_but_are_not_listed_in_the_table(conn):
     assert balances == {"Bank": 6000, "Pot": 4000}
 
 
-def test_quick_add_has_a_type_dropdown_beside_each_title_and_a_full_width_date(conn):
+def test_quick_add_has_a_type_dropdown_beside_each_title(conn):
     from src.routers import dashboard
     account(conn)
-    body = dashboard.quick_add_form(_request("/quick/add"), default_tab="transaction", conn=conn).body.decode()
+    body = dashboard.quick_add_form(_request("/quick/add"), default_tab="task", conn=conn).body.decode()
     assert "quick-add-tabs" not in body and "seg-btn" not in body.split('id="quick-add-panels"')[1].split("</section>")[0]
-    for kind in ("task", "event", "contact", "label", "transaction", "note"):
+    for kind in ("task", "event"):
         assert f'name="qa_type_{kind}"' in body
-    assert 'class="field field-wide">\n            <label>Date</label>' in body

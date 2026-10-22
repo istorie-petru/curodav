@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Board - Tasks{% endblock %}
+{% block main_class %}main-shell{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+<h1 class="sr-only">Tasks</h1>
+{% call page_header_narrow("Tasks", "check-square", views=header_views("tasks", "board")) %}{% endcall %}
+<div class="main-shell-body">
+{% set label = none %}
+{% include "_kanban_board.html" %}
+</div>
+{% endblock %}
+{% block extra_scripts %}<script defer src="{{ static_url('tasks_board.js') }}"></script>{% endblock %}

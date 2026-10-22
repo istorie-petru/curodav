@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% block title %}{{ label.name }}{% endblock %}
+{% block main_class %}main-full-width main-shell{% endblock %}
+{% block content %}
+{% call page_header_narrow(label.name, label.icon or 'tag', banner=banner, banner_image_scope=banner_image_scope, icon_color=label.color, views=header_views("scope", "board", page_url, agenda=true)) %}
+    {% if header_edit_url %}<a href="{{ header_edit_url }}" data-modal class="icon-btn label-page-edit" title="Page options" aria-label="Page options">{{ icon('edit', 'icon-sm') }}</a>{% endif %}
+{% endcall %}
+<div class="main-shell-body">
+{% include "_kanban_board.html" %}
+</div>
+{% endblock %}
+{% block extra_scripts %}<script defer src="{{ static_url('tasks_board.js') }}"></script>{% endblock %}

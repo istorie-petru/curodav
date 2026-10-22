@@ -87,8 +87,7 @@ class TestSettingsTimeBlocksPage:
 
     def test_hub_links_to_time_blocks(self, conn):
         body = settings_router.settings_index(_request("/settings"), conn=conn).body.decode()
-        assert 'href="/settings/time-blocks"' in body
-        assert "Sleep &amp; Leisure Time" in body or "Sleep & Leisure Time" in body
+        assert "Preferences" in body and "/settings/time-blocks" in [c["url"] for c in settings_router.HUB_CATEGORIES]
 
     def test_all_seven_days_summarize_as_all_week(self, conn):
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:59", "days": ",".join(db.TIME_BLOCK_DAYS)})

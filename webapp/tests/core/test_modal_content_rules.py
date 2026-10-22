@@ -7,7 +7,7 @@ checkbox (weekday picks and bulk-select rows); it only shrinks.
 from pathlib import Path
 
 TEMPLATES = Path(__file__).resolve().parents[2] / "src" / "templates"
-MODAL_CHECKBOXES = {"habit_task_form.html", "settings_time_blocks.html"}
+MODAL_CHECKBOXES = {"habit_task_form.html", "settings_time_blocks.html", "settings_notebook.html", "taxonomy.html"}
 
 
 def _modal_templates() -> dict[str, str]:

@@ -208,7 +208,7 @@ def test_the_new_note_form_offers_labels_project_type_and_frontmatter(conn):
         assert marker in body
 
 
-def test_the_sidebar_new_modal_has_a_note_tab_that_defaults_on_notebook_pages(conn):
+def test_the_sidebar_new_modal_no_longer_offers_notes(conn):
     from src.routers import dashboard
     body = dashboard.quick_add_form(_request("/quick/add"), default_tab="note", conn=conn).body.decode()
-    assert 'data-quick-add-tab="note"' in body and 'id="notebook-new-form"' in body
+    assert 'data-quick-add-tab="note"' not in body and 'id="notebook-new-form"' not in body

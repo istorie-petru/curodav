@@ -653,6 +653,7 @@
     if (!combo) return;
     e.preventDefault();
     if (overlay.classList.contains("is-open")) close();
+    else if (window.CCModal) window.CCModal.open("/quick/add?focus=search");
     else open({});
   });
 
@@ -682,7 +683,8 @@
     const openTrigger = e.target.closest("[data-command-palette-open]");
     if (openTrigger) {
       e.preventDefault();
-      open({});
+      if (window.CCModal) window.CCModal.open("/quick/add?focus=search", openTrigger);
+      else open({});
     }
   });
 

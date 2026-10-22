@@ -1,0 +1,141 @@
+/* Page: the writing column is a readable width, centered, with the toolbar above it at the same width. */
+body:has(.nbtb) .notebook-page-main > #notebook-editor{max-width:860px; margin-inline:auto;}
+body:has(.nbtb) .notebook-page-main > #notebook-editor{padding:var(--space-4) var(--space-5);}
+
+/* Text rhythm: one line height, one gap between blocks, headings with more air above than below. */
+#notebook-editor .tiptap{outline:none; min-height:60vh; padding:0; line-height:1.65; font-size:var(--text-base);}
+#notebook-editor .tiptap > *{margin-top:0; margin-bottom:0;}
+#notebook-editor .tiptap > * + *{margin-top:1em;}
+#notebook-editor .tiptap li p,#notebook-editor .tiptap td p,#notebook-editor .tiptap th p,#notebook-editor .tiptap blockquote p:first-child{margin:0;}
+#notebook-editor .tiptap h1,#notebook-editor .tiptap h2,#notebook-editor .tiptap h3,#notebook-editor .tiptap h4,#notebook-editor .tiptap h5{line-height:1.25; margin-bottom:0;}
+#notebook-editor .tiptap h1{font-size:2em;} #notebook-editor .tiptap h2{font-size:1.65em;} #notebook-editor .tiptap h3{font-size:1.4em;}
+#notebook-editor .tiptap h4{font-size:1.2em;} #notebook-editor .tiptap h5{font-size:1.05em;}
+#notebook-editor .tiptap > h1:not(:first-child){margin-top:2.2em;} #notebook-editor .tiptap > h2:not(:first-child){margin-top:1.8em;}
+#notebook-editor .tiptap > h3:not(:first-child){margin-top:1.5em;} #notebook-editor .tiptap > h4:not(:first-child){margin-top:1.2em;}
+#notebook-editor .tiptap > h5:not(:first-child){margin-top:1em;}
+#notebook-editor .tiptap > h1 + *,#notebook-editor .tiptap > h2 + *,#notebook-editor .tiptap > h3 + *,#notebook-editor .tiptap > h4 + *,#notebook-editor .tiptap > h5 + *{margin-top:.35em;}
+#notebook-editor .tiptap ul,#notebook-editor .tiptap ol{padding-left:1.5em;}
+#notebook-editor .tiptap li > p{margin:0;}
+#notebook-editor .tiptap li + li{margin-top:.2em;}
+#notebook-editor .tiptap li > ul,#notebook-editor .tiptap li > ol{margin-top:.2em;}
+#notebook-editor .tiptap ul[data-type="taskList"]{list-style:none; padding-left:0;}
+#notebook-editor .tiptap ul[data-type="taskList"] li{display:flex; align-items:baseline; gap:var(--space-2);}
+#notebook-editor .tiptap ul[data-type="taskList"] li > label{flex:none;}
+#notebook-editor .tiptap ul[data-type="taskList"] li > div{flex:1; min-width:0;}
+#notebook-editor .tiptap ul[data-type="taskList"] ul[data-type="taskList"]{padding-left:1.5em;}
+#notebook-editor .tiptap a{color:var(--tag-blue-fg);}
+#notebook-editor .tiptap code{font-family:var(--font-mono, ui-monospace, "SF Mono", Consolas, monospace); font-size:.9em; background:var(--bg-secondary); border-radius:var(--radius-xs, 4px); padding:.1em .35em;}
+
+/* Code block: a card-like surface with Prism token colors from notebook_code.css. */
+#notebook-editor .tiptap pre{background:var(--bg-secondary); color:var(--fg-primary); border:1px solid var(--border); border-radius:var(--radius-control); padding:var(--space-3) var(--space-4); overflow:auto; font-size:13px; line-height:1.5; tab-size:2;}
+#notebook-editor .tiptap pre code{background:none; padding:0; border-radius:0; font-size:inherit; white-space:pre-wrap;}
+
+/* Tables */
+#notebook-editor .tiptap table{border-collapse:collapse; width:100%; table-layout:fixed; overflow:hidden;}
+#notebook-editor .tiptap th,#notebook-editor .tiptap td{border:1px solid var(--border); padding:var(--space-1) var(--space-2); vertical-align:top; text-align:left; min-width:4em;}
+#notebook-editor .tiptap th{background:var(--bg-secondary); font-weight:var(--font-weight-bold);}
+#notebook-editor .tiptap td p,#notebook-editor .tiptap th p{margin:0;}
+#notebook-editor .tiptap .selectedCell{background:var(--accent-neutral-subtle);}
+#notebook-editor .tiptap .column-resize-handle{background:var(--accent); width:2px; position:absolute; top:0; bottom:0; right:-1px; pointer-events:none;}
+
+#notebook-editor .tiptap .is-empty::before{content:attr(data-placeholder); float:left; height:0; pointer-events:none; color:var(--fg-tertiary);}
+#notebook-editor .ProseMirror{position:relative; white-space:pre-wrap; white-space:break-spaces; word-wrap:break-word; font-variant-ligatures:none; font-feature-settings:"liga" 0;}
+#notebook-editor .ProseMirror pre{white-space:pre-wrap;}
+#notebook-editor .ProseMirror li{position:relative;}
+#notebook-editor .ProseMirror-hideselection *::selection{background:transparent;}
+
+/* Quote, callout, divider: the colors come from notebook_blocks.css; these rules shape the editable versions. */
+#notebook-editor .tiptap blockquote.cdx-nb-quote{border-left:3px solid var(--nb-color-fg); padding:.2em 0 .2em 1em;}
+#notebook-editor .tiptap blockquote.cdx-nb-quote p + p{margin-top:.5em;}
+#notebook-editor .tiptap .quote-caption{margin-top:.4em; font-size:.9em; color:var(--fg-secondary);}
+#notebook-editor .tiptap .quote-caption:not(.is-empty)::before{content:"\2014\00a0";}
+#notebook-editor .tiptap .cdx-nb-callout{}
+#notebook-editor .tiptap .cdx-nb-callout__body .callout-title{font-weight:var(--font-weight-bold); margin-bottom:2px;}
+#notebook-editor .tiptap .cdx-nb-callout[data-hide-title="true"] .callout-title{display:none;}
+#notebook-editor .tiptap hr.cdx-nb-delimiter{border:0; margin:1.2em 0 !important;}
+#notebook-editor .tiptap hr.cdx-nb-delimiter[data-style="line"]{border-top:1px solid var(--border-strong);}
+
+/* Timeline: a bullet on a line, title beside it and description below, optional date column. */
+#notebook-editor .tiptap .nbtl{position:relative; padding:var(--space-1) 0;}
+#notebook-editor .tiptap .nbtl[data-color="red"]{--nbtl-fg:var(--tag-red-fg);} #notebook-editor .tiptap .nbtl[data-color="orange"]{--nbtl-fg:var(--tag-orange-fg);}
+#notebook-editor .tiptap .nbtl[data-color="yellow"]{--nbtl-fg:var(--tag-yellow-fg);} #notebook-editor .tiptap .nbtl[data-color="green"]{--nbtl-fg:var(--tag-green-fg);}
+#notebook-editor .tiptap .nbtl[data-color="teal"]{--nbtl-fg:var(--tag-teal-fg);} #notebook-editor .tiptap .nbtl[data-color="blue"]{--nbtl-fg:var(--tag-blue-fg);}
+#notebook-editor .tiptap .nbtl[data-color="purple"]{--nbtl-fg:var(--tag-purple-fg);} #notebook-editor .tiptap .nbtl[data-color="pink"]{--nbtl-fg:var(--tag-pink-fg);}
+#notebook-editor .tiptap .nbtl[data-color="gray"]{--nbtl-fg:var(--tag-gray-fg);}
+#notebook-editor .tiptap .nbtl[data-color]{--nbtl-line:color-mix(in srgb, var(--nbtl-fg) 45%, transparent);}
+#notebook-editor .tiptap .nbtl-item{position:relative; display:grid; grid-template-columns:auto 12px 1fr; column-gap:var(--space-3); padding:2px 0 var(--space-2);}
+#notebook-editor .tiptap .nbtl-item::before{content:""; grid-column:2; grid-row:1; width:12px; height:12px; border-radius:50%; background:var(--nbtl-fg, var(--fg-tertiary)); margin-top:.45em;}
+#notebook-editor .tiptap .nbtl-item::after{content:""; position:absolute; top:calc(.45em + 14px); bottom:-1px; left:calc(var(--nbtl-date-width, 0px) + var(--space-3) + 5px); width:2px; background:var(--nbtl-line, var(--border));}
+#notebook-editor .tiptap .nbtl-item:last-child::after{display:none;}
+#notebook-editor .tiptap .nbtl[data-dates="true"]{--nbtl-date-width:96px;}
+#notebook-editor .tiptap .timeline-date{grid-column:1; grid-row:1; width:0; overflow:hidden; color:var(--fg-tertiary); font-size:var(--text-sm); text-align:right;}
+#notebook-editor .tiptap .nbtl[data-dates="true"] .timeline-date{width:96px;}
+#notebook-editor .tiptap .timeline-title{grid-column:3; grid-row:1; color:var(--fg-primary);}
+#notebook-editor .tiptap .timeline-desc{grid-column:3; grid-row:2; color:var(--fg-secondary);}
+
+/* Endnote markers are numbered by CSS so the number follows the text; figures show their pictures. */
+#notebook-editor .tiptap{counter-reset:endnote;}
+#notebook-editor .tiptap sup.cdx-footnote-ref{counter-increment:endnote; cursor:pointer;}
+#notebook-editor .tiptap sup.cdx-footnote-ref::after{content:counter(endnote);}
+#notebook-editor .tiptap .nbfig{margin:0; text-align:center;}
+#notebook-editor .tiptap .nbfig-grid{display:grid; gap:var(--space-2); grid-template-columns:repeat(var(--cols, 1), 1fr);}
+#notebook-editor .tiptap .nbfig-grid[data-columns="2"]{--cols:2;} #notebook-editor .tiptap .nbfig-grid[data-columns="3"]{--cols:3;} #notebook-editor .tiptap .nbfig-grid[data-columns="4"]{--cols:4;}
+#notebook-editor .tiptap .nbfig-grid img{max-width:100%; border-radius:var(--radius-md);}
+#notebook-editor .tiptap .nbfig figcaption{margin-top:var(--space-1); font-size:var(--text-sm); color:var(--fg-secondary);}
+#notebook-editor .tiptap .cdx-nb-callout__icon{font-size:20px; line-height:1;}
+
+/* Figures: width steps and automatic numbering. */
+#notebook-editor .tiptap .nbfig{margin-inline:auto;}
+#notebook-editor .tiptap{counter-reset:endnote figure;}
+#notebook-editor .tiptap .nbfig[data-numbered] figcaption::before{counter-increment:figure; content:"Figure " counter(figure) ". "; font-weight:var(--font-weight-bold);}
+#notebook-editor .tiptap .nbfig.ProseMirror-selectednode{outline:2px solid var(--accent, var(--tag-blue-fg)); outline-offset:2px;}
+#notebook-editor .tiptap .nbfig[data-width="20"]{max-width:20%;}
+#notebook-editor .tiptap .nbfig[data-width="25"]{max-width:25%;}
+#notebook-editor .tiptap .nbfig[data-width="30"]{max-width:30%;}
+#notebook-editor .tiptap .nbfig[data-width="35"]{max-width:35%;}
+#notebook-editor .tiptap .nbfig[data-width="40"]{max-width:40%;}
+#notebook-editor .tiptap .nbfig[data-width="45"]{max-width:45%;}
+#notebook-editor .tiptap .nbfig[data-width="50"]{max-width:50%;}
+#notebook-editor .tiptap .nbfig[data-width="55"]{max-width:55%;}
+#notebook-editor .tiptap .nbfig[data-width="60"]{max-width:60%;}
+#notebook-editor .tiptap .nbfig[data-width="65"]{max-width:65%;}
+#notebook-editor .tiptap .nbfig[data-width="70"]{max-width:70%;}
+#notebook-editor .tiptap .nbfig[data-width="75"]{max-width:75%;}
+#notebook-editor .tiptap .nbfig[data-width="80"]{max-width:80%;}
+#notebook-editor .tiptap .nbfig[data-width="85"]{max-width:85%;}
+#notebook-editor .tiptap .nbfig[data-width="90"]{max-width:90%;}
+#notebook-editor .tiptap .nbfig[data-width="95"]{max-width:95%;}
+#notebook-editor .tiptap .nbfig[data-width="100"]{max-width:100%;}
+
+/* Toolbar: attached to the top edge, flush with the page; the first row is always there, further rows only for what the cursor is in. */
+.nbtb{position:sticky; top:0; z-index:5; background:var(--bg-elevated); border-bottom:1px solid var(--border); padding:0; margin:0 0 var(--space-3);}
+.nbtb-row{display:flex; flex-wrap:wrap; gap:var(--space-1); align-items:center; padding:var(--space-1) var(--space-3);}
+.nbtb-row + .nbtb-row{border-top:1px solid var(--border);}
+.nbtb-context{background:var(--bg-secondary);}
+.nbtb-row[hidden]{display:none;}
+.nbtb-group{display:inline-flex; gap:2px; padding-right:var(--space-2); margin-right:var(--space-1); border-right:1px solid var(--border);}
+.nbtb-btn.is-active{background:var(--bg-secondary); color:var(--fg-primary);}
+.nbtb-menu{display:inline-flex;}
+.nbtb-panel-actions{min-width:180px;}
+.nbtb-panel-actions .multiselect-option input[type="radio"]{display:none;}
+.nbtb-panel-actions .multiselect-option .nbtb-glyph{color:var(--fg-secondary); width:16px; text-align:center;}
+.nbtb-input{height:var(--icon-btn-size); border:1px solid var(--border); border-radius:var(--radius-md); background:var(--bg-elevated); color:var(--fg-primary); font:inherit; padding:0 var(--space-2);}
+.nbtb-text{height:var(--icon-btn-size); border:0; border-radius:var(--radius-md); background:transparent; color:var(--fg-primary); font:inherit; padding:0 var(--space-2); cursor:pointer;}
+.nbtb-text:hover,.nbtb-text.is-active{background:var(--bg-secondary);}
+.nbtb-field{display:inline-flex; align-items:center; gap:var(--space-1); color:var(--fg-secondary); font-size:var(--text-sm);}
+.nbtb-label{color:var(--fg-secondary); font-size:var(--text-sm); padding:0 var(--space-1);}
+.nbtb .nb-color-swatch{width:20px; height:20px; padding:0; border:0; border-radius:50%; background:var(--nb-color-bg); box-shadow:inset 0 0 0 2px var(--nb-color-fg); cursor:pointer;}
+.nbtb .nb-color-swatch--active{box-shadow:inset 0 0 0 3px var(--nb-color-fg);}
+@media (max-width:720px){.nbtb-row{flex-wrap:nowrap; overflow-x:auto; padding-inline:var(--space-2);} body:has(.nbtb) .notebook-page-main > #notebook-editor{padding:var(--space-3);}}
+.nbtb-glyph{font-family:"Lucide Glyphs"; font-size:16px; line-height:1; display:inline-block;}
+
+#notebook-editor .tiptap .ProseMirror-selectednode,#notebook-editor .tiptap .nbtl.ProseMirror-selectednode,#notebook-editor .tiptap hr.ProseMirror-selectednode{outline:2px solid var(--accent, var(--tag-blue-fg)); outline-offset:3px; border-radius:var(--radius-sm);}
+
+#notebook-editor .tiptap [data-toc-num]::before{content:attr(data-toc-num) "\00a0\00a0"; color:var(--fg-tertiary); font-weight:var(--font-weight-regular);}
+#notebook-editor .tiptap a{cursor:text;}
+#notebook-editor.nb-mod-down .tiptap a{cursor:pointer;}
+#notebook-editor .tiptap sup.cdx-footnote-ref{color:var(--tag-blue-fg);}
+.page-header-rows > .nbtb{position:static; margin:0; background:var(--bg-elevated); border-bottom:0;}
+.page-header-rows > .nbtb .nbtb-row{flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none;}
+.page-header-rows > .nbtb .nbtb-row::-webkit-scrollbar{display:none;}
+.page-header-rows > .nbtb .nbtb-row > *{flex:none;}

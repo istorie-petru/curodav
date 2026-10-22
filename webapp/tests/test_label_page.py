@@ -138,7 +138,7 @@ class TestLabelPageActions:
     def test_group_page_offers_edit_group_not_edit_label(self, conn):
         db.upsert_label_config(conn, {"name": "Art", "label_group": "Uni"})
         body = label_pages.group_page("Uni", _request("/groups/Uni"), conn=conn).body.decode()
-        assert 'href="/groups/Uni/edit" data-modal' in body and 'title="Edit group"' in body
+        assert 'href="/groups/Uni/edit" data-modal' in body and 'title="Page options"' in body
         # Scoped to the page's own header actions cluster, not the whole
         # body -- item 20's group_members widget legitimately has its own
         # per-MEMBER "Edit label" kebab item now (a different label than
@@ -166,10 +166,7 @@ class TestEmptyState:
         _task(conn, "t1", ["Gym"])
         body = _page(conn, "Gym").body.decode()
         assert "Nothing tagged" not in body
-        assert "kanban-board" in body
-        # L12: the board has a heading; sections with nothing in them (here
-        # Contacts) are hidden.
-        assert "label-section-heading" in body
+        assert "kanban-board" not in body
         assert "No contacts" not in body
 
 
@@ -183,7 +180,7 @@ class TestQuickAddPrefill:
         import re
 
         checked = re.findall(r'<input[^>]*value="Gym"[^>]*form="(\w+)-form"[^>]*checked', body)
-        assert checked == ["task", "event", "contact"]
+        assert checked == ["task", "event"]
 
     def test_project_label_lands_in_the_project_dropdown(self, conn):
         db.upsert_label_config(conn, {"name": "Trip", "is_project": 1})

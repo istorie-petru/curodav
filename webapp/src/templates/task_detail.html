@@ -22,6 +22,22 @@
 <div class="modal-body">
 {% call detail_section('Details') %}
     <div class="detail-meta-grid">
+        {% set _projects = project_label_names(request) %}
+        {% set _proj = (task.tags or []) | select('in', _projects) | list %}
+        {% set _plain = (task.tags or []) | reject('in', _projects) | list %}
+        {% set _people = object_contacts(request, 'task', task.uid) %}
+        {% if task.start_at %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Start</span>
+            <span class="detail-meta-value">{{ task.start_at | relative_date }}</span>
+        </div>
+        {% endif %}
+        {% if task.due_at %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Due</span>
+            <span class="detail-meta-value">{{ task.due_at | relative_date }}</span>
+        </div>
+        {% endif %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Status</span>
             <span class="detail-meta-value"><span class="cell-tag tag-{{ status_colors[task.status] }}">{{ status_labels[task.status] }}</span></span>
@@ -32,27 +48,6 @@
             <span class="detail-meta-value"><span class="cell-tag cal-{{ task_list.color }}">{{ task_list.name }}</span></span>
         </div>
         {% endif %}
-        {% if task.due_at %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Due</span>
-            <span class="detail-meta-value">{{ task.due_at | relative_date }}</span>
-        </div>
-        {% endif %}
-        {% if task.start_at %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Start</span>
-            <span class="detail-meta-value">{{ task.start_at | relative_date }}</span>
-        </div>
-        {% endif %}
-        {% if task.recurrence %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Recurrence</span>
-            <span class="detail-meta-value">{{ task.recurrence | recurrence_text }}</span>
-        </div>
-        {% endif %}
-        {% set _projects = project_label_names(request) %}
-        {% set _proj = (task.tags or []) | select('in', _projects) | list %}
-        {% set _plain = (task.tags or []) | reject('in', _projects) | list %}
         {% if _proj %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Project</span>
@@ -65,11 +60,16 @@
             <span class="detail-meta-value">{% for tag in _plain %}{{ label_pill(tag, 'modal') }} {% endfor %}</span>
         </div>
         {% endif %}
-        {% set _people = object_contacts(request, 'task', task.uid) %}
         {% if _people %}
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">Contacts</span>
             <span class="detail-meta-value">{% for p in _people %}<a href="/contacts/{{ p.uid }}" data-modal>{{ p.full_name or 'Unnamed' }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
+        </div>
+        {% endif %}
+        {% if task.recurrence %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Recurrence</span>
+            <span class="detail-meta-value">{{ task.recurrence | recurrence_text }}</span>
         </div>
         {% endif %}
     </div>

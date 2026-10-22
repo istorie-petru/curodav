@@ -27,7 +27,7 @@ from urllib.parse import quote, urlencode
 from fastapi import APIRouter, Depends, Form, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from .. import citation_formats, clock, db, notebook_fields, notebook_find, notebook_mentions
+from .. import citation_formats, clock, db, icon_font, notebook_fields, notebook_find, notebook_mentions
 from ..deps import get_db, respond, templates, wants_json
 from .labels import COLORS, icon_groups_for
 
@@ -507,7 +507,7 @@ def serve_image(image_id: str, conn=Depends(get_db)):
 
 
 @router.get("/{uid}")
-def document_page(uid: str, request: Request, back_to: str = "", back_label: str = "", conn=Depends(get_db)):
+def document_page(uid: str, request: Request, back_to: str = "", back_label: str = "", editor: str = "", conn=Depends(get_db)):
     """`back_to`/`back_label` --
         the Document editor is reachable from several different contexts
         (Browse list, a label page's Notebook widget, a group dashboard's
@@ -544,6 +544,9 @@ def document_page(uid: str, request: Request, back_to: str = "", back_label: str
             "journal_weeks": db.journal_year_weeks(conn, document["journal_week"][:4], db.week_key(clock.today())) if document.get("journal_week") else [],
             "sidebar_layout": db.get_notebook_settings(conn)["sidebar_layout"],
             "self_url": f"/notebook/{uid}", "self_title": document["title"],
+            "new_editor": editor != "legacy",
+            "toolbar_icons": icon_font.toolbar_icons(),
+            "editor_choice": editor,
         },
     )
 

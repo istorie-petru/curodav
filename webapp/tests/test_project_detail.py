@@ -39,13 +39,13 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _request(path="/projects/Trip"):
+def _request(path="/projects/Trip", query=b""):
     return Request(
         {
             "type": "http",
             "method": "GET",
             "path": path,
-            "query_string": b"",
+            "query_string": query,
             "scheme": "http",
             "server": ("testserver", 80),
             "root_path": "",
@@ -173,7 +173,7 @@ class TestKanbanDragAndDrop:
 
     def test_tasks_board_js_is_included(self, conn):
         _promote(conn, "Trip")
-        body = label_pages.label_page("Trip", _request(), conn=conn).body.decode()
+        body = label_pages.label_page("Trip", _request(query=b"view=board"), conn=conn).body.decode()
         assert 'src="/static/tasks_board.js' in body
 
 
@@ -198,7 +198,7 @@ class TestKanbanResponsiveColumns:
         # A label nothing carries shows the one empty state instead of the
         # board, and an empty board is hidden, so give it a tagged task.
         _task(conn, "t1", ["Trip"])
-        body = label_pages.label_page("Trip", _request(), conn=conn).body.decode()
+        body = label_pages.label_page("Trip", _request(query=b"view=board"), conn=conn).body.decode()
         assert '<div class="kanban-board-wrap">' in body
         # The wrapper must actually contain the board, not just sit
         # somewhere else on the page.
@@ -218,7 +218,7 @@ class TestKanbanResponsiveColumns:
         # non-functional ancestor around it.
         _promote(conn, "Trip")
         _task(conn, "t1", ["Trip"], status="active")
-        body = label_pages.label_page("Trip", _request(), conn=conn).body.decode()
+        body = label_pages.label_page("Trip", _request(query=b"view=board"), conn=conn).body.decode()
         assert 'id="kanban-board"' in body
         assert 'class="kanban-card" data-uid="t1" data-status="active"' in body
 

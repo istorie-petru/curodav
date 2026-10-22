@@ -296,15 +296,20 @@ def tasks_regions(
 
 
 @router.get("/board")
-def board_view_redirect():
-    """Kanban is retired --
-        Table is now the only Tasks view. Redirect rather than a bare 404, same
-        "any bookmark still lands somewhere real" precedent `/projects`'s own
-        retirement established (routers/projects.py). tasks_board.html and this
-        route's old filter-driven column logic are gone; `_apply_status_filter`
-        et al died with them.
-    """
-    return RedirectResponse(url="/tasks", status_code=302)
+def board_view(request: Request, conn=Depends(get_db)):
+    """Every open task on one status board; done tasks show the most recent few."""
+    board_statuses = [s for s in STATUSES if s != "archived"]
+    columns: dict[str, list] = {s: [] for s in board_statuses}
+    tasks = [t for t in db.list_tasks(conn) if t["status"] != "archived"]
+    tasks.sort(key=_due_at_key)
+    for t in tasks:
+        t["strip"] = db.card_strip(conn, t)
+        if t["status"] in columns:
+            columns[t["status"]].append(t)
+    columns["done"] = sorted(columns["done"], key=lambda t: t.get("completed_at") or "", reverse=True)[:20]
+    ctx = _task_context(request)
+    ctx.update({"columns": columns, "board_statuses": board_statuses, "label": None, "active_tab": "tasks"})
+    return templates.TemplateResponse("tasks_board.html", ctx)
 
 
 @router.get("/habits")
