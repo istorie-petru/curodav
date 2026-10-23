@@ -198,3 +198,44 @@ class TestBackToTheFolder:
         assert 'action="/notebook/a/pin"' in modal and "Pin" in modal
         page = notebook_router.document_page("a", _request("/notebook/a"), conn=conn).body.decode()
         assert 'action="/notebook/a/pin"' not in page
+
+
+class TestFolderReadmeAndAgenda:
+    def test_a_label_folder_saves_and_shows_its_readme(self, conn):
+        _doc(conn, "a", tags=["Uni"])
+        notebook_router.save_folder_readme(kind="label", name="Uni", body="  Call the registrar  ", conn=conn)
+        assert db.get_folder_readme(conn, "Uni") == "Call the registrar"
+        body = notebook_router.folder_view(_request("/notebook/folder"), kind="label", name="Uni", conn=conn).body.decode()
+        assert "Call the registrar" in body and 'id="notebook-readme"' in body
+
+    def test_an_empty_readme_is_removed_and_other_labels_are_untouched(self, conn):
+        db.set_folder_readme(conn, "Uni", "one")
+        db.set_folder_readme(conn, "Work", "two")
+        db.set_folder_readme(conn, "Uni", "")
+        assert db.get_folder_readme(conn, "Uni") == "" and db.get_folder_readme(conn, "Work") == "two"
+
+    def test_the_readme_follows_a_label_rename(self, conn):
+        db.upsert_label_config(conn, {"name": "Uni"})
+        db.set_folder_readme(conn, "Uni", "notes")
+        db.rename_label(conn, "Uni", "College")
+        assert db.get_folder_readme(conn, "College") == "notes" and db.get_folder_readme(conn, "Uni") == ""
+
+    def test_unfiled_and_journal_folders_have_no_readme_or_agenda(self, conn):
+        for kind in ("unfiled", "journal"):
+            body = notebook_router.folder_view(_request("/notebook/folder"), kind=kind, conn=conn).body.decode()
+            assert 'id="notebook-readme"' not in body and 'id="notebook-agenda"' not in body
+
+    def test_the_agenda_shows_the_next_event_and_three_upcoming_tasks(self, conn, frozen_today):
+        from datetime import date
+
+        frozen_today(date(2026, 10, 9))
+        db.upsert_label_config(conn, {"name": "Uni"})
+        db.upsert_event(conn, {"uid": "e-late", "description": "", "all_day": 0, "status": "confirmed", "title": "Later exam", "start_at": "2026-10-20T09:00:00", "end_at": "2026-10-20T10:00:00", "tags": ["Uni"]})
+        db.upsert_event(conn, {"uid": "e-soon", "description": "", "all_day": 0, "status": "confirmed", "title": "Lecture", "start_at": "2026-10-12T09:00:00", "end_at": "2026-10-12T10:00:00", "tags": ["Uni"]})
+        db.upsert_event(conn, {"uid": "e-past", "description": "", "all_day": 0, "status": "confirmed", "title": "Old", "start_at": "2026-10-01T09:00:00", "end_at": "2026-10-01T10:00:00", "tags": ["Uni"]})
+        for i, day in enumerate(("2026-10-15", "2026-10-11", "2026-10-13", "2026-10-14", "2026-10-30")):
+            db.upsert_task(conn, {"uid": f"t{i}", "title": f"Task {day}", "description": "", "status": "active", "created_at": "2026-10-01T00:00:00+00:00", "due_at": f"{day}T00:00:00", "tags": ["Uni"]})
+        db.upsert_task(conn, {"uid": "t-none", "title": "No date", "description": "", "status": "active", "created_at": "2026-10-01T00:00:00+00:00", "tags": ["Uni"]})
+        agenda = notebook_router._folder_agenda(conn, "Uni")
+        assert agenda["event"]["title"] == "Lecture"
+        assert [t["title"] for t in agenda["tasks"]] == ["Task 2026-10-11", "Task 2026-10-13", "Task 2026-10-14"]

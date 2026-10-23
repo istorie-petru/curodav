@@ -169,6 +169,13 @@ def _timing_statistics(conn: sqlite3.Connection) -> None:
     )
 
 
+def _folder_readmes(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS notebook_folder_readmes (label_name TEXT PRIMARY KEY, body TEXT NOT NULL DEFAULT '', "
+        "updated_at TEXT)"
+    )
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "notebook documents get an is_template flag", _note_templates),
     Migration(2, "frontmatter fields lose the required column", _field_config_without_required, destructive=True),
@@ -188,6 +195,7 @@ MIGRATIONS: list[Migration] = [
     Migration(16, "entry kinds get fixed-name fields", _entry_kinds_get_fields),
     Migration(17, "entry references get start and end pages", _references_get_pages),
     Migration(18, "timing statistics per day", _timing_statistics),
+    Migration(19, "notebook folder readmes", _folder_readmes),
 ]
 
 

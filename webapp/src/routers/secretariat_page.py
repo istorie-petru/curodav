@@ -24,6 +24,20 @@ def _filter_options(conn) -> list[dict]:
             + [{"value": n, "name": n, "section": "Labels"} for n in others])
 
 
+def _scope_deadlines(conn, scope: set[str] | None, today) -> list[dict]:
+    """Deadlines of the labels in scope that are still live (not archived)."""
+    from .label_pages import deadline_info
+
+    out = []
+    for name in sorted(scope or []):
+        cfg = db.effective_label_config(conn, name)
+        info = deadline_info(cfg, today)
+        if info and info["state"] != "archived":
+            out.append({"title": f"{name} deadline", "date": str(cfg["deadline_date"])[:10], "text": info["text"],
+                        "color": info["color"]})
+    return out
+
+
 def render(conn, request: Request, *, scope_key: str | None, title: str, icon_name: str, icon_color: str | None,
            banner_ctx: dict, page_url: str, label: dict | None = None, header_edit_url: str | None = None,
            view: str = "overview"):
@@ -39,8 +53,9 @@ def render(conn, request: Request, *, scope_key: str | None, title: str, icon_na
     config = {"label_name": scope_key}
     scope = dashboard_router._scope_child_names(conn, scope_key)
     tasks = dashboard_router._agenda_with_grace(conn, config, lambda t: True)
+    agenda = view == "agenda"
     events = dashboard_router._filtered_events_expanded(
-        conn, config, today, today + timedelta(days=secretariat.UPCOMING_EVENT_DAYS)
+        conn, config, today, today + timedelta(days=secretariat.AGENDA_DAYS if agenda else secretariat.UPCOMING_EVENT_DAYS)
     )
     habits = [
         h for h in habit_view.habit_items(conn)
@@ -52,10 +67,14 @@ def render(conn, request: Request, *, scope_key: str | None, title: str, icon_na
         look = note_looks.get(n.get("note_type") or "", db.NOTEBOOK_TYPE_LOOK_FALLBACK)
         n["type_icon"], n["type_color"] = look["icon"], look["color"]
     display_name = db.get_app_meta(conn, dashboard_router.DISPLAY_NAME_KEY)
+    agenda_sections = None
+    if agenda:
+        agenda_sections = secretariat.build_agenda(today, tasks, events, _scope_deadlines(conn, scope, today))
     ctx = {
         "request": request,
         "active_tab": "dashboard" if is_home else "label",
         "page": secretariat.build(today, tasks, events, habits, notes),
+        "agenda_sections": agenda_sections,
         "scope_choice": chosen,
         "scope_options": [{"value": "", "name": "Everything"}] + filter_options,
         "today": today.isoformat(),

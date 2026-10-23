@@ -266,10 +266,7 @@ class TestAgendaCard:
         the label's, not default on blue or any other accent color" --
         the Agenda card's event marker used to be a flat var(--accent) dot,
         see _widget_items.html's widget_event_dot(). 2026-09-28 direct
-        feedback ("move from the small dots to colored icons the same size
-        as the font") swapped the dot for a `calendar` glyph via the same
-        macro, renamed widget_event_icon() -- `icon('calendar', 'cal-
-        purple')` renders `class="icon cal-purple"` (deps.py's `_icon`)."""
+        feedback the dot became a colored icon; the Overview now shows it in an icon-only pill."""
         _promote(conn, "Trip", end=None)
         db.upsert_label_config(conn, {"name": "Trip", "is_project": 1, "page_type": "sections", "color": "purple", "created_at": _now()})
         future = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
@@ -277,7 +274,7 @@ class TestAgendaCard:
         resp = label_pages.label_page("Trip", _request(), conn=conn)
         assert resp.context["agenda_items"][0]["calendar_color"] == "purple"
         body = resp.body.decode()
-        assert 'class="icon cal-purple"' in body
+        assert 'cell-tag cal-purple icon-pill' in body
 
     def test_events_are_sorted_soonest_first(self, conn):
         _promote(conn, "Trip", end=None)
@@ -434,10 +431,9 @@ class TestProjectDeadlineAsEvent:
         _event(conn, "e1", ["Trip"], (datetime.now(timezone.utc) + timedelta(days=1)).isoformat())
         resp = label_pages.label_page("Trip", _request(), conn=conn)
         body = resp.body.decode()
-        assert "Deadline" in body
+        assert "label-deadline" in body
         # 2026-09-25 (UI audit L6): 20 days out is neutral, not red.
-        assert "pill-gray" in body and "pill-red" not in body
-        assert "Deadline" in body
+        assert "tag-gray" in body and "pill-red" not in body and "tag-red" not in body
 
 
 class TestHeaderBannerAndAvatar:

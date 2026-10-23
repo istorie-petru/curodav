@@ -689,27 +689,6 @@ document.addEventListener("submit", (event) => {
   }
 });
 
-// Mobile FAB -- clones whatever [data-fab] element exists in the page's
-// own toolbar (each page's real "+New X" button already carries the
-// right href/data-modal, so this reads from it instead of hardcoding a
-// second copy of every page's create URL here). CSS hides the result on
-// anything wider than the mobile breakpoint, so this always runs, not
-// just below some JS-side width check -- one fewer thing to keep in sync
-// with the CSS breakpoint.
-document.addEventListener("DOMContentLoaded", () => {
-  const source = document.querySelector("[data-fab]");
-  if (!source) return;
-  const fab = document.createElement("a");
-  fab.className = "fab";
-  fab.href = source.getAttribute("href") || "#";
-  const modalTarget = source.getAttribute("data-modal");
-  if (modalTarget !== null) fab.setAttribute("data-modal", modalTarget || fab.href);
-  fab.setAttribute("aria-label", (source.textContent || "New").trim());
-  fab.title = (source.textContent || "New").trim();
-  fab.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>';
-  document.body.appendChild(fab);
-});
-
 // data-confirm-sheet="message" -- the explicit version of the fallback
 // above, for forms that need a more specific message than the generic
 // one (cascading deletes: a database's columns/rows, a habit's whole

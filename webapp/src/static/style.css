@@ -162,7 +162,6 @@
   --radius-card:16px;
 
   --z-rail:20;           /* desktop .tabbar, the fixed sidebar rail */
-  --z-fab:90;            /* .fab, the floating action button */
   --z-modal:100;         /* .modal-overlay */
   --z-nav-scrim:140;     /* .mobile-nav-scrim -- the mobile drawer's backdrop */
   --z-overlay-panel:150; /* portaled dropdown/popover panels that escape modal/overflow clipping (.multiselect-panel, .action-menu-panel, .color-popover, .icon-popover, .dtp-panel), and .tabbar's own bottom-sheet drawer mode below the mobile breakpoint */
@@ -1566,11 +1565,11 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 .kanban-column{
   flex:1 1 0; min-width:240px; max-width:340px;
   background:transparent; border:1px solid var(--separator); border-radius:var(--radius-md); padding:var(--space-2);
-  display:flex; flex-direction:column; gap:var(--space-2); min-height:80px;
+  display:flex; flex-direction:column; gap:var(--space-2); min-height:96px;
   transition:background var(--dur-fast) var(--ease-standard);
 }
-.kanban-column-head{display:flex; align-items:center; justify-content:space-between; padding:2px 2px var(--space-1);}
-.kanban-count{font-size:var(--text-sm); color:var(--fg-tertiary); font-weight:var(--font-weight-bold);}
+.kanban-column-head{display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); min-height:32px; padding:0 var(--space-1);}
+.kanban-count{font-size:var(--text-sm); color:var(--fg-tertiary); font-weight:var(--font-weight-bold); min-width:24px; text-align:center; padding:2px var(--space-2); border-radius:var(--radius-pill, 999px); background:var(--accent-neutral-subtle);}
 /* flex:1 (added alongside the equal-height column change above) lets the
    card list itself fill a column stretched taller than its own content --
    without it the drop-hover highlight below would leave a plain unhovered
@@ -1588,12 +1587,10 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 .kanban-card.dragging{opacity:.4;}
 .kanban-card-strip{height:26px; flex:none; overflow:hidden; border-radius:0; padding:0; border:0;}
 .kanban-card-strip img{display:block; width:100%; height:100%; object-fit:cover;}
-.kanban-card-body{display:flex; flex-direction:column; gap:var(--space-1); padding:var(--space-2) var(--space-3);}
-.kanban-card-head{display:flex; align-items:flex-start; gap:var(--space-1);}
-.kanban-card-icon{display:inline-flex; flex:none; margin-top:2px; background:none; padding:0;}
-.kanban-card-title{color:var(--fg-primary); font-size:var(--text-base); font-weight:var(--font-weight-bold); text-decoration:none; min-width:0;}
+.kanban-card-body{display:flex; flex-direction:column; gap:var(--space-2); padding:var(--space-3);}
+.kanban-card-title{color:var(--fg-primary); font-size:var(--text-base); font-weight:var(--font-weight-bold); text-decoration:none; min-width:0; overflow-wrap:anywhere; line-height:1.3;}
 .kanban-card-title:hover{text-decoration:none;}
-.kanban-card-meta{display:flex; flex-wrap:wrap; gap:4px;}
+.kanban-card-meta{display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-1) var(--space-2);}
 
 /* Responsive column-count tiers (2026-09-10, audit-fixes-2.1.md direct
    request: "should try to not add a horizontal scrollbar. It should
@@ -2570,30 +2567,6 @@ button.month-more-link{
   pointer-events:none;
 }
 
-/* Mobile FAB (static/app.js clones whatever [data-fab] link/button exists
-    in the page's own toolbar -- each page keeps exactly one source of
-    truth for its primary create action's href/data-modal target, this
-    just gives it a second, thumb-reachable presentation on small screens
-    instead of a duplicate hardcoded URL living here or in JS). Hidden by
-    default -- only shown below the mobile breakpoint, where the toolbar's
-    own button scrolls out of reach the moment a list is longer than one
-    screen. MD3 FAB: circular, elevated, accent-colored. */
-.fab{
-   display:none; position:fixed; right:var(--space-4); z-index:var(--z-fab);
-   bottom:calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
-   width:56px; height:56px; border-radius:16px; background:var(--accent); color:var(--fg-on-accent);
-   align-items:center; justify-content:center; box-shadow:var(--elevation-3);
-   border:none; cursor:pointer; text-decoration:none;
-   transition:background var(--dur-fast) var(--ease-standard), box-shadow var(--dur-normal) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
-}
-.fab .icon{width:22px; height:22px;}
-.fab:hover{background:var(--accent-hover); text-decoration:none; box-shadow:var(--elevation-4);}
-.fab:active{transform:scale(.94); background:var(--accent-active); box-shadow:var(--elevation-1);}
-.fab::after{background:rgba(255,255,255,.24);}
-@media (max-width:720px){
-   .fab{display:flex; bottom:calc(72px + env(safe-area-inset-bottom, 0px));}
-}
-
 /* .mobile-nav-handle/.mobile-tabbar/.mobile-nav-scrim markup exists on
    every page (base.html) but must render as nothing above the mobile
    breakpoint -- this default has to sit BEFORE the `@media (max-
@@ -2640,10 +2613,7 @@ button.month-more-link{
   /* No separate collapse/expand state exists at this width -- the drawer
      is always the "expanded" look, so the desktop toggle/app-name header
      has nothing to do here (the grab handle above is this drawer's own
-     top affordance instead). "+ New" stays off the drawer specifically
-     (not "expanded content" in general) -- every page already has its own
-     .fab for this (see the .fab mobile block above), so the drawer isn't
-     the only way to reach it and doesn't need to duplicate it. */
+     top affordance instead). */
   .sidebar-header{display:none;}
   /* Spaces/Projects sections and the nested Spaces tree: shown here (not
      hidden the way the old bottom-bar block did) per the explicit "mirror
@@ -2671,8 +2641,8 @@ button.month-more-link{
   .tab-btn .icon{width:20px; height:20px;}
   .tab-btn span{display:block; margin-top:0; max-width:none; overflow:visible; text-overflow:clip; white-space:normal;}
   .tab-btn.active::before{top:0; left:0; transform:none; width:100%; height:100%; border-radius:var(--radius-sm);}
-  /* New persistent 3-button bar (base.html's .mobile-tabbar) -- Sidebar
-     toggle / Home / Search, replacing the old all-destinations row this
+  /* New persistent 4-button bar (base.html's .mobile-tabbar) -- Menu /
+     Home / Add / Settings, replacing the old all-destinations row this
      block used to render via .tabbar itself. */
   .mobile-tabbar{
     display:flex; position:fixed; left:0; right:0; bottom:0;
@@ -5078,6 +5048,22 @@ button.avatar-upload{background:none; border:none; padding:0; cursor:pointer;}
 .sec-title{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .sec-pills{flex:none; display:flex; align-items:center; gap:var(--space-1);}
 .sec-row.is-done .sec-title{text-decoration:line-through; color:var(--fg-tertiary);}
+.icon-pill{display:inline-flex; align-items:center; justify-content:center; padding:4px; line-height:0;}
+.sec-agenda{display:flex; flex-direction:column; gap:var(--space-4); max-width:720px;}
+.ov-line{display:flex; flex-wrap:wrap; gap:var(--space-1) var(--space-4); margin:var(--space-3) 0; color:var(--fg-secondary); font-size:var(--text-sm);}
+.ov-line .is-overdue{color:var(--danger); font-weight:var(--font-weight-bold);}
+.ov-progress{height:6px; border-radius:var(--radius-pill); background:var(--accent-neutral-subtle); overflow:hidden; margin-bottom:var(--space-4);}
+.ov-progress-fill{display:block; height:100%; background:var(--fg-secondary); border-radius:var(--radius-pill); width:0;}
+.ov-heading{margin:0 0 var(--space-2); font-size:var(--text-base); font-weight:var(--font-weight-bold); color:var(--fg-secondary);}
+.ov-count{margin-left:var(--space-1); color:var(--fg-tertiary);}
+.ov-section{display:flex; flex-direction:column; gap:2px;}
+.ov-grid{margin-top:var(--space-4);}
+.ov-next{margin-bottom:var(--space-4);}
+.ov-next-row{display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:var(--space-2);}
+.ov-next-item{display:flex; align-items:center; gap:var(--space-2); min-height:44px; padding:var(--space-2) var(--space-3); border:1px solid var(--separator); border-radius:var(--radius-control); color:var(--fg-primary); text-decoration:none; min-width:0;}
+.ov-next-item:hover{background:var(--accent-neutral-subtle); text-decoration:none;}
+.ov-next-title{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.ov-next-when{flex:none; color:var(--fg-tertiary); font-size:var(--text-sm);}
 @media (max-width:900px){
   .sec-grid{grid-template-columns:minmax(0, 1fr);}
   .sec-col:nth-child(2){grid-column:1;}
@@ -5276,6 +5262,9 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .notebook-continue-text{display:flex; flex-direction:column;}
 .notebook-continue-label{color:var(--fg-tertiary); font-size:var(--text-sm);}
 .notebook-folder-list .contact-row-name{font-weight:normal;}
+.notebook-folder-side{display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr); gap:var(--space-3); align-items:start; margin-bottom:var(--space-3);}
+.notebook-readme textarea{width:100%; resize:vertical;}
+@media (max-width:640px){.notebook-folder-side{grid-template-columns:minmax(0,1fr);}}
 .notebook-row-icon{flex:none; display:flex; align-items:center; justify-content:center; width:32px; height:32px;}
 .notebook-row-edited{flex:none; color:var(--fg-tertiary); font-size:var(--text-sm); padding-left:var(--space-3);}
 .notebook-folder-filters{display:flex; align-items:center; gap:var(--space-2);}
@@ -5385,8 +5374,12 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .quick-add-panel .quick-add-type-field + .field{grid-column:1 / -1;}
 @media (max-width:720px){
   .qa-split.qa-with-side{grid-template-columns:minmax(0,1fr);}
-  .qa-next{padding-left:0; border-left:0; border-top:1px solid var(--separator); padding-top:var(--space-3);}
-  .qa-row{height:52px;}
+  .qa-next{padding-left:0; border-left:0; gap:0;}
+  .field + .qa-next{grid-column:1 / -1; margin:calc(var(--space-2) * -1) 0 var(--space-3);}
+  .qa-side-title{font-size:var(--text-xs);}
+  .qa-next:not(.is-searching), .qa-next:not(:has(.qa-row)){display:none;}
+  .qa-next-list .qa-row:nth-child(n+4){display:none;}
+  .qa-row{height:44px;}
 }
 
 /* Details: the collapsed second section of add and edit forms. */
@@ -5510,3 +5503,39 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
   .header-view{flex:1; justify-content:center;}
 }
 .main-shell-body > .kanban-board-wrap{padding-top:var(--space-3);}
+
+/* ---- Phone header and bar: the header is a flat full-width bar like desktop (title and controls on one line, views
+   as an underlined tab row under it); the bottom bar carries Menu, Home, Add and Settings. ---- */
+@media (max-width:720px){
+  html main > .page-header-region > .page-header-narrow,
+  html main:not(.main-shell):not(.main-calendar) > .page-header-region > .page-header-narrow,
+  html main > .page-header-region > .page-header-narrow.has-banner{
+    box-sizing:border-box; width:auto; margin:0 -12px var(--space-3); padding:0 var(--space-2);
+    border-radius:0; border-width:0 0 1px; border-bottom:1px solid var(--separator);
+    gap:var(--space-1); row-gap:0; min-height:48px; align-content:flex-start; flex-wrap:wrap;
+  }
+  html main.main-shell > .page-header-region > .page-header-narrow,
+  html main.main-calendar > .page-header-region > .page-header-narrow{margin-bottom:var(--space-2);}
+  main:has(> .page-header-region){padding-top:0;}
+  .page-header-narrow .page-header-narrow-back, .page-header-narrow .page-header-menu{height:36px; width:36px; margin:6px 0;}
+  .page-header-narrow-title{font-size:18px; font-weight:650; letter-spacing:-.2px; color:var(--hdr-fg); min-width:0; flex:0 1 auto; max-width:50%;}
+  .page-header-narrow .page-header-narrow-actions, .page-header-narrow.has-banner .page-header-narrow-actions{flex:1 1 0; min-width:0; justify-content:flex-start; height:48px; align-items:center; gap:var(--space-1); flex-wrap:nowrap;}
+  .page-header-narrow .page-header-narrow-actions > :first-child{margin-left:auto;}
+  .page-header-narrow .page-header-narrow-actions .btn:not(.primary), .page-header-narrow .page-header-narrow-actions .icon-btn,
+  .page-header-narrow .page-header-narrow-actions .multiselect-trigger{height:34px; border:0; box-shadow:none; background:var(--hdr-glass); color:var(--hdr-fg); backdrop-filter:none; -webkit-backdrop-filter:none;}
+  .page-header-narrow .page-header-narrow-actions .icon-btn{width:34px; min-width:34px;}
+  .page-header-narrow .page-header-narrow-actions{overflow:hidden;}
+  .page-header-narrow .page-header-narrow-actions .btn.btn-icon-only{width:34px; min-width:34px; padding:0;}
+  .page-header-narrow .page-header-narrow-actions .btn.primary{height:34px; border:0; box-shadow:none;}
+  .page-header-narrow .header-views{order:3; flex:1 1 100%; align-self:auto; height:40px; margin:0 calc(var(--space-2) * -1); padding:0 var(--space-2); gap:0; border-radius:0; background:none; border-top:1px solid var(--separator);}
+  .page-header-narrow.has-banner .header-views{border-top-color:rgba(255,255,255,.22);}
+  .page-header-narrow .header-view{flex:1; justify-content:center; height:100%; border-radius:0; opacity:.72; background:none; color:var(--hdr-fg);}
+  .page-header-narrow .header-view.active{opacity:1;}
+  .page-header-narrow .header-view.active::after{left:12px; right:12px; bottom:0; height:3px;}
+  .page-header-narrow.has-banner::after{background:rgba(0,0,0,.42);}
+  .mobile-tabbar-btn{min-width:0;}
+  .mobile-tabbar-add{padding:0;}
+  .mobile-tabbar-add-disc{display:grid; place-items:center; width:48px; height:48px; border-radius:16px; background:var(--accent); color:var(--accent-contrast, #fff); box-shadow:var(--elevation-2); transition:transform var(--dur-fast) var(--ease-standard);}
+  .mobile-tabbar-add:active .mobile-tabbar-add-disc{transform:scale(.94);}
+  .mobile-tabbar-add .icon{width:24px; height:24px; stroke-width:2.2;}
+}

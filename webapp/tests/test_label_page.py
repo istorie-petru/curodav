@@ -90,14 +90,13 @@ class TestDeadlineInfo:
         info = self._info("2026-09-10", archived_at=_now())
         assert info["state"] == "archived" and info["color"] == "gray"
 
-    def test_project_page_with_agenda_does_not_repeat_the_deadline_pill(self, conn):
-        # The Agenda section already shows the deadline, so the page's
-        # status row leaves the pill out (the preview modal still shows it).
+    def test_project_overview_shows_the_deadline_in_its_summary(self, conn):
+        # The Overview has no agenda list any more, so the summary header carries the deadline.
         db.upsert_label_config(conn, {"name": "Old", "is_project": 1, "page_type": "sections",
                                       "has_deadline": 1, "deadline_date": "2020-01-01"})
         _task(conn, "t1", ["Old"])
         body = _page(conn, "Old").body.decode()
-        assert "label-deadline is-overdue" not in body
+        assert "label-deadline is-overdue" in body
 
     def test_preview_modal_uses_the_state(self, conn):
         db.upsert_label_config(conn, {"name": "Old", "is_project": 1, "has_deadline": 1, "deadline_date": "2020-01-01"})

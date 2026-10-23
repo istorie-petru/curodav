@@ -1,5 +1,5 @@
 // The page header region: publishes its height as --hdr-h (the sidebar and page sit beneath it) and moves page
-// controls that do not fit on the strip's line into a ... menu.
+// controls that do not fit on the strip's line (beside the title, on phones) into a ... menu.
 (function () {
   var DESKTOP = window.matchMedia("(min-width: 721px)");
 
@@ -52,10 +52,13 @@
       moved.slice().reverse().forEach(function (node) { actions.insertBefore(node, more); });
       moved = [];
       if (more) { more.remove(); closePanel(); }
-      if (DESKTOP.matches) {
+      {
+        // Desktop: the whole strip is one line. Phones: the strip wraps (views get their own row), so only the
+        // controls beside the title must fit their own box.
+        var box = DESKTOP.matches ? strip : actions;
         var kids = Array.prototype.filter.call(actions.children, function (c) { return getComputedStyle(c).display !== "none"; });
         var guard = kids.length;
-        while (guard-- > 0 && strip.scrollWidth > strip.clientWidth + 1 && kids.length) {
+        while (guard-- > 0 && box.scrollWidth > box.clientWidth + 1 && kids.length) {
           ensureMore();
           if (!more.parentNode) actions.appendChild(more);
           var last = kids.pop();

@@ -76,6 +76,11 @@
 </form>
 {%- endmacro %}
 
+{# An icon in its colour as an icon-only pill, so the colour sits on a pill and never on a loose glyph. #}
+{% macro icon_pill(color='blue', icon_name='calendar', title=None) -%}
+<span class="cell-tag cal-{{ color }} icon-pill"{% if title %} title="{{ title }}"{% endif %}>{{ icon(icon_name, 'icon-sm') }}</span>
+{%- endmacro %}
+
 {% macro widget_event_icon(color='blue', size='', icon_name='calendar') -%}
 {{ icon(icon_name, 'cal-' ~ color ~ (' ' ~ size if size else '')) }}
 {%- endmacro %}

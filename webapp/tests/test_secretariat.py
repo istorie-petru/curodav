@@ -63,3 +63,14 @@ def test_a_task_just_completed_stays_in_its_list_after_open_ones_and_is_not_over
 def test_a_completed_task_is_not_an_in_progress_reminder():
     page = secretariat.build(TODAY, [_task("t", status="done")], [], [])
     assert page["reminders"] == []
+
+
+def test_agenda_runs_30_days_with_overdue_and_deadlines_first():
+    tasks = [_task("old", "2026-10-02"), _task("soon", "2026-10-09"), _task("far", "2026-12-30"),
+             _task("done", "2026-10-08", "done"), _task("undated")]
+    events = [_event("e1", "2026-10-07T09:00"), _event("e2", "2026-11-05T09:00"), _event("e3", "2026-11-20T09:00")]
+    deadlines = [{"title": "Trip deadline", "date": "2026-10-20", "text": "Due 20 Oct", "color": "gray"}]
+    sections = secretariat.build_agenda(TODAY, tasks, events, deadlines)
+    names = {s["title"]: [x["item"]["title"] for x in s["entries"]] for s in sections}
+    assert names == {"Overdue": ["old"], "Today": ["e1"], "This week": ["soon"],
+                     "Later": ["Trip deadline", "e2"]}

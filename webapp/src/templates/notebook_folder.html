@@ -4,6 +4,8 @@
 {% from "_folder_icon.html" import folder_icon %}
 {% from "_bulk_actions_bar.html" import bulk_actions_bar, bulk_count %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_inputs.html" import textarea_input %}
+{% from "_widget_items.html" import widget_link_row, widget_pill, widget_event_icon %}
 {% block title %}{{ folder_name }} - Notebook{% endblock %}
 {% block main_class %}main-full-width notebook-main notebook-folder-page{% endblock %}
 {% block content %}
@@ -35,6 +37,28 @@
     {% endif %}
 {% endcall %}
 {% if journal_weeks %}{{ journal_strip(journal_weeks, '', true) }}{% endif %}
+{% if agenda is not none %}
+<div class="notebook-folder-side">
+    <form method="post" action="/notebook/folder/readme" class="card notebook-readme" id="notebook-readme">
+        <input type="hidden" name="kind" value="{{ kind }}">
+        <input type="hidden" name="name" value="{{ name }}">
+        <div class="card-title">{{ icon('file-text', 'icon-sm') }} Readme</div>
+        <div class="card-body">{{ textarea_input({'name': 'body', 'rows': 5, 'maxlength': 20000, 'aria-label': 'Quick thoughts for ' ~ name}, readme) }}</div>
+        <div class="card-footer"><button type="submit" class="btn ghost">Save</button></div>
+    </form>
+    <div class="card notebook-agenda" id="notebook-agenda">
+        <div class="card-title">{{ icon('calendar', 'icon-sm') }} Agenda</div>
+        <div class="card-body">
+            {% if agenda.event %}
+            {{ widget_link_row('/events/' ~ agenda.event.uid, agenda.event.title, leading=icon('calendar', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill(agenda.event.start_at | relative_date, 'blue')) }}
+            {% else %}<p class="empty-state-text">No upcoming event</p>{% endif %}
+            {% for t in agenda.tasks %}
+            {{ widget_link_row('/tasks/' ~ t.uid, t.title, leading=icon('check-square', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill(t.start_at | relative_date, 'gray')) }}
+            {% else %}<p class="empty-state-text">No upcoming tasks</p>{% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
 <div class="notebook-folder-body" id="notebook-folder-body" data-smart-region>
     {% if documents %}
     <div class="card contact-list notebook-folder-list" id="notebook-folder-list">

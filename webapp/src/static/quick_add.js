@@ -8,11 +8,26 @@
   // into #multiselect-portal, so its radios fire `change` outside the panels container.
   const FORM_IDS = { task: "task-form", event: "event-form", contact: "contact-form", label: "label-form", transaction: "finance-transaction-form", note: "notebook-new-form" };
 
+  // On phones the matches sit right under the active panel's title box (the column to the right has no room), on
+  // wide screens they stay in their own column.
+  const PHONE = window.matchMedia("(max-width: 720px)");
+
+  function placeNext() {
+    const side = document.querySelector(".qa-next");
+    const split = side && side.closest(".qa-split");
+    if (!side || !split) return;
+    const title = PHONE.matches && document.querySelector(".quick-add-panel.is-active input[data-qa-search]");
+    const anchor = title && title.closest(".field");
+    if (anchor) anchor.after(side);
+    else if (side.parentNode !== split) split.append(side);
+  }
+
   function setActive(container, kind) {
     container.dataset.active = kind;
     container.querySelectorAll("[data-quick-add-panel]").forEach((p) => p.classList.toggle("is-active", p.dataset.quickAddPanel === kind));
     const save = document.getElementById("quick-add-save");
     if (save) save.setAttribute("form", FORM_IDS[kind] || "task-form");
+    placeNext();
   }
 
   function onChange(e) {
@@ -63,6 +78,7 @@
         bound = true;
         document.addEventListener("change", onChange);
         document.addEventListener("click", onClick);
+        PHONE.addEventListener("change", placeNext);
       }
       markSearchBoxes();
       const container = document.getElementById("quick-add-panels");

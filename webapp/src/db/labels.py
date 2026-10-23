@@ -887,6 +887,7 @@ def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None
         conn.execute("UPDATE object_labels SET label_name = ? WHERE label_name = ?", (new_name, old_name))
         conn.execute("UPDATE label_config SET name = ? WHERE name = ?", (new_name, old_name))
         conn.execute("UPDATE label_config SET parent_name = ? WHERE parent_name = ?", (new_name, old_name))
+        conn.execute("UPDATE notebook_folder_readmes SET label_name = ? WHERE label_name = ?", (new_name, old_name))
         _rename_in_auto_labels(conn, old_name, new_name)
         conn.commit()
         return
@@ -897,6 +898,7 @@ def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None
     conn.execute("UPDATE object_labels SET label_name = ? WHERE label_name = ?", (new_name, old_name))
     conn.execute("UPDATE label_config SET name = ? WHERE name = ?", (new_name, old_name))
     conn.execute("UPDATE label_config SET parent_name = ? WHERE parent_name = ?", (new_name, old_name))
+    conn.execute("UPDATE notebook_folder_readmes SET label_name = ? WHERE label_name = ?", (new_name, old_name))
     _rename_in_auto_labels(conn, old_name, new_name)
     conn.commit()
 

@@ -15,6 +15,8 @@
       if (resp.ok) list.innerHTML = await resp.text();
       const title = document.getElementById("qa-side-title");
       if (title) title.textContent = box.value.trim() ? "Matches" : "Coming up";
+      const side = list.closest(".qa-next");
+      if (side) side.classList.toggle("is-searching", box.value.trim() !== "");
     } catch (err) {
       if (err.name !== "AbortError") list.classList.add("is-stale");
     } finally {

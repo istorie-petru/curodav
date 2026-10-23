@@ -1,5 +1,6 @@
 {# The status board shared by label pages and Tasks > Board; drag and drop in static/tasks_board.js. #}
 {% from "_empty_state.html" import empty_state %}
+{% from "_widget_items.html" import icon_pill %}
 {% from "_label_pill.html" import label_pill with context %}
 <div class="kanban-board-wrap">
 <div class="kanban-board" id="kanban-board">
@@ -25,14 +26,16 @@
                 </div>
                 {% endif %}
                 <div class="kanban-card-body">
-                    <div class="kanban-card-head">
-                        {% for tag in _s.labels %}{% set _li = label_icon(request, tag) %}{% if _li %}<span class="kanban-card-icon cal-{{ label_color(request, tag) }}" title="{{ tag }}">{{ icon(_li, 'icon-sm') }}</span>{% endif %}{% endfor %}
-                        <a class="kanban-card-title" href="/tasks/{{ t.uid }}" data-modal draggable="false">{{ t.title }}</a>
-                    </div>
+                    <a class="kanban-card-title" href="/tasks/{{ t.uid }}" data-modal draggable="false">{{ t.title }}</a>
+                    {% set _icons = [] %}
+                    {% for tag in _s.labels %}{% if label_icon(request, tag) %}{% set _ = _icons.append(tag) %}{% endif %}{% endfor %}
+                    {% if t.due_at or _s.project or _icons %}
                     <div class="kanban-card-meta">
                         {% if t.due_at %}<span class="cell-tag tag-gray">{{ t.due_at | relative_date }}</span>{% endif %}
                         {% if _s.project %}{{ label_pill(_s.project, 'modal') }}{% endif %}
+                        {% for tag in _icons %}{{ icon_pill(label_color(request, tag), label_icon(request, tag), tag) }}{% endfor %}
                     </div>
+                    {% endif %}
                 </div>
             </div>
             {% else %}

@@ -1,4 +1,4 @@
-// Page glue for the Tiptap editor (opt-in with ?editor=tiptap while the Editor.js one is still the default).
+// Page glue for the Tiptap editor (the default; ?editor=legacy is an explicit opt-in to the Editor.js one).
 // The note is stored as the same Editor.js block list, so the server side is unchanged; notes with content the
 // new editor cannot hold yet open read-only and are never saved from here.
 (function () {
@@ -244,14 +244,6 @@
         if (window.notebookWireMentions) window.notebookWireMentions(mount);
       }
       measure("editor open", openedAt);
-      if (handle.readOnly && mount.getAttribute("data-editor-choice") !== "tiptap") {
-        // The note uses something the new editor cannot hold yet; the old editor opens it for now.
-        handle.editor.destroy();
-        var url = new URL(window.location.href);
-        url.searchParams.set("editor", "legacy");
-        window.location.replace(url.toString());
-        return;
-      }
       if (handle.readOnly) {
         window.ccToast({ message: "This note uses content the new editor cannot hold yet, so it is read-only here.", variant: "info" });
       }

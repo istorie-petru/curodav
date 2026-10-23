@@ -36,6 +36,16 @@ router = APIRouter(prefix="/notebook", tags=["notebook"])
 BROWSE_PAGE_SIZE = 30
 
 
+def _folder_agenda(conn, name: str) -> dict:
+    """The next event's date and the next three dated open tasks for a label or project folder."""
+    from . import label_pages
+
+    tasks = [t for t in db.list_tasks_sharing_labels(conn, [name]) if t["status"] != "archived"]
+    items = label_pages._agenda_items(conn, {name}, {}, tasks, 1000)
+    event = next((i for i in items if i.get("kind") not in ("task", "habit") and not i.get("is_deadline")), None)
+    return {"event": event, "tasks": [i for i in items if i.get("kind") == "task"][:3]}
+
+
 def _folder_context(conn, request: Request, kind: str, name: str, note_type: str, sort: str, limit: int, offset: int) -> dict:
     from .labels import COLORS  # noqa: F401  (the palette the folder icon colors come from)
 
@@ -71,6 +81,8 @@ def _folder_context(conn, request: Request, kind: str, name: str, note_type: str
         "crumbs": [{"url": "/notebook", "name": "Notebook"}],
         "back_to": "/notebook/folder?" + urlencode({k: v for k, v in (("kind", kind), ("name", name)) if v}),
         "back_label": name or "Unfiled",
+        "readme": db.get_folder_readme(conn, name) if kind in ("project", "label") else "",
+        "agenda": _folder_agenda(conn, name) if kind in ("project", "label") else None,
     }
 
 
@@ -109,6 +121,15 @@ def folder_view(
         _folder_context(conn, request, kind.strip(), name.strip(), note_type.strip(), sort.strip(),
                         max(BROWSE_PAGE_SIZE, min(limit, 1000)), 0),
     )
+
+
+@router.post("/folder/readme")
+def save_folder_readme(kind: str = Form("label"), name: str = Form(""), body: str = Form(""), conn=Depends(get_db)):
+    """Saves the quick-thoughts readme of a label or project folder."""
+    name = name.strip()
+    if kind in ("project", "label") and name:
+        db.set_folder_readme(conn, name, body[:20000])
+    return RedirectResponse(url="/notebook/folder?" + urlencode({"kind": kind, "name": name}), status_code=303)
 
 
 @router.get("/folder/rows")

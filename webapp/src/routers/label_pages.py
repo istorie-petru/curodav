@@ -246,6 +246,52 @@ def _pooled_sections_page(conn, request: Request, scope_key: str | None, title: 
     return templates.TemplateResponse("label_sections.html", ctx)
 
 
+def _overview_context(conn, scope: set[str] | None, scope_key: str | None, label: dict, tasks: list[dict],
+                      group_members: dict | None) -> dict:
+    """What the Overview shows besides the widget sections: its kind (project, group,
+    label or home), the Next row, the open tasks by status, progress and, for a
+    group, its labels and attention items."""
+    today_iso = clock.today().isoformat()
+    is_group = bool(scope_key and scope_key.startswith(db.GROUP_KEY_PREFIX))
+    kind = "group" if is_group else "home" if scope_key is None else "project" if label.get("is_project") else "label"
+    open_tasks = [t for t in tasks if t["status"] not in ("done", "archived")]
+    dated = sorted((t for t in open_tasks if t.get("due_at")), key=lambda t: t["due_at"])
+    overdue = [t for t in dated if t["due_at"][:10] < today_iso]
+    upcoming = [t for t in dated if t["due_at"][:10] >= today_iso]
+    events = [
+        e for e in _agenda_items(conn, scope, label, [], 30)
+        if e.get("kind") != "habit" and not e.get("is_deadline")
+    ]
+    by_status = [
+        (title, [t for t in open_tasks if t["status"] == status])
+        for status, title in (("in_progress", "In progress"), ("active", "To do"), ("waiting", "Waiting"))
+    ]
+    done = len([t for t in tasks if t["status"] == "done"])
+    total = len([t for t in tasks if t["status"] != "archived"])
+    attention = []
+    if kind == "group" and group_members:
+        for row in group_members["rows"]:
+            name = row["label"]["name"]
+            row["overdue_count"] = len([t for t in overdue if name in (t.get("tags") or [])])
+            cfg = db.effective_label_config(conn, name)
+            info = deadline_info(cfg)
+            if info and info["state"] in ("overdue", "soon") and not cfg.get("archived_at"):
+                attention.append({"name": name, "text": info["text"], "color": info["color"]})
+    return {
+        "ov_kind": kind,
+        "ov_next_event": events[0] if events else None,
+        "ov_next_tasks": upcoming[:3],
+        "ov_overdue": overdue[:5],
+        "ov_overdue_count": len(overdue),
+        "ov_by_status": [(title, rows[:6], len(rows)) for title, rows in by_status if rows],
+        "ov_open_count": len(open_tasks),
+        "ov_done": done,
+        "ov_total": total,
+        "ov_percent": round(100 * done / total) if total else 0,
+        "ov_attention": attention,
+    }
+
+
 def _sections_context(conn, request: Request, scope: set[str] | None, scope_key: str | None, label: dict,
                       tasks: list[dict]) -> dict:
     board_statuses = [s for s in tasks_router.STATUSES if s != "archived"]
@@ -272,7 +318,9 @@ def _sections_context(conn, request: Request, scope: set[str] | None, scope_key:
         dashboard_router._render_group_members(conn, {"label_name": scope_key})
         if scope_key and scope_key.startswith(db.GROUP_KEY_PREFIX) else None
     )
+    ctx_overview = _overview_context(conn, scope, scope_key, label, tasks, group_members)
     return {
+        **ctx_overview,
         "request": request,
         "glance": glance,
         "group_members": group_members,

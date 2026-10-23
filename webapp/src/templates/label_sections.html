@@ -1,6 +1,6 @@
 {% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
-{% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill, widget_complete_button, widget_event_icon %}
+{% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill, widget_complete_button, widget_event_icon, icon_pill %}
 {% from "_label_pill.html" import label_pill with context %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% block title %}{{ label.name }}{% endblock %}
@@ -18,84 +18,118 @@
     {% endif %}
 {% endcall %}
 {% if not label.pooled %}
-{% set hide_redundant_status_pills = label.agenda_widget %}
 {% include "_label_status.html" %}
 {% if label.description %}<p class="label-description">{{ label.description }}</p>{% endif %}
 {% include "_label_empty_state.html" %}
 {% endif %}
 {% if label_usage_count != 0 %}
-{# Sections with nothing in them are hidden. #}
-{% set show_agenda = label.agenda_widget and agenda_items %}
+{# Overview (features/kanban-views): a quiet summary, a Next row, then what is happening (left) and what belongs (right). The kind (project, group, label, home) decides which parts show. #}
 {% set show_contacts = label.contacts_widget and contacts %}
 {% set show_notebook = label.notebook_widget and notebook_documents.documents %}
-
-{% if glance %}
-<div class="card widget-card-static">
-    <div class="card-title widget-header"><h2>{{ icon('check-square', 'icon-sm') }} At a glance</h2></div>
-    <div class="card-body widget-content">
-    {% set data = glance %}
-    {% include "_widget_at_a_glance.html" %}
-    </div>
+{% set show_members = group_members and group_members.rows %}
+{% macro ov_task_row(t, overdue=false) %}
+<div class="sec-row">
+    <span class="sec-lead">{{ widget_complete_button(t.uid, t.status == 'done') }}</span>
+    <a class="sec-title" href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>
+    {% if t.due_at %}<span class="sec-pills">{{ widget_pill((('Overdue · ' if overdue else '') ~ (t.due_at[:10] | relative_date)), 'red' if overdue else 'gray') }}</span>{% endif %}
 </div>
-{% endif %}
-{% if group_members and group_members.rows %}
-<div class="card widget-card-static">
-    <div class="card-title widget-header"><h2>{{ icon('tag', 'icon-sm') }} Labels</h2></div>
-    <div class="card-body widget-content">
-    {% set data = group_members %}
-    {% include "_widget_group_members.html" %}
-    </div>
-</div>
-{% endif %}
+{% endmacro %}
 
-<!-- Agenda: future events tagged with this label, its own deadline, and
-     open due-dated tasks, in one chronological list. -->
-{% if show_agenda %}
-<div class="card widget-card-static">
-    <div class="card-title widget-header"><h2>{{ icon('calendar', 'icon-sm') }} Agenda</h2></div>
-    <div class="card-body widget-content">
-    {% if agenda_items %}
-    <table>
-        {% set agenda_task_checks = true %}
-        {% include "_label_agenda_rows.html" %}
-    </table>
-    {% else %}
-    {{ widget_empty('No upcoming events, deadline or due tasks for this label.') }}
-    {% endif %}
-    </div>
-</div>
-
+{% set show_tasks = label.agenda_widget or label.tasks_widget %}
+{% if show_tasks and (ov_total or ov_open_count) %}
+<p class="ov-line">
+    <span>{{ ov_open_count }} open</span>
+    {% if ov_overdue_count %}<span class="is-overdue">{{ ov_overdue_count }} overdue</span>{% endif %}
+    {% if glance and glance.today_count %}<span>{{ glance.today_count }} due today</span>{% endif %}
+    {% if glance and glance.week_count %}<span>{{ glance.week_count }} this week</span>{% endif %}
+    {% if ov_kind == 'project' and ov_total %}<span>{{ ov_done }} of {{ ov_total }} done · {{ ov_percent }}%</span>{% endif %}
+</p>
+{% if ov_kind == 'project' and ov_total %}<div class="ov-progress" role="progressbar" aria-label="Progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ ov_percent }}"><span class="ov-progress-fill" data-style="width:{{ ov_percent }}%"></span></div>{% endif %}
 {% endif %}
 
-<!-- Contacts: every contact tagged with this label (up to 20), reusing
-     the Dashboard's Contact List widget partial. -->
-{% if show_contacts %}
-<div class="card widget-card-static">
-    <div class="card-title widget-header"><h2>{{ icon('user', 'icon-sm') }} Contacts</h2></div>
-    <div class="card-body widget-content">
-    {% set data = {'contacts': contacts} %}
-    {% set contacts_empty_text = 'No contacts yet.' if label.pooled else ('No contacts tagged ' ~ label.name ~ ' yet.') %}
-    {% include "_widget_contact_list.html" %}
+{% if label.agenda_widget and (ov_next_event or ov_next_tasks) %}
+<section class="ov-next">
+    <h2 class="ov-heading">Next</h2>
+    <div class="ov-next-row">
+        {% if ov_next_event %}
+        {% set e = ov_next_event %}
+        <a class="ov-next-item" href="/events/{{ e.uid }}" data-modal>
+            {{ icon_pill(e.calendar_color, 'calendar') }}
+            <span class="ov-next-title">{{ e.title }}</span>
+            <span class="ov-next-when">{{ e.start_at[:10] | relative_date }}{% if not e.all_day %} {{ e.start_at | fmt_time }}{% endif %}</span>
+        </a>
+        {% endif %}
+        {% for t in ov_next_tasks %}
+        <a class="ov-next-item" href="/tasks/{{ t.uid }}" data-modal>
+            {{ icon('check-square', 'icon-sm') }}
+            <span class="ov-next-title">{{ t.title }}</span>
+            <span class="ov-next-when">{{ t.due_at[:10] | relative_date }}</span>
+        </a>
+        {% endfor %}
     </div>
-</div>
-
+</section>
 {% endif %}
 
-<!-- Notebook: documents tagged with this label, reusing the Dashboard's
-     Notebook List widget partial (same reuse pattern as Contacts above). -->
-{% if show_notebook %}
-<div class="card widget-card-static">
-    <div class="card-title widget-header"><h2>{{ icon('file-text', 'icon-sm') }} Notebook</h2></div>
-    <div class="card-body widget-content">
-    {% set data = notebook_documents %}
-    {% set notebook_hide_create = true %}
-    {% include "_widget_notebook_list.html" %}
+{% set has_left = show_tasks and (ov_overdue or ov_by_status or ov_attention) %}
+{% set has_right = show_members or show_contacts or show_notebook %}
+{% if has_left or has_right %}
+<div class="sec-grid ov-grid">
+    <div class="sec-col">
+        {% if ov_attention %}
+        <section class="ov-section">
+            <h2 class="ov-heading">Needs attention</h2>
+            {% for a in ov_attention %}
+            <div class="sec-row"><span class="sec-lead">{{ icon('flag', 'icon-sm') }}</span><a class="sec-title" href="/labels/{{ a.name|urlencode }}">{{ a.name }}</a><span class="sec-pills">{{ widget_pill(a.text, a.color) }}</span></div>
+            {% endfor %}
+        </section>
+        {% endif %}
+        {% if ov_overdue %}
+        <section class="ov-section">
+            <h2 class="ov-heading">Overdue</h2>
+            {% for t in ov_overdue %}{{ ov_task_row(t, true) }}{% endfor %}
+        </section>
+        {% endif %}
+        {% for title, rows, count in ov_by_status %}
+        <section class="ov-section">
+            <h2 class="ov-heading">{{ title }} <span class="ov-count">{{ count }}</span></h2>
+            {% for t in rows %}{{ ov_task_row(t) }}{% endfor %}
+        </section>
+        {% endfor %}
+    </div>
+    <div class="sec-col">
+        {% if show_members %}
+        <section class="ov-section">
+            <h2 class="ov-heading">Labels</h2>
+            {% for row in group_members.rows %}
+            <div class="sec-row">
+                <span class="sec-lead">{{ icon_pill(row.label.color, row.label.icon or 'tag') }}</span>
+                <a class="sec-title" href="/labels/{{ row.label.name|urlencode }}">{{ row.label.name }}</a>
+                <span class="sec-pills">
+                    {% if row.overdue_count %}{{ widget_pill(row.overdue_count ~ ' overdue', 'red') }}{% endif %}
+                    {{ widget_pill(row.open_task_count ~ ' open', 'gray') }}
+                </span>
+            </div>
+            {% endfor %}
+        </section>
+        {% endif %}
+        {% if show_contacts %}
+        <section class="ov-section">
+            <h2 class="ov-heading">Contacts</h2>
+            {% set data = {'contacts': contacts} %}
+            {% include "_widget_contact_list.html" %}
+        </section>
+        {% endif %}
+        {% if show_notebook %}
+        <section class="ov-section">
+            <h2 class="ov-heading">Notebook</h2>
+            {% set data = notebook_documents %}
+            {% set notebook_hide_create = true %}
+            {% include "_widget_notebook_list.html" %}
+        </section>
+        {% endif %}
     </div>
 </div>
-
-{% endif %}
-
-{% if not (show_agenda or show_contacts or show_notebook) %}
+{% else %}
 {% if label.agenda_widget or label.contacts_widget or label.notebook_widget or label.tasks_widget %}
 {{ empty_state('Nothing here yet', size='compact') }}
 {% else %}

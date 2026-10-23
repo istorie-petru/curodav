@@ -32,7 +32,7 @@ global.document = {
   querySelectorAll: () => [],
   getElementById: (id) => (id === "quick-add-panels" ? container : id === "quick-add-save" ? save : null),
 };
-global.window = {};
+global.window = { matchMedia: () => ({ matches: false, addEventListener() {} }) };
 require(process.argv[1]);
 window.CCQuickAdd.init();
 // The radio that fires the change is NOT inside the container (it was portaled out with its dropdown panel).

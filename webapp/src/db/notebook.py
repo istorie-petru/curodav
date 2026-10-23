@@ -258,6 +258,26 @@ def list_pinned_notebook_documents(conn: sqlite3.Connection) -> list[dict[str, A
     return rows
 
 
+def get_folder_readme(conn: sqlite3.Connection, label_name: str) -> str:
+    """The quick-thoughts readme saved for a label or project folder, or an empty string."""
+    row = conn.execute("SELECT body FROM notebook_folder_readmes WHERE label_name = ?", (label_name,)).fetchone()
+    return row["body"] if row else ""
+
+
+def set_folder_readme(conn: sqlite3.Connection, label_name: str, body: str) -> None:
+    """Saves a folder readme; an empty body removes the row."""
+    body = (body or "").strip()
+    if not body:
+        conn.execute("DELETE FROM notebook_folder_readmes WHERE label_name = ?", (label_name,))
+    else:
+        conn.execute(
+            "INSERT INTO notebook_folder_readmes (label_name, body, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(label_name) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at",
+            (label_name, body, datetime.now(timezone.utc).isoformat()),
+        )
+    conn.commit()
+
+
 def latest_notebook_document(conn: sqlite3.Connection) -> dict[str, Any] | None:
     """The most recently edited note, for the home's Continue card."""
     row = conn.execute("SELECT uid, title FROM notebook_documents WHERE is_template = 0 ORDER BY updated_at DESC LIMIT 1").fetchone()

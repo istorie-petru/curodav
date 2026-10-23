@@ -6,6 +6,13 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [4.5.1]
+
+- Page views: the Overview of a group, label or project is a quiet summary (open, overdue, due today, this week; a progress bar on projects), a Next row (next event and next three tasks), then what is happening (open tasks by status, overdue, deadlines needing attention) beside what belongs (labels of a group with open and overdue counts, contacts, notebook). The old card stack is gone. The Agenda view is the Secretariat list scoped to the page, 30 days ahead with overdue tasks, events and label deadlines, and no habits.
+- Kanban board restyle: title first, one meta line (due date, project, label icons) that is left out when empty, a calmer column header (status pill and count pill) and roomier spacing. Label and event icons now sit in small icon-only pills instead of loose colored glyphs, on the board, the Overview and the Agenda.
+- Phone: the header is a flat bar, the find-or-add matches sit under the title, and the bottom bar holds menu, home, add and settings.
+- Notebook: no automatic fallback to the old editor; labels and projects show their folder readme and an agenda card.
+
 ## [4.5.0]
 
 - Kanban cards: a short banner strip on top (the project's banner or color, else the label's), label icons next to the title and the project always as a pill; clearer card borders and a lift on hover.

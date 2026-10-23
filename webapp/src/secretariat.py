@@ -10,6 +10,7 @@ from datetime import date, timedelta
 MAX_HABITS = 2
 MAX_NOTES = 6
 UPCOMING_EVENT_DAYS = 3
+AGENDA_DAYS = 30
 
 
 def greeting(hour: int, name: str | None = None) -> str:
@@ -80,3 +81,35 @@ def build(today: date, tasks: list[dict], events: list[dict], habits: list[dict]
         "reminders": reminders,
         "notes": pinned_first(notes or []),
     }
+
+
+def build_agenda(today: date, tasks: list[dict], events: list[dict], deadlines: list[dict] | None = None,
+                 days: int = AGENDA_DAYS) -> list[dict]:
+    """The Agenda view of a scoped page: overdue tasks and deadlines, then everything dated
+    up to `days` ahead, as sections (Overdue, Today, This week, Later). No habits.
+
+    `events` must already be expanded into occurrences; each deadline is
+    {"title", "date" (ISO), "text", "color"}.
+    """
+    today_iso = today.isoformat()
+    week_iso = end_of_week(today).isoformat()
+    end_iso = (today + timedelta(days=days)).isoformat()
+    entries = []
+    for t in tasks:
+        if _is_open(t) and t.get("due_at") and _day(t["due_at"]) <= end_iso:
+            entries.append({"kind": "task", "item": t, "day": _day(t["due_at"]), "at": t["due_at"]})
+    for e in events:
+        if today_iso <= _day(e.get("start_at")) <= end_iso:
+            entries.append({"kind": "event", "item": e, "day": _day(e["start_at"]), "at": e["start_at"]})
+    for d in deadlines or []:
+        if d["date"] <= end_iso:
+            entries.append({"kind": "deadline", "item": d, "day": d["date"], "at": d["date"]})
+    entries.sort(key=lambda x: (x["day"], x["at"], x["item"].get("title") or ""))
+    sections = [("Overdue", lambda d: d < today_iso), ("Today", lambda d: d == today_iso),
+                ("This week", lambda d: today_iso < d <= week_iso), ("Later", lambda d: d > week_iso)]
+    out = []
+    for title, test in sections:
+        rows = [x for x in entries if test(x["day"])]
+        if rows:
+            out.append({"title": title, "entries": rows, "overdue": title == "Overdue"})
+    return out

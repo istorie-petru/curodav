@@ -86,7 +86,7 @@ class TestSections:
         assert "kanban-board" not in body
         board = _page(conn, "Gym", "board")
         assert "kanban-board" in board.body.decode() and 'src="/static/tasks_board.js' in board.body.decode()
-        assert "> Contacts</h2>" in body and "> Agenda</h2>" in body and "> Notebook</h2>" in body
+        assert "Contacts</h2>" in body and "Next</h2>" in body and "Notebook</h2>" in body
 
     def test_switched_off_sections_are_not_rendered(self, conn):
         self._seed(conn, agenda_widget=0, contacts_widget=0, notebook_widget=0)
@@ -94,7 +94,7 @@ class TestSections:
         body = resp.body.decode()
         assert resp.context["agenda_items"] == [] and resp.context["contacts"] == []
         assert resp.context["notebook_documents"] == {}
-        assert "> Agenda</h2>" not in body and "> Contacts</h2>" not in body and "> Notebook</h2>" not in body
+        assert "Next</h2>" not in body and "Contacts</h2>" not in body and "Notebook</h2>" not in body
 
     def test_no_kanban_means_no_board_script(self, conn):
         self._seed(conn, tasks_widget=0)
@@ -145,7 +145,7 @@ class TestGroupPage:
         assert 'class="toolbar group-labels"' not in body
         # 2026-09-28 (direct request, "always use card grid"): the widget
         # renders every row as a `filled_card` tile now, not a list.
-        assert 'class="filled-cards-grid"' in body
+        assert 'class="sec-row"' in body and " open" in body
 
     def test_widgets_are_scoped_to_the_members(self, conn):
         from src.routers import dashboard as dashboard_router
@@ -454,3 +454,16 @@ class TestLabelPillLinks:
 def _checked(body: str, name: str, value: str) -> bool:
     """A multiselect-partial input (attributes split over lines) is checked."""
     return bool(re.search(r'name="%s" value="%s"[^>]*\bchecked\b' % (re.escape(name), re.escape(value)), body))
+
+
+class TestAgendaView:
+    def test_agenda_view_lists_overdue_tasks_and_the_deadline(self, conn):
+        soon = (date.today() + timedelta(days=5)).isoformat()
+        old = (date.today() - timedelta(days=2)).isoformat()
+        db.upsert_label_config(conn, {"name": "Essay", "has_deadline": 1, "deadline_date": soon})
+        db.upsert_task(conn, {"uid": "t9", "title": "Late draft", "description": "", "status": "active",
+                              "tags": ["Essay"], "created_at": _now(), "due_at": old})
+        resp = _page(conn, "Essay", "agenda")
+        names = {s["title"]: [x["item"]["title"] for x in s["entries"]] for s in resp.context["agenda_sections"]}
+        assert names["Overdue"] == ["Late draft"]
+        assert any("Essay deadline" in v for v in sum(names.values(), []))

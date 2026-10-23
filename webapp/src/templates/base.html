@@ -1,4 +1,5 @@
 {% from "_inputs.html" import search_input %}
+{% from "_quick_add_target.html" import quick_add_href, quick_add_title with context %}
 <!DOCTYPE html>
 <html lang="en" data-terminology="{{ terminology(request) if request is defined else 'standard' }}">
 <head>
@@ -162,10 +163,12 @@
              overlay instead of navigating when JS is available). -->
         <a href="/settings" data-tab="settings" class="tab-btn {% if active_tab and (active_tab.startswith('settings') or active_tab in ('labels', 'published_lists', 'export')) %}active{% endif %}" title="Settings" aria-label="Settings">{{ icon('settings') }}<span>Settings</span></a>
     </nav>
+    {# Phone bar: menu, home, add (the find-or-add window, same target as the header + on desktop) and settings. #}
     <nav class="mobile-tabbar" role="navigation" aria-label="Main (mobile)">
         <button type="button" id="mobile-nav-toggle" class="mobile-tabbar-btn" aria-expanded="false" aria-controls="mobile-nav-drawer" aria-label="Open navigation menu">{{ icon('sidebar') }}<span>Menu</span></button>
         <a href="/" data-tab="dashboard" class="mobile-tabbar-btn {% if active_tab == 'dashboard' %}active{% endif %}">{{ icon('home') }}<span>Home</span></a>
-        <a href="/search" data-tab="search" data-command-palette-open class="mobile-tabbar-btn {% if active_tab == 'search' %}active{% endif %}">{{ icon('command') }}<span>Search</span></a>
+        <a href="{{ quick_add_href() }}" data-modal class="mobile-tabbar-btn mobile-tabbar-add" title="{{ quick_add_title() }}" aria-label="{{ quick_add_title() }}"><span class="mobile-tabbar-add-disc">{{ icon('plus') }}</span></a>
+        <a href="/settings" data-tab="settings" class="mobile-tabbar-btn {% if active_tab and (active_tab.startswith('settings') or active_tab in ('labels', 'published_lists', 'export')) %}active{% endif %}">{{ icon('settings') }}<span>Settings</span></a>
     </nav>
     <!-- Scrim behind the open drawer -- tap to close (static/
          mobile_nav_drawer.js), sibling of the thing it darkens rather
