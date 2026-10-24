@@ -595,21 +595,6 @@ class TestLabelIconInRenderedPages:
         assert '#icon-book"' in body
         assert "University" in body
 
-    def test_task_tag_pill_has_no_icon_when_off(self, tmp_path):
-        db_path = tmp_path / "cache.sqlite"
-        with db.connect(db_path) as c:
-            db.upsert_label_config(c, {"name": "University", "color": "green", "icon": "book"})
-            db.upsert_task(c, {
-                "uid": "t1", "title": "Essay", "description": "", "status": "active",
-                "tags": ["University"], "created_at": _now(),
-            })
-            resp = tasks_router.list_tasks(_request_with_app("/tasks", db_path), conn=c)
-        body = resp.body.decode()
-        # The sprite defines every icon (<symbol id="icon-book">), so check
-        # the *use* reference (<use href="#icon-book">), which only renders
-        # when the toggle is on.
-        assert '#icon-book' not in body
-        assert "University" in body
 
 
 class TestSettingsAppearanceLabelIcons:

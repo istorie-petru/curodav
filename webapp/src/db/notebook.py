@@ -173,7 +173,24 @@ def _folder_rows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
         project = next((t for t in tags if t in open_projects), None)
         label = next((t for t in tags if t not in all_projects), None)
         row["folder"] = ("project", project) if project else (("label", label) if label else ("unfiled", ""))
+    _attach_tags_bulk(conn, "notebook", rows)
     return rows
+
+
+def list_notebook_subfolders(conn: sqlite3.Connection, label: str) -> list[dict[str, Any]]:
+    """The sub-folders of a shelf folder: one per tag that its notes carry, with a count and the tag's own look.
+    A shelf whose notes carry only its same-named default tag has none."""
+    counts: dict[str, dict[str, Any]] = {}
+    for row in _folder_rows(conn):
+        if row["folder"] != ("label", label):
+            continue
+        for item in row.get("tag_items") or []:
+            if item["label"] == label:
+                entry = counts.setdefault(item["name"], {"name": item["name"], "color": item["color"], "icon": item["icon"], "count": 0})
+                entry["count"] += 1
+    if set(counts) <= {label}:
+        return []
+    return sorted(counts.values(), key=lambda e: e["name"].lower())
 
 
 def get_journal_template(conn: sqlite3.Connection) -> str:
@@ -313,10 +330,12 @@ def list_notebook_folders(conn: sqlite3.Connection) -> dict[str, list[dict[str, 
 
 def list_notebook_folder_documents(
     conn: sqlite3.Connection, kind: str, name: str, note_type: str = "", sort: str = "created", query: str = "",
-    limit: int = 30, offset: int = 0,
+    limit: int = 30, offset: int = 0, tag: str = "",
 ) -> tuple[list[dict[str, Any]], int]:
-    """One page of a folder's notes and the total, filtered by type and a title search."""
+    """One page of a folder's notes and the total, filtered by tag (a sub-folder), type and a title search."""
     rows = [r for r in _folder_rows(conn) if r["folder"] == (kind, name if kind != "unfiled" else "")]
+    if tag:
+        rows = [r for r in rows if tag in {i["name"] for i in r.get("tag_items") or []}]
     if note_type:
         rows = [r for r in rows if r["note_type"] == note_type]
     if query:

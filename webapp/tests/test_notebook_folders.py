@@ -232,3 +232,34 @@ class TestFolderReadmeAndAgenda:
         agenda = notebook_router._folder_agenda(conn, "Uni")
         assert agenda["event"]["title"] == "Lecture"
         assert [t["title"] for t in agenda["tasks"]] == ["Task 2026-10-11", "Task 2026-10-13", "Task 2026-10-14"]
+
+
+class TestTagSubfolders:
+    def _shelf(self, conn):
+        from src import tags
+        tags.ensure_schema(conn)
+        conn.execute("INSERT INTO label_tags (name, label_name, color) VALUES ('Lectures', 'School', 'blue'), ('Exams', 'School', 'red')")
+        conn.commit()
+        for uid, tag in (("a", "Lectures"), ("b", "Lectures"), ("c", "Exams")):
+            _doc(conn, uid, tags=["School"])
+            tags.set_object_tags(conn, "note", uid, [tag])
+
+    def test_a_shelf_folder_lists_one_subfolder_per_tag_with_counts(self, conn):
+        self._shelf(conn)
+        subs = db.list_notebook_subfolders(conn, "School")
+        assert [(s["name"], s["count"]) for s in subs] == [("Exams", 1), ("Lectures", 2)]
+
+    def test_a_tag_subfolder_lists_only_its_notes(self, conn):
+        self._shelf(conn)
+        ctx = notebook_router._folder_context(conn, _request(), "label", "School", "", "created", 30, 0, "Lectures")
+        assert {d["uid"] for d in ctx["documents"]} == {"a", "b"}
+        assert ctx["folder_name"] == "Lectures" and ctx["subfolders"] == [] and ctx["agenda"] is None
+
+    def test_the_shelf_folder_still_lists_every_note_of_the_shelf(self, conn):
+        self._shelf(conn)
+        ctx = notebook_router._folder_context(conn, _request(), "label", "School", "", "created", 30, 0)
+        assert {d["uid"] for d in ctx["documents"]} == {"a", "b", "c"} and len(ctx["subfolders"]) == 2
+
+    def test_a_shelf_with_only_its_default_tag_has_no_subfolders(self, conn):
+        _doc(conn, "x", tags=["Reading"])
+        assert db.list_notebook_subfolders(conn, "Reading") == []

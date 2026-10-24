@@ -175,29 +175,33 @@ def _due_at_key(t: dict) -> str:
 
 
 def _build_task_groups(conn, open_tasks: list[dict], completed_tasks: list[dict]) -> list[dict]:
-    """The list's groups: open projects first, then labels, then tasks with neither, then Completed last.
+    """The list's sections: one per shelf (alphabetical), then tasks with no tag, then Completed last.
 
-    A task sits in one group: its open project, else its first label (alphabetically), else No shelf.
-    `open_tasks` is pre-sorted by due date and each group keeps that order. Completed tasks stay together
-    in the one trailing group, newest change first."""
-    projects = db.list_project_labels(conn)
-    open_projects = {c["name"] for c in projects if not c.get("archived_at")}
-    all_projects = {c["name"] for c in projects}
-    buckets: dict[tuple[str, str], list[dict]] = {}
+    A shelf section holds a sub-group per tag; a task sits under every tag it carries. `tasks` is the section's
+    tasks without repeats. `open_tasks` is pre-sorted by due date and each group keeps that order. Completed
+    tasks stay together in the one trailing group, newest change first."""
+    shelves: dict[str, dict[str, list[dict]]] = {}
+    loose: list[dict] = []
     for t in open_tasks:
-        tags = sorted(t.get("tags") or [], key=str.lower)
-        project = next((x for x in tags if x in open_projects), None)
-        label = next((x for x in tags if x not in all_projects), None)
-        key = ("project", project) if project else ("label", label) if label else ("unassigned", "No shelf")
-        buckets.setdefault(key, []).append(t)
-    rank = {"project": 0, "label": 1, "unassigned": 2}
-    groups = [
-        {"kind": kind, "name": name, "tasks": members}
-        for (kind, name), members in sorted(buckets.items(), key=lambda kv: (rank[kv[0][0]], kv[0][1].lower()))
-    ]
+        items = t.get("tag_items") or []
+        for item in items:
+            shelves.setdefault(item["label"], {}).setdefault(item["name"], []).append(t)
+        if not items:
+            loose.append(t)
+    groups = []
+    for shelf, by_tag in sorted(shelves.items(), key=lambda kv: kv[0].lower()):
+        subgroups = []
+        for name, members in sorted(by_tag.items(), key=lambda kv: kv[0].lower()):
+            look = next(i for i in members[0]["tag_items"] if i["name"] == name)
+            subgroups.append({"name": name, "color": look["color"], "icon": look["icon"], "tasks": members})
+        unique = {t["uid"]: t for sub in subgroups for t in sub["tasks"]}
+        groups.append({"kind": "label", "name": shelf, "subgroups": subgroups,
+                       "tasks": sorted(unique.values(), key=_due_at_key)})
+    if loose:
+        groups.append({"kind": "unassigned", "name": "No tag", "subgroups": [], "tasks": loose})
     completed_sorted = sorted(completed_tasks, key=lambda t: t.get("updated_at") or "", reverse=True)
     if completed_sorted:
-        groups.append({"kind": "completed", "name": "Completed", "tasks": completed_sorted})
+        groups.append({"kind": "completed", "name": "Completed", "subgroups": [], "tasks": completed_sorted})
     return groups
 
 
@@ -256,6 +260,7 @@ def _tasks_list_context(
             "q": q or "",
             "tag_names": tag_names,
             "today_iso": clock.today().isoformat(),
+            "soon_iso": (clock.today() + timedelta(days=2)).isoformat(),
         }
     )
     return ctx

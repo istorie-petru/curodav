@@ -138,7 +138,7 @@ class TestGroupNameAndAddButtonInTableHeader:
         task_list = body.split('id="task-table"', 1)[1]
         assert "<thead>" not in task_list.split("</div>\n</div>", 1)[0]
         assert task_list.count('class="section-row') >= 3
-        assert "No shelf" in task_list
+        assert "No tag" in task_list
 
     def test_project_label_and_unassigned_tasks_share_the_one_list(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "is_project": 1})

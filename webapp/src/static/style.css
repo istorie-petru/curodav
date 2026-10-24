@@ -1725,6 +1725,8 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
    same distinction the Labels table's own "No group" divider makes. */
 /* One section heading row for grouped lists (_section_row.html). */
 .section-row{display:flex; align-items:center; gap:var(--space-2); padding:12px 0 4px; font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary);}
+.section-row-title .shelf-link{font-size:var(--text-base); font-weight:var(--font-weight-regular); color:var(--fg-primary);}
+.section-row-title .shelf-link:hover{text-decoration:underline;}
 .section-row-count{font-weight:var(--font-weight-regular); color:var(--fg-tertiary);}
 .section-row.is-muted .section-row-title{font-weight:var(--font-weight-regular);}
 .contact-list .section-row:not(:first-child){margin-top:var(--space-1);}
@@ -5247,7 +5249,8 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .task-row-title{flex:0 1 auto; max-width:55%; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--text-base);}
 .task-row-completed .task-row-title{text-decoration:line-through; color:var(--fg-tertiary);}
 .task-row-date{flex:none; color:var(--fg-secondary); font-size:var(--text-sm);}
-.task-row-date.is-overdue{color:var(--danger);}
+.task-row-date.is-overdue, .task-row-date.is-soon{color:var(--danger);}
+.task-row-date .icon{margin-right:var(--space-1); vertical-align:-3px;}
 .task-row-tags{margin-left:auto;}
 .task-row-tags{flex:none; display:flex; justify-content:flex-end; gap:var(--space-1); max-width:30%; overflow:hidden;}
 @media (max-width:720px){ .task-row-date, .task-row-tags{display:none;} .task-row-title{flex:1 1 0; max-width:none;} .task-row .task-status-select{width:auto; max-width:118px;} }

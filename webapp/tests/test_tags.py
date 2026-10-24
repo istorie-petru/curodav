@@ -82,7 +82,7 @@ def test_label_deadline_archives_and_restore_clears_it():
 
 
 def test_tag_tables_migrations_are_registered():
-    assert [m.number for m in migrations.MIGRATIONS[-5:-3]] == [20, 21]
+    assert {20, 21} <= {m.number for m in migrations.MIGRATIONS}
 
 
 def test_an_older_tags_table_does_not_get_in_the_way():

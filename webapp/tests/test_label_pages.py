@@ -387,20 +387,14 @@ class TestLabelPillLinks:
         assert 'title="Gym"' in body and 'title="Legs"' in body
         assert "/labels/Gym/preview" not in body  # tags have no pages
 
-    def test_tasks_table_group_headers_link_to_the_preview(self, conn):
-        """2026-09-26 follow-up (_task_row.html's own header comment):
-        the Tasks table's Labels cell went from an editable dropdown
-        (briefly, 2026-08-29 - 2026-09-26 -- pills there had to stay plain,
-        nested inside that dropdown's trigger button) back to plain
-        read-only pills -- which are no longer nested inside any other
-        control, so 2026-09-28 gave them the same clickable-preview
-        treatment every other pill in the app has."""
+    def test_tasks_table_shelf_headers_and_tag_pills_link_to_the_shelf_page(self, conn):
+        """The shelf header is a plain link to the shelf page; a tag pill links to that page filtered by the tag."""
         from src.routers import tasks as tasks_router
         db.upsert_task(conn, {"uid": "t1", "title": "Draft", "description": "", "status": "active",
                               "tags": ["Gym", "Home"], "created_at": _now()})
         body = tasks_router.list_tasks(_request("/tasks"), conn=conn).body.decode()
-        # the group header is the label (linked); the row's own pills are tags (plain)
-        assert 'href="/labels/Gym/preview" data-modal' in body
+        assert '<a class="shelf-link" href="/labels/Gym">Gym</a>' in body
+        assert 'href="/labels/Gym?tag=Gym"' in body
 
     def test_pills_inside_other_controls_stay_plain(self, conn):
         """The still-live case the class docstring describes: a label

@@ -1,14 +1,21 @@
 {% from "_empty_state.html" import empty_state %}
 {% from "_task_list_row.html" import task_list_row with context %}
 {% from "_section_row.html" import section_row %}
-{% from "_label_pill.html" import label_pill with context %}
+{% from "_label_pill.html" import tag_pill with context %}
 <div id="tasks-body" class="main-shell-body">
 {% if has_any %}
 {% if has_main_tasks %}
 <div id="task-table" class="card contact-list task-list">
     {% for grp in groups %}
-    {% call section_row('', muted=grp.kind in ('unassigned', 'completed')) %}{% if grp.kind in ('project', 'label') %}{{ label_pill(grp.name, 'modal') }}{% else %}{{ grp.name }}{% endif %}{% endcall %}
-    {% for t in grp.tasks %}{{ task_list_row(t, grp.name if grp.kind in ('project', 'label') else '') }}{% endfor %}
+    {% call section_row('', muted=grp.kind in ('unassigned', 'completed')) %}{% if grp.kind == 'label' %}<a class="shelf-link" href="/labels/{{ grp.name | urlencode }}">{{ grp.name }}</a>{% else %}{{ grp.name }}{% endif %}{% endcall %}
+    {% if grp.kind == 'label' and grp.subgroups | length > 1 %}
+    {% for sub in grp.subgroups %}
+    {% call section_row('') %}{{ tag_pill(sub, '/labels/' ~ (grp.name | urlencode) ~ '?tag=' ~ (sub.name | urlencode)) }}{% endcall %}
+    {% for t in sub.tasks %}{{ task_list_row(t, sub.name) }}{% endfor %}
+    {% endfor %}
+    {% else %}
+    {% for t in grp.tasks %}{{ task_list_row(t) }}{% endfor %}
+    {% endif %}
     {% endfor %}
 </div>
 {% endif %}

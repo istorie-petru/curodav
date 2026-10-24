@@ -324,6 +324,7 @@ from .notebook import (
     set_folder_readme,
     list_notebook_folder_documents,
     list_notebook_folders,
+    list_notebook_subfolders,
     single_label_tags,
     BUILTIN_NOTEBOOK_FIELD_UIDS,
     CITATION_TYPES,

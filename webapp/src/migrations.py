@@ -222,6 +222,21 @@ def _folder_readmes(conn: sqlite3.Connection) -> None:
     )
 
 
+def _series_share_tags(conn: sqlite3.Connection) -> None:
+    """Occurrences of a repeating event that have no tag link take the tags of the series' first tagged occurrence."""
+    from . import tags
+
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'object_tags'").fetchone():
+        return
+    for series in conn.execute("SELECT DISTINCT series_uid FROM events WHERE series_uid IS NOT NULL").fetchall():
+        uids = [r[0] for r in conn.execute("SELECT uid FROM events WHERE series_uid = ? ORDER BY start_at, uid", (series[0],))]
+        linked = {u: tags.tags_for_object(conn, "event", u) for u in uids}
+        source = next((t for t in linked.values() if t), None)
+        for uid in uids:
+            if source and not linked[uid]:
+                tags.set_object_tags(conn, "event", uid, source)
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "notebook documents get an is_template flag", _note_templates),
     Migration(2, "frontmatter fields lose the required column", _field_config_without_required, destructive=True),
@@ -247,6 +262,7 @@ MIGRATIONS: list[Migration] = [
     Migration(22, "habits get their own flag and the habit label goes away", _habit_is_not_a_label, destructive=True),
     Migration(23, "finance tags become tags on the Finance shelf; old tags and projects tables are dropped", _finance_tags_become_tags, destructive=True),
     Migration(24, "projects become tags on the shelf Projects", _projects_become_tags, destructive=True),
+    Migration(25, "occurrences of a repeating event share the series' tags", _series_share_tags, destructive=True),
 ]
 
 

@@ -16,6 +16,7 @@ from typing import Any
 from dateutil.rrule import rrulestr
 
 from . import clock, db, ical_rows, recurrence_expand
+from . import tags as tag_store
 
 HORIZON_DAYS = 730
 MAX_ROWS = 3000
@@ -160,6 +161,7 @@ def _generate(conn, series: dict[str, Any], template: dict[str, Any], first_uid:
     start0, end0 = _minute(template["start_at"]), _minute(template.get("end_at"))
     duration = (end0 - start0) if (start0 and end0 and end0 >= start0) else None
     contacts = [c["uid"] for c in db.list_object_contacts(conn, "event", template["uid"])] if template.get("uid") else []
+    tag_links = tag_store.tags_for_object(conn, "event", template["uid"]) if template.get("uid") else []
     made = 0
     existing = conn.execute("SELECT COUNT(*) FROM events WHERE series_uid = ?", (series["uid"],)).fetchone()[0]
     for occ in rule.between(after + timedelta(seconds=1) if after else anchor - timedelta(seconds=1), limit, inc=True):
@@ -184,6 +186,8 @@ def _generate(conn, series: dict[str, Any], template: dict[str, Any], first_uid:
         db.upsert_event(conn, row)
         if contacts:
             db.set_object_contacts(conn, "event", uid, contacts)
+        if tag_links:
+            tag_store.set_object_tags(conn, "event", uid, tag_links)
         made += 1
     return made
 

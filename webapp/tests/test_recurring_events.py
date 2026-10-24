@@ -288,3 +288,39 @@ def test_a_day_shift_that_would_split_an_every_other_week_rule_is_refused():
     with pytest.raises(event_series.CannotShift):
         event_series.shift_rule("FREQ=WEEKLY;INTERVAL=2;BYDAY=SA,SU", 1)
 
+
+
+def _tagged_series(conn, scope_rule="FREQ=WEEKLY;BYDAY=MO;COUNT=4"):
+    from src import tags
+    tags.ensure_schema(conn)
+    tags.add_default_tag(conn, "Work")
+    calendar_router.create_event(
+        title="Standup", description="", start_at="2026-10-05T09:00", end_at="2026-10-05T10:00", all_day="", location="",
+        meeting_url="", tags="", item_tags=["Work"], item_tags_field="1", recurrence=scope_rule, reminders="",
+        holiday_calendar="", exclude_saturday="", exclude_sunday="", conn=conn)
+    return event_series.members(conn, db.list_events(conn)[0]["series_uid"])
+
+
+def test_every_occurrence_of_a_new_series_carries_the_tag(conn):
+    from src import tags
+    rows = _tagged_series(conn)
+    assert len(rows) == 4
+    assert all(tags.tags_for_object(conn, "event", r["uid"]) == ["Work"] for r in rows)
+
+
+def test_new_occurrences_added_at_the_horizon_copy_the_tag(conn):
+    from src import tags
+    rows = _tagged_series(conn, "FREQ=WEEKLY;BYDAY=MO")
+    event_series.ensure_horizon(conn, date.today() + timedelta(days=400))
+    later = event_series.members(conn, rows[0]["series_uid"])
+    assert len(later) > len(rows)
+    assert all(tags.tags_for_object(conn, "event", r["uid"]) == ["Work"] for r in later)
+
+
+def test_the_migration_gives_untagged_occurrences_the_series_tag(conn):
+    from src import tags
+    rows = _tagged_series(conn)
+    for r in rows[1:]:
+        conn.execute("DELETE FROM object_tags WHERE object_type = 'event' AND object_id = ?", (r["uid"],))
+    migrations._series_share_tags(conn)
+    assert all(tags.tags_for_object(conn, "event", r["uid"]) == ["Work"] for r in rows)

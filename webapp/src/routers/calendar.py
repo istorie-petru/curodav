@@ -1219,6 +1219,8 @@ def create_event(
     if rule and not event_series.valid_rule(rule):
         raise HTTPException(422, "Recurrence is not a valid rule")
     resolved = db.resolve_contact_entries(conn, contacts) if isinstance(contacts, list) else None
+    if item_tags_field == "1":
+        tag_store.record(conn, "event", row["uid"], item_tags)  # before the series is made, so every occurrence copies it
     try:
         if rule:
             event_series.create_series(conn, row, rule, contacts=resolved)
@@ -1228,8 +1230,6 @@ def create_event(
         raise HTTPException(400, str(exc))
     if resolved is not None and not rule:
         db.set_object_contacts(conn, "event", row["uid"], resolved)
-    if item_tags_field == "1":
-        tag_store.record(conn, "event", row["uid"], item_tags)
     return respond(x_requested_with, "/calendar", status_code=201, ok=True, uid=row["uid"])
 
 
@@ -1340,6 +1340,16 @@ def edit_event_form(uid: str, request: Request, occurrence_date: str | None = No
             "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
+
+
+def _record_event_tags(conn, uid: str, names: list[str], scope: str) -> None:
+    """Stores the picked tags on the saved event and, for a series, on every occurrence the save covered."""
+    event = db.get_event(conn, uid)
+    rows = event_series.scope_rows(conn, uid, scope) if event and event.get("series_uid") else []
+    if event and event.get("series_uid") and not rows:
+        rows = [event]
+    for r in rows or [{"uid": uid}]:
+        tag_store.record(conn, "event", r["uid"], names)
 
 
 def _save_series_edit(conn, uid: str, existing: dict, row: dict, scope: str, rule: str | None, contacts: list[str] | None) -> None:
@@ -1459,7 +1469,8 @@ def update_event(
     if resolved is not None and not existing.get("series_uid") and not _clean_field(recurrence):
         db.set_object_contacts(conn, "event", row["uid"], resolved)
     if item_tags_field == "1":
-        tag_store.record(conn, "event", row["uid"], item_tags)
+        scope = series_scope if isinstance(series_scope, str) and series_scope in ("this", "following", "all") else "this"
+        _record_event_tags(conn, row["uid"], item_tags, scope)
     if isinstance(occurrence_date, str) and occurrence_date and isinstance(occ_start_at, str) and occ_start_at:
         series = occurrence_window(row, occurrence_date, None)
         apply_occurrence_times(

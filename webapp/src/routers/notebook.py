@@ -47,25 +47,32 @@ def _folder_agenda(conn, name: str) -> dict:
     return {"event": event, "tasks": [i for i in items if i.get("kind") == "task"][:3]}
 
 
-def _folder_context(conn, request: Request, kind: str, name: str, note_type: str, sort: str, limit: int, offset: int) -> dict:
+def _folder_context(conn, request: Request, kind: str, name: str, note_type: str, sort: str, limit: int, offset: int, tag: str = "") -> dict:
     from .labels import COLORS  # noqa: F401  (the palette the folder icon colors come from)
 
     if kind not in ("project", "label", "unfiled", "journal"):
         kind = "unfiled"
     name = "" if kind == "unfiled" else name
-    documents, total = db.list_notebook_folder_documents(conn, kind, name, note_type, sort, "", limit, offset)
+    tag = tag if kind == "label" else ""
+    documents, total = db.list_notebook_folder_documents(conn, kind, name, note_type, sort, "", limit, offset, tag)
     type_looks = db.notebook_note_type_looks(conn)
     for d in documents:
         look = type_looks.get(d.get("note_type") or "", db.NOTEBOOK_TYPE_LOOK_FALLBACK)
         d["type_icon"], d["type_color"] = look["icon"], look["color"]
     cfg = db.effective_label_config(conn, name) if name else {}
-    params = {k: v for k, v in (("kind", kind), ("name", name), ("note_type", note_type), ("sort", sort if sort in ("title", "updated") else "")) if v}
+    subfolders = db.list_notebook_subfolders(conn, name) if kind == "label" and not tag else []
+    tag_look = next((f for f in db.list_notebook_subfolders(conn, name) if f["name"] == tag), None) if tag else None
+    if tag_look:
+        cfg = {"color": tag_look["color"], "icon": tag_look["icon"]}
+    params = {k: v for k, v in (("kind", kind), ("name", name), ("tag", tag), ("note_type", note_type), ("sort", sort if sort in ("title", "updated") else "")) if v}
     return {
         "request": request,
         "active_tab": "notebook",
         "kind": kind,
         "name": name,
-        "folder_name": name or "Unfiled",
+        "folder_name": tag or name or "Unfiled",
+        "tag": tag,
+        "subfolders": subfolders,
         "folder_icon_name": "calendar" if kind == "journal" else cfg.get("icon") or ("inbox" if kind == "unfiled" else "folder"),
         "current_week": db.week_key(clock.today()),
         "journal_weeks": db.journal_year_weeks(conn, name, db.week_key(clock.today())) if kind == "journal" and re.fullmatch(r"\d{4}", name) else [],
@@ -79,11 +86,11 @@ def _folder_context(conn, request: Request, kind: str, name: str, note_type: str
         "next_offset": offset + limit,
         "more_href": "/notebook/folder?" + urlencode({**params, "limit": limit + BROWSE_PAGE_SIZE}),
         "rows_query": urlencode(params),
-        "crumbs": [{"url": "/notebook", "name": "Notebook"}],
-        "back_to": "/notebook/folder?" + urlencode({k: v for k, v in (("kind", kind), ("name", name)) if v}),
-        "back_label": name or "Unfiled",
-        "readme": db.get_folder_readme(conn, name) if kind in ("project", "label") else "",
-        "agenda": _folder_agenda(conn, name) if kind in ("project", "label") else None,
+        "crumbs": [{"url": "/notebook", "name": "Notebook"}] + ([{"url": "/notebook/folder?" + urlencode({"kind": "label", "name": name}), "name": name}] if tag else []),
+        "back_to": "/notebook/folder?" + urlencode({k: v for k, v in (("kind", kind), ("name", name), ("tag", tag)) if v}),
+        "back_label": tag or name or "Unfiled",
+        "readme": db.get_folder_readme(conn, name) if kind in ("project", "label") and not tag else "",
+        "agenda": _folder_agenda(conn, name) if kind in ("project", "label") and not tag else None,
     }
 
 
@@ -115,12 +122,12 @@ def list_documents(request: Request, conn=Depends(get_db)):
 @router.get("/folder")
 def folder_view(
     request: Request, kind: str = "unfiled", name: str = "", note_type: str = "", sort: str = "created",
-    limit: int = BROWSE_PAGE_SIZE, conn=Depends(get_db),
+    limit: int = BROWSE_PAGE_SIZE, tag: str = "", conn=Depends(get_db),
 ):
     return templates.TemplateResponse(
         "notebook_folder.html",
         _folder_context(conn, request, kind.strip(), name.strip(), note_type.strip(), sort.strip(),
-                        max(BROWSE_PAGE_SIZE, min(limit, 1000)), 0),
+                        max(BROWSE_PAGE_SIZE, min(limit, 1000)), 0, tag.strip()),
     )
 
 
@@ -136,11 +143,11 @@ def save_folder_readme(kind: str = Form("label"), name: str = Form(""), body: st
 @router.get("/folder/rows")
 def folder_rows(
     request: Request, kind: str = "unfiled", name: str = "", note_type: str = "", sort: str = "created",
-    offset: int = 0, conn=Depends(get_db),
+    offset: int = 0, tag: str = "", conn=Depends(get_db),
 ):
     """The next page of a folder's rows, for the Load more button."""
     ctx = _folder_context(conn, request, kind.strip(), name.strip(), note_type.strip(), sort.strip(),
-                          BROWSE_PAGE_SIZE, max(offset, 0))
+                          BROWSE_PAGE_SIZE, max(offset, 0), tag.strip())
     html = templates.get_template("_notebook_folder_rows.html").render(ctx)
     return JSONResponse({"html": html, "has_more": ctx["has_more"], "next_offset": ctx["next_offset"]})
 

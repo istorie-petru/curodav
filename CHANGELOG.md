@@ -6,6 +6,12 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [4.6.2]
+
+- Repeating events: every occurrence now carries the event's tags, so the tag colour shows on all of them, not only the first. Occurrences added later copy the tags too, and a data step fixes existing series (it takes a backup first).
+- Tasks list: tasks are grouped under their shelf, with a sub-heading per tag when a shelf has several. A shelf header is plain text linking to the shelf page, and tag pills link to that page filtered by the tag. A date due within two days, or overdue, gets a small exclamation mark and red text.
+- Notebook: a shelf folder shows a sub-folder for each tag its notes carry, and a sub-folder lists only that tag's notes.
+
 ## [4.6.1]
 
 - Tags: each row of the Tags table has a Move action that opens a window to file the tag under another shelf. Items keep the tag and follow it to the new shelf. A shelf keeps at least one tag, so its last tag cannot be moved.
