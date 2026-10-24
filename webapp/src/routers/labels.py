@@ -251,9 +251,8 @@ def manage_labels(request: Request, conn=Depends(get_db)):
 def _labels_context(conn, request: Request, kind: str = "labels") -> dict:
     from .label_pages import deadline_info
 
-    want_projects = kind == "projects"
-    labels = [lbl for lbl in db.list_labels(conn) if bool(lbl.get("is_project")) == want_projects]
-    show = request.query_params.get("show", "") if not want_projects else "all"
+    labels = list(db.list_labels(conn))
+    show = request.query_params.get("show", "")
     if show not in ("archived", "all"):
         show = ""
     if show == "archived":
@@ -261,19 +260,15 @@ def _labels_context(conn, request: Request, kind: str = "labels") -> dict:
     elif show == "":
         labels = [lbl for lbl in labels if not lbl.get("archived_at")]
     for lbl in labels:
-        # Status is only needed for is_project rows (the badge shows it) --
-        # skipped for everything else rather than calling db.project_status
-        # on every label.
-        if lbl.get("is_project") or lbl.get("has_deadline"):
+        if lbl.get("has_deadline"):
             lbl["project_status"] = db.project_status(conn, lbl)
         lbl["deadline"] = deadline_info(lbl)
-        if not want_projects and lbl.get("label_group"):
+        if lbl.get("label_group"):
             lbl["group_style"] = db.get_group_style(conn, lbl["label_group"])
 
     labels.sort(key=lambda l: (
         0 if l.get("label_group") else 1,
         (l.get("label_group") or "").lower(),
-        _ROLE_SORT_RANK[_label_role(l)],
         l["name"].lower(),
     ))
 
@@ -281,39 +276,16 @@ def _labels_context(conn, request: Request, kind: str = "labels") -> dict:
         "request": request,
         "active_tab": "labels",
         "crumbs": [{"url": "/settings", "name": "Settings"}],
-        "kind": "projects" if want_projects else "labels",
-        "noun": "project" if want_projects else "label",
-        "new_url": "/settings/projects/new" if want_projects else "/settings/labels/new",
-        "page_icon": "folder" if want_projects else "tag",
+        "kind": "labels",
+        "noun": "shelf",
+        "new_url": "/settings/labels/new",
+        "page_icon": "tag",
         "group_default_icon": db.GROUP_DEFAULT_ICON,
-        "title": "Projects" if want_projects else "Shelves",
+        "title": "Shelves",
         "labels": labels,
         "has_labels": bool(labels),
         "show": show,
     }
-
-
-def _label_role(cfg: dict) -> str:
-    """"none" / "project" -- a label's Role. "space" was the third role
-        until labels-as-modules slice c turned Spaces into text
-        groups.
-    """
-    return "project" if cfg.get("is_project") else "none"
-
-
-_ROLE_SORT_RANK = {"project": 0, "none": 1}
-
-
-def _auto_label_items(conn, own_name: str) -> list[dict]:
-    """Every other plain label, for a project's Auto labels field."""
-    names = {n for n in db.list_all_label_names(conn)} | {l["name"] for l in db.list_labels(conn)}
-    return [{"uid": n, "name": n} for n in sorted(names, key=str.lower) if n.lower() != own_name.lower()]
-
-
-@router.get("/{name}/auto-labels")
-def auto_labels_json(name: str, conn=Depends(get_db)):
-    """Labels a project adds to an item the moment it is picked in a modal."""
-    return JSONResponse(db.get_auto_labels(conn, name))
 
 
 async def _tag_rows(request: Request) -> list[dict]:
@@ -337,11 +309,7 @@ def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
             "l": cfg,
             "colors": COLORS,
             "icon_groups": icon_groups_for(cfg.get("icon")),
-            "role": _label_role(cfg),
-            "is_project_form": bool(cfg.get("is_project")),
             "group_options": [g["name"] for g in db.list_groups(conn)],
-            "auto_label_items": _auto_label_items(conn, name),
-            "auto_labels_selected": db.get_auto_labels(conn, name),
             "label_tags": tags.tags_of_label(conn, name),
             "banner": banner,
         },
@@ -368,7 +336,6 @@ def update_label(
     icon: str = Form(""),
     label_group: str = Form(""),
     description: str = Form(""),
-    role: str | None = Form(None),
     page_fields: str = Form(""),
     deadline_date: str = Form(""),
     page_type: str = Form(""),
@@ -378,7 +345,6 @@ def update_label(
     notebook_widget: str = Form(""),
     sidebar_pin: str = Form(""),
     widget_pin: str = Form(""),
-    auto_labels: list[str] | None = Form(None),
     tag_rows: list[dict] = Depends(_tag_rows),
     request: Request = None,
     conn=Depends(get_db),
@@ -391,7 +357,6 @@ def update_label(
     icon = (icon or "").strip() or None
     page = _page_fields(page_fields, deadline_date, page_type, agenda_widget, tasks_widget, contacts_widget,
                         notebook_widget, sidebar_pin, widget_pin)
-    explicit_role = role if isinstance(role, str) and role in ("none", "project") else None
 
     renamed_from = None
     if new_name != name:
@@ -406,7 +371,6 @@ def update_label(
         "icon": icon,
         "label_group": _clean_group(label_group),
         "description": _clean_description(description),
-        "is_project": (1 if explicit_role == "project" else 0) if explicit_role else (existing.get("is_project") or 0),
         "created_at": existing.get("created_at") or _now(),
         **page,
     }
@@ -415,21 +379,11 @@ def update_label(
     # changing the role.
     db.upsert_label_config(conn, row)
     tags.apply_rows(conn, name, tag_rows, COLORS)
-    if row["is_project"]:
-        db.set_auto_labels(conn, name, auto_labels or [])
     if renamed_from and request is not None:
         ref = urlparse(request.headers.get("referer") or "")
         if unquote(ref.path) == f"/labels/{renamed_from}":
             return RedirectResponse(url=f"/labels/{quote(name, safe='')}", status_code=303)
-    return RedirectResponse(url="/settings/projects" if row["is_project"] else "/settings/labels", status_code=303)
-
-
-@router.post("/{name}/convert-to-project")
-def convert_to_project(name: str, conn=Depends(get_db)):
-    if not db.get_label_config(conn, name):
-        db.upsert_label_config(conn, {"name": name, "created_at": _now()})
-    db.upsert_label_config(conn, {"name": name, "is_project": 1})
-    return RedirectResponse(url="/settings/projects", status_code=303)
+    return RedirectResponse(url="/settings/labels", status_code=303)
 
 
 @router.post("/{name}/rename")
@@ -460,12 +414,9 @@ def clear_label(name: str, conn=Depends(get_db)):
 
 
 @router.get("/new")
-def new_label_modal(request: Request, project: bool = False, return_to: str = "", copy: str = "", conn=Depends(get_db)):
+def new_label_modal(request: Request, return_to: str = "", copy: str = "", conn=Depends(get_db)):
     """The "+ New Label" entry point -- opens the same label_form_modal.html
         the Edit buttons open, empty. Opens via data-modal, posts to create_label below.
-        `project`: Settings > Projects' "Add project" -- the same
-        form in project mode, creating an is_project label.
-
         `return_to` (modal-stack Cancel fix, same family as
         routers/notebook.py's `_safe_return_to` -- see that function's own
         comment): when this modal is opened from inside another modal that has
@@ -482,8 +433,6 @@ def new_label_modal(request: Request, project: bool = False, return_to: str = ""
     if not isinstance(return_to, str) or not return_to.startswith("/") or return_to.startswith("//"):
         return_to = ""
     prefill = db.effective_label_config(conn, copy) if copy else None
-    if prefill:
-        project = bool(prefill.get("is_project"))
     return templates.TemplateResponse(
         "label_form_modal.html",
         {
@@ -492,11 +441,7 @@ def new_label_modal(request: Request, project: bool = False, return_to: str = ""
             "prefill": prefill,
             "colors": COLORS,
             "icon_groups": icon_groups_for(prefill.get("icon")) if prefill else LABEL_ICON_GROUPS,
-            "role": "project" if project else "none",
-            "is_project_form": bool(project),
             "group_options": [g["name"] for g in db.list_groups(conn)],
-            "auto_label_items": _auto_label_items(conn, ""),
-            "auto_labels_selected": db.get_auto_labels(conn, copy) if prefill else [],
             "return_to": return_to,
             "label_tags": [],
         },
@@ -510,7 +455,6 @@ def create_label(
     icon: str = Form(""),
     label_group: str = Form(""),
     description: str = Form(""),
-    role: str = Form("none"),
     page_fields: str = Form(""),
     deadline_date: str = Form(""),
     page_type: str = Form(""),
@@ -520,13 +464,11 @@ def create_label(
     notebook_widget: str = Form(""),
     sidebar_pin: str = Form(""),
     widget_pin: str = Form(""),
-    auto_labels: list[str] | None = Form(None),
     tag_rows: list[dict] = Depends(_tag_rows),
     conn=Depends(get_db),
 ):
     """Create a new label with zero items attached -- labels are first-class
-        organizational tools, not tied to any object. `role` is the single Role radio value now, not two
-        separately-submitted checkboxes.
+        organizational tools, not tied to any object.
     """
     new_name = new_name.strip()
     if not new_name:
@@ -543,7 +485,6 @@ def create_label(
         "icon": icon,
         "label_group": _clean_group(label_group),
         "description": _clean_description(description),
-        "is_project": 1 if role == "project" else 0,
         "created_at": _now(),
         **page,
     }
@@ -556,9 +497,7 @@ def create_label(
     db.upsert_label_config(conn, row)
     tags.add_default_tag(conn, new_name, row["color"], icon or "")
     tags.apply_rows(conn, new_name, tag_rows, COLORS)
-    if row["is_project"]:
-        db.set_auto_labels(conn, new_name, auto_labels or [])
-    return RedirectResponse(url="/settings/projects" if row["is_project"] else "/settings/labels", status_code=303)
+    return RedirectResponse(url="/settings/labels", status_code=303)
 
 
 @router.post("/{name}/delete")
@@ -626,14 +565,13 @@ def bulk_merge_labels(uids: list[str] = Form([]), dest_name: str = Form(...), co
 def bulk_edit_modal(uids: str, request: Request, conn=Depends(get_db)):
     """Bulk-select "Edit": color, group, end date and archive state for every selected label or project."""
     names = [n for n in uids.split(",") if n]
-    projects = bool(names) and all((db.get_label_config(conn, n) or {}).get("is_project") for n in names)
-    noun = "project" if projects else "label"
+    noun = "shelf"
     fields = [
         {"name": "color", "label": "Color", "kind": "select", "options": [(c, c.title()) for c in COLORS]},
         {"name": "label_group", "label": "Group", "kind": "select",
          "options": [(_NO_GROUP, "No group")] + [(g["name"], g["name"]) for g in db.list_groups(conn)]},
-        {"name": "end_date", "label": "End date" if projects else "Deadline", "kind": "date"},
-        {"name": "clear_end", "label": "Remove end date" if projects else "Remove deadline", "kind": "select",
+        {"name": "end_date", "label": "Deadline", "kind": "date"},
+        {"name": "clear_end", "label": "Remove deadline", "kind": "select",
          "options": [("1", "Remove it")]},
         {"name": "archive", "label": "Archive", "kind": "select", "options": [("archive", "Archive"), ("restore", "Restore")]},
     ]
@@ -641,7 +579,7 @@ def bulk_edit_modal(uids: str, request: Request, conn=Depends(get_db)):
         "bulk_edit_modal.html",
         {"request": request, "uids": names, "noun": noun, "fields": fields,
          "post_url": "/settings/labels/bulk-edit", "change_type": "label",
-         "back_url": "/settings/projects" if projects else "/settings/labels"},
+         "back_url": "/settings/labels"},
     )
 
 
@@ -678,19 +616,15 @@ def bulk_edit_labels(
             row["label_group"] = None if label_group == _NO_GROUP else _clean_group(label_group)
         if end_date or clear_end:
             value = end_date or None
-            if config.get("is_project"):
-                row["end_date"] = value
-            else:
-                row["has_deadline"] = 1 if value else 0
-                row["deadline_date"] = value
+            row["has_deadline"] = 1 if value else 0
+            row["deadline_date"] = value
         if len(row) > 2:
             db.upsert_label_config(conn, row)
         if archive == "archive":
             db.archive_project(conn, name)
         elif archive == "restore":
             db.unarchive_label(conn, name)
-    projects = bool(uids) and all((db.get_label_config(conn, n) or {}).get("is_project") for n in uids)
-    return RedirectResponse(url="/settings/projects" if projects else "/settings/labels", status_code=303)
+    return RedirectResponse(url="/settings/labels", status_code=303)
 
 
 @router.post("/{name}/set")
@@ -740,12 +674,6 @@ projects_settings_router = APIRouter(prefix="/settings/projects", tags=["project
 
 
 @projects_settings_router.get("")
-def manage_projects(request: Request, conn=Depends(get_db)):
-    from .taxonomy import page_response
-
-    return page_response(conn, request, "projects")
-
-
-@projects_settings_router.get("/new")
-def new_project_modal(request: Request, copy: str = "", conn=Depends(get_db)):
-    return new_label_modal(request, project=True, copy=copy, conn=conn)
+def projects_settings_redirect():
+    """Projects are tags on the Projects shelf now; the old page is gone."""
+    return RedirectResponse(url="/settings/tags", status_code=301)

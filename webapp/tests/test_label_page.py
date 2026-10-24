@@ -252,10 +252,10 @@ class TestDescriptionField:
 
     def test_create_and_update_save_it(self, conn):
         labels_router.create_label(new_name="Gym", color="blue", icon="", label_group="", description="  Lift  ",
-                                   role="none", conn=conn)
+                                   conn=conn)
         assert db.get_label_config(conn, "Gym")["description"] == "Lift"
         labels_router.update_label("Gym", new_name="Gym", color="blue", icon="", label_group="", description="",
-                                   role="none", conn=conn)
+                                   conn=conn)
         assert db.get_label_config(conn, "Gym")["description"] is None
 
 
@@ -371,14 +371,14 @@ class TestLabelRenameFromItsOwnPage:
     def test_rename_from_label_page_redirects_to_the_new_page(self, conn):
         db.upsert_label_config(conn, {"name": "Reading", "created_at": _now()})
         resp = labels_router.update_label("Reading", new_name="Books", color="blue", icon="", label_group="",
-                                          description="", role="none", request=_post_req(
+                                          description="", request=_post_req(
             "http://testserver/labels/Reading"), conn=conn)
         assert resp.headers["location"] == "/labels/Books"
 
     def test_rename_from_elsewhere_still_lands_on_the_labels_list(self, conn):
         db.upsert_label_config(conn, {"name": "Reading", "created_at": _now()})
         resp = labels_router.update_label("Reading", new_name="Books", color="blue", icon="", label_group="",
-                                          description="", role="none", request=_post_req(
+                                          description="", request=_post_req(
             "http://testserver/settings/labels"), conn=conn)
         assert resp.headers["location"] == "/settings/labels"
 

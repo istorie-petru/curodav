@@ -15,9 +15,9 @@ def conn(tmp_path):
 
 def _create(conn, name, **kw):
     labels_router.create_label(new_name=name, color=kw.get("color", "red"), icon=kw.get("icon", "home"), label_group="",
-                               description="", role="none", page_fields="", deadline_date="", page_type="",
+                               description="", page_fields="", deadline_date="", page_type="",
                                agenda_widget="", tasks_widget="", contacts_widget="", notebook_widget="",
-                               sidebar_pin="", widget_pin="", auto_labels=None, tag_rows=[], conn=conn)
+                               sidebar_pin="", widget_pin="", tag_rows=[], conn=conn)
 
 
 def test_new_label_gets_one_default_tag_with_its_look(conn):
@@ -31,10 +31,8 @@ def _rows(*rows):
 
 
 def _update(conn, name, rows):
-    labels_router.update_label(name, new_name=name, color="red", icon="home", label_group="", description="", role=None,
-                               page_fields="", deadline_date="", page_type="", agenda_widget="", tasks_widget="",
-                               contacts_widget="", notebook_widget="", sidebar_pin="", widget_pin="", auto_labels=None,
-                               tag_rows=rows, request=None, conn=conn)
+    labels_router.update_label(name, new_name=name, color="red", icon="home", label_group="", description="", page_fields="", deadline_date="", page_type="", agenda_widget="", tasks_widget="",
+                               contacts_widget="", notebook_widget="", sidebar_pin="", widget_pin="", tag_rows=rows, request=None, conn=conn)
 
 
 def test_label_name_cannot_reuse_a_tag_name(conn):
@@ -139,3 +137,42 @@ def test_label_page_with_several_tags_groups_open_tasks_by_tag(conn):
     request = Request({"type": "http", "method": "GET", "path": "/labels/Kitchen", "query_string": b"", "headers": [], "app": None})
     ctx = label_pages.label_page("Kitchen", request, conn=conn).context
     assert [(g[0]["name"], [t["title"] for t in g[1]]) for g in ctx["ov_by_tag"]] == [("Kitchen", ["Plain"]), ("Salt", ["Season"])]
+
+
+def test_projects_fold_into_tags_on_the_projects_shelf(conn):
+    db.upsert_label_config(conn, {"name": "Thesis", "label_group": "Uni", "is_project": 1, "has_deadline": 1,
+                                  "deadline_date": "2027-01-10", "color": "red", "icon": "book", "auto_labels": '["Gym"]'})
+    db.upsert_label_config(conn, {"name": "Garden", "label_group": "Uni", "is_project": 1, "end_date": "2027-06-30"})
+    db.upsert_label_config(conn, {"name": "Gym"})
+    tags.add_default_tag(conn, "Thesis", "red", "book")
+    db.set_object_labels(conn, "task", "t1", ["Thesis"])
+    db.set_object_labels(conn, "task", "t2", ["Garden", "Gym"])
+    assert tags.fold_projects(conn) == ["Garden", "Thesis"]
+    shelf = db.get_label_config(conn, "Projects")
+    assert shelf["label_group"] == "Uni" and shelf["has_deadline"] and shelf["deadline_date"] == "2027-06-30"
+    assert [t["name"] for t in tags.tags_of_label(conn, "Projects")] == ["Garden", "Projects", "Thesis"]
+    assert tags.get_tag(conn, "Thesis")["color"] == "red"
+    assert db.get_label_config(conn, "Thesis") is None and db.get_label_config(conn, "Garden") is None
+    assert tags.tags_for_object(conn, "task", "t1") == ["Thesis"]
+    assert db.list_labels_for_object(conn, "task", "t1") == ["Projects"]
+    assert db.list_labels_for_object(conn, "task", "t2") == ["Gym", "Projects"]
+    assert tags.fold_projects(conn) == []
+def test_move_tag_to_another_shelf_follows_items_and_keeps_last_tag(conn):
+    from src.routers import taxonomy
+
+    _create(conn, "Kitchen")
+    _create(conn, "Garage")
+    _update(conn, "Kitchen", _rows({"name": "Salt"}))
+    tags.set_object_tags(conn, "task", "t1", ["Salt"])
+    db.set_object_labels(conn, "task", "t1", ["Kitchen"])
+    assert tags.move_error(conn, "Salt", "Garage") is None
+    taxonomy.move_tag(name="Salt", dest="Garage", conn=conn)
+    assert tags.get_tag(conn, "Salt")["label_name"] == "Garage"
+    assert tags.tags_for_object(conn, "task", "t1") == ["Salt"]
+    assert db.list_labels_for_object(conn, "task", "t1") == ["Garage"]
+    with pytest.raises(HTTPException):  # Garage's own default is now not alone, Kitchen's is
+        taxonomy.move_tag(name="Kitchen", dest="Garage", conn=conn)
+    assert tags.move_error(conn, "Garage", "Kitchen") is None  # Garage still has Salt beside its default
+    assert tags.move_error(conn, "Salt", "Salt") is not None
+    with pytest.raises(HTTPException):
+        taxonomy.move_tag(name="Salt", dest="", conn=conn)

@@ -8,8 +8,8 @@
 
     function bindBulk() {
         const base = { tableId: "taxonomy-table" };
-        if (view === "labels" || view === "projects") {
-            const noun = view === "projects" ? "project" : "label";
+        if (view === "labels") {
+            const noun = "shelf";
             window.CCBulkSelect.init(Object.assign(base, {
                 barId: "labels-bulk-bar", countId: "labels-bulk-count", clearId: "labels-bulk-clear",
                 deleteButtonId: "labels-bulk-delete", deleteUrl: "/settings/labels/bulk-delete", changeType: "label",
@@ -60,33 +60,11 @@
         load(view);
     });
 
-    // Convert to project and Archive/Unarchive: the row hides or the toast
-    // offers Undo; nothing is sent for Convert until the toast runs out.
+    // Archive/Unarchive: reloads the rows once the change lands.
     document.addEventListener("submit", (e) => {
         const f = e.target;
         if (!(f instanceof HTMLFormElement)) return;
-        if (f.dataset.convertUndo) {
-            e.preventDefault();
-            const name = f.dataset.convertUndo;
-            const row = f.closest("tr");
-            if (row) row.style.display = "none";
-            let cancelled = false;
-            const timer = setTimeout(async () => {
-                if (cancelled) return;
-                try {
-                    const resp = await fetch(f.action, { method: "POST", headers: { "X-Requested-With": "fetch" }, body: new FormData(f) });
-                    if (!resp.ok) throw new Error();
-                    load(view);
-                } catch (err) {
-                    if (row) row.style.display = "";
-                    window.ccToast && window.ccToast({ message: "Could not convert “" + name + "”.", variant: "error" });
-                }
-            }, 4500);
-            window.ccToast({
-                title: "Converted to project", message: "“" + name + "”", actionLabel: "Undo", duration: 4500,
-                onAction: () => { cancelled = true; clearTimeout(timer); if (row) row.style.display = ""; },
-            });
-        } else if (f.dataset.rowToggle) {
+        if (f.dataset.rowToggle) {
             e.preventDefault();
             const name = f.dataset.rowName;
             fetch(f.action, { method: "POST", headers: { "X-Requested-With": "fetch" } })

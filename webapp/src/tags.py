@@ -184,6 +184,35 @@ def apply_rows(conn: sqlite3.Connection, label_name: str, rows: list[dict[str, A
     conn.commit()
 
 
+def move_error(conn: sqlite3.Connection, name: str, dest: str) -> str | None:
+    """Why a tag cannot go to another shelf, or None. A shelf keeps at least one tag, so its last tag stays."""
+    tag = get_tag(conn, name)
+    if not tag:
+        return f"There is no tag named {name}"
+    if not dest or not conn.execute("SELECT 1 FROM label_config WHERE name = ?", (dest,)).fetchone():
+        return "Choose a shelf to move the tag to"
+    if dest == tag["label_name"]:
+        return f"{tag['name']} is already on the shelf {dest}"
+    if len(tags_of_label(conn, tag["label_name"])) < 2:
+        return f"{tag['name']} is the only tag of {tag['label_name']}, and a shelf keeps at least one tag"
+    return None
+
+
+def move_tag(conn: sqlite3.Connection, name: str, dest: str) -> None:
+    """Files a tag under another shelf. Its items keep it, and their shelf links follow: they gain the new shelf and leave
+    the old one unless another of their tags still sits there."""
+    tag = get_tag(conn, name)
+    conn.execute("UPDATE label_tags SET label_name = ? WHERE name = ? COLLATE NOCASE", (dest, tag["name"]))
+    from . import db
+
+    kinds = {"note": "notebook"}
+    for r in conn.execute("SELECT object_type, object_id FROM object_tags WHERE tag_name = ? COLLATE NOCASE", (tag["name"],)).fetchall():
+        if kinds.get(r["object_type"], r["object_type"]) in LABEL_OBJECT_TYPES:
+            kind = kinds.get(r["object_type"], r["object_type"])
+            db.set_object_labels(conn, kind, r["object_id"], labels_of(conn, tags_for_object(conn, r["object_type"], r["object_id"])))
+    conn.commit()
+
+
 def label_renamed(conn: sqlite3.Connection, old: str, new: str) -> None:
     if _has(conn, "label_tags"):
         conn.execute("UPDATE label_tags SET label_name = ? WHERE label_name = ?", (new, old))
@@ -412,6 +441,51 @@ def move_finance_tags(conn: sqlite3.Connection) -> int:
         conn.execute(f"DROP TABLE {t}")
     conn.commit()
     return len(rows)
+
+
+PROJECTS_SHELF = "Projects"
+
+
+def fold_projects(conn: sqlite3.Connection) -> list[str]:
+    """Every remaining project becomes a tag (with its own look) on the shelf Projects, which takes the farthest of their
+    deadlines, in the space most of them sat in. Their items keep the tag; the project shelves, their auto-shelf lists and
+    the project flag go. Returns the names folded."""
+    from . import db
+
+    ensure_schema(conn)
+    rows = [dict(r) for r in conn.execute("SELECT * FROM label_config WHERE is_project = 1 ORDER BY name COLLATE NOCASE")]
+    if not rows:
+        return []
+    spaces = [r["label_group"] for r in rows if r.get("label_group")]
+    conn.execute("INSERT OR IGNORE INTO label_config (name, color, icon) VALUES (?, 'gray', 'folder')", (PROJECTS_SHELF,))
+    if spaces:
+        conn.execute("UPDATE label_config SET label_group = ? WHERE name = ? COLLATE NOCASE AND COALESCE(label_group, '') = ''",
+                     (max(set(spaces), key=spaces.count), PROJECTS_SHELF))
+    shelf = conn.execute("SELECT name FROM label_config WHERE name = ? COLLATE NOCASE", (PROJECTS_SHELF,)).fetchone()["name"]
+    add_default_tag(conn, shelf, "gray", "folder")
+    deadlines = [r.get("deadline_date") or r.get("end_date") for r in rows]
+    farthest = max((d for d in deadlines if d), default=None)
+    if farthest:
+        conn.execute("UPDATE label_config SET has_deadline = 1, deadline_date = ? WHERE name = ? AND (deadline_date IS NULL OR deadline_date < ?)",
+                     (farthest, shelf, farthest))
+    folded = []
+    for r in rows:
+        name = r["name"]
+        if name.lower() == shelf.lower():
+            conn.execute("UPDATE label_config SET is_project = 0 WHERE name = ?", (name,))
+            continue
+        add_default_tag(conn, name, r.get("color") or "gray", r.get("icon") or "")
+        linked = {(x["object_type"], x["object_id"]) for x in conn.execute("SELECT DISTINCT object_type, object_id FROM object_tags")}
+        for x in conn.execute(f"SELECT object_type, object_id FROM object_labels WHERE label_name = ? AND object_type IN ({', '.join('?' for _ in LABEL_OBJECT_TYPES)})",
+                              (name, *LABEL_OBJECT_TYPES)).fetchall():
+            kind = TAG_TYPE.get(x["object_type"], x["object_type"])
+            if (kind, x["object_id"]) not in linked:
+                conn.execute("INSERT OR IGNORE INTO object_tags VALUES (?, ?, ?)", (kind, x["object_id"], name))
+        db.merge_labels(conn, name, shelf)
+        folded.append(name)
+    conn.execute("UPDATE label_config SET auto_labels = NULL WHERE auto_labels IS NOT NULL")
+    conn.commit()
+    return folded
 
 
 def _label_rows(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:

@@ -204,25 +204,25 @@ class TestIconPersistence:
     # `set_label`/`create_label` already document for `abbreviation`).
 
     def test_create_label_saves_the_chosen_icon(self, conn):
-        labels_router.create_label(new_name="Garden", color="green", icon="  leaf  ", label_group="", role="none", conn=conn)
+        labels_router.create_label(new_name="Garden", color="green", icon="  leaf  ", label_group="", conn=conn)
         cfg = db.get_label_config(conn, "Garden")
         assert cfg["icon"] == "leaf"
 
     def test_update_label_saves_a_newly_chosen_icon(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
-        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="leaf", label_group="", description="", role="none", conn=conn)
+        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="leaf", label_group="", description="", conn=conn)
         assert db.get_label_config(conn, "Garden")["icon"] == "leaf"
 
     def test_update_label_changes_an_existing_icon(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "icon": "leaf", "created_at": _now()})
-        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="flag", label_group="", description="", role="none", conn=conn)
+        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="flag", label_group="", description="", conn=conn)
         assert db.get_label_config(conn, "Garden")["icon"] == "flag"
 
     def test_update_label_no_icon_radio_clears_it(self, conn):
         # The picker's "No icon" option submits icon="" (_icon_swatch_
         # picker.html) -- an explicit clear, not "leave unchanged".
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "icon": "leaf", "created_at": _now()})
-        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="", label_group="", description="", role="none", conn=conn)
+        labels_router.update_label(name="Garden", new_name="Garden", color="green", icon="", label_group="", description="", conn=conn)
         assert db.get_label_config(conn, "Garden")["icon"] is None
 
 # --------------------------------------------------------------------- #
@@ -237,16 +237,16 @@ class TestIconPersistence:
 
 class TestColorValidation:
     def test_create_label_rejects_an_unknown_color(self, conn):
-        labels_router.create_label(new_name="Garden", color="not-a-real-color", icon="", label_group="", role="none", conn=conn)
+        labels_router.create_label(new_name="Garden", color="not-a-real-color", icon="", label_group="", conn=conn)
         assert db.get_label_config(conn, "Garden")["color"] == "blue"
 
     def test_create_label_accepts_a_real_color(self, conn):
-        labels_router.create_label(new_name="Garden", color="teal", icon="", label_group="", role="none", conn=conn)
+        labels_router.create_label(new_name="Garden", color="teal", icon="", label_group="", conn=conn)
         assert db.get_label_config(conn, "Garden")["color"] == "teal"
 
     def test_update_label_rejects_an_unknown_color(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
-        labels_router.update_label(name="Garden", new_name="Garden", color="<script>", icon="", label_group="", description="", role="none", conn=conn)
+        labels_router.update_label(name="Garden", new_name="Garden", color="<script>", icon="", label_group="", description="", conn=conn)
         assert db.get_label_config(conn, "Garden")["color"] == "blue"
 
     def test_set_label_rejects_an_unknown_color(self, conn):
@@ -258,19 +258,19 @@ class TestColorValidation:
 class TestReservedLabelNameGuard:
     def test_create_label_rejects_the_page_header_scope_name(self, conn):
         with pytest.raises(Exception) as excinfo:
-            labels_router.create_label(new_name=db.PAGE_HEADER_BANNER_SCOPE, color="blue", icon="", label_group="", role="none", conn=conn)
+            labels_router.create_label(new_name=db.PAGE_HEADER_BANNER_SCOPE, color="blue", icon="", label_group="", conn=conn)
         assert excinfo.value.status_code == 400
         assert db.get_label_config(conn, db.PAGE_HEADER_BANNER_SCOPE) is None
 
     def test_create_label_rejects_a_season_scope_name(self, conn):
         with pytest.raises(Exception) as excinfo:
-            labels_router.create_label(new_name=db.SEASON_BANNER_SCOPES["summer"], color="blue", icon="", label_group="", role="none", conn=conn)
+            labels_router.create_label(new_name=db.SEASON_BANNER_SCOPES["summer"], color="blue", icon="", label_group="", conn=conn)
         assert excinfo.value.status_code == 400
 
     def test_update_label_rejects_renaming_into_a_reserved_name(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
         with pytest.raises(Exception) as excinfo:
-            labels_router.update_label(name="Garden", new_name=db.PAGE_HEADER_BANNER_SCOPE, color="green", icon="", label_group="", description="", role="none", conn=conn)
+            labels_router.update_label(name="Garden", new_name=db.PAGE_HEADER_BANNER_SCOPE, color="green", icon="", label_group="", description="", conn=conn)
         assert excinfo.value.status_code == 400
         # Rejected before the rename happened -- the label is untouched.
         assert db.get_label_config(conn, "Garden") is not None
@@ -279,7 +279,7 @@ class TestReservedLabelNameGuard:
         # Sanity check the guard only fires on an actual name *change* --
         # every ordinary edit (new_name == name) must keep working.
         db.upsert_label_config(conn, {"name": "Garden", "color": "green", "created_at": _now()})
-        labels_router.update_label(name="Garden", new_name="Garden", color="teal", icon="", label_group="", description="", role="none", conn=conn)
+        labels_router.update_label(name="Garden", new_name="Garden", color="teal", icon="", label_group="", description="", conn=conn)
         assert db.get_label_config(conn, "Garden")["color"] == "teal"
 
     def test_rename_endpoint_rejects_a_reserved_destination(self, conn):

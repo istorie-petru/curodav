@@ -5,8 +5,8 @@ reloads the rows after a change."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import db, tags
 from ..deps import get_db, templates
@@ -17,7 +17,6 @@ VIEWS = {
     "labels": {"name": "Shelves", "noun": "shelf", "url": "/settings/labels", "new_url": "/settings/labels/new", "cols": ["Shelf", "Space", "Usage"]},
     "label_tags": {"name": "Tags", "noun": "tag", "url": "/settings/tags", "new_url": "/settings/labels/new", "cols": ["Tag", "Shelf", "Usage"]},
     "groups": {"name": "Spaces", "noun": "space", "url": "/settings/groups", "new_url": "/groups/new", "cols": ["Space", "Shelves", "Usage"]},
-    "projects": {"name": "Projects", "noun": "project", "url": "/settings/projects", "new_url": "/settings/projects/new", "cols": ["Project", "Due", "Usage"]},
     "frontmatter": {"name": "Frontmatter", "noun": "field", "url": "/settings/notebook", "new_url": "/settings/notebook/new", "cols": ["Field", "Type", "Default"]},
     "time_blocks": {"name": "Sleep & Leisure", "noun": "time block", "url": "/settings/calendar?view=time-blocks", "new_url": "/settings/time-blocks/new",
                     "cols": ["Block", "Hours", "Days"]},
@@ -25,7 +24,7 @@ VIEWS = {
 }
 
 
-_PAGE_ICONS = {"labels": "tag", "label_tags": "tag", "groups": "folder", "projects": "folder-plus", "holidays": "calendar", "time_blocks": "calendar", "frontmatter": "file-text"}
+_PAGE_ICONS = {"labels": "tag", "label_tags": "tag", "groups": "folder", "holidays": "calendar", "time_blocks": "calendar", "frontmatter": "file-text"}
 
 
 def _view_key(view: str) -> str:
@@ -37,7 +36,7 @@ def rows_context(conn, request: Request, view: str) -> dict:
     from . import label_pages, labels
 
     view = _view_key(view)
-    if view in ("labels", "projects"):
+    if view == "labels":
         ctx = labels._labels_context(conn, request, view)
     elif view == "groups":
         ctx = label_pages._groups_context(conn, request)
@@ -87,6 +86,24 @@ settings_router = APIRouter(prefix="/settings/tags", tags=["tags-settings"])
 @settings_router.get("")
 def manage_tags(request: Request, conn=Depends(get_db)):
     return page_response(conn, request, "label_tags")
+
+
+@settings_router.get("/move-modal")
+def move_tag_modal(request: Request, name: str, conn=Depends(get_db)):
+    tag = tags.get_tag(conn, name)
+    if not tag:
+        raise HTTPException(404, f"There is no tag named {name}")
+    shelves = sorted((l["name"] for l in db.list_labels(conn) if l["name"] != tag["label_name"] and not l.get("archived_at")), key=str.lower)
+    return templates.TemplateResponse("tag_move_modal.html", {"request": request, "tag": tag, "shelf_names": shelves})
+
+
+@settings_router.post("/move")
+def move_tag(name: str = Form(...), dest: str = Form(""), conn=Depends(get_db)):
+    error = tags.move_error(conn, name, dest.strip())
+    if error:
+        raise HTTPException(400, error)
+    tags.move_tag(conn, name, dest.strip())
+    return RedirectResponse(url="/settings/tags", status_code=303)
 
 
 calendar_router = APIRouter(prefix="/settings/calendar", tags=["calendar-settings"])

@@ -122,54 +122,22 @@ class TestGroupModalsAndPages:
         assert 'data-group-name="Uni"' in body and "Empty" in body and 'href="/groups/new"' in body
 
 
-class TestLabelsVsProjects:
-    def test_projects_page_and_new_project_form(self, conn):
-        db.upsert_label_config(conn, {"name": "Thesis", "is_project": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Gym", "created_at": _now()})
-        body = labels_router.manage_projects(_req("/settings/projects"), conn=conn).body.decode()
-        assert 'data-label-name="Thesis"' in body and 'data-label-name="Gym"' not in body
-        assert 'href="/settings/projects/new"' in body and 'data-view="projects"' in body
-        form = labels_router.new_project_modal(_req("/settings/projects/new"), conn=conn).body.decode()
-        assert "New project" in form and '<input type="hidden" name="role" value="project">' in form
-        assert 'name="deadline_date"' in form
-
-    def test_label_form_has_no_role_and_no_deadline(self, conn):
+class TestShelvesHaveNoProjectMode:
+    def test_shelf_form_has_a_deadline_and_no_role_or_auto_shelves(self, conn):
         db.upsert_label_config(conn, {"name": "Gym", "created_at": _now()})
         body = labels_router.edit_label_modal("Gym", _req("/settings/labels/Gym/edit"), conn=conn).body.decode()
-        assert 'name="role"' not in body and 'name="deadline_date"' not in body
-        # 2026-09-26: Convert moved to the Labels table's actions column.
+        assert 'name="deadline_date"' in body and 'name="role"' not in body and 'name="auto_labels"' not in body
+        assert "Edit shelf" in body
+
+    def test_shelf_rows_have_no_convert_action(self, conn):
+        db.upsert_label_config(conn, {"name": "Gym", "created_at": _now()})
+        body = labels_router.manage_labels(_req("/settings/labels"), conn=conn).body.decode()
         assert "convert-to-project" not in body
 
-    def test_project_form_has_no_convert(self, conn):
-        db.upsert_label_config(conn, {"name": "Thesis", "is_project": 1, "created_at": _now()})
-        body = labels_router.edit_label_modal("Thesis", _req("/settings/labels/Thesis/edit"), conn=conn).body.decode()
-        assert "Edit project" in body and "convert-to-project" not in body and 'name="deadline_date"' in body
-
-    def test_saving_without_role_keeps_what_it_is(self, conn):
-        db.upsert_label_config(conn, {"name": "Thesis", "is_project": 1, "created_at": _now()})
-        resp = labels_router.update_label("Thesis", new_name="Thesis", color="blue", icon="", label_group="",
-                                          description="", role=None, request=_req("/x"), conn=conn)
-        assert db.get_label_config(conn, "Thesis")["is_project"] == 1
-        assert resp.headers["location"] == "/settings/projects"
-
-    def test_convert_is_a_row_action_on_labels_only(self, conn):
-        db.upsert_label_config(conn, {"name": "Gym", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "Thesis", "is_project": 1, "created_at": _now()})
-        body = labels_router.manage_labels(_req("/settings/labels"), conn=conn).body.decode()
-        assert 'action="/settings/labels/Gym/convert-to-project" class="label-convert-form" data-convert-undo="Gym"' in body
-        projects = labels_router.manage_projects(_req("/settings/projects"), conn=conn).body.decode()
-        assert "convert-to-project" not in projects
-
-    def test_convert_is_one_way(self, conn):
-        db.upsert_label_config(conn, {"name": "Gym", "created_at": _now()})
-        resp = labels_router.convert_to_project("Gym", conn=conn)
-        assert resp.headers["location"] == "/settings/projects"
-        assert db.get_label_config(conn, "Gym")["is_project"] == 1
-
-    def test_create_project_redirects_to_projects(self, conn):
-        resp = labels_router.create_label(new_name="Thesis", color="blue", icon="", label_group="", role="project",
-                                          conn=conn)
-        assert resp.headers["location"] == "/settings/projects"
+    def test_create_redirects_to_shelves_and_old_projects_page_to_tags(self, conn):
+        resp = labels_router.create_label(new_name="Thesis", color="blue", icon="", label_group="", conn=conn)
+        assert resp.headers["location"] == "/settings/labels"
+        assert labels_router.projects_settings_redirect().headers["location"] == "/settings/tags"
 
 
 class TestModuleDropdowns:
@@ -194,11 +162,6 @@ class TestDuplicate:
         body = labels_router.new_label_modal(_req("/settings/labels/new"), copy="Gym", conn=conn).body.decode()
         assert 'value="Gym copy"' in body and "Lifting" in body
         assert [c["name"] for c in db.list_labels(conn)] == ["Gym"]
-
-    def test_project_copy_opens_in_project_mode(self, conn):
-        db.upsert_label_config(conn, {"name": "Thesis", "is_project": 1, "created_at": _now()})
-        body = labels_router.new_project_modal(_req("/settings/projects/new"), copy="Thesis", conn=conn).body.decode()
-        assert 'value="Thesis copy"' in body and 'name="role" value="project"' in body
 
     def test_group_copy_keeps_the_look_but_not_the_labels(self, conn):
         db.create_group(conn, "Uni", "heart", "red")

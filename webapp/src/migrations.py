@@ -208,6 +208,13 @@ def _finance_tags_become_tags(conn: sqlite3.Connection) -> None:
     conn.execute("DROP TABLE IF EXISTS projects")
 
 
+def _projects_become_tags(conn: sqlite3.Connection) -> None:
+    """Remaining projects become tags on the shelf Projects (see tags.fold_projects); auto-shelf lists go."""
+    from . import tags
+
+    tags.fold_projects(conn)
+
+
 def _folder_readmes(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE TABLE IF NOT EXISTS notebook_folder_readmes (label_name TEXT PRIMARY KEY, body TEXT NOT NULL DEFAULT '', "
@@ -239,6 +246,7 @@ MIGRATIONS: list[Migration] = [
     Migration(21, "app-wide tags live in label_tags (an older tags table already exists)", _tag_tables),
     Migration(22, "habits get their own flag and the habit label goes away", _habit_is_not_a_label, destructive=True),
     Migration(23, "finance tags become tags on the Finance shelf; old tags and projects tables are dropped", _finance_tags_become_tags, destructive=True),
+    Migration(24, "projects become tags on the shelf Projects", _projects_become_tags, destructive=True),
 ]
 
 

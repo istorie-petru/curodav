@@ -6,6 +6,11 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [4.6.1]
+
+- Tags: each row of the Tags table has a Move action that opens a window to file the tag under another shelf. Items keep the tag and follow it to the new shelf. A shelf keeps at least one tag, so its last tag cannot be moved.
+- Projects are now tags: every remaining project becomes a tag on a new shelf called Projects, which takes the farthest of their deadlines. The Projects table in Settings, the Convert to project action and Auto shelves are gone, and any shelf can have a deadline. One data step runs at the first start (it takes a backup first).
+
 ## [4.6.0]
 
 - Spaces, shelves and tags: groups are now called spaces and labels are called shelves. A shelf belongs to one space and holds one or more tags; a tag is the only level you put on an item. One Tag dropdown replaces the Label and Project pickers on tasks, events, notes, contacts and transactions. It only picks existing tags, and tags are made in the Tags section of a shelf's edit window, where each tag has its own name, colour and icon. The first tag of a new shelf has the shelf's own name.

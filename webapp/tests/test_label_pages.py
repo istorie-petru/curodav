@@ -161,7 +161,7 @@ class TestGroupPage:
 
     def test_group_prefix_is_reserved_for_label_names(self, conn):
         with pytest.raises(HTTPException):
-            labels_router.create_label(new_name="group:Uni", color="blue", icon="", label_group="", role="none", conn=conn)
+            labels_router.create_label(new_name="group:Uni", color="blue", icon="", label_group="", conn=conn)
 
 
 class TestStatusRow:
@@ -210,7 +210,7 @@ class TestOldUrls:
 
 class TestFormFields:
     def _update(self, conn, **kw):
-        base = dict(name="Gym", new_name="Gym", color="blue", icon="", label_group="", description="", role="none")
+        base = dict(name="Gym", new_name="Gym", color="blue", icon="", label_group="", description="")
         base.update(kw)
         return labels_router.update_label(**base, conn=conn)
 
@@ -242,19 +242,8 @@ class TestFormFields:
             self._update(conn, page_fields="1", deadline_date="soon")
         assert exc.value.status_code == 400
 
-    def test_project_role_no_longer_needs_dates(self, conn):
-        self._update(conn, role="project", page_fields="1")
-        assert db.effective_label_config(conn, "Gym")["is_project"] is True
-
-    def test_role_change_does_not_touch_archiving(self, conn):
-        db.upsert_label_config(conn, {"name": "Gym", "is_project": 1})
-        db.archive_project(conn, "Gym")
-        self._update(conn, role="none", page_fields="1")
-        assert db.effective_label_config(conn, "Gym")["is_archived"] is True
-
     def test_create_writes_page_fields(self, conn):
-        labels_router.create_label(new_name="Essay", color="blue", icon="", label_group="", role="none",
-                                   page_fields="1", deadline_date="2026-11-30", agenda_widget="1", conn=conn)
+        labels_router.create_label(new_name="Essay", color="blue", icon="", label_group="", page_fields="1", deadline_date="2026-11-30", agenda_widget="1", conn=conn)
         cfg = db.effective_label_config(conn, "Essay")
         assert cfg["deadline_date"] == "2026-11-30" and cfg["page_type"] == "sections"
         assert (cfg["agenda_widget"], cfg["tasks_widget"], cfg["contacts_widget"], cfg["notebook_widget"]) == (True, False, False, False)
@@ -298,18 +287,12 @@ class TestSettingsLabelsTable:
     def test_context_sorts_flat_grouped_then_ungrouped(self, conn):
         db.upsert_label_config(conn, {"name": "Zeta", "label_group": "Uni"})
         db.upsert_label_config(conn, {"name": "Alpha", "label_group": "Uni"})
-        db.upsert_label_config(conn, {"name": "Thesis", "label_group": "Uni", "is_project": 1})
         db.upsert_label_config(conn, {"name": "Run", "label_group": "Health"})
         db.upsert_label_config(conn, {"name": "Loose"})
         ctx = labels_router._labels_context(conn, _request("/settings/labels"))
-        # 2026-09-26: projects are listed on Settings > Projects, not here.
         assert [l["name"] for l in ctx["labels"]] == ["Run", "Alpha", "Zeta", "Loose"]
         assert ctx["labels"][0]["group_style"]["color"] == "gray"  # Run: Health, default style
         assert "group_style" not in ctx["labels"][-1]  # Loose: no group
-        # Settings > Projects sorts the same flat way now.
-        pctx = labels_router._labels_context(conn, _request("/settings/projects"), "projects")
-        assert [l["name"] for l in pctx["labels"]] == ["Thesis"]
-
     def test_rendered_labels_table_has_no_group_section_rows(self, conn):
         db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni"})
         db.upsert_label_config(conn, {"name": "Loose"})
@@ -318,25 +301,6 @@ class TestSettingsLabelsTable:
         assert 'data-label-name="Maths" data-label-group="Uni"' in body
         assert 'href="/groups/Uni/view"' in body and "Uni</a>" in body  # the row's Group pill
         assert ">No group<" in body  # Loose's Group cell
-
-    def test_rendered_projects_table_has_no_group_section_rows(self, conn):
-        db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni", "is_project": 1})
-        db.upsert_label_config(conn, {"name": "Solo", "is_project": 1})
-        body = labels_router.manage_projects(_request("/settings/projects"), conn=conn).body.decode()
-        assert "entity-section-row" not in body
-        assert 'href="/groups/Uni" class="icon-btn" title="Open group page"' not in body
-        assert 'data-label-name="Maths" data-label-group="Uni"' in body
-        assert 'data-label-name="Solo" data-label-group=""' in body
-
-    def test_rendered_projects_due_is_its_own_column(self, conn):
-        db.upsert_label_config(conn, {"name": "Thesis", "is_project": 1, "has_deadline": 1,
-                                      "deadline_date": (date.today() + timedelta(days=3)).isoformat()})
-        body = labels_router.manage_projects(_request("/settings/projects"), conn=conn).body.decode()
-        row = body[body.index('data-label-name="Thesis"'):]
-        name_cell = row[:row.index("</td>")]
-        assert "label-deadline" not in name_cell  # no longer inline next to the name
-        assert "label-deadline" in row[row.index("</td>"):]  # it's the Due column instead
-
 
     def test_edit_modal_has_a_group_dropdown(self, conn):
         # 2026-09-26: groups are standalone; the label picks one from a

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Move tag{% endblock %}
+{% block content %}
+<div id="modal-target">
+<div class="modal-header">
+<h1>Move "{{ tag.name }}"</h1>
+</div>
+<div class="modal-body">
+<div class="card">
+<form method="post" id="tag-move-form" action="/settings/tags/move">
+    <input type="hidden" name="name" value="{{ tag.name }}">
+    {% set ms_name = 'dest' %}
+    {% set ms_mode = 'single' %}
+    {% set ms_label = 'Move to' %}
+    {% set ms_selected = '' %}
+    {% set ms_form_id = 'tag-move-form' %}
+    {% set ms_items = [] %}
+    {% for n in shelf_names %}{% set _ = ms_items.append({'uid': n, 'name': n}) %}{% endfor %}
+    {% include "_widget_list_multiselect.html" %}
+</form>
+</div>
+</div>
+{% set footer_back_url = '/settings/tags' %}
+{% set footer_back_label = 'Cancel' %}
+{% set footer_primary_form = 'tag-move-form' %}
+{% set footer_primary_label = 'Move' %}
+{% set footer_primary_icon = 'move' %}
+{% include "_modal_footer.html" %}
+</div>
+{% endblock %}

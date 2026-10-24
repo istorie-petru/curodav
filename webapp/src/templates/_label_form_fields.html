@@ -22,7 +22,6 @@
     {% set ms_form_id = 'label-form' %}
     {% set ms_extra_class = 'label-group-field' %}
     {% include "_widget_list_multiselect.html" %}
-    {% if is_project_form and not l %}<input type="hidden" name="role" value="project">{% endif %}
     {% from "_look_picker.html" import look_picker %}
     {% macro tag_row(i, t) %}
     <div class="label-tag-row">
@@ -46,13 +45,12 @@
     </div>
     {{ details_start(l is not none and l) }}
     <input type="hidden" name="page_fields" value="1">
-    {% if is_project_form or (p and p.has_deadline) %}
+    
     {% from "_date_time_fields.html" import date_field with context %}
     <div class="field field-wide">
         <label>Deadline</label>
         {{ date_field('deadline_date', p.deadline_date if (p and p.has_deadline) else '', label='Deadline') }}
     </div>
-    {% endif %}
     {% set ms_name = 'sections' %}
     {% set ms_mode = 'names' %}
     {% set ms_label = 'Sections' %}
@@ -74,20 +72,6 @@
     {% set ms_wide = true %}
     {% set ms_extra_class = '' %}
     {% include "_widget_list_multiselect.html" %}
-    {% if is_project_form %}
-    {% set ms_name = 'auto_labels' %}
-    {% set ms_mode = 'select' %}
-    {% set ms_label = 'Auto shelves' %}{% set ms_placeholder = 'None' %}
-    {% set ms_icon = 'tag' %}
-    {% set ms_items = auto_label_items | default([]) %}
-    {% set ms_selected = auto_labels_selected | default([]) %}
-    {% set ms_allow_new = false %}
-    {% set ms_pill = true %}
-    {% set ms_wide = true %}
-    {% set ms_form_id = 'label-form' %}
-    {% set ms_extra_class = 'label-auto-labels-field' %}
-    {% include "_widget_list_multiselect.html" %}
-    {% endif %}
     <div class="field field-wide">
         <label for="label-description-input">Description</label>
         {{ textarea_input({'id': 'label-description-input', 'name': 'description', 'rows': '2', 'maxlength': '500'}, p.description or '' if p else '') }}
