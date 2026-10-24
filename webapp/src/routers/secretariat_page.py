@@ -21,7 +21,7 @@ def _filter_options(conn) -> list[dict]:
     names = db.project_picker_context(conn)["project_names"]
     others = [n for n in db.list_tag_names_in_use(conn) if n not in names]
     return ([{"value": n, "name": n, "section": "Projects"} for n in names]
-            + [{"value": n, "name": n, "section": "Labels"} for n in others])
+            + [{"value": n, "name": n, "section": "Shelves"} for n in others])
 
 
 def _scope_deadlines(conn, scope: set[str] | None, today) -> list[dict]:

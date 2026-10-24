@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, Form, Header, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import clock, db, finance, finance_stats
+from .. import clock, db, finance, finance_stats, tags
 from ..deps import get_db, respond, templates, wants_json
 from .labels import COLORS
 
@@ -50,10 +50,10 @@ def transactions(request: Request, month: str = "", account: str = "", conn=Depe
     sections = finance_stats.month_sections(rows, {a["uid"]: a for a in accounts}, accounts[0]["currency"] if accounts else "")
     return templates.TemplateResponse("finance_transactions.html", {
         "request": request, "active_tab": "finance", "sections": sections, "pending": pending, "has_accounts": bool(accounts),
-        "month": month, "month_label": finance_stats.month_title(month),
+        "month": month, "month_label": finance_stats.month_title(month), "month_label_short": finance_stats.month_title_short(month),
         "prev_month": finance_stats.month_add(month, -1), "next_month": finance_stats.month_add(month, 1), "account": account,
         "account_items": [{"value": "", "name": "All accounts"}] + [{"value": a["uid"], "name": a["short"]} for a in accounts],
-        "money": finance_stats.format_money, "short_date": finance_stats.short_date, "tag_styles": finance.tag_styles(conn),
+        "money": finance_stats.format_money, "short_date": finance_stats.short_date, "tag_styles": tags.tag_styles(conn),
     })
 
 
@@ -71,14 +71,12 @@ def transaction_form_context(request: Request, conn, txn: dict | None, action: s
         "account_items": [_NONE] + [{"uid": a["uid"], "name": f"{a['short']} ({a['currency']})"} for a in accounts],
         "type_items": [_NONE] + [{"uid": k, "name": n} for k, n in finance_stats.TRANSACTION_TYPES],
         "amount_text": finance_stats.amount_input((txn or {}).get("amount", 0)) if txn else "",
-        **_tag_context(conn, (txn or {}).get("tags", [])),
+        **_tag_context(conn, (txn or {}).get("tags", []), (txn or {}).get("uid", ""), scheduled),
     }
 
 
-def _tag_context(conn, selected: list[str]) -> dict:
-    known = finance.tag_names(conn)
-    names = list(dict.fromkeys(known + list(selected)))
-    return {"tag_items": [{"uid": n, "name": n} for n in names], "tag_selected": selected}
+def _tag_context(conn, selected: list[str], uid: str = "", scheduled: bool = False) -> dict:
+    return {"tag_type": "scheduled" if scheduled else "transaction", "tag_uid": uid, "tag_old": list(selected)}
 
 
 @router.get("/transactions/new")
@@ -102,7 +100,7 @@ async def _form_values(request: Request) -> dict:
     form = await request.form()
     data = {k: form.get(k, "") for k in ("date", "type", "account_uid", "to_account_uid", "amount", "description",
                                          "status", "recurrence", "task_uid")}
-    data["tags"] = form.getlist("tags")
+    data["tags"] = form.getlist("item_tags")
     data["contacts"] = form.getlist("contacts") if form.get("contacts_present") == "1" else None
     return data
 
@@ -190,7 +188,6 @@ def accounts_page(request: Request, conn=Depends(get_db)):
     return templates.TemplateResponse("finance_accounts.html", {
         "request": request, "crumbs": [{"url": "/settings", "name": "Settings"}], "active_tab": "settings_finance_accounts", "accounts": accounts,
         "type_names": dict(finance_stats.ACCOUNT_TYPES), "money": finance_stats.format_money,
-        "tags": finance.list_tags(conn),
     })
 
 
@@ -247,55 +244,4 @@ def update_account(uid: str, name: str = Form(""), abbreviation: str = Form(""),
 @settings_router.post("/{uid}/delete")
 def delete_account(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     finance.delete_account(conn, uid)
-    return respond(x_requested_with, "/settings/finance-accounts")
-
-
-# Transaction tags (listed in Settings > Taxonomy & Data)
-
-def _tag_context_modal(request: Request, conn, tag: dict | None) -> dict:
-    action = "/finance/tags/update" if tag else "/finance/tags"
-    from .labels import icon_groups_for
-
-    return {"request": request, "tag": tag, "form_action": action, "colors": COLORS,
-            "icon_groups": icon_groups_for((tag or {}).get("icon") or None)}
-
-
-@router.get("/tags/new")
-def new_tag_modal(request: Request, conn=Depends(get_db)):
-    return templates.TemplateResponse("finance_tag_modal.html", _tag_context_modal(request, conn, None))
-
-
-@router.get("/tags/edit")
-def edit_tag_modal(request: Request, name: str = "", conn=Depends(get_db)):
-    tag = finance.get_tag(conn, name)
-    if tag is None:
-        return RedirectResponse(url="/settings/finance-accounts", status_code=303)
-    return templates.TemplateResponse("finance_tag_modal.html", _tag_context_modal(request, conn, tag))
-
-
-def _save_tag(conn, name: str, x_requested_with, old: str | None, color: str = "gray", icon: str = ""):
-    clean, error = finance.validate_tag(conn, name, old, color if color in COLORS else "gray", icon)
-    if error:
-        return _error_response(error, x_requested_with, "/settings/finance-accounts")
-    finance.save_tag(conn, clean, old)
-    return respond(x_requested_with, "/settings/finance-accounts")
-
-
-@router.post("/tags")
-def create_tag(name: str = Form(""), color: str = Form("gray"), icon: str = Form(""),
-               x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
-    return _save_tag(conn, name, x_requested_with, None, color, icon)
-
-
-@router.post("/tags/update")
-def update_tag(name: str = Form(""), old_name: str = Form(""),
-               color: str = Form("gray"), icon: str = Form(""), x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
-    if finance.get_tag(conn, old_name) is None:
-        return RedirectResponse(url="/settings/finance-accounts", status_code=303)
-    return _save_tag(conn, name, x_requested_with, old_name, color, icon)
-
-
-@router.post("/tags/delete")
-def delete_tag(name: str = "", x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
-    finance.delete_tag(conn, name)
     return respond(x_requested_with, "/settings/finance-accounts")

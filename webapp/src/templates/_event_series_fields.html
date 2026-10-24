@@ -1,0 +1,31 @@
+{# The rule and the weekend/holiday policy of a repeating event. #}
+{% from "_form_rows.html" import recurrence_row %}
+{% set ms_form_id = 'event-form' %}
+        <div class="series-only"{% if series_member | default(false) and not series_split | default(false) %} data-series-only inert{% endif %}>
+        {{ recurrence_row(event.recurrence if event and event.recurrence not in (None, 'None', 'Nothing') else '', wide=true) }}
+        <!-- 1.6 ("Configurable terminology"): the field names/values below
+             (holiday_calendar/exclude_saturday/exclude_sunday) never
+             change -- only the on-screen label does, per Settings >
+             General's "Recurrence terminology" toggle
+             (deps.py's recurrence_terminology() global). -->
+        {% set _playful = recurrence_terminology(request) == 'playful' %}
+        {% set _recurring = event and event.recurrence not in (None, 'None', 'Nothing', '') %}
+        {% set ms_mode = 'single' %}
+        {% set ms_name = 'holiday_calendar' %}
+        {% set ms_label = 'Respects Labor Laws' if _playful else 'Holiday calendar' %}
+        {% set ms_items = [{'uid': '', 'name': '(none)'}] %}
+        {% for name in holiday_calendar_names|default([]) %}{% set _ = ms_items.append({'uid': name, 'name': name}) %}{% endfor %}
+        {% set ms_selected = event.holiday_calendar if event and event.holiday_calendar not in (None, 'None', 'Nothing') else '' %}
+        {% set ms_allow_new = false %}
+        {% set ms_wide = true %}
+        {% set ms_extra_class = 'holiday-field' %}
+        {% set ms_hidden = not _recurring %}
+        {% set ms_extra_checkboxes = [
+            {'name': 'exclude_saturday', 'id': 'exclude_saturday', 'checked': event.exclude_saturday if event else false,
+             'label': 'Marx Weekend: Saturday' if _playful else 'Exclude Saturday'},
+            {'name': 'exclude_sunday', 'id': 'exclude_sunday', 'checked': event.exclude_sunday if event else false,
+             'label': 'Marx Weekend: Sunday' if _playful else 'Exclude Sunday'},
+        ] %}
+        {% include "_widget_list_multiselect.html" %}
+        {% set ms_extra_checkboxes = [] %}
+        </div>

@@ -31,7 +31,7 @@
         {# Jinja's {% set %} isn't block-scoped to the include above -- it
            stays set for every later {% include %} of this same partial
            lower in this file, so ms_root_class has to be cleared back out
-           explicitly here or "Show icons next to labels"/"Edit mode"
+           explicitly here or "Show icons next to shelves"/"Edit mode"
            below would silently inherit "theme-select" too (caught live:
            all three `.ms-summary` elements matched `.theme-select
            .ms-summary` until this reset was added). #}
@@ -45,13 +45,13 @@
     <form id="accent-form" method="post" action="/settings/appearance/accent" hidden></form>
     <p class="settings-field-hint settings-look-hint">Accent used for buttons, links, and highlights throughout the app; banner is the background image for every standard page's header strip (Tasks, Calendar, Settings, ...)</p>
     <form class="settings-field-row" method="post" action="/settings/label-icons" id="label-icons-form">
-        <span class="settings-field-label">Show icons next to labels
-            <span class="settings-field-hint">Each label's icon before its name, wherever labels appear</span>
+        <span class="settings-field-label">Show icons next to shelves
+            <span class="settings-field-hint">Each shelf's icon before its name, wherever shelves appear</span>
         </span>
         <span class="spacer"></span>
         {% set ms_name = 'show' %}
         {% set ms_mode = 'single' %}
-        {% set ms_label = 'Show icons next to labels' %}
+        {% set ms_label = 'Show icons next to shelves' %}
         {% set ms_items = [{'uid': '', 'name': 'Off'}, {'uid': '1', 'name': 'On'}] %}
         {% set ms_selected = '1' if current_show_label_icons else '' %}
         {% set ms_autosubmit = true %}

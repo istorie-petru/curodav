@@ -586,7 +586,7 @@ class TestQuickAddModal:
         assert 'name="due_at"' in body
         # ...and event-specific fields present.
         assert 'name="start_at"' in body
-        assert 'id="all_day"' in body
+        assert 'class="dtr-allday-box"' in body
 
     def test_route_has_tab_switch_and_shared_save(self, conn):
         resp = dashboard_router.quick_add_form(_request("/quick/add"), conn=conn)

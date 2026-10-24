@@ -546,7 +546,7 @@ def _render_spaces_projects(conn, config: dict, nav: dict | None = None) -> dict
                 "icon": lbl.get("icon") or ("folder" if lbl.get("is_project") else "tag"),
                 "color": lbl.get("color") or "blue",
                 "description": lbl.get("description") or "",
-                "meta": "Project" if lbl.get("is_project") else "Label",
+                "meta": "Project" if lbl.get("is_project") else "Shelf",
             })
         return {"style": "cards", "cards": cards, "scoped": group is not None}
 

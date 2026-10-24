@@ -34,8 +34,7 @@ def _now() -> str:
 
 
 def _habit(conn, uid, title, recurrence="FREQ=DAILY", target=1, **extra):
-    db.save_task_habit_settings(conn, "Habit")
-    row = {"uid": uid, "title": title, "description": "", "status": "active", "tags": ["Habit"],
+    row = {"uid": uid, "title": title, "description": "", "status": "active", "is_habit": 1, "tags": [],
            "recurrence": recurrence, "target_per_day": target, "created_at": _now()}
     row.update(extra)
     db.upsert_task(conn, row)
@@ -146,9 +145,8 @@ class TestHabitDays:
         assert tasks_router._apply_habit_days(rec, days, present) == expected
 
     def test_create_with_days_and_form_prechecks(self, conn):
-        db.save_task_habit_settings(conn, "Habit")
         tasks_router.create_task(title="Swim", description="", due_at="", status="active", tags="",
-                                 tags_labels=["Habit"], recurrence="FREQ=DAILY", target_per_day="1",
+                                 is_habit="1", recurrence="FREQ=DAILY", target_per_day="1",
                                  habit_days=["TU", "TH"], habit_days_present="1", conn=conn)
         task = next(t for t in db.list_habit_tasks(conn) if t["title"] == "Swim")
         assert task["recurrence"] == "FREQ=WEEKLY;BYDAY=TU,TH"
@@ -218,7 +216,7 @@ class TestHabitRepeat:
     def test_update_round_trip(self, conn):
         _habit(conn, "h1", "Gym")
         tasks_router.update_task("h1", title="Gym", description="", due_at="", start_at="", status="active", tags="",
-                                 tags_labels=["Habit"], project="", project_field="", recurrence="",
+                                 is_habit="1", project="", project_field="", recurrence="",
                                  target_per_day="1", habit_days_present="", habit_kind="build", habit_unit="",
                                  reminder_time="", holiday_calendar="", exclude_saturday="", exclude_sunday="",
                                  x_requested_with=None,
@@ -226,7 +224,7 @@ class TestHabitRepeat:
         task = db.get_task(conn, "h1")
         assert (task["recurrence"], task["habits_per_period"]) == ("FREQ=WEEKLY", 3)
         tasks_router.update_task("h1", title="Gym", description="", due_at="", start_at="", status="active", tags="",
-                                 tags_labels=["Habit"], project="", project_field="", recurrence="",
+                                 is_habit="1", project="", project_field="", recurrence="",
                                  target_per_day="1", habit_days_present="", habit_kind="build", habit_unit="",
                                  reminder_time="", holiday_calendar="", exclude_saturday="", exclude_sunday="",
                                  x_requested_with=None,
@@ -312,7 +310,7 @@ class TestSecondPass20260926:
     def test_colour_and_icon_round_trip(self, conn):
         _habit(conn, "h1", "Read")
         tasks_router.update_task("h1", title="Read", description="", due_at="", start_at="", status="active", tags="",
-                                 tags_labels=["Habit"], project="", project_field="", recurrence="",
+                                 is_habit="1", project="", project_field="", recurrence="",
                                  target_per_day="1", habit_days_present="", habit_kind="build", habit_unit="",
                                  reminder_time="", holiday_calendar="", exclude_saturday="", exclude_sunday="",
                                  x_requested_with=None, habits_per_period="", habit_days=[], habit_repeat="daily",
@@ -386,7 +384,7 @@ class TestEditFormMockup20260926:
     def test_amount_habit_round_trip_and_back_to_once(self, conn):
         _habit(conn, "h1", "Water")
         base = dict(title="Water", description="", due_at="", start_at="", status="active", tags="",
-                    tags_labels=["Habit"], project="", project_field="", recurrence="",
+                    is_habit="1", project="", project_field="", recurrence="",
                     habit_days_present="", habit_kind="build", reminder_time="", holiday_calendar="",
                     exclude_saturday="", exclude_sunday="", x_requested_with=None, habits_per_period="",
                     habit_days=[], habit_repeat="daily", conn=conn)
@@ -422,7 +420,6 @@ class TestLookEverywhereAndCancel20260926:
         assert '<a href="/tasks/h1" class="btn ghost" data-modal>' in form
 
     def test_new_habit_cancel_still_closes(self, conn):
-        db.save_task_habit_settings(conn, "Habit")
         form = tasks_router.new_task_form(_request("/tasks/new"), habit=True, conn=conn).body.decode()
         assert 'href="/habits" class="btn ghost" data-modal-cancel' in form
 

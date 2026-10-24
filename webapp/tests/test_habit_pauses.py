@@ -31,8 +31,7 @@ def _now():
 
 
 def _habit(conn, uid, title="Read", **extra):
-    db.save_task_habit_settings(conn, "Habit")
-    row = {"uid": uid, "title": title, "description": "", "status": "active", "tags": ["Habit"],
+    row = {"uid": uid, "title": title, "description": "", "status": "active", "is_habit": 1, "tags": [],
            "recurrence": "FREQ=DAILY", "created_at": _now()}
     row.update(extra)
     db.upsert_task(conn, row)

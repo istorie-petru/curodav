@@ -77,13 +77,18 @@ def upsert_task(
     # to carry it through.
     # NOT NULL DEFAULT 0 columns -- same coercion upsert_event already does
     # for its own holiday-policy columns, see that function's comment.
+    if "is_habit" in data:
+        data["is_habit"] = 1 if data["is_habit"] else 0
+    else:  # rows built without the flag (imports, sync) keep what the task already is
+        data["is_habit"] = conn.execute("SELECT is_habit FROM tasks WHERE uid = ?", (data.get("uid"),)).fetchone()
+        data["is_habit"] = data["is_habit"][0] if data["is_habit"] else 0
     data["exclude_saturday"] = 1 if data.get("exclude_saturday") else 0
     data["exclude_sunday"] = 1 if data.get("exclude_sunday") else 0
     cols = [
         "uid", "title", "description",
         "start_at", "due_at", "status", "progress",
         "recurrence", "completed_at", "created_at", "updated_at",
-        "target_per_day", "habits_per_period", "habit_unit", "habit_kind",
+        "target_per_day", "habits_per_period", "habit_unit", "habit_kind", "is_habit",
         "holiday_calendar", "exclude_saturday", "exclude_sunday",
     ]
     values = [(data.get(c) if c != "target_per_day" else (data.get(c) or 1)) for c in cols]
@@ -195,8 +200,7 @@ def list_tasks(
     q: str | None = None,
     include_habit_tasks: bool = False,
 ) -> list[dict[str, Any]]:
-    """`include_habit_tasks` defaults False -- a task carrying the configured habit label
-        (task_habit_settings.habit_label) is meant to live *only* on Tasks >
+    """`include_habit_tasks` defaults False -- a habit (`is_habit`) is meant to live *only* on Tasks >
         Habits, not the normal Table/Timeline/Board/Calendar/dashboard-widget
         views this function backs almost everywhere in the app. Every one of
         those call sites gets the exclusion for free without needing its own
@@ -214,12 +218,7 @@ def list_tasks(
         clauses.append("title LIKE ?")
         params.append(f"%{q}%")
     if not include_habit_tasks:
-        habit_label = get_task_habit_settings(conn)["habit_label"]
-        excluded_uids = list_object_ids_for_label(conn, "task", habit_label)
-        if excluded_uids:
-            placeholders = ", ".join("?" for _ in excluded_uids)
-            clauses.append(f"uid NOT IN ({placeholders})")
-            params.extend(excluded_uids)
+        clauses.append("is_habit = 0")
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
     # Importance/Urgency used to sort here before that whole feature was
@@ -230,16 +229,8 @@ def list_tasks(
 
 
 def list_habit_tasks(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """The mirror image of list_tasks' default exclusion -- every task
-    carrying the configured habit label, for Tasks > Habits itself."""
-    habit_label = get_task_habit_settings(conn)["habit_label"]
-    uids = list_object_ids_for_label(conn, "task", habit_label)
-    if not uids:
-        return []
-    placeholders = ", ".join("?" for _ in uids)
-    rows = conn.execute(
-        f"SELECT * FROM tasks WHERE uid IN ({placeholders}) ORDER BY title COLLATE NOCASE", uids
-    ).fetchall()
+    """The mirror image of list_tasks' default exclusion -- every habit, for Tasks > Habits itself."""
+    rows = conn.execute("SELECT * FROM tasks WHERE is_habit = 1 ORDER BY title COLLATE NOCASE").fetchall()
     return _attach_tags_bulk(conn, "task", [_row_to_dict(r, _TASK_JSON_FIELDS) for r in rows])
 
 
@@ -721,16 +712,13 @@ def list_tasks_sharing_labels(conn: sqlite3.Connection, label_names: list[str]) 
     labels = [n for n in (label_names or []) if n]
     if not labels:
         return []
-    habit_label = get_task_habit_settings(conn)["habit_label"]
     placeholders = ", ".join("?" for _ in labels)
     rows = conn.execute(
         f"SELECT tasks.* FROM tasks "
-        f"WHERE tasks.uid IN (SELECT DISTINCT object_id FROM object_labels "
-        f"  WHERE object_type = 'task' AND label_name IN ({placeholders}) "
-        f"  AND object_id NOT IN (SELECT object_id FROM object_labels "
-        f"    WHERE object_type = 'task' AND label_name = ?)) "
+        f"WHERE tasks.is_habit = 0 AND tasks.uid IN (SELECT DISTINCT object_id FROM object_labels "
+        f"  WHERE object_type = 'task' AND label_name IN ({placeholders})) "
         f"ORDER BY tasks.title COLLATE NOCASE",
-        (*labels, habit_label),
+        tuple(labels),
     ).fetchall()
     return _attach_tags_bulk(conn, "task", [_row_to_dict(r, _TASK_JSON_FIELDS) for r in rows])
 
@@ -774,12 +762,7 @@ def _search_tasks(
         clauses.append(f"uid NOT IN ({placeholders})")
         params.extend(excluded)
     if not include_habit_tasks:
-        habit_label = get_task_habit_settings(conn)["habit_label"]
-        excluded_uids = list_object_ids_for_label(conn, "task", habit_label)
-        if excluded_uids:
-            placeholders = ", ".join("?" for _ in excluded_uids)
-            clauses.append(f"uid NOT IN ({placeholders})")
-            params.extend(excluded_uids)
+        clauses.append("is_habit = 0")
 
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
@@ -813,21 +796,6 @@ def delete_checklist_items_for_task(conn: sqlite3.Connection, task_uid: str) -> 
     conn.execute("DELETE FROM task_checklist_items WHERE task_uid = ?", (task_uid,))
     conn.commit()
 
-
-def get_task_habit_settings(conn: sqlite3.Connection) -> dict[str, Any]:
-    row = conn.execute("SELECT * FROM task_habit_settings WHERE id = 1").fetchone()
-    if row is None:
-        return {"habit_label": "Habit"}
-    return dict(row)
-
-
-def save_task_habit_settings(conn: sqlite3.Connection, habit_label: str) -> None:
-    conn.execute(
-        "INSERT INTO task_habit_settings (id, habit_label) VALUES (1, ?) "
-        "ON CONFLICT(id) DO UPDATE SET habit_label=excluded.habit_label",
-        (habit_label.strip() or "Habit",),
-    )
-    conn.commit()
 
 
 def upsert_task_completion(

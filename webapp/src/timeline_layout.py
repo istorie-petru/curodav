@@ -14,7 +14,7 @@ live from the `object_labels` table -- see db.py's
 `list_labels_for_object`, which returns them already sorted COLLATE
 NOCASE), so each distinct label gets its own swimlane block with the
 label's name as its header row, and untagged tasks fall into a trailing
-"(No label)" block. This is the faithful equivalent, not a reduction: it
+"(No shelf)" block. This is the faithful equivalent, not a reduction: it
 reuses this app's existing label system (the same tags Table/Board/
 Calendar already show) as the thing the Timeline gutter is organized
 around, replacing the task-list grouping that Phase 1 of the label-space
@@ -29,7 +29,7 @@ from datetime import date, timedelta
 from typing import Any
 
 NO_LABEL_KEY = ""  # assign_swimlanes grouping key for a task with no labels
-NO_LABEL_DISPLAY = "(No label)"
+NO_LABEL_DISPLAY = "(No shelf)"
 
 
 def pack_intervals(
@@ -126,7 +126,7 @@ def _task_label(task: dict) -> tuple[str, str]:
     so the header row shows the real label name. A task can paint only one
     Gantt bar, so a multi-label task lives under its first label rather
     than being duplicated across every label it carries; an untagged task
-    falls into the "(No label)" block."""
+    falls into the "(No shelf)" block."""
     for tag in task.get("tags") or []:
         if tag and tag.strip():
             return tag.strip().lower(), tag.strip()
@@ -185,7 +185,7 @@ def assign_swimlanes(
         display_by_key.setdefault(key, display)
 
     def group_sort_key(key: str) -> str:
-        # "(No label)" always sorts last; real labels in case-insensitive
+        # "(No shelf)" always sorts last; real labels in case-insensitive
         # name order (the key is already lowercased).
         if key == NO_LABEL_KEY:
             return "\uffff"

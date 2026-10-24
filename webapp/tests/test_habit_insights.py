@@ -68,9 +68,8 @@ class TestHabitsPagePanel:
     page row's expandable panel; strength stays a modal stat."""
     def test_renders_strength_and_bars(self, tmp_path):
         with db.connect(tmp_path / "cache.sqlite") as conn:
-            db.save_task_habit_settings(conn, "Habit")
             db.upsert_task(conn, {"uid": "h1", "title": "Read", "description": "", "status": "active",
-                                  "tags": ["Habit"], "recurrence": "FREQ=DAILY",
+                                  "is_habit": 1, "tags": [], "recurrence": "FREQ=DAILY",
                                   "created_at": (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()})
             today = date.today()
             # 2026-09-26: insights show from 14 logged days (INSIGHTS_MIN_DAYS).

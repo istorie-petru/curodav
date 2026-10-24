@@ -4,13 +4,32 @@
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_bulk_actions_bar.html" import bulk_actions_bar, bulk_count %}
-{% set _count %}{{ bulk_count("labels") }}{{ bulk_count("holidays") }}{% endset %}
+{% set _count %}{{ bulk_count("labels") }}{{ bulk_count("holidays") }}{{ bulk_count("time-blocks") }}{% endset %}
 {% call page_header_narrow(title, page_icon, title_extra=_count) %}
 {{ bulk_actions_bar("labels", merge_label="Merge", edit=true) }}
 {{ bulk_actions_bar("holidays") }}
+{{ bulk_actions_bar("time-blocks") }}
+{% if view == 'labels' %}
+<form method="get" action="/settings/labels" id="labels-show-form">
+    {% set fd_name = 'show' %}{% set fd_label = 'Show' %}{% set fd_mode = 'single' %}{% set fd_form_id = 'labels-show-form' %}
+    {% set fd_items = [{'value': '', 'name': 'Active'}, {'value': 'archived', 'name': 'Archived'}, {'value': 'all', 'name': 'All'}] %}
+    {% set fd_selected = show %}
+    {% include '_filter_dropdown.html' %}
+</form>
+{% endif %}
 {% endcall %}
 <div id="modal-target">
 <div class="card table-scroll table-responsive" id="taxonomy-table-wrapper">
+    {% if view in ('holidays', 'time_blocks') %}
+    <form method="get" action="/settings/calendar" class="table-toolbar" id="calendar-view-form">
+        {% set fd_name = 'view' %}{% set fd_label = 'View' %}{% set fd_mode = 'single' %}{% set fd_form_id = 'calendar-view-form' %}
+        {% set fd_items = [{'value': 'holidays', 'name': 'Holidays'}, {'value': 'time-blocks', 'name': 'Sleep & Leisure'}] %}
+        {% set fd_selected = 'time-blocks' if view == 'time_blocks' else 'holidays' %}
+        {% include '_filter_dropdown.html' %}
+        <span class="spacer"></span>
+        <a href="{{ new_url }}" data-modal class="btn ghost btn-sm btn-icon-only" title="Add {{ noun }}" aria-label="Add {{ noun }}">{{ icon('plus', 'icon-sm') }}</a>
+    </form>
+    {% endif %}
     <div id="taxonomy-table" data-view="{{ view }}">
         <table class="entity-table labels-table">
             <thead>

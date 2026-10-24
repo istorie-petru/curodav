@@ -13,7 +13,7 @@
 <div class="card">
 {% set _rep0 = habit_repeat_choice(task, week_start(request)) %}
 <form method="post" id="habit-task-form" data-repeat="{{ _rep0.mode }}" data-goal="{{ 'amount' if task and (task.target_per_day or 1) > 1 else 'once' }}" class="habit-task-form{% if task and task.habit_kind == 'avoid' %} is-avoid{% endif %}" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}" data-cc-change="task" data-cc-action="{% if task %}edit{% else %}create{% endif %}">
-    <input type="hidden" name="tags_labels" value="{{ habit_label }}">
+    <input type="hidden" name="is_habit" value="1">
     <div class="field-grid">
         {{ title_row(task.title if task else '', autofocus=true) }}
         {% set _look = habit_look(task) %}

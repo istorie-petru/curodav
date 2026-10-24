@@ -165,13 +165,13 @@ class TestWeekViewStrip:
 
 
 class TestDayViewStrip:
-    def test_template_has_strip_headers(self, conn):
+    def test_all_day_items_are_an_agenda_list_shown_only_when_there_are_some(self, conn):
         today_iso = date.today().isoformat()
-        resp = calendar_router.day_view(today_iso, _request(f"/calendar/day/{today_iso}"), conn=conn)
-        body = resp.body.decode()
-        assert "time-grid-top" in body
-        assert "time-grid-allday day" in body
-        assert 'class="allday-cols day"' in body
+        empty = calendar_router.day_view(today_iso, _request(f"/calendar/day/{today_iso}"), conn=conn).body.decode()
+        assert "time-grid-top" in empty and 'class="day-agenda' not in empty
+        _seed_event(conn, "d_allday", start_at=f"{today_iso}T00:00:00", end_at=f"{today_iso}T23:59:00", all_day=True)
+        body = calendar_router.day_view(today_iso, _request(f"/calendar/day/{today_iso}"), conn=conn).body.decode()
+        assert 'class="day-agenda' in body and "time-grid-allday" not in body
         assert ">All day<" in body
 
     def test_all_day_event_and_task_render(self, conn):

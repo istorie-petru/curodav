@@ -120,13 +120,13 @@ class TestTimesPerPeriodField:
         with db.connect(tmp_path / "cache.sqlite") as conn:
             now = datetime.now(timezone.utc).isoformat()
             db.upsert_task(conn, {"uid": "h1", "title": "Run", "description": "", "status": "active",
-                                  "tags": ["Habit"], "recurrence": "FREQ=WEEKLY", "created_at": now})
+                                  "is_habit": 1, "tags": [], "recurrence": "FREQ=WEEKLY", "created_at": now})
             tasks_router.update_task("h1", title="Run", description="", due_at="", start_at="", status="active",
-                                     tags="", tags_labels=["Habit"], recurrence="FREQ=WEEKLY", target_per_day="1",
+                                     tags="", is_habit="1", recurrence="FREQ=WEEKLY", target_per_day="1",
                                      habits_per_period="3", conn=conn)
             assert db.get_task(conn, "h1")["habits_per_period"] == 3
             # A form without the field (plain task form) keeps the value.
             tasks_router.update_task("h1", title="Run", description="", due_at="", start_at="", status="active",
-                                     tags="", tags_labels=["Habit"], recurrence="FREQ=WEEKLY", target_per_day="1",
+                                     tags="", is_habit="1", recurrence="FREQ=WEEKLY", target_per_day="1",
                                      conn=conn)
             assert db.get_task(conn, "h1")["habits_per_period"] == 3

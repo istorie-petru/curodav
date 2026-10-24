@@ -52,7 +52,7 @@ class TestRendering:
 
         body = calendar_router.new_event_form(_req("/events/new"), conn=conn).body.decode()
         assert 'class="dtr-title">Date &amp; time</span>' in body
-        assert 'id="all_day" name="all_day"' in body
+        assert 'name="all_day" value="1" class="dtr-allday-box"' in body
         assert body.count('data-dtf="date"') == 2 and body.count('data-dtf="time"') == 2
         assert 'type="date"' not in body and "data-dtp" not in body
 

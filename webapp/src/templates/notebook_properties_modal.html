@@ -20,9 +20,8 @@
         </div>
         {% if not document.is_template %}
         {% set ms_form_id = 'notebook-properties-form' %}
-        {% set labels_single = true %}{% include "_labels_row.html" %}
-        {% set pf_form_id = 'notebook-properties-form' %}
-        {% include "_project_field.html" %}
+        {% set tag_type = 'notebook' %}{% set tag_uid = document.uid %}{% set tag_old = document.tags %}{% set tags_single = true %}
+        {% include "_tag_row.html" %}
         {% endif %}
         <div class="field">
             {% set ms_form_id = 'notebook-properties-form' %}

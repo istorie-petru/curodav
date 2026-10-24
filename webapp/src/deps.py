@@ -19,7 +19,7 @@ from jinja2 import pass_context
 from jinja2.ext import Extension
 from markupsafe import Markup, escape
 
-from . import db, habit_heatmap, habit_view, recurrence_text, terminology
+from . import db, habit_heatmap, habit_view, recurrence_text, tags, terminology
 from .header_views import header_views, settings_group
 from .caldav_bridge import CalDavBridge
 
@@ -641,6 +641,19 @@ def _project_label_names(request: Request) -> frozenset[str]:
 
 
 templates.env.globals["project_label_names"] = _project_label_names
+
+
+def _tag_picker(request: Request, object_type: str, object_id: str, old_labels: list[str]) -> dict:
+    """Options and picks of the Tag dropdown (tags.picker); the old labels alone when the DB cannot be read."""
+    try:
+        with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
+            return tags.picker(conn, object_type, object_id, list(old_labels or []))
+    except Exception:
+        names = list(old_labels or [])
+        return {"items": [{"uid": n, "name": n} for n in names], "selected": names}
+
+
+templates.env.globals["tag_picker"] = _tag_picker
 
 
 def _format_time_value(value: str, fmt: str) -> str:

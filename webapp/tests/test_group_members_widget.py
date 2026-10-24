@@ -295,5 +295,5 @@ class TestRenderedWidgetTemplate:
         html = templates.get_template("_widget_group_members.html").render(
             data=data, icon=lambda *a, **k: "", relative_date=lambda v: v
         )
-        assert "No labels in this group yet." in html
+        assert "No shelves in this space yet." in html
         assert 'class="filled-cards-grid"' not in html

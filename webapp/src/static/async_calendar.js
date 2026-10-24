@@ -30,7 +30,14 @@
       if (prevLink && gridEl.dataset.prev) prevLink.href = pageBase + "?date_=" + gridEl.dataset.prev + lq;
       if (nextLink && gridEl.dataset.next) nextLink.href = pageBase + "?date_=" + gridEl.dataset.next + lq;
       if (labelEl && gridEl.dataset.labelText) {
-        labelEl.textContent = gridEl.dataset.labelText;
+        var longEl = labelEl.querySelector(".cal-nav-long");
+        var shortEl = labelEl.querySelector(".cal-nav-short");
+        if (longEl && shortEl) {
+          longEl.textContent = gridEl.dataset.labelText;
+          shortEl.textContent = gridEl.dataset.labelShort || gridEl.dataset.labelText;
+        } else {
+          labelEl.textContent = gridEl.dataset.labelText;
+        }
         document.title = gridEl.dataset.labelText + " - Calendar";
       }
     }

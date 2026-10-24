@@ -1,11 +1,6 @@
-{% set _show_status = label_status and label_status != 'Archived' and not (hide_redundant_status_pills is defined and hide_redundant_status_pills) %}
 {% set _show_deadline = label_deadline and not (hide_redundant_status_pills is defined and hide_redundant_status_pills) %}
-{% if _show_status or _show_deadline or label_archived_on %}
-{% set _status_color = {'Open': 'blue', 'Pending': 'orange', 'Pending Archiving': 'green'} %}
+{% if _show_deadline or label_archived_on %}
 <div class="toolbar label-status">
-    {% if _show_status %}
-    <span class="cell-tag tag-{{ _status_color.get(label_status, 'gray') }}">{{ label_status }}</span>
-    {% endif %}
     {% if _show_deadline %}
     <span class="cell-tag tag-{{ label_deadline.color }} label-deadline is-{{ label_deadline.state }}">{{ icon('flag', 'icon-sm') }} {{ label_deadline.text }}</span>
     {% endif %}

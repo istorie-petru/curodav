@@ -1,0 +1,19 @@
+{# Canonical Tag row: the one dropdown that replaces the Labels and Project pickers. It only picks existing tags (tags are
+   made in the label's own edit modal). Set `tag_type` ('task', 'event', 'notebook', 'contact'), `tag_uid` (the item's uid,
+   empty for a new one) and `tag_old` (the item's current label names) before including; `tags_single` for one-tag forms,
+   `tag_prefill` to preselect on a new item. Posts `item_tags`. #}
+{% set _single = tags_single | default(false) %}
+{% set _pick = tag_picker(request, tag_type, tag_uid | default(''), (tag_old | default([])) + (tag_prefill | default([]))) %}
+{% set _sel = _pick.selected %}
+<input type="hidden" name="item_tags_field" value="1"{% if ms_form_id | default('') %} form="{{ ms_form_id }}"{% endif %}>
+<div class="field">
+    {% set ms_name = 'item_tags' %}
+    {% set ms_icon = 'tag' %}
+    {% set ms_label = 'Tag' if _single else 'Tags' %}
+    {% set ms_items = ([{'uid': '', 'name': 'No tag'}] + _pick['items']) if _single else _pick['items'] %}
+    {% set ms_selected = (_sel | first | default('')) if _single else _sel %}
+    {% set ms_mode = 'single' if _single else 'select' %}
+    {% set ms_allow_new = false %}
+    {% set ms_pill = true %}
+    {% include "_widget_list_multiselect.html" %}
+</div>

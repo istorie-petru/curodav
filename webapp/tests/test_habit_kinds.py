@@ -30,8 +30,7 @@ def _now():
 
 
 def _habit(conn, uid, title, **extra):
-    db.save_task_habit_settings(conn, "Habit")
-    row = {"uid": uid, "title": title, "description": "", "status": "active", "tags": ["Habit"],
+    row = {"uid": uid, "title": title, "description": "", "status": "active", "is_habit": 1, "tags": [],
            "recurrence": "FREQ=DAILY", "created_at": (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()}
     row.update(extra)
     db.upsert_task(conn, row)
@@ -67,14 +66,13 @@ class TestFormFields:
         assert len(tasks_router._habit_unit_value("x" * 50)) == 24
 
     def test_create_and_plain_form_preserves(self, conn):
-        db.save_task_habit_settings(conn, "Habit")
         tasks_router.create_task(title="No sugar", description="", due_at="", status="active", tags="",
-                                 tags_labels=["Habit"], recurrence="FREQ=DAILY", target_per_day="1",
+                                 is_habit="1", recurrence="FREQ=DAILY", target_per_day="1",
                                  habit_kind="avoid", habit_unit="", conn=conn)
         t = next(t for t in db.list_habit_tasks(conn) if t["title"] == "No sugar")
         assert t["habit_kind"] == "avoid"
         tasks_router.update_task(t["uid"], title="No sugar!", description="", due_at="", start_at="", status="active",
-                                 tags="", tags_labels=["Habit"], recurrence="FREQ=DAILY", target_per_day="1", conn=conn)
+                                 tags="", is_habit="1", recurrence="FREQ=DAILY", target_per_day="1", conn=conn)
         assert db.get_task(conn, t["uid"])["habit_kind"] == "avoid"
 
 

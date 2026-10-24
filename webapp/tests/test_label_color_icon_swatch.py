@@ -146,7 +146,8 @@ class TestExpandedPaletteAndGroupedIcons:
         resp = labels_router.edit_label_modal("Uni", _request("/labels/Uni/edit"), conn=conn)
         body = resp.body.decode()
         # 2026-09-26: Look dropdown swatches, named by their title.
-        assert body.count('class="look-swatch') == 24
+        label_look = body.split('class="label-tag-template"')[0]  # the tag rows carry their own pickers
+        assert label_look.count('class="look-swatch') == 24
         for name in ("Red", "Lime", "Mint", "Teal", "Cyan", "Indigo", "Magenta", "Brown", "Slate"):
             assert f'class="look-swatch" title="{name}"' in body
 

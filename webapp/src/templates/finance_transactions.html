@@ -22,7 +22,7 @@
 {% macro sum_row(title, amount, currency, kind='') %}<tr class="finance-ledger-total"><td colspan="4">{{ title }}</td><td class="finance-num">{{ money(amount, currency, kind == 'sum') }}</td><td></td></tr>{% endmacro %}
 {% call page_header_narrow("Transactions", "list") %}
     <a class="icon-btn" href="?month={{ prev_month }}{% if account %}&account={{ account | urlencode }}{% endif %}" title="Previous month" aria-label="Previous month">{{ icon('chevron-left', 'icon-sm') }}</a>
-    <span class="cal-nav-label" aria-live="polite">{{ month_label }}</span>
+    <span class="cal-nav-label" aria-live="polite"><span class="cal-nav-long">{{ month_label }}</span><span class="cal-nav-short">{{ month_label_short }}</span></span>
     <a class="icon-btn" href="?month={{ next_month }}{% if account %}&account={{ account | urlencode }}{% endif %}" title="Next month" aria-label="Next month">{{ icon('chevron-right', 'icon-sm') }}</a>
     <form method="get" action="/finance/transactions" id="finance-filter-form" class="finance-header-form" data-smart-form>
         <input type="hidden" name="month" value="{{ month }}">

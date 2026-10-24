@@ -87,8 +87,8 @@ class TestFormsRenderChipMultiselectNotTextInput:
         resp = tasks_router.edit_task_form("t1", _request("/tasks/t1/edit"), conn=conn)
         body = resp.body.decode()
         assert 'class="tag-input"' not in body
-        assert 'name="tags_labels" value="Work"' in body
-        assert 'name="tags_labels" value="Urgent"' in body
+        assert 'name="item_tags" value="Work"' in body
+        assert 'name="item_tags" value="Urgent"' in body
         assert 'checked' in body  # at least one checkbox pre-checked
 
     def test_event_form_has_no_tag_input(self, conn):
@@ -96,21 +96,23 @@ class TestFormsRenderChipMultiselectNotTextInput:
         resp = calendar_router.edit_event_form("e1", _request("/events/e1/edit"), conn=conn)
         body = resp.body.decode()
         assert 'class="tag-input"' not in body
-        assert 'name="tags_labels" value="Lecture"' in body
+        assert 'name="item_tags" value="Lecture"' in body
 
     def test_contact_form_has_no_tag_input(self, conn):
         _seed_contact(conn, "c1", tags=["Professor"])
         resp = contacts_router.edit_contact_form("c1", _request("/contacts/c1/edit"), conn=conn)
         body = resp.body.decode()
         assert 'class="tag-input"' not in body
-        assert 'name="tags_labels" value="Professor"' in body
+        assert 'name="item_tags" value="Professor"' in body
 
 
     def test_new_task_form_lists_existing_labels_unchecked(self, conn):
         _seed_task(conn, "t1", tags=["Existing"])
-        resp = tasks_router.new_task_form(_request("/tasks/new"), conn=conn)
-        body = resp.body.decode()
-        assert 'name="tags_labels" value="Existing"' in body
+        from src import tags
+
+        db.upsert_label_config(conn, {"name": "Existing"})
+        picked = tags.picker(conn, "task", "", [])
+        assert [i["uid"] for i in picked["items"]] == ["Existing"] and picked["selected"] == []
 
 
 class TestCreateWithTwoLabelsStoresBoth:

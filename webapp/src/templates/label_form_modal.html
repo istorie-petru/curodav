@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}{{ ('Edit ' if l else 'New ') ~ ('project' if is_project_form else 'label') }}{% endblock %}
+{% block title %}{{ ('Edit ' if l else 'New ') ~ ('project' if is_project_form else 'shelf') }}{% endblock %}
 {% block content %}
-{% set _noun = 'project' if is_project_form else 'label' %}
+{% set _noun = 'project' if is_project_form else 'shelf' %}
 <!-- Everything fits in one modal: Name, Group, Role (Plain / Project),
      Deadline, Page (Dashboard or Sections), Pins; colour + icon are the
      Look dropdown with the banner button at the end of its row. See routers/labels.py's edit_label_modal /

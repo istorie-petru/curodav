@@ -15,7 +15,7 @@
             {% set _s = t.strip %}
             <div class="kanban-card" data-uid="{{ t.uid }}" data-status="{{ t.status }}">
                 {% if _s.scope %}
-                <div class="kanban-card-strip{% if not _s.banner %} cell-tag cal-{{ label_color(request, _s.scope) }}{% endif %}">
+                <div class="kanban-card-strip{% if not _s.banner %} cell-tag cal-{{ (t.tag_items | first).color if t.tag_items else label_color(request, _s.scope) }}{% endif %}">
                     {% if _s.banner %}
                     {% if _s.banner.version %}
                     <img src="/banners/image?scope={{ _s.banner.scope|urlencode }}&amp;v={{ _s.banner.version }}" alt="" draggable="false">
@@ -27,13 +27,10 @@
                 {% endif %}
                 <div class="kanban-card-body">
                     <a class="kanban-card-title" href="/tasks/{{ t.uid }}" data-modal draggable="false">{{ t.title }}</a>
-                    {% set _icons = [] %}
-                    {% for tag in _s.labels %}{% if label_icon(request, tag) %}{% set _ = _icons.append(tag) %}{% endif %}{% endfor %}
-                    {% if t.due_at or _s.project or _icons %}
+                    {% if t.due_at or t.tag_items %}
                     <div class="kanban-card-meta">
                         {% if t.due_at %}<span class="cell-tag tag-gray">{{ t.due_at | relative_date }}</span>{% endif %}
-                        {% if _s.project %}{{ label_pill(_s.project, 'modal') }}{% endif %}
-                        {% for tag in _icons %}{{ icon_pill(label_color(request, tag), label_icon(request, tag), tag) }}{% endfor %}
+                        {% for tag in t.tag_items %}{{ icon_pill(tag.color, tag.icon or 'tag', tag.name) }}{% endfor %}
                     </div>
                     {% endif %}
                 </div>

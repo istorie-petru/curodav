@@ -1,6 +1,6 @@
 {% from "_empty_state.html" import empty_state %}
 {% from "_unscheduled_task_item.html" import unscheduled_task_item with context %}
-<div class="project-calendar-layout" id="week-grid" data-date="{{ monday.isoformat() }}" data-label="{{ active_label | default('') }}" data-label-text="{{ label_text }}" data-prev="{{ prev_week }}" data-next="{{ next_week }}">
+<div class="project-calendar-layout" id="week-grid" data-date="{{ monday.isoformat() }}" data-label="{{ active_label | default('') }}" data-label-text="{{ label_text }}" data-label-short="{{ label_short }}" data-prev="{{ prev_week }}" data-next="{{ next_week }}">
     <div class="card calendar-viewport project-calendar-grid">
     <div class="time-grid-wrap">
     <div class="time-grid-top">
@@ -58,7 +58,12 @@
     </div>
     </div>
 
+    <button type="button" class="planner-sheet-handle" id="planner-sheet-handle" aria-controls="unscheduled-panel" aria-expanded="false">{{ icon('clock', 'icon-sm') }}<span>Unscheduled</span>{{ icon('chevron-up', 'icon-sm') }}</button>
     <aside class="notebook-sidebar project-calendar-unscheduled" id="unscheduled-panel">
+        <div class="planner-sheet-bar">
+            <span class="planner-sheet-title">{{ icon('clock', 'icon-sm') }} Unscheduled work</span>
+            <button type="button" class="icon-btn" id="planner-sheet-close" aria-label="Close">{{ icon('chevron-down', 'icon-sm') }}</button>
+        </div>
         <div class="notebook-sidebar-head unscheduled-panel-head">
             <div class="notebook-sidebar-select" data-notebook-sidebar-select>
                 <button type="button" class="notebook-sidebar-select-trigger" aria-haspopup="listbox" aria-expanded="false">
@@ -99,7 +104,7 @@
                 <a class="sidebar-allday-row{% if bar.is_past %} is-past{% endif %}" href="/events/{{ bar.event.uid }}{% if bar.event.recurrence %}?occurrence_date={{ bar.event.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ bar.event.title }}"><span class="color-dot cal-{{ bar.event.calendar_color }}"></span><span class="sidebar-allday-title">{{ bar.event.title }}</span></a>
                 {% endfor %}
                 {% for t in day.tasks %}
-                <a class="sidebar-allday-row{% if day.is_past and t.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }}<span class="sidebar-allday-title">{{ t.title }}</span></a>
+                <a class="sidebar-allday-row{% if day.is_past and t.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}">{{ icon(((t.tag_items | first).icon if t.tag_items else '') | default('alert-triangle', true), 'icon-sm') }}<span class="sidebar-allday-title">{{ t.title }}</span></a>
                 {% endfor %}
             </div>
             {% endif %}

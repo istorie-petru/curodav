@@ -23,10 +23,9 @@
 <div class="time-grid-head day">
     <div class="thd {% if day == today_iso %}is-today{% endif %} {% if day < today_iso %}is-past{% endif %}"><span class="thd-link"{% if day == today_iso %} aria-current="date"{% endif %}><span class="thd-dow">{{ day_date.strftime('%A') }}</span> <span class="thd-num">{{ day_date.day }}</span></span></div>
 </div>
-<div class="time-grid-allday day">
-    <div class="allday-gutter">All day</div>
-    <div class="allday-cols day">
-        <div class="allday-col {% if day < today_iso %}is-past{% endif %}">
+{% if all_day or tasks or habits %}
+<div class="day-agenda{% if day < today_iso %} is-past{% endif %}">
+    <div class="section-row">All day</div>
             {% for e in all_day %}
             <a class="allday-task" href="/events/{{ e.uid }}{% if e.recurrence %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ e.title }}">
                 <span class="color-dot cal-{{ e.calendar_color }}"></span>
@@ -34,7 +33,7 @@
             </a>
             {% endfor %}
             {% for t in tasks %}
-            <a class="allday-task{% if day < today_iso and t.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }}<span class="allday-title">{{ t.title }}</span></a>
+            <a class="allday-task{% if day < today_iso and t.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ t.uid }}/edit" data-modal title="{{ t.title }}">{{ icon(((t.tag_items | first).icon if t.tag_items else '') | default('alert-triangle', true), 'icon-sm') }}<span class="allday-title">{{ t.title }}</span></a>
             {% endfor %}
             {% for h in habits | default([]) %}
             {% set _c = ' habit-c-' ~ h.color if h.color else '' %}
@@ -55,9 +54,8 @@
             </form>
             {% endif %}
             {% endfor %}
-        </div>
-    </div>
 </div>
+{% endif %}
 </div>
 <div class="time-grid-body">
     <div class="time-gutter">

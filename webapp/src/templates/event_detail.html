@@ -1,6 +1,6 @@
 {% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
-{% from "_label_pill.html" import label_pill with context %}
+{% from "_label_pill.html" import label_pill, tag_pill with context %}
 {% from "_detail_cover.html" import detail_cover with context %}
 {% from "_detail_section.html" import detail_section %}
 {% block title %}{{ event.title if event else "Event" }}{% endblock %}
@@ -21,9 +21,6 @@
 <div class="modal-body">
 {% call detail_section('Details') %}
     <div class="detail-meta-grid">
-        {% set _projects = project_label_names(request) %}
-        {% set _proj = (event.tags or []) | select('in', _projects) | list %}
-        {% set _plain = (event.tags or []) | reject('in', _projects) | list %}
         {% set _people = object_contacts(request, 'event', event.uid) %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Start</span>
@@ -35,16 +32,10 @@
             <span class="detail-meta-value">{% if event.all_day %}{{ event.end_at | relative_date }}{% else %}{{ event.end_at | relative_date }} {{ event.end_at | fmt_time }}{% endif %}</span>
         </div>
         {% endif %}
-        {% if _proj %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Project</span>
-            <span class="detail-meta-value">{% for tag in _proj %}{{ label_pill(tag, 'modal') }} {% endfor %}</span>
-        </div>
-        {% endif %}
-        {% if _plain %}
+        {% if event.tag_items %}
         <div class="detail-meta-item detail-meta-wide">
-            <span class="detail-meta-label">Labels</span>
-            <span class="detail-meta-value">{% for tag in _plain %}{{ label_pill(tag, 'modal') }} {% endfor %}</span>
+            <span class="detail-meta-label">Tags</span>
+            <span class="detail-meta-value">{% for tag in event.tag_items %}{{ tag_pill(tag) }} {% endfor %}</span>
         </div>
         {% endif %}
         {% if _people %}

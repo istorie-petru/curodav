@@ -25,7 +25,7 @@ from urllib.parse import quote, unquote, urlparse
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import clock, db
+from .. import clock, db, tags
 from ..deps import get_db, templates
 
 router = APIRouter(prefix="/settings/labels", tags=["labels"])
@@ -253,6 +253,13 @@ def _labels_context(conn, request: Request, kind: str = "labels") -> dict:
 
     want_projects = kind == "projects"
     labels = [lbl for lbl in db.list_labels(conn) if bool(lbl.get("is_project")) == want_projects]
+    show = request.query_params.get("show", "") if not want_projects else "all"
+    if show not in ("archived", "all"):
+        show = ""
+    if show == "archived":
+        labels = [lbl for lbl in labels if lbl.get("archived_at")]
+    elif show == "":
+        labels = [lbl for lbl in labels if not lbl.get("archived_at")]
     for lbl in labels:
         # Status is only needed for is_project rows (the badge shows it) --
         # skipped for everything else rather than calling db.project_status
@@ -279,9 +286,10 @@ def _labels_context(conn, request: Request, kind: str = "labels") -> dict:
         "new_url": "/settings/projects/new" if want_projects else "/settings/labels/new",
         "page_icon": "folder" if want_projects else "tag",
         "group_default_icon": db.GROUP_DEFAULT_ICON,
-        "title": "Projects" if want_projects else "Labels",
+        "title": "Projects" if want_projects else "Shelves",
         "labels": labels,
         "has_labels": bool(labels),
+        "show": show,
     }
 
 
@@ -308,6 +316,15 @@ def auto_labels_json(name: str, conn=Depends(get_db)):
     return JSONResponse(db.get_auto_labels(conn, name))
 
 
+async def _tag_rows(request: Request) -> list[dict]:
+    return tags.parse_rows(await request.form())
+
+
+def _rows_of(tag_rows) -> list[dict]:
+    """Direct calls (tests, internal callers) leave the Depends default in place; that means no tag rows."""
+    return tag_rows if isinstance(tag_rows, list) else []
+
+
 @router.get("/{name}/edit")
 def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
     """The label edit modal -- uses the unified label_form_modal.html."""
@@ -325,6 +342,7 @@ def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
             "group_options": [g["name"] for g in db.list_groups(conn)],
             "auto_label_items": _auto_label_items(conn, name),
             "auto_labels_selected": db.get_auto_labels(conn, name),
+            "label_tags": tags.tags_of_label(conn, name),
             "banner": banner,
         },
     )
@@ -361,10 +379,15 @@ def update_label(
     sidebar_pin: str = Form(""),
     widget_pin: str = Form(""),
     auto_labels: list[str] | None = Form(None),
+    tag_rows: list[dict] = Depends(_tag_rows),
     request: Request = None,
     conn=Depends(get_db),
 ):
     new_name = (new_name or "").strip() or name
+    tag_rows = _rows_of(tag_rows)
+    error = tags.validate_rows(conn, new_name, tag_rows)
+    if error:
+        raise HTTPException(400, error)
     icon = (icon or "").strip() or None
     page = _page_fields(page_fields, deadline_date, page_type, agenda_widget, tasks_widget, contacts_widget,
                         notebook_widget, sidebar_pin, widget_pin)
@@ -391,6 +414,7 @@ def update_label(
     # the label's page (routers/label_pages.py), not a side effect of
     # changing the role.
     db.upsert_label_config(conn, row)
+    tags.apply_rows(conn, name, tag_rows, COLORS)
     if row["is_project"]:
         db.set_auto_labels(conn, name, auto_labels or [])
     if renamed_from and request is not None:
@@ -411,6 +435,8 @@ def convert_to_project(name: str, conn=Depends(get_db)):
 @router.post("/{name}/rename")
 def rename_label(name: str, new_name: str = Form(...), conn=Depends(get_db)):
     _reject_reserved_label_name((new_name or "").strip())
+    if new_name.strip().lower() != name.lower() and tags.get_tag(conn, new_name.strip()):
+        raise HTTPException(400, "A tag with that name already exists")
     db.rename_label(conn, name, new_name)
     return RedirectResponse(url="/settings/labels", status_code=303)
 
@@ -472,6 +498,7 @@ def new_label_modal(request: Request, project: bool = False, return_to: str = ""
             "auto_label_items": _auto_label_items(conn, ""),
             "auto_labels_selected": db.get_auto_labels(conn, copy) if prefill else [],
             "return_to": return_to,
+            "label_tags": [],
         },
     )
 
@@ -494,6 +521,7 @@ def create_label(
     sidebar_pin: str = Form(""),
     widget_pin: str = Form(""),
     auto_labels: list[str] | None = Form(None),
+    tag_rows: list[dict] = Depends(_tag_rows),
     conn=Depends(get_db),
 ):
     """Create a new label with zero items attached -- labels are first-class
@@ -502,7 +530,7 @@ def create_label(
     """
     new_name = new_name.strip()
     if not new_name:
-        raise HTTPException(400, "Label name is required")
+        raise HTTPException(400, "Shelf name is required")
     _reject_reserved_label_name(new_name)
 
     icon = (icon or "").strip() or None
@@ -519,7 +547,15 @@ def create_label(
         "created_at": _now(),
         **page,
     }
+    if tags.name_taken(conn, new_name):
+        raise HTTPException(400, "A tag or shelf with that name already exists")
+    tag_rows = _rows_of(tag_rows)
+    error = tags.validate_rows(conn, new_name, tag_rows)
+    if error:
+        raise HTTPException(400, error)
     db.upsert_label_config(conn, row)
+    tags.add_default_tag(conn, new_name, row["color"], icon or "")
+    tags.apply_rows(conn, new_name, tag_rows, COLORS)
     if row["is_project"]:
         db.set_auto_labels(conn, new_name, auto_labels or [])
     return RedirectResponse(url="/settings/projects" if row["is_project"] else "/settings/labels", status_code=303)
@@ -543,7 +579,7 @@ async def bulk_delete_labels(request: Request, conn=Depends(get_db)):
     payload = await request.json()
     names = payload.get("uids") or []
     if not names:
-        return JSONResponse({"error": "no labels selected"}, status_code=400)
+        return JSONResponse({"error": "no shelves selected"}, status_code=400)
     for name in names:
         db.delete_label_config(conn, name)
     return JSONResponse({"ok": True, "count": len(names)})
@@ -578,7 +614,7 @@ def bulk_merge_labels(uids: list[str] = Form([]), dest_name: str = Form(...), co
     skipping here avoids the pointless call)."""
     dest_name = (dest_name or "").strip()
     if not dest_name:
-        raise HTTPException(400, "Choose a label to merge into")
+        raise HTTPException(400, "Choose a shelf to merge into")
     _reject_reserved_label_name(dest_name)
     for name in uids:
         if name and name != dest_name:

@@ -19,7 +19,7 @@
 {% call detail_section('Details') %}
     <div class="detail-meta-grid">
         <div class="detail-meta-item">
-            <span class="detail-meta-label">Labels</span>
+            <span class="detail-meta-label">Shelves</span>
             <span class="detail-meta-value">{{ labels|length }}</span>
         </div>
         <div class="detail-meta-item">
@@ -28,7 +28,7 @@
         </div>
         {% if labels %}
         <div class="detail-meta-item detail-meta-wide">
-            <span class="detail-meta-label">In this group</span>
+            <span class="detail-meta-label">In this space</span>
             <span class="detail-meta-value">{% for l in labels %}{{ label_pill(l.name, 'modal') }} {% endfor %}</span>
         </div>
         {% endif %}
@@ -39,7 +39,7 @@
 {% set footer_back_url = '/settings/groups' %}
 {% set footer_delete_url = '/groups/' ~ (group.name|urlencode) ~ '/delete' %}
 {% set footer_delete_mode = 'confirm' %}
-{% set footer_delete_label = 'Delete the group "' ~ group.name ~ '"? Its labels stay, ungrouped.' %}
+{% set footer_delete_label = 'Delete the space "' ~ group.name ~ '"? Its shelves stay, ungrouped.' %}
 {% set footer_extra_html %}<a class="btn ghost" href="/groups/{{ group.name|urlencode }}">{{ icon('external-link', 'icon-sm') }} Open page</a>{% endset %}
 {% set footer_primary_href = '/groups/' ~ (group.name|urlencode) ~ '/edit' %}
 {% set footer_primary_label = 'Edit' %}

@@ -21,7 +21,7 @@ BUNDLES = {
         "async_crud", "inline_edit", "tag_input", "recurrence_picker", "series_scope", "reminders_picker",
         "date_time_fields", "stepper", "dashboard_widget_preview", "avatar_cropper", "upload_zone", "contact_draft",
         "contact_phone_email_rows", "entry_reference_pages", "citation_fields", "entry_fields",
-        "task_habit_field_toggle", "label_role_picker", "label_form_picker", "label_auto_apply", "event_format_toggle",
+        "label_role_picker", "label_form_picker", "label_auto_apply", "event_format_toggle",
         "holiday_date_sync", "notebook_properties_rows", "notebook_field_options_rows", "notebook_new_note",
         "smart_region", "finance_task_rows", "finance_transaction_form", "calendar_past", "command_palette", "quick_add", "quick_next",
     ],

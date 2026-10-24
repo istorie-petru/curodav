@@ -104,6 +104,7 @@
       // below.
       if (e.target.closest(".unscheduled-row-actions")) return;
       e.preventDefault();
+      setSheet(false);
       const ghost = item.cloneNode(true);
       ghost.classList.add("drag-ghost");
       document.body.appendChild(ghost);
@@ -214,8 +215,27 @@
       finish(); // interruption: drop everything, submit nothing
     }
 
-    item.addEventListener("pointerdown", begin);
+    // Touch: a long press arms the drag (a short swipe still scrolls the sheet); mouse and pen start at once.
+    item.addEventListener("pointerdown", (e) => { if (e.pointerType !== "touch") begin(e); });
+    if (window.CCTouchHold) {
+      window.CCTouchHold.bind(item, (p) => begin({ button: 0, target: item, preventDefault() {}, clientX: p.clientX, clientY: p.clientY }));
+    }
   }
+
+  // Phone planner: the Unscheduled work list is a sheet rising from the bottom bar (CSS hides it on desktop).
+  function setSheet(open) {
+    const panel = document.getElementById("unscheduled-panel");
+    const handle = document.getElementById("planner-sheet-handle");
+    if (panel) panel.classList.toggle("is-open", open);
+    if (handle) handle.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  document.addEventListener("click", (e) => {
+    const panel = document.getElementById("unscheduled-panel");
+    if (!panel) return;
+    if (e.target.closest("#planner-sheet-handle")) setSheet(!panel.classList.contains("is-open"));
+    else if (e.target.closest("#planner-sheet-close")) setSheet(false);
+    else if (panel.classList.contains("is-open") && !panel.contains(e.target)) setSheet(false);
+  });
 
   // ------------------------------------------------------------------ //
   // 2. Move / resize an existing work-allocation block

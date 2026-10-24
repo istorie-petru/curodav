@@ -1,11 +1,11 @@
 {% from "_inputs.html" import text_input %}
 {% extends "base.html" %}
-{% block title %}{% if group %}Edit group{% else %}New group{% endif %}{% endblock %}
+{% block title %}{% if group %}Edit space{% else %}New space{% endif %}{% endblock %}
 {% block content %}
 {% from "_look_picker.html" import look_picker %}
 <div id="modal-target">
 <div class="modal-header">
-<h1>{% if group %}Edit group{% else %}New group{% endif %}</h1>
+<h1>{% if group %}Edit space{% else %}New space{% endif %}</h1>
 </div>
 <div class="modal-body">
 <form method="post" id="group-form" action="{% if group %}/groups/{{ group.name|urlencode }}/update{% else %}/groups/create{% endif %}" data-follow-redirect data-cc-change="group" data-cc-action="{{ 'edit' if group else 'create' }}">
@@ -21,7 +21,7 @@
         <input type="hidden" name="members_submitted" value="1">
         {% set ms_name = 'members' %}
         {% set ms_mode = 'select' %}
-        {% set ms_label = 'Labels' %}
+        {% set ms_label = 'Shelves' %}
         {% set ms_items = [] %}
         {% for c in candidates %}{% set _ = ms_items.append({'uid': c.name, 'name': c.name ~ ((' (in ' ~ c.other_group ~ ')') if c.other_group else '')}) %}{% endfor %}
         {% set ms_selected = candidates|selectattr('member')|map(attribute='name')|list %}
@@ -35,7 +35,7 @@
 {% set footer_back_mode = 'modal' %}
 {% set footer_delete_url = '/groups/' ~ (group.name|urlencode) ~ '/delete' %}
 {% set footer_delete_mode = 'confirm' %}
-{% set footer_delete_label = 'Delete the group "' ~ group.name ~ '"? Its labels stay, ungrouped.' %}
+{% set footer_delete_label = 'Delete the space "' ~ group.name ~ '"? Its shelves stay, ungrouped.' %}
 {% else %}
 {% set footer_back_url = '/settings/groups' %}
 {% endif %}

@@ -36,9 +36,7 @@ categories that are actually useful"):
     onto /schedule itself as a <details> block specifically so there wouldn't be two paths to the same
     four fields; re-adding a Settings mirror here would recreate exactly
     the "which one is current" drift that move was fixing. Tasks has no
-    settings of its own beyond the habit-tracking label, which likewise
-    already lives contextually on Tasks > Habits (tasks.py's
-    save_habit_settings) for the same reason. Both stay contextual-only,
+    settings of their own. The schedule settings stay contextual-only,
     not mirrored -- see the redesign brief's own "only mirror a setting
     when the contextual shortcut provides a real usability advantage";
     a settings mirror nobody asked for isn't one.
@@ -100,8 +98,8 @@ logger = get_logger(__name__)
 
 HUB_DESCRIPTIONS = {
     "Account": "Profile picture, nickname, login and security, notifications",
-    "Preferences": "Display preferences, theme and header banner, sleep and leisure hours",
-    "Organise": "Labels, groups, projects and holiday calendars",
+    "Preferences": "Display preferences, theme and header banner",
+    "Organise": "Shelves, tags, spaces and projects",
     "Modules": "Notebook layout and entry types, finance accounts",
     "System": "Backups and maintenance, published lists, logs",
 }
@@ -932,10 +930,8 @@ def _parse_holiday_date_field(value: str, year_agnostic: bool) -> str:
 
 
 @router.get("/settings/holidays")
-def settings_holidays(request: Request, conn=Depends(get_db)):
-    from .taxonomy import page_response
-
-    return page_response(conn, request, "holidays")
+def settings_holidays():
+    return RedirectResponse(url="/settings/calendar", status_code=301)
 
 
 @router.get("/settings/holidays/new")
@@ -1006,7 +1002,7 @@ def create_holiday(
         },
     )
     event_series.reconcile_holidays(conn, before)
-    return RedirectResponse(url="/settings/holidays", status_code=303)
+    return RedirectResponse(url="/settings/calendar", status_code=303)
 
 
 @router.post("/settings/holidays/{uid}/update")
@@ -1039,7 +1035,7 @@ def update_holiday(
         },
     )
     event_series.reconcile_holidays(conn, before)
-    return RedirectResponse(url="/settings/holidays", status_code=303)
+    return RedirectResponse(url="/settings/calendar", status_code=303)
 
 
 @router.post("/settings/holidays/{uid}/delete")
@@ -1047,7 +1043,7 @@ def delete_holiday(uid: str, conn=Depends(get_db)):
     before = db.list_holidays_by_calendar(conn)
     db.delete_holiday(conn, uid)
     event_series.reconcile_holidays(conn, before)
-    return RedirectResponse(url="/settings/holidays", status_code=303)
+    return RedirectResponse(url="/settings/calendar", status_code=303)
 
 
 @router.post("/settings/holidays/bulk-delete")
@@ -1092,23 +1088,8 @@ def _time_block_days_label(days_csv: str) -> str:
 
 
 @router.get("/settings/time-blocks")
-def settings_time_blocks(request: Request, conn=Depends(get_db)):
-    sleep_blocks = db.list_time_blocks(conn, "sleep")
-    leisure_blocks = db.list_time_blocks(conn, "leisure")
-    time_blocks = sleep_blocks + leisure_blocks
-    for block in time_blocks:
-        block["days_label"] = _time_block_days_label(block.get("days") or "")
-    return templates.TemplateResponse(
-        "settings_time_blocks.html",
-        {
-            "request": request,
-            "active_tab": "settings_time_blocks",
-            "crumbs": _TIME_BLOCKS_CRUMB,
-            "title": "Sleep & Leisure Time",
-            "time_blocks": time_blocks,
-            "time_block_days": db.TIME_BLOCK_DAYS,
-        },
-    )
+def settings_time_blocks():
+    return RedirectResponse(url="/settings/calendar?view=time-blocks", status_code=301)
 
 
 @router.get("/settings/time-blocks/new")
@@ -1179,7 +1160,7 @@ def create_time_block(
                 "start_time": start_time, "end_time": end_time, "days": ",".join(valid_days),
             },
         )
-    return RedirectResponse(url="/settings/time-blocks", status_code=303)
+    return RedirectResponse(url="/settings/calendar?view=time-blocks", status_code=303)
 
 
 @router.post("/settings/time-blocks/{uid}/update")
@@ -1216,13 +1197,13 @@ def update_time_block(
                 "days": ",".join(valid_days),
             },
         )
-    return RedirectResponse(url="/settings/time-blocks", status_code=303)
+    return RedirectResponse(url="/settings/calendar?view=time-blocks", status_code=303)
 
 
 @router.post("/settings/time-blocks/{uid}/delete")
 def delete_time_block(uid: str, conn=Depends(get_db)):
     db.delete_time_block(conn, uid)
-    return RedirectResponse(url="/settings/time-blocks", status_code=303)
+    return RedirectResponse(url="/settings/calendar?view=time-blocks", status_code=303)
 
 
 @router.post("/settings/time-blocks/bulk-delete")

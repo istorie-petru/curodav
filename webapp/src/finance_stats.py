@@ -109,6 +109,10 @@ def month_title(key: str) -> str:
     return date.fromisoformat(key + "-01").strftime("%B %Y")
 
 
+def month_title_short(key: str) -> str:
+    return date.fromisoformat(key + "-01").strftime("%b %Y")
+
+
 def month_sections(txns: list[dict], accounts: dict[str, dict], currency: str = "") -> list[dict]:
     """One ledger block per currency for a month's transactions: income, expenses, profit and savings.
     Savings is what moved into savings accounts minus what moved out of them (transfers between other accounts

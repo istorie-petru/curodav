@@ -750,24 +750,8 @@ class TestSystemLabelsExcludedFromThePicker:
         db.set_object_labels(conn, "event", "e1", ["birthday"])
         assert "birthday" not in db.list_tag_names_in_use(conn)
 
-    def test_default_habit_label_excluded(self, conn):
-        db.set_object_labels(conn, "task", "t1", ["Habit"])
-        assert "Habit" not in db.list_tag_names_in_use(conn)
-
-    def test_renamed_habit_label_is_excluded_not_the_old_default(self, conn):
-        # habit_label is user-renameable (Settings) -- the exclusion must
-        # track the LIVE configured value, not a hardcoded "Habit" string.
-        db.save_task_habit_settings(conn, "Routines")
-        db.set_object_labels(conn, "task", "t1", ["Routines", "Habit"])
-        names = db.list_tag_names_in_use(conn)
-        assert "Routines" not in names
-        # "Habit" is no longer the configured habit label, so a real
-        # object still tagged with it (e.g. before the rename) stays
-        # visible/pickable like any other ordinary label.
-        assert "Habit" in names
-
     def test_ordinary_labels_unaffected(self, conn):
-        db.set_object_labels(conn, "task", "t1", ["Birthday", "Habit", "Focus"])
+        db.set_object_labels(conn, "task", "t1", ["Birthday", "Focus"])
         assert db.list_tag_names_in_use(conn) == ["Focus"]
 
 

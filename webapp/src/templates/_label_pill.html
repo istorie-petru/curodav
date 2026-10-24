@@ -1,2 +1,5 @@
 {% macro label_pill(tag, link=none) %}{% set _cls = "cell-tag cal-" ~ label_color(request, tag) %}{% set _li = label_icon(request, tag) %}{% set _p = request.url.path if request is defined and request else '' %}{% set _from = _p if (_p.startswith('/tasks/') or _p.startswith('/events/') or _p.startswith('/contacts/')) else '' %}{% if link == 'modal' %}<a class="{{ _cls }} label-pill-link" href="/labels/{{ tag|urlencode }}/preview{% if _from %}?from={{ _from|urlencode }}{% endif %}" data-modal draggable="false" title="{{ tag }}">{% elif link == 'page' %}<a class="{{ _cls }} label-pill-link" href="/labels/{{ tag|urlencode }}" draggable="false" title="{{ tag }}">{% else %}<span class="{{ _cls }}">{% endif %}{% if _li %}{{ icon(_li, 'icon-sm') }} {% endif %}{{ tag }}{% if link %}</a>{% else %}</span>{% endif %}{% endmacro %}
 
+
+{# A tag pill: the tag's own colour and icon, always with its icon. Tags have no pages, so it never links. #}
+{% macro tag_pill(t) %}<span class="cell-tag cal-{{ t.color or 'gray' }}" title="{{ t.name }}">{% if t.icon %}{{ icon(t.icon, 'icon-sm') }} {% endif %}{{ t.name }}</span>{% endmacro %}

@@ -31,9 +31,9 @@ def header_views(kind: str, active: str, label: str = "", day: str = "", agenda:
 
 SETTINGS_GROUPS = [
     {"name": "Account", "icon": "user-check", "items": [("Profile", "/settings/your-profile"), ("Notifications", "/settings/notifications")]},
-    {"name": "Preferences", "icon": "sun", "items": [("General", "/settings/general"), ("Appearance", "/settings/appearance"), ("Sleep & Leisure", "/settings/time-blocks")]},
-    {"name": "Organise", "icon": "tag", "items": [("Labels", "/settings/labels"), ("Groups", "/settings/groups"), ("Projects", "/settings/projects"), ("Holidays", "/settings/holidays")]},
-    {"name": "Modules", "icon": "file-text", "items": [("Notebook", "/settings/notebook"), ("Finance", "/settings/finance-accounts")]},
+    {"name": "Preferences", "icon": "sun", "items": [("General", "/settings/general"), ("Appearance", "/settings/appearance")]},
+    {"name": "Organise", "icon": "tag", "items": [("Shelves", "/settings/labels"), ("Tags", "/settings/tags"), ("Spaces", "/settings/groups"), ("Projects", "/settings/projects")]},
+    {"name": "Modules", "icon": "file-text", "items": [("Notebook", "/settings/notebook"), ("Finance", "/settings/finance-accounts"), ("Calendar", "/settings/calendar")]},
     {"name": "System", "icon": "database", "items": [("Data", "/settings/data-maintenance"), ("Published lists", "/published-lists"), ("Logs", "/settings/logs")]},
 ]
 

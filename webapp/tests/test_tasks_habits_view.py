@@ -73,30 +73,21 @@ def _request_with_app(path, db_path):
 class TestListTasksExcludesHabitLabel:
     def test_default_excludes_habit_labeled_task(self, conn):
         _seed_task(conn, "plain")
-        _seed_task(conn, "habit1", tags=["Habit"])
+        _seed_task(conn, "habit1", is_habit=1)
         uids = {t["uid"] for t in db.list_tasks(conn)}
         assert uids == {"plain"}
 
     def test_include_habit_tasks_true_gets_everything(self, conn):
         _seed_task(conn, "plain")
-        _seed_task(conn, "habit1", tags=["Habit"])
+        _seed_task(conn, "habit1", is_habit=1)
         uids = {t["uid"] for t in db.list_tasks(conn, include_habit_tasks=True)}
         assert uids == {"plain", "habit1"}
 
-    def test_renamed_label_changes_which_tasks_are_excluded(self, conn):
-        _seed_task(conn, "a", tags=["Habit"])
-        _seed_task(conn, "b", tags=["Routine"])
-        db.save_task_habit_settings(conn, "Routine")
-        uids = {t["uid"] for t in db.list_tasks(conn)}
-        # "a" (still labeled "Habit") is a normal task again once the
-        # configured label moved to "Routine" -- only "b" stays hidden.
-        assert uids == {"a"}
-
 
 class TestListHabitTasks:
-    def test_returns_only_labeled_tasks_sorted_by_title(self, conn):
-        _seed_task(conn, "z", tags=["Habit"], title="Zzz")
-        _seed_task(conn, "a", tags=["Habit"], title="Aaa")
+    def test_returns_only_habits_sorted_by_title(self, conn):
+        _seed_task(conn, "z", is_habit=1, title="Zzz")
+        _seed_task(conn, "a", is_habit=1, title="Aaa")
         _seed_task(conn, "plain")
         titles = [t["title"] for t in db.list_habit_tasks(conn)]
         assert titles == ["Aaa", "Zzz"]
@@ -113,7 +104,7 @@ class TestTasksPageNoLongerShowsHabits:
         assert resp.headers["location"] == "/habits"
 
     def test_no_habits_group_and_habit_task_not_in_any_group(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
+        _seed_task(conn, "h1", is_habit=1, title="Meditate", recurrence="FREQ=DAILY")
         _seed_task(conn, "t1", title="Plain")
         resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
         groups = resp.context["groups"]
@@ -123,14 +114,14 @@ class TestTasksPageNoLongerShowsHabits:
         assert 'id="habits-table"' not in resp.body.decode()
 
     def test_only_habits_means_tasks_empty_state(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
+        _seed_task(conn, "h1", is_habit=1, title="Meditate", recurrence="FREQ=DAILY")
         resp = tasks_router.list_tasks(_request("/tasks"), conn=conn)
         assert resp.context["has_any"] is False
 
 
 class TestSetTaskCompletion:
     def test_posts_an_explicit_value(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], target_per_day=8)
+        _seed_task(conn, "h1", is_habit=1, target_per_day=8)
         today = date.today().isoformat()
         tasks_router.set_task_completion(
             "h1", _request("/tasks/h1/completions", method="POST"), completion_date=today, value="5", conn=conn
@@ -138,7 +129,7 @@ class TestSetTaskCompletion:
         assert db.get_task_completion(conn, "h1", today)["value"] == 5
 
     def test_zero_or_less_deletes_the_completion(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"])
+        _seed_task(conn, "h1", is_habit=1)
         today = date.today().isoformat()
         db.upsert_task_completion(conn, "h1", today, _now(), value=2)
         tasks_router.set_task_completion(
@@ -148,7 +139,7 @@ class TestSetTaskCompletion:
 
     def test_no_fetch_header_still_redirects(self, conn):
         """Plain-HTML fallback (no JS): unchanged 303 behavior."""
-        _seed_task(conn, "h1", tags=["Habit"])
+        _seed_task(conn, "h1", is_habit=1)
         today = date.today().isoformat()
         resp = tasks_router.set_task_completion(
             "h1", _request("/tasks/h1/completions", method="POST"), completion_date=today, value="1", conn=conn
@@ -162,7 +153,7 @@ class TestSetTaskCompletion:
         native form submit -- a full-page reload on every check-in
         (reported directly against a `POST .../completions ... 303 See
         Other` server log). Now dual-mode like every other mutation route."""
-        _seed_task(conn, "h1", tags=["Habit"], target_per_day=8)
+        _seed_task(conn, "h1", is_habit=1, target_per_day=8)
         today = date.today().isoformat()
         req = Request(
             {
@@ -181,7 +172,7 @@ class TestSetTaskCompletion:
 
 class TestToggleTaskCompletion:
     def test_no_fetch_header_still_redirects(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"])
+        _seed_task(conn, "h1", is_habit=1)
         today = date.today().isoformat()
         resp = tasks_router.toggle_task_completion(
             "h1", today, _request("/tasks/h1/completion/" + today + "/toggle", method="POST"), conn=conn
@@ -192,7 +183,7 @@ class TestToggleTaskCompletion:
         """Same dual-mode fix as TestSetTaskCompletion above, applied to the
         plain checkbox habit's toggle route (_habit_row.html's
         `habit-checkin-toggle` form)."""
-        _seed_task(conn, "h1", tags=["Habit"])
+        _seed_task(conn, "h1", is_habit=1)
         today = date.today().isoformat()
         req = _request("/tasks/h1/completion/" + today + "/toggle", method="POST")
         resp = tasks_router.toggle_task_completion("h1", today, req, x_requested_with="fetch", conn=conn)
@@ -202,17 +193,3 @@ class TestToggleTaskCompletion:
         resp = tasks_router.toggle_task_completion("h1", today, req, x_requested_with="fetch", conn=conn)
         assert resp.status_code == 200
         assert db.get_task_completion(conn, "h1", today) is None
-
-
-
-class TestHabitSettings:
-    def test_defaults_to_habit(self, conn):
-        assert db.get_task_habit_settings(conn)["habit_label"] == "Habit"
-
-    def test_save_and_reload(self, conn):
-        db.save_task_habit_settings(conn, "Routine")
-        assert db.get_task_habit_settings(conn)["habit_label"] == "Routine"
-
-    def test_blank_falls_back_to_habit(self, conn):
-        db.save_task_habit_settings(conn, "   ")
-        assert db.get_task_habit_settings(conn)["habit_label"] == "Habit"

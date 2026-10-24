@@ -78,9 +78,8 @@ class TestSpaceScopedRenderers:
 
     def test_habit_checkin_label_filter(self, conn):
         db.upsert_label_config(conn, {"name": "CS101", "label_group": "Uni", "created_at": now_iso()})
-        db.save_task_habit_settings(conn, "Habit")
-        for uid, tags in (("h1", ["Habit", "CS101"]), ("h2", ["Habit"])):
-            db.upsert_task(conn, {"uid": uid, "title": uid, "description": "", "status": "active",
+        for uid, tags in (("h1", ["CS101"]), ("h2", [])):
+            db.upsert_task(conn, {"uid": uid, "title": uid, "description": "", "status": "active", "is_habit": 1,
                                   "tags": tags, "recurrence": "FREQ=DAILY", "created_at": now_iso()})
         data = dashboard_router._render_habit_checkin(conn, {"label_name": "group:Uni"})
         assert [r["uid"] for r in data["rows"]] == ["h1"]
@@ -132,13 +131,13 @@ class TestGroupsAndLabelsWidget:
         cards = {c["name"]: c for c in data["cards"]}
         assert set(cards) == {"Uni", "Personal"}  # CS101 is reached through Uni
         assert cards["Uni"]["href"] == "/groups/Uni" and cards["Uni"]["meta"] == "2 labels"
-        assert cards["Personal"]["href"] == "/labels/Personal" and cards["Personal"]["meta"] == "Label"
+        assert cards["Personal"]["href"] == "/labels/Personal" and cards["Personal"]["meta"] == "Shelf"
 
     def test_group_page_cards_are_every_member_label_not_just_pinned(self, conn):
         self._seed(conn)
         data = dashboard_router._render_spaces_projects(conn, {"label_name": "group:Uni", "style": "cards"})
         assert [(c["name"], c["icon"], c["meta"]) for c in data["cards"]] == [
-            ("Art", "tag", "Label"), ("CS101", "folder", "Project"),
+            ("Art", "tag", "Shelf"), ("CS101", "folder", "Project"),
         ]
 
     def test_add_widget_stores_scope(self, conn):

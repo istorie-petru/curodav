@@ -1585,7 +1585,9 @@ tr:hover .task-row-delete, tr:focus-within .task-row-delete{opacity:1;}
 }
 .kanban-card:hover{box-shadow:var(--elevation-3, var(--elevation-2, var(--elevation-1))); transform:translateY(-1px);}
 .kanban-card.dragging{opacity:.4;}
-.kanban-card-strip{height:26px; flex:none; overflow:hidden; border-radius:0; padding:0; border:0;}
+.kanban-card{flex-direction:row;}
+.kanban-card-body{flex:1 1 auto; min-width:0;}
+.kanban-card-strip{order:2; width:36px; align-self:stretch; flex:none; overflow:hidden; border-radius:0; padding:0; border:0;}
 .kanban-card-strip img{display:block; width:100%; height:100%; object-fit:cover;}
 .kanban-card-body{display:flex; flex-direction:column; gap:var(--space-2); padding:var(--space-3);}
 .kanban-card-title{color:var(--fg-primary); font-size:var(--text-base); font-weight:var(--font-weight-bold); text-decoration:none; min-width:0; overflow-wrap:anywhere; line-height:1.3;}
@@ -1983,17 +1985,6 @@ main.main-calendar .month-week-grid{flex:1 1 0;}
   main.main-calendar{height:100vh; height:100dvh;}
 }
 @media (max-width:720px){
-  /* This margin-bottom only exists to keep the grid's own content clear
-     of the mobile bottom nav bar (.mobile-tabbar, 64px, fixed/persistent
-     below this breakpoint) -- desktop has no such bar, so the block above
-     leaves it out entirely instead of setting it to 0 here. */
-  main.main-calendar > .calendar-viewport,
-  main.main-calendar > .project-calendar-layout{margin-bottom:8dvh;}
-}
-@media (max-width:720px){
-  main.main-calendar,
-  main.main-calendar .calendar-viewport,
-  main.main-calendar .time-grid-wrap{overflow:visible;}
   main.main-calendar .unscheduled-task-list{max-height:none; overflow:visible;}
 }
 
@@ -2689,6 +2680,7 @@ button.month-more-link{
   main{margin-left:0; padding-bottom:80px;}
 
   main.main-calendar{
+    flex:none;
     height:calc(100vh - 64px);
     height:calc(100dvh - 64px);
     padding-bottom:var(--space-3);
@@ -4179,7 +4171,6 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
     aspect-ratio:auto; height:auto; min-height:46px;
     padding-top:var(--space-1); padding-bottom:var(--space-1);
   }
-  .page-header-narrow .page-header-narrow-back{width:36px; height:36px;}
   .page-header-narrow{flex-wrap:wrap; justify-content:flex-start; align-content:center;}
   .page-header-narrow .page-header-narrow-title{flex:0 1 auto; min-width:5.5em;}
   .page-header-narrow .page-header-narrow-actions{flex:1 1 0; min-width:0; flex-wrap:nowrap; justify-content:flex-end;}
@@ -4205,14 +4196,6 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .page-header-narrow-icon, .page-header-narrow-title, .page-header-narrow-actions,
 .page-header-narrow-back{
   position:relative; z-index:1;
-}
-.page-header-narrow.has-banner .page-header-narrow-back{
-  background:rgba(0,0,0,.4); color:#fff;
-  border:1px solid rgba(255,255,255,.35);
-  backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
-}
-.page-header-narrow.has-banner .page-header-narrow-back:hover{
-  background:rgba(0,0,0,.55); color:#fff;
 }
 .page-header-narrow-icon{
   display:flex; color:var(--accent);
@@ -4281,23 +4264,8 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
    shouldn't shrink just because one context needs it compact. */
 .page-header-narrow-actions .segmented{padding:2px;}
 .page-header-narrow-actions .seg-btn{padding:3px 12px;}
-/* Buttons/dropdown triggers pinned over a photo need to read against
-   whatever image is behind them, not the page background -- same
-   frosted-chip treatment .page-banner-actions .btn.ghost gets. Bannerless
-   (the default, flat-gradient) case skips this: normal control styling
-   already reads fine against --bg-elevated. */
-.page-header-narrow.has-banner .page-header-narrow-actions .btn.ghost,
-.page-header-narrow.has-banner .page-header-narrow-actions .icon-btn,
-.page-header-narrow.has-banner .page-header-narrow-actions .multiselect-trigger{
-  background:rgba(0,0,0,.4); color:#fff;
-  border:1px solid rgba(255,255,255,.35);
-  backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
-}
-.page-header-narrow.has-banner .page-header-narrow-actions .btn.ghost:hover,
-.page-header-narrow.has-banner .page-header-narrow-actions .icon-btn:hover,
-.page-header-narrow.has-banner .page-header-narrow-actions .multiselect-trigger:hover{
-  background:rgba(0,0,0,.55); color:#fff;
-}
+.cal-nav-short{display:none;}
+@media (max-width:720px){.cal-nav-long{display:none;} .cal-nav-short{display:inline;}}
 .cal-nav-label{
   font-weight:var(--font-weight-bold); font-size:var(--text-base); color:var(--fg-secondary);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
@@ -5257,14 +5225,9 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .folder-tile-name{text-align:center; overflow-wrap:anywhere;}
 .folder-tile-count{color:var(--fg-tertiary); font-size:var(--text-sm);}
 .notebook-home{padding-bottom:var(--space-6);}
-.notebook-report-notice, .notebook-continue{display:flex; align-items:center; gap:var(--space-3); padding:var(--space-3) var(--space-4); margin-bottom:var(--space-4);}
-.notebook-continue:hover{text-decoration:none; background:var(--row-hover);}
-.notebook-continue-text{display:flex; flex-direction:column;}
-.notebook-continue-label{color:var(--fg-tertiary); font-size:var(--text-sm);}
 .notebook-folder-list .contact-row-name{font-weight:normal;}
-.notebook-folder-side{display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr); gap:var(--space-3); align-items:start; margin-bottom:var(--space-3);}
+.notebook-readme{display:flex; flex-direction:column; gap:var(--space-2);}
 .notebook-readme textarea{width:100%; resize:vertical;}
-@media (max-width:640px){.notebook-folder-side{grid-template-columns:minmax(0,1fr);}}
 .notebook-row-icon{flex:none; display:flex; align-items:center; justify-content:center; width:32px; height:32px;}
 .notebook-row-edited{flex:none; color:var(--fg-tertiary); font-size:var(--text-sm); padding-left:var(--space-3);}
 .notebook-folder-filters{display:flex; align-items:center; gap:var(--space-2);}
@@ -5452,31 +5415,33 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .header-add{position:relative; z-index:1; flex:none; display:inline-grid; place-items:center; width:34px; height:34px; border-radius:var(--radius-md, 8px); background:var(--accent); color:var(--accent-contrast, #fff); text-decoration:none; transition:filter var(--dur-fast) var(--ease-standard);}
 .header-add:hover{filter:brightness(1.08); text-decoration:none;}
 .header-add .icon{stroke-width:2.2;}
+/* Header controls: one look at every width (the phone strip only changes layout, never the buttons). */
+.page-header-region .page-header-narrow .page-header-menu, .page-header-region .page-header-narrow .page-header-narrow-back{
+  width:34px; height:34px; background:transparent; border:0; box-shadow:none; color:var(--hdr-fg);
+  backdrop-filter:none; -webkit-backdrop-filter:none;
+}
+.page-header-region .page-header-narrow .page-header-menu:hover, .page-header-region .page-header-narrow .page-header-narrow-back:hover{background:var(--hdr-glass-hover);}
+.page-header-region .page-header-narrow .page-header-narrow-actions .btn:not(.primary),
+.page-header-region .page-header-narrow .page-header-narrow-actions .icon-btn,
+.page-header-region .page-header-narrow .page-header-narrow-actions .multiselect-trigger{
+  height:34px; border:0; box-shadow:none; background:var(--hdr-glass); color:var(--hdr-fg);
+  backdrop-filter:none; -webkit-backdrop-filter:none;
+}
+.page-header-region .page-header-narrow-actions .icon-btn{width:34px; min-width:34px;}
+.page-header-region .page-header-narrow .page-header-narrow-actions .btn:not(.primary):hover,
+.page-header-region .page-header-narrow .page-header-narrow-actions .icon-btn:hover,
+.page-header-region .page-header-narrow .page-header-narrow-actions .multiselect-trigger:hover{background:var(--hdr-glass-hover);}
+.page-header-region .page-header-narrow .page-header-narrow-actions .btn.primary{height:34px; border:0; box-shadow:none;}
+.page-header-region .page-header-narrow .page-header-narrow-actions .btn.btn-icon-only{width:34px; min-width:34px; padding:0;}
+.page-header-region .page-header-narrow .page-header-narrow-actions input:not([type=checkbox]):not([type=radio]),
+.page-header-region .page-header-narrow .page-header-narrow-actions select{
+  height:34px; border:0; box-shadow:none; background:var(--hdr-glass); color:var(--hdr-fg); border-radius:var(--radius-md, 8px);
+}
+.page-header-region .page-header-narrow .page-header-narrow-actions input::placeholder{color:var(--hdr-fg); opacity:.7;}
+
 @media (min-width:721px){
   .page-header-region > .page-header-narrow.has-banner::after{background:rgba(0,0,0,.45);}
   .page-header-narrow-title{font-size:20px; font-weight:650; letter-spacing:-.2px; margin-left:var(--space-1); color:var(--hdr-fg);}
-  .page-header-region .page-header-narrow .page-header-menu, .page-header-region .page-header-narrow .page-header-narrow-back{
-    width:34px; height:34px; background:transparent; border:0; box-shadow:none; color:var(--hdr-fg);
-    backdrop-filter:none; -webkit-backdrop-filter:none;
-  }
-  .page-header-region .page-header-narrow .page-header-menu:hover, .page-header-region .page-header-narrow .page-header-narrow-back:hover{background:var(--hdr-glass-hover);}
-  .page-header-region .page-header-narrow .page-header-narrow-actions .btn:not(.primary),
-  .page-header-region .page-header-narrow .page-header-narrow-actions .icon-btn,
-  .page-header-region .page-header-narrow .page-header-narrow-actions .multiselect-trigger{
-    height:34px; border:0; box-shadow:none; background:var(--hdr-glass); color:var(--hdr-fg);
-    backdrop-filter:none; -webkit-backdrop-filter:none;
-  }
-  .page-header-region .page-header-narrow-actions .icon-btn{width:34px; min-width:34px;}
-  .page-header-region .page-header-narrow .page-header-narrow-actions .btn:not(.primary):hover,
-  .page-header-region .page-header-narrow .page-header-narrow-actions .icon-btn:hover,
-  .page-header-region .page-header-narrow .page-header-narrow-actions .multiselect-trigger:hover{background:var(--hdr-glass-hover);}
-  .page-header-region .page-header-narrow .page-header-narrow-actions .btn.primary{height:34px; border:0; box-shadow:none;}
-  .page-header-region .page-header-narrow .page-header-narrow-actions .btn.btn-icon-only{width:34px; min-width:34px; padding:0;}
-  .page-header-region .page-header-narrow .page-header-narrow-actions input:not([type=checkbox]):not([type=radio]),
-  .page-header-region .page-header-narrow .page-header-narrow-actions select{
-    height:34px; border:0; box-shadow:none; background:var(--hdr-glass); color:var(--hdr-fg); border-radius:var(--radius-md, 8px);
-  }
-  .page-header-region .page-header-narrow .page-header-narrow-actions input::placeholder{color:var(--hdr-fg); opacity:.7;}
   .page-header-narrow:has(.page-header-narrow-actions .btn.primary) .header-add{display:none;}
   .page-header-region .page-header-narrow-actions{display:contents;}
   .page-header-region .page-header-narrow-actions > *{position:relative; z-index:1;}
@@ -5498,7 +5463,6 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 @media (max-width:720px){
   .header-add{display:none;}
   .header-view.active::after{bottom:-3px;}
-  .page-header-region .page-header-narrow .page-header-narrow-back{background:var(--hdr-glass); border:0; backdrop-filter:none; -webkit-backdrop-filter:none; color:var(--hdr-fg);}
   .header-views{order:3; flex:1 1 100%; justify-content:stretch;}
   .header-view{flex:1; justify-content:center;}
 }
@@ -5517,16 +5481,10 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
   html main.main-shell > .page-header-region > .page-header-narrow,
   html main.main-calendar > .page-header-region > .page-header-narrow{margin-bottom:var(--space-2);}
   main:has(> .page-header-region){padding-top:0;}
-  .page-header-narrow .page-header-narrow-back, .page-header-narrow .page-header-menu{height:36px; width:36px; margin:6px 0;}
+  .page-header-narrow .page-header-narrow-back, .page-header-narrow .page-header-menu{margin:7px 0;}
   .page-header-narrow-title{font-size:18px; font-weight:650; letter-spacing:-.2px; color:var(--hdr-fg); min-width:0; flex:0 1 auto; max-width:50%;}
-  .page-header-narrow .page-header-narrow-actions, .page-header-narrow.has-banner .page-header-narrow-actions{flex:1 1 0; min-width:0; justify-content:flex-start; height:48px; align-items:center; gap:var(--space-1); flex-wrap:nowrap;}
-  .page-header-narrow .page-header-narrow-actions > :first-child{margin-left:auto;}
-  .page-header-narrow .page-header-narrow-actions .btn:not(.primary), .page-header-narrow .page-header-narrow-actions .icon-btn,
-  .page-header-narrow .page-header-narrow-actions .multiselect-trigger{height:34px; border:0; box-shadow:none; background:var(--hdr-glass); color:var(--hdr-fg); backdrop-filter:none; -webkit-backdrop-filter:none;}
-  .page-header-narrow .page-header-narrow-actions .icon-btn{width:34px; min-width:34px;}
+  .page-header-narrow .page-header-narrow-actions, .page-header-narrow.has-banner .page-header-narrow-actions{flex:1 1 0; min-width:0; justify-content:flex-end; height:48px; align-items:center; gap:var(--space-1); flex-wrap:nowrap;}
   .page-header-narrow .page-header-narrow-actions{overflow:hidden;}
-  .page-header-narrow .page-header-narrow-actions .btn.btn-icon-only{width:34px; min-width:34px; padding:0;}
-  .page-header-narrow .page-header-narrow-actions .btn.primary{height:34px; border:0; box-shadow:none;}
   .page-header-narrow .header-views{order:3; flex:1 1 100%; align-self:auto; height:40px; margin:0 calc(var(--space-2) * -1); padding:0 var(--space-2); gap:0; border-radius:0; background:none; border-top:1px solid var(--separator);}
   .page-header-narrow.has-banner .header-views{border-top-color:rgba(255,255,255,.22);}
   .page-header-narrow .header-view{flex:1; justify-content:center; height:100%; border-radius:0; opacity:.72; background:none; color:var(--hdr-fg);}
@@ -5534,8 +5492,82 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
   .page-header-narrow .header-view.active::after{left:12px; right:12px; bottom:0; height:3px;}
   .page-header-narrow.has-banner::after{background:rgba(0,0,0,.42);}
   .mobile-tabbar-btn{min-width:0;}
-  .mobile-tabbar-add{padding:0;}
-  .mobile-tabbar-add-disc{display:grid; place-items:center; width:48px; height:48px; border-radius:16px; background:var(--accent); color:var(--accent-contrast, #fff); box-shadow:var(--elevation-2); transition:transform var(--dur-fast) var(--ease-standard);}
-  .mobile-tabbar-add:active .mobile-tabbar-add-disc{transform:scale(.94);}
-  .mobile-tabbar-add .icon{width:24px; height:24px; stroke-width:2.2;}
 }
+
+/* Day view: all-day items are a plain agenda list above the hours. */
+.day-agenda{max-height:30dvh; overflow-y:auto; display:flex; flex-direction:column; gap:2px; padding:var(--space-2) var(--space-3); background:var(--bg-elevated); border-bottom:1px solid var(--separator);}
+.day-agenda.is-past > :not(.is-overdue):not(.section-row){opacity:.5;}
+.day-agenda .section-row{padding:0 0 2px;}
+.day-agenda .allday-task{min-height:32px; padding:0; gap:var(--space-2); font-size:var(--text-base);}
+.day-agenda .allday-habit-form{display:flex;}
+
+/* Phone planner: Unscheduled work is a sheet rising from the bottom bar; long-press a task to drag it onto the grid. */
+.planner-sheet-handle, .planner-sheet-bar{display:none;}
+@media (max-width:720px){
+  main.main-calendar .notebook-sidebar.project-calendar-unscheduled{
+    position:fixed; left:0; right:0; top:auto; bottom:64px; width:auto; max-height:55dvh; box-sizing:border-box;
+    z-index:calc(var(--z-mobile-tabbar) - 5); border:0; border-top:1px solid var(--separator);
+    border-radius:var(--radius-card) var(--radius-card) 0 0; box-shadow:0 -4px 16px rgba(0,0,0,.18);
+    transform:translateY(calc(100% + 64px)); transition:transform var(--dur-normal) var(--ease-standard);
+  }
+  main.main-calendar .notebook-sidebar.project-calendar-unscheduled.is-open{transform:none;}
+  .project-calendar-unscheduled .notebook-sidebar-head{display:none;}
+  .project-calendar-unscheduled [data-notebook-sidebar-panel="allday"]{display:none !important;}
+  .project-calendar-unscheduled [data-notebook-sidebar-panel="unscheduled"]{display:block !important;}
+  .planner-sheet-bar{display:flex; align-items:center; justify-content:space-between; gap:var(--space-2);}
+  .planner-sheet-title{display:inline-flex; align-items:center; gap:var(--space-2); font-weight:var(--font-weight-bold);}
+  .planner-sheet-handle{
+    display:inline-flex; align-items:center; gap:var(--space-2); position:fixed; left:50%; bottom:calc(64px + var(--space-2)); transform:translateX(-50%);
+    z-index:calc(var(--z-mobile-tabbar) - 6); height:36px; padding:0 var(--space-3); border:1px solid var(--border); border-radius:var(--radius-pill, 999px);
+    background:var(--bg-elevated); color:var(--fg-primary); box-shadow:var(--elevation-2); font-size:var(--text-sm); font-weight:var(--font-weight-bold);
+  }
+  .project-calendar-layout:has(.project-calendar-unscheduled.is-open) .planner-sheet-handle{display:none;}
+  main.main-calendar #notebook-sidebar-toggle{display:none;}
+  .project-calendar-unscheduled .unscheduled-task-item{touch-action:pan-y;}
+}
+@media (max-width:720px){
+  .page-header-narrow-actions .filter-dropdown-trigger{min-width:0; padding:0 var(--space-2); gap:var(--space-1);}
+  .page-header-narrow-actions .filter-dropdown-trigger .ms-summary{max-width:64px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .page-header-narrow-actions .cal-nav-label{flex:0 0 auto; max-width:none;}
+  .page-header-narrow-title{max-width:38%;}
+  .day-agenda{max-height:24dvh;}
+}
+
+/* Editing one event of a repeating series: this event on the left, the series on the right (same split as the new-item window). */
+.qa-series{display:flex; flex-direction:column; gap:var(--space-3); min-width:0; padding-left:var(--space-4); border-left:1px solid var(--separator);}
+.qa-split .field-grid{grid-template-columns:minmax(0,1fr);}
+@media (max-width:720px){
+  .qa-series{padding-left:0; border-left:0;}
+}
+
+/* Split event edit: the header is split like the body, so each title sits over its pane. */
+.modal-header-split{display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:var(--space-4); align-items:center; flex:1; min-width:0; margin-right:calc(var(--space-5) - 44px);}
+.modal-header-split h1{text-align:left;}
+.modal-header-split h1:last-child{padding-left:var(--space-4); border-left:1px solid var(--separator);}
+.qa-split .qa-side-title{display:none;}
+@media (max-width:720px){
+  .modal-header-split{display:flex;}
+  .modal-header-split h1:last-child{display:none;}
+  .modal-header-split h1:first-child::after{content:" / The whole series"; color:var(--fg-tertiary);}
+  .qa-split .qa-side-title{display:block;}
+}
+
+/* All day: a full-width row with the square checkbox. */
+.dtr-allday-row{text-transform:none; letter-spacing:0; font-weight:var(--font-weight-regular); color:var(--fg-primary); display:flex; flex-direction:row; align-items:center; justify-content:space-between; gap:var(--space-2); box-sizing:border-box; width:100%; height:41px; padding:0 var(--space-3); border:0; border-radius:var(--radius-control); background:var(--control-bg); cursor:pointer;}
+.dtr-allday-row:hover{background:var(--row-hover);}
+.dtr-allday-row input[type="checkbox"]{appearance:none; -webkit-appearance:none; width:18px; height:18px; flex:none; border:1.5px solid var(--control-border); border-radius:5px; background:var(--control-bg); position:relative; cursor:pointer;}
+.dtr-allday-row input[type="checkbox"]:checked{background:var(--accent); border-color:var(--accent);}
+.dtr-allday-row input[type="checkbox"]:checked::after{content:""; position:absolute; left:5px; top:1px; width:5px; height:9px; border:solid var(--fg-on-accent); border-width:0 2px 2px 0; transform:rotate(45deg);}
+
+/* Split primary button: label on four fifths, a chevron on the last fifth. */
+.btn-split{display:inline-grid; grid-template-columns:4fr 1fr; align-items:stretch;}
+.btn-split .btn-split-main{border-top-right-radius:0; border-bottom-right-radius:0;}
+.btn-split .action-menu{display:flex;}
+.btn-split .btn-split-trigger{width:auto; min-width:36px; height:100%; border-radius:0 var(--radius-control) var(--radius-control) 0; border:0; border-left:1px solid rgba(255,255,255,.35); color:var(--fg-on-accent); padding:0 var(--space-2);}
+.btn-split .btn-split-trigger:hover{background:var(--accent-hover); color:var(--fg-on-accent);}
+
+/* Label form: tag rows (name, look, remove) on one line */
+.label-tags-list{display:flex;flex-direction:column;gap:var(--space-2);margin-bottom:var(--space-2);}
+.label-tag-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:var(--space-2);align-items:center;}
+.label-tag-row[hidden]{display:none;}
+.label-tag-row .field{margin:0;}

@@ -409,7 +409,7 @@ document.addEventListener("submit", (event) => {
     // this input lives inside a portaled panel so a stray Enter bubbling
     // up through its `form="..."` association would otherwise submit the
     // enclosing modal prematurely (same class of trap as the ms_allow_new
-    // "New label..." input's own Enter handling, see that code's
+    // "New shelf..." input's own Enter handling, see that code's
     // comment).
     if (e.key === "Enter" && e.target.matches && e.target.matches(".multiselect-search-input")) {
       e.preventDefault();
@@ -499,7 +499,7 @@ document.addEventListener("submit", (event) => {
     }
   });
 
-  // Handle "New label..." input in multiselect -- when user types a new
+  // Handle "New shelf..." input in multiselect -- when user types a new
   // label and presses Enter, add it as a selected checkbox option in the
   // dropdown so it can be combined with other labels before form submit.
   document.addEventListener("keydown", (e) => {

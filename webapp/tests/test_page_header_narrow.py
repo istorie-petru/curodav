@@ -41,6 +41,7 @@ from src.routers import notebook as notebook_router
 from src.routers import published_lists as published_lists_router
 from src.routers import search as search_router
 from src.routers import settings as settings_router
+from src.routers import taxonomy as taxonomy_router
 from src.routers import tasks as tasks_router
 
 STATIC = Path(__file__).resolve().parent.parent / "src" / "static"
@@ -134,12 +135,12 @@ class TestPageHeaderNarrowRollout:
         _assert_narrow_header(resp.body.decode(), "Organise", "tag")
 
     def test_settings_holidays(self, conn):
-        resp = settings_router.settings_holidays(_bare_request("/settings/holidays"), conn=conn)
-        _assert_narrow_header(resp.body.decode(), "Organise", "calendar")
+        resp = taxonomy_router.manage_calendar(_bare_request("/settings/calendar"), view="holidays", conn=conn)
+        _assert_narrow_header(resp.body.decode(), "Modules", "calendar")
 
     def test_settings_time_blocks(self, conn):
-        resp = settings_router.settings_time_blocks(_bare_request("/settings/time-blocks"), conn=conn)
-        _assert_narrow_header(resp.body.decode(), "Preferences", "moon")
+        resp = taxonomy_router.manage_calendar(_bare_request("/settings/calendar"), view="time-blocks", conn=conn)
+        _assert_narrow_header(resp.body.decode(), "Modules", "calendar")
 
     def test_settings_data_maintenance(self, conn, tmp_path):
         req = _request_with_app("/settings/data-maintenance", tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
@@ -258,11 +259,11 @@ class TestBulkActionsBarRelocatedIntoHeader:
         assert bar_pos < clear_pos < delete_pos
 
     def test_holidays_bulk_bar_is_inside_the_actions_slot(self, conn):
-        resp = settings_router.settings_holidays(_bare_request("/settings/holidays"), conn=conn)
+        resp = taxonomy_router.manage_calendar(_bare_request("/settings/calendar"), view="holidays", conn=conn)
         self._assert_bulk_bar_in_actions_slot(resp.body.decode(), "holidays")
 
     def test_time_blocks_bulk_bar_is_inside_the_actions_slot(self, conn):
-        resp = settings_router.settings_time_blocks(_bare_request("/settings/time-blocks"), conn=conn)
+        resp = taxonomy_router.manage_calendar(_bare_request("/settings/calendar"), view="time-blocks", conn=conn)
         self._assert_bulk_bar_in_actions_slot(resp.body.decode(), "time-blocks")
 
     def test_labels_bulk_bar_is_inside_the_actions_slot(self, conn):
@@ -296,8 +297,8 @@ class TestBulkActionsBarRelocatedIntoHeader:
         # `.page-header-narrow-actions` (e.g. a leftover copy from before
         # the move).
         pages = {
-            "holidays": settings_router.settings_holidays(_bare_request("/settings/holidays"), conn=conn),
-            "time-blocks": settings_router.settings_time_blocks(_bare_request("/settings/time-blocks"), conn=conn),
+            "holidays": taxonomy_router.manage_calendar(_bare_request("/settings/calendar"), view="holidays", conn=conn),
+            "time-blocks": taxonomy_router.manage_calendar(_bare_request("/settings/calendar"), view="time-blocks", conn=conn),
             "labels": labels_router.manage_labels(_bare_request("/settings/labels"), conn=conn),
         }
         for prefix, resp in pages.items():
@@ -313,7 +314,7 @@ class TestNarrowHeaderBackPosition:
     slot -- see the macro's own comment."""
 
     def test_back_arrow_precedes_icon_and_title(self, conn):
-        resp = settings_router.settings_holidays(_bare_request("/settings/holidays"), conn=conn)
+        resp = taxonomy_router.manage_calendar(_bare_request("/settings/calendar"), view="holidays", conn=conn)
         body = resp.body.decode()
         back_pos = body.index("page-header-narrow-back")
         title_pos = body.index("page-header-narrow-title")

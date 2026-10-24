@@ -29,6 +29,8 @@ Two pieces, kept pure/testable separately:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import sqlite3
 from datetime import datetime, timezone
 from typing import Any
@@ -118,6 +120,15 @@ _PATH_FIELD = {
 }
 
 
+# (collection path, uid) -> digest of the last row pushed. Unchanged members are not
+# re-PUT every tick; a restart empties it, so the first tick re-pushes once.
+_PUSHED: dict[tuple[str, str], str] = {}
+
+
+def _digest(row: dict[str, Any]) -> str:
+    return hashlib.sha256(json.dumps(row, sort_keys=True, default=str).encode()).hexdigest()
+
+
 def materialize(conn: sqlite3.Connection, bridge: Any, list_row: dict[str, Any]) -> dict[str, int]:
     """Given one `published_lists` row (as returned by db.get_published_list
     /list_published_lists -- `label_filter` already decoded), evaluate its
@@ -158,7 +169,12 @@ def materialize(conn: sqlite3.Connection, bridge: Any, list_row: dict[str, Any])
         push_row[path_field] = collection_path
         if entity_type == "contact":
             push_row["name_field"] = list_row.get("contact_name_field") or "full_name"
+        digest = _digest(push_row)
+        key = (collection_path, object_id)
+        if object_id in existing_uids and _PUSHED.get(key) == digest:
+            continue
         _SAVE_ROW[entity_type](bridge, push_row)
+        _PUSHED[key] = digest
         if object_id in existing_uids:
             updated += 1
         else:
@@ -167,6 +183,7 @@ def materialize(conn: sqlite3.Connection, bridge: Any, list_row: dict[str, Any])
     deleted = 0
     for stale_uid in existing_uids - member_ids:
         _DELETE[entity_type](bridge, stale_uid, collection_path)
+        _PUSHED.pop((collection_path, stale_uid), None)
         deleted += 1
 
     if list_row.get("id"):

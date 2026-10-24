@@ -12,7 +12,7 @@
 <h1 class="sr-only">{{ label_text }}</h1>
 {% call page_header_narrow("Calendar", "calendar", views=header_views("calendar", "fourweek", _lbl, today_iso)) %}
 <a class="icon-btn cal-nav-prev" href="/calendar/fourweek?date_={{ prev_start }}{{ _lq }}" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
-<span class="cal-nav-label" id="cal-nav-label" aria-live="polite">{{ label_text }}</span>
+<span class="cal-nav-label" id="cal-nav-label" aria-live="polite"><span class="cal-nav-long">{{ label_text }}</span><span class="cal-nav-short">{{ label_short }}</span></span>
 <a class="icon-btn cal-nav-next" href="/calendar/fourweek?date_={{ next_start }}{{ _lq }}" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>
 {{ cf.calendar_filters(_lbl, calendar_filter_base_url, event_label_names, event_label_items) }}
 {% endcall %}

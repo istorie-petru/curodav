@@ -68,7 +68,7 @@
                 {% if all_labels %}
                 {% set ms_name = 'labels' %}
                 {% set ms_mode = 'filter' %}
-                {% set ms_label = 'Filter by labels (optional)' %}
+                {% set ms_label = 'Filter by shelves (optional)' %}
                 {% set ms_items = [] %}
                 {% for name in all_labels %}{% set _ = ms_items.append({'uid': name, 'name': name}) %}{% endfor %}
                 {% set ms_selected = selected_labels | default([]) %}
@@ -79,7 +79,7 @@
 
                 {% set ms_name = 'exclude_labels' %}
                 {% set ms_mode = 'select' %}
-                {% set ms_label = 'Exclude labels' %}
+                {% set ms_label = 'Exclude shelves' %}
                 {% set ms_items = [] %}
                 {% for name in all_labels %}{% set _ = ms_items.append({'uid': name, 'name': name}) %}{% endfor %}
                 {% set ms_selected = selected_exclude_labels | default([]) %}
@@ -90,13 +90,13 @@
                 {% include "_widget_list_multiselect.html" %}
                 {% else %}
                 <div class="field field-wide">
-                    <label>Filter by labels <span class="text-muted">(optional)</span></label>
+                    <label>Filter by shelves <span class="text-muted">(optional)</span></label>
                     {# Modal-stack Cancel fix (curodav-notes memory
                        curodav-webapp-modal-stack-cancel-fix) -- return_to
                        carries this same modal's own URL, so the nested "new
                        label" modal's Cancel returns here instead of closing
                        the whole flow back to /settings/labels. #}
-                    {% call empty_state('No labels yet', size='compact') %}<a href="/settings/labels/new?return_to={{ (('/published-lists/' ~ _editing.id ~ '/edit') if _editing else '/published-lists/new') | urlencode }}" data-modal data-modal-size="wide">Create label</a>{% endcall %}
+                    {% call empty_state('No shelves yet', size='compact') %}<a href="/settings/labels/new?return_to={{ (('/published-lists/' ~ _editing.id ~ '/edit') if _editing else '/published-lists/new') | urlencode }}" data-modal data-modal-size="wide">Create shelf</a>{% endcall %}
                 </div>
                 {% endif %}
             </div>

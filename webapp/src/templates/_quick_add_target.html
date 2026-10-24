@@ -7,5 +7,5 @@
 {%- endmacro %}
 {% macro quick_add_title() -%}
 {% set _qa_label = label.name if (active_tab == 'label' and label is defined and label) else '' -%}
-{% if _qa_label %}New item in {{ _qa_label }}{% else %}{{ {'contacts': 'New contact', 'labels': 'New label'}.get(active_tab, 'New task or event') }}{% endif %}
+{% if _qa_label %}New item in {{ _qa_label }}{% else %}{{ {'contacts': 'New contact', 'labels': 'New shelf'}.get(active_tab, 'New task or event') }}{% endif %}
 {%- endmacro %}

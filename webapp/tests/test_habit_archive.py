@@ -59,7 +59,7 @@ def _request(path="/tasks"):
 def _habit(conn, uid, title=None, recurrence="FREQ=DAILY", status="active"):
     db.upsert_task(conn, {
         "uid": uid, "title": title or uid, "description": "", "status": status,
-        "tags": ["Habit"], "recurrence": recurrence, "created_at": _now(),
+        "is_habit": 1, "tags": [], "recurrence": recurrence, "created_at": _now(),
     })
     return uid
 
@@ -112,7 +112,7 @@ class TestUpdateTaskPreservesArchivedStatus:
         # Simulates habit_task_form.html's own POST -- no status field.
         tasks_router.update_task(
             "h1", title="Meditate (renamed)", description="", due_at="", start_at="",
-            tags="", tags_labels=["Habit"], project="", project_field="", recurrence="FREQ=DAILY",
+            tags="", is_habit="1", project="", project_field="", recurrence="FREQ=DAILY",
             target_per_day="1", conn=conn,
         )
         task = db.get_task(conn, "h1")

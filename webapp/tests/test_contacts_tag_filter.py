@@ -176,26 +176,16 @@ class TestArchivedDefaultExclusion:
         assert "Alice" in body
         assert "Old Contact" not in body
 
-    def test_rendered_show_archived_checkbox_reflects_state(self, conn):
-        """2026-09-27 direct feedback reverted the plain checkbox+label
-        toggle to a `_filter_dropdown.html` dropdown (same component the
-        Label filter next to it uses) -- the checkbox itself is now one
-        `<input>` inside that macro's multi-line markup, so this checks
-        for "checked" on the same tag rather than one exact single-line
-        string."""
+    def test_show_dropdown_has_active_archived_and_all(self, conn):
+        """The Show dropdown (Active, Archived, All) is a `_filter_dropdown.html` single-select."""
         _seed_contact(conn, "c1", "Alice", tags=["University"])
         _seed_contact(conn, "c2", "Old Contact")
         db.archive_contact(conn, "c2")
-        resp = contacts_router.list_contacts(_request(), conn=conn)
-        body = resp.body.decode()
-        assert 'name="archived" value="1"' in body
-        assert "Old Contact" not in body
-        unchecked_input = body[body.index('name="archived" value="1"'):][:200]
-        assert "checked" not in unchecked_input
-        resp2 = contacts_router.list_contacts(_request(), archived="1", conn=conn)
-        body2 = resp2.body.decode()
-        checked_input = body2[body2.index('name="archived" value="1"'):][:200]
-        assert 'form="contacts-filters-form"' in checked_input
-        assert "data-change-submit" in checked_input
-        assert "checked" in checked_input
-        assert "Old Contact" in body2
+        body = contacts_router.list_contacts(_request(), conn=conn).body.decode()
+        assert "Old Contact" not in body and "Alice" in body
+        assert 'name="show" value="archived"' in body and 'name="show" value="all"' in body
+        only = contacts_router.list_contacts(_request(), show="archived", conn=conn).body.decode()
+        assert "Old Contact" in only and "Alice" not in only
+        both = contacts_router.list_contacts(_request(), show="all", conn=conn).body.decode()
+        assert "Old Contact" in both and "Alice" in both
+        assert "Old Contact" in contacts_router.list_contacts(_request(), archived="1", conn=conn).body.decode()

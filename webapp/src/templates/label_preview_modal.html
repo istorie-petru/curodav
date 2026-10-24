@@ -2,6 +2,7 @@
 {% from "_detail_section.html" import detail_section %}
 {% from "_detail_cover.html" import detail_cover with context %}
 {% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill, widget_event_icon %}
+{% from "_label_pill.html" import tag_pill with context %}
 {% block title %}{{ label.name }}{% endblock %}
 {% block content %}
 <div id="modal-target" class="modal-stable-height">
@@ -23,6 +24,12 @@
         <div class="detail-meta-item">
             <span class="detail-meta-label">Group</span>
             <span class="detail-meta-value"><a href="/groups/{{ label.label_group|urlencode }}">{{ icon('layers', 'icon-sm') }} {{ label.label_group }}</a></span>
+        </div>
+        {% endif %}
+        {% if label_tag_pills %}
+        <div class="detail-meta-item detail-meta-wide">
+            <span class="detail-meta-label">Tags</span>
+            <span class="detail-meta-value">{% for t in label_tag_pills %}{{ tag_pill(t) }} {% endfor %}</span>
         </div>
         {% endif %}
         {% if label_status %}

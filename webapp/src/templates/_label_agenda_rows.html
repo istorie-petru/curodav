@@ -1,15 +1,14 @@
-{# Rows of a label's agenda list, shared by the sections page and the preview modal.
-   Set `agenda_task_checks` before including to give task rows a complete button. #}
-{% from "_widget_items.html" import widget_link_row, widget_pill, widget_event_icon, widget_complete_button, widget_recurring_badge %}
+{# Rows of a label's agenda list, shared by the sections page and the preview modal. #}
+{% from "_widget_items.html" import widget_link_row, widget_pill, widget_event_icon, task_pill, widget_recurring_badge %}
 {% for item in agenda_items %}
 {% if item.kind == 'habit' %}
 {{ widget_link_row(item.detail_url, item.title, leading=icon('activity', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill(item.recurrence_label, 'gray')) }}
 {% elif item.kind == 'task' %}
-{{ widget_link_row('/tasks/' ~ item.uid, item.title, leading=(widget_complete_button(item.uid) if agenda_task_checks|default(false) else icon('check-square', 'icon-sm')), leading_class='widget-row-icon', right=widget_pill((item.start_at | relative_date), 'gray')) }}
+{{ widget_link_row('/tasks/' ~ item.uid, item.title, leading=task_pill(request, item.tag_items), leading_class='widget-row-icon', right=widget_pill((item.start_at | relative_date), 'gray')) }}
 {% elif item.is_deadline %}
 {{ widget_link_row(none, item.title, leading=icon('flag', 'icon-sm'), leading_class='widget-row-icon', right=widget_pill(label_deadline.text if label_deadline else ('Deadline · ' ~ (item.start_at | relative_date)), label_deadline.color if label_deadline else 'gray')) }}
 {% else %}
 {% set _right %}{{ widget_recurring_badge(item) }}{{ widget_pill(((item.start_at | relative_date) ~ (' ' ~ (item.start_at | fmt_time) if not item.all_day else '')), 'blue') }}{% endset %}
-{{ widget_link_row('/events/' ~ item.uid, item.title, leading=widget_event_icon(item.calendar_color, icon_name=(label_icon(request, item.tags | first | default('')) | default('calendar', true))), leading_class='widget-row-icon', right=_right) }}
+{{ widget_link_row('/events/' ~ item.uid, item.title, leading=widget_event_icon(item.calendar_color, icon_name=(((item.tag_items | first).icon if item.tag_items else '') | default('calendar', true))), leading_class='widget-row-icon', right=_right) }}
 {% endif %}
 {% endfor %}

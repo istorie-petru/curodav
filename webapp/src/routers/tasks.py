@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .. import clock, db, derived_state, finance, finance_stats, habit_heatmap, habit_view, work_sessions
+from .. import tags as tag_store
 from .. import validation
 from ..deps import get_db, respond, templates, validation_response
 from . import dashboard as dashboard_router
@@ -123,10 +124,8 @@ def _pending_transaction_context(conn, task: dict | None) -> dict:
     """What the task edit form's Pending transactions rows need: the task's scheduled rows and the account names."""
     accounts = finance.list_accounts(conn)
     rows = finance.list_scheduled(conn, task_uid=task["uid"]) if task else []
-    known = finance.tag_names(conn)
-    names = list(dict.fromkeys(known + [t for r in rows for t in r["tags"]]))
     return {
-        "pending_tag_items": [{"uid": n, "name": n} for n in names],
+        "pending_tag_items": tag_store.picker(conn, "scheduled", "", [t for r in rows for t in r["tags"]])["items"],
         "pending_transactions": rows,
         "pending_account_names": [a["name"] for a in accounts],
         "pending_type_names": [n for _, n in finance_stats.TRANSACTION_TYPES],
@@ -178,7 +177,7 @@ def _due_at_key(t: dict) -> str:
 def _build_task_groups(conn, open_tasks: list[dict], completed_tasks: list[dict]) -> list[dict]:
     """The list's groups: open projects first, then labels, then tasks with neither, then Completed last.
 
-    A task sits in one group: its open project, else its first label (alphabetically), else No label.
+    A task sits in one group: its open project, else its first label (alphabetically), else No shelf.
     `open_tasks` is pre-sorted by due date and each group keeps that order. Completed tasks stay together
     in the one trailing group, newest change first."""
     projects = db.list_project_labels(conn)
@@ -189,7 +188,7 @@ def _build_task_groups(conn, open_tasks: list[dict], completed_tasks: list[dict]
         tags = sorted(t.get("tags") or [], key=str.lower)
         project = next((x for x in tags if x in open_projects), None)
         label = next((x for x in tags if x not in all_projects), None)
-        key = ("project", project) if project else ("label", label) if label else ("unassigned", "No label")
+        key = ("project", project) if project else ("label", label) if label else ("unassigned", "No shelf")
         buckets.setdefault(key, []).append(t)
     rank = {"project": 0, "label": 1, "unassigned": 2}
     groups = [
@@ -321,27 +320,14 @@ def habits_view_redirect():
     return RedirectResponse(url="/habits", status_code=302)
 
 
-@router.post("/habits/settings")
-def save_habit_settings(habit_label: str = Form("Habit"), conn=Depends(get_db)):
-    """Returns to /habits since habits H2."""
-    db.save_task_habit_settings(conn, habit_label)
-    return RedirectResponse(url="/habits", status_code=303)
-
-
 @router.get("/new")
 def new_task_form(
     request: Request, habit: bool = False, project: str = "", title: str = "", conn=Depends(get_db)
 ):
     if habit:
-        habit_label = db.get_task_habit_settings(conn)["habit_label"]
         return templates.TemplateResponse(
             "habit_task_form.html",
-            {
-                "request": request,
-                "active_tab": "tasks",
-                "task": None,
-                "habit_label": habit_label,
-            },
+            {"request": request, "active_tab": "tasks", "task": None},
         )
     tag_names = db.list_tag_names_in_use(conn)
     # `project` may be a freshly-promoted label with no object_labels rows
@@ -369,7 +355,6 @@ def new_task_form(
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
             **db.project_picker_context(conn),
             "today": clock.today().isoformat(),
-            "habit_label": db.get_task_habit_settings(conn)["habit_label"],
             # 1.4 (Project pages & views: "newly created tasks automatically
             # receive the project's label") -- the project detail page's "+
             # New task" link opens this same form with ?project=<name>, which
@@ -474,6 +459,8 @@ def create_task(
     status: str = Form("active"),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
+    item_tags: list[str] = Form([]),
+    item_tags_field: str = Form(""),
     project: str = Form(""),
     project_field: str = Form(""),
     recurrence: str = Form(""),
@@ -487,6 +474,7 @@ def create_task(
     habit_goal: str | None = Form(None),
     habit_kind: str | None = Form(None),
     habit_unit: str | None = Form(None),
+    is_habit: str = Form(""),
     reminder_time: str | None = Form(None),
     habit_icon: str | None = Form(None),
     habit_color: str | None = Form(None),
@@ -500,6 +488,8 @@ def create_task(
     error = validation.task_error(title, start_at, due_at, status, STATUSES)
     if error:
         return validation_response(error, x_requested_with, "/tasks")
+    if item_tags_field == "1":
+        tags_labels = tag_store.labels_of(conn, item_tags)
     tags = dashboard_router._combine_tags(tags, tags_labels)
     tags = dashboard_router._with_project(conn, tags, project, project_field)
     recurrence, habits_per_period = _apply_habit_repeat(
@@ -552,6 +542,7 @@ def create_task(
         "habits_per_period": _habits_per_period_value(habits_per_period),
         "habit_kind": _habit_kind_value(habit_kind),
         "habit_unit": _habit_unit_value(habit_unit),
+        "is_habit": is_habit in ("1", "true", "on"),
         "holiday_calendar": holiday_calendar or None,
         "exclude_saturday": exclude_saturday in ("1", "true", "on"),
         "exclude_sunday": exclude_sunday in ("1", "true", "on"),
@@ -571,6 +562,8 @@ def create_task(
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
+    if item_tags_field == "1":
+        tag_store.record(conn, "task", row["uid"], item_tags)
     if isinstance(reminder_time, str):
         db.set_task_reminder_time(conn, row["uid"], reminder_time)
     if isinstance(habit_icon, str) or isinstance(habit_color, str):
@@ -590,7 +583,7 @@ BULK_RECURRENCE = {
 
 
 def _label_options(conn):
-    return [(l["name"], l["name"]) for l in sorted(db.list_labels(conn), key=lambda l: l["name"].lower())]
+    return [(i["name"], i["name"]) for i in tag_store.picker(conn, "task", "", [])["items"]]
 
 
 @router.get("/bulk-edit-modal")
@@ -602,8 +595,8 @@ def bulk_edit_modal(uids: str, request: Request, conn=Depends(get_db)):
         {"name": "start_at", "label": "Start date", "kind": "date"},
         {"name": "due_at", "label": "Due date", "kind": "date"},
         {"name": "recurrence", "label": "Repeats", "kind": "select", "options": list(BULK_RECURRENCE.items())},
-        {"name": "add_tag", "label": "Add label", "kind": "select", "options": labels},
-        {"name": "remove_tag", "label": "Remove label", "kind": "select", "options": labels},
+        {"name": "add_tag", "label": "Add tag", "kind": "select", "options": labels},
+        {"name": "remove_tag", "label": "Remove tag", "kind": "select", "options": labels},
     ]
     return templates.TemplateResponse(
         "bulk_edit_modal.html",
@@ -639,12 +632,8 @@ def bulk_edit(
             row["due_at"] = due_at
         if recurrence in BULK_RECURRENCE:
             row["recurrence"] = None if recurrence == "none" else recurrence
-        tags = set(row.get("tags") or [])
-        if add_tag:
-            tags.add(add_tag)
-        if remove_tag:
-            tags.discard(remove_tag)
-        row["tags"] = sorted(tags)
+        if add_tag or remove_tag:
+            row["tags"] = sorted(tag_store.bulk_change(conn, "task", uid, row.get("tags") or [], [add_tag], [remove_tag]))
         row["updated_at"] = clock.now().isoformat()
         try:
             db.upsert_task(conn, row)
@@ -713,12 +702,9 @@ async def bulk_action(request: Request, conn=Depends(get_db)):
             row = db.get_task(conn, uid)
             if row is None:
                 continue
-            tags = set(row.get("tags") or [])
-            if mode == "add":
-                tags.update(tags_to_apply)
-            else:
-                tags.difference_update(tags_to_apply)
-            row["tags"] = sorted(tags)
+            row["tags"] = sorted(tag_store.bulk_change(
+                conn, "task", uid, row.get("tags") or [],
+                tags_to_apply if mode == "add" else [], tags_to_apply if mode == "remove" else []))
             row["updated_at"] = clock.now().isoformat()
             try:
                 db.upsert_task(conn, row)
@@ -758,8 +744,7 @@ def _is_habit_task(conn, task: dict | None) -> bool:
     """
     if not task:
         return False
-    habit_label = db.get_task_habit_settings(conn)["habit_label"]
-    return habit_label in (task.get("tags") or [])
+    return bool(task.get("is_habit"))
 
 
 @router.get("/{uid}/edit")
@@ -772,7 +757,6 @@ def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
                 "request": request,
                 "active_tab": "tasks",
                 "task": task,
-                "habit_label": db.get_task_habit_settings(conn)["habit_label"],
                 **_work_allocation_context(conn, task),
             },
         )
@@ -795,7 +779,6 @@ def edit_task_form(uid: str, request: Request, conn=Depends(get_db)):
             # create_task always sets one now, this just covers a legacy
             # row from before that was true.
             "today": clock.today().isoformat(),
-            "habit_label": db.get_task_habit_settings(conn)["habit_label"],
             "holiday_calendar_names": db.list_holiday_calendar_names(conn),
         },
     )
@@ -845,7 +828,6 @@ def task_detail(uid: str, request: Request, month: str | None = None, conn=Depen
             }
         )
     if _is_habit_task(conn, task):
-        ctx["habit_label"] = db.get_task_habit_settings(conn)["habit_label"]
         rows = db.list_task_completions(conn, uid)
         week_start = db.get_app_meta(conn, habit_view.WEEK_START_KEY) or "monday"
         ctx["completion_weeks"] = habit_heatmap.heatmap_weeks(
@@ -871,6 +853,8 @@ def update_task(
     status: str | None = Form(None),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
+    item_tags: list[str] = Form([]),
+    item_tags_field: str = Form(""),
     project: str = Form(""),
     project_field: str = Form(""),
     recurrence: str = Form(""),
@@ -884,6 +868,7 @@ def update_task(
     habit_goal: str | None = Form(None),
     habit_kind: str | None = Form(None),
     habit_unit: str | None = Form(None),
+    is_habit: str = Form(""),
     reminder_time: str | None = Form(None),
     habit_icon: str | None = Form(None),
     habit_color: str | None = Form(None),
@@ -926,6 +911,8 @@ def update_task(
                 if x_requested_with == "fetch":
                     return JSONResponse({"detail": [{"loc": ["body", error["field"]], "msg": error["message"]}]}, status_code=422)
                 return RedirectResponse(url=f"/tasks/{uid}/edit?error={quote(error['message'])}", status_code=303)
+    if item_tags_field == "1":
+        tags_labels = tag_store.labels_of(conn, item_tags)
     tags = dashboard_router._combine_tags(tags, tags_labels)
     tags = dashboard_router._with_project(conn, tags, project, project_field)
     recurrence, habits_per_period = _apply_habit_repeat(
@@ -988,10 +975,14 @@ def update_task(
         row["habit_kind"] = _habit_kind_value(habit_kind)
     if isinstance(habit_unit, str):
         row["habit_unit"] = _habit_unit_value(habit_unit)
+    if is_habit in ("1", "true", "on"):
+        row["is_habit"] = 1
     try:
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
+    if item_tags_field == "1":
+        tag_store.record(conn, "task", row["uid"], item_tags)
     # Per-habit reminder time -- same "only the habit form sends it" rule.
     if isinstance(reminder_time, str):
         db.set_task_reminder_time(conn, row["uid"], reminder_time)

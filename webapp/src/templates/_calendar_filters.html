@@ -10,7 +10,7 @@
     {% endif %}
     {% endfor %}{% endif %}
 </form>
-{% set _fd_items = [{'value': '', 'name': 'All labels'}] %}
+{% set _fd_items = [{'value': '', 'name': 'All shelves'}] %}
 {% if event_label_items %}
 {% for _it in event_label_items %}{% set _ = _fd_items.append({'value': _it.value, 'name': _it.name, 'section': _it.section}) %}{% endfor %}
 {% else %}
@@ -19,7 +19,7 @@
 {% endfor %}
 {% endif %}
 {% set fd_name = 'label' %}
-{% set fd_label = 'Label' %}
+{% set fd_label = 'Shelf' %}
 {% set fd_items = _fd_items %}
 {% set fd_selected = active_label %}
 {% set fd_mode = 'single' %}

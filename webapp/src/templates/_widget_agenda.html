@@ -1,5 +1,5 @@
 
-{% from "_widget_items.html" import widget_empty, widget_section_label, widget_pill, widget_link_row, widget_complete_button, widget_event_icon, widget_recurring_badge %}
+{% from "_widget_items.html" import widget_empty, widget_section_label, widget_pill, widget_link_row, task_pill, widget_event_icon, widget_recurring_badge %}
 {% from "_habit_page_row.html" import habit_check_control %}
 {% macro habit_rows(habits) %}
 {{ widget_section_label('Habits') }}
@@ -14,7 +14,7 @@
 <table>
     {% for t in tasks %}
     {% set _done = t.status in ('done', 'archived') %}
-    {{ widget_link_row('/tasks/' ~ t.uid, t.title, leading=widget_complete_button(t.uid, _done), leading_class='widget-row-icon', right=widget_pill((t.due_at[:10] | relative_date), 'gray'), row_class=('task-row-completed' if _done else None)) }}
+    {{ widget_link_row('/tasks/' ~ t.uid, t.title, leading=task_pill(request, t.tag_items), leading_class='widget-row-icon', right=widget_pill((t.due_at[:10] | relative_date), 'gray'), row_class=('task-row-completed' if _done else None)) }}
     {% endfor %}
 </table>
 {% endmacro %}
@@ -27,10 +27,10 @@
     <div class="week-overview-day-label">{{ day.label }}</div>
     {% if day.tasks or day.events %}
     {% for e in day.events %}
-    <a class="week-overview-item" href="/events/{{ e.uid }}{% if e.recurrence and e.occurrence_date %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ e.title }}">{{ widget_event_icon(e.calendar_color or 'blue', 'icon-sm', label_icon(request, e.tags | first | default('')) | default('calendar', true)) }}{% if e.start_at and not e.all_day %}<span class="wo-time">{{ e.start_at | fmt_time }}</span>{% endif %}<span class="wo-title">{{ e.title }}</span></a>
+    <a class="week-overview-item" href="/events/{{ e.uid }}{% if e.recurrence and e.occurrence_date %}?occurrence_date={{ e.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ e.title }}">{{ widget_event_icon(e.calendar_color or 'blue', 'icon-sm', ((e.tag_items | first).icon if e.tag_items else '') | default('calendar', true)) }}{% if e.start_at and not e.all_day %}<span class="wo-time">{{ e.start_at | fmt_time }}</span>{% endif %}<span class="wo-title">{{ e.title }}</span></a>
     {% endfor %}
     {% for t in day.tasks %}
-    <a class="week-overview-item" href="/tasks/{{ t.uid }}" data-modal title="{{ t.title }}">{{ icon(label_icon(request, t.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }}<span class="wo-title">{{ t.title }}</span></a>
+    <a class="week-overview-item" href="/tasks/{{ t.uid }}" data-modal title="{{ t.title }}">{{ icon(((t.tag_items | first).icon if t.tag_items else '') | default('alert-triangle', true), 'icon-sm') }}<span class="wo-title">{{ t.title }}</span></a>
     {% endfor %}
     {% else %}
     <div class="week-overview-empty">&mdash;</div>
@@ -47,7 +47,7 @@
 <table>
     {% for t in data.tasks %}
     {% set _done = t.status in ('done', 'archived') %}
-    {{ widget_link_row('/tasks/' ~ t.uid, t.title, leading=widget_complete_button(t.uid, _done), leading_class='widget-row-icon', right=(widget_pill('Today', 'blue') if data.range == 'today' else widget_pill((t.due_at[:10] | relative_date), 'gray')), row_class=('task-row-completed' if _done else None)) }}
+    {{ widget_link_row('/tasks/' ~ t.uid, t.title, leading=task_pill(request, t.tag_items), leading_class='widget-row-icon', right=(widget_pill('Today', 'blue') if data.range == 'today' else widget_pill((t.due_at[:10] | relative_date), 'gray')), row_class=('task-row-completed' if _done else None)) }}
     {% endfor %}
 </table>
 {% endif %}
@@ -55,7 +55,7 @@
 {{ widget_section_label('Events') }}
 <table>
     {% for e in data.events %}
-    {% set _icon_name = label_icon(request, e.tags | first | default('')) | default('calendar', true) %}
+    {% set _icon_name = ((e.tag_items | first).icon if e.tag_items else '') | default('calendar', true) %}
     {% set _ev_attrs = ('data-start="' ~ (e.start_at | e) ~ '" data-end="' ~ ((e.end_at or '') | e) ~ '"' ~ (' data-all-day="1"' if e.all_day else '')) if e.start_at else none %}
     {% if data.range == 'today' %}
     {{ widget_link_row('/events/' ~ e.uid, e.title, leading=widget_event_icon(e.calendar_color, icon_name=_icon_name), leading_class='widget-row-icon', right=widget_pill(('All day' if e.all_day or not e.start_at else (e.start_at | fmt_time)), 'blue'), row_attrs=_ev_attrs) }}

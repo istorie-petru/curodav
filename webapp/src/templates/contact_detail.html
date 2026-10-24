@@ -1,6 +1,6 @@
 {% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
-{% from "_label_pill.html" import label_pill with context %}
+{% from "_label_pill.html" import label_pill, tag_pill with context %}
 {% from "_detail_cover.html" import detail_cover with context %}
 {% from "_detail_section.html" import detail_section %}
 {% block title %}{{ contact.full_name if contact else "Contact" }}{% endblock %}
@@ -76,10 +76,10 @@
             <span class="detail-meta-value">{{ contact.birthday | fmt_birthday }}</span>
         </div>
         {% endif %}
-        {% if contact.tags %}
+        {% if contact.tag_items %}
         <div class="detail-meta-item detail-meta-wide">
-            <span class="detail-meta-label">Labels</span>
-            <span class="detail-meta-value">{% for tag in contact.tags %}{{ label_pill(tag, 'modal') }} {% endfor %}</span>
+            <span class="detail-meta-label">Tags</span>
+            <span class="detail-meta-value">{% for tag in contact.tag_items %}{{ tag_pill(tag) }} {% endfor %}</span>
         </div>
         {% endif %}
     </div>

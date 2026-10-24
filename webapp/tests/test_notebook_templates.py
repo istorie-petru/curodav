@@ -201,10 +201,10 @@ def test_frontmatter_fields_outside_the_template_can_be_filled_too(conn):
     assert {p["key"]: p["value"] for p in doc["properties"]}["author"] == "Ada"
 
 
-def test_the_new_note_form_offers_labels_project_type_and_frontmatter(conn):
+def test_the_new_note_form_offers_tag_type_and_frontmatter(conn):
     db.upsert_notebook_field_config(conn, {"key": "author", "label": "Author", "type": "text"})
     body = router.new_note_modal(_request("/notebook/new"), conn=conn).body.decode()
-    for marker in ('name="title"', 'name="note_type"', 'name="tags_labels"', 'name="field__author"', 'name="template_uid"'):
+    for marker in ('name="title"', 'name="note_type"', 'name="item_tags"', 'name="field__author"', 'name="template_uid"'):
         assert marker in body
 
 

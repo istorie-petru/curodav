@@ -227,7 +227,6 @@ class TestContactsNoArchivedState:
         # contacts_archive_column.py cover that real feature).
         resp = contacts_router.list_contacts(_request("/contacts"), conn=conn)
         body = resp.body.decode()
-        assert ">Active<" not in body
         assert "segmented-control" not in body
         assert "segmented-btn" not in body
 

@@ -141,13 +141,17 @@ def test_the_delete_question_has_three_choices_for_a_series(conn):
     assert "/delete-scope" in detail and "Every week" in detail or "Weekly" in detail
 
 
-def test_the_edit_form_asks_which_events_to_change(conn):
+def test_the_edit_form_of_a_series_has_one_form_with_event_fields_and_a_rules_pane(conn):
     rows = _create(conn)
     body = calendar_router.edit_event_form(rows[1]["uid"], _request(), conn=conn).body.decode()
-    assert 'name="series_scope"' in body and "This and following events" in body
-    # the scope comes first, and the series-wide fields stay locked until it is widened
-    assert body.index('name="series_scope"') < body.index('name="title"') < body.index('name="recurrence"')
-    assert 'data-series-only inert' in body
+    assert body.count('id="event-form"') == 1 and "Apply changes to" not in body
+    # the date selector appears once, and the rule fields live in the series pane of the same form
+    assert body.count('name="start_at"') == 1 and body.count('name="recurrence"') == 1
+    assert body.index('name="start_at"') < body.index("data-series-rules") < body.index('name="recurrence"')
+    # the main save is "this event"; the menu offers following and all
+    assert 'name="series_scope" value="this"' in body
+    assert 'data-set-value="following"' in body and 'data-set-value="all"' in body and "Save this event" in body
+    assert '<h1>Event</h1>' in body and '<h1>The whole series</h1>' in body and "<h1>Edit event</h1>" not in body
 
 
 # ---- the migration of legacy repeating events

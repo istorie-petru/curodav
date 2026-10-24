@@ -114,8 +114,8 @@
         <a href="/contacts" data-tab="contacts" class="tab-btn {% if active_tab == 'contacts' %}active{% endif %}" title="Contacts" aria-label="Contacts">{{ icon('address-book') }}<span>Contacts</span></a>
         {% set _sb_groups = sidebar_groups(request) %}
         {% if _sb_groups %}
-        <div class="tab-separator" role="separator" aria-label="Groups"></div>
-        <div class="sidebar-section-label" aria-hidden="true">Groups</div>
+        <div class="tab-separator" role="separator" aria-label="Spaces"></div>
+        <div class="sidebar-section-label" aria-hidden="true">Spaces</div>
         {% for g in _sb_groups %}
         {% set has_children = g.children|length > 0 %}
         {% set group_href = '/groups/' ~ g.name %}
@@ -132,7 +132,7 @@
           <div class="sidebar-tree-row">
             <a href="{{ group_href }}" class="tab-btn tab-btn-space {% if _g_active %}active{% elif ns.child_active %}has-active-child{% endif %}" title="{{ g.name }}" aria-label="{{ g.name }}"><span class="sidebar-group-glyph" data-style="color: var(--cal-text-{{ g.color or 'gray' }})">{{ icon(g.icon or 'layers') }}</span><span>{{ g.name }}</span></a>
             {% if has_children %}
-            <button type="button" class="sidebar-tree-toggle" aria-expanded="{{ 'true' if ns.child_active else 'false' }}" aria-label="Toggle {{ g.name }} labels">{{ icon('chevron-right', 'sidebar-tree-chevron') }}</button>
+            <button type="button" class="sidebar-tree-toggle" aria-expanded="{{ 'true' if ns.child_active else 'false' }}" aria-label="Toggle {{ g.name }} shelves">{{ icon('chevron-right', 'sidebar-tree-chevron') }}</button>
             {% endif %}
           </div>
           {% if has_children %}
@@ -167,7 +167,7 @@
     <nav class="mobile-tabbar" role="navigation" aria-label="Main (mobile)">
         <button type="button" id="mobile-nav-toggle" class="mobile-tabbar-btn" aria-expanded="false" aria-controls="mobile-nav-drawer" aria-label="Open navigation menu">{{ icon('sidebar') }}<span>Menu</span></button>
         <a href="/" data-tab="dashboard" class="mobile-tabbar-btn {% if active_tab == 'dashboard' %}active{% endif %}">{{ icon('home') }}<span>Home</span></a>
-        <a href="{{ quick_add_href() }}" data-modal class="mobile-tabbar-btn mobile-tabbar-add" title="{{ quick_add_title() }}" aria-label="{{ quick_add_title() }}"><span class="mobile-tabbar-add-disc">{{ icon('plus') }}</span></a>
+        <a href="{{ quick_add_href() }}" data-modal class="mobile-tabbar-btn" title="{{ quick_add_title() }}" aria-label="{{ quick_add_title() }}">{{ icon('plus') }}<span>Add</span></a>
         <a href="/settings" data-tab="settings" class="mobile-tabbar-btn {% if active_tab and (active_tab.startswith('settings') or active_tab in ('labels', 'published_lists', 'export')) %}active{% endif %}">{{ icon('settings') }}<span>Settings</span></a>
     </nav>
     <!-- Scrim behind the open drawer -- tap to close (static/

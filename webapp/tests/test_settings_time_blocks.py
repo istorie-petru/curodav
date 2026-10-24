@@ -36,6 +36,7 @@ from settings_app import fake_app
 from src import db
 from src.routers import calendar as calendar_router
 from src.routers import settings as settings_router
+from src.routers import taxonomy as taxonomy_router
 
 
 @pytest.fixture()
@@ -57,23 +58,22 @@ def _request(path="/settings/time-blocks", query_string=b""):
 
 class TestSettingsTimeBlocksPage:
     def test_renders_with_breadcrumb_and_active_tab(self, conn):
-        resp = settings_router.settings_time_blocks(_request(), conn=conn)
+        resp = taxonomy_router.manage_calendar(_request(), view="time-blocks", conn=conn)
         assert resp.status_code == 200
-        assert resp.context["active_tab"] == "settings_time_blocks"
+        assert resp.context["view"] == "time_blocks"
         assert resp.context["crumbs"] == [{"url": "/settings", "name": "Settings"}]
 
     def test_empty_state_when_no_blocks(self, conn):
-        body = settings_router.settings_time_blocks(_request(), conn=conn).body.decode()
+        body = taxonomy_router.manage_calendar(_request(), view="time-blocks", conn=conn).body.decode()
         assert "No time blocks configured yet" in body
-        assert 'id="time-block-table"' in body
+        assert 'id="taxonomy-table"' in body and 'data-view="time_blocks"' in body
         assert 'href="/settings/time-blocks/new"' in body
 
     def test_lists_existing_blocks_in_one_merged_table(self, conn):
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:59", "days": "Monday,Tuesday"})
         db.upsert_time_block(conn, {"uid": "l1", "kind": "leisure", "label": "Evening", "start_time": "21:00", "end_time": "21:59", "days": "Monday"})
-        body = settings_router.settings_time_blocks(_request(), conn=conn).body.decode()
-        assert 'id="time-block-table"' in body
-        assert body.count('id="time-block-table"') == 1  # one merged table, not two
+        body = taxonomy_router.manage_calendar(_request(), view="time-blocks", conn=conn).body.decode()
+        assert body.count('id="taxonomy-table"') == 1  # one table for Holidays and Sleep & Leisure, not two pages
         assert "Night" in body
         assert "Evening" in body
         assert "00:00&ndash;05:59" in body
@@ -87,21 +87,21 @@ class TestSettingsTimeBlocksPage:
 
     def test_hub_links_to_time_blocks(self, conn):
         body = settings_router.settings_index(_request("/settings"), conn=conn).body.decode()
-        assert "Preferences" in body and "/settings/time-blocks" in [c["url"] for c in settings_router.HUB_CATEGORIES]
+        assert "Modules" in body and "/settings/calendar" in [c["url"] for c in settings_router.HUB_CATEGORIES]
 
     def test_all_seven_days_summarize_as_all_week(self, conn):
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:59", "days": ",".join(db.TIME_BLOCK_DAYS)})
-        body = settings_router.settings_time_blocks(_request(), conn=conn).body.decode()
+        body = taxonomy_router.manage_calendar(_request(), view="time-blocks", conn=conn).body.decode()
         assert "All week" in body
 
     def test_monday_to_friday_summarize_as_all_work_week(self, conn):
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:59", "days": ",".join(db.TIME_BLOCK_DAYS[:5])})
-        body = settings_router.settings_time_blocks(_request(), conn=conn).body.decode()
+        body = taxonomy_router.manage_calendar(_request(), view="time-blocks", conn=conn).body.decode()
         assert "All work week" in body
 
     def test_partial_day_sets_are_abbreviated_in_canonical_order(self, conn):
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:59", "days": "Monday,Wednesday,Friday"})
-        body = settings_router.settings_time_blocks(_request(), conn=conn).body.decode()
+        body = taxonomy_router.manage_calendar(_request(), view="time-blocks", conn=conn).body.decode()
         assert "00:00&ndash;05:59" in body
         assert "Mon Wed Fri" in body
 
@@ -110,7 +110,7 @@ class TestCreateTimeBlock:
     def test_creates_sleep_block(self, conn):
         resp = settings_router.create_time_block(kind="sleep", label="Night", start_time="00:00", end_time="05:59", days=["Monday", "Tuesday"], conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/time-blocks"
+        assert resp.headers["location"] == "/settings/calendar?view=time-blocks"
         blocks = db.list_time_blocks(conn, "sleep")
         assert len(blocks) == 1
         assert blocks[0]["days"] == "Monday,Tuesday"
@@ -184,7 +184,7 @@ class TestUpdateTimeBlock:
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Old", "start_time": "00:00", "end_time": "05:00", "days": "Monday"})
         resp = settings_router.update_time_block("s1", label="New", start_time="00:00", end_time="05:00", days=["Monday"], conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/time-blocks"
+        assert resp.headers["location"] == "/settings/calendar?view=time-blocks"
         assert db.get_time_block(conn, "s1")["label"] == "New"
 
     def test_updates_start_and_end_time(self, conn):
@@ -242,7 +242,7 @@ class TestDeleteTimeBlock:
         db.upsert_time_block(conn, {"uid": "s1", "kind": "sleep", "label": "Night", "start_time": "00:00", "end_time": "05:00", "days": "Monday"})
         resp = settings_router.delete_time_block("s1", conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/time-blocks"
+        assert resp.headers["location"] == "/settings/calendar?view=time-blocks"
         assert db.list_time_blocks(conn) == []
 
 

@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from .. import clock, db, habit_view, recurrence_expand
+from .. import tags as tag_store
 from ..deps import EDIT_MODE_KEY, get_db, templates
 from . import dashboard as dashboard_router
 from . import secretariat_page
@@ -163,7 +164,7 @@ def _dashboard_page(conn, request: Request, name: str, label: dict):
     return templates.TemplateResponse("label_detail.html", ctx)
 
 
-def _agenda_items(conn, scope: set[str] | None, label: dict, tasks: list[dict], limit: int) -> list[dict]:
+def _agenda_items(conn, scope: set[str] | None, label: dict, tasks: list[dict], limit: int, tag: str = "") -> list[dict]:
     """Future events tagged with this label, the label's own deadline, and
     open due-dated tasks (from `tasks`), merged into one chronological list
     and capped at `limit`, led by at most MAX_AGENDA_HABITS of the label's
@@ -177,6 +178,9 @@ def _agenda_items(conn, scope: set[str] | None, label: dict, tasks: list[dict], 
         )
         if dashboard_router._passes_scope(e.get("tags"), scope) and e.get("start_at") and e["start_at"][:10] >= today_iso
     ]
+    if tag:
+        match = tag_store.matcher(conn, "event", [tag])
+        events = [e for e in events if match(e)]
     events.sort(key=lambda e: e["start_at"])
     events = recurrence_expand.collapse_recurring(events)
     db.annotate_item_colors(conn, events)
@@ -203,13 +207,40 @@ def _agenda_items(conn, scope: set[str] | None, label: dict, tasks: list[dict], 
     return (habits + events)[:limit]
 
 
+def _tag_filter(conn, request: Request, name: str) -> tuple[str, list[dict]]:
+    """The tag picked on this label's page (`?tag=`) and the dropdown's options; none when the label has one tag."""
+    own = tag_store.tags_of_label(conn, name)
+    picked = request.query_params.get("tag", "")
+    if len(own) < 2 or picked.lower() not in {t["name"].lower() for t in own}:
+        picked = ""
+    items = [{"value": "", "name": "All tags"}] + [{"value": t["name"], "name": t["name"]} for t in own] if len(own) > 1 else []
+    return picked, items
+
+
+def _group_by_tag(by_status: list) -> list[tuple[dict, list[dict], int]]:
+    """A label page whose label has several tags groups its open tasks by tag (the task's first tag), instead of by status."""
+    groups: dict[str, tuple[dict, list[dict]]] = {}
+    for _title, rows, _count in by_status:
+        for t in rows:
+            tag = (t.get("tag_items") or [{"name": "Other", "color": "gray", "icon": ""}])[0]
+            groups.setdefault(tag["name"], (tag, []))[1].append(t)
+    return [(tag, rows, len(rows)) for tag, rows in sorted(groups.values(), key=lambda g: g[0]["name"].lower())]
+
+
 def _sections_page(conn, request: Request, name: str, label: dict):
     tasks = [t for t in db.list_tasks_sharing_labels(conn, [name]) if t["status"] != "archived"]
-    ctx = _sections_context(conn, request, {name}, name, label, tasks)
+    picked, tag_items = _tag_filter(conn, request, name)
+    if picked:
+        match = tag_store.matcher(conn, "task", [picked])
+        tasks = [t for t in tasks if match(t)]
+    ctx = _sections_context(conn, request, {name}, name, label, tasks, tag=picked)
     ctx.update(
         {
             "page_label_scope": name if label.get("label_group") else None,
             "page_url": label_url(name),
+            "tag_items": tag_items,
+            "active_tag": picked,
+            "ov_by_tag": _group_by_tag(ctx.get("ov_by_status") or []) if len(tag_items) > 1 and not picked else [],
         }
     )
     ctx.update(_status_context(conn, label))
@@ -293,7 +324,7 @@ def _overview_context(conn, scope: set[str] | None, scope_key: str | None, label
 
 
 def _sections_context(conn, request: Request, scope: set[str] | None, scope_key: str | None, label: dict,
-                      tasks: list[dict]) -> dict:
+                      tasks: list[dict], tag: str = "") -> dict:
     board_statuses = [s for s in tasks_router.STATUSES if s != "archived"]
     columns: dict[str, list] = {s: [] for s in board_statuses}
     if label.get("tasks_widget"):
@@ -301,17 +332,24 @@ def _sections_context(conn, request: Request, scope: set[str] | None, scope_key:
             t["strip"] = db.card_strip(conn, t)
             columns.setdefault(t["status"], []).append(t)
 
-    agenda_items = _agenda_items(conn, scope, label, tasks, 8) if label.get("agenda_widget") else []
+    agenda_items = _agenda_items(conn, scope, label, tasks, 8, tag) if label.get("agenda_widget") else []
 
     contacts = []
     if label.get("contacts_widget"):
-        contacts = [c for c in db.list_contacts(conn) if dashboard_router._passes_scope(c.get("tags"), scope)][:20]
+        contacts = [c for c in db.list_contacts(conn) if dashboard_router._passes_scope(c.get("tags"), scope)]
+        if tag:
+            match = tag_store.matcher(conn, "contact", [tag])
+            contacts = [c for c in contacts if match(c)]
+        contacts = contacts[:20]
 
     notebook_documents = {}
     if label.get("notebook_widget"):
         # Reuses the Dashboard's own scope/tags/limit pipeline so this
         # section and the Notebook List widget cannot drift apart.
         notebook_documents = dashboard_router._render_notebook_list(conn, {"label_name": scope_key})
+        if tag and notebook_documents.get("documents"):
+            match = tag_store.matcher(conn, "notebook", [tag])
+            notebook_documents = {**notebook_documents, "documents": [d for d in notebook_documents["documents"] if match(d)]}
 
     glance = dashboard_router._render_at_a_glance(conn, {"label_name": scope_key}) if tasks else None
     group_members = (
@@ -367,7 +405,7 @@ def label_preview(name: str, request: Request, conn=Depends(get_db)):
         with an Open page link and an Edit button.
     """
     if not _label_exists(conn, name):
-        raise HTTPException(404, "No such label")
+        raise HTTPException(404, "No such shelf")
     label = db.effective_label_config(conn, name)
     tasks = [t for t in db.list_tasks_sharing_labels(conn, [name]) if t["status"] != "archived"]
     back_to = request.query_params.get("from") or ""
@@ -384,6 +422,7 @@ def label_preview(name: str, request: Request, conn=Depends(get_db)):
     }
     ctx.update(_status_context(conn, label))
     ctx.update(_page_common(conn, name))
+    ctx["label_tag_pills"] = tag_store.tags_of_label(conn, name)
     return templates.TemplateResponse("label_preview_modal.html", ctx)
 
 
@@ -422,7 +461,7 @@ def _usage_by_label(conn) -> dict[str, int]:
 def _group_or_404(conn, name: str) -> dict:
     g = db.get_group(conn, name)
     if not g:
-        raise HTTPException(404, "No such group")
+        raise HTTPException(404, "No such space")
     return g
 
 
@@ -478,7 +517,7 @@ def create_group(
 
     new_name = new_name.strip() if isinstance(new_name, str) else ""
     if new_name.startswith(db.GROUP_KEY_PREFIX):
-        raise HTTPException(400, "A group name can't start with \"group:\".")
+        raise HTTPException(400, "A space name can't start with \"group:\".")
     color = color if isinstance(color, str) and color in COLORS else "gray"
     icon = icon.strip() if isinstance(icon, str) else ""
     try:
@@ -582,7 +621,7 @@ def update_group(
     members = members if isinstance(members, list) else []
     members_submitted = members_submitted if isinstance(members_submitted, str) else ""
     if new_name.startswith(db.GROUP_KEY_PREFIX):
-        raise HTTPException(400, "A group name can't start with \"group:\".")
+        raise HTTPException(400, "A space name can't start with \"group:\".")
     if members_submitted:
         db.set_group_members(conn, name, members)
     db.set_group_style(conn, name, icon or None, color)

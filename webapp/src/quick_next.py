@@ -13,7 +13,7 @@ def _day(value: str | None) -> str:
 
 def task_row(task: dict, overdue: bool = False) -> dict:
     return {"kind": "task", "uid": task["uid"], "title": task["title"], "url": f"/tasks/{task['uid']}",
-            "date": task.get("due_at"), "all_day": len(task.get("due_at") or "") <= 10, "tags": task.get("tags") or [],
+            "date": task.get("due_at"), "all_day": len(task.get("due_at") or "") <= 10, "tags": task.get("tags") or [], "tag_items": task.get("tag_items") or [],
             "done": task.get("status") == "done", "overdue": overdue}
 
 
@@ -22,12 +22,12 @@ def event_row(event: dict) -> dict:
     if event.get("recurrence") and event.get("occurrence_date"):
         url += "?occurrence_date=" + event["occurrence_date"]
     return {"kind": "event", "uid": event["uid"], "title": event["title"], "url": url, "date": event.get("start_at"),
-            "all_day": bool(event.get("all_day")), "tags": event.get("tags") or [], "done": False, "overdue": False}
+            "all_day": bool(event.get("all_day")), "tags": event.get("tags") or [], "tag_items": event.get("tag_items") or [], "done": False, "overdue": False}
 
 
 def contact_row(contact: dict) -> dict:
     return {"kind": "contact", "uid": contact["uid"], "title": contact.get("name") or contact.get("title") or "",
-            "url": f"/contacts/{contact['uid']}", "date": None, "all_day": True, "tags": contact.get("tags") or [],
+            "url": f"/contacts/{contact['uid']}", "date": None, "all_day": True, "tags": contact.get("tags") or [], "tag_items": contact.get("tag_items") or [],
             "done": False, "overdue": False}
 
 

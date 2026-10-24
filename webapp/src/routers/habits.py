@@ -30,7 +30,6 @@ def _habits_context(conn, request: Request) -> dict:
         # Habits H6: habits on a pause today get their own section.
         "paused": [h for h in items if h["paused_today"] and not h["due_today"]],
         "has_habits": bool(items),
-        "habit_label": db.get_task_habit_settings(conn)["habit_label"],
         "today_iso": clock.today().isoformat(),
     }
 

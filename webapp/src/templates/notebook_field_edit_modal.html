@@ -14,7 +14,7 @@
 <form method="post" id="notebook-field-form" action="{{ form_action }}">
     <div class="field-grid notebook-field-form-grid" data-field-type="{{ f.type if f else 'text' }}">
         <div class="field">
-            <label>Display label</label>
+            <label>Display shelf</label>
             {{ text_input({'name': 'label', 'value': f.label if f else '', 'required': true, 'autofocus': (true if (not f or not f.builtin) else false)}) }}
         </div>
         <div class="field">

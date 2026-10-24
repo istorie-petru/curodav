@@ -27,7 +27,7 @@
         <div class="field work-session-title-field">
             {% set ms_form_id = form_id %}{% set ms_name = 'pt_tags__' ~ key %}{% set ms_label = 'Tags' %}
             {% set ms_items = pending_tag_items %}{% set ms_selected = (row.tags if row else []) %}{% set ms_mode = 'select' %}
-            {% set ms_allow_new = true %}
+            {% set ms_allow_new = false %}{% set ms_pill = true %}
             {% include "_widget_list_multiselect.html" %}
         </div>
     </div>

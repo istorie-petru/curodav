@@ -260,6 +260,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "task_completions", "note", "TEXT")
     _ensure_column(conn, "tasks", "habit_unit", "TEXT")
     _ensure_column(conn, "tasks", "habit_kind", "TEXT")
+    _ensure_column(conn, "tasks", "is_habit", "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "tasks", "reminder_time", "TEXT")
     _ensure_column(conn, "tasks", "habit_icon", "TEXT")
     _ensure_column(conn, "tasks", "habit_color", "TEXT")
@@ -444,7 +445,7 @@ def purge_all_data(conn: sqlite3.Connection) -> None:
         "notebook_glossary_excluded_terms",
         "notebook_links", "notebook_images", "notebook_image_refs", "glossary_section_refs",
         # Personal finance (Phase P) -- same "purge wipes everything".
-        "finance_accounts", "finance_transactions", "finance_scheduled", "finance_scheduled_tags", "finance_tags", "finance_transaction_tags",
+        "finance_accounts", "finance_transactions", "finance_scheduled", "label_tags", "object_tags",
     ]
     for table in tables:
         conn.execute(f"DELETE FROM {table}")
@@ -517,7 +518,7 @@ _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 
 
 def annotate_item_colors(conn: sqlite3.Connection, items: list[dict[str, Any]], *, key: str = "calendar_color") -> list[dict[str, Any]]:
-    """A task/event row's display color is its first label's color
+    """A task/event row's display color is its first tag's color (or, with no tag items, its first label's color)
         (alphabetical, for a stable pick when it carries more than one),
         falling back to 'blue' for an unlabeled row -- moved here from
         routers/calendar.py's `_annotate_calendar_colors` so
@@ -531,6 +532,9 @@ def annotate_item_colors(conn: sqlite3.Connection, items: list[dict[str, Any]], 
     from .labels import effective_label_config
     color_by_label: dict[str, str] = {}
     for item in items:
+        if item.get("tag_items"):  # a tag's own colour comes first
+            item[key] = item["tag_items"][0]["color"] or "blue"
+            continue
         tags = sorted(item.get("tags") or [], key=str.lower)
         color = "blue"
         for name in tags:

@@ -114,7 +114,7 @@
         <div class="field widget-scope-field">
             <label>Scope</label>
             <div class="field-toggle-group">
-                <label class="field-toggle">{{ radio_input({'name': 'scope', 'value': 'space', 'checked': (true if ((widget.config.scope or 'space') == 'space') else false)}) }} This Space</label>
+                <label class="field-toggle">{{ radio_input({'name': 'scope', 'value': 'space', 'checked': (true if ((widget.config.scope or 'space') == 'space') else false)}) }} This page</label>
                 <label class="field-toggle">{{ radio_input({'name': 'scope', 'value': 'everything', 'checked': (true if (widget.config.scope == 'everything') else false)}) }} Everything</label>
             </div>
         </div>
@@ -122,8 +122,8 @@
         {% set _extra_tags = (widget.config.tags or []) | reject('in', tag_names) | reject('equalto', '__no_label__') | list %}
         {% if _extra_tags %}<input type="hidden" name="tags" value="{{ _extra_tags|join(',') }}">{% endif %}
         {% set ms_name = 'tags_labels' %}
-        {% set ms_label = 'Labels' %}
-        {% set ms_items = [{'uid': '__no_label__', 'name': 'No label'}] + tag_name_items %}
+        {% set ms_label = 'Shelves' %}
+        {% set ms_items = [{'uid': '__no_label__', 'name': 'No shelf'}] + tag_name_items %}
         {% set ms_selected = widget.config.tags or [] %}
         {% set ms_pill = true %}
         {% include "_widget_list_multiselect.html" %}

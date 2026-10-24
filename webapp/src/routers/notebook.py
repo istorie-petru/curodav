@@ -27,6 +27,7 @@ from urllib.parse import quote, urlencode
 from fastapi import APIRouter, Depends, Form, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
+from .. import tags as tag_store
 from .. import citation_formats, clock, db, icon_font, notebook_fields, notebook_find, notebook_mentions
 from ..deps import get_db, respond, templates, wants_json
 from .labels import COLORS, icon_groups_for
@@ -186,15 +187,11 @@ _NONE = "__none__"
 
 @router.get("/bulk-edit-modal")
 def bulk_edit_modal(uids: str, request: Request, conn=Depends(get_db)):
-    """Bulk-select "Edit": sets the same label, project and Type on every selected document."""
-    project_names = {c["name"] for c in db.list_project_labels(conn)}
-    all_names = sorted(db.list_all_known_label_names(conn), key=str.lower)
-    labels = [(_NONE, "No label")] + [(n, n) for n in all_names if n not in project_names]
-    projects = [(_NONE, "No project")] + [(n, n) for n in sorted(project_names, key=str.lower)]
+    """Bulk-select "Edit": sets the same tag and Type on every selected document."""
+    tag_options = [(_NONE, "No tag")] + [(i["name"], i["name"]) for i in tag_store.picker(conn, "notebook", "", [])["items"]]
     types = [(t, t.capitalize()) for t in db.list_notebook_note_types_in_use(conn)]
     fields = [
-        {"name": "label", "label": "Label", "kind": "select", "options": labels},
-        {"name": "project", "label": "Project", "kind": "select", "options": projects},
+        {"name": "tag", "label": "Tag", "kind": "select", "options": tag_options},
         {"name": "note_type", "label": "Type", "kind": "select", "options": types},
     ]
     return templates.TemplateResponse(
@@ -207,24 +204,21 @@ def bulk_edit_modal(uids: str, request: Request, conn=Depends(get_db)):
 @router.post("/bulk-edit")
 def bulk_edit(
     uids: list[str] = Form([]),
-    label: str = Form(""),
-    project: str = Form(""),
+    tag: str = Form(""),
     note_type: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     now = clock.now().isoformat()
-    project_names = {c["name"] for c in db.list_project_labels(conn)}
     for uid in uids:
         row = db.get_notebook_document(conn, uid)
         if row is None:
             continue
-        tags = list(row.get("tags") or [])
-        if label:
-            tags = [t for t in tags if t in project_names] + ([] if label == _NONE else [label])
-        if project:
-            tags = [t for t in tags if t not in project_names] + ([] if project == _NONE else [project])
-        row["tags"] = tags
+        if tag:  # a note has one tag: the new one replaces it, or "No tag" clears it
+            current = row.get("tags") or []
+            row["tags"] = [] if tag == _NONE else tag_store.bulk_change(conn, "notebook", uid, current, [tag], [], single=True)
+            if tag == _NONE:
+                tag_store.record(conn, "notebook", uid, [])
         if note_type.strip():
             row["note_type"] = note_type.strip()
         row["updated_at"] = now
@@ -265,6 +259,8 @@ def create_document(
     note_type: str | None = Form(None),
     note_type_new: str = Form(""),
     tags_labels: list[str] = Form([]),
+    item_tags: list[str] = Form([]),
+    item_tags_field: str = Form(""),
     project: str = Form(""),
     project_field: str = Form(""),
     typed=Depends(_typed_field_values),
@@ -292,6 +288,8 @@ def create_document(
     if errors:
         detail = [{"loc": ["body", name], "msg": msg} for name, msg in errors.items()]
         return JSONResponse({"detail": detail}, status_code=422)
+    if item_tags_field == "1":
+        tags_labels = tag_store.labels_of(conn, item_tags[:1])
     tags = [t for t in (tags_labels if isinstance(tags_labels, list) else [])]
     if isinstance(label, str) and label and label not in tags:
         tags.append(label)
@@ -303,6 +301,8 @@ def create_document(
         "document_type": "full", "note_type": kind, "created_at": now, "updated_at": now,
         "tags": tags, "properties": properties,
     })
+    if item_tags_field == "1":
+        tag_store.record(conn, "notebook", uid, item_tags[:1])
     if open_note == "1":
         return RedirectResponse(url=f"/notebook/{uid}", status_code=303)
     return respond(x_requested_with, f"/notebook/{uid}", status_code=201, uid=uid)
@@ -691,6 +691,8 @@ def update_document_properties(
     note_type: str = Form(""),
     note_type_new: str = Form(""),
     tags_labels: list[str] = Form([]),
+    item_tags: list[str] = Form([]),
+    item_tags_field: str = Form(""),
     project: str = Form(""),
     project_field: str = Form(""),
     kind: str = Form(""),
@@ -722,6 +724,9 @@ def update_document_properties(
     else:
         from . import dashboard as dashboard_router
 
+        if item_tags_field == "1":
+            tags_labels = tag_store.labels_of(conn, item_tags[:1])
+
         row["tags"] = dashboard_router._tags_list(dashboard_router._with_project(
             conn, ",".join(tags_labels if isinstance(tags_labels, list) else []),
             project if isinstance(project, str) else "", project_field if isinstance(project_field, str) else ""))
@@ -737,6 +742,8 @@ def update_document_properties(
     row["properties"] = items
     row["updated_at"] = clock.now().isoformat()
     db.upsert_notebook_document(conn, row)
+    if item_tags_field == "1" and not row["is_template"]:
+        tag_store.record(conn, "notebook", uid, item_tags[:1])
     return respond(x_requested_with, f"/notebook/{uid}")
 
 

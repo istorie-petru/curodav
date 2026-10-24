@@ -1,4 +1,4 @@
-<div class="card calendar-viewport month-viewport fourweek-viewport" id="fourweek-grid" data-date="{{ anchor_iso }}" data-label="{{ active_label | default('') }}" data-label-text="{{ label_text }}" data-prev="{{ prev_start }}" data-next="{{ next_start }}">
+<div class="card calendar-viewport month-viewport fourweek-viewport" id="fourweek-grid" data-date="{{ anchor_iso }}" data-label="{{ active_label | default('') }}" data-label-text="{{ label_text }}" data-label-short="{{ label_short }}" data-prev="{{ prev_start }}" data-next="{{ next_start }}">
 <div class="month-weekday-row">
     {% for wd in weekday_names %}<span>{{ wd }}</span>{% endfor %}
 </div>
@@ -30,7 +30,7 @@
                         <span class="month-item-title">{{ item.event.title }}</span>
                     </a>
                 {% else %}
-                    <a class="month-task-item month-due-task-item{% if day.is_past and item.task.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ item.task.uid }}/edit" data-modal title="{{ item.task.title }}" data-uid="{{ item.task.uid }}" data-due="{{ item.task.due_at }}">{{ icon(label_icon(request, item.task.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }} <span class="month-item-title">{{ item.task.title }}</span></a>
+                    <a class="month-task-item month-due-task-item{% if day.is_past and item.task.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ item.task.uid }}/edit" data-modal title="{{ item.task.title }}" data-uid="{{ item.task.uid }}" data-due="{{ item.task.due_at }}">{{ icon(((item.task.tag_items | first).icon if item.task.tag_items else '') | default('alert-triangle', true), 'icon-sm') }} <span class="month-item-title">{{ item.task.title }}</span></a>
                 {% endif %}
             {% endfor %}
             {% if day.overflow_count %}
@@ -40,7 +40,7 @@
                         {% if item.kind == "event" %}
                             <a class="cal-pop-row" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal><span class="color-dot cal-{{ item.event.calendar_color }}"></span><span class="cal-pop-time">{% if item.event.start_at %}{{ item.event.start_at | fmt_time }}{% endif %}</span><span class="cal-pop-title">{{ item.event.title }}</span></a>
                         {% else %}
-                            <a class="cal-pop-row cal-pop-task{% if day.is_past and item.task.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ item.task.uid }}/edit" data-modal>{{ icon(label_icon(request, item.task.tags | first | default('')) | default('alert-triangle', true), 'icon-sm') }}<span class="cal-pop-time">Task</span><span class="cal-pop-title">{{ item.task.title }}</span></a>
+                            <a class="cal-pop-row cal-pop-task{% if day.is_past and item.task.status not in ('done', 'archived') %} is-overdue{% endif %}" href="/tasks/{{ item.task.uid }}/edit" data-modal>{{ icon(((item.task.tag_items | first).icon if item.task.tag_items else '') | default('alert-triangle', true), 'icon-sm') }}<span class="cal-pop-time">Task</span><span class="cal-pop-title">{{ item.task.title }}</span></a>
                         {% endif %}
                     {% endfor %}
                 </template>

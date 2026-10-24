@@ -1,14 +1,13 @@
-{% from "_widget_items.html" import widget_pill, widget_complete_button %}
+{% from "_widget_items.html" import widget_pill, icon_pill %}
 {% from "_empty_state.html" import empty_state %}
 {# Rows of the New modal's right column: type icon in the item's label color, title, relative date, and a check-off
    for tasks. Same row height for every type. #}
 {% set _icons = {'task': 'check-square', 'event': 'calendar', 'contact': 'user'} %}
 {% for r in next_rows %}
 <div class="qa-row{% if r.done %} is-done{% endif %}">
-    <span class="qa-lead">{{ icon(_icons[r.kind], 'cal-' ~ (label_color(request, r.tags[0]) if r.tags else 'gray')) }}</span>
+    <span class="qa-lead">{{ icon_pill((r.tag_items[0].color if r.tag_items else 'gray'), _icons[r.kind]) }}</span>
     <a class="qa-title" href="{{ r.url }}" data-modal>{{ r.title }}</a>
     {% if r.date %}{{ widget_pill((r.date[:10] | relative_date) ~ ((' ' ~ (r.date | fmt_time)) if not r.all_day else ''), 'red' if r.overdue else 'gray') }}{% endif %}
-    <span class="qa-action">{% if r.kind == 'task' %}{{ widget_complete_button(r.uid, r.done) }}{% endif %}</span>
 </div>
 {% else %}
 {{ empty_state('Nothing found' if q else 'Nothing coming up', text=('Try another search.' if q else 'No open tasks or events in the next two weeks.'), size='compact') }}

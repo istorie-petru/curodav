@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Merge labels{% endblock %}
+{% block title %}Merge shelves{% endblock %}
 {% block content %}
 <div id="modal-target">
 <div class="modal-header">
@@ -7,7 +7,7 @@
 </div>
 <div class="modal-body">
 <div class="card">
-<form method="post" id="label-bulk-merge-form" action="/settings/labels/bulk-merge" data-confirm-sheet="Merge {{ selected_names|length }} selected label{{ '' if selected_names|length == 1 else 's' }} into one? Every object tagged with any of them moves to the destination, and the rest are removed." data-cc-change="label" data-cc-action="merge">
+<form method="post" id="label-bulk-merge-form" action="/settings/labels/bulk-merge" data-confirm-sheet="Merge {{ selected_names|length }} selected {{ 'shelf' if selected_names|length == 1 else 'shelves' }} into one? Every object tagged with any of them moves to the destination, and the rest are removed." data-cc-change="label" data-cc-action="merge">
     {% for n in selected_names %}
     <input type="hidden" name="uids" value="{{ n }}">
     {% endfor %}

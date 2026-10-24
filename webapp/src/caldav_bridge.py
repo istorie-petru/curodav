@@ -290,10 +290,7 @@ class CalDavBridge:
     def list_contact_rows(self, addressbook_path: str) -> list[dict[str, Any]]:
         client = self._addressbook(addressbook_path)
         rows = []
-        for href, etag in client.list_resources():
-            text = client.get(href)
-            if text is None:
-                continue
+        for href, etag, text in client.list_all():
             try:
                 card = vobject.readOne(text)
             except Exception:
@@ -380,6 +377,31 @@ class CardDavClient:
                 continue
             etag = response.findtext(".//d:getetag", namespaces=_DAV_NS)
             results.append((href, etag))
+        return results
+
+    def list_all(self) -> list[tuple[str, str | None, str]]:
+        """Every card with its etag in one addressbook-query REPORT, instead of a
+        PROPFIND plus one GET per card."""
+        body = """<?xml version="1.0" encoding="utf-8"?>
+<C:addressbook-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav">
+  <D:prop><D:getetag/><C:address-data/></D:prop>
+</C:addressbook-query>"""
+        resp = httpx.request(
+            "REPORT",
+            self._collection_url,
+            auth=self._auth,
+            content=body,
+            headers={"Content-Type": "application/xml", "Depth": "1"},
+        )
+        resp.raise_for_status()
+        tree = ET.fromstring(resp.text)
+        results = []
+        for response in tree.findall("d:response", _DAV_NS):
+            href = response.findtext("d:href", namespaces=_DAV_NS)
+            text = response.findtext(".//{urn:ietf:params:xml:ns:carddav}address-data")
+            if href is None or not href.endswith(".vcf") or not text:
+                continue
+            results.append((href, response.findtext(".//d:getetag", namespaces=_DAV_NS), text))
         return results
 
     def _collection_url_path(self) -> str:

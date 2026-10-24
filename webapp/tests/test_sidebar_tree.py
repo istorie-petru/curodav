@@ -72,7 +72,7 @@ class TestGroupsTree:
     def test_group_without_pinned_members_has_no_chevron(self, conn):
         _label(conn, "CS101", label_group="Uni")
         body = _page(conn)
-        assert '<div class="sidebar-section-label" aria-hidden="true">Groups</div>' in body
+        assert '<div class="sidebar-section-label" aria-hidden="true">Spaces</div>' in body
         assert 'href="/groups/Uni" class="tab-btn tab-btn-space' in body
         assert 'data-space-name="Uni"' in body
         assert "sidebar-tree-toggle" not in body
@@ -83,7 +83,7 @@ class TestGroupsTree:
         _label(conn, "Art", label_group="Uni")
         body = _page(conn)
         assert "sidebar-tree-item has-children" in body
-        assert 'aria-label="Toggle Uni labels"' in body
+        assert 'aria-label="Toggle Uni shelves"' in body
         assert 'href="/labels/CS101" class="tab-btn tab-btn-child' in body
         assert 'href="/labels/Art" class="tab-btn' not in body  # not pinned
 
@@ -91,12 +91,12 @@ class TestGroupsTree:
         _label(conn, "CS101", label_group="Uni", sidebar_pin=1)
         body = _page(conn, "CS101")
         assert 'href="/labels/CS101" class="tab-btn tab-btn-child active"' in body
-        assert 'aria-expanded="true" aria-label="Toggle Uni labels"' in body
+        assert 'aria-expanded="true" aria-label="Toggle Uni shelves"' in body
 
     def test_other_page_leaves_the_group_closed(self, conn):
         _label(conn, "CS101", label_group="Uni", sidebar_pin=1)
         body = _page(conn)
-        assert 'aria-expanded="false" aria-label="Toggle Uni labels"' in body
+        assert 'aria-expanded="false" aria-label="Toggle Uni shelves"' in body
 
     def test_group_page_marks_its_own_entry_active(self, conn):
         _label(conn, "CS101", label_group="Uni")
@@ -105,7 +105,7 @@ class TestGroupsTree:
 
     def test_no_groups_no_section(self, conn):
         body = _page(conn)
-        assert ">Groups</div>" not in body
+        assert ">Spaces</div>" not in body
 
 
 class TestPinnedSection:

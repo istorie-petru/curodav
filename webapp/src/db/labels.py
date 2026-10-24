@@ -10,6 +10,7 @@ import sqlite3
 from datetime import date, datetime, timezone
 from typing import Any
 
+from .. import tags
 from .core import MultipleProjectLabelsError, _mirror_legacy_module_fields, get_app_meta, set_app_meta
 
 
@@ -35,6 +36,7 @@ def _attach_tags(conn: sqlite3.Connection, object_type: str, d: dict[str, Any]) 
     none of those callers needed to change. See
     features/architecture.md §2 item 2."""
     d["tags"] = list_labels_for_object(conn, object_type, d["uid"])
+    tags.attach_items(conn, object_type, [d])
     return d
 
 
@@ -63,6 +65,7 @@ def _attach_tags_bulk(
         by_id.setdefault(r["object_id"], []).append(r["label_name"])
     for d in dicts:
         d["tags"] = by_id.get(d["uid"], [])
+    tags.attach_items(conn, object_type, dicts)
     return dicts
 
 
@@ -330,11 +333,9 @@ def list_all_known_label_names(conn: sqlite3.Connection) -> list[str]:
         label picker dropdowns so a label created in the manage page appears
         immediately even before it's applied to anything.
     """
-    from .tasks import get_task_habit_settings
     names = set(list_all_label_names(conn))
     names |= {r["name"] for r in conn.execute("SELECT name FROM label_config").fetchall()}
-    habit_label = get_task_habit_settings(conn)["habit_label"]
-    system_names = {"birthday", (habit_label or "").strip().lower()}
+    system_names = {"birthday"}
     names = {n for n in names if n.lower() not in system_names}
     return sorted(names, key=str.lower)
 
@@ -795,50 +796,13 @@ def list_project_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
 
 def project_status(conn: sqlite3.Connection, cfg: dict[str, Any], today: date | None = None) -> str:
-    """Computed lifecycle state -- Open / Pending / Pending Archiving /
-        Archived (§ Project lifecycle). Only `archived_at` is stored (the
-        user's explicit confirmation); the other three states are derived at
-        read time from task completion + end_date, same "computed, not
-        stored" treatment as Importance/Urgency, because both inputs change
-        underneath the label without the label itself being edited.
-
-        - Archived: `archived_at` is set (explicit user confirmation only --
-          neither the end date passing nor every task completing gets here by
-          itself).
-        - Open: at least one incomplete task, or no tasks at all (a project
-          with no work yet hasn't reached a completion point to leave Open
-          from).
-        - Pending: every task is completed (and there's at least one), but
-          today is still before the deadline -- completed early.
-        - Pending Archiving: every task is completed and today is on/after
-          the deadline (or there's no deadline) -- ready for the user to
-          confirm closure.
-
-        labels-as-modules slice b: reads the generic
-        `deadline_date` (when `has_deadline` is on) instead of a project's
-        `end_date`, so this works for any label with a deadline, not only
-        is_project ones.
-    """
-    from .tasks import list_tasks
-    if cfg.get("archived_at"):
-        return "Archived"
-    tasks = [t for t in list_tasks(conn) if cfg["name"] in (t.get("tags") or [])]
-    # ("done", "archived") mirrors routers/tasks.py's DONE_STATUSES --
-    # duplicated here rather than imported to avoid a routers -> db ->
-    # routers import cycle (db.py has no dependency on routers/*).
-    if not tasks or any(t.get("status") not in ("done", "archived") for t in tasks):
-        return "Open"
-    deadline = cfg.get("deadline_date") if cfg.get("has_deadline") else None
-    if today is None:
-        today = date.today()
-    if deadline and today < date.fromisoformat(deadline):
-        return "Pending"
-    return "Pending Archiving"
+    """A label is Active or Archived. A passed deadline archives it (tags.archive_past_deadlines); there are no
+    Open, Pending or Pending Archiving states."""
+    return "Archived" if cfg.get("archived_at") else "Active"
 
 
 def archive_project(conn: sqlite3.Connection, name: str) -> None:
-    """The explicit user confirmation that closes a project (Pending
-    Archiving -> Archived). Never automatic -- see project_status."""
+    """Archives a label by hand; a passed deadline does the same automatically (tags.archive_past_deadlines)."""
     conn.execute(
         "UPDATE label_config SET archived_at = ? WHERE name = ?",
         (datetime.now(timezone.utc).isoformat(), name),
@@ -847,9 +811,8 @@ def archive_project(conn: sqlite3.Connection, name: str) -> None:
 
 
 def unarchive_label(conn: sqlite3.Connection, name: str) -> None:
-    """Undoes archive_project -- the label goes back to its computed
-    Open/Pending/Pending Archiving status."""
-    conn.execute("UPDATE label_config SET archived_at = NULL WHERE name = ?", (name,))
+    """Restores an archived label and clears its deadline, so the passed date does not archive it again."""
+    conn.execute("UPDATE label_config SET archived_at = NULL, has_deadline = 0, deadline_date = NULL, end_date = NULL WHERE name = ?", (name,))
     conn.commit()
 
 
@@ -889,6 +852,7 @@ def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None
         conn.execute("UPDATE label_config SET parent_name = ? WHERE parent_name = ?", (new_name, old_name))
         conn.execute("UPDATE notebook_folder_readmes SET label_name = ? WHERE label_name = ?", (new_name, old_name))
         _rename_in_auto_labels(conn, old_name, new_name)
+        tags.label_renamed(conn, old_name, new_name)
         conn.commit()
         return
     collision = new_name.lower() in {n.lower() for n in list_all_label_names(conn)} or bool(get_label_config(conn, new_name))
@@ -900,6 +864,7 @@ def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None
     conn.execute("UPDATE label_config SET parent_name = ? WHERE parent_name = ?", (new_name, old_name))
     conn.execute("UPDATE notebook_folder_readmes SET label_name = ? WHERE label_name = ?", (new_name, old_name))
     _rename_in_auto_labels(conn, old_name, new_name)
+    tags.label_renamed(conn, old_name, new_name)
     conn.commit()
 
 
@@ -934,6 +899,7 @@ def merge_labels(conn: sqlite3.Connection, source_name: str, dest_name: str) -> 
     conn.execute("DELETE FROM object_labels WHERE label_name = ?", (source_name,))
     conn.execute("UPDATE label_config SET parent_name = ? WHERE parent_name = ?", (dest_name, source_name))
     conn.execute("DELETE FROM label_config WHERE name = ?", (source_name,))
+    tags.label_removed(conn, source_name, into=dest_name)
     conn.commit()
     from .notebook import enforce_one_label_and_project
 
@@ -963,6 +929,7 @@ def delete_label_config(conn: sqlite3.Connection, name: str) -> None:
     """
     conn.execute("DELETE FROM object_labels WHERE label_name = ?", (name,))
     conn.execute("DELETE FROM label_config WHERE name = ?", (name,))
+    tags.label_removed(conn, name)
     conn.commit()
 
 

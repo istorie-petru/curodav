@@ -827,7 +827,7 @@ try {
   document.addEventListener("submit", (e) => {
     const form = e.target;
     if (!(form instanceof HTMLFormElement)) return;
-    const scope = form.querySelector('input[name="series_scope"]:checked');
+    const scope = form.querySelector('input[name="series_scope"]:checked, input[type="hidden"][name="series_scope"]');
     const rule = form.querySelector('input[name="recurrence"]');
     if (!scope || !rule) return;
     if (scope.value !== "this" && rule.value !== rule.defaultValue) {
@@ -836,6 +836,35 @@ try {
       form.removeAttribute("data-confirm-sheet");
     }
   }, true);
+
+  // Split edit window: the main button saves this event; once a rule field changes it saves the series instead.
+  function syncMain(form) {
+    const rules = form.querySelector("[data-series-rules]");
+    const main = document.querySelector("[data-split-main]");
+    const scope = form.querySelector('input[type="hidden"][name="series_scope"]');
+    if (!rules || !main || !scope) return;
+    const dirty = Array.from(rules.querySelectorAll("input, select, textarea")).some((el) => {
+      const now = el.type === "checkbox" || el.type === "radio" ? String(el.checked) : el.value;
+      return el.dataset.base !== undefined && el.dataset.base !== now;
+    });
+    scope.value = dirty ? "all" : "this";
+    const label = main.querySelector(".btn-split-label");
+    if (!main.dataset.labelThis && label) main.dataset.labelThis = label.textContent;
+    if (label) label.textContent = dirty ? main.dataset.labelAlt : main.dataset.labelThis;
+  }
+  // The values before the first touch are the baseline a "changed rule" is measured from.
+  ["pointerdown", "focusin"].forEach((type) => document.addEventListener(type, (e) => {
+    const rules = e.target.closest && e.target.closest("[data-series-rules]");
+    if (!rules || rules.dataset.baseTaken) return;
+    rules.dataset.baseTaken = "1";
+    rules.querySelectorAll("input, select, textarea").forEach((el) => {
+      el.dataset.base = el.type === "checkbox" || el.type === "radio" ? String(el.checked) : el.value;
+    });
+  }, true));
+  ["input", "change"].forEach((type) => document.addEventListener(type, (e) => {
+    const form = e.target.closest && e.target.closest("form");
+    if (e.target.closest && e.target.closest("[data-series-rules]") && form) syncMain(form);
+  }));
 })();
 
 } catch (err) { console.error('series_scope.js', err); }
@@ -910,7 +939,7 @@ try {
     });
 
     // "Other minutes" escape hatch -- same idea as _widget_list_multiselect
-    // .html's "+ New label" row: one extra row at the bottom of the same
+    // .html's "+ New shelf" row: one extra row at the bottom of the same
     // panel rather than a separate control below it.
     const customRow = document.createElement("label");
     customRow.className = "multiselect-option multiselect-new-option";
@@ -2377,43 +2406,6 @@ try {
 })();
 
 } catch (err) { console.error('entry_fields.js', err); }
-/* task_habit_field_toggle.js */
-try {
-(function () {
-  function init(root) {
-    (root || document).querySelectorAll(".habit-target-field[data-form-id]").forEach((field) => {
-      if (field.dataset.ccWired) return;
-      field.dataset.ccWired = "1";
-
-      const habitLabel = field.dataset.habitLabel;
-      const formId = field.dataset.formId;
-      if (!habitLabel || !formId) return;
-
-      function isChecked() {
-        const selector =
-          'input[name="tags_labels"][form="' + formId + '"]' +
-          '[value="' + (window.CSS && CSS.escape ? CSS.escape(habitLabel) : habitLabel) + '"]';
-        const input = document.querySelector(selector);
-        return !!(input && input.checked);
-      }
-
-      function sync() {
-        field.classList.toggle("is-hidden", !isChecked());
-      }
-
-      document.addEventListener("change", (e) => {
-        if (e.target.name === "tags_labels" && e.target.form && e.target.form.id === formId) sync();
-      });
-
-      sync(); // initial state, in case the server-rendered class is ever stale (e.g. a habit_label rename mid-session)
-    });
-  }
-
-  window.CCHabitFieldToggle = { init };
-  document.addEventListener("DOMContentLoaded", () => init(document));
-})();
-
-} catch (err) { console.error('task_habit_field_toggle.js', err); }
 /* label_role_picker.js */
 try {
 (function () {
@@ -2422,6 +2414,30 @@ try {
     if (!el || el.name !== "page_type" || !el.form) return;
     const grid = el.form.querySelector(".label-form-grid");
     if (grid) grid.dataset.page = el.value;
+  });
+
+  // Tags rows of the label form: Add clones the template, Remove hides a saved row (the server deletes it) or drops a new one.
+  document.addEventListener("click", (e) => {
+    const add = e.target.closest && e.target.closest("[data-tag-add]");
+    const del = e.target.closest && e.target.closest("[data-tag-remove]");
+    if (add) {
+      const field = add.closest(".label-tags-field");
+      const list = field.querySelector(".label-tags-list");
+      const i = parseInt(list.dataset.next, 10);
+      list.dataset.next = String(i + 1);
+      list.insertAdjacentHTML("beforeend", field.querySelector(".label-tag-template").innerHTML.replaceAll("__i__", String(i)));
+      const input = list.lastElementChild.querySelector('input[type="text"]');
+      if (input) input.focus();
+    } else if (del) {
+      const row = del.closest(".label-tag-row");
+      const old = row.querySelector('input[name^="tag_old_"]');
+      if (old && old.value) {
+        row.querySelector('input[name^="tag_del_"]').value = "1";
+        row.hidden = true;
+      } else {
+        row.remove();
+      }
+    }
   });
 
   // Kept for modal.js's wireContent() call; nothing to wire per render.
@@ -2470,7 +2486,7 @@ try {
         // Confirm before turning off a Space that has children, or a Project with dates
         function checkConfirmOnSwitchAway(changedCheckbox) {
             if (changedCheckbox === spaceCheckbox && originalSpace && !spaceCheckbox.checked && spaceHadChildren) {
-                return "This Space has child labels grouped under it. Turning off Space will ungroup them. Continue?";
+                return "This Space has child shelves grouped under it. Turning off Space will ungroup them. Continue?";
             }
             if (changedCheckbox === projectCheckbox && originalProject && !projectCheckbox.checked && projectHadDates) {
                 return "This Project has a date range set. Turning off Project will clear its dates. Continue?";
@@ -3045,11 +3061,11 @@ try {
 //     add_event_relation) are unchanged from the old <select>-based flow
 //     this replaces.
 //
-// A third mode, Label mode (entered from a result row's own "Add label"
+// A third mode, Label mode (entered from a result row's own "Add shelf"
 // action, searching routers/search.py's now-removed GET /api/labels),
 // existed from the original "Command palette actions" follow-up
 // (plans/open.md) through 2026-09-24 -- removed that day (direct
-// request, "search window simplification": "remove the Add label and
+// request, "search window simplification": "remove the Add shelf and
 // Delete buttons from the search window") along with its one entry point
 // and the two backend endpoints that existed only to serve it. See
 // buildActions below for what result-row actions remain.
@@ -3297,7 +3313,7 @@ try {
 
   function emptyMessage(q, data) {
     if (mode === "relation" && data && data.no_labels) {
-      return "Add a label to relate " + (relationCtx.label || "items") + ".";
+      return "Add a shelf to relate " + (relationCtx.label || "items") + ".";
     }
     if (q) return "No results.";
     return mode === "relation"

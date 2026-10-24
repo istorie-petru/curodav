@@ -197,7 +197,7 @@ def _seed_agenda_stack_layout(conn, label_name: str | None, now: str) -> None:
         db.upsert_dashboard_widget(
             conn,
             {
-                "uid": str(uuid.uuid4()), "type": "group_members", "title": "Labels in this group",
+                "uid": str(uuid.uuid4()), "type": "group_members", "title": "Shelves in this group",
                 "config": {**_GROUP_MEMBERS_QUARTER_CONFIG, "label_name": label_name}, "position": 2.0,
                 "created_at": now, "label_name": label_name,
             },

@@ -25,11 +25,11 @@
 //     add_event_relation) are unchanged from the old <select>-based flow
 //     this replaces.
 //
-// A third mode, Label mode (entered from a result row's own "Add label"
+// A third mode, Label mode (entered from a result row's own "Add shelf"
 // action, searching routers/search.py's now-removed GET /api/labels),
 // existed from the original "Command palette actions" follow-up
 // (plans/open.md) through 2026-09-24 -- removed that day (direct
-// request, "search window simplification": "remove the Add label and
+// request, "search window simplification": "remove the Add shelf and
 // Delete buttons from the search window") along with its one entry point
 // and the two backend endpoints that existed only to serve it. See
 // buildActions below for what result-row actions remain.
@@ -277,7 +277,7 @@
 
   function emptyMessage(q, data) {
     if (mode === "relation" && data && data.no_labels) {
-      return "Add a label to relate " + (relationCtx.label || "items") + ".";
+      return "Add a shelf to relate " + (relationCtx.label || "items") + ".";
     }
     if (q) return "No results.";
     return mode === "relation"

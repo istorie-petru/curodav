@@ -111,13 +111,13 @@ class TestLabelPageActions:
         body = _page(conn, "Gym").body.decode()
         # 2026-09-28 (direct request): Edit is icon-only now (no visible
         # "Edit label" text) -- title/aria-label carry the name instead.
-        assert 'href="/settings/labels/Gym/edit" data-modal' in body and 'title="Edit label"' in body
+        assert 'href="/settings/labels/Gym/edit" data-modal' in body and 'title="Edit shelf"' in body
         assert 'action="/labels/Gym/archive"' not in body
 
     def test_dashboard_page_header_has_them_too(self, conn):
         db.upsert_label_config(conn, {"name": "Gym", "page_type": "dashboard"})
         body = _page(conn, "Gym").body.decode()
-        assert 'title="Edit label"' in body and 'action="/labels/Gym/archive"' not in body
+        assert 'title="Edit shelf"' in body and 'action="/labels/Gym/archive"' not in body
 
     def test_archived_plain_label_shows_archived_on_line(self, conn):
         db.upsert_label_config(conn, {"name": "Gym"})
@@ -146,7 +146,7 @@ class TestLabelPageActions:
         # now (no visible text), so this checks the title attribute
         # instead of the old "Edit label" substring.
         header = body.split('class="page-header-narrow-actions"')[1].split("</div>")[0]
-        assert 'title="Edit label"' not in header
+        assert 'title="Edit shelf"' not in header
 
 
 class TestEmptyState:
@@ -175,17 +175,18 @@ class TestQuickAddPrefill:
         resp = dashboard_router.quick_add_form(_request("/quick/add"), default_tab="task", scope="", label="Gym", conn=conn)
         assert resp.context["prefill_tags"] == ["Gym"]
         body = resp.body.decode()
-        # Selected in each of the three Labels pickers (task, event, contact).
+        # Selected in the Tag dropdown of each form (task, event, contact).
         import re
 
         checked = re.findall(r'<input[^>]*value="Gym"[^>]*form="(\w+)-form"[^>]*checked', body)
         assert checked == ["task", "event"]
 
-    def test_project_label_lands_in_the_project_dropdown(self, conn):
+    def test_project_label_lands_in_the_tag_dropdown(self, conn):
         db.upsert_label_config(conn, {"name": "Trip", "is_project": 1})
         resp = dashboard_router.quick_add_form(_request("/quick/add"), default_tab="task", scope="", label="Trip", conn=conn)
         assert resp.context["prefill_tags"] == ["Trip"]
-        assert "project-field" in resp.body.decode()
+        body = resp.body.decode()
+        assert 'name="item_tags"' in body and "project-field" not in body
 
 
 class TestUnknownLabel:
@@ -268,7 +269,7 @@ class TestIconFallback:
 
 
 class TestProjectRow:
-    def test_task_modal_splits_project_from_labels(self, conn, db_path):
+    def test_task_modal_shows_one_tags_row_with_each_tags_own_look(self, conn, db_path):
         from src.routers import tasks as tasks_router
 
         db.upsert_label_config(conn, {"name": "Trip", "is_project": 1})
@@ -276,10 +277,9 @@ class TestProjectRow:
         req = _request("/tasks/t1")
         req.scope["app"] = SimpleNamespace(state=SimpleNamespace(settings=SimpleNamespace(db_path=db_path)))
         body = tasks_router.task_detail("t1", req, conn=conn).body.decode()
-        proj = body.index(">Project</span>")
-        labels = body.index(">Labels</span>")
-        assert body.index("Trip", proj) < labels
-        assert "Gym" in body[labels:]
+        assert ">Project</span>" not in body and ">Labels</span>" not in body
+        tags_row = body[body.index(">Tags</span>"):]
+        assert "Trip" in tags_row and "Gym" in tags_row
 
 
 

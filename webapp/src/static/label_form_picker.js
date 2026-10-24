@@ -37,7 +37,7 @@
         // Confirm before turning off a Space that has children, or a Project with dates
         function checkConfirmOnSwitchAway(changedCheckbox) {
             if (changedCheckbox === spaceCheckbox && originalSpace && !spaceCheckbox.checked && spaceHadChildren) {
-                return "This Space has child labels grouped under it. Turning off Space will ungroup them. Continue?";
+                return "This Space has child shelves grouped under it. Turning off Space will ungroup them. Continue?";
             }
             if (changedCheckbox === projectCheckbox && originalProject && !projectCheckbox.checked && projectHadDates) {
                 return "This Project has a date range set. Turning off Project will clear its dates. Continue?";

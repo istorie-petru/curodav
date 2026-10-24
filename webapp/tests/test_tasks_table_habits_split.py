@@ -41,10 +41,9 @@ def _seed_task(conn, uid, tags=None):
 def _seed_habit(conn, uid, title):
     """A habit is a habit-labeled task (the standalone Habit entity these
     tests used to seed was removed 2026-09-24)."""
-    db.save_task_habit_settings(conn, "Habit")
     db.upsert_task(
         conn,
-        {"uid": uid, "title": title, "description": "", "status": "active", "tags": ["Habit"],
+        {"uid": uid, "title": title, "description": "", "status": "active", "is_habit": 1, "tags": [],
          "recurrence": "FREQ=DAILY", "created_at": _now()},
     )
 
@@ -139,7 +138,7 @@ class TestGroupNameAndAddButtonInTableHeader:
         task_list = body.split('id="task-table"', 1)[1]
         assert "<thead>" not in task_list.split("</div>\n</div>", 1)[0]
         assert task_list.count('class="section-row') >= 3
-        assert "No label" in task_list
+        assert "No shelf" in task_list
 
     def test_project_label_and_unassigned_tasks_share_the_one_list(self, conn):
         db.upsert_label_config(conn, {"name": "Garden", "is_project": 1})

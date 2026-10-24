@@ -7,7 +7,7 @@ from datetime import date, datetime, timezone
 
 import pytest
 
-from src import db, finance, finance_stats
+from src import db, finance, finance_stats, tags
 
 
 @pytest.fixture()
@@ -248,6 +248,8 @@ def test_the_task_edit_form_hides_the_section_until_an_account_exists(conn):
 def test_saving_the_task_form_saves_its_pending_transactions_and_validates_them_first(conn):
     from src.routers import tasks as tasks_router
     a = account(conn, "Cash")
+    tags.add_finance_tag(conn, "monthly")
+    tags.add_finance_tag(conn, "commute")
     task(conn)
     kwargs = dict(title="Renew", description="", due_at="", start_at="", status="active", tags="", tags_labels=[], project="", project_field="", recurrence="", pending_tx_present="1", pt_key=["1"], pending_tags={"1": ["monthly", "commute"]}, pt_uid=[""], pt_type=["Expense"], pt_amount=["80"],
                   pt_description=["Bus pass"], pt_account=["Cash"], pt_to_account=[""], pt_date=["2026-11-01"], x_requested_with="fetch")
@@ -260,6 +262,8 @@ def test_saving_the_task_form_saves_its_pending_transactions_and_validates_them_
 
 
 def test_tags_travel_from_the_scheduled_row_to_the_real_transaction(conn):
+    tags.add_finance_tag(conn, "commute")
+    tags.add_finance_tag(conn, "monthly")
     a = account(conn)
     uid = schedule(conn, a, tags=["commute", "monthly"])
     assert finance.get_scheduled(conn, uid)["tags"] == ["commute", "monthly"]
@@ -274,10 +278,10 @@ def test_a_transfer_keeps_no_tags(conn):
     assert finance.get_scheduled(conn, uid)["tags"] == []
 
 
-def test_tags_typed_on_a_scheduled_row_are_offered_next_time(conn):
+def test_tags_are_never_made_on_a_scheduled_row(conn):
     a = account(conn)
-    schedule(conn, a, tags=["commute"])
-    assert finance.tag_names(conn) == ["commute"]
+    uid = schedule(conn, a, tags=["commute"])
+    assert finance.get_scheduled(conn, uid)["tags"] == [] and tags.get_tag(conn, "commute") is None
 
 
 def test_the_task_form_rows_ask_for_a_description_and_offer_tags_and_type_dependent_accounts(conn):
@@ -290,6 +294,7 @@ def test_the_task_form_rows_ask_for_a_description_and_offer_tags_and_type_depend
 
 
 def test_tags_survive_in_a_backup(conn, tmp_path):
+    tags.add_finance_tag(conn, "monthly")
     a = account(conn)
     schedule(conn, a, tags=["monthly"])
     with db.connect(tmp_path / "other.sqlite") as other:

@@ -82,7 +82,7 @@ WIDGET_TYPES: dict[str, dict] = {
         "default_width": "half",
     },
     "spaces_projects": {
-        "label": "Groups & Labels",
+        "label": "Groups & Shelves",
         "template": "_widget_spaces_projects.html",
         "render": _render_spaces_projects,
         "uses": set(),
@@ -126,7 +126,7 @@ WIDGET_TYPES: dict[str, dict] = {
         "default_width": "half",
     },
     "group_members": {
-        "label": "Group labels",
+        "label": "Group shelves",
         "template": "_widget_group_members.html",
         "render": _render_group_members,
         "uses": {"tasks", "events"},
@@ -139,8 +139,8 @@ WIDGET_SOURCES: dict[str, dict] = {
     "calendar_tasks": {"label": "WebDAV", "icon": "calendar"},
     "habits": {"label": "Habits", "icon": "activity"},
     "contacts": {"label": "Contacts", "icon": "users"},
-    "spaces_projects": {"label": "Groups & Labels", "icon": "layers"},
-    "group_members": {"label": "Group labels", "icon": "layers"},
+    "spaces_projects": {"label": "Groups & Shelves", "icon": "layers"},
+    "group_members": {"label": "Group shelves", "icon": "layers"},
     "notebooks": {"label": "Notebook", "icon": "notebook"},
 }
 
@@ -151,9 +151,9 @@ WIDGET_VIEWS: dict[str, dict] = {
     "checklist": {"label": "Checklist", "source": "habits", "has_range": False},
     "contact_list_view": {"label": "Contact list", "source": "contacts", "has_range": False, "has_limit": True},
     "scheduled_work_view": {"label": "Scheduled work hours today", "source": "calendar_tasks", "has_range": False},
-    "spaces_projects_view": {"label": "Groups & Labels", "source": "spaces_projects", "has_range": False, "has_style": True},
+    "spaces_projects_view": {"label": "Groups & Shelves", "source": "spaces_projects", "has_range": False, "has_style": True},
     "weekly_schedule_view": {"label": "Weekly schedule", "source": "calendar_tasks", "has_range": False},
-    "group_members_view": {"label": "Group labels", "source": "group_members", "has_range": False},
+    "group_members_view": {"label": "Group shelves", "source": "group_members", "has_range": False},
     "notebook_list_view": {"label": "Document list", "source": "notebooks", "has_range": False, "has_limit": True},
 }
 
@@ -484,7 +484,6 @@ def quick_add_form(
             "prefill_tags": [label] if label else [],
             **db.project_picker_context(conn),
             "today": clock.today().isoformat(),
-            "habit_label": db.get_task_habit_settings(conn)["habit_label"],
             # Event-side context -- same union new_event_form passes, all
             # blank so the event form starts empty.
             "event": None,

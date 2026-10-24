@@ -70,15 +70,15 @@
 {%- if days < 0 %}Overdue{% elif days == 0 %}Today{% elif days == 1 %}Tomorrow{% else %}In {{ days }} days{% endif -%}
 {%- endmacro %}
 
-{% macro widget_complete_button(uid, done=false) -%}
-<form class="form-inline" method="post" action="/tasks/{{ uid }}/complete" data-cc-complete>
-    <button type="submit" class="habit-check-btn habit-check-widget{% if done %} is-done{% endif %}" title="{{ 'Done' if done else 'Mark done' }}"{% if done %} disabled aria-label="Done"{% endif %}>{{ icon('check-circle' if done else 'square') }}</button>
-</form>
-{%- endmacro %}
-
 {# An icon in its colour as an icon-only pill, so the colour sits on a pill and never on a loose glyph. #}
 {% macro icon_pill(color='blue', icon_name='calendar', title=None) -%}
 <span class="cell-tag cal-{{ color }} icon-pill"{% if title %} title="{{ title }}"{% endif %}>{{ icon(icon_name, 'icon-sm') }}</span>
+{%- endmacro %}
+
+{# A task's leading icon in agenda rows: its first tag's icon and colour as an icon-only pill, gray when it has no tag. #}
+{% macro task_pill(request, tag_items) -%}
+{% set _tag = tag_items | first %}
+{{ icon_pill(_tag.color if _tag else 'gray', (_tag.icon if _tag else '') or 'check-square') }}
 {%- endmacro %}
 
 {% macro widget_event_icon(color='blue', size='', icon_name='calendar') -%}

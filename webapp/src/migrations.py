@@ -169,6 +169,45 @@ def _timing_statistics(conn: sqlite3.Connection) -> None:
     )
 
 
+def _tag_tables(conn: sqlite3.Connection) -> None:
+    from . import tags
+
+    tags.ensure_schema(conn)
+
+
+def _habit_is_not_a_label(conn: sqlite3.Connection) -> None:
+    """Habits get their own flag: tasks carrying the habit label are marked, then the label disappears everywhere
+    (links on tasks and events, its label row and the setting that named it)."""
+    from .db.core import _ensure_column
+
+    _ensure_column(conn, "tasks", "is_habit", "INTEGER NOT NULL DEFAULT 0")
+    try:
+        row = conn.execute("SELECT habit_label FROM task_habit_settings WHERE id = 1").fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    label = (row["habit_label"] if row else "") or "Habit"
+    conn.execute("UPDATE tasks SET is_habit = 1 WHERE uid IN "
+                 "(SELECT object_id FROM object_labels WHERE object_type = 'task' AND label_name = ?)", (label,))
+    conn.execute("DELETE FROM object_labels WHERE label_name = ?", (label,))
+    conn.execute("DELETE FROM label_config WHERE name = ?", (label,))
+    try:
+        conn.execute("DELETE FROM task_habit_settings")
+    except sqlite3.OperationalError:
+        pass
+
+
+def _finance_tags_become_tags(conn: sqlite3.Connection) -> None:
+    """Finance tags and their links move under the shelf Finance as ordinary tags (the old finance tag tables are dropped),
+    and two unused leftovers of earlier versions go: the old `tags` table (not the new `label_tags`) and the `projects`
+    table, whose rows became shelves long ago."""
+    from . import tags
+
+    tags.ensure_schema(conn)
+    tags.move_finance_tags(conn)
+    conn.execute("DROP TABLE IF EXISTS tags")
+    conn.execute("DROP TABLE IF EXISTS projects")
+
+
 def _folder_readmes(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE TABLE IF NOT EXISTS notebook_folder_readmes (label_name TEXT PRIMARY KEY, body TEXT NOT NULL DEFAULT '', "
@@ -196,6 +235,10 @@ MIGRATIONS: list[Migration] = [
     Migration(17, "entry references get start and end pages", _references_get_pages),
     Migration(18, "timing statistics per day", _timing_statistics),
     Migration(19, "notebook folder readmes", _folder_readmes),
+    Migration(20, "app-wide tags and their links", _tag_tables),
+    Migration(21, "app-wide tags live in label_tags (an older tags table already exists)", _tag_tables),
+    Migration(22, "habits get their own flag and the habit label goes away", _habit_is_not_a_label, destructive=True),
+    Migration(23, "finance tags become tags on the Finance shelf; old tags and projects tables are dropped", _finance_tags_become_tags, destructive=True),
 ]
 
 

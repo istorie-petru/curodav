@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from .. import clock, db
+from .. import tags as tag_store
 from ..deps import get_db, respond, templates
 from ..image_convert import to_webp, write_cached_webp
 from ..image_sniff import sniff_image_type
@@ -192,24 +193,25 @@ def _social_profile_list(types: list[str], values: list[str]) -> list[dict]:
 
 
 def _contacts_list_context(
-    conn, request: Request, q: str | None, tags: list[str], filtered: bool, show_archived: bool = False
+    conn, request: Request, q: str | None, tags: list[str], filtered: bool, show: str = ""
 ) -> dict:
+    show = show if show in ("archived", "all") else ""
+    show_archived = bool(show)
     contacts = [_attach_photo_url(c) for c in db.list_contacts(conn, q=q, include_archived=show_archived)]
+    if show == "archived":
+        contacts = [c for c in contacts if c.get("archived_at")]
     total_before_filtering = len(contacts)
     all_tags = db.list_contact_tag_names(conn)
-    filter_items = db.label_filter_items(conn, all_tags, lowercase_values=True)
+    filter_items = tag_store.filter_items(conn, "contact", db.label_filter_items(conn, all_tags, lowercase_values=True), lowercase_values=True)
     if filtered:
         selected = {t.lower() for t in tags}
-        wanted = db.expand_label_filter(conn, selected)
+        matches = tag_store.matcher(conn, "contact", selected)
         # Explicit pick -- OR-inclusion, same as the old single-select
         # filter generalized to multiple values: show a contact carrying
         # at least one checked label. An empty selection (every checkbox
         # deliberately unchecked) is respected literally -- nothing
         # matches, not "no filter."
-        contacts = [
-            c for c in contacts
-            if wanted & {t.lower() for t in (c.get("tags") or [])}
-        ]
+        contacts = [c for c in contacts if matches(c)]
     else:
         # Untouched page load -- every real label counts as implicitly
         # checked (no more Archived-name suppression needed here, see
@@ -225,6 +227,7 @@ def _contacts_list_context(
         "contact_filter_items": filter_items,
         "active_tags": selected,
         "show_archived": show_archived,
+        "show": show,
         # Whether the list actually got narrowed down right now -- true
         # for an explicit pick or a search -- so _contacts_body.html's
         # empty state reads "No contacts match" (not "No contacts yet")
@@ -266,22 +269,23 @@ def list_contacts(
     q: str | None = None,
     tag: list[str] = Query([]),
     archived: str = "",
+    show: str = "",
     conn=Depends(get_db),
 ):
     filtered = "contacts_filtered" in request.query_params
     return templates.TemplateResponse(
         "contacts_list.html",
-        _contacts_list_context(conn, request, q, tag, filtered, show_archived=archived == "1"),
+        _contacts_list_context(conn, request, q, tag, filtered, show="all" if archived == "1" else show),
     )
 
 
 @router.get("/bulk-edit-modal")
 def bulk_edit_modal(uids: str, request: Request, conn=Depends(get_db)):
     """Bulk-select "Edit": one modal that sets the same value on every selected contact."""
-    labels = [(l["name"], l["name"]) for l in sorted(db.list_labels(conn), key=lambda l: l["name"].lower())]
+    labels = [(i["name"], i["name"]) for i in tag_store.picker(conn, "contact", "", [])["items"]]
     fields = [
-        {"name": "remove_tag", "label": "Remove label", "kind": "select", "options": labels},
-        {"name": "add_tag", "label": "Set label", "kind": "select", "options": labels},
+        {"name": "remove_tag", "label": "Remove tag", "kind": "select", "options": labels},
+        {"name": "add_tag", "label": "Set tag", "kind": "select", "options": labels},
         {"name": "org", "label": "Organization", "kind": "text"},
     ]
     return templates.TemplateResponse(
@@ -300,21 +304,14 @@ def bulk_edit(
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
-    project_names = {cfg["name"] for cfg in db.list_project_labels(conn)}
     for uid in uids:
         row = db.get_contact(conn, uid)
         if row is None:
             continue
         if org.strip():
             row["org"] = org.strip()
-        tags = set(row.get("tags") or [])
-        if remove_tag:
-            tags.discard(remove_tag)
-        if add_tag:
-            # one label and one project: the new tag replaces the same kind
-            kind = add_tag in project_names
-            tags = {t for t in tags if (t in project_names) != kind} | {add_tag}
-        row["tags"] = sorted(tags)
+        if add_tag or remove_tag:  # a contact has one tag: the new one replaces it
+            row["tags"] = sorted(tag_store.bulk_change(conn, "contact", uid, row.get("tags") or [], [add_tag], [remove_tag], single=True))
         row["updated_at"] = clock.now().isoformat()
         db.upsert_contact(conn, row)
     return respond(x_requested_with, "/contacts", count=len(uids))
@@ -351,6 +348,7 @@ def contacts_regions(
     q: str | None = None,
     tag: list[str] = Query([]),
     archived: str = "",
+    show: str = "",
     conn=Depends(get_db),
 ):
     """Async-CRUD region fragment (features/async-crud.md): renders the
@@ -361,7 +359,7 @@ def contacts_regions(
     if region != "list":
         return JSONResponse({"error": f"unknown region '{region}'"}, status_code=400)
     filtered = "contacts_filtered" in request.query_params
-    ctx = _contacts_list_context(conn, request, q, tag, filtered, show_archived=archived == "1")
+    ctx = _contacts_list_context(conn, request, q, tag, filtered, show="all" if archived == "1" else show)
     html = templates.env.get_template("_contacts_body.html").render(ctx)
     return HTMLResponse(html)
 
@@ -439,6 +437,8 @@ async def create_contact(
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     tags_labels_new: str = Form(""),
+    item_tags: list[str] = Form([]),
+    item_tags_field: str = Form(""),
     project: str = Form(""),
     project_field: str = Form(""),
     notes: str = Form(""),
@@ -447,6 +447,8 @@ async def create_contact(
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
+    if item_tags_field == "1":
+        tags_labels = tag_store.labels_of(conn, item_tags[:1])
     resolved_tags = _with_contact_project(conn, _resolve_contact_label(tags, tags_labels, tags_labels_new), project, project_field)
     birthday_value = _parse_birthday_field(birthday)
     photo_result = await _read_photo(photo)
@@ -486,6 +488,8 @@ async def create_contact(
         "updated_at": now,
     }
     db.upsert_contact(conn, row)
+    if item_tags_field == "1":
+        tag_store.record(conn, "contact", uid, item_tags[:1])
     return respond(x_requested_with, "/contacts", status_code=201, uid=row["uid"])
 
 
@@ -601,6 +605,8 @@ async def update_contact(
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     tags_labels_new: str = Form(""),
+    item_tags: list[str] = Form([]),
+    item_tags_field: str = Form(""),
     project: str = Form(""),
     project_field: str = Form(""),
     notes: str = Form(""),
@@ -609,6 +615,8 @@ async def update_contact(
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
+    if item_tags_field == "1":
+        tags_labels = tag_store.labels_of(conn, item_tags[:1])
     resolved_tags = _with_contact_project(conn, _resolve_contact_label(tags, tags_labels, tags_labels_new), project, project_field)
     birthday_value = _parse_birthday_field(birthday)
     existing = db.get_contact(conn, uid) or {}
@@ -651,6 +659,8 @@ async def update_contact(
         # else: no new file chosen -- row already carries the existing
         # photo_b64/photo_type through from `dict(existing)` above.
     db.upsert_contact(conn, row, record_server_write=not is_draft)
+    if item_tags_field == "1":
+        tag_store.record(conn, "contact", uid, item_tags[:1])
     return respond(x_requested_with, f"/contacts/{uid}")
 
 

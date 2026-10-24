@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import pytest
 from starlette.requests import Request
 
-from src import clock, db, finance, finance_stats
+from src import clock, db, finance, finance_stats, tags
 from src.routers import finance as router
 
 
@@ -117,12 +117,32 @@ def test_invalid_transactions_report_the_field(conn, extra, field):
     assert finance.validate_transaction(conn, data)[1]["field"] == field
 
 
-def test_tags_are_stored_with_the_transaction(conn):
+def _tags(conn, *names):
+    for n in names:
+        tags.add_finance_tag(conn, n, "green", "tag")
+
+
+def test_tags_are_stored_with_the_transaction_as_tag_links(conn):
+    _tags(conn, "transport", "bus")
     a = account(conn)
-    uid = txn(conn, a, tags=["transport", "bus"])
+    uid = txn(conn, a, tags=["transport", "bus", "unknown"])
     row = finance.get_transaction(conn, uid)
-    assert "label" not in row and row["tags"] == ["bus", "transport"]
-    assert finance.tag_names(conn) == ["bus", "transport"]
+    assert "label" not in row and row["tags"] == ["bus", "transport"]  # a tag is never made on the fly
+    assert tags.tags_for_object(conn, "transaction", uid) == ["bus", "transport"]
+    assert tags.get_tag(conn, "bus")["label_name"] == "Finance"
+
+
+def test_tag_pills_use_the_tags_own_look(conn):
+    _tags(conn, "food")
+    assert tags.tag_styles(conn)["food"] == {"color": "green", "icon": "tag"}
+
+
+def test_deleting_a_transaction_removes_its_tag_links(conn):
+    _tags(conn, "old")
+    a = account(conn)
+    uid = txn(conn, a, tags=["old"])
+    finance.delete_transaction(conn, uid)
+    assert tags.tags_for_object(conn, "transaction", uid) == []
 
 
 def test_filters_narrow_by_search_account_type_and_dates(conn):
@@ -155,6 +175,7 @@ def test_a_currency_cannot_change_once_the_account_has_transactions(conn):
 
 def test_csv_import_creates_rows_and_reports_unknown_accounts(conn):
     account(conn, "Cash")
+    _tags(conn, "a", "b")
     rows, _ = finance_stats.parse_csv("date,account,amount,type,label,tags\n2026-10-01,Cash,5,expense,Food,a;b\n2026-10-02,Nope,5,expense,,\n")
     created, problems = finance.import_rows(conn, rows)
     assert created == 1 and problems == ["Line 3: there is no account named Nope"]
@@ -162,6 +183,7 @@ def test_csv_import_creates_rows_and_reports_unknown_accounts(conn):
 
 
 def test_backup_round_trips_accounts_transactions_and_tags(conn, tmp_path):
+    _tags(conn, "x")
     a = account(conn)
     txn(conn, a, tags=["x"], description="Lunch")
     payload = finance.backup_rows(conn)
@@ -207,30 +229,13 @@ def test_the_save_route_returns_a_structured_error(conn):
 
 
 def test_a_tag_on_an_unlabelled_transaction_survives_adding_a_label(conn):
+    _tags(conn, "transport")
     a = account(conn)
     uid = txn(conn, a, tags=["transport"])
     clean, _ = finance.validate_transaction(conn, dict(date="2026-10-02", type="expense", amount="10", account_uid=a,
                                                        label="Personal", tags=["transport"]))
     finance.save_transaction(conn, clean, uid)
     assert finance.get_transaction(conn, uid)["tags"] == ["transport"]
-
-
-def test_tags_are_listed_with_group_and_usage(conn):
-    db.upsert_label_config(conn, {"name": "Personal", "label_group": "Myself"})
-    a = account(conn)
-    txn(conn, a, label="Personal", tags=["transport"])
-    txn(conn, a, label="Personal", tags=["transport", "food"])
-    assert finance.list_tags(conn) == [{"name": "food", "color": "gray", "icon": "", "usage": 1},
-                                       {"name": "transport", "color": "gray", "icon": "", "usage": 2}]
-
-
-def test_a_tag_keeps_the_colour_and_icon_chosen_for_it(conn):
-    clean, error = finance.validate_tag(conn, "food", None, "green", "tag")
-    assert error is None
-    finance.save_tag(conn, clean)
-    assert finance.tag_styles(conn) == {"food": {"color": "green", "icon": "tag"}}
-    finance.save_tag(conn, finance.validate_tag(conn, "meals", "food", "red", "")[0], "food")
-    assert finance.tag_styles(conn) == {"meals": {"color": "red", "icon": ""}}
 
 
 def test_an_account_shows_its_abbreviation_and_falls_back_to_its_name(conn):
@@ -246,41 +251,6 @@ def test_an_account_shows_its_abbreviation_and_falls_back_to_its_name(conn):
 def test_dates_and_types_are_shortened_for_the_table():
     assert finance_stats.short_date("2026-04-05") == "05 Apr"
     assert finance_stats.TYPE_ABBREVIATIONS["transfer"] == "Trf"
-
-
-def test_renaming_a_tag_renames_it_on_every_transaction(conn):
-    a = account(conn)
-    uid = txn(conn, a, tags=["trnsport"])
-    clean, error = finance.validate_tag(conn, "transport", "trnsport")
-    assert error is None
-    finance.save_tag(conn, clean, "trnsport")
-    assert finance.get_transaction(conn, uid)["tags"] == ["transport"] and [t["name"] for t in finance.list_tags(conn)] == ["transport"]
-
-
-def test_deleting_a_tag_removes_it_from_transactions(conn):
-    a = account(conn)
-    uid = txn(conn, a, tags=["old"])
-    finance.delete_tag(conn, "old")
-    assert finance.get_transaction(conn, uid)["tags"] == [] and finance.list_tags(conn) == []
-
-
-def test_tags_are_free_standing_and_unique_by_name(conn):
-    finance.save_tag(conn, {"name": "bus"})
-    assert finance.validate_tag(conn, "Bus")[1]["field"] == "name"
-    assert finance.validate_tag(conn, "Bus", "bus")[1] is None
-
-
-def test_tags_that_belonged_to_a_group_become_free_standing(conn):
-    conn.execute("INSERT INTO finance_tags (group_name, name) VALUES ('Myself', 'bus'), ('Work', 'bus'), ('Work', 'taxi')")
-    finance.free_tags(conn)
-    assert sorted(t["name"] for t in finance.list_tags(conn)) == ["bus", "taxi"]
-
-
-def test_the_taxonomy_page_lists_transaction_tags(conn):
-    from src.routers import taxonomy
-    finance.save_tag(conn, {"name": "bus"})
-    body = taxonomy.page_response(conn, _request("/settings/taxonomy"), "tags").body.decode()
-    assert "bus" in body and "Transaction tags" in body
 
 
 def test_accounts_live_in_settings_and_the_transactions_page_does_not_link_to_them(conn):

@@ -1,5 +1,5 @@
 {% from "_inputs.html" import checkbox_input, radio_input %}
-{% from "_label_pill.html" import label_pill with context %}
+{% from "_label_pill.html" import label_pill, tag_pill with context %}
 {% from "_action_menu.html" import action_menu with context %}
 {# One task as a list row: select box, the title (opens the view modal), its due date, its labels, then at the far
    right the status, the one inline editor, next to the menu. Everything else is edited in the edit modal.
@@ -9,7 +9,7 @@
     {{ checkbox_input({'class': 'row-select', 'data-uid': (t.uid), 'aria-label': 'Select ' ~ (t.title), 'autocomplete': 'off'}) }}
     <a class="contact-row task-row-title" href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>
     <span class="task-row-date{% if t.due_at and t.due_at[:10] < today_iso and t.status not in ('done', 'archived') %} is-overdue{% endif %}">{% if t.due_at %}{{ t.due_at | relative_date }}{% endif %}</span>
-    <span class="task-row-tags">{% for tag in t.tags if tag != skip_tag %}{{ label_pill(tag, 'modal') }}{% endfor %}</span>
+    <span class="task-row-tags">{% for tag in t.tag_items if tag.label != skip_tag %}{{ tag_pill(tag) }}{% endfor %}</span>
     <div class="multiselect widget-list-multiselect task-status-select" data-ms data-ms-mode="single" data-ms-label="status" data-uid="{{ t.uid }}">
         <button type="button" class="multiselect-trigger pill-select-trigger pill-{{ status_colors[t.status] }}" aria-haspopup="true" aria-expanded="false">
             <span class="ms-summary">{{ status_labels[t.status] }}</span>

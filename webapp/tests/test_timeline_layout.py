@@ -145,8 +145,8 @@ class TestAssignSwimlanes:
         ]
         result = tl.assign_swimlanes(tasks)
         labels_in_order = [label for _, _, label, _ in result.group_labels]
-        assert labels_in_order == ["University", "Work", "(No label)"]
-        # the "(No label)" block is the last one
+        assert labels_in_order == ["University", "Work", "(No shelf)"]
+        # the "(No shelf)" block is the last one
         no_label_start, _ = result.group_range_by_label[tl.NO_LABEL_KEY]
         assert no_label_start == result.total_rows - 1
 

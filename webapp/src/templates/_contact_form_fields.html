@@ -71,20 +71,8 @@
             </div>
         </template>
     </div>
-    <div class="field">
-        {% set ms_name = 'tags_labels' %}
-        {% set ms_icon = 'tag' %}
-        {% set ms_label = 'Label' %}
-        {% set ms_items = [{'uid': '__no_label__', 'name': 'No label'}] + (tag_name_items | rejectattr('uid', 'in', project_names | default([])) | list) %}
-        {% set _labels = (contact.tags or []) | reject('in', project_names | default([])) | list if contact else [] %}
-        {% set ms_selected = (_labels[0] if _labels else '__no_label__') if contact else ((prefill_tags or []) | first | default('__no_label__')) %}
-        {% set ms_mode = 'single' %}
-        {% set ms_allow_new = true %}
-        {% set ms_pill = true %}
-        {% include "_widget_list_multiselect.html" %}
-    </div>
-    {% set pf_tags = contact.tags if contact else (prefill_tags or []) %}{% set pf_form_id = 'contact-form' %}
-    {% include "_project_field.html" %}
+    {% set tag_type = 'contact' %}{% set tag_uid = contact.uid if contact else '' %}{% set tag_old = contact.tags if contact else [] %}{% set tag_prefill = prefill_tags or [] %}{% set tags_single = true %}
+    {% include "_tag_row.html" %}
     {{ details_start(contact is not none and contact) }}
     <div class="field">
         <label>Pseudonym</label>

@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from src import db
+from src import db, published_lists
 from src.published_lists import evaluate_label_filter, materialize, materialize_all
 
 
@@ -213,9 +213,10 @@ class TestMaterialize:
     def test_idempotent_on_second_call(self, conn):
         _make_task(conn, "t1", "A", ["University"])
         bridge = FakeBridge()
+        published_lists._PUSHED.clear()
         materialize(conn, bridge, self._list_row())
         summary2 = materialize(conn, bridge, self._list_row())
-        assert summary2 == {"created": 0, "updated": 1, "deleted": 0, "member_count": 1}
+        assert summary2 == {"created": 0, "updated": 0, "deleted": 0, "member_count": 1}
         assert set(bridge.task_collections["published-uni"]) == {"t1"}
 
     def test_deletes_stale_members_no_longer_matching(self, conn):
@@ -815,3 +816,29 @@ class TestReadOnlyness:
             assert "ical_to_event_row" not in body_source
             assert "ical_to_task_row" not in body_source
             assert "vcard_to_contact_row" not in body_source
+
+
+def test_materialize_skips_unchanged_members(tmp_path):
+    from src import published_lists as pl
+
+    pl._PUSHED.clear()
+    with db.connect(tmp_path / "c.sqlite") as conn:
+        _make_task(conn, "t1", "A", ["U"])
+        bridge = FakeBridge()
+        saves = []
+        orig = bridge.save_task_row
+        bridge.save_task_row = lambda row: (saves.append(row["uid"]), orig(row))[1]
+        lst = {"entity_type": "task", "radicale_collection_path": "published-x", "label_filter": {"any": ["U"]}}
+        pl.materialize(conn, bridge, lst)
+        pl.materialize(conn, bridge, lst)
+        assert saves == ["t1"]
+        db.upsert_task(conn, {"uid": "t1", "title": "B", "description": "", "status": "active", "tags": ["U"], "created_at": "2026-01-01T00:00:00+00:00"})
+        pl.materialize(conn, bridge, lst)
+        assert saves == ["t1", "t1"]
+
+
+def test_export_is_byte_stable_for_unchanged_row():
+    from src.ical_rows import task_row_to_ical
+
+    row = {"uid": "t1", "title": "A", "description": "", "status": "active", "tags": [], "created_at": "2026-01-01T00:00:00+00:00"}
+    assert task_row_to_ical(row) == task_row_to_ical(dict(row))

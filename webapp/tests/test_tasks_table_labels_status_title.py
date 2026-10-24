@@ -124,7 +124,7 @@ class TestTableMarkup:
         assert "task-labels-select" not in body
         assert "task-label-checkbox" not in body
         assert 'class="task-row-tags"' in body
-        assert "No label" in body
+        assert "No shelf" in body
 
     def test_the_title_opens_the_view_modal(self, conn):
         _seed_task(conn, "t1")

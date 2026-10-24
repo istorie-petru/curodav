@@ -6,6 +6,18 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [4.6.0]
+
+- Spaces, shelves and tags: groups are now called spaces and labels are called shelves. A shelf belongs to one space and holds one or more tags; a tag is the only level you put on an item. One Tag dropdown replaces the Label and Project pickers on tasks, events, notes, contacts and transactions. It only picks existing tags, and tags are made in the Tags section of a shelf's edit window, where each tag has its own name, colour and icon. The first tag of a new shelf has the shelf's own name.
+- Tags look their own: pills, agenda icons, board cards and calendar colours use the tag's colour and icon, and tag pills never link anywhere. A shelf page groups its tasks by tag and has a tag filter; the Calendar and Contacts filters list tags. Settings has a Tags view under Organise listing every tag with its shelf, look and use.
+- Projects are retired as a model: a deadline sits on the shelf, and a passed deadline archives it once a day. A shelf is Active or Archived, restoring clears the deadline, and the shelves and contacts lists have a Show filter (Active, Archived, All).
+- Habits are marked by their own flag instead of the Habit label, and the Habit label setting is gone.
+- Finance: transactions and scheduled transactions use the same tags. Old finance tags move under a Finance shelf in the space Personal. The finance tag tables, the old unused tags and projects tables are removed.
+- Settings: Calendar is a subsection of Modules, one page with Holidays and Sleep & Leisure as views of one table. Bulk edit of tasks, notes and contacts picks tags.
+- Events and phone: the edit window of an event is one form with the event fields on the left and the series rules on the right and a Save button with a scope menu; the All day row is simpler; the phone calendar has short labels, an in-grid scroll and an agenda list; task and note rows in agendas are coloured by their first tag.
+- Sync: reading a contact list takes one request instead of one per card, and published lists push only the items that changed.
+- Data: three data steps run at the first start (they take a backup first): tags tables, habits as a flag, finance tags and old tables removed.
+
 ## [4.5.1]
 
 - Page views: the Overview of a group, label or project is a quiet summary (open, overdue, due today, this week; a progress bar on projects), a Next row (next event and next three tasks), then what is happening (open tasks by status, overdue, deadlines needing attention) beside what belongs (labels of a group with open and overdue counts, contacts, notebook). The old card stack is gone. The Agenda view is the Secretariat list scoped to the page, 30 days ahead with overdue tasks, events and label deadlines, and no habits.

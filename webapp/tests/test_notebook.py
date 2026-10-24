@@ -434,10 +434,10 @@ class TestCreateDocument:
         )
         assert db.get_notebook_document(conn, "d1")["tags"] == ["University"]
 
-    def test_properties_modal_has_labels_and_project_as_two_dropdowns_and_kind_as_a_dropdown(self, conn):
+    def test_properties_modal_has_one_tag_dropdown_and_kind_as_a_dropdown(self, conn):
         _document(conn, uid="d1")
         body = notebook_router.document_properties_modal("d1", _bare_request(), conn=conn).body.decode()
-        assert 'name="tags_labels"' in body and 'name="project"' in body and 'name="project_field"' in body
+        assert 'name="item_tags"' in body and 'name="item_tags_field"' in body and 'name="project_field"' not in body
         assert "seg-btn" not in body and 'name="kind"' in body
 
     def test_update_properties_saves_the_project_beside_the_labels(self, conn):

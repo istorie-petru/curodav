@@ -39,10 +39,9 @@ def _now():
 
 
 def _habit(conn, uid, title="Water", target=1, rrule="FREQ=DAILY", kind="build", created=None):
-    db.save_task_habit_settings(conn, "Habit")
     db.upsert_task(
         conn,
-        {"uid": uid, "title": title, "description": "", "status": "active", "tags": ["Habit"],
+        {"uid": uid, "title": title, "description": "", "status": "active", "is_habit": 1, "tags": [],
          "recurrence": rrule, "target_per_day": target, "habit_kind": kind,
          "created_at": created or _now()},
     )
@@ -228,9 +227,8 @@ class TestHabitReminderTimeForm:
     """2026-09-25: the habit form's Reminder dropdown and the row's bell."""
 
     def test_create_and_update_store_and_clear_the_time(self, conn):
-        db.save_task_habit_settings(conn, "Habit")
         tasks_router.create_task(title="Walk", description="", due_at="", start_at="", status="active", tags="",
-                                 tags_labels=["Habit"], project="", project_field="", recurrence="FREQ=DAILY",
+                                 is_habit="1", project="", project_field="", recurrence="FREQ=DAILY",
                                  target_per_day="1", habits_per_period=None, habit_days=[], habit_days_present="",
                                  habit_kind="build", habit_unit="", reminder_time="19:30", holiday_calendar="",
                                  exclude_saturday="", exclude_sunday="", x_requested_with=None, conn=conn)

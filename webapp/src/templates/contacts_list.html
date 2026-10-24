@@ -23,7 +23,7 @@
 </form>
 {% if contact_tags %}
 {% set fd_name = 'tag' %}
-{% set fd_label = 'Label' %}
+{% set fd_label = 'Shelf' %}
 {% set fd_items = [] %}
 {% for _it in contact_filter_items %}{% set _ = fd_items.append(_it) %}{% endfor %}
 {% set fd_selected = active_tags %}
@@ -31,17 +31,11 @@
 {% set fd_form_id = 'contacts-filters-form' %}
 {% include '_filter_dropdown.html' %}
 {% endif %}
-{% set fd_name = 'archived' %}
-{% set fd_label = 'Archived' %}
-{% set fd_items = [{'value': '1', 'name': 'Show archived'}] %}
-{% set fd_selected = ['1'] if show_archived else [] %}
-{# "names" mode, not "multi" -- with exactly one item, "multi"'s own
-   0-selected-or-all-selected-both-read-"All" summary logic (app.js's
-   updateMsSummary) can never distinguish the two for a single checkbox,
-   so it would always show "All" regardless of state. "names" shows the
-   item's own name when checked, fd_placeholder otherwise. #}
-{% set fd_mode = 'names' %}
-{% set fd_placeholder = 'Archived' %}
+{% set fd_name = 'show' %}
+{% set fd_label = 'Show' %}
+{% set fd_items = [{'value': '', 'name': 'Active'}, {'value': 'archived', 'name': 'Archived'}, {'value': 'all', 'name': 'All'}] %}
+{% set fd_selected = show %}
+{% set fd_mode = 'single' %}
 {% set fd_form_id = 'contacts-filters-form' %}
 {% include '_filter_dropdown.html' %}
 {% endcall %}

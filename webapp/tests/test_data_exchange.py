@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from src import data_exchange, db, finance
+from src import data_exchange, db, finance, tags
 from src.routers import export as export_router
 
 
@@ -80,12 +80,14 @@ def test_importing_without_merge_leaves_an_existing_note_alone(conn):
 
 
 def test_finance_exports_and_imports_accounts_then_transactions(conn, tmp_path):
+    tags.add_finance_tag(conn, "out")
     a = _account(conn)
     clean, _ = finance.validate_transaction(conn, dict(date="2026-02-01", type="expense", amount="5.50", account_uid=a,
                                                       description="Coffee", tags=["out"]))
     finance.save_transaction(conn, clean)
     bundle = zipfile.ZipFile(io.BytesIO(export_router.download_selective(data_type="finance", conn=conn).body))
     with db.connect(tmp_path / "other.sqlite") as other:
+        tags.add_finance_tag(other, "out")
         assert "Imported 1 account." in export_router._import_one(other, "accounts.csv", bundle.read("finance/accounts.csv"), False)
         note = export_router._import_one(other, "transactions.csv", bundle.read("finance/transactions.csv"), False)
         assert "Imported 1 transaction." in note

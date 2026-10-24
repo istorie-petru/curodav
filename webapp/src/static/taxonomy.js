@@ -23,6 +23,11 @@
                 barId: "holidays-bulk-bar", countId: "holidays-bulk-count", clearId: "holidays-bulk-clear",
                 deleteButtonId: "holidays-bulk-delete", deleteUrl: "/settings/holidays/bulk-delete", itemLabel: "holiday",
             }));
+        } else if (view === "time_blocks") {
+            window.CCBulkSelect.init(Object.assign(base, {
+                barId: "time-blocks-bulk-bar", countId: "time-blocks-bulk-count", clearId: "time-blocks-bulk-clear",
+                deleteButtonId: "time-blocks-bulk-delete", deleteUrl: "/settings/time-blocks/bulk-delete", itemLabel: "time block",
+            }));
         } else {
             window.CCBulkSelect.init(Object.assign(base, { barId: "none" }));
         }

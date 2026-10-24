@@ -28,9 +28,8 @@ def _now():
 
 
 def _habit(conn, uid="h1", target=1):
-    db.save_task_habit_settings(conn, "Habit")
     db.upsert_task(conn, {"uid": uid, "title": "Read", "description": "", "status": "active",
-                          "tags": ["Habit"], "recurrence": "FREQ=DAILY", "target_per_day": target,
+                          "is_habit": 1, "tags": [], "recurrence": "FREQ=DAILY", "target_per_day": target,
                           "created_at": _now()})
 
 

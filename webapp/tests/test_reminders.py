@@ -82,9 +82,8 @@ class TestDigest:
         assert _keys(conn, at(21, 30)) == []  # too late in the day
 
     def test_habits_digest_and_custom_time(self, conn):
-        db.save_task_habit_settings(conn, "Habit")
         for uid in ("h1", "h2"):
-            db.upsert_task(conn, {"uid": uid, "title": uid, "description": "", "status": "active", "tags": ["Habit"],
+            db.upsert_task(conn, {"uid": uid, "title": uid, "description": "", "status": "active", "is_habit": 1, "tags": [],
                                   "recurrence": "FREQ=DAILY", "created_at": _now_utc()})
         db.set_app_meta(conn, reminders.DIGEST_TIME_KEY, "06:30")
         (n,) = reminders.due_notifications(conn, at(6, 30))
@@ -171,9 +170,8 @@ class TestSettings:
 
 
 def _habit(conn, uid, title=None, target=1, kind="build", reminder=None):
-    db.save_task_habit_settings(conn, "Habit")
     db.upsert_task(conn, {"uid": uid, "title": title or uid.title(), "description": "", "status": "active",
-                          "tags": ["Habit"], "recurrence": "FREQ=DAILY", "target_per_day": target,
+                          "is_habit": 1, "tags": [], "recurrence": "FREQ=DAILY", "target_per_day": target,
                           "habit_kind": kind, "created_at": _now_utc()})
     if reminder:
         db.set_task_reminder_time(conn, uid, reminder)

@@ -95,6 +95,10 @@ footer_delete_redirect -- data-delete-undo-redirect (undo mode only)
                                Left in place as general-purpose machinery for
                                the next modal that needs a server-disabled
                                primary button.
+     footer_primary_menu    -- optional list of {label, icon, form, name, value}: turns the primary into a split
+                               button whose chevron lists alternative saves (each sets the named hidden field of
+                               the form, then submits it)
+     footer_primary_alt_label -- text the split button's main label switches to when the form's rule fields change
      footer_extra_html      -- raw safe HTML spliced in after Delete and
                                before the primary button, for a modal whose
                                action doesn't fit the delete/primary shape
@@ -141,6 +145,19 @@ footer_delete_redirect -- data-delete-undo-redirect (undo mode only)
 {% if footer_primary_label %}
 {% if footer_primary_href %}
 <a class="btn {{ footer_primary_variant|default('primary') }}"{% if footer_primary_id %} id="{{ footer_primary_id }}"{% endif %} href="{{ footer_primary_href }}" data-modal>{{ icon(footer_primary_icon|default('edit'), 'icon-sm') }} {{ footer_primary_label }}</a>
+{% elif footer_primary_menu %}
+{# Split primary: the label takes four fifths, a chevron opens the alternative actions. #}
+<div class="btn-split">
+    <button type="submit" form="{{ footer_primary_form }}" class="btn primary btn-split-main"{% if footer_primary_alt_label %} data-split-main data-label-alt="{{ footer_primary_alt_label }}"{% endif %}>{{ icon(footer_primary_icon|default('check-square'), 'icon-sm') }} <span class="btn-split-label">{{ footer_primary_label }}</span></button>
+    <div class="action-menu btn-split-more">
+        <button type="button" class="action-menu-trigger btn primary btn-split-trigger" aria-label="More options">{{ icon('chevron-down', 'icon-sm') }}</button>
+        <div class="action-menu-panel" role="menu"><div class="action-menu-section">
+            {% for it in footer_primary_menu %}
+            <button type="button" class="action-menu-item" role="menuitem" data-submit-form="{{ it.form }}" data-set-name="{{ it.name }}" data-set-value="{{ it.value }}">{{ icon(it.icon, 'icon-sm') }} {{ it.label }}</button>
+            {% endfor %}
+        </div></div>
+    </div>
+</div>
 {% else %}
 <button type="submit"{% if footer_primary_id %} id="{{ footer_primary_id }}"{% endif %} form="{{ footer_primary_form }}" class="btn {{ footer_primary_variant|default('primary') }}"{% if footer_primary_extra_attr %} {{ footer_primary_extra_attr }}{% endif %}{% if footer_primary_disabled %} disabled{% endif %}>{{ icon(footer_primary_icon|default('check-square'), 'icon-sm') }} {{ footer_primary_label }}</button>
 {% endif %}

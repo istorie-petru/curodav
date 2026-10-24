@@ -227,8 +227,7 @@ class TestImplicitFilters:
         ]
 
     def test_habit_tasks_hidden_by_default(self, conn):
-        db.upsert_task(conn, {"uid": "t1", "title": "Habit task", "description": "", "status": "active", "created_at": _now(), "tags": ["Habit"]})
-        db.save_task_habit_settings(conn, "Habit")
+        db.upsert_task(conn, {"uid": "t1", "title": "Habit task", "description": "", "status": "active", "created_at": _now(), "is_habit": 1, "tags": []})
         assert db.search_entities(conn, q="Habit task") == []
         assert _titles(db.search_entities(conn, q="Habit task", include_habit_tasks=True)) == [
             ("task", "Habit task")

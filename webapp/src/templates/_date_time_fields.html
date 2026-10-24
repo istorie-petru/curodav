@@ -20,16 +20,14 @@
 
 {% macro datetime_range(start_name, end_name, start_value='', end_value='', all_day_name='', all_day=false, title='Date & time', start_label='Start', end_label='End', required=false, compact=false) %}
 <div class="dtr{% if compact %} dtr--compact{% endif %}" data-dtr{% if all_day %} data-all-day{% endif %}>
-    {% if title or all_day_name %}
-    <div class="dtr-head">
-        {% if title %}<span class="dtr-title">{{ title }}</span>{% endif %}
-        {% if all_day_name %}
-        <label class="dtr-allday" for="all_day"><span>All day</span><span class="switch"><input type="checkbox" role="switch" id="all_day" name="{{ all_day_name }}" value="1" class="dtr-allday-box"{% if all_day %} checked{% endif %}><span class="slider"></span></span></label>
-        {% endif %}
-    </div>
+    {% if title %}
+    <div class="dtr-head"><span class="dtr-title">{{ title }}</span></div>
     {% endif %}
     <input type="hidden" class="dtr-start" name="{{ start_name }}" value="{{ start_value or '' }}"{% if required %} required{% endif %}>
     <input type="hidden" class="dtr-end" name="{{ end_name }}" value="{{ end_value or '' }}">
+    {% if all_day_name %}
+    <label class="dtr-allday-row"><span>All day</span><input type="checkbox" name="{{ all_day_name }}" value="1" class="dtr-allday-box"{% if all_day %} checked{% endif %}></label>
+    {% endif %}
     <div class="dtr-row">
         <div class="dtr-fields">
             <div class="field"><label>{{ start_label }} date</label>{{ date_field('', start_value, required=required, compact=compact, label=start_label ~ ' date', role='start-date') }}</div>

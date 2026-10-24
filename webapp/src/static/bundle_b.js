@@ -681,6 +681,7 @@ try {
   function wireContent() {
     // Lets a page script (e.g. push_settings.js) set itself up on content
     // that was injected after the page loaded.
+    if (window.CCActionMenu) window.CCActionMenu.init();
     document.dispatchEvent(new CustomEvent("cc-modal-content"));
      body.querySelectorAll("[data-modal-cancel]").forEach((el) => {
        el.addEventListener("click", (e) => {
@@ -703,7 +704,6 @@ try {
     }
     if (window.CCContactPhoneEmailRows) window.CCContactPhoneEmailRows.init(body);
     // task_form.html's Daily target visibility -- same re-init reasoning.
-    if (window.CCHabitFieldToggle) window.CCHabitFieldToggle.init(body);
     // label_edit_modal.html's Role picker (Space/Project date-field
     // reveal + switch-away confirm) -- same re-init reasoning.
     if (window.CCLabelRolePicker) window.CCLabelRolePicker.init(body);
@@ -1149,6 +1149,23 @@ try {
     },
   };
 })();
+
+// An action-menu item with data-submit-form sets one field of that form and submits it (the split Save button's alternatives).
+document.addEventListener("click", (e) => {
+  const item = e.target.closest("[data-submit-form]");
+  if (!item) return;
+  const form = document.getElementById(item.dataset.submitForm);
+  if (!form) return;
+  let field = form.querySelector('input[name="' + item.dataset.setName + '"]');
+  if (!field) {
+    field = document.createElement("input");
+    field.type = "hidden";
+    field.name = item.dataset.setName;
+    form.appendChild(field);
+  }
+  field.value = item.dataset.setValue;
+  form.requestSubmit();
+});
 
 } catch (err) { console.error('modal.js', err); }
 /* habit_day.js */

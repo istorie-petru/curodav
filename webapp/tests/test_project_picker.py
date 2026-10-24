@@ -128,40 +128,47 @@ class TestRoutesApplyTheDropdown:
 
 
 class TestFormRendering:
+    """The Project dropdown is gone: a project is one more tag in the Tag dropdown."""
+
     def _options(self, body, name):
         import re
         tags = re.findall(rf'<input type="(?:radio|checkbox)" name="{name}" value="([^"]*)"([^>]*)>', body)
         return [(v, "checked" if re.search(r"\bchecked\b", rest) else "") for v, rest in tags]
 
-    def test_new_task_form_has_a_separate_project_dropdown(self, conn):
+    def test_task_form_has_no_project_dropdown(self, conn):
         body = tasks_router.new_task_form(_request("/tasks/new"), conn=conn).body.decode()
-        assert 'name="project_field" value="1"' in body
-        project_values = [v for v, _ in self._options(body, "project")]
-        assert project_values == ["", "Thesis", "Trip"]  # No project first, archived left out
-        label_values = [v for v, _ in self._options(body, "tags_labels")]
-        assert "urgent" in label_values
-        assert not {"Trip", "Thesis", "Old"} & set(label_values)
+        assert 'name="project_field"' not in body and 'name="item_tags_field" value="1"' in body
 
-    def test_edit_task_form_preselects_its_project(self, conn):
+    def test_edit_task_form_preselects_its_project_as_a_tag(self, conn):
         _task(conn, "t1", ["Trip", "urgent"])
         body = tasks_router.edit_task_form("t1", _request("/tasks/t1/edit"), conn=conn).body.decode()
-        checked = [v for v, c in self._options(body, "project") if c]
-        assert checked == ["Trip"]
-
-    def test_archived_current_project_stays_selectable(self, conn):
-        _task(conn, "t1", ["Old"])
-        body = tasks_router.edit_task_form("t1", _request("/tasks/t1/edit"), conn=conn).body.decode()
-        assert [v for v, c in self._options(body, "project") if c] == ["Old"]
-        assert "Old (archived)" in body
+        assert sorted(v for v, c in self._options(body, "item_tags") if c) == ["Trip", "urgent"]
 
     def test_edit_event_form_has_it_too(self, conn):
         _event(conn, "e1", ["Thesis"])
         body = calendar_router.edit_event_form("e1", _request("/events/e1/edit"), conn=conn).body.decode()
-        assert [v for v, c in self._options(body, "project") if c] == ["Thesis"]
+        assert [v for v, c in self._options(body, "item_tags") if c] == ["Thesis"]
 
     def test_quick_add_task_from_a_project_page_prefills_it(self, conn):
         body = tasks_router.new_task_form(_request("/tasks/new"), project="Trip", conn=conn).body.decode()
-        assert [v for v, c in self._options(body, "project") if c] == ["Trip"]
+        assert [v for v, c in self._options(body, "item_tags") if c] == ["Trip"]
+
+    def test_dropdown_offers_labels_without_a_tag_yet_and_hides_archived_unless_carried(self, conn):
+        from src import tags
+
+        picked = tags.picker(conn, "task", "", [])
+        assert [i["uid"] for i in picked["items"]] == ["Thesis", "Trip", "urgent"]  # Old is archived
+        assert "Old" in [i["uid"] for i in tags.picker(conn, "task", "", ["Old"])["items"]]
+
+    def test_saving_picks_writes_tag_links_and_the_old_label_links(self, conn):
+        from src import tags
+
+        conn.execute("INSERT INTO label_tags (name, label_name) VALUES ('Salt', 'urgent')")
+        tasks_router.create_task(title="Cook", description="", due_at="", status="active", tags="", tags_labels=[],
+                                 item_tags=["Salt", "Trip"], item_tags_field="1", recurrence="", conn=conn)
+        task = next(t for t in db.list_tasks(conn) if t["title"] == "Cook")
+        assert sorted(task["tags"]) == ["Trip", "urgent"]
+        assert tags.tags_for_object(conn, "task", task["uid"]) == ["Salt"]
 
 
 class TestOfflineSyncOneProjectPerEvent:

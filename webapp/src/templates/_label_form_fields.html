@@ -14,8 +14,8 @@
     {% endcall %}
     {% set ms_name = 'label_group' %}
     {% set ms_mode = 'single' %}
-    {% set ms_label = 'Group' %}
-    {% set ms_items = [{'uid': '', 'name': 'No group'}] %}
+    {% set ms_label = 'Space' %}
+    {% set ms_items = [{'uid': '', 'name': 'No space'}] %}
     {% for g in group_options | default([]) %}{% set _ = ms_items.append({'uid': g, 'name': g}) %}{% endfor %}
     {% set ms_selected = (p.label_group or '') if p else '' %}
     {% set ms_wide = true %}
@@ -23,6 +23,27 @@
     {% set ms_extra_class = 'label-group-field' %}
     {% include "_widget_list_multiselect.html" %}
     {% if is_project_form and not l %}<input type="hidden" name="role" value="project">{% endif %}
+    {% from "_look_picker.html" import look_picker %}
+    {% macro tag_row(i, t) %}
+    <div class="label-tag-row">
+        <input type="hidden" name="tag_idx" value="{{ i }}">
+        <input type="hidden" name="tag_old_{{ i }}" value="{{ t.name if t else '' }}">
+        <input type="hidden" name="tag_del_{{ i }}" value="">
+        <div class="label-tag-name">{{ text_input({'name': 'tag_name_' ~ i, 'value': t.name if t else '', 'placeholder': 'Tag name', 'aria-label': 'Tag name', 'form': 'label-form'}) }}</div>
+        {{ look_picker('look-tag-' ~ i, 'label-form', t.color if t else (p.color if p else 'blue'), t.icon if t else (p.icon if p else none), colors, icon_groups, color_field='tag_color_' ~ i, icon_field='tag_icon_' ~ i, no_icon_label='No icon', default_icon='tag', label='', wide=false, extra_class='label-tag-look') }}
+        <button type="button" class="icon-btn" data-tag-remove title="Remove tag" aria-label="Remove tag">{{ icon('x', 'icon-sm') }}</button>
+    </div>
+    {% endmacro %}
+    <div class="field field-wide label-tags-field">
+        <div class="field-label-row">
+            <label>Tags</label>
+            <button type="button" class="icon-btn" data-tag-add title="Add tag" aria-label="Add tag">{{ icon('plus', 'icon-sm') }}</button>
+        </div>
+        <div class="label-tags-list" data-next="{{ (label_tags | default([])) | length }}">
+            {% for t in label_tags | default([]) %}{{ tag_row(loop.index0, t) }}{% endfor %}
+        </div>
+        <template class="label-tag-template">{{ tag_row('__i__', none) }}</template>
+    </div>
     {{ details_start(l is not none and l) }}
     <input type="hidden" name="page_fields" value="1">
     {% if is_project_form or (p and p.has_deadline) %}
@@ -49,14 +70,14 @@
     {% set ms_placeholder = 'Nowhere' %}
     {% set ms_items = [
         {'uid': '1', 'field': 'sidebar_pin', 'name': 'Sidebar', 'checked': (p and p.sidebar_pin)},
-        {'uid': '1', 'field': 'widget_pin', 'name': 'Groups & Labels widget', 'checked': (p and p.widget_pin)}] %}
+        {'uid': '1', 'field': 'widget_pin', 'name': 'Spaces & Shelves widget', 'checked': (p and p.widget_pin)}] %}
     {% set ms_wide = true %}
     {% set ms_extra_class = '' %}
     {% include "_widget_list_multiselect.html" %}
     {% if is_project_form %}
     {% set ms_name = 'auto_labels' %}
     {% set ms_mode = 'select' %}
-    {% set ms_label = 'Auto labels' %}{% set ms_placeholder = 'None' %}
+    {% set ms_label = 'Auto shelves' %}{% set ms_placeholder = 'None' %}
     {% set ms_icon = 'tag' %}
     {% set ms_items = auto_label_items | default([]) %}
     {% set ms_selected = auto_labels_selected | default([]) %}

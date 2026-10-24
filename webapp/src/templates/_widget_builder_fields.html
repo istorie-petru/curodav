@@ -112,15 +112,15 @@
     <div class="field widget-scope-field">
         <label>Scope</label>
         <div class="field-toggle-group">
-            <label class="field-toggle">{{ radio_input({'name': 'scope', 'value': 'space', 'checked': true}) }} This Space</label>
+            <label class="field-toggle">{{ radio_input({'name': 'scope', 'value': 'space', 'checked': true}) }} This page</label>
             <label class="field-toggle">{{ radio_input({'name': 'scope', 'value': 'everything'}) }} Everything</label>
         </div>
     </div>
     {% endif %}
 </div>
 {% set ms_name = 'tags_labels' %}
-{% set ms_label = 'Labels' %}
-{% set ms_items = [{'uid': '__no_label__', 'name': 'No label'}] + tag_name_items %}
+{% set ms_label = 'Shelves' %}
+{% set ms_items = [{'uid': '__no_label__', 'name': 'No shelf'}] + tag_name_items %}
 {% set ms_selected = [] %}
 {% set ms_pill = true %}
 {% include "_widget_list_multiselect.html" %}

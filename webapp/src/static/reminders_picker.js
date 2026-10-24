@@ -67,7 +67,7 @@
     });
 
     // "Other minutes" escape hatch -- same idea as _widget_list_multiselect
-    // .html's "+ New label" row: one extra row at the bottom of the same
+    // .html's "+ New shelf" row: one extra row at the bottom of the same
     // panel rather than a separate control below it.
     const customRow = document.createElement("label");
     customRow.className = "multiselect-option multiselect-new-option";

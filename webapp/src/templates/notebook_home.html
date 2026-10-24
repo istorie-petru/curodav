@@ -20,17 +20,19 @@
 <div class="notebook-home">
     {% if label_report %}
     <div class="card notebook-report-notice">
-        <span>{{ label_report | length }} note{{ 's' if label_report | length != 1 }} had several labels or projects. The first of each was kept.</span>
-        <span class="spacer"></span>
-        <a class="btn ghost btn-sm" href="/notebook/label-report" data-modal>Review</a>
-        <form method="post" action="/notebook/label-report/dismiss" class="form-inline"><button type="submit" class="btn ghost btn-sm">Dismiss</button></form>
+        <div class="card-body">{{ label_report | length }} note{{ 's' if label_report | length != 1 }} had several shelves or projects. The first of each was kept.</div>
+        <div class="card-footer">
+            <span class="spacer"></span>
+            <a class="btn ghost btn-sm" href="/notebook/label-report" data-modal>Review</a>
+            <form method="post" action="/notebook/label-report/dismiss" class="form-inline"><button type="submit" class="btn ghost btn-sm">Dismiss</button></form>
+        </div>
     </div>
     {% endif %}
     {% if continue_note %}
-    <a class="card notebook-continue" href="/notebook/{{ continue_note.uid }}">
-        {{ icon('edit', 'icon-sm') }}
-        <span class="notebook-continue-text"><span class="notebook-continue-label">Continue writing</span><span class="notebook-continue-title">{{ continue_note.title or 'Untitled' }}</span></span>
-    </a>
+    {% call section_row('') %}Continue writing{% endcall %}
+    <div class="card contact-list notebook-folder-list">
+        {% with documents = [continue_note], select = false, sort = 'updated', back_to = '/notebook', back_label = 'Notebook' %}{% include "_notebook_folder_rows.html" %}{% endwith %}
+    </div>
     {% endif %}
     {% if pinned %}
     <div id="notebook-pinned" data-smart-region>

@@ -3,20 +3,25 @@
 {% from "_form_rows.html" import title_row, title_date_row, recurrence_row, reminder_row, details_start, details_end %}
     {% set ms_form_id = 'event-form' %}
     <div class="field-grid">
-        {% if series_member | default(false) %}
+        {% if series_split | default(false) %}
+        <input type="hidden" name="series_scope" value="this">
+        {% elif series_member | default(false) %}
         <div class="field field-wide">
-            {% set st_name = 'series_scope' %}{% set st_label = 'Apply changes to' %}{% set st_items = series_scope_items %}{% set st_selected = 'this' %}{% set st_form_id = 'event-form' %}
+            {% set st_name = 'series_scope' %}{% set st_label = 'Apply changes to' %}{% set st_items = series_scope_items %}{% set st_selected = 'all' if series_split | default(false) else 'this' %}{% set st_form_id = 'event-form' %}
             {% include "_status_type_row.html" %}
         </div>
         {% endif %}
-        {% call title_date_row(event.title if event else (prefill_title or ''), qa=(quick_add_kind | default(''))) %}
+        {% set _dt_block %}
         <div class="field field-wide event-start-end-field">
             {% from "_date_time_fields.html" import datetime_range with context %}
             {{ datetime_range('start_at', 'end_at', event.start_at if event else (prefill_start or ''), event.end_at if event else (prefill_end or ''),
-                              all_day_name='all_day', all_day=(event and event.all_day) or (not event and prefill_all_day), required=true) }}
+                              all_day_name='all_day', all_day=(event and event.all_day) or (not event and prefill_all_day), required=true, title=('' if series_split | default(false) else 'Date & time')) }}
         </div>
+        {% endset %}
+        {% call title_date_row(event.title if event else (prefill_title or ''), qa=(quick_add_kind | default(''))) %}
+        {{ _dt_block }}
         {% endcall %}
-        {% if occurrence %}
+        {% if occurrence and not series_split | default(false) %}
         <div class="field field-wide event-start-end-field">
             <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
             <input type="hidden" name="occ_initial_start" value="{{ occurrence.start }}">
@@ -24,44 +29,17 @@
             {{ datetime_range('occ_start_at', 'occ_end_at', occurrence.start, occurrence.end, title='This occurrence only', required=true) }}
         </div>
         {% endif %}
-        {% set labels_selected = event.tags if event else (prefill_tags or []) %}
-        {% include "_labels_row.html" %}
-        {% set pf_tags = event.tags if event else (prefill_tags or []) %}
-        {% set pf_form_id = 'event-form' %}
-        {% include "_project_field.html" %}
-        {{ details_start(event and (event.description or event.location or event.meeting_url or event.reminders or event.recurrence not in (None, 'None', 'Nothing', ''))) }}
+        {% set _lp_block %}
+        {% set tag_type = 'event' %}{% set tag_uid = event.uid if event else '' %}{% set tag_old = event.tags if event else [] %}{% set tag_prefill = prefill_tags or [] %}
+        {% include "_tag_row.html" %}
+        {% endset %}
+        {{ _lp_block }}
+        {{ details_start(false if series_split | default(false) else (event and (event.description or event.location or event.meeting_url or event.reminders or event.recurrence not in (None, 'None', 'Nothing', '')))) }}
         {% set contacts_object_type = 'event' %}{% set contacts_object_id = event.uid if event else '' %}
         {% include "_contacts_row.html" %}
         {# reminders_picker.js and recurrence_picker.js upgrade these two inputs in place; routers/calendar.py still takes the raw values. #}
         {{ reminder_row(event.reminders|join(', ') if event else '', wide=true) }}
-        <div class="series-only"{% if series_member | default(false) %} data-series-only inert{% endif %}>
-        {{ recurrence_row(event.recurrence if event and event.recurrence not in (None, 'None', 'Nothing') else '', wide=true) }}
-        <!-- 1.6 ("Configurable terminology"): the field names/values below
-             (holiday_calendar/exclude_saturday/exclude_sunday) never
-             change -- only the on-screen label does, per Settings >
-             General's "Recurrence terminology" toggle
-             (deps.py's recurrence_terminology() global). -->
-        {% set _playful = recurrence_terminology(request) == 'playful' %}
-        {% set _recurring = event and event.recurrence not in (None, 'None', 'Nothing', '') %}
-        {% set ms_mode = 'single' %}
-        {% set ms_name = 'holiday_calendar' %}
-        {% set ms_label = 'Respects Labor Laws' if _playful else 'Holiday calendar' %}
-        {% set ms_items = [{'uid': '', 'name': '(none)'}] %}
-        {% for name in holiday_calendar_names|default([]) %}{% set _ = ms_items.append({'uid': name, 'name': name}) %}{% endfor %}
-        {% set ms_selected = event.holiday_calendar if event and event.holiday_calendar not in (None, 'None', 'Nothing') else '' %}
-        {% set ms_allow_new = false %}
-        {% set ms_wide = true %}
-        {% set ms_extra_class = 'holiday-field' %}
-        {% set ms_hidden = not _recurring %}
-        {% set ms_extra_checkboxes = [
-            {'name': 'exclude_saturday', 'id': 'exclude_saturday', 'checked': event.exclude_saturday if event else false,
-             'label': 'Marx Weekend: Saturday' if _playful else 'Exclude Saturday'},
-            {'name': 'exclude_sunday', 'id': 'exclude_sunday', 'checked': event.exclude_sunday if event else false,
-             'label': 'Marx Weekend: Sunday' if _playful else 'Exclude Sunday'},
-        ] %}
-        {% include "_widget_list_multiselect.html" %}
-        {% set ms_extra_checkboxes = [] %}
-        </div>
+        {% if not series_split | default(false) %}{% include "_event_series_fields.html" %}{% endif %}
 
         {% set _has_location = event and event.location and event.location not in (None, 'None', 'Nothing') %}
         {% set _has_meeting = event and event.meeting_url and event.meeting_url not in (None, 'None', 'Nothing') %}

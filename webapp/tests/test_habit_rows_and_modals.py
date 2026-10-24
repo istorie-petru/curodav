@@ -103,7 +103,7 @@ class TestRecurrenceLabel:
 
 class TestHabitTaskEditModal:
     def test_uses_dedicated_template_no_label_status_due_start(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
+        _seed_task(conn, "h1", is_habit=1, title="Meditate", recurrence="FREQ=DAILY")
         resp = tasks_router.edit_task_form("h1", _request("/tasks/h1/edit"), conn=conn)
         body = resp.body.decode()
         assert 'name="due_at"' not in body
@@ -120,7 +120,7 @@ class TestHabitTaskEditModal:
         # from habit modals, then asked back for the edit modal
         # specifically ("should be able to be work scheduled -- return it
         # to the edit modal") -- the view modal is unchanged, still none.
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
+        _seed_task(conn, "h1", is_habit=1, title="Meditate", recurrence="FREQ=DAILY")
         resp = tasks_router.edit_task_form("h1", _request("/tasks/h1/edit"), conn=conn)
         body = resp.body.decode()
         assert "work_sessions_present" in body
@@ -136,7 +136,7 @@ class TestHabitTaskEditModal:
 
 class TestHabitTaskViewModal:
     def test_uses_dedicated_template_with_heatmap(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
+        _seed_task(conn, "h1", is_habit=1, title="Meditate", recurrence="FREQ=DAILY")
         resp = tasks_router.task_detail("h1", _request("/tasks/h1"), conn=conn)
         body = resp.body.decode()
         assert "heatmap-grid" in body
@@ -146,13 +146,13 @@ class TestHabitTaskViewModal:
         # 2026-09-25 (Peter): the view modal's heatmap is clickable again,
         # reversing the 2026-08-29 view-only call -- see test_habit_detail.py
         # for the amount-popup and period-habit cases.
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
+        _seed_task(conn, "h1", is_habit=1, title="Meditate", recurrence="FREQ=DAILY")
         resp = tasks_router.task_detail("h1", _request("/tasks/h1"), conn=conn)
         body = resp.body.decode()
         assert 'class="heatmap-cell-form" data-modal-keep-open data-cc-change="task"' in body
 
     def test_no_status_due_start_meta(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
+        _seed_task(conn, "h1", is_habit=1, title="Meditate", recurrence="FREQ=DAILY")
         resp = tasks_router.task_detail("h1", _request("/tasks/h1"), conn=conn)
         body = resp.body.decode()
         assert "detail-meta-label\">Status" not in body
@@ -168,38 +168,38 @@ class TestHabitTaskViewModal:
 
 class TestHabitWorkSessionsStatus:
     def test_daily_habit_requires_seven(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], recurrence="FREQ=DAILY")
+        _seed_task(conn, "h1", is_habit=1, recurrence="FREQ=DAILY")
         info = db.habit_work_sessions_status(conn, "h1", "FREQ=DAILY", "2026-08-17", "2026-08-23")
         assert info["required"] == 7
         assert info["needed"] == 7
 
     def test_weekly_habit_requires_one(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], recurrence="FREQ=WEEKLY")
+        _seed_task(conn, "h1", is_habit=1, recurrence="FREQ=WEEKLY")
         info = db.habit_work_sessions_status(conn, "h1", "FREQ=WEEKLY", "2026-08-17", "2026-08-23")
         assert info["required"] == 1
         assert info["needed"] == 1
 
     def test_dated_session_in_period_counts_toward_requirement(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], recurrence="FREQ=DAILY")
+        _seed_task(conn, "h1", is_habit=1, recurrence="FREQ=DAILY")
         db.create_work_allocation(conn, "h1", "2026-08-18T09:00:00", "2026-08-18T10:00:00")
         info = db.habit_work_sessions_status(conn, "h1", "FREQ=DAILY", "2026-08-17", "2026-08-23")
         assert info["dated_in_period"] == 1
         assert info["needed"] == 6
 
     def test_dated_session_outside_period_does_not_count(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], recurrence="FREQ=WEEKLY")
+        _seed_task(conn, "h1", is_habit=1, recurrence="FREQ=WEEKLY")
         db.create_work_allocation(conn, "h1", "2026-08-01T09:00:00", "2026-08-01T10:00:00")
         info = db.habit_work_sessions_status(conn, "h1", "FREQ=WEEKLY", "2026-08-17", "2026-08-23")
         assert info["needed"] == 1
 
     def test_undated_placeholder_counts_toward_requirement(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], recurrence="FREQ=WEEKLY")
+        _seed_task(conn, "h1", is_habit=1, recurrence="FREQ=WEEKLY")
         db.create_work_allocation(conn, "h1")  # undated placeholder
         info = db.habit_work_sessions_status(conn, "h1", "FREQ=WEEKLY", "2026-08-17", "2026-08-23")
         assert info["needed"] == 0
 
     def test_fully_covered_daily_habit_needs_nothing_more(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], recurrence="FREQ=DAILY")
+        _seed_task(conn, "h1", is_habit=1, recurrence="FREQ=DAILY")
         for day in range(17, 24):
             db.create_work_allocation(conn, "h1", f"2026-08-{day:02d}T09:00:00", f"2026-08-{day:02d}T10:00:00")
         info = db.habit_work_sessions_status(conn, "h1", "FREQ=DAILY", "2026-08-17", "2026-08-23")
@@ -208,14 +208,14 @@ class TestHabitWorkSessionsStatus:
 
 class TestHabitWorkSessionsOnWeekView:
     def test_habit_task_appears_on_unscheduled_panel(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
+        _seed_task(conn, "h1", is_habit=1, title="Meditate", recurrence="FREQ=DAILY")
         body = calendar_router.week_view(
             _request("/calendar/week", query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn
         ).body.decode()
         assert "Meditate" in body
 
     def test_daily_habit_persists_until_full_week_covered(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
+        _seed_task(conn, "h1", is_habit=1, title="Meditate", recurrence="FREQ=DAILY")
         # Only 6 of the 7 days in the displayed week are scheduled.
         for day in range(17, 23):
             db.create_work_allocation(conn, "h1", f"2026-08-{day:02d}T09:00:00", f"2026-08-{day:02d}T10:00:00")
@@ -225,7 +225,7 @@ class TestHabitWorkSessionsOnWeekView:
         assert "Meditate" in body
 
     def test_daily_habit_drops_off_once_full_week_covered(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], title="Meditate", recurrence="FREQ=DAILY")
+        _seed_task(conn, "h1", is_habit=1, title="Meditate", recurrence="FREQ=DAILY")
         for day in range(17, 24):
             db.create_work_allocation(conn, "h1", f"2026-08-{day:02d}T09:00:00", f"2026-08-{day:02d}T10:00:00")
         body = calendar_router.week_view(
@@ -236,7 +236,7 @@ class TestHabitWorkSessionsOnWeekView:
         assert 'data-task-title="Meditate"' not in body
 
     def test_weekly_habit_drops_off_after_one_session_this_week(self, conn):
-        _seed_task(conn, "h1", tags=["Habit"], title="Water plants", recurrence="FREQ=WEEKLY")
+        _seed_task(conn, "h1", is_habit=1, title="Water plants", recurrence="FREQ=WEEKLY")
         db.create_work_allocation(conn, "h1", f"{_MONDAY}T09:00:00", f"{_MONDAY}T10:00:00")
         body = calendar_router.week_view(
             _request("/calendar/week", query_string=f"date_={_MONDAY}".encode()), date_=_MONDAY, conn=conn

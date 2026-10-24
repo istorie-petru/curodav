@@ -62,21 +62,21 @@
             <a href="/groups/{{ g.name|urlencode }}/view" data-modal class="label-name">{{ g.name }}</a>
         </div>
     </td>
-    <td class="col-meta col-opt-2">{% if g.labels %}{{ g.labels|length }} label{{ 's' if g.labels|length != 1 }}{% else %}<span class="text-muted">Empty</span>{% endif %}</td>
+    <td class="col-meta col-opt-2">{% if g.labels %}{{ g.labels|length }} {{ 'shelf' if g.labels|length == 1 else 'shelves' }}{% else %}<span class="text-muted">Empty</span>{% endif %}</td>
     <td class="col-meta col-opt-1">{% if g.usage %}Used in {{ g.usage }} item{{ 's' if g.usage != 1 }}{% else %}<span class="text-muted">Not used</span>{% endif %}</td>
     <td class="col-actions">
         {{ row_action_buttons(
             "/groups/" ~ (g.name|urlencode) ~ "/edit",
             "/groups/" ~ (g.name|urlencode) ~ "/delete",
-            "group",
-            'Delete the group "' ~ g.name ~ '"? Its labels stay, ungrouped.',
+            "space",
+            'Delete the space "' ~ g.name ~ '"? Its shelves stay, ungrouped.',
             "/groups/" ~ (g.name|urlencode),
             duplicate_url="/groups/new?copy=" ~ (g.name|urlencode)
         ) }}
     </td>
 </tr>
 {% endfor %}
-{% if not groups %}{{ empty_state_row(5, "No groups yet.", css_class='empty-state') }}{% endif %}
+{% if not groups %}{{ empty_state_row(5, "No spaces yet.", css_class='empty-state') }}{% endif %}
 {% elif view == 'frontmatter' %}
 {% for f in fields %}
 <tr class="entity-row" data-uid="{{ f.uid }}">
@@ -100,24 +100,38 @@
     </td>
 </tr>
 {% endfor %}
-{% elif view == 'tags' %}
-{% for t in tags %}
+{% elif view == 'label_tags' %}
+{% for t in label_tags %}
+{% set _l = label_looks.get(t.label_name) %}
 <tr class="entity-row" data-tag-name="{{ t.name }}">
     <td class="col-select"></td>
     <td class="col-name"><div class="label-cell"><span class="cell-tag cal-{{ t.color }}">{% if t.icon %}{{ icon(t.icon, 'icon-sm') }} {% endif %}{{ t.name }}</span></div></td>
-    <td class="col-meta col-opt-2">{{ t.color | capitalize }}{% if t.icon %} · {{ t.icon | replace('-', ' ') | capitalize }}{% endif %}</td>
-    <td class="col-meta col-opt-1">{% if t.usage %}Used in {{ t.usage }} transaction{{ 's' if t.usage != 1 }}{% else %}<span class="text-muted">Not used</span>{% endif %}</td>
+    <td class="col-meta col-opt-2"><span class="cell-tag cal-{{ _l.color if _l else 'gray' }}">{% if _l and _l.icon %}{{ icon(_l.icon, 'icon-sm') }} {% endif %}{{ t.label_name }}</span></td>
+    <td class="col-meta col-opt-1">{% if t.usage %}Used in {{ t.usage }} item{{ 's' if t.usage != 1 }}{% else %}<span class="text-muted">Not used</span>{% endif %}</td>
+    <td class="col-actions">
+        <div class="action-buttons"><a href="/settings/labels/{{ t.label_name|urlencode }}/edit" class="icon-btn" data-modal title="Edit the tags of {{ t.label_name }}" aria-label="Edit the tags of {{ t.label_name }}">{{ icon('edit', 'icon-sm') }}</a></div>
+    </td>
+</tr>
+{% endfor %}
+{% if not label_tags %}{{ empty_state_row(5, "No tags yet. Every shelf gets one when the migration runs, and new shelves get one when they are created.", css_class='empty-state') }}{% endif %}
+{% elif view == 'time_blocks' %}
+{% for b in time_blocks %}
+<tr class="entity-row" data-uid="{{ b.uid }}">
+    {{ _select(b.uid, b.label or (b.kind ~ ' time block')) }}
+    <td class="col-name"><div class="label-cell"><span class="label-name">{{ b.label or '(untitled)' }}</span> {% if b.kind == 'sleep' %}<span class="pill-static pill-red">{{ icon('moon', 'icon-sm') }} Sleep</span>{% else %}<span class="pill-static pill-green">{{ icon('sun', 'icon-sm') }} Leisure</span>{% endif %}</div></td>
+    <td class="col-meta col-opt-2"><span class="settings-hint">{{ b.start_time }}&ndash;{{ b.end_time }}</span></td>
+    <td class="col-meta col-opt-1"><span class="settings-hint">{{ b.days_label }}</span></td>
     <td class="col-actions">
         {{ row_action_buttons(
-            "/finance/tags/edit?" ~ ({'name': t.name} | urlencode),
-            "/finance/tags/delete?" ~ ({'name': t.name} | urlencode),
-            "tag",
-            'Delete the tag "' ~ t.name ~ '"? It is removed from every transaction that carries it.'
+            "/settings/time-blocks/" ~ b.uid ~ "/edit",
+            "/settings/time-blocks/" ~ b.uid ~ "/delete",
+            b.kind ~ " time",
+            'Delete "' ~ (b.label or (b.kind ~ ' time block')) ~ '"? This stops the Week/Day grid from hatching these hours.'
         ) }}
     </td>
 </tr>
 {% endfor %}
-{% if not tags %}{{ empty_state_row(5, "No tags yet.", css_class='empty-state') }}{% endif %}
+{% if not time_blocks %}{{ empty_state_row(5, "No time blocks configured yet", css_class='empty-state') }}{% endif %}
 {% else %}
 {% for h in holidays %}
 <tr class="entity-row" data-uid="{{ h.uid }}">
@@ -137,6 +151,6 @@
 {% endfor %}
 {% if not holidays %}{{ empty_state_row(5, "No holidays configured yet", css_class='empty-state') }}{% endif %}
 {% endif %}
-{% if not hide_add_row | default(false) %}<tr class="task-add-row">
-    <td colspan="5"><a href="{{ new_url }}" data-modal{% if view != 'holidays' %} data-modal-size="wide"{% endif %}>{{ icon('plus', 'icon-sm') }} Add {{ noun }}</a></td>
+{% if not hide_add_row | default(false) and view not in ('label_tags', 'holidays', 'time_blocks') %}<tr class="task-add-row">
+    <td colspan="5"><a href="{{ new_url }}" data-modal{% if view not in ('holidays', 'time_blocks') %} data-modal-size="wide"{% endif %}>{{ icon('plus', 'icon-sm') }} Add {{ noun }}</a></td>
 </tr>{% endif %}

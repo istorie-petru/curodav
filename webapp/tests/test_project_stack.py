@@ -91,36 +91,12 @@ class TestProjectStatus:
         db.upsert_label_config(conn, {"name": name, "is_project": is_project, "has_deadline": 1, "deadline_date": end, "created_at": _now()})
         return db.effective_label_config(conn, name)
 
-    def test_any_label_with_a_deadline_has_a_status(self, conn):
-        # labels-as-modules slice b: the lifecycle isn't project-only.
+    def test_a_label_is_active_whatever_its_tasks_and_deadline(self, conn):
         cfg = self._cfg(conn, end="2026-01-01", is_project=0)
         _task(conn, "t1", ["P"], status="done")
-        assert db.project_status(conn, cfg, today=date(2026, 6, 1)) == "Pending Archiving"
-
-    def test_deadline_switched_off_is_ignored(self, conn):
-        db.upsert_label_config(conn, {"name": "P", "is_project": 1, "has_deadline": 0, "deadline_date": "2099-01-01"})
-        _task(conn, "t1", ["P"], status="done")
-        cfg = db.effective_label_config(conn, "P")
-        assert db.project_status(conn, cfg, today=date(2026, 1, 1)) == "Pending Archiving"
-
-    def test_no_tasks_is_open(self, conn):
-        cfg = self._cfg(conn)
-        assert db.project_status(conn, cfg) == "Open"
-
-    def test_incomplete_task_is_open(self, conn):
-        cfg = self._cfg(conn)
-        _task(conn, "t1", ["P"], status="active")
-        assert db.project_status(conn, cfg) == "Open"
-
-    def test_all_completed_before_end_date_is_pending(self, conn):
-        cfg = self._cfg(conn, end="2099-01-01")
-        _task(conn, "t1", ["P"], status="done")
-        assert db.project_status(conn, cfg, today=date(2026, 1, 1)) == "Pending"
-
-    def test_all_completed_past_end_date_is_pending_archiving(self, conn):
-        cfg = self._cfg(conn, end="2026-01-01")
-        _task(conn, "t1", ["P"], status="done")
-        assert db.project_status(conn, cfg, today=date(2026, 6, 1)) == "Pending Archiving"
+        assert db.project_status(conn, cfg) == "Active"
+        _task(conn, "t2", ["P"], status="active")
+        assert db.project_status(conn, cfg) == "Active"
 
     def test_archived_status_set_stays_archived_regardless_of_tasks(self, conn):
         cfg = self._cfg(conn)
@@ -129,16 +105,16 @@ class TestProjectStatus:
         cfg = db.effective_label_config(conn, "P")
         assert db.project_status(conn, cfg) == "Archived"
 
-    def test_end_date_passing_alone_does_not_archive(self, conn):
-        # "The end date does not automatically archive a project."
-        cfg = self._cfg(conn, end="2020-01-01")
-        _task(conn, "t1", ["P"], status="active")
-        assert db.project_status(conn, cfg, today=date(2026, 6, 1)) == "Open"
+    def test_a_passed_deadline_archives_and_restoring_clears_the_deadline(self, conn):
+        from src import tags
 
-    def test_completing_all_tasks_does_not_silently_archive(self, conn):
-        cfg = self._cfg(conn, end="2099-01-01")
-        _task(conn, "t1", ["P"], status="done")
-        assert db.project_status(conn, cfg, today=date(2026, 1, 1)) != "Archived"
+        self._cfg(conn, end="2020-01-01")
+        assert tags.archive_past_deadlines(conn, "2026-06-01") == 1
+        assert db.project_status(conn, db.effective_label_config(conn, "P")) == "Archived"
+        db.unarchive_label(conn, "P")
+        cfg = db.effective_label_config(conn, "P")
+        assert db.project_status(conn, cfg) == "Active" and not cfg["has_deadline"]
+        assert tags.archive_past_deadlines(conn, "2026-06-01") == 0
 
 
 # --------------------------------------------------------------------- #
@@ -185,13 +161,13 @@ class TestArchiveAction:
         assert cfg["archived_at"] is not None
         assert db.project_status(conn, cfg) == "Archived"
 
-    def test_unarchive_goes_back_to_the_computed_status(self, conn):
+    def test_unarchive_makes_the_label_active_again(self, conn):
         db.upsert_label_config(conn, {"name": "Trip", "is_project": 1, "created_at": _now()})
         label_pages.archive_label("Trip", conn=conn)
         label_pages.unarchive_label("Trip", conn=conn)
         cfg = db.effective_label_config(conn, "Trip")
         assert cfg["archived_at"] is None
-        assert db.project_status(conn, cfg) == "Open"
+        assert db.project_status(conn, cfg) == "Active"
 
     def test_old_project_endpoints_are_gone(self):
         for name in ("promote", "set_dates", "demote", "archive"):

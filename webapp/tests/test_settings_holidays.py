@@ -27,6 +27,7 @@ from starlette.requests import Request
 from settings_app import fake_app
 from src import db
 from src.routers import settings as settings_router
+from src.routers import taxonomy as taxonomy_router
 
 
 @pytest.fixture()
@@ -48,7 +49,7 @@ def _request(path="/settings/holidays"):
 
 class TestSettingsHolidaysPage:
     def test_renders_with_breadcrumb_and_active_tab(self, conn):
-        resp = settings_router.settings_holidays(_request(), conn=conn)
+        resp = taxonomy_router.manage_calendar(_request(), view="holidays", conn=conn)
         assert resp.status_code == 200
         assert resp.context["view"] == "holidays"
         assert resp.context["crumbs"] == [{"url": "/settings", "name": "Settings"}]
@@ -56,7 +57,7 @@ class TestSettingsHolidaysPage:
         assert 'href="/settings"' in body
 
     def test_empty_state_when_no_holidays(self, conn):
-        resp = settings_router.settings_holidays(_request(), conn=conn)
+        resp = taxonomy_router.manage_calendar(_request(), view="holidays", conn=conn)
         body = resp.body.decode()
         assert "No holidays configured yet" in body
         assert 'id="taxonomy-table" data-view="holidays"' in body
@@ -64,7 +65,7 @@ class TestSettingsHolidaysPage:
 
     def test_lists_existing_holidays_as_rows_with_edit_buttons(self, conn):
         db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "University", "label": "Winter break", "date_from": "2026-12-20", "date_to": "2027-01-05"})
-        resp = settings_router.settings_holidays(_request(), conn=conn)
+        resp = taxonomy_router.manage_calendar(_request(), view="holidays", conn=conn)
         body = resp.body.decode()
         assert 'id="taxonomy-table" data-view="holidays"' in body
         assert "Winter break" in body
@@ -81,7 +82,7 @@ class TestSettingsHolidaysPage:
 
     def test_lists_a_year_agnostic_holiday_without_a_year(self, conn):
         db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "National", "label": "Christmas", "date_from": "--12-25", "date_to": "--12-25"})
-        resp = settings_router.settings_holidays(_request(), conn=conn)
+        resp = taxonomy_router.manage_calendar(_request(), view="holidays", conn=conn)
         body = resp.body.decode()
         assert "25 Dec" in body
         assert "--12-25" not in body
@@ -89,7 +90,7 @@ class TestSettingsHolidaysPage:
     def test_hub_links_to_holidays(self, conn):
         resp = settings_router.settings_index(_request("/settings"), conn=conn)
         body = resp.body.decode()
-        assert "Organise" in body and "/settings/holidays" in [c["url"] for c in settings_router.HUB_CATEGORIES]
+        assert "Modules" in body and "/settings/calendar" in [c["url"] for c in settings_router.HUB_CATEGORIES]
 
 
 class TestHolidayDateRangeDisplay:
@@ -99,20 +100,20 @@ class TestHolidayDateRangeDisplay:
 
     def test_same_day_holiday_shows_one_date_not_a_range(self, conn):
         db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "Romania", "label": "National day", "date_from": "2026-12-01", "date_to": "2026-12-01"})
-        resp = settings_router.settings_holidays(_request(), conn=conn)
+        resp = taxonomy_router.manage_calendar(_request(), view="holidays", conn=conn)
         body = resp.body.decode()
         assert "1 Dec" in body
         assert "&rarr;" not in body
 
     def test_a_genuine_range_still_shows_the_arrow(self, conn):
         db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "University", "label": "Break", "date_from": "2026-09-14", "date_to": "2026-09-16"})
-        resp = settings_router.settings_holidays(_request(), conn=conn)
+        resp = taxonomy_router.manage_calendar(_request(), view="holidays", conn=conn)
         body = resp.body.decode()
         assert "&rarr;" in body
 
     def test_same_day_year_agnostic_holiday_also_collapses_to_one_date(self, conn):
         db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "National", "label": "Christmas", "date_from": "--12-25", "date_to": "--12-25"})
-        resp = settings_router.settings_holidays(_request(), conn=conn)
+        resp = taxonomy_router.manage_calendar(_request(), view="holidays", conn=conn)
         body = resp.body.decode()
         assert "25 Dec" in body
         assert "&rarr;" not in body
@@ -269,7 +270,7 @@ class TestCreateHoliday:
     def test_creates_and_redirects_to_holidays_page(self, conn):
         resp = settings_router.create_holiday(calendar_name="University", label="Break", date_from="2026-09-14", date_to="2026-09-16", calendar_name_new="", year_agnostic="", conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/holidays"
+        assert resp.headers["location"] == "/settings/calendar"
         holidays = db.list_holidays(conn)
         assert len(holidays) == 1
         assert holidays[0]["calendar_name"] == "University"
@@ -302,7 +303,7 @@ class TestUpdateHoliday:
         db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "Default", "label": "Old", "date_from": "2026-09-14", "date_to": "2026-09-16"})
         resp = settings_router.update_holiday("h1", label="New title", calendar_name="Default", date_from="2026-09-14", date_to="2026-09-16", calendar_name_new="", year_agnostic="", conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/holidays"
+        assert resp.headers["location"] == "/settings/calendar"
         assert db.list_holidays(conn)[0]["label"] == "New title"
 
     def test_updates_dates(self, conn):
@@ -349,5 +350,5 @@ class TestDeleteHoliday:
         db.upsert_holiday(conn, {"uid": "h1", "calendar_name": "Default", "label": "Break", "date_from": "2026-09-14", "date_to": "2026-09-16"})
         resp = settings_router.delete_holiday("h1", conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/holidays"
+        assert resp.headers["location"] == "/settings/calendar"
         assert db.list_holidays(conn) == []

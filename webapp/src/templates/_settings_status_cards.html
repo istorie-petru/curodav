@@ -20,7 +20,7 @@
                 {% for c in conflicts %}
                 <tr>
                     <td>{{ c.entity_type }} &middot; {{ c.entity_uid }}</td>
-                    <td>{{ 'Project label' if c.field_name == 'project_label' else c.field_name }}</td>
+                    <td>{{ 'Project shelf' if c.field_name == 'project_label' else c.field_name }}</td>
                     <td>{{ c.losing_value if c.losing_value is not none else '(empty)' }}</td>
                     <td>{{ c.created_at | fmt_dt }}</td>
                     <td class="text-right-nowrap">

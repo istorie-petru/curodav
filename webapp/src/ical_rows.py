@@ -143,8 +143,20 @@ def task_row_to_ical(row: dict[str, Any]) -> bytes:
             pass
         if embedded_exdates:
             todo.add("EXDATE", embedded_exdates)
-    todo.add("DTSTAMP", datetime.now(timezone.utc))
+    todo.add("DTSTAMP", _dtstamp(row))
     return todo.to_ical()
+
+
+def _dtstamp(row: dict[str, Any]) -> datetime:
+    """The row's own change time, so re-exporting an unchanged row yields identical
+    bytes and sync clients see no change."""
+    for key in ("updated_at", "created_at"):
+        try:
+            stamp = datetime.fromisoformat(row[key])
+        except (KeyError, TypeError, ValueError):
+            continue
+        return stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc)
 
 
 def ical_to_task_row(todo: Todo) -> dict[str, Any]:
@@ -239,7 +251,7 @@ def event_row_to_ical(row: dict[str, Any]) -> bytes:
 
         alarm.add("TRIGGER", timedelta(minutes=-abs(minutes_before)))
         event.add_component(alarm)
-    event.add("DTSTAMP", datetime.now(timezone.utc))
+    event.add("DTSTAMP", _dtstamp(row))
     return event.to_ical()
 
 

@@ -196,7 +196,7 @@
     if (!btn) return;
     window.ccConfirmSheet({
       anchor: btn,
-      message: "Deletes every task, event, contact, label, habit, and published list. Backups are kept.",
+      message: "Deletes every task, event, contact, shelf, habit, and published list. Backups are kept.",
       // confirmLabel omitted -- ccConfirmSheet's own default ("Delete") is
       // exactly what every other confirm toast in the app already uses.
       typedConfirm: { matchValue: "DELETE ALL" },

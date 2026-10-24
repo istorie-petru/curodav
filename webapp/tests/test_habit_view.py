@@ -30,17 +30,16 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _habit(conn, uid, title, target=1, status="active", tags=("Habit",)):
-    db.save_task_habit_settings(conn, "Habit")
+def _habit(conn, uid, title, target=1, status="active", tags=()):
     db.upsert_task(
         conn,
-        {"uid": uid, "title": title, "description": "", "status": status, "tags": list(tags),
+        {"uid": uid, "title": title, "description": "", "status": status, "tags": list(tags), "is_habit": 1,
          "recurrence": "FREQ=DAILY", "target_per_day": target, "created_at": _now()},
     )
 
 
 class TestHabitItems:
-    def test_only_habit_labeled_active_tasks(self, conn):
+    def test_only_flagged_active_tasks(self, conn):
         _habit(conn, "h1", "Read")
         _habit(conn, "h2", "Stretch", status="done")
         db.upsert_task(conn, {"uid": "t1", "title": "Plain", "description": "", "status": "active",

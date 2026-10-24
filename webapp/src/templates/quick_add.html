@@ -24,7 +24,7 @@
 {% set default_tab = default_tab|default('task') %}
 <div id="modal-target" class="modal-stable-height">
 {% set _kinds = [default_tab] if default_tab in ('contact', 'label') else ['task', 'event'] %}
-{% set _kind_meta = {'task': ('Task', 'check-square'), 'event': ('Event', 'calendar'), 'contact': ('Contact', 'user'), 'label': ('Label', 'tag')} %}
+{% set _kind_meta = {'task': ('Task', 'check-square'), 'event': ('Event', 'calendar'), 'contact': ('Contact', 'user'), 'label': ('Shelf', 'tag')} %}
 <div class="modal-header">
 <h1>{% if _kinds | length == 1 %}New {{ _kind_meta[_kinds[0]][0] | lower }}{% else %}New{% endif %}</h1>
 </div>
@@ -64,7 +64,7 @@
     </section>
     {% endif %}
     {% if 'label' in _kinds %}
-    <section class="quick-add-panel is-active" data-quick-add-panel="label" role="tabpanel" aria-label="New label">
+    <section class="quick-add-panel is-active" data-quick-add-panel="label" role="tabpanel" aria-label="New shelf">
         {% set quick_add_kind = 'label' %}
         <form method="post" id="label-form" action="/settings/labels/create">
             {% include "_label_form_fields.html" %}

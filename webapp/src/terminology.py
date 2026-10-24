@@ -11,7 +11,7 @@ from contextvars import ContextVar
 
 PLAYFUL = {
     "No accounts yet": "No accounts. Your wallet is suspiciously quiet",
-    "No groups yet.": "No groups yet. Everyone is flying solo",
+    "No spaces yet.": "No spaces yet. Everyone is flying solo",
     "No tags yet.": "No tags yet. Nothing here but tumbleweeds",
     "No templates yet": "No templates yet. Blank page energy",
     "No holidays configured yet": "No holidays yet. Work forever, apparently",

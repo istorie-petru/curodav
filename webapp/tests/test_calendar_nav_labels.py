@@ -76,7 +76,7 @@ class TestFourWeekLabelText:
         body = resp.body.decode()
         label_text = resp.context["label_text"]
         assert f'<h1 class="sr-only">{label_text}</h1>' in body
-        assert f'<span class="cal-nav-label" id="cal-nav-label" aria-live="polite">{label_text}</span>' in body
+        assert f'<span class="cal-nav-long">{label_text}</span><span class="cal-nav-short">{resp.context["label_short"]}</span>' in body
 
     def test_nav_links_carry_cal_nav_classes(self, conn):
         resp = calendar_router.four_week_view(_bare_request(), conn=conn)
@@ -115,7 +115,7 @@ class TestWeekLabelText:
         body = resp.body.decode()
         label_text = resp.context["label_text"]
         assert f'<h1 class="sr-only">{label_text}</h1>' in body
-        assert f'<span class="cal-nav-label" id="cal-nav-label" aria-live="polite">{label_text}</span>' in body
+        assert f'<span class="cal-nav-long">{label_text}</span><span class="cal-nav-short">{resp.context["label_short"]}</span>' in body
 
     def test_nav_links_carry_cal_nav_classes(self, conn):
         resp = calendar_router.week_view(_bare_request("/calendar/week"), conn=conn)

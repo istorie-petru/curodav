@@ -13,11 +13,8 @@
             {{ date_field('due_at', task.due_at[:10] if task and task.due_at else '', label='Due date') }}
         </div>
         {% endcall %}
-        {% set labels_selected = task.tags if task else (prefill_tags or []) %}
-        {% include "_labels_row.html" %}
-        {% set pf_tags = task.tags if task else (prefill_tags or []) %}
-        {% set pf_form_id = 'task-form' %}
-        {% include "_project_field.html" %}
+        {% set tag_type = 'task' %}{% set tag_uid = task.uid if task else '' %}{% set tag_old = task.tags if task else [] %}{% set tag_prefill = prefill_tags or [] %}
+        {% include "_tag_row.html" %}
         {% set st_name = 'status' %}{% set st_label = 'Status' %}{% set st_items = status_items %}
         {% set st_selected = task.status if task else '' %}{% set st_form_id = 'task-form' %}
         {% include "_status_type_row.html" %}
@@ -44,15 +41,6 @@
              'label': 'Marx Weekend: Sunday' if _playful else 'Exclude Sunday'},
         ] %}
         {% include "_widget_list_multiselect.html" %}
-        <div class="field habit-target-field {{ '' if (task and habit_label in (task.tags or [])) else 'is-hidden' }}"
-             id="habit-target-field" data-habit-label="{{ habit_label }}" data-form-id="task-form">
-            <label>Daily target</label>
-            <div class="stepper">
-                <button type="button" class="stepper-btn stepper-dec" aria-label="Decrease daily target">&minus;</button>
-                {{ number_input({'name': 'target_per_day', 'class': 'stepper-input', 'min': '1', 'step': '1', 'value': (task.target_per_day|int if task and task.target_per_day else 1)}) }}
-                <button type="button" class="stepper-btn stepper-inc" aria-label="Increase daily target">+</button>
-            </div>
-        </div>
         <div class="field field-wide">
             <label>Description</label>
             {{ textarea_input({'name': 'description', 'rows': '3'}, task.description if task else '') }}

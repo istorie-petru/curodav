@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from .. import clock, db, event_series, grid_layout, habit_heatmap, habit_view, recurrence_expand
+from .. import tags as tag_store
 from .. import validation
 from ..deps import HIDE_SLEEP_HOURS_KEY, _four_week_position, _week_start, get_db, respond, templates, validation_response, wants_json
 from . import dashboard as dashboard_router
@@ -172,8 +173,10 @@ def _apply_event_label_filter(events: list[dict], label: str | None, conn=None) 
     single-label match every other label filter in this app uses."""
     if not label:
         return events
-    wanted = db.expand_label_filter(conn, [label]) if conn is not None else {label.lower()}
-    return [e for e in events if any((tg or "").lower() in wanted for tg in e.get("tags") or [])]
+    if conn is None:
+        return [e for e in events if label.lower() in {(tg or "").lower() for tg in e.get("tags") or []}]
+    match = tag_store.matcher(conn, "event", [label])
+    return [e for e in events if match(e)]
 
 
 _DEFAULT_EVENT_COLOR = "blue"
@@ -216,8 +219,10 @@ def _apply_task_label_filter(tasks: list[dict], label: str | None, conn=None) ->
     Month/Agenda also show alongside events (object_type='task' labels)."""
     if not label:
         return tasks
-    wanted = db.expand_label_filter(conn, [label]) if conn is not None else {label.lower()}
-    return [t for t in tasks if any((tg or "").lower() in wanted for tg in t.get("tags") or [])]
+    if conn is None:
+        return [t for t in tasks if label.lower() in {(tg or "").lower() for tg in t.get("tags") or []}]
+    match = tag_store.matcher(conn, "task", [label])
+    return [t for t in tasks if match(t)]
 
 
 def _is_bar_worthy(e: dict) -> bool:
@@ -545,7 +550,7 @@ def _month_view_context(conn, request: Request, year: int | None, month: int | N
         "next_year": next_year,
         "next_month": next_month,
         "event_label_names": db.list_event_label_names(conn),
-        "event_label_items": db.label_filter_items(conn, db.list_event_label_names(conn)),
+        "event_label_items": tag_store.filter_items(conn, "event", db.label_filter_items(conn, db.list_event_label_names(conn))),
         "active_label": label or "",
     }
 
@@ -678,6 +683,7 @@ def _four_week_view_context(conn, request, date_, label):
     weeks = _four_week_grid(view_start, events, tasks, week_start)
 
     label_text = f"{view_start.strftime('%b %d')} – {view_end.strftime('%b %d, %Y')}"
+    label_short = view_start.strftime("%b") if view_start.month == view_end.month else f"{view_start.strftime('%b')}–{view_end.strftime('%b')}"
 
     return {
         "request": request,
@@ -695,8 +701,9 @@ def _four_week_view_context(conn, request, date_, label):
         "prev_start": (view_start - timedelta(days=7)).isoformat(),
         "next_start": (view_start + timedelta(days=7)).isoformat(),
         "label_text": label_text,
+        "label_short": label_short,
         "event_label_names": db.list_event_label_names(conn),
-        "event_label_items": db.label_filter_items(conn, db.list_event_label_names(conn)),
+        "event_label_items": tag_store.filter_items(conn, "event", db.label_filter_items(conn, db.list_event_label_names(conn))),
         "active_label": label or "",
     }
 
@@ -837,6 +844,7 @@ def _week_view_context(conn, request, date_, label):
     unscheduled_tasks.sort(key=lambda item: item["task"].get("due_at") or "9999-99-99")
 
     label_text = f"{week_start_date.strftime('%b %d')} – {week_end_date.strftime('%b %d, %Y')}"
+    label_short = f"W{week_start_date.isocalendar()[1]}"
 
     week_bars, week_lane_count = _week_bars(
         [d["date"] for d in days], [e for e in events if _is_bar_worthy(e)]
@@ -885,10 +893,11 @@ def _week_view_context(conn, request, date_, label):
         "prev_week": (week_start_date - timedelta(days=7)).isoformat(),
         "next_week": (week_start_date + timedelta(days=7)).isoformat(),
         "label_text": label_text,
+        "label_short": label_short,
         "unscheduled_tasks": unscheduled_tasks,
         "unscheduled_next": f"/calendar/week?date_={week_start_date.isoformat()}",
         "event_label_names": db.list_event_label_names(conn),
-        "event_label_items": db.label_filter_items(conn, db.list_event_label_names(conn)),
+        "event_label_items": tag_store.filter_items(conn, "event", db.label_filter_items(conn, db.list_event_label_names(conn))),
         "active_label": label or "",
         "time_blocks_json": _time_blocks_client_payload(time_blocks),
     }
@@ -1075,6 +1084,7 @@ def _day_view_context(conn, request, day, label):
         "today_iso": clock.today().isoformat(),
         "day": day,
         "day_label": f"{d.strftime('%a, %b')} {d.day}, {d.year}",
+        "day_label_short": f"{d.strftime('%b')} {d.day}",
         "day_date": d,
         "prev_day": (d - timedelta(days=1)).isoformat(),
         "next_day": (d + timedelta(days=1)).isoformat(),
@@ -1086,7 +1096,7 @@ def _day_view_context(conn, request, day, label):
         "hours": list(range(grid_layout.GRID_HOURS)),
         "px_per_hour": grid_layout.PX_PER_HOUR,
         "event_label_names": db.list_event_label_names(conn),
-        "event_label_items": db.label_filter_items(conn, db.list_event_label_names(conn)),
+        "event_label_items": tag_store.filter_items(conn, "event", db.label_filter_items(conn, db.list_event_label_names(conn))),
         "active_label": label or "",
         "time_blocks_json": _time_blocks_client_payload(day_time_blocks),
     }
@@ -1163,6 +1173,8 @@ def create_event(
     meeting_url: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
+    item_tags: list[str] = Form([]),
+    item_tags_field: str = Form(""),
     project: str = Form(""),
     project_field: str = Form(""),
     recurrence: str = Form(""),
@@ -1177,6 +1189,8 @@ def create_event(
     error = validation.event_error(title, start_at, end_at)
     if error:
         return validation_response(error, x_requested_with, "/calendar")
+    if item_tags_field == "1":
+        tags_labels = tag_store.labels_of(conn, item_tags)
     tags = dashboard_router._combine_tags(tags, tags_labels)
     tags = dashboard_router._with_project(conn, tags, project, project_field)
     now = clock.now().isoformat()
@@ -1214,6 +1228,8 @@ def create_event(
         raise HTTPException(400, str(exc))
     if resolved is not None and not rule:
         db.set_object_contacts(conn, "event", row["uid"], resolved)
+    if item_tags_field == "1":
+        tag_store.record(conn, "event", row["uid"], item_tags)
     return respond(x_requested_with, "/calendar", status_code=201, ok=True, uid=row["uid"])
 
 
@@ -1368,6 +1384,8 @@ def update_event(
     meeting_url: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
+    item_tags: list[str] = Form([]),
+    item_tags_field: str = Form(""),
     project: str = Form(""),
     project_field: str = Form(""),
     recurrence: str = Form(""),
@@ -1389,6 +1407,8 @@ def update_event(
     error = validation.event_error(title, start_at, end_at)
     if error:
         return validation_response(error, x_requested_with, f"/events/{uid}/edit")
+    if item_tags_field == "1":
+        tags_labels = tag_store.labels_of(conn, item_tags)
     tags = dashboard_router._combine_tags(tags, tags_labels)
     tags = dashboard_router._with_project(conn, tags, project, project_field)
     existing = db.get_event(conn, uid) or {}
@@ -1438,6 +1458,8 @@ def update_event(
             db.upsert_task(conn, task_row)
     if resolved is not None and not existing.get("series_uid") and not _clean_field(recurrence):
         db.set_object_contacts(conn, "event", row["uid"], resolved)
+    if item_tags_field == "1":
+        tag_store.record(conn, "event", row["uid"], item_tags)
     if isinstance(occurrence_date, str) and occurrence_date and isinstance(occ_start_at, str) and occ_start_at:
         series = occurrence_window(row, occurrence_date, None)
         apply_occurrence_times(

@@ -59,9 +59,9 @@ class TestHome:
 
     def test_the_label_report_notice_shows_until_dismissed(self, conn):
         db.set_app_meta(conn, "notebook_label_report", json.dumps([{"uid": "a", "title": "A", "kept": ["X"], "dropped": ["Y"]}]))
-        assert "had several labels" in notebook_router.list_documents(_request(), conn=conn).body.decode()
+        assert "had several shelves" in notebook_router.list_documents(_request(), conn=conn).body.decode()
         notebook_router.dismiss_label_report(conn=conn)
-        assert "had several labels" not in notebook_router.list_documents(_request(), conn=conn).body.decode()
+        assert "had several shelves" not in notebook_router.list_documents(_request(), conn=conn).body.decode()
 
 
 class TestFolder:
@@ -123,36 +123,29 @@ class TestBulk:
         resp = asyncio.run(notebook_router.bulk_delete(_json_request({"uids": []}), conn=conn))
         assert resp.status_code == 400
 
-    def test_bulk_edit_sets_the_label_and_the_type(self, conn):
+    def test_bulk_edit_sets_the_tag_and_the_type(self, conn):
         _doc(conn, "a", tags=["Old"], note_type="notes")
         _doc(conn, "b", tags=["Other"])
-        notebook_router.bulk_edit(uids=["a", "b"], label="New", project="", note_type="wiki", x_requested_with=None, conn=conn)
+        notebook_router.bulk_edit(uids=["a", "b"], tag="New", note_type="wiki", x_requested_with=None, conn=conn)
         for uid in ("a", "b"):
             doc = db.get_notebook_document(conn, uid)
             assert doc["tags"] == ["New"] and doc["note_type"] == "wiki"
 
-    def test_bulk_edit_can_clear_the_label_and_keeps_the_project(self, conn):
-        db.upsert_label_config(conn, {"name": "Thesis", "is_project": True})
-        _doc(conn, "a", tags=["Thesis", "Old"])
-        notebook_router.bulk_edit(uids=["a"], label="__none__", project="", note_type="", x_requested_with=None, conn=conn)
-        assert db.get_notebook_document(conn, "a")["tags"] == ["Thesis"]
-
-    def test_bulk_edit_sets_the_project_and_keeps_the_label(self, conn):
-        db.upsert_label_config(conn, {"name": "Thesis", "is_project": True})
+    def test_bulk_edit_can_clear_the_tag(self, conn):
         _doc(conn, "a", tags=["Old"])
-        notebook_router.bulk_edit(uids=["a"], label="", project="Thesis", note_type="", x_requested_with=None, conn=conn)
-        assert sorted(db.get_notebook_document(conn, "a")["tags"]) == ["Old", "Thesis"]
+        notebook_router.bulk_edit(uids=["a"], tag="__none__", note_type="", x_requested_with=None, conn=conn)
+        assert db.get_notebook_document(conn, "a")["tags"] == []
 
     def test_blank_fields_change_nothing(self, conn):
         _doc(conn, "a", tags=["Old"], note_type="notes")
-        notebook_router.bulk_edit(uids=["a"], label="", project="", note_type="", x_requested_with=None, conn=conn)
+        notebook_router.bulk_edit(uids=["a"], tag="", note_type="", x_requested_with=None, conn=conn)
         doc = db.get_notebook_document(conn, "a")
         assert doc["tags"] == ["Old"] and doc["note_type"] == "notes"
 
     def test_modal_lists_the_fields(self, conn):
         body = notebook_router.bulk_edit_modal("a,b", _request("/notebook/bulk-edit-modal"), conn=conn).body.decode()
         assert "Edit 2 documents" in body
-        for name in ("label", "project", "note_type"):
+        for name in ("tag", "note_type"):
             assert f'name="{name}"' in body
 
 

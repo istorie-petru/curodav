@@ -144,13 +144,12 @@ class TestKanbanBoard:
         all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
         assert all_uids == {"t1"}
 
-    def test_habit_tagged_tasks_are_excluded(self, conn):
-        # list_tasks_sharing_labels excludes the configured habit label,
-        # same exclusion the "link an existing task" pool already applies
-        # -- a habit is never a Kanban card.
+    def test_habits_are_excluded(self, conn):
+        # list_tasks_sharing_labels leaves habits out, same exclusion the
+        # "link an existing task" pool already applies -- a habit is never a Kanban card.
         _promote(conn, "Trip")
-        habit_label = db.get_task_habit_settings(conn)["habit_label"]
-        _task(conn, "h1", ["Trip", habit_label], status="active")
+        _task(conn, "h1", ["Trip"], status="active")
+        conn.execute("UPDATE tasks SET is_habit = 1 WHERE uid = 'h1'")
         resp = label_pages.label_page("Trip", _request(), conn=conn)
         all_uids = {t["uid"] for col in resp.context["columns"].values() for t in col}
         assert "h1" not in all_uids

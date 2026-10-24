@@ -22,7 +22,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import Scope
 
 from .log import get_logger
-from . import db, perf, reminders, sync
+from . import db, perf, reminders, sync, tags
 from .auth import AuthMiddleware, CSRFMiddleware
 from .caldav_bridge import CalDavBridge
 from .config import apply_persisted_radicale_overrides, apply_persisted_timezone, load_settings, uses_default_radicale_credentials
@@ -197,6 +197,7 @@ async def lifespan(app: FastAPI):
         logger.warning("Background Radicale sync not started (no bridge); restart to retry")
     _reminder_thread, reminder_stop = reminders.start_scheduler(settings.db_path)
     perf_stop = perf.start_flusher(settings.db_path)
+    archive_stop = tags.start_archive_job(settings.db_path)
 
     total_ms = (time.perf_counter() - boot) * 1000
     breakdown = ", ".join(f"{name} {round(seconds * 1000)} ms" for name, seconds in steps.items())
@@ -210,6 +211,7 @@ async def lifespan(app: FastAPI):
     if stop_event is not None:
         stop_event.set()
     reminder_stop.set()
+    archive_stop.set()
     perf_stop.set()
 
 
@@ -302,6 +304,8 @@ def create_app() -> FastAPI:
     app.include_router(contacts.router)
     app.include_router(quick_capture.router)
     app.include_router(taxonomy.router)
+    app.include_router(taxonomy.settings_router)
+    app.include_router(taxonomy.calendar_router)
     app.include_router(labels.router)
     app.include_router(labels.projects_settings_router)
     app.include_router(label_pages.groups_settings_router)
