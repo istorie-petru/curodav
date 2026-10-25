@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_detail_section.html" import detail_section %}
+{% block title %}{{ d.name }}{% endblock %}
+{% block content %}
+{% set _enc = d.name|urlencode %}
+{% set _retire = [{'action': 'delete', 'url': '/settings/university/discipline/' ~ _enc ~ '/remove', 'mode': 'confirm', 'label': 'Remove ' ~ d.name ~ '? Its teachers lose the tag.', 'redirect': none, 'change': none}] if not removal_blocker else none %}
+{% call modal(kind="view", title=d.name, size="large", edit_url='/settings/university/discipline/' ~ _enc ~ '/edit', retire=_retire) %}
+{% call detail_section('Teachers') %}
+    {% if d.teachers %}{{ d.teachers | map(attribute='name') | join(', ') }}{% else %}None{% endif %}
+{% endcall %}
+{% call detail_section('Timetable', count=slots|length) %}
+    {% for s in slots %}
+    <p><a href="/settings/university/slot/{{ s.series_uid }}/edit" data-modal>{{ s.weekday_name }} {{ s.start }} to {{ s.end }}, {{ kinds[s.kind] }}{% if s.weeks != 'all' %}, {{ s.weeks }} weeks{% endif %}{% if s.room %}, {{ s.room }}{% endif %}{% if s.teacher_names %}, {{ s.teacher_names }}{% endif %}</a> ({{ s.count }} classes, {{ s.first }} to {{ s.last }})</p>
+    {% else %}<p>No classes yet.</p>{% endfor %}
+    <p><a href="/settings/university/slot/new?discipline={{ _enc }}" data-modal class="btn ghost">{{ icon('plus', 'icon-sm') }} Add class</a></p>
+{% endcall %}
+{% call detail_section('Syllabus', count=topics|length) %}
+    {% for t in topics %}<p>{{ t.number }}. {{ t.title }}{% if t.importance %} {{ '*' * t.importance }}{% endif %}{% if t.events %} ({{ t.events|length }} class{{ 'es' if t.events|length != 1 }}){% endif %}</p>{% else %}<p>No topics yet.</p>{% endfor %}
+    <p><a href="/settings/university/syllabus/{{ _enc }}" data-modal class="btn ghost">{{ icon('edit', 'icon-sm') }} Edit syllabus</a>
+    {% if topics and slots %}<a href="/settings/university/syllabus/{{ _enc }}/assign" data-modal class="btn ghost">{{ icon('list-checks', 'icon-sm') }} Place in classes</a>{% endif %}</p>
+{% endcall %}
+{% call detail_section('Exams', count=exams|length) %}
+    {% for e in exams %}<p><a href="/settings/university/exam/{{ e.task_uid }}/edit" data-modal>{{ e.title }}, {{ e.date|dtf_date }} {{ e.start }}{% if e.weight is not none %}, {{ e.weight|round(0)|int }}%{% endif %}</a> ({{ e.days_left }} days)</p>{% else %}<p>No exams yet.</p>{% endfor %}
+    <p><a href="/settings/university/exam/new?discipline={{ _enc }}" data-modal class="btn ghost">{{ icon('plus', 'icon-sm') }} Add exam</a></p>
+{% endcall %}
+{% call detail_section('Readings', count=readings|length) %}
+    {% for r in readings %}<p><a href="/settings/university/reading/{{ r.task_uid }}/edit" data-modal>{{ r.title }}{% if r.author %}, {{ r.author }}{% endif %}</a>{% if r.due %} due {{ r.due|dtf_date }}{% endif %} ({{ r.status }})</p>{% else %}<p>No readings yet.</p>{% endfor %}
+    <p><a href="/settings/university/reading/new?discipline={{ _enc }}" data-modal class="btn ghost">{{ icon('plus', 'icon-sm') }} Add reading</a></p>
+{% endcall %}
+{% endcall %}
+{% endblock %}

@@ -5578,3 +5578,24 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .label-tag-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:var(--space-2);align-items:center;}
 .label-tag-row[hidden]{display:none;}
 .label-tag-row .field{margin:0;}
+
+/* University study page: the week as seven day cards, widgets above. */
+.study-page{display:flex; flex-direction:column; gap:var(--space-4);}
+.study-widgets{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:var(--space-4);}
+.study-week-nav{display:flex; align-items:center; gap:var(--space-2);}
+.study-week-label{color:var(--fg-secondary); margin-left:var(--space-2);}
+.study-week{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:var(--space-3);}
+.study-day{display:flex; flex-direction:column; gap:var(--space-2); min-width:0;}
+.study-day.is-today{border-color:var(--accent);}
+.study-day-head{display:flex; align-items:center; gap:var(--space-2); color:var(--fg-secondary);}
+.study-day-head .icon-btn{margin-left:auto;}
+.study-class,.study-exam{display:flex; flex-direction:column; gap:2px; padding:var(--space-2); border-radius:var(--radius-control); background:var(--control-bg); color:var(--fg-primary); text-decoration:none;}
+.study-exam{border:1.5px solid var(--accent);}
+.study-class-time,.study-class-topic,.study-day-empty{color:var(--fg-secondary);}
+@media (max-width:720px){ .study-widgets{order:3;} .study-week{grid-template-columns:minmax(0,1fr);} .study-day:not(.is-today) .study-day-empty{display:none;} }
+.study-widget{display:flex; flex-direction:column; gap:var(--space-2); min-width:0;}
+.study-widget p{margin:0;}
+.study-class{display:flex; flex-direction:column; gap:var(--space-1);}
+.study-class a{color:var(--fg-primary); text-decoration:none; display:flex; flex-direction:column; gap:2px;}
+.study-class-note{background:none; border:0; padding:0; font:inherit; color:var(--fg-secondary); cursor:pointer; display:inline-flex; align-items:center; gap:var(--space-1);}
+.study-class a.study-class-note{flex-direction:row; align-items:center; color:var(--fg-secondary);}

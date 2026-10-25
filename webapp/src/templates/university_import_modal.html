@@ -1,0 +1,24 @@
+{% from "_inputs.html" import file_input %}
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% block title %}Import{% endblock %}
+{% block content %}
+{% if plan %}
+{% call modal(kind="form", title='Import', size="small", form='university-import-apply', save_label='Import', save_icon='upload', cancel_url='/settings/university/import?discard=1') %}
+<div class="card">
+<form method="post" id="university-import-apply" action="/settings/university/import/apply">
+    {% for line in plan.lines %}<p>{{ line }}</p>{% endfor %}
+    {% for w in plan.warnings %}<p>{{ icon('alert-triangle', 'icon-sm') }} {{ w }}</p>{% endfor %}
+</form>
+</div>
+{% endcall %}
+{% else %}
+{% call modal(kind="form", title='Import', size="small", form='university-import-form', save_label='Preview', save_icon='eye') %}
+<div class="card">
+<form method="post" id="university-import-form" action="/settings/university/import/upload" enctype="multipart/form-data" data-modal-keep-open>
+    <div class="field-grid"><div class="field field-wide"><label>File</label>{{ file_input({'name': 'file', 'accept': '.json,application/json', 'required': true}) }}</div></div>
+</form>
+</div>
+{% endcall %}
+{% endif %}
+{% endblock %}

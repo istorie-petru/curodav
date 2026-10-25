@@ -1,0 +1,27 @@
+{% from "_inputs.html" import text_input %}
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_date_time_fields.html" import date_field with context %}
+{% block title %}{{ 'Edit reading' if reading else 'New reading' }}{% endblock %}
+{% block content %}
+{% set _retire = [{'action': 'delete', 'url': '/settings/university/reading/' ~ reading.task_uid ~ '/delete?discipline=' ~ (d.name|urlencode), 'mode': 'confirm', 'label': 'Delete this reading task?', 'redirect': none, 'change': none}] if reading else none %}
+{% call modal(kind="form", title=('Edit reading' if reading else 'New reading'), size="medium", form='university-reading-form', creating=(not reading), back=back, back_name=d.name, retire=_retire) %}
+<div class="card">
+<form method="post" id="university-reading-form" action="/settings/university/reading">
+    <input type="hidden" name="discipline" value="{{ d.name }}">
+    <input type="hidden" name="task_uid" value="{{ reading.task_uid if reading else '' }}">
+    <div class="field-grid">
+        <div class="field field-wide"><label>Title</label>{{ text_input({'name': 'title', 'value': (reading.title if reading else ''), 'required': true}) }}</div>
+        <div class="field"><label>Author</label>{{ text_input({'name': 'author', 'value': (reading.author if reading else '')}) }}</div>
+        <div class="field"><label>Due date</label>{{ date_field('due', reading.due if reading else '', label='Due date') }}</div>
+        <div class="field">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'university-reading-form' %}{% set ms_name = 'status' %}{% set ms_label = 'Status' %}
+            {% set ms_items = [{'uid': 'active', 'name': 'Active'}, {'uid': 'in_progress', 'name': 'In progress'}, {'uid': 'waiting', 'name': 'Waiting'}, {'uid': 'done', 'name': 'Done'}] %}
+            {% set ms_selected = reading.status if reading else 'active' %}{% set ms_wide = false %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+    </div>
+</form>
+</div>
+{% endcall %}
+{% endblock %}

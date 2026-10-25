@@ -1,0 +1,30 @@
+{% from "_inputs.html" import text_input %}
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_date_time_fields.html" import date_field with context %}
+{% block title %}{{ 'Edit semester' if semester else 'New semester' }}{% endblock %}
+{% block content %}
+{% call modal(kind="form", title=('Edit semester' if semester else 'New semester'), size="medium", form='university-semester-form', creating=(not semester), save_label='Preview', save_icon='eye') %}
+<div class="card">
+<form method="get" id="university-semester-form" action="/settings/university/semester/preview" data-modal-get>
+    <div class="field-grid">
+        <div class="field field-wide"><label>Name</label>{{ text_input({'name': 'name', 'value': (semester.name if semester else ''), 'required': true}) }}</div>
+        {% if not semester %}
+        <div class="field field-wide"><label>Shelf</label>{{ text_input({'name': 'shelf_name', 'value': ''}) }}</div>
+        {% else %}
+        <input type="hidden" name="shelf_name" value="{{ semester.shelf_name }}">
+        {% endif %}
+        <div class="field"><label>Start date</label>{{ date_field('start_date', semester.start_date if semester else '', label='Start date') }}</div>
+        <div class="field"><label>End date</label>{{ date_field('end_date', semester.end_date if semester else '', label='End date') }}</div>
+        <div class="field"><label>Class end date</label>{{ date_field('class_end_date', semester.class_end_date if semester else '', label='Class end date') }}</div>
+        <div class="field">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'university-semester-form' %}{% set ms_name = 'holiday_calendar' %}{% set ms_label = 'Holidays' %}
+            {% set ms_items = [{'uid': '', 'name': 'None'}] %}{% for c in calendars %}{% set _ = ms_items.append({'uid': c, 'name': c}) %}{% endfor %}
+            {% set ms_selected = (semester.holiday_calendar or '') if semester else '' %}{% set ms_wide = false %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+    </div>
+</form>
+</div>
+{% endcall %}
+{% endblock %}

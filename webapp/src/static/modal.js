@@ -533,7 +533,8 @@
     // document), so respecting defaultPrevented here is what stops a
     // completed drag from *also* popping the edit modal open.
     if (e.defaultPrevented) return;
-    const trigger = e.target.closest("[data-modal]");
+    // The header's Back chevron is a plain link; it goes to the previous window through the same stack.
+    const trigger = e.target.closest("[data-modal], .modal-header-back");
     if (!trigger) return;
     e.preventDefault();
     // Loading feedback (style.css's .is-loading) between tap and the

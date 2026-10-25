@@ -1,0 +1,19 @@
+{% from "_inputs.html" import text_input, textarea_input %}
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_look_picker.html" import look_picker %}
+{% block title %}{{ 'Edit discipline' if d else 'New discipline' }}{% endblock %}
+{% block content %}
+{% call modal(kind="form", title=('Edit ' ~ d.name if d else 'New discipline'), size="medium", form='university-discipline-form', creating=(not d), back=('/settings/university/discipline/' ~ (d.name|urlencode) if d else none), back_name=(d.name if d else none)) %}
+<div class="card">
+<form method="post" id="university-discipline-form" action="/settings/university/discipline">
+    <input type="hidden" name="old" value="{{ d.name if d else '' }}">
+    <div class="field-grid">
+        <div class="field field-wide"><label>Name</label>{{ text_input({'name': 'name', 'value': (d.name if d else ''), 'required': true}) }}</div>
+        {{ look_picker('look-discipline', 'university-discipline-form', d.color if d else 'blue', d.icon if d else none, colors, icon_groups, default_icon='book-open', label='Look') }}
+        <div class="field field-wide"><label>Teachers</label>{{ textarea_input({'name': 'teacher_names', 'rows': 2}, teacher_names) }}</div>
+    </div>
+</form>
+</div>
+{% endcall %}
+{% endblock %}

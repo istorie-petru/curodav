@@ -3,7 +3,7 @@
     {% set ms_form_id = 'task-form' %}
     <div class="field-grid">
         {% from "_date_time_fields.html" import date_field with context %}
-        {% call title_date_row(task.title if task else (prefill_title or ''), qa=(quick_add_kind | default(''))) %}
+        {% call title_date_row(task.title if task else (prefill_title or ''), qa=(quick_add_kind | default('')), locked=university_locked(request, 'task', task.uid if task else '')) %}
         <div class="field">
             <label>Start date</label>
             {{ date_field('start_at', task.start_at[:10] if task and task.start_at else today, label='Start date') }}
@@ -44,7 +44,7 @@
         {% include "_widget_list_multiselect.html" %}
         <div class="field field-wide">
             <label>Description</label>
-            {{ textarea_input({'name': 'description', 'rows': '3'}, task.description if task else '') }}
+            {{ textarea_input({'name': 'description', 'rows': '3', 'readonly': university_locked(request, 'task', task.uid if task else ''), 'class': 'is-fixed' if university_locked(request, 'task', task.uid if task else '') else ''}, task.description if task else '') }}
         </div>
         {{ details_end() }}
     </div>

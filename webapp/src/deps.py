@@ -584,6 +584,21 @@ def _label_color(request: Request, label: str) -> str:
 templates.env.globals["label_color"] = _label_color
 
 
+def _university_locked(request: Request, kind: str, uid: str) -> bool:
+    """Whether the University module owns this item's title and description (a class or an exam)."""
+    from . import modules, university_plan
+    if not uid or not modules.is_enabled("university"):
+        return False
+    try:
+        with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
+            return university_plan.is_locked(conn, kind, uid)
+    except Exception:
+        return False
+
+
+templates.env.globals["university_locked"] = _university_locked
+
+
 def _contact_items(request: Request) -> list[dict[str, str]]:
     """Every contact as a {uid, name} pair, for the Contacts row's dropdown."""
     try:

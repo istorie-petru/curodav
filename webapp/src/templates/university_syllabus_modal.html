@@ -1,0 +1,15 @@
+{% from "_inputs.html" import textarea_input %}
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% block title %}Syllabus{% endblock %}
+{% block content %}
+{% call modal(kind="form", title='Syllabus of ' ~ d.name, size="medium", form='university-syllabus-form', back=back, back_name=d.name) %}
+<div class="card">
+<form method="post" id="university-syllabus-form" action="/settings/university/syllabus/{{ d.name|urlencode }}">
+    <div class="field-grid">
+        <div class="field field-wide"><label>Topics, one per line</label>{{ textarea_input({'name': 'themes', 'rows': 14}, text) }}</div>
+    </div>
+</form>
+</div>
+{% endcall %}
+{% endblock %}

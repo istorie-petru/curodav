@@ -6,6 +6,12 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [4.8.0]
+
+- University module: turn it on with `CC_MODULES=university`. Settings, Modules, University describes a semester: its dates and class end date, its disciplines (a tag each, with colour, icon and teachers) and, for each discipline, its timetable, syllabus, exams and readings. Classes are real repeating events, an exam is a task plus an event, a reading is a task, and a teacher is a contact. Anything that creates many rows shows a preview first. A discipline or the whole semester exports to and imports from a versioned JSON file.
+- Study page: a shelf set to the Study page type shows the week by discipline colour, exam blocks with a countdown, the next class, readings due, quick add on each day, and a note for each class made from a Lecture template.
+- The Back chevron in a modal header now goes back to the previous window instead of leaving the page.
+
 ## [4.7.0]
 
 - Modal windows: every modal is now built from one skeleton, so the same things sit in the same places. The header has the Back arrow (only when the window was opened from another), the title and the close button. The footer has Cancel or Done on the left, then one Archive and Delete button, then the one filled button on the right. Back always returns to the previous window and Cancel always closes. New objects say Create and existing ones say Save. The Settings pages and a few special dialogs keep their own layout.

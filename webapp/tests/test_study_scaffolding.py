@@ -93,7 +93,7 @@ def test_the_university_tables_exist_and_the_migration_is_safe_twice(tmp_path):
         migrations._university_tables(conn)
         migrations._university_tables(conn)
         names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'university_%'")}
-        assert names == {"university_semesters", "university_topics", "university_topic_classes"}
+        assert {"university_semesters", "university_topics", "university_topic_classes"} <= names
     assert 27 in {m.number for m in migrations.MIGRATIONS}
 
 
@@ -117,32 +117,25 @@ def test_the_settings_page_is_not_found_while_the_module_is_off(monkeypatch, tmp
     from fastapi import HTTPException
 
     monkeypatch.delenv("CC_MODULES", raising=False)
-    with db.connect(tmp_path / "c.sqlite") as conn, pytest.raises(HTTPException) as exc:
-        university.university_settings(_request(), conn=conn)
+    with pytest.raises(HTTPException) as exc:
+        university._enabled()
     assert exc.value.status_code == 404
+    assert any(d.dependency is university._enabled for d in university.router.dependencies)
 
 
 def test_a_module_page_type_is_offered_only_while_the_module_is_on(monkeypatch):
-    modules.register_page_type(modules.PageType("study", "Study page", "university", lambda *a: None))
-    try:
-        monkeypatch.delenv("CC_MODULES", raising=False)
-        assert "study" not in db.page_types()
-        monkeypatch.setenv("CC_MODULES", "university")
-        assert db.page_types()["study"] == "Study page" and "sections" in db.page_types()
-    finally:
-        modules.PAGE_TYPES.pop("study", None)
+    monkeypatch.delenv("CC_MODULES", raising=False)
+    assert "study" not in db.page_types()
+    monkeypatch.setenv("CC_MODULES", "university")
+    assert db.page_types()["study"] == "Study page" and "sections" in db.page_types()
 
 
 def test_a_shelf_with_a_module_page_type_keeps_it_while_the_module_is_on(monkeypatch, tmp_path):
-    modules.register_page_type(modules.PageType("study", "Study page", "university", lambda *a: None))
-    try:
-        monkeypatch.setenv("CC_MODULES", "university")
-        with db.connect(tmp_path / "c.sqlite") as conn:
-            db.upsert_label_config(conn, {"name": "Uni", "page_type": "study"})
-            assert db.get_label_config(conn, "Uni")["page_type"] == "study"
-        monkeypatch.delenv("CC_MODULES")
-        with db.connect(tmp_path / "d.sqlite") as conn:
-            db.upsert_label_config(conn, {"name": "Uni", "page_type": "study"})
-            assert db.get_label_config(conn, "Uni")["page_type"] == "sections"
-    finally:
-        modules.PAGE_TYPES.pop("study", None)
+    monkeypatch.setenv("CC_MODULES", "university")
+    with db.connect(tmp_path / "c.sqlite") as conn:
+        db.upsert_label_config(conn, {"name": "Uni", "page_type": "study"})
+        assert db.get_label_config(conn, "Uni")["page_type"] == "study"
+    monkeypatch.delenv("CC_MODULES")
+    with db.connect(tmp_path / "d.sqlite") as conn:
+        db.upsert_label_config(conn, {"name": "Uni", "page_type": "study"})
+        assert db.get_label_config(conn, "Uni")["page_type"] == "sections"

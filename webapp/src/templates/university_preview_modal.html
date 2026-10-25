@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+{# The preview of a University change: the plan is shown, and applying posts the same values again. #}
+{% call modal(kind="form", title=title, size="small", back=back or none, back_name="the form", form=('university-preview-form' if not error else none), save_label=confirm or none, save_icon='check-square') %}
+<div class="card">
+{% if error %}
+    <p>{{ error }}</p>
+{% else %}
+<form method="post" id="university-preview-form" action="{{ action }}">
+    {% for k, v in fields.items() %}
+        {% if v is iterable and v is not string %}{% for item in v %}<input type="hidden" name="{{ k }}" value="{{ item }}">{% endfor %}
+        {% else %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endif %}
+    {% endfor %}
+    {% for line in lines %}<p>{{ line }}</p>{% endfor %}
+    {% for w in warnings %}<p class="text-danger">{{ icon('alert-triangle', 'icon-sm') }} {{ w }}</p>{% endfor %}
+</form>
+{% endif %}
+</div>
+{% endcall %}
+{% endblock %}

@@ -282,6 +282,37 @@ def _university_tables(conn: sqlite3.Connection) -> None:
     )
 
 
+def _university_items(conn: sqlite3.Connection) -> None:
+    """What the University module keeps about its classes, exams and readings: which series, task or event is its own."""
+    if "holiday_calendar" not in _columns(conn, "university_semesters"):
+        conn.execute("ALTER TABLE university_semesters ADD COLUMN holiday_calendar TEXT")
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS university_slots (
+            series_uid TEXT PRIMARY KEY,
+            semester_uid TEXT NOT NULL,
+            discipline_tag TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'lecture',
+            weeks TEXT NOT NULL DEFAULT 'all'
+        );
+        CREATE TABLE IF NOT EXISTS university_exams (
+            task_uid TEXT PRIMARY KEY,
+            event_uid TEXT NOT NULL,
+            semester_uid TEXT NOT NULL,
+            discipline_tag TEXT NOT NULL,
+            weight REAL
+        );
+        CREATE TABLE IF NOT EXISTS university_readings (
+            task_uid TEXT PRIMARY KEY,
+            semester_uid TEXT NOT NULL,
+            discipline_tag TEXT NOT NULL,
+            author TEXT,
+            citation_id TEXT
+        );
+        """
+    )
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "notebook documents get an is_template flag", _note_templates),
     Migration(2, "frontmatter fields lose the required column", _field_config_without_required, destructive=True),
@@ -310,6 +341,7 @@ MIGRATIONS: list[Migration] = [
     Migration(25, "occurrences of a repeating event share the series' tags", _series_share_tags, destructive=True),
     Migration(26, "task and event links get a kind", _links_get_a_kind, destructive=True),
     Migration(27, "University module tables", _university_tables),
+    Migration(28, "University classes, exams and readings", _university_items),
 ]
 
 

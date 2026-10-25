@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import clock, db, event_series, grid_layout, habit_heatmap, habit_view, recurrence_expand
+from .. import clock, db, event_series, grid_layout, habit_heatmap, habit_view, recurrence_expand, university_plan
 from .. import tags as tag_store
 from .. import validation
 from ..deps import HIDE_SLEEP_HOURS_KEY, _four_week_position, _week_start, get_db, respond, templates, validation_response, wants_json
@@ -1427,6 +1427,8 @@ def update_event(
     tags = dashboard_router._combine_tags(tags, tags_labels)
     tags = dashboard_router._with_project(conn, tags, project, project_field)
     existing = db.get_event(conn, uid) or {}
+    if existing and university_plan.is_locked(conn, "event", uid):  # a class or exam: title and description are the module's
+        title, description = existing.get("title") or title, existing.get("description") or ""
     # 1.4 (§ Task & calendar semantics): "changing the title of a
     # work-allocation event changes the associated task rather than
     # creating an independent event with a conflicting name." A

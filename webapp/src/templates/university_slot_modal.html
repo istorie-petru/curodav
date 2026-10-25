@@ -1,0 +1,39 @@
+{% from "_inputs.html" import text_input %}
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_date_time_fields.html" import time_field with context %}
+{% block title %}{{ 'Edit class' if series_uid else 'New class' }}{% endblock %}
+{% block content %}
+{% set _retire = [{'action': 'delete', 'url': '/settings/university/slot/' ~ series_uid ~ '/delete?discipline=' ~ (d.name|urlencode), 'mode': 'confirm', 'label': 'Delete all ' ~ (slot.count or 0) ~ ' classes of this slot?', 'redirect': none, 'change': none}] if series_uid else none %}
+{% call modal(kind="form", title=('Edit class' if series_uid else 'New class'), size="medium", form='university-slot-form', creating=(not series_uid), back=back, back_name=d.name, retire=_retire, save_label='Preview', save_icon='eye') %}
+<div class="card">
+<form method="get" id="university-slot-form" action="/settings/university/slot/preview" data-modal-get>
+    <input type="hidden" name="discipline" value="{{ d.name }}">
+    <input type="hidden" name="series_uid" value="{{ series_uid }}">
+    <div class="field-grid">
+        {% macro pick(name, label, items, selected) %}
+        <div class="field">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'university-slot-form' %}{% set ms_name = name %}{% set ms_label = label %}
+            {% set ms_items = items %}{% set ms_selected = selected %}{% set ms_wide = false %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+        {% endmacro %}
+        {% set _days = [] %}{% for w in weekdays %}{% set _ = _days.append({'uid': loop.index0|string, 'name': w}) %}{% endfor %}
+        {{ pick('weekday', 'Day', _days, (slot.weekday|string) if slot else '0') }}
+        {% set _kinds = [] %}{% for k, n in kinds.items() %}{% set _ = _kinds.append({'uid': k, 'name': n}) %}{% endfor %}
+        {{ pick('kind', 'Kind', _kinds, slot.kind if slot else 'lecture') }}
+        <div class="field"><label>Start time</label>{{ time_field('start', slot.start if slot else '', required=true, label='Start time') }}</div>
+        <div class="field"><label>End time</label>{{ time_field('end', slot.end if slot else '', required=true, label='End time') }}</div>
+        {{ pick('weeks', 'Weeks', [{'uid': 'all', 'name': 'Every week'}, {'uid': 'odd', 'name': 'Odd weeks'}, {'uid': 'even', 'name': 'Even weeks'}], slot.weeks if slot else 'all') }}
+        <div class="field"><label>Room</label>{{ text_input({'name': 'room', 'value': (slot.room if slot else '')}) }}</div>
+        <div class="field field-wide">
+            {% set ms_mode = 'select' %}{% set ms_form_id = 'university-slot-form' %}{% set ms_name = 'teachers' %}{% set ms_label = 'Teachers' %}
+            {% set ms_items = [] %}{% for t in d.teachers %}{% set _ = ms_items.append({'uid': t.uid, 'name': t.name}) %}{% endfor %}
+            {% set ms_selected = slot.teachers if slot else (d.teachers | map(attribute='uid') | list) %}{% set ms_wide = true %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+    </div>
+</form>
+</div>
+{% endcall %}
+{% endblock %}

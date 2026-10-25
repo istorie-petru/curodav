@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_empty_state.html" import empty_state %}
+{% from "_widget_items.html" import widget_empty, widget_pill %}
+{% block title %}{{ name }}{% endblock %}
+{% block content %}
+{% call page_header_narrow(name, label.icon or 'graduation-cap', icon_color=label.color) %}
+    <a href="{{ settings_url }}" class="icon-btn" title="University settings" aria-label="University settings">{{ icon('settings', 'icon-sm') }}</a>
+{% endcall %}
+{% if not semester %}
+<div class="card">{% call empty_state('No semester set up', icon_name='graduation-cap', size='compact') %}<a class="btn primary" href="{{ settings_url }}">Open University settings</a>{% endcall %}</div>
+{% else %}
+<div class="study-page">
+<div class="study-widgets">
+    <div class="card study-widget" id="study-next-class">
+        <div class="widget-section-label">Next class</div>
+        {% if next_class %}
+        <p><a href="/events/{{ next_class.uid }}" data-modal><span class="cell-tag cal-{{ next_class.look.color or 'gray' }}">{{ next_class.discipline }}</span> {{ next_class.kind_label }}</a></p>
+        <p>{{ next_class.day|dtf_date }}, {{ next_class.start }}{% if next_class.location %}, {{ next_class.location }}{% endif %}</p>
+        {% else %}{{ widget_empty('No class coming up.') }}{% endif %}
+    </div>
+    <div class="card study-widget" id="study-exams">
+        <div class="widget-section-label">Exams</div>
+        {% for e in upcoming %}
+        <p><a href="/events/{{ e.event_uid }}" data-modal><span class="cell-tag cal-{{ e.look.color or 'gray' }}">{{ e.discipline }}</span> {{ e.title }}</a>
+        {{ widget_pill(('Today' if e.days_left == 0 else (e.days_left ~ ' days')), 'red' if e.days_left <= 7 else 'gray') }} {{ e.date|dtf_date }} {{ e.start }}</p>
+        {% for n in e.notes[:3] %}<p><a href="/notebook/{{ n.uid }}">{{ icon('file-text', 'icon-sm') }} {{ n.title }}</a></p>{% endfor %}
+        {% else %}{{ widget_empty('No exam coming up.') }}{% endfor %}
+    </div>
+    <div class="card study-widget" id="study-readings">
+        <div class="widget-section-label">Readings due</div>
+        {% for r in readings %}
+        <p><a href="/tasks/{{ r.task_uid }}" data-modal><span class="cell-tag cal-{{ r.look.color or 'gray' }}">{{ r.discipline }}</span> {{ r.title }}</a>{% if r.due %} {{ widget_pill(r.due|dtf_date, 'gray') }}{% endif %}</p>
+        {% else %}{{ widget_empty('Nothing left to read.') }}{% endfor %}
+    </div>
+</div>
+<div class="study-week-nav">
+    <a href="{{ prev_url }}" class="icon-btn" title="Previous week" aria-label="Previous week">{{ icon('chevron-left', 'icon-sm') }}</a>
+    <a href="{{ today_url }}" class="btn ghost btn-sm">This week</a>
+    <a href="{{ next_url }}" class="icon-btn" title="Next week" aria-label="Next week">{{ icon('chevron-right', 'icon-sm') }}</a>
+    <span class="study-week-label">{{ week_label }}</span>
+</div>
+<div class="study-week">
+    {% for d in days %}
+    <section class="card study-day{% if d.is_today %} is-today{% endif %}">
+        <header class="study-day-head"><span>{{ d.label }}</span> <span>{{ d.day }} {{ d.month }}</span>
+            <a href="{{ d.new_url }}" data-modal class="icon-btn" title="Add on {{ d.label }}" aria-label="Add on {{ d.label }}">{{ icon('plus', 'icon-sm') }}</a></header>
+        {% for e in d.exams %}
+        <a class="study-exam" href="/events/{{ e.event_uid }}" data-modal><span class="cell-tag cal-{{ e.look.color or 'gray' }}">{% if e.look.icon %}{{ icon(e.look.icon, 'icon-sm') }} {% endif %}{{ e.discipline }}</span> {{ e.title }}, {{ e.start }}{% if e.weight is not none %} ({{ e.weight|round(0)|int }}%){% endif %}</a>
+        {% endfor %}
+        {% for c in d.classes %}
+        <div class="study-class">
+            <a href="/events/{{ c.uid }}" data-modal><span class="cell-tag cal-{{ c.look.color or 'gray' }}">{% if c.look.icon %}{{ icon(c.look.icon, 'icon-sm') }} {% endif %}{{ c.discipline }}</span>
+                <span class="study-class-time">{{ c.start }} to {{ c.end }}</span> {{ c.kind_label }}{% if c.location %}, {{ c.location }}{% endif %}{% if c.description %}<span class="study-class-topic">{{ c.description }}</span>{% endif %}</a>
+            {% if c.note_uid %}<a class="study-class-note" href="/notebook/{{ c.note_uid }}">{{ icon('file-text', 'icon-sm') }} Open note</a>
+            {% else %}<form method="post" action="/university/class/{{ c.uid }}/note" class="form-inline"><button type="submit" class="study-class-note">{{ icon('file-plus', 'icon-sm') }} Make note</button></form>{% endif %}
+        </div>
+        {% endfor %}
+        {% if not d.classes and not d.exams %}<span class="study-day-empty">Free</span>{% endif %}
+    </section>
+    {% endfor %}
+</div>
+</div>
+{% endif %}
+{% endblock %}
