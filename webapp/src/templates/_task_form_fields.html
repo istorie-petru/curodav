@@ -21,6 +21,7 @@
         {{ details_start(task and (task.description or task.recurrence not in (None, 'None', 'Nothing', ''))) }}
         {% set contacts_object_type = 'task' %}{% set contacts_object_id = task.uid if task else '' %}
         {% include "_contacts_row.html" %}
+        {% if task %}{% set link_label = 'Linked events' %}{% set link_name = 'linked_event_uids' %}{% set link_form_id = 'task-form' %}{% include "_link_field.html" %}{% endif %}
         {{ recurrence_row(task.recurrence if task else '') }}
         {% set _playful = recurrence_terminology(request) == 'playful' %}
         {% set _recurring = task and task.recurrence not in (None, 'None', 'Nothing', '') %}

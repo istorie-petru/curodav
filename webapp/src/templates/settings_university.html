@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}University - Settings{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_empty_state.html" import empty_state %}
+{{ page_header_narrow("University", "graduation-cap") }}
+<div id="modal-target">
+<div class="card">
+{{ empty_state('Nothing set up yet', size='compact') }}
+</div>
+</div>
+{% endblock %}

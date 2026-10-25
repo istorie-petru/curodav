@@ -1,12 +1,9 @@
 {% from "_inputs.html" import switch_input, text_input %}
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}{{ form_title }}{% endblock %}
 {% block content %}
-<div id="modal-target" class="modal-height-md">
-<div class="modal-header">
-<h1>{{ form_title }}</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="form", title=((form_title)), size="medium", retire=([({'action': 'delete', 'url': '/settings/holidays/' ~ h.uid ~ '/delete', 'mode': 'confirm', 'label': 'Delete &quot;' ~ (h.label or '(untitled)') ~ '&quot;? This removes the holiday dates from the calendar it references.', 'redirect': none, 'change': none} if (h) else none)] | select | list), form='holiday-form', creating=(not h), save_icon='check-square') %}
 <div class="card">
 <form method="post" id="holiday-form" action="{{ form_action }}">
     <div class="field-grid">
@@ -44,20 +41,7 @@
     </div>
 </form>
 </div>
-</div>
-{% set footer_back_url = '/settings/calendar' %}
-{% set footer_back_mode = 'cancel' %}
-{% set footer_back_label = 'Cancel' %}
-{% if h %}
-{% set footer_delete_url = '/settings/holidays/' ~ h.uid ~ '/delete' %}
-{% set footer_delete_mode = 'confirm' %}
-{% set footer_delete_label = 'Delete &quot;' ~ (h.label or '(untitled)') ~ '&quot;? This removes the holiday dates from the calendar it references.' %}
-{% endif %}
-{% set footer_primary_form = 'holiday-form' %}
-{% set footer_primary_label = 'Save' %}
-{% set footer_primary_icon = 'check-square' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}
 <!-- No extra_scripts block here -- like label_edit_modal.html, this page is
      only ever opened via data-modal, so anything outside #modal-target above

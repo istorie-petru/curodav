@@ -1,13 +1,10 @@
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% from "_task_work_allocations.html" import work_sessions_edit with context %}
 {% from "_task_transactions.html" import pending_transactions_edit with context %}
 {% block title %}{% if task %}Edit task{% else %}New task{% endif %}{% endblock %}
 {% block content %}
-<div id="modal-target" class="modal-stable-height">
-<div class="modal-header">
-<h1>{% if task %}Edit task{% else %}New task{% endif %}</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="form", title=((('Edit task' if task else 'New task'))), size="medium", back=(('/tasks/' ~ task.uid if (task) else ('/tasks' if not (task) else none)) if (('modal' if (task) else none)) == 'modal' else none), back_name='the previous window', retire=([({'action': 'delete', 'url': '/tasks/' ~ task.uid ~ '/delete', 'mode': 'undo', 'label': task.title, 'redirect': '/tasks', 'change': none} if (task) else none)] | select | list), form='task-form', creating=(not task), save_icon='check-square') %}
 <div class="card">
 <form method="post" id="task-form" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}" data-cc-change="task" data-cc-action="{% if task %}edit{% else %}create{% endif %}">
     {% include "_task_form_fields.html" %}
@@ -15,23 +12,5 @@
     {% if task and pending_account_names %}{{ pending_transactions_edit(pending_transactions, 'task-form') }}{% endif %}
 </form>
 </div>
-</div>
-{% if task %}
-{% set footer_back_url = '/tasks/' ~ task.uid %}
-{% set footer_back_mode = 'modal' %}
-{% else %}
-{% set footer_back_url = '/tasks' %}
-{% endif %}
-{% set footer_back_label = 'Cancel' %}
-{% if task %}
-{% set footer_delete_url = '/tasks/' ~ task.uid ~ '/delete' %}
-{% set footer_delete_mode = 'undo' %}
-{% set footer_delete_label = task.title %}
-{% set footer_delete_redirect = '/tasks' %}
-{% endif %}
-{% set footer_primary_form = 'task-form' %}
-{% set footer_primary_label = 'Save' %}
-{% set footer_primary_icon = 'check-square' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

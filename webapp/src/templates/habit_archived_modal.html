@@ -1,12 +1,9 @@
 {% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}Archived habits{% endblock %}
 {% block content %}
-<div id="modal-target" class="modal-height-md">
-<div class="modal-header">
-<h1>Archived habits</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="manage", title='Archived habits', size="medium") %}
 {% if archived %}
 <ul class="habit-pauses-list">
     {% for h in archived %}
@@ -21,9 +18,5 @@
 {% else %}
 {{ empty_state('No archived habits', size='compact') }}
 {% endif %}
-</div>
-{% set footer_back_url = '/habits' %}
-{% set footer_back_label = 'Done' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

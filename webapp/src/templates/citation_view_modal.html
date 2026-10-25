@@ -1,14 +1,9 @@
 {% extends "base.html" %}
-{% from "_modal_header_back.html" import modal_header_back %}
+{% from "_modal.html" import modal %}
 {% from "_detail_section.html" import detail_section %}
 {% block title %}{{ c.title }}{% endblock %}
 {% block content %}
-<div id="modal-target" class="modal-stable-height">
-<div class="modal-header">
-{% if return_to %}{{ modal_header_back(return_to, 'Back') }}{% endif %}
-<h1>{{ c.title }}</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="view", title=((c.title)), size="medium", back=(return_to), back_name='Back', retire=[{'action': 'delete', 'url': '/notebook/citations/' ~ c.uid ~ '/delete', 'mode': 'confirm', 'label': 'Delete "' ~ c.title ~ '"? Any document this is attached to loses it from its bibliography too.', 'redirect': none, 'change': none}], edit_url='/notebook/citations/' ~ c.uid ~ '/edit') %}
 {% call detail_section('Citation') %}
     <div class="detail-meta-grid">
         <div class="detail-meta-item">
@@ -51,16 +46,5 @@
     <span class="detail-meta-label">No entries yet</span>
     {% endif %}
 {% endcall %}
-</div>
-{% set footer_back_url = return_to if return_to else '/notebook/citations' %}
-{% set footer_back_mode = 'modal' if return_to else 'cancel' %}
-{% set footer_back_label = 'Back' if return_to else 'Done' %}
-{% set footer_delete_url = '/notebook/citations/' ~ c.uid ~ '/delete' %}
-{% set footer_delete_mode = 'confirm' %}
-{% set footer_delete_label = 'Delete "' ~ c.title ~ '"? Any document this is attached to loses it from its bibliography too.' %}
-{% set footer_primary_href = '/notebook/citations/' ~ c.uid ~ '/edit' %}
-{% set footer_primary_label = 'Edit' %}
-{% set footer_primary_icon = 'edit' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

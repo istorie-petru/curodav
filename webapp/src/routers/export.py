@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 
 from .. import clock, data_exchange, db, finance, ical_rows, vcard_rows
+from .. import tags as tags_module
 from ..deps import get_db, templates
 
 router = APIRouter(prefix="/export", tags=["export"])
@@ -710,7 +711,8 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
     # "object_labels" (raw membership rows) instead, see export_data_json/
     # export_labels_json above.
     for row in payload.get("labels", []):
-        db.upsert_label_config(conn, row)
+        with tags_module.managed_writes(row.get("managed_by") or tags_module.managed_by(conn, row.get("name"))):
+            db.upsert_label_config(conn, row)
     for row in payload.get("object_labels", []):
         db.add_object_label(conn, row["object_type"], row["object_id"], row["label_name"])
     # 1.6 (Schedule & recurrence rework): no more `payload.get(
@@ -739,7 +741,7 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
     # backup with duplicate rows (or a re-restore) is harmless.
     for row in payload.get("event_task_relations", []):
         db.add_event_task_relation(
-            conn, row["event_uid"], row["task_uid"], row.get("is_work_allocation", 0)
+            conn, row["event_uid"], row["task_uid"], row.get("is_work_allocation", 0), row.get("kind")
         )
         db.restore_work_session_fields(conn, row)
     for row in payload.get("notebook_images", []):

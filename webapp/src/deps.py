@@ -152,6 +152,13 @@ templates.env.globals["icon_exists"] = lambda name: bool(name) and name in _spri
 
 
 templates.env.globals["icon"] = _icon
+
+
+def _raise_error(message: str) -> None:
+    raise ValueError(message)
+
+
+templates.env.globals["raise_error"] = _raise_error
 templates.env.globals["header_views"] = header_views
 templates.env.globals["settings_group"] = settings_group
 

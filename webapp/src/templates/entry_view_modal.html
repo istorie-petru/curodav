@@ -1,17 +1,12 @@
 {% extends "base.html" %}
-{% from "_modal_header_back.html" import modal_header_back %}
+{% from "_modal.html" import modal %}
 {% from "_detail_section.html" import detail_section %}
 {% macro ref_line(ref, entry_uid) %}{% if ref %}
             <span class="detail-meta-value entry-section-ref"><a href="/notebook/citations/{{ ref.ref_uid }}?return_to=/notebook/glossary/{{ entry_uid }}" data-modal>{{ ref.name }}</a>{% if ref.pages %} {% if ref.pages.lower().startswith(("http://", "https://")) %}<a class="detail-meta-label" href="{{ ref.pages }}" target="_blank" rel="noopener noreferrer">{{ ref.pages }}</a>{% else %}<span class="detail-meta-label">{{ ref.pages }}</span>{% endif %}{% endif %}</span>
         {% endif %}{% endmacro %}
 {% block title %}{{ entry.term }}{% endblock %}
 {% block content %}
-<div id="modal-target" class="modal-stable-height">
-<div class="modal-header">
-{% if return_to %}{{ modal_header_back(return_to, 'Back') }}{% endif %}
-<h1>{{ entry.term }}</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="view", title=((entry.term)), size="medium", back=(return_to), back_name='Back', retire=[{'action': 'delete', 'url': '/notebook/glossary/' ~ entry.uid ~ '/delete', 'mode': 'confirm', 'label': 'Delete "' ~ entry.term ~ '"?', 'redirect': none, 'change': none}], edit_url='/notebook/glossary/' ~ entry.uid ~ '/edit') %}
 {% call detail_section('Entry') %}
     <div class="detail-meta-grid">
         <div class="detail-meta-item">
@@ -78,16 +73,5 @@
     <span class="detail-meta-label">No notes yet</span>
     {% endif %}
 {% endcall %}
-</div>
-{% set footer_back_url = return_to if return_to else '/notebook/glossary' %}
-{% set footer_back_mode = 'modal' if return_to else 'cancel' %}
-{% set footer_back_label = 'Back' if return_to else 'Done' %}
-{% set footer_delete_url = '/notebook/glossary/' ~ entry.uid ~ '/delete' %}
-{% set footer_delete_mode = 'confirm' %}
-{% set footer_delete_label = 'Delete "' ~ entry.term ~ '"?' %}
-{% set footer_primary_href = '/notebook/glossary/' ~ entry.uid ~ '/edit' %}
-{% set footer_primary_label = 'Edit' %}
-{% set footer_primary_icon = 'edit' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

@@ -25,7 +25,7 @@ from urllib.parse import quote, unquote, urlparse
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import clock, db, tags
+from .. import clock, db, modules, tags
 from ..deps import get_db, templates
 
 router = APIRouter(prefix="/settings/labels", tags=["labels"])
@@ -98,7 +98,7 @@ def _page_fields(page_fields, deadline_date, page_type, agenda_widget, tasks_wid
     return {
         "has_deadline": 1 if deadline else 0,
         "deadline_date": deadline,
-        "page_type": s(page_type) if s(page_type) in db.PAGE_TYPES else "sections",
+        "page_type": s(page_type) if s(page_type) in db.page_types() else "sections",
         "agenda_widget": on(agenda_widget),
         "tasks_widget": on(tasks_widget),
         "contacts_widget": on(contacts_widget),
@@ -301,6 +301,8 @@ def _rows_of(tag_rows) -> list[dict]:
 def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
     """The label edit modal -- uses the unified label_form_modal.html."""
     cfg = db.effective_label_config(conn, name)
+    if cfg.get("managed_by"):
+        return templates.TemplateResponse("managed_notice_modal.html", {"request": request, "name": name, "module": modules.get(cfg["managed_by"])})
     banner = db.get_page_banner(conn, name)
     return templates.TemplateResponse(
         "label_form_modal.html",

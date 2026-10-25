@@ -206,7 +206,7 @@ class TestPreviewBack:
         resp = label_pages.label_preview("Gym", _request("/labels/Gym/preview", b"from=/tasks/t1"), conn=conn)
         body = resp.body.decode()
         assert resp.context["back_to"] == "/tasks/t1"
-        assert 'href="/tasks/t1" class="btn ghost" data-modal' in body
+        assert 'class="icon-btn modal-header-back" href="/tasks/t1"' in body
 
     def test_offsite_from_is_ignored(self, conn):
         db.upsert_label_config(conn, {"name": "Gym"})

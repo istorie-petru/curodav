@@ -144,14 +144,14 @@ class TestHabitFormArchiveButton:
         assert 'action="/tasks/h1/archive"' in body
         assert 'action="/tasks/h1/unarchive"' not in body
         footer = body[body.index('class="modal-footer"'):]
-        assert 'action="/tasks/h1/archive"' in footer and 'aria-label="Archive"' in footer
+        assert 'action="/tasks/h1/archive"' in footer and "modal-retire" in footer and "Archive" in footer
 
     def test_archived_habit_offers_restore_button(self, conn):
         _habit(conn, "h1", title="Meditate", status="archived")
         body = tasks_router.edit_task_form("h1", _request("/tasks/h1/edit"), conn=conn).body.decode()
         assert 'action="/tasks/h1/unarchive"' in body
         assert 'action="/tasks/h1/archive"' not in body
-        assert 'aria-label="Restore"' in body
+        assert "Restore" in body.split('class="modal-footer"')[1]
 
     def test_still_no_visible_status_field(self, conn):
         # The Archive button must not reintroduce the generic Status

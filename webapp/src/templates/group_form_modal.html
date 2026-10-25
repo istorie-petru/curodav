@@ -1,13 +1,10 @@
 {% from "_inputs.html" import text_input %}
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}{% if group %}Edit space{% else %}New space{% endif %}{% endblock %}
 {% block content %}
 {% from "_look_picker.html" import look_picker %}
-<div id="modal-target">
-<div class="modal-header">
-<h1>{% if group %}Edit space{% else %}New space{% endif %}</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="form", title=((('Edit space' if group else 'New space'))), size="small", back=(('/groups/' ~ (group.name|urlencode) ~ '/view' if (group) else ('/settings/groups' if not (group) else none)) if (('modal' if (group) else none)) == 'modal' else none), back_name='the previous window', retire=([({'action': 'delete', 'url': '/groups/' ~ (group.name|urlencode) ~ '/delete', 'mode': 'confirm', 'label': 'Delete the space "' ~ group.name ~ '"? Its shelves stay, ungrouped.', 'redirect': none, 'change': none} if (group) else none)] | select | list), form='group-form', creating=(not group), save_icon='check-square') %}
 <form method="post" id="group-form" action="{% if group %}/groups/{{ group.name|urlencode }}/update{% else %}/groups/create{% endif %}" data-follow-redirect data-cc-change="group" data-cc-action="{{ 'edit' if group else 'create' }}">
     <div class="field-grid">
         <div class="field field-wide">
@@ -29,20 +26,5 @@
         {% include "_widget_list_multiselect.html" %}
     </div>
 </form>
-</div>
-{% if group %}
-{% set footer_back_url = '/groups/' ~ (group.name|urlencode) ~ '/view' %}
-{% set footer_back_mode = 'modal' %}
-{% set footer_delete_url = '/groups/' ~ (group.name|urlencode) ~ '/delete' %}
-{% set footer_delete_mode = 'confirm' %}
-{% set footer_delete_label = 'Delete the space "' ~ group.name ~ '"? Its shelves stay, ungrouped.' %}
-{% else %}
-{% set footer_back_url = '/settings/groups' %}
-{% endif %}
-{% set footer_back_label = 'Cancel' %}
-{% set footer_primary_form = 'group-form' %}
-{% set footer_primary_label = 'Save' %}
-{% set footer_primary_icon = 'check-square' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

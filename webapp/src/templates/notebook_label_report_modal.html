@@ -1,11 +1,8 @@
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}Shelf report{% endblock %}
 {% block content %}
-<div id="modal-target">
-<div class="modal-header">
-<h1>Notes that lost a shelf</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="manage", title='Notes that lost a shelf', size="small") %}
 <div class="card">
     {% for r in report %}
     <div class="settings-field-row">
@@ -14,10 +11,5 @@
     </div>
     {% endfor %}
 </div>
-</div>
-{% set footer_back_url = '/notebook' %}
-{% set footer_back_mode = 'cancel' %}
-{% set footer_back_label = 'Done' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

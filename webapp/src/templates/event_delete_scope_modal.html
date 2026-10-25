@@ -1,14 +1,9 @@
 {% extends "base.html" %}
-{% from "_modal_header_back.html" import modal_header_back %}
+{% from "_modal.html" import modal %}
 {% block title %}Delete repeating event{% endblock %}
 {% block content %}
 {# Asked before deleting a repeating event: just the occurrence that was open, or every event in the series. #}
-<div id="modal-target">
-<div class="modal-header">
-{{ modal_header_back('/events/' ~ event.uid ~ ('?occurrence_date=' ~ (occurrence_date | urlencode) if occurrence_date else ''), event.title) }}
-<h1>Delete repeating event</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="question", title="Delete repeating event", size="small", back='/events/' ~ event.uid ~ ('?occurrence_date=' ~ (occurrence_date | urlencode) if occurrence_date else ''), back_name=event.title) %}
 <div class="card">
     <p>{{ event.title }} repeats. What should be deleted?</p>
     {% if in_series %}
@@ -33,10 +28,6 @@
     </form>
     {% endif %}
 </div>
-</div>
-{% set footer_back_url = '/events/' ~ event.uid ~ ('?occurrence_date=' ~ (occurrence_date | urlencode) if occurrence_date else '') %}
-{% set footer_back_mode = 'modal' %}
-{% set footer_back_label = 'Cancel' %}
-{% include "_modal_footer.html" %}
-</div>
+
+{% endcall %}
 {% endblock %}

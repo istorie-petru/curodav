@@ -321,6 +321,7 @@ CREATE TABLE IF NOT EXISTS event_task_relations (
     task_uid TEXT NOT NULL,
     created_at TEXT,
     is_work_allocation INTEGER NOT NULL DEFAULT 0,
+    kind TEXT,
     PRIMARY KEY (event_uid, task_uid)
 );
 

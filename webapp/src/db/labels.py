@@ -25,6 +25,7 @@ _LABEL_MODULE_COLUMNS = (
     ("contacts_widget", "INTEGER NOT NULL DEFAULT 1"),
     ("notebook_widget", "INTEGER NOT NULL DEFAULT 1"),
     ("auto_labels", "TEXT"),
+    ("managed_by", "TEXT"),
 )
 
 
@@ -347,6 +348,7 @@ _LABEL_CONFIG_DEFAULTS: dict[str, Any] = {
     "contacts_widget": 1,
     "notebook_widget": 1,
     "auto_labels": None,
+    "managed_by": None,
 }
 
 # The labels-as-modules boolean flags -- normalized to 0/1 on write and to
@@ -404,7 +406,10 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     existing value (or the default, for a brand-new label_config row),
     same "only touch what you're told to" convention as every setter in
     this file."""
-    from .pages import PAGE_TYPES
+    from .pages import page_types
+    tags.assert_writable(conn, row.get("name"))
+    if row.get("managed_by") and tags._managed_writer.get() != row["managed_by"]:
+        raise tags.ManagedLabelError(row.get("name"), row["managed_by"])
     cols = (
         "name", "color", "icon", "description", "parent_name", "label_group",
         "generate_space", "dashboard_preset_json", "abbreviation",
@@ -421,7 +426,7 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     _mirror_legacy_module_fields(row, existing, data)
     if "has_dashboard" in row and "page_type" not in row:
         data["page_type"] = "dashboard" if row["has_dashboard"] else "sections"
-    if data.get("page_type") not in PAGE_TYPES:
+    if data.get("page_type") not in page_types():
         data["page_type"] = "sections"
     data["label_group"] = ensure_group(conn, data.get("label_group"))
     conn.execute(
@@ -747,6 +752,7 @@ def set_group_members(conn: sqlite3.Connection, group: str, members: list[str]) 
     group = (group or "").strip()
     wanted = [m.strip() for m in members if m and m.strip()]
     ensure_group(conn, group)
+    tags.assert_writable(conn, *wanted, *group_member_names(conn, group))
     for name in group_member_names(conn, group):
         if name not in wanted:
             conn.execute("UPDATE label_config SET label_group = NULL WHERE name = ?", (name,))
@@ -770,13 +776,14 @@ def list_project_labels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
 
 def project_status(conn: sqlite3.Connection, cfg: dict[str, Any], today: date | None = None) -> str:
-    """A label is Active or Archived. A passed deadline archives it (tags.archive_past_deadlines); there are no
-    Open, Pending or Pending Archiving states."""
+    """A label is Active or Archived, and only the user changes that; there are no Open, Pending or Pending
+    Archiving states."""
     return "Archived" if cfg.get("archived_at") else "Active"
 
 
 def archive_project(conn: sqlite3.Connection, name: str) -> None:
-    """Archives a label by hand; a passed deadline does the same automatically (tags.archive_past_deadlines)."""
+    """Archives a label by hand; no date archives anything."""
+    tags.assert_writable(conn, name)
     conn.execute(
         "UPDATE label_config SET archived_at = ? WHERE name = ?",
         (datetime.now(timezone.utc).isoformat(), name),
@@ -785,8 +792,9 @@ def archive_project(conn: sqlite3.Connection, name: str) -> None:
 
 
 def unarchive_label(conn: sqlite3.Connection, name: str) -> None:
-    """Restores an archived label and clears its deadline, so the passed date does not archive it again."""
-    conn.execute("UPDATE label_config SET archived_at = NULL, has_deadline = 0, deadline_date = NULL, end_date = NULL WHERE name = ?", (name,))
+    """Restores an archived label; its dates stay as they were."""
+    tags.assert_writable(conn, name)
+    conn.execute("UPDATE label_config SET archived_at = NULL WHERE name = ?", (name,))
     conn.commit()
 
 
@@ -814,6 +822,7 @@ def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None
     (mirrors the old tag-rename behavior) rather than raising a
     unique-constraint error a plain form can't act on -- see merge_labels
     below for the actual merge semantics."""
+    tags.assert_writable(conn, old_name, new_name)
     old_name = (old_name or "").strip()
     new_name = (new_name or "").strip()
     if not old_name or not new_name or old_name == new_name:
@@ -848,6 +857,7 @@ def merge_labels(conn: sqlite3.Connection, source_name: str, dest_name: str) -> 
     rows are the only "membership" a label has, so once those are
     repointed the source label has nothing left pointing at it, same
     "deleting" semantics as every other label removal in this app (§0.1)."""
+    tags.assert_writable(conn, source_name, dest_name)
     if source_name == dest_name:
         return
     rows = conn.execute(
@@ -875,6 +885,7 @@ def clear_label(conn: sqlite3.Connection, name: str) -> None:
         is harmless (per the plan), and there is no delete-a-label endpoint at
         all in this app.
     """
+    tags.assert_writable(conn, name)
     conn.execute("DELETE FROM object_labels WHERE label_name = ?", (name,))
     conn.commit()
 
@@ -889,6 +900,7 @@ def delete_label_config(conn: sqlite3.Connection, name: str) -> None:
         every other label removal in this app" for its own source label; this
         is that same pair of statements with no destination to repoint onto.
     """
+    tags.assert_writable(conn, name)
     conn.execute("DELETE FROM object_labels WHERE label_name = ?", (name,))
     conn.execute("DELETE FROM label_config WHERE name = ?", (name,))
     tags.label_removed(conn, name)

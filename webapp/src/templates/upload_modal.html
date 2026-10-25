@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}{{ title }}{% endblock %}
 {% block content %}
 {# The unified upload modal for media: a drag-and-drop zone in the body and
@@ -6,9 +7,12 @@
    editor (static/avatar_cropper.js), whose Apply submits the form. Variables:
    title, form_id, upload_action, field_name, input_class, zone_label,
    delete_url (omit for none), delete_label, back_url. #}
-<div id="modal-target">
-    <div class="modal-header"><h1>{{ title }}</h1></div>
-    <div class="modal-body">
+{% set _extra %}
+<form id="{{ form_id }}" method="post" action="{{ upload_action }}" enctype="multipart/form-data" class="form-inline" data-autosubmit data-modal-keep-open></form>
+{% endset %}
+{% call modal(kind="form", title=title, size="small", back=(back_url if back_mode == 'modal' else none), back_name='the previous window', extra_html=_extra,
+              retire=([{'action': 'delete', 'url': delete_url, 'mode': 'confirm', 'label': delete_label}] if delete_url else none)) %}
+
         {% if discard_url %}<span data-discard-url="{{ discard_url }}" hidden></span>{% endif %}
         {% from "_upload_zone.html" import upload_zone %}
         {% if preview_url %}
@@ -18,18 +22,5 @@
         </div>
         {% endif %}
         {{ upload_zone(field_name, input_class, form_id, zone_label) }}
-    </div>
-    {% set footer_back_url = back_url %}
-    {% set footer_back_label = 'Cancel' %}
-    {% if back_mode == 'modal' %}{% set footer_back_mode = 'modal' %}{% endif %}
-    {% if delete_url %}
-    {% set footer_delete_url = delete_url %}
-    {% set footer_delete_mode = 'confirm' %}
-    {% set footer_delete_label = delete_label %}
-    {% endif %}
-    {% set footer_extra_html %}
-    <form id="{{ form_id }}" method="post" action="{{ upload_action }}" enctype="multipart/form-data" class="form-inline" data-autosubmit data-modal-keep-open></form>
-    {% endset %}
-    {% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

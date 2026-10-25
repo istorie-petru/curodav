@@ -1,12 +1,9 @@
 {% from "_inputs.html" import switch_input, file_input %}
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}Import data{% endblock %}
 {% block content %}
-<div id="modal-target">
-<div class="modal-header">
-<h1>Import data</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="form", title='Import data', size="small", form='import-form', save_label='Import', save_id='import-submit-btn', save_icon='upload') %}
 <form id="import-form" method="post" action="/export/import/auto" enctype="multipart/form-data" class="dm-import-form">
     <label class="dm-dropzone" data-dm-dropzone>
         {{ file_input({'name': 'file', 'accept': '.ics,.vcf,.csv,.md,.markdown,.zip,.json,text/calendar,text/vcard,text/csv,text/markdown,application/zip,application/json', 'class': 'sr-only', 'required': true, 'data-dm-file': true}) }}
@@ -21,13 +18,5 @@
     </div>
 </form>
 {% include "_data_formats_table.html" %}
-</div>
-{% set footer_back_url = '/settings' %}
-{% set footer_back_label = 'Cancel' %}
-{% set footer_primary_form = 'import-form' %}
-{% set footer_primary_label = 'Import' %}
-{% set footer_primary_icon = 'upload' %}
-{% set footer_primary_id = 'import-submit-btn' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

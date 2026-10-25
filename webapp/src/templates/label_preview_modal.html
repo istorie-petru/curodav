@@ -1,23 +1,14 @@
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% from "_detail_section.html" import detail_section %}
 {% from "_detail_cover.html" import detail_cover with context %}
 {% from "_widget_items.html" import widget_empty, widget_link_row, widget_pill, widget_event_icon %}
 {% from "_label_pill.html" import tag_pill with context %}
 {% block title %}{{ label.name }}{% endblock %}
 {% block content %}
-<div id="modal-target" class="modal-stable-height">
-<div class="modal-header">
-    <div class="detail-header-inner">
-        {{ detail_cover('var(--cal-accent-' ~ (label.color or 'blue') ~ ')', banner, icon(label.icon or ('folder' if label.is_project else 'tag'))) }}
-        <div class="detail-heading-row">
-            <div class="detail-heading-text">
-                <h1 class="detail-title">{{ label.name }}</h1>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal-body">
+{% set _extra %}<a class="btn ghost" href="/labels/{{ label.name|urlencode }}">{{ icon('external-link', 'icon-sm') }} Open page</a>{% endset %}
+{% set _cover %}{{ detail_cover('var(--cal-accent-' ~ (label.color or 'blue') ~ ')', banner, icon(label.icon or ('folder' if label.is_project else 'tag'))) }}{% endset %}
+{% call modal(kind="view", title=((label.name)), size="medium", back=(back_to or none), back_name='the previous window', extra_html=_extra, edit_url='/settings/labels/' ~ label.name ~ '/edit', cover_html=_cover) %}
 {% call detail_section('Details') %}
     <div class="detail-meta-grid">
         {% if label.label_group %}
@@ -65,21 +56,5 @@
 {{ widget_empty('Nothing coming up for this label.') }}
 {% endif %}
 {% endcall %}
-</div>
-
-{% if back_to %}
-{% set footer_back_url = back_to %}
-{% set footer_back_label = 'Back' %}
-{% set footer_back_mode = 'modal' %}
-{% else %}
-{% set footer_back_url = '/labels/' ~ label.name %}
-{% set footer_back_label = 'Done' %}
-{% endif %}
-{% set footer_extra_html %}<a class="btn ghost" href="/labels/{{ label.name|urlencode }}">{{ icon('external-link', 'icon-sm') }} Open page</a>
-{% endset %}
-{% set footer_primary_href = '/settings/labels/' ~ label.name ~ '/edit' %}
-{% set footer_primary_label = 'Edit' %}
-{% set footer_primary_icon = 'edit' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

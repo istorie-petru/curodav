@@ -75,13 +75,13 @@ class TestHabitTaskFormFooter:
     def test_new_habit_task_uses_shared_footer(self, conn):
         body = tasks_router.new_task_form(_request(), habit=True, conn=conn).body.decode()
         assert 'form="habit-task-form"' in body
-        assert '<a href="/habits" class="btn ghost" data-modal-cancel>' in body
+        assert 'data-modal-cancel>Cancel</a>' in body
 
 
 class TestLabelEditModalFooter:
     def test_edit_label_uses_shared_footer_with_confirm_delete(self, conn):
         body = labels_router.edit_label_modal("work", _request(), conn=conn).body.decode()
-        assert 'class="detail-delete-link"' in body
+        assert "modal-retire" in body.split('<div class="modal-footer">')[1]
         assert 'class="btn danger"' not in body
         assert "data-confirm-sheet=" in body
         assert "/labels/work/delete" in body

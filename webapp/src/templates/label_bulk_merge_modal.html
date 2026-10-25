@@ -1,11 +1,8 @@
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}Merge shelves{% endblock %}
 {% block content %}
-<div id="modal-target">
-<div class="modal-header">
-<h1>Merge {{ selected_names|length }} label{{ '' if selected_names|length == 1 else 's' }}</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="pick", title='Merge ' ~ selected_names|length ~ ' label' ~ ('' if selected_names|length == 1 else 's'), size="small", form='label-bulk-merge-form', save_label='Merge', save_icon='git-pull-request') %}
 <div class="card">
 <form method="post" id="label-bulk-merge-form" action="/settings/labels/bulk-merge" data-confirm-sheet="Merge {{ selected_names|length }} selected {{ 'shelf' if selected_names|length == 1 else 'shelves' }} into one? Every object tagged with any of them moves to the destination, and the rest are removed." data-cc-change="label" data-cc-action="merge">
     {% for n in selected_names %}
@@ -21,12 +18,5 @@
     {% include "_widget_list_multiselect.html" %}
 </form>
 </div>
-</div>
-{% set footer_back_url = '/settings/labels' %}
-{% set footer_back_label = 'Cancel' %}
-{% set footer_primary_form = 'label-bulk-merge-form' %}
-{% set footer_primary_label = 'Merge' %}
-{% set footer_primary_icon = 'git-pull-request' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

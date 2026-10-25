@@ -1,26 +1,16 @@
 {% from "_empty_state.html" import empty_state %}
 {% from "_detail_section.html" import detail_section %}
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% from "_habit_heatmap.html" import heatmap %}
 {% from "_habit_history.html" import period_grid %}
 {% from "_label_pill.html" import label_pill, tag_pill with context %}
 {% from "_detail_cover.html" import detail_cover with context %}
 {% block title %}{{ task.title if task else "Habit" }}{% endblock %}
 {% block content %}
-<div id="modal-target" class="modal-stable-height">
 {% if task %}
-<div class="modal-header">
-    <div class="detail-header-inner">
-        {{ detail_cover('var(--cal-accent-' ~ (habit_look.color or status_colors[task.status]) ~ ')', none if habit_look.color else banner, icon(habit_look.icon or 'repeat')) }}
-        <div class="detail-heading-row">
-            <div class="detail-heading-text">
-                <h1 class="detail-title">{{ task.title }}</h1>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal-body">
+{% set _cover %}{{ detail_cover('var(--cal-accent-' ~ (habit_look.color or status_colors[task.status]) ~ ')', none if habit_look.color else banner, icon(habit_look.icon or 'repeat')) }}{% endset %}
+{% call modal(kind="view", title=((task.title)), size="medium", retire=[{'action': 'delete', 'url': '/tasks/' ~ task.uid ~ '/delete', 'mode': 'undo', 'label': task.title, 'redirect': '/habits', 'change': 'task'}], edit_url='/tasks/' ~ task.uid ~ '/edit', cover_html=_cover) %}
 {% call detail_section('Details') %}
     <div class="detail-meta-grid habit-stats-grid">
         <div class="detail-meta-item">
@@ -90,26 +80,11 @@
 </ul>
 {% endcall %}
 {% endif %}
-
-
-</div>
-
-{% set footer_back_url = '/habits' %}
-{% set footer_back_label = 'Done' %}
-{% set footer_delete_url = '/tasks/' ~ task.uid ~ '/delete' %}
-{% set footer_delete_mode = 'undo' %}
-{% set footer_delete_label = task.title %}
-{% set footer_delete_redirect = '/habits' %}
-{% set footer_delete_cc_change = 'task' %}
-{% set footer_primary_href = '/tasks/' ~ task.uid ~ '/edit' %}
-{% set footer_primary_label = 'Edit' %}
-{% set footer_primary_icon = 'edit' %}
-{% include "_modal_footer.html" %}
+{% endcall %}
 {% else %}
-<div class="modal-body">
+{% call modal(kind="view", title="Task not found", size="small") %}
 {{ empty_state('Task not found', size='compact') }}
 <p><a href="/tasks" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Back to tasks</a></p>
-</div>
+{% endcall %}
 {% endif %}
-</div>
 {% endblock %}

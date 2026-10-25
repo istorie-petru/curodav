@@ -148,14 +148,14 @@ class TestNewLabelModalReturnTo:
         resp = labels_router.new_label_modal(_request("/settings/labels/new"), conn=conn)
         body = resp.body.decode()
         assert 'data-modal-cancel' in body
-        assert 'href="/settings/labels"' in body
+        assert "modal-header-back" not in body
 
     def test_return_to_swaps_cancel_to_a_modal_link(self, conn):
         req = _request("/settings/labels/new?return_to=/published-lists/new")
         resp = labels_router.new_label_modal(req, return_to="/published-lists/new", conn=conn)
         body = resp.body.decode()
-        assert 'href="/published-lists/new" class="btn ghost" data-modal' in body
-        assert 'data-modal-cancel' not in body
+        assert 'class="icon-btn modal-header-back" href="/published-lists/new"' in body
+        assert 'data-modal-cancel>Cancel</a>' in body
 
     def test_return_to_must_be_same_origin_relative(self, conn):
         """Same guard family as routers/notebook.py's `_safe_return_to` --
@@ -165,7 +165,7 @@ class TestNewLabelModalReturnTo:
         resp = labels_router.new_label_modal(req, return_to="//evil.example/x", conn=conn)
         body = resp.body.decode()
         assert 'data-modal-cancel' in body
-        assert 'href="/settings/labels"' in body
+        assert "modal-header-back" not in body
         assert "evil.example" not in body
 
 

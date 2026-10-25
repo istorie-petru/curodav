@@ -1,13 +1,10 @@
 {% from "_empty_state.html" import empty_state %}
 {% from "_inputs.html" import text_input %}
+{% from "_modal.html" import modal %}
 {% set _editing = editing | default(none) %}
 {% set _form_id = 'edit-list-form' if _editing else 'create-list-form' %}
-<div id="modal-target" class="modal-height-md">
-    <div class="modal-header">
-        <h1>{{ 'Edit published list' if _editing else 'Create a published list' }}</h1>
-    </div>
-    <div class="modal-body">
-        <div class="card">
+{% call modal(kind="form", title='Edit published list' if _editing else 'Create a published list', size="medium", form=_form_id, creating=(not _editing), save_id='save-list-btn' if _editing else 'publish-btn', save_icon='check-square' if _editing else 'share-2') %}
+<div class="card">
         <form method="post" action="{{ ('/published-lists/' ~ _editing.id ~ '/update') if _editing else '/published-lists/create' }}" id="{{ _form_id }}">
             <div class="field-grid">
                 <div class="field field-wide">
@@ -102,12 +99,4 @@
             </div>
         </form>
         </div>
-    </div>
-{% set footer_back_url = '/published-lists' %}
-{% set footer_back_label = 'Cancel' %}
-{% set footer_primary_form = _form_id %}
-{% set footer_primary_label = 'Save Changes' if _editing else 'Publish List' %}
-{% set footer_primary_icon = 'check-square' if _editing else 'share-2' %}
-{% set footer_primary_id = 'save-list-btn' if _editing else 'publish-btn' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}

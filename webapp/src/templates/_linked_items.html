@@ -1,0 +1,20 @@
+{# Read-only lists of the other side of a task and event link, each row opening the other item's modal. #}
+{% macro linked_events_view(links) %}
+<ul class="linked-list">
+    {% for l in links %}
+    <li class="linked-item"><a href="/events/{{ l.event.uid }}" data-modal>{{ l.event.title }}</a>
+        <span class="linked-meta">{{ l.event.start_at | relative_date }}</span>
+        <span class="cell-tag">{{ l.kind_label }}</span></li>
+    {% endfor %}
+</ul>
+{% endmacro %}
+
+{% macro linked_tasks_view(links) %}
+<ul class="linked-list">
+    {% for l in links %}
+    <li class="linked-item"><a href="/tasks/{{ l.task.uid }}" data-modal>{{ l.task.title }}</a>
+        {% if l.task.due_at %}<span class="linked-meta">Due {{ l.task.due_at | relative_date }}</span>{% endif %}
+        <span class="cell-tag">{{ l.kind_label }}</span></li>
+    {% endfor %}
+</ul>
+{% endmacro %}

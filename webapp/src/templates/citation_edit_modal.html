@@ -1,15 +1,10 @@
 {% from "_inputs.html" import text_input %}
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% from "_citation_author_row.html" import citation_author_row %}
-{% from "_modal_header_back.html" import modal_header_back %}
 {% block title %}{{ "Edit citation" if c else "Add citation" }}{% endblock %}
 {% block content %}
-<div id="modal-target" class="modal-stable-height">
-<div class="modal-header">
-{{ modal_header_back(return_to or (crumbs[-1].url if crumbs else ''), 'Back' if return_to else (crumbs[-1].name if crumbs else '')) }}
-<h1>{{ "Edit citation" if c else "Add citation" }}</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="form", title=(("Edit citation" if c else "Add citation")), size="medium", back=(return_to or (crumbs[-1].url if crumbs else '')), back_name=('Back' if return_to else (crumbs[-1].name if crumbs else '')), retire=([({'action': 'delete', 'url': '/notebook/citations/' ~ c.uid ~ '/delete', 'mode': 'confirm', 'label': 'Delete "' ~ c.title ~ '"? Any document this is attached to loses it from its bibliography too.', 'redirect': none, 'change': none} if (c) else none)] | select | list), form='citation-form', creating=(not c), save_icon='check-square') %}
 <div class="card">
 <form method="post" id="citation-form" action="{{ form_action }}">
     <div class="field-grid">
@@ -90,20 +85,7 @@
     </div>
 </form>
 </div>
-</div>
-{% set footer_back_url = return_to if return_to else '/notebook/citations' %}
-{% set footer_back_mode = 'modal' if return_to else 'cancel' %}
-{% set footer_back_label = 'Cancel' %}
-{% if c %}
-{% set footer_delete_url = '/notebook/citations/' ~ c.uid ~ '/delete' %}
-{% set footer_delete_mode = 'confirm' %}
-{% set footer_delete_label = 'Delete "' ~ c.title ~ '"? Any document this is attached to loses it from its bibliography too.' %}
-{% endif %}
-{% set footer_primary_form = 'citation-form' %}
-{% set footer_primary_label = 'Save' %}
-{% set footer_primary_icon = 'check-square' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}
 <!-- No extra_scripts block -- only ever opened via data-modal, same as
      notebook_field_edit_modal.html; contact_phone_email_rows.js is

@@ -1,12 +1,13 @@
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% from "_inputs.html" import text_input, switch_input %}
 {% block title %}Search contents{% endblock %}
 {% block content %}
-<div id="modal-target" class="modal-stable-height">
-<div class="modal-header">
-<h1>Search contents</h1>
-</div>
-<div class="modal-body">
+{% set _extra %}
+<button type="button" class="btn tonal" data-find-preview>{{ icon('search', 'icon-sm') }} Preview</button>
+<button type="button" class="btn primary" data-find-apply disabled>{{ icon('check-square', 'icon-sm') }} Replace</button>
+{% endset %}
+{% call modal(kind="manage", title="Search contents", size="medium", extra_html=_extra) %}
 <div class="card" data-notebook-find>
     <div class="field-grid">
         <div class="field field-wide">
@@ -28,13 +29,5 @@
     </div>
     <div class="notebook-find-results" data-find-results></div>
 </div>
-</div>
-{% set footer_back_url = '/notebook' %}
-{% set footer_back_label = 'Done' %}
-{% set footer_extra_html %}
-<button type="button" class="btn tonal" data-find-preview>{{ icon('search', 'icon-sm') }} Preview</button>
-<button type="button" class="btn primary" data-find-apply disabled>{{ icon('check-square', 'icon-sm') }} Replace</button>
-{% endset %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

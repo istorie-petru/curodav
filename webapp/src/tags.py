@@ -7,6 +7,8 @@ do; `apply_migration` performs it. Neither runs at startup.
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import sqlite3
 from datetime import datetime, timezone
 from typing import Any
@@ -32,42 +34,60 @@ LABEL_OBJECT_TYPES = ("task", "event", "contact", "notebook")  # object_labels s
 FINANCE_LABEL, FINANCE_GROUP = "Finance", "Personal"
 
 
+class ManagedLabelError(ValueError):
+    """A shelf managed by a module was changed by someone other than that module."""
+
+    def __init__(self, label_name: str, module_key: str):
+        from . import modules
+
+        module = modules.get(module_key)
+        super().__init__(f'"{label_name}" is managed by the {module.title} module. Change it in its settings ({module.settings_url}).')
+        self.label_name, self.module_key = label_name, module_key
+
+
+_managed_writer: contextvars.ContextVar[str | None] = contextvars.ContextVar("managed_writer", default=None)
+
+
+@contextlib.contextmanager
+def managed_writes(module_key: str):
+    """Lets the named module change the shelves it manages; every other caller is refused."""
+    token = _managed_writer.set(module_key)
+    try:
+        yield
+    finally:
+        _managed_writer.reset(token)
+
+
+def managed_by(conn: sqlite3.Connection, label_name: str) -> str | None:
+    try:
+        row = conn.execute("SELECT managed_by FROM label_config WHERE name = ? COLLATE NOCASE", (label_name,)).fetchone() if label_name else None
+    except sqlite3.OperationalError:  # a database from before the column existed
+        return None
+    return (row[0] or None) if row else None
+
+
+def assert_writable(conn: sqlite3.Connection, *label_names: str) -> None:
+    """Raises ManagedLabelError when a named shelf is managed by a module other than the current writer."""
+    for name in label_names:
+        owner = managed_by(conn, name)
+        if owner and _managed_writer.get() != owner:
+            raise ManagedLabelError(name, owner)
+
+
+def set_managed_by(conn: sqlite3.Connection, label_name: str, module_key: str | None) -> None:
+    """Marks a shelf as managed by a module (or clears the mark); only the module itself may do either."""
+    assert_writable(conn, label_name)
+    conn.execute("UPDATE label_config SET managed_by = ? WHERE name = ?", (module_key, label_name))
+    conn.commit()
+
+
 def ensure_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
 
 
-def archive_past_deadlines(conn: sqlite3.Connection, today: str) -> int:
-    """A label whose deadline has passed is archived, nothing more; restoring it clears the deadline."""
-    cur = conn.execute("UPDATE label_config SET archived_at = ? WHERE has_deadline = 1 AND deadline_date IS NOT NULL "
-                       "AND deadline_date < ? AND archived_at IS NULL", (today, today))
-    conn.commit()
-    return cur.rowcount
-
-
-def start_archive_job(db_path) -> "threading.Event":
-    """Archives labels with a passed deadline once at start and then once a day; returns the event that stops it."""
-    import threading
-
-    from . import clock, db
-    from .log import get_logger
-
-    stop = threading.Event()
-
-    def loop() -> None:
-        while not stop.is_set():
-            try:
-                with db.connect(db_path) as conn:
-                    archive_past_deadlines(conn, clock.today().isoformat())
-            except Exception:
-                get_logger(__name__).exception("Deadline archiving failed; will retry tomorrow")
-            stop.wait(24 * 60 * 60)
-
-    threading.Thread(target=loop, daemon=True, name="label-archive").start()
-    return stop
-
-
 def restore(conn: sqlite3.Connection, label_name: str) -> None:
-    conn.execute("UPDATE label_config SET archived_at = NULL, deadline_date = NULL, has_deadline = 0 WHERE name = ?", (label_name,))
+    assert_writable(conn, label_name)
+    conn.execute("UPDATE label_config SET archived_at = NULL WHERE name = ?", (label_name,))
     conn.commit()
 
 
@@ -163,6 +183,7 @@ def validate_rows(conn: sqlite3.Connection, label_name: str, rows: list[dict[str
 
 
 def apply_rows(conn: sqlite3.Connection, label_name: str, rows: list[dict[str, Any]], colors) -> None:
+    assert_writable(conn, label_name)
     """Deletes, renames/restyles and creates the tags of a label as one change."""
     now = datetime.now(timezone.utc).isoformat()
     for r in rows:
@@ -189,6 +210,9 @@ def move_error(conn: sqlite3.Connection, name: str, dest: str) -> str | None:
     tag = get_tag(conn, name)
     if not tag:
         return f"There is no tag named {name}"
+    for shelf in (tag["label_name"], dest):
+        if managed_by(conn, shelf):
+            return str(ManagedLabelError(shelf, managed_by(conn, shelf)))
     if not dest or not conn.execute("SELECT 1 FROM label_config WHERE name = ?", (dest,)).fetchone():
         return "Choose a shelf to move the tag to"
     if dest == tag["label_name"]:
@@ -202,6 +226,7 @@ def move_tag(conn: sqlite3.Connection, name: str, dest: str) -> None:
     """Files a tag under another shelf. Its items keep it, and their shelf links follow: they gain the new shelf and leave
     the old one unless another of their tags still sits there."""
     tag = get_tag(conn, name)
+    assert_writable(conn, tag["label_name"], dest)
     conn.execute("UPDATE label_tags SET label_name = ? WHERE name = ? COLLATE NOCASE", (dest, tag["name"]))
     from . import db
 

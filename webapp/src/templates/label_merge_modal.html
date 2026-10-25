@@ -1,11 +1,8 @@
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}Merge shelf{% endblock %}
 {% block content %}
-<div id="modal-target">
-<div class="modal-header">
-<h1>Merge "{{ name }}"</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="pick", title='Merge "' ~ name ~ '"', size="small", form='label-merge-form', save_label='Merge', save_icon='git-pull-request') %}
 <div class="card">
 <form method="post" id="label-merge-form" action="/labels/{{ name }}/merge" data-confirm-sheet="Merge &quot;{{ name }}&quot; into another shelf? Every object tagged with it moves to the destination and this shelf is removed." data-cc-change="label" data-cc-action="merge">
     {% set ms_name = 'dest_name' %}
@@ -18,12 +15,5 @@
     {% include "_widget_list_multiselect.html" %}
 </form>
 </div>
-</div>
-{% set footer_back_url = '/labels' %}
-{% set footer_back_label = 'Cancel' %}
-{% set footer_primary_form = 'label-merge-form' %}
-{% set footer_primary_label = 'Merge' %}
-{% set footer_primary_icon = 'git-pull-request' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

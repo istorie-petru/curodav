@@ -1,13 +1,10 @@
 {% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}Pauses{% endblock %}
 {% block content %}
 {% set _keep = 'data-modal-keep-open data-cc-change="task" data-cc-action="edit"' %}
-<div id="modal-target" class="modal-height-md">
-<div class="modal-header">
-<h1>Pauses</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="manage", title='Pauses', size="medium") %}
 {% if pauses %}
 <ul class="habit-pauses-list">
     {% for p in pauses %}
@@ -39,9 +36,5 @@
     <div class="habit-log-field"><span>Until</span>{{ date_field('end_date', '', required=true, min=today_iso, label='Until') }}</div>
     <button type="submit" class="btn tonal">{{ icon('pause', 'icon-sm') }} Pause</button>
 </form>
-</div>
-{% set footer_back_url = '/habits' %}
-{% set footer_back_label = 'Done' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

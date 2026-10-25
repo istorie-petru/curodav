@@ -1,14 +1,9 @@
 {% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
-{% from "_modal_header_back.html" import modal_header_back %}
+{% from "_modal.html" import modal %}
 {% block title %}Bibliography -- {{ document.title }}{% endblock %}
 {% block content %}
-<div id="modal-target" class="modal-stable-height">
-<div class="modal-header">
-{{ modal_header_back('/notebook/' ~ document.uid, document.title) }}
-<h1>Bibliography</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="form", title='Bibliography', size="medium", form='bibliography-form', save_icon='check-square') %}
 <div class="card">
 <form method="post" id="bibliography-form" action="/notebook/{{ document.uid }}/bibliography">
     <div class="field-grid">
@@ -37,13 +32,5 @@
     </div>
 </form>
 </div>
-</div>
-{% set footer_back_url = '/notebook/' ~ document.uid %}
-{% set footer_back_mode = 'cancel' %}
-{% set footer_back_label = 'Cancel' %}
-{% set footer_primary_form = 'bibliography-form' %}
-{% set footer_primary_label = 'Save' %}
-{% set footer_primary_icon = 'check-square' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

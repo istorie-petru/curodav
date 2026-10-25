@@ -270,8 +270,14 @@ def set_task_reminder_time(conn: sqlite3.Connection, uid: str, value: str | None
     conn.commit()
 
 
+LINK_KINDS = ("related", "work_session", "exam")
+LINK_KIND_LABELS = {"related": "Related", "work_session": "Work session", "exam": "Exam"}
+# A row with no explicit kind is a work session when it carries the old flag, and a plain link otherwise.
+_LINK_KIND_SQL = "COALESCE(r.kind, CASE WHEN r.is_work_allocation = 1 THEN 'work_session' ELSE 'related' END)"
+
+
 def add_event_task_relation(
-    conn: sqlite3.Connection, event_uid: str, task_uid: str, is_work_allocation: int = 0
+    conn: sqlite3.Connection, event_uid: str, task_uid: str, is_work_allocation: int = 0, kind: str | None = None
 ) -> None:
     """Idempotent link insert (composite PK means a duplicate is a no-op) --
     the caller is responsible for the "must share a label" rule (the UI's
@@ -283,12 +289,119 @@ def add_event_task_relation(
     backed-up row's real value through, so a work allocation round-trips
     through a JSON backup as one instead of silently downgrading to a plain
     relation."""
+    if kind is not None and kind not in LINK_KINDS:
+        raise ValueError(f"Unknown link kind: {kind}")
+    if kind == "work_session":
+        is_work_allocation = 1
     conn.execute(
-        "INSERT OR IGNORE INTO event_task_relations (event_uid, task_uid, created_at, is_work_allocation) "
-        "VALUES (?, ?, ?, ?)",
-        (event_uid, task_uid, datetime.now(timezone.utc).isoformat(), int(is_work_allocation)),
+        "INSERT OR IGNORE INTO event_task_relations (event_uid, task_uid, created_at, is_work_allocation, kind) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (event_uid, task_uid, datetime.now(timezone.utc).isoformat(), int(is_work_allocation), kind),
     )
     conn.commit()
+
+
+def links_for_task(conn: sqlite3.Connection, task_uid: str) -> list[dict[str, Any]]:
+    """Every link of a task as {"event": event dict, "kind": kind}, ordered by the event's start."""
+    rows = conn.execute(
+        f"SELECT events.*, {_LINK_KIND_SQL} AS link_kind FROM events JOIN event_task_relations r ON r.event_uid = events.uid "
+        "WHERE r.task_uid = ? ORDER BY events.start_at ASC",
+        (task_uid,),
+    ).fetchall()
+    kinds = [r["link_kind"] for r in rows]
+    events = _attach_tags_bulk(conn, "event", [_row_to_dict(r, _EVENT_JSON_FIELDS) for r in rows])
+    return [{"event": e, "kind": k, "kind_label": LINK_KIND_LABELS[k]} for e, k in zip(events, kinds)]
+
+
+def links_for_event(conn: sqlite3.Connection, event_uid: str) -> list[dict[str, Any]]:
+    """Every link of an event as {"task": task dict, "kind": kind}, ordered like a task list."""
+    rows = conn.execute(
+        f"SELECT tasks.*, {_LINK_KIND_SQL} AS link_kind FROM tasks JOIN event_task_relations r ON r.task_uid = tasks.uid "
+        "WHERE r.event_uid = ? ORDER BY (tasks.due_at IS NULL), tasks.due_at ASC",
+        (event_uid,),
+    ).fetchall()
+    kinds = [r["link_kind"] for r in rows]
+    tasks = _attach_tags_bulk(conn, "task", [_row_to_dict(r, _TASK_JSON_FIELDS) for r in rows])
+    return [{"task": t, "kind": k, "kind_label": LINK_KIND_LABELS[k]} for t, k in zip(tasks, kinds)]
+
+
+def _tag_overlap_uids(conn: sqlite3.Connection, object_type: str, other_type: str, tags: list[str], since: str | None, limit: int) -> list[str]:
+    if not tags:
+        return []
+    marks = ",".join("?" * len(tags))
+    table = "events" if other_type == "event" else "tasks"
+    order = "start_at" if other_type == "event" else "COALESCE(due_at, created_at)"
+    where = f" AND {table}.start_at >= ?" if since and other_type == "event" else ""
+    args = [other_type, *tags] + ([since] if where else []) + [limit]
+    rows = conn.execute(
+        f"SELECT DISTINCT {table}.uid, {order} AS o FROM {table} JOIN object_tags ot ON ot.object_type = ? AND ot.object_id = {table}.uid "
+        f"WHERE ot.tag_name IN ({marks}){where} ORDER BY o LIMIT ?",
+        args,
+    ).fetchall()
+    return [r["uid"] for r in rows]
+
+
+def link_candidate_events(conn: sqlite3.Connection, task: dict[str, Any], since: str, limit: int = 200) -> list[dict[str, Any]]:
+    """Events a task can be linked to: those sharing one of its tags from `since` on, plus the ones already linked."""
+    from .. import tags as tag_store
+
+    uids = _tag_overlap_uids(conn, "task", "event", tag_store.tags_for_object(conn, "task", task["uid"]), since, limit)
+    uids += [r["event_uid"] for r in conn.execute("SELECT event_uid FROM event_task_relations WHERE task_uid = ?", (task["uid"],)) if r["event_uid"] not in uids]
+    events = [e for e in (get_event(conn, u) for u in uids) if e]
+    return [{"uid": e["uid"], "name": f"{e['title']} ({str(e['start_at'])[:10]})"} for e in events]
+
+
+def link_candidate_tasks(conn: sqlite3.Connection, event: dict[str, Any], limit: int = 200) -> list[dict[str, Any]]:
+    """Tasks an event can be linked to: those sharing one of its tags, plus the ones already linked."""
+    from .. import tags as tag_store
+
+    uids = _tag_overlap_uids(conn, "event", "task", tag_store.tags_for_object(conn, "event", event["uid"]), None, limit)
+    uids += [r["task_uid"] for r in conn.execute("SELECT task_uid FROM event_task_relations WHERE event_uid = ?", (event["uid"],)) if r["task_uid"] not in uids]
+    tasks = [t for t in (get_task(conn, u) for u in uids) if t]
+    return [{"uid": t["uid"], "name": t["title"]} for t in tasks]
+
+
+def sync_task_links(conn: sqlite3.Connection, task_uid: str, event_uids: list[str]) -> None:
+    """Makes the task's links other than work sessions exactly `event_uids`; an existing link keeps its kind."""
+    wanted = set(event_uids)
+    rows = conn.execute(
+        f"SELECT r.event_uid, {_LINK_KIND_SQL} AS link_kind FROM event_task_relations r WHERE r.task_uid = ?", (task_uid,)
+    ).fetchall()
+    have = {r["event_uid"]: r["link_kind"] for r in rows}
+    for event_uid, kind in have.items():
+        if kind != "work_session" and event_uid not in wanted:
+            conn.execute("DELETE FROM event_task_relations WHERE event_uid = ? AND task_uid = ?", (event_uid, task_uid))
+    conn.commit()
+    for event_uid in wanted - set(have):
+        add_event_task_relation(conn, event_uid, task_uid, kind="related")
+
+
+def sync_event_links(conn: sqlite3.Connection, event_uid: str, task_uids: list[str]) -> None:
+    """Makes the event's links other than work sessions exactly `task_uids`; an existing link keeps its kind."""
+    wanted = set(task_uids)
+    rows = conn.execute(
+        f"SELECT r.task_uid, {_LINK_KIND_SQL} AS link_kind FROM event_task_relations r WHERE r.event_uid = ?", (event_uid,)
+    ).fetchall()
+    have = {r["task_uid"]: r["link_kind"] for r in rows}
+    for task_uid, kind in have.items():
+        if kind != "work_session" and task_uid not in wanted:
+            conn.execute("DELETE FROM event_task_relations WHERE event_uid = ? AND task_uid = ?", (event_uid, task_uid))
+    conn.commit()
+    for task_uid in wanted - set(have):
+        add_event_task_relation(conn, event_uid, task_uid, kind="related")
+
+
+def plan_link_kinds(conn: sqlite3.Connection) -> dict[str, int]:
+    """Dry run of the link migration: how many links exist and which kind each takes. Changes nothing."""
+    plan = {"links": 0, "work_session": 0, "related": 0, "exam": 0, "already_set": 0}
+    for row in conn.execute("SELECT is_work_allocation, kind FROM event_task_relations"):
+        plan["links"] += 1
+        if row["kind"]:
+            plan["already_set"] += 1
+            plan[row["kind"]] += 1
+        else:
+            plan["work_session" if row["is_work_allocation"] else "related"] += 1
+    return plan
 
 
 def remove_event_task_relation(conn: sqlite3.Connection, event_uid: str, task_uid: str) -> None:
@@ -382,8 +495,8 @@ def create_work_allocation(
         },
     )
     conn.execute(
-        "INSERT OR IGNORE INTO event_task_relations (event_uid, task_uid, created_at, is_work_allocation) "
-        "VALUES (?, ?, ?, 1)",
+        "INSERT OR IGNORE INTO event_task_relations (event_uid, task_uid, created_at, is_work_allocation, kind) "
+        "VALUES (?, ?, ?, 1, 'work_session')",
         (event_uid, task_uid, now),
     )
     record_work_allocation_flag(conn, event_uid)

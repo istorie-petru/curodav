@@ -1,26 +1,12 @@
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}{{ "Edit transaction" if t and not copy else "New transaction" }}{% endblock %}
 {% block content %}
-<div id="modal-target" class="modal-stable-height">
-<div class="modal-header"><h1>{{ "Edit transaction" if t and not copy else "New transaction" }}</h1></div>
-<div class="modal-body">
+{% call modal(kind="form", title=(("Edit transaction" if t and not copy else "New transaction")), size="medium", retire=([({'action': 'delete', 'url': delete_url if delete_url is defined else '/finance/transactions/' ~ t.uid ~ '/delete', 'mode': 'confirm', 'label': 'Delete this transaction?', 'redirect': none, 'change': none} if (t and not copy) else none)] | select | list), form='finance-transaction-form', creating=((not t or copy)), save_icon='check-square') %}
 <div class="card">
 <form method="post" id="finance-transaction-form" action="{{ form_action }}">
     {% include "_finance_transaction_fields.html" %}
 </form>
 </div>
-</div>
-{% set footer_back_url = '/finance/transactions' %}
-{% set footer_back_mode = 'cancel' %}
-{% set footer_back_label = 'Cancel' %}
-{% if t and not copy %}
-{% set footer_delete_url = delete_url if delete_url is defined else '/finance/transactions/' ~ t.uid ~ '/delete' %}
-{% set footer_delete_mode = 'confirm' %}
-{% set footer_delete_label = 'Delete this transaction?' %}
-{% endif %}
-{% set footer_primary_form = 'finance-transaction-form' %}
-{% set footer_primary_label = 'Save' %}
-{% set footer_primary_icon = 'check-square' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

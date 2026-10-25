@@ -237,6 +237,51 @@ def _series_share_tags(conn: sqlite3.Connection) -> None:
                 tags.set_object_tags(conn, "event", uid, source)
 
 
+def _links_get_a_kind(conn: sqlite3.Connection) -> None:
+    """Every task and event link names its kind: a work session when it carried the old flag, otherwise related."""
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'event_task_relations'").fetchone():
+        return
+    if "kind" not in _columns(conn, "event_task_relations"):
+        conn.execute("ALTER TABLE event_task_relations ADD COLUMN kind TEXT")
+    conn.execute("UPDATE event_task_relations SET kind = CASE WHEN is_work_allocation = 1 THEN 'work_session' ELSE 'related' END "
+                 "WHERE kind IS NULL")
+
+
+def _university_tables(conn: sqlite3.Connection) -> None:
+    """The University module's own tables: the semester record, the syllabus and the link from a topic to a class."""
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS university_semesters (
+            uid TEXT PRIMARY KEY,
+            shelf_name TEXT NOT NULL,
+            name TEXT NOT NULL,
+            start_date TEXT,
+            end_date TEXT,
+            class_end_date TEXT,
+            exam_start TEXT,
+            exam_end TEXT,
+            created_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS university_topics (
+            uid TEXT PRIMARY KEY,
+            semester_uid TEXT NOT NULL,
+            discipline_tag TEXT NOT NULL,
+            number INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'lecture',
+            importance INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_university_topics_discipline ON university_topics(semester_uid, discipline_tag, number);
+        CREATE TABLE IF NOT EXISTS university_topic_classes (
+            topic_uid TEXT NOT NULL,
+            event_uid TEXT NOT NULL,
+            PRIMARY KEY (topic_uid, event_uid)
+        );
+        CREATE INDEX IF NOT EXISTS idx_university_topic_classes_event ON university_topic_classes(event_uid);
+        """
+    )
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "notebook documents get an is_template flag", _note_templates),
     Migration(2, "frontmatter fields lose the required column", _field_config_without_required, destructive=True),
@@ -263,6 +308,8 @@ MIGRATIONS: list[Migration] = [
     Migration(23, "finance tags become tags on the Finance shelf; old tags and projects tables are dropped", _finance_tags_become_tags, destructive=True),
     Migration(24, "projects become tags on the shelf Projects", _projects_become_tags, destructive=True),
     Migration(25, "occurrences of a repeating event share the series' tags", _series_share_tags, destructive=True),
+    Migration(26, "task and event links get a kind", _links_get_a_kind, destructive=True),
+    Migration(27, "University module tables", _university_tables),
 ]
 
 

@@ -1,11 +1,8 @@
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}Home page{% endblock %}
 {% block content %}
-<div id="modal-target">
-<div class="modal-header">
-<h1>Home page</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="form", title='Home page', size="small", form='home-page-form') %}
 <div class="card">
 <form method="post" id="home-page-form" action="/home/page">
     <div class="field-grid">
@@ -17,11 +14,5 @@
     </div>
 </form>
 </div>
-</div>
-{% set footer_back_url = '/' %}
-{% set footer_back_label = 'Cancel' %}
-{% set footer_primary_form = 'home-page-form' %}
-{% set footer_primary_label = 'Save' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

@@ -37,6 +37,7 @@
         {{ details_start(false if series_split | default(false) else (event and (event.description or event.location or event.meeting_url or event.reminders or event.recurrence not in (None, 'None', 'Nothing', '')))) }}
         {% set contacts_object_type = 'event' %}{% set contacts_object_id = event.uid if event else '' %}
         {% include "_contacts_row.html" %}
+        {% if event %}{% set link_label = 'Linked tasks' %}{% set link_name = 'linked_task_uids' %}{% set link_form_id = 'event-form' %}{% include "_link_field.html" %}{% endif %}
         {# reminders_picker.js and recurrence_picker.js upgrade these two inputs in place; routers/calendar.py still takes the raw values. #}
         {{ reminder_row(event.reminders|join(', ') if event else '', wide=true) }}
         {% if not series_split | default(false) %}{% include "_event_series_fields.html" %}{% endif %}

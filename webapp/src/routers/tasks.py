@@ -102,10 +102,16 @@ def _work_allocation_context(conn, task: dict) -> dict:
         on the object existing.
     """
     if task is None:
-        return {"work_allocations": [], "work_hours": {"scheduled": 0.0, "completed": 0.0, "remaining": 0.0}}
+        return {"work_allocations": [], "work_hours": {"scheduled": 0.0, "completed": 0.0, "remaining": 0.0},
+                "linked_events": [], "link_candidates": [], "link_selected": []}
     allocations = db.list_work_allocations_for_task(conn, task["uid"])
     allocations = calendar_router._annotate_calendar_colors(conn, allocations)
+    links = [link for link in db.links_for_task(conn, task["uid"]) if link["kind"] != "work_session"]
+    since = (clock.today() - timedelta(days=14)).isoformat()
     return {
+        "linked_events": links,
+        "link_candidates": db.link_candidate_events(conn, task, since),
+        "link_selected": [link["event"]["uid"] for link in links],
         "work_allocations": allocations,
         "work_hours": db.task_work_hours(conn, task["uid"]),
         "work_difficulty": work_sessions.average_difficulty([a.get("difficulty") for a in allocations]),
@@ -883,6 +889,8 @@ def update_task(
     contacts: list[str] = Form([]),
     contacts_present: str = Form(""),
     work_sessions_present: str = Form(""),
+    links_present: str = Form(""),
+    linked_event_uids: list[str] = Form([]),
     ws_uid: list[str] = Form([]),
     ws_title: list[str] = Form([]),
     ws_hours: list[str] = Form([]),
@@ -995,6 +1003,8 @@ def update_task(
         _save_habit_look(conn, row["uid"], habit_icon, habit_color)
     if contacts_present == "1" and isinstance(contacts, list):
         db.set_object_contacts(conn, "task", row["uid"], db.resolve_contact_entries(conn, contacts))
+    if links_present == "1":
+        db.sync_task_links(conn, row["uid"], linked_event_uids)
     if work_sessions_present == "1":
         db.sync_work_sessions(conn, row["uid"], _work_session_rows(ws_uid, ws_title, ws_hours, ws_difficulty, ws_start, ws_end))
     if pending_rows is not None:

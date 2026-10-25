@@ -364,7 +364,7 @@ class TestLabelPillLinks:
         assert "/archive" not in preview
         body = labels_router.edit_label_modal("Essay", _request("/settings/labels/Essay/edit"), conn=conn).body.decode()
         footer = body[body.index('class="modal-footer"'):]
-        assert 'action="/labels/Essay/archive"' in footer and 'aria-label="Archive"' in footer
+        assert 'action="/labels/Essay/archive"' in footer and "modal-retire" in footer
         label_pages.archive_label("Essay", conn=conn)
         body = labels_router.edit_label_modal("Essay", _request("/settings/labels/Essay/edit"), conn=conn).body.decode()
         assert 'action="/labels/Essay/unarchive"' in body

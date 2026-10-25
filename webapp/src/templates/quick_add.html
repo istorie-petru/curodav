@@ -1,5 +1,6 @@
 {% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}New{% endblock %}
 {% block content %}
 
@@ -22,13 +23,9 @@
        content automatically -- nothing to rebind here beyond the tab
        switch. -->
 {% set default_tab = default_tab|default('task') %}
-<div id="modal-target" class="modal-stable-height">
 {% set _kinds = [default_tab] if default_tab in ('contact', 'label') else ['task', 'event'] %}
 {% set _kind_meta = {'task': ('Task', 'check-square'), 'event': ('Event', 'calendar'), 'contact': ('Contact', 'user'), 'label': ('Shelf', 'tag')} %}
-<div class="modal-header">
-<h1>{% if _kinds | length == 1 %}New {{ _kind_meta[_kinds[0]][0] | lower }}{% else %}New{% endif %}</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="form", title=(('New ' ~ _kind_meta[_kinds[0]][0] | lower) if _kinds | length == 1 else 'New'), size="medium", form=default_tab ~ '-form', creating=(true), save_id='quick-add-save', save_icon='check-square') %}
 <div class="qa-split{% if _kinds | length > 1 %} qa-with-side{% endif %}"{% if _kinds | length > 1 %} data-modal-wide{% endif %}>
 <div class="qa-create">
 {% if _kinds | length > 1 %}
@@ -80,13 +77,5 @@
 </aside>
 {% endif %}
 </div>
-</div>
-{% set footer_back_url = '#' %}
-{% set footer_back_label = 'Cancel' %}
-{% set footer_primary_form = default_tab ~ '-form' %}
-{% set footer_primary_id = 'quick-add-save' %}
-{% set footer_primary_label = 'Save' %}
-{% set footer_primary_icon = 'check-square' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

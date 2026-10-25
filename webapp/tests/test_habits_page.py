@@ -417,11 +417,11 @@ class TestLookEverywhereAndCancel20260926:
     def test_cancel_goes_back_to_view_modal(self, conn):
         _habit(conn, "h1", "Read")
         form = tasks_router.edit_task_form("h1", _request("/tasks/h1/edit"), conn=conn).body.decode()
-        assert '<a href="/tasks/h1" class="btn ghost" data-modal>' in form
+        assert 'class="icon-btn modal-header-back" href="/tasks/h1' in form
 
     def test_new_habit_cancel_still_closes(self, conn):
         form = tasks_router.new_task_form(_request("/tasks/new"), habit=True, conn=conn).body.decode()
-        assert 'href="/habits" class="btn ghost" data-modal-cancel' in form
+        assert 'data-modal-cancel>Cancel</a>' in form and "modal-header-back" not in form
 
     def test_group_form_uses_look_dropdown(self, conn):
         from src.routers import label_pages

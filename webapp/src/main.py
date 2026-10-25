@@ -197,7 +197,6 @@ async def lifespan(app: FastAPI):
         logger.warning("Background Radicale sync not started (no bridge); restart to retry")
     _reminder_thread, reminder_stop = reminders.start_scheduler(settings.db_path)
     perf_stop = perf.start_flusher(settings.db_path)
-    archive_stop = tags.start_archive_job(settings.db_path)
 
     total_ms = (time.perf_counter() - boot) * 1000
     breakdown = ", ".join(f"{name} {round(seconds * 1000)} ms" for name, seconds in steps.items())
@@ -211,7 +210,6 @@ async def lifespan(app: FastAPI):
     if stop_event is not None:
         stop_event.set()
     reminder_stop.set()
-    archive_stop.set()
     perf_stop.set()
 
 
@@ -272,6 +270,10 @@ def create_app() -> FastAPI:
             return templates.TemplateResponse(request, "not_found.html", {}, status_code=404)
         return await http_exception_handler(request, exc)
 
+    @app.exception_handler(tags.ManagedLabelError)
+    async def managed_shelf_refused(request: Request, exc: tags.ManagedLabelError):
+        return JSONResponse({"detail": str(exc)}, status_code=403)
+
     @app.exception_handler(Exception)
     async def unexpected_error(request: Request, exc: Exception):
         logger.exception("Unhandled error on %s %s", request.method, request.url.path)
@@ -304,6 +306,9 @@ def create_app() -> FastAPI:
     app.include_router(contacts.router)
     app.include_router(quick_capture.router)
     app.include_router(taxonomy.router)
+    from . import university
+
+    app.include_router(university.router)
     app.include_router(taxonomy.settings_router)
     app.include_router(taxonomy.calendar_router)
     app.include_router(labels.router)

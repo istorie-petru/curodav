@@ -104,7 +104,7 @@ class TestGroupModalsAndPages:
         body = label_pages.edit_group_modal("Uni", _req("/groups/Uni/edit"), conn=conn).body.decode()
         assert 'id="look-group-form"' in body and "look-side-btn" in body
         assert "/banners/editor?scope=group%3AUni" in body
-        assert '<a href="/groups/Uni/view" class="btn ghost" data-modal>' in body
+        assert 'class="icon-btn modal-header-back" href="/groups/Uni/view' in body
         assert "field-hint" not in body
 
     def test_new_modal_has_no_banner_button(self, conn):

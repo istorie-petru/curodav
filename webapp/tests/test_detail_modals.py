@@ -263,9 +263,9 @@ class TestFooterActions:
         body = calendar_router.event_detail("e1", _request("/events/e1"), conn=conn).body.decode()
         footer_pos = self._footer_pos(body)
         assert 'class="btn danger"' not in body
-        delete_pos = _index(body, 'class="detail-delete-link"')
+        delete_pos = _index(body, 'aria-label="Delete"')
         edit_pos = _index(body, 'class="btn primary"')
-        done_pos = _index(body, "> Done</a>")
+        done_pos = _index(body, ">Done</a>")
         assert delete_pos > footer_pos
         assert edit_pos > footer_pos
         assert done_pos > footer_pos
@@ -277,7 +277,7 @@ class TestFooterActions:
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
         footer_pos = self._footer_pos(body)
         assert 'class="btn danger"' not in body
-        assert _index(body, 'class="detail-delete-link"') > footer_pos
+        assert _index(body, 'aria-label="Delete"') > footer_pos
         assert _index(body, 'class="btn primary"') > footer_pos
         assert 'data-delete-undo-redirect="/tasks"' in body
 
@@ -290,14 +290,14 @@ class TestFooterActions:
         footer_pos = self._footer_pos(body)
         assert 'class="btn danger"' not in body
         assert "data-confirm-sheet" not in body
-        assert _index(body, 'class="detail-delete-link"') > footer_pos
+        assert _index(body, 'aria-label="Delete"') > footer_pos
 
     def test_contact_delete_demoted_and_edit_primary(self, conn):
         _seed_contact(conn, "c1")
         body = contacts_router.contact_detail("c1", _request("/contacts/c1"), conn=conn).body.decode()
         footer_pos = self._footer_pos(body)
         assert 'class="btn danger"' not in body
-        assert _index(body, 'class="detail-delete-link"') > footer_pos
+        assert _index(body, 'aria-label="Delete"') > footer_pos
         assert _index(body, 'class="btn primary"') > footer_pos
         assert 'data-delete-undo-redirect="/contacts"' in body
 

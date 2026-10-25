@@ -1,16 +1,13 @@
 {% from "_inputs.html" import text_input %}
 {% from "_date_time_fields.html" import date_field with context %}
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}Edit {{ uids|length }} {{ noun }}{{ '' if uids|length == 1 else 's' }}{% endblock %}
 {% block content %}
 {# Bulk edit modal for a bulk-select selection. `fields` is a list of
    {name, label, kind: 'select'|'text'|'date', options: [(value, label)]};
    every field starts at "no change", so only what the user fills in is applied. #}
-<div id="modal-target">
-<div class="modal-header">
-<h1>Edit {{ uids|length }} {{ noun }}{{ '' if uids|length == 1 else 's' }}</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="form", title='Edit ' ~ uids|length ~ ' ' ~ noun ~ ('' if uids|length == 1 else 's'), size="small", form='bulk-edit-form', save_icon='check-square') %}
 <form method="post" id="bulk-edit-form" action="{{ post_url }}" data-cc-change="{{ change_type }}" data-cc-action="update">
     {% for uid in uids %}<input type="hidden" name="uids" value="{{ uid }}">{% endfor %}
     <div class="field-grid">
@@ -35,12 +32,5 @@
     {% endfor %}
     </div>
 </form>
-</div>
-{% set footer_back_url = back_url %}
-{% set footer_back_label = 'Cancel' %}
-{% set footer_primary_form = 'bulk-edit-form' %}
-{% set footer_primary_label = 'Apply' %}
-{% set footer_primary_icon = 'check-square' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

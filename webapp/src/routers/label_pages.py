@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, quote
 from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from .. import clock, db, habit_view, recurrence_expand
+from .. import clock, db, habit_view, modules, recurrence_expand
 from .. import tags as tag_store
 from ..deps import EDIT_MODE_KEY, get_db, templates
 from . import dashboard as dashboard_router
@@ -395,6 +395,9 @@ def label_page(name: str, request: Request, conn=Depends(get_db)):
             conn, request, {name}, name, {**label, "tasks_widget": 1}, tasks, label_url(name),
             dashboard_router._page_banner_context(conn, name, name=name), None,
         )
+    module_page = modules.PAGE_TYPES.get(label.get("page_type"))
+    if module_page and module_page.module in modules.enabled_keys():
+        return module_page.render(conn, request, name, label)
     return _sections_page(conn, request, name, label)
 
 

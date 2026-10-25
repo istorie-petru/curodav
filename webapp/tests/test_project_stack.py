@@ -105,16 +105,14 @@ class TestProjectStatus:
         cfg = db.effective_label_config(conn, "P")
         assert db.project_status(conn, cfg) == "Archived"
 
-    def test_a_passed_deadline_archives_and_restoring_clears_the_deadline(self, conn):
-        from src import tags
-
+    def test_a_passed_deadline_archives_nothing_and_restoring_keeps_the_date(self, conn):
         self._cfg(conn, end="2020-01-01")
-        assert tags.archive_past_deadlines(conn, "2026-06-01") == 1
+        assert db.project_status(conn, db.effective_label_config(conn, "P")) == "Active"
+        db.archive_project(conn, "P")
         assert db.project_status(conn, db.effective_label_config(conn, "P")) == "Archived"
         db.unarchive_label(conn, "P")
         cfg = db.effective_label_config(conn, "P")
-        assert db.project_status(conn, cfg) == "Active" and not cfg["has_deadline"]
-        assert tags.archive_past_deadlines(conn, "2026-06-01") == 0
+        assert db.project_status(conn, cfg) == "Active" and cfg["has_deadline"]
 
 
 # --------------------------------------------------------------------- #

@@ -1,25 +1,16 @@
 {% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% from "_task_work_allocations.html" import work_sessions_view, work_sessions_summary with context %}
 {% from "_detail_section.html" import detail_section %}
+{% from "_linked_items.html" import linked_events_view %}
 {% from "_label_pill.html" import label_pill, tag_pill with context %}
 {% from "_detail_cover.html" import detail_cover with context %}
 {% block title %}{{ task.title if task else "Task" }}{% endblock %}
 {% block content %}
-<div id="modal-target" class="modal-stable-height">
 {% if task %}
-<div class="modal-header">
-    <div class="detail-header-inner">
-        {{ detail_cover('var(--cal-accent-' ~ status_colors[task.status] ~ ')', banner, icon('check-square')) }}
-        <div class="detail-heading-row">
-            <div class="detail-heading-text">
-                <h1 class="detail-title">{{ task.title }}</h1>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal-body">
+{% set _cover %}{{ detail_cover('var(--cal-accent-' ~ status_colors[task.status] ~ ')', banner, icon('check-square')) }}{% endset %}
+{% call modal(kind="view", title=((task.title)), size="medium", retire=[{'action': 'delete', 'url': '/tasks/' ~ task.uid ~ '/delete', 'mode': 'undo', 'label': task.title, 'redirect': '/tasks', 'change': 'task'}], edit_url='/tasks/' ~ task.uid ~ '/edit', cover_html=_cover) %}
 {% call detail_section('Details') %}
     <div class="detail-meta-grid">
         {% set _people = object_contacts(request, 'task', task.uid) %}
@@ -68,27 +59,17 @@
 {% if task.description %}
 {% call detail_section('Description') %}<p class="detail-text">{{ task.description }}</p>{% endcall %}
 {% endif %}
+{% if linked_events %}
+{% call detail_section('Linked events', linked_events|length) %}{{ linked_events_view(linked_events) }}{% endcall %}
+{% endif %}
 {% if work_allocations %}
 {% call detail_section('Work sessions', work_allocations|length, work_sessions_summary(work_allocations, work_hours)) %}{{ work_sessions_view(work_allocations, work_hours) }}{% endcall %}
 {% endif %}
-</div>
-
-{% set footer_back_url = '/tasks' %}
-{% set footer_back_label = 'Done' %}
-{% set footer_delete_url = '/tasks/' ~ task.uid ~ '/delete' %}
-{% set footer_delete_mode = 'undo' %}
-{% set footer_delete_label = task.title %}
-{% set footer_delete_redirect = '/tasks' %}
-{% set footer_delete_cc_change = 'task' %}
-{% set footer_primary_href = '/tasks/' ~ task.uid ~ '/edit' %}
-{% set footer_primary_label = 'Edit' %}
-{% set footer_primary_icon = 'edit' %}
-{% include "_modal_footer.html" %}
+{% endcall %}
 {% else %}
-<div class="modal-body">
+{% call modal(kind="view", title="Task not found", size="small") %}
 {{ empty_state('Task not found', size='compact') }}
 <p><a href="/tasks" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Back to tasks</a></p>
-</div>
+{% endcall %}
 {% endif %}
-</div>
 {% endblock %}

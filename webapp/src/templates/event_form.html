@@ -1,20 +1,14 @@
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}{% if event %}Edit event{% else %}New event{% endif %}{% endblock %}
 {% block content %}
-<div id="modal-target" class="modal-stable-height">
-{% if event and series_member | default(false) %}
-<div class="modal-header">
-<div class="modal-header-split">
-<h1>Event</h1>
-<h1>The whole series</h1>
-</div>
-</div>
-{% else %}
-<div class="modal-header">
-<h1>{% if event %}Edit event{% else %}New event{% endif %}</h1>
-</div>
-{% endif %}
-<div class="modal-body">
+{% set _series = event and series_member | default(false) %}
+{% call modal(kind="form", title=('Event' if _series else ('Edit event' if event else 'New event')), split_title=('The whole series' if _series else none), size="medium",
+              back=(('/events/' ~ event.uid ~ ('?occurrence_date=' ~ occurrence_date if occurrence_date and event.recurrence else '')) if event else none), back_name=(event.title if event else none),
+              retire=([{'action': 'delete', 'url': '/events/' ~ event.uid ~ '/delete-scope' ~ ('?occurrence_date=' ~ (occurrence_date | urlencode) if occurrence_date else ''), 'mode': 'link'} if (event.recurrence or event.series_uid) else {'action': 'delete', 'url': '/events/' ~ event.uid ~ '/delete', 'mode': 'undo', 'label': event.title, 'redirect': '/calendar', 'change': 'event'}] if event else none),
+              form='event-form', creating=(not event), save_label=('Save this event' if _series else none),
+              save_options=([{'label': 'This and following events', 'icon': 'check-square', 'form': 'event-form', 'name': 'series_scope', 'value': 'following'}, {'label': 'All events in the series', 'icon': 'check-square', 'form': 'event-form', 'name': 'series_scope', 'value': 'all'}] if _series else none),
+              save_alt_label=('Save series' if _series else none)) %}
 {% if event and series_member | default(false) %}
 {# A repeating event edits in two panes, like the new-item window: this event alone on the left, the series on the right. #}
 {% set series_split = true %}
@@ -44,33 +38,5 @@
 </form>
 </div>
 {% endif %}
-</div>
-{% if event %}
-{% set footer_back_url = '/events/' ~ event.uid ~ ('?occurrence_date=' ~ occurrence_date if occurrence_date and event.recurrence else '') %}
-{% set footer_back_mode = 'modal' %}
-{% else %}
-{% set footer_back_url = '/calendar' %}
-{% endif %}
-{% set footer_back_label = 'Cancel' %}
-{% if event %}
-{% if event.recurrence or event.series_uid %}
-{% set footer_delete_url = '/events/' ~ event.uid ~ '/delete-scope' ~ ('?occurrence_date=' ~ (occurrence_date | urlencode) if occurrence_date else '') %}
-{% set footer_delete_mode = 'link' %}
-{% else %}
-{% set footer_delete_url = '/events/' ~ event.uid ~ '/delete' %}
-{% set footer_delete_mode = 'undo' %}
-{% endif %}
-{% set footer_delete_label = event.title %}
-{% set footer_delete_redirect = '/calendar' %}
-{% set footer_delete_cc_change = 'event' %}
-{% endif %}
-{% set footer_primary_form = 'event-form' %}
-{% set footer_primary_label = 'Save this event' if event and series_member | default(false) else 'Save' %}
-{% set footer_primary_icon = 'check-square' %}
-{% if event and series_member | default(false) %}
-{% set footer_primary_menu = [{'label': 'This and following events', 'icon': 'check-square', 'form': 'event-form', 'name': 'series_scope', 'value': 'following'}, {'label': 'All events in the series', 'icon': 'check-square', 'form': 'event-form', 'name': 'series_scope', 'value': 'all'}] %}
-{% set footer_primary_alt_label = 'Save series' %}
-{% endif %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

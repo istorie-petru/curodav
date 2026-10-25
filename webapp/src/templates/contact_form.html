@@ -1,11 +1,8 @@
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}{% if contact and not draft_uid %}Edit contact{% else %}New contact{% endif %}{% endblock %}
 {% block content %}
-<div id="modal-target" class="modal-stable-height">
-<div class="modal-header">
-<h1>{% if contact and not draft_uid %}Edit contact{% else %}New contact{% endif %}</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="form", title=((('Edit contact' if contact and not draft_uid else 'New contact'))), size="medium", back=(('/contacts/' ~ contact.uid if (contact and not draft_uid) else ('/contacts' if not (contact and not draft_uid) else none)) if (('modal' if (contact and not draft_uid) else none)) == 'modal' else none), back_name='the previous window', retire=([({'action': 'archive', 'url': '/contacts/' ~ contact.uid ~ '/archive', 'restore_url': ('/contacts/' ~ contact.uid ~ '/unarchive' if (contact) else none), 'archived': contact.archived_at, 'confirm': none, 'change': 'contact'} if (contact) else none)] | select | list), form='contact-form', creating=(not (contact and not draft_uid)), save_icon='check-square') %}
 {% if draft_uid %}<span data-discard-url="/contacts/{{ draft_uid }}/discard" hidden></span>{% endif %}
 <div class="card">
 <form method="post" id="contact-form" action="{% if contact and not draft_uid %}/contacts/{{ contact.uid }}{% else %}/contacts{% endif %}" enctype="multipart/form-data" data-cc-change="contact" data-cc-action="{% if contact %}edit{% else %}create{% endif %}">
@@ -13,18 +10,5 @@
     {% include "_contact_form_fields.html" %}
 </form>
 </div>
-</div>
-{% if contact and not draft_uid %}
-{% set footer_back_url = '/contacts/' ~ contact.uid %}
-{% set footer_back_mode = 'modal' %}
-{% else %}
-{% set footer_back_url = '/contacts' %}
-{% endif %}
-{% set footer_back_label = 'Cancel' %}
-{% if contact %}{% set footer_archive_url = '/contacts/' ~ contact.uid ~ '/archive' %}{% set footer_unarchive_url = '/contacts/' ~ contact.uid ~ '/unarchive' %}{% set footer_archived = contact.archived_at %}{% set footer_archive_change = 'contact' %}{% endif %}
-{% set footer_primary_form = 'contact-form' %}
-{% set footer_primary_label = 'Save' %}
-{% set footer_primary_icon = 'check-square' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

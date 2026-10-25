@@ -1,21 +1,13 @@
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% from "_detail_cover.html" import detail_cover with context %}
 {% from "_label_pill.html" import label_pill with context %}
 {% from "_detail_section.html" import detail_section %}
 {% block title %}{{ group.name }}{% endblock %}
 {% block content %}
-<div id="modal-target" class="modal-stable-height">
-<div class="modal-header">
-    <div class="detail-header-inner">
-        {{ detail_cover('var(--cal-accent-' ~ (group.color or 'gray') ~ ')', banner, icon(group.icon or group_default_icon)) }}
-        <div class="detail-heading-row">
-            <div class="detail-heading-text">
-                <h1 class="detail-title">{{ group.name }}</h1>
-            </div>
-        </div>
-    </div>
-</div>
-<div class="modal-body">
+{% set _extra %}<a class="btn ghost" href="/groups/{{ group.name|urlencode }}">{{ icon('external-link', 'icon-sm') }} Open page</a>{% endset %}
+{% set _cover %}{{ detail_cover('var(--cal-accent-' ~ (group.color or 'gray') ~ ')', banner, icon(group.icon or group_default_icon)) }}{% endset %}
+{% call modal(kind="view", title=((group.name)), size="medium", extra_html=_extra, retire=[{'action': 'delete', 'url': '/groups/' ~ (group.name|urlencode) ~ '/delete', 'mode': 'confirm', 'label': 'Delete the space "' ~ group.name ~ '"? Its shelves stay, ungrouped.', 'redirect': none, 'change': none}], edit_url='/groups/' ~ (group.name|urlencode) ~ '/edit', cover_html=_cover) %}
 {% call detail_section('Details') %}
     <div class="detail-meta-grid">
         <div class="detail-meta-item">
@@ -34,16 +26,5 @@
         {% endif %}
     </div>
 {% endcall %}
-</div>
-{% set footer_back_label = 'Done' %}
-{% set footer_back_url = '/settings/groups' %}
-{% set footer_delete_url = '/groups/' ~ (group.name|urlencode) ~ '/delete' %}
-{% set footer_delete_mode = 'confirm' %}
-{% set footer_delete_label = 'Delete the space "' ~ group.name ~ '"? Its shelves stay, ungrouped.' %}
-{% set footer_extra_html %}<a class="btn ghost" href="/groups/{{ group.name|urlencode }}">{{ icon('external-link', 'icon-sm') }} Open page</a>{% endset %}
-{% set footer_primary_href = '/groups/' ~ (group.name|urlencode) ~ '/edit' %}
-{% set footer_primary_label = 'Edit' %}
-{% set footer_primary_icon = 'edit' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

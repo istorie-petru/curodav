@@ -1,15 +1,10 @@
 {% from "_inputs.html" import text_input %}
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% from "_notebook_field_option_row.html" import notebook_field_option_row %}
-{% from "_modal_header_back.html" import modal_header_back %}
 {% block title %}{{ "Edit field" if f else "Add field" }}{% endblock %}
 {% block content %}
-<div id="modal-target" class="modal-stable-height">
-<div class="modal-header">
-{{ modal_header_back(crumbs[-1].url if crumbs else '', crumbs[-1].name if crumbs else '') }}
-<h1>{{ "Edit field" if f else "Add field" }}</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="form", title=(("Edit field" if f else "Add field")), size="medium", back=(crumbs[-1].url if crumbs else ''), back_name=(crumbs[-1].name if crumbs else ''), retire=([({'action': 'delete', 'url': '/settings/notebook/' ~ f.uid ~ '/delete', 'mode': 'confirm', 'label': 'Delete "' ~ (f.label or f.key) ~ '"? Notes keep any values already stored under it.' ~ (' It is also removed from these templates: ' ~ (using_templates | map(attribute='title') | join(', ')) ~ '.' if using_templates else ''), 'redirect': none, 'change': none} if (f and not f.builtin) else none)] | select | list), form='notebook-field-form', creating=(not f), save_icon='check-square') %}
 <div class="card">
 <form method="post" id="notebook-field-form" action="{{ form_action }}">
     <div class="field-grid notebook-field-form-grid" data-field-type="{{ f.type if f else 'text' }}">
@@ -60,20 +55,7 @@
     </div>
 </form>
 </div>
-</div>
-{% set footer_back_url = '/settings/notebook' %}
-{% set footer_back_mode = 'cancel' %}
-{% set footer_back_label = 'Cancel' %}
-{% if f and not f.builtin %}
-{% set footer_delete_url = '/settings/notebook/' ~ f.uid ~ '/delete' %}
-{% set footer_delete_mode = 'confirm' %}
-{% set footer_delete_label = 'Delete "' ~ (f.label or f.key) ~ '"? Notes keep any values already stored under it.' ~ (' It is also removed from these templates: ' ~ (using_templates | map(attribute='title') | join(', ')) ~ '.' if using_templates else '') %}
-{% endif %}
-{% set footer_primary_form = 'notebook-field-form' %}
-{% set footer_primary_label = 'Save' %}
-{% set footer_primary_icon = 'check-square' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}
 <!-- No extra_scripts block here -- like holiday_edit_modal.html, this page
      is only ever opened via data-modal, so anything outside #modal-target

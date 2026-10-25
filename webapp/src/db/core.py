@@ -274,6 +274,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "event_task_relations", "hours_estimate", "REAL")
     _ensure_column(conn, "event_task_relations", "difficulty", "TEXT")
     _ensure_column(conn, "event_task_relations", "own_title", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "event_task_relations", "kind", "TEXT")
     conn.execute("UPDATE contacts SET org = NULL WHERE org = 'None'")
     conn.execute("UPDATE contacts SET phone = NULL WHERE phone = 'None'")
     conn.execute("UPDATE contacts SET email = NULL WHERE email = 'None'")

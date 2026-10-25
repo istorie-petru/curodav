@@ -1,0 +1,13 @@
+{# The linked-events (task form) or linked-tasks (event form) field. Set link_label, link_name, link_form_id before the
+   include; link_candidates and link_selected come from the router. Saved with the form (update_task, update_event). #}
+{% if link_candidates or link_selected %}
+<input type="hidden" name="links_present" value="1" form="{{ link_form_id }}">
+{% set ms_mode = 'select' %}
+{% set ms_form_id = link_form_id %}
+{% set ms_name = link_name %}
+{% set ms_label = link_label %}
+{% set ms_items = link_candidates %}
+{% set ms_selected = link_selected %}
+{% set ms_search_always = true %}
+{% include "_widget_list_multiselect.html" %}
+{% endif %}

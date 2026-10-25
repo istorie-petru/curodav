@@ -1,15 +1,12 @@
 {% from "_inputs.html" import checkbox_input, number_input, text_input, textarea_input %}
 {% from "_form_rows.html" import title_row, title_date_row %}
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}{% if task %}Edit habit{% else %}New habit{% endif %}{% endblock %}
 {% block content %}
 {% from "_look_picker.html" import look_picker %}
 {% from "_task_work_allocations.html" import work_sessions_edit with context %}
-<div id="modal-target" class="modal-height-md">
-<div class="modal-header">
-<h1>{% if task %}Edit habit{% else %}New habit{% endif %}</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="form", title=((('Edit habit' if task else 'New habit'))), size="medium", back=(('/tasks/' ~ task.uid if (task) else ('/habits' if not (task) else none)) if (('modal' if (task) else none)) == 'modal' else none), back_name='the previous window', retire=([({'action': 'archive', 'url': '/tasks/' ~ task.uid ~ '/archive', 'restore_url': ('/tasks/' ~ task.uid ~ '/unarchive' if (task) else none), 'archived': task.status == 'archived', 'confirm': none, 'change': 'task'} if (task) else none), ({'action': 'delete', 'url': '/tasks/' ~ task.uid ~ '/delete', 'mode': 'undo', 'label': task.title, 'redirect': '/tasks', 'change': 'task'} if (task) else none)] | select | list), form='habit-task-form', creating=(not task), save_icon='check-square') %}
 <div class="card">
 {% set _rep0 = habit_repeat_choice(task, week_start(request)) %}
 <form method="post" id="habit-task-form" data-repeat="{{ _rep0.mode }}" data-goal="{{ 'amount' if task and (task.target_per_day or 1) > 1 else 'once' }}" class="habit-task-form{% if task and task.habit_kind == 'avoid' %} is-avoid{% endif %}" action="{% if task %}/tasks/{{ task.uid }}{% else %}/tasks{% endif %}" data-cc-change="task" data-cc-action="{% if task %}edit{% else %}create{% endif %}">
@@ -109,28 +106,5 @@
 {% if task %}
 {% endif %}
 </div>
-</div>
-{% if task %}
-{% set footer_back_url = '/tasks/' ~ task.uid %}
-{% set footer_back_mode = 'modal' %}
-{% else %}
-{% set footer_back_url = '/habits' %}
-{% endif %}
-{% set footer_back_label = 'Cancel' %}
-{% if task %}
-{% set footer_delete_url = '/tasks/' ~ task.uid ~ '/delete' %}
-{% set footer_delete_mode = 'undo' %}
-{% set footer_delete_label = task.title %}
-{% set footer_delete_redirect = '/tasks' %}
-{% set footer_delete_cc_change = 'task' %}
-{% set footer_archive_url = '/tasks/' ~ task.uid ~ '/archive' %}
-{% set footer_unarchive_url = '/tasks/' ~ task.uid ~ '/unarchive' %}
-{% set footer_archived = task.status == 'archived' %}
-{% set footer_archive_change = 'task' %}
-{% endif %}
-{% set footer_primary_form = 'habit-task-form' %}
-{% set footer_primary_label = 'Save' %}
-{% set footer_primary_icon = 'check-square' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

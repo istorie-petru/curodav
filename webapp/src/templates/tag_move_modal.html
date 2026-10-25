@@ -1,11 +1,8 @@
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}Move tag{% endblock %}
 {% block content %}
-<div id="modal-target">
-<div class="modal-header">
-<h1>Move "{{ tag.name }}"</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="pick", title='Move "' ~ tag.name ~ '"', size="small", form='tag-move-form', save_label='Move', save_icon='move') %}
 <div class="card">
 <form method="post" id="tag-move-form" action="/settings/tags/move">
     <input type="hidden" name="name" value="{{ tag.name }}">
@@ -19,12 +16,5 @@
     {% include "_widget_list_multiselect.html" %}
 </form>
 </div>
-</div>
-{% set footer_back_url = '/settings/tags' %}
-{% set footer_back_label = 'Cancel' %}
-{% set footer_primary_form = 'tag-move-form' %}
-{% set footer_primary_label = 'Move' %}
-{% set footer_primary_icon = 'move' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

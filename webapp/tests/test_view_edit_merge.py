@@ -147,10 +147,8 @@ class TestSharedFooterPartial:
         assert 'form="event-form"' in form
         assert "> Save</a>" not in view  # the view's primary is Edit, not Save
 
-    def test_edit_cancel_returns_to_the_view_modal_not_close(self, conn):
-        """2026-08-08 direct feedback: on an edit form, the footer Cancel
-        goes BACK to the detail view modal (a data-modal link into the
-        view URL), while the modal's X is the only way to fully close."""
+    def test_edit_back_returns_to_the_view_and_cancel_closes(self, conn):
+        """Modal contract: the header Back chevron returns to the detail view, the footer Cancel always closes."""
         _seed_event(conn, "e1")
         _seed_task(conn, "t1")
         _seed_contact(conn, "c1")
@@ -160,14 +158,9 @@ class TestSharedFooterPartial:
             (self.FORMS["contact"](conn, "c1").body.decode(), "/contacts/c1"),
         ]
         for body, view_url in cases:
-            # The back link is a data-modal link to the detail view, not a
-            # data-modal-cancel that closes the window.
-            ghost = body.index('class="btn ghost"')
-            back = body[body.rfind("<a ", 0, ghost):body.index("</a>", ghost)]
-            assert 'data-modal-cancel' not in back
-            assert f'href="{view_url}"' in back
-            assert "> Cancel</a>" in body
-
+            header, footer = body.split('<div class="modal-footer">')
+            assert f'class="icon-btn modal-header-back" href="{view_url}' in header
+            assert 'data-modal-cancel>Cancel</a>' in footer
     def test_new_form_cancel_still_closes_via_data_modal_cancel(self, conn):
         # A brand-new object has no detail view to return to, so its Cancel
         # stays a plain data-modal-cancel close.
@@ -188,7 +181,7 @@ class TestSharedFooterPartial:
         # contact).
         _seed_task(conn, "t1")
         body = self.FORMS["task"](conn, "t1").body.decode()
-        assert 'class="detail-delete-link"' in body
+        assert 'aria-label="Delete"' in body.split('class="modal-footer"')[1]
         assert 'class="btn danger"' not in body
         _seed_contact(conn, "c1")
         body = self.FORMS["contact"](conn, "c1").body.decode()

@@ -72,13 +72,12 @@ def test_folded_projects_become_tags_under_one_label_with_the_latest_deadline():
     assert tags.tags_for_object(conn, "task", "t1") == ["Maths"]
 
 
-def test_label_deadline_archives_and_restore_clears_it():
+def test_a_passed_label_deadline_archives_nothing_and_restore_keeps_the_date():
     conn = _conn()
-    conn.execute("INSERT INTO label_config (name, has_deadline, deadline_date) VALUES ('Old', 1, '2026-01-01'), ('Soon', 1, '2099-01-01')")
-    assert tags.archive_past_deadlines(conn, "2026-10-23") == 1
-    assert tags.archive_past_deadlines(conn, "2026-10-23") == 0
+    conn.execute("INSERT INTO label_config (name, has_deadline, deadline_date, archived_at) VALUES ('Old', 1, '2026-01-01', '2026-02-01')")
+    assert not hasattr(tags, "archive_past_deadlines") and not hasattr(tags, "start_archive_job")
     tags.restore(conn, "Old")
-    assert conn.execute("SELECT archived_at, deadline_date FROM label_config WHERE name = 'Old'").fetchone()[:] == (None, None)
+    assert conn.execute("SELECT archived_at, deadline_date FROM label_config WHERE name = 'Old'").fetchone()[:] == (None, "2026-01-01")
 
 
 def test_tag_tables_migrations_are_registered():

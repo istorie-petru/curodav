@@ -8,7 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import db, tags
+from .. import db, modules, tags
 from ..deps import get_db, templates
 
 router = APIRouter(prefix="/settings/taxonomy", tags=["taxonomy"])
@@ -93,6 +93,9 @@ def move_tag_modal(request: Request, name: str, conn=Depends(get_db)):
     tag = tags.get_tag(conn, name)
     if not tag:
         raise HTTPException(404, f"There is no tag named {name}")
+    owner = tags.managed_by(conn, tag["label_name"])
+    if owner:
+        return templates.TemplateResponse("managed_notice_modal.html", {"request": request, "name": tag["name"], "module": modules.get(owner)})
     shelves = sorted((l["name"] for l in db.list_labels(conn) if l["name"] != tag["label_name"] and not l.get("archived_at")), key=str.lower)
     return templates.TemplateResponse("tag_move_modal.html", {"request": request, "tag": tag, "shelf_names": shelves})
 

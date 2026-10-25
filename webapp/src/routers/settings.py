@@ -68,7 +68,7 @@ from .. import log as app_log
 from .. import perf
 from ..log import get_logger
 from .. import clock, auth, config, data_health, db, env_file, event_series, finance, finance_stats, flairs, offline_sync, push, release, reminders
-from ..header_views import SETTINGS_GROUPS
+from ..header_views import current_settings_groups
 from ..image_sniff import sniff_image_type
 from ..deps import (
     ACCENT_COLOR_KEY,
@@ -103,10 +103,14 @@ HUB_DESCRIPTIONS = {
     "Modules": "Notebook layout and entry types, finance accounts",
     "System": "Backups and maintenance, published lists, logs",
 }
-HUB_GROUPS = [
-    {"url": g["items"][0][1], "icon": g["icon"], "name": g["name"], "desc": HUB_DESCRIPTIONS[g["name"]], "views": [{"name": text, "url": url} for text, url in g["items"]]}
-    for g in SETTINGS_GROUPS
-]
+def _hub_groups() -> list[dict]:
+    return [
+        {"url": g["items"][0][1], "icon": g["icon"], "name": g["name"], "desc": HUB_DESCRIPTIONS[g["name"]], "views": [{"name": text, "url": url} for text, url in g["items"]]}
+        for g in current_settings_groups()
+    ]
+
+
+HUB_GROUPS = _hub_groups()
 HUB_CATEGORIES = [{"url": v["url"], "name": v["name"], "group": g["name"]} for g in HUB_GROUPS for v in g["views"]]
 
 # Breadcrumb roots shared by every settings_*.html page below.
@@ -133,8 +137,8 @@ def settings_index(request: Request, conn=Depends(get_db)):
     ctx = {
         "request": request,
         "active_tab": "settings",
-        "groups": HUB_GROUPS,
-        "categories": HUB_CATEGORIES,
+        "groups": (_groups := _hub_groups()),
+        "categories": [{"url": v["url"], "name": v["name"], "group": g["name"]} for g in _groups for v in g["views"]],
         "conflict_count": len(status["conflicts"]),
         "release_version": release.VERSION,
         "release_title": release.TITLE,

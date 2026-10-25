@@ -62,6 +62,13 @@ def time_block_days(row: dict[str, Any]) -> list[str]:
 
 PAGE_TYPES = ("sections", "dashboard", "secretariat")
 PAGE_TYPE_LABELS = {"sections": "Sections", "dashboard": "Widget dashboard", "secretariat": "Secretariat"}
+
+
+def page_types() -> dict[str, str]:
+    """Every page type a shelf may use now: the built-in ones plus those of the enabled modules, key to label."""
+    from .. import modules
+
+    return {**PAGE_TYPE_LABELS, **modules.page_types()}
 _LABEL_PAGE_TYPE_MIGRATED_KEY = "label_page_type_migrated_v1"
 HOME_PAGE_TYPE_KEY = "home_page_type"
 
@@ -87,7 +94,7 @@ def set_home_page_type(conn: sqlite3.Connection, page_type: str) -> None:
 
 def get_group_page_type(conn: sqlite3.Connection, group: str) -> str:
     row = get_group(conn, group) or {}
-    return row.get("page_type") if row.get("page_type") in PAGE_TYPES else "dashboard"
+    return row.get("page_type") if row.get("page_type") in page_types() else "dashboard"
 
 
 def set_group_page_type(conn: sqlite3.Connection, group: str, page_type: str) -> None:

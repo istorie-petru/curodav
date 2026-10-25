@@ -1,0 +1,84 @@
+{# The modal skeleton (modal-system contract). One macro writes #modal-target, the header, the body and the footer.
+   Usage: {% from "_modal.html" import modal %}{% call modal(kind="question", title="Delete 'x'?", size="small", back=url, back_name="x") %}...{% endcall %}
+   Kinds: view, form, pick, question, manage. Sizes: small, medium, large.
+   Back is the header chevron and is shown only when `back` is given; Cancel is the footer button, always closes.
+   retire: list of {"action": "archive"|"delete", ...}. Archive: url, restore_url, archived, confirm, change.
+   Delete: url, mode ("undo" | "confirm" | "link"), label, redirect, change.
+   split_title: a second heading for the two-pane header (the event series). save_alt_label: label the split main button takes when rule fields change.
+   subtitle_html: lines under the title in a cover header (contact role and organisation).
+   cover_html: the cover block (.detail-cover-wrap) for a header with a cover image.
+   creating: a form that makes a new object says Create; one that changes an object says Save. save_label overrides both for the actions that are neither.
+   save_options (form only): list of {label, icon, form, name, value}, turns the primary into a split button. #}
+{% from "_modal_header_back.html" import modal_header_back %}
+{% set MODAL_SIZES = {'small': '', 'medium': 'modal-stable-height', 'large': 'modal-height-lg'} %}
+{% set MODAL_KINDS = ['view', 'form', 'pick', 'question', 'manage'] %}
+
+{% macro modal_retire(retire) %}
+{% macro retire_item(r, as_menu) %}
+{% if r.action == 'archive' %}
+<form method="post" action="{{ r.restore_url if r.archived else r.url }}" class="form-inline"{% if r.confirm and not r.archived %} data-confirm-sheet="{{ r.confirm }}"{% endif %}{% if r.change %} data-cc-change="{{ r.change }}"{% endif %}>
+    <button type="submit" class="{{ 'action-menu-item' if as_menu else 'icon-btn' }}"{% if as_menu %} role="menuitem"{% else %} title="{{ 'Restore' if r.archived else 'Archive' }}" aria-label="{{ 'Restore' if r.archived else 'Archive' }}"{% endif %}>{{ icon('rotate-ccw' if r.archived else 'archive', 'icon-sm') }}{% if as_menu %} {{ 'Restore' if r.archived else 'Archive' }}{% endif %}</button>
+</form>
+{% elif r.mode == 'link' %}
+<a href="{{ r.url }}" class="{{ 'action-menu-item danger' if as_menu else 'icon-btn danger' }}" data-modal{% if as_menu %} role="menuitem"{% else %} title="Delete" aria-label="Delete"{% endif %}>{{ icon('trash', 'icon-sm') }}{% if as_menu %} Delete{% endif %}</a>
+{% else %}
+<form method="post" action="{{ r.url }}" class="form-inline"{% if r.mode == 'confirm' %} data-confirm-sheet="{{ r.label }}"{% else %} data-delete-undo="{{ r.label }}" data-delete-undo-redirect="{{ r.redirect }}"{% endif %}{% if r.change %} data-cc-change="{{ r.change }}"{% endif %}>
+    <button type="submit" class="{{ 'action-menu-item danger' if as_menu else 'icon-btn danger' }}"{% if as_menu %} role="menuitem"{% else %} title="Delete" aria-label="Delete"{% endif %}>{{ icon('trash', 'icon-sm') }}{% if as_menu %} Delete{% endif %}</button>
+</form>
+{% endif %}
+{% endmacro %}
+{% if retire|length == 1 %}
+{{ retire_item(retire[0], false) }}
+{% elif retire %}
+<div class="action-menu modal-retire">
+    <button type="button" class="action-menu-trigger icon-btn" aria-label="Archive or delete" aria-haspopup="true" aria-expanded="false" title="Archive or delete">{{ icon('archive', 'icon-sm') }}</button>
+    <div class="action-menu-panel" role="menu"><div class="action-menu-section">
+        {% for r in retire %}{{ retire_item(r, true) }}{% endfor %}
+    </div></div>
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro modal(kind, title, size='medium', back=None, back_name=None, id=None, form=None, cancel_url=None, save_label=None, creating=False, save_icon='check-square', save_id=None, save_options=None, save_alt_label=None, split_title=None, cover_html=None, subtitle_html=None, retire=None, edit_url=None, done_url=None, extra_html=None) %}
+{% set _save = save_label or ('Create' if creating else 'Save') %}
+{% if kind not in MODAL_KINDS %}{{ raise_error('Unknown modal kind: ' ~ kind) }}{% endif %}
+{% if size not in MODAL_SIZES %}{{ raise_error('Unknown modal size: ' ~ size) }}{% endif %}
+<div id="modal-target"{% if MODAL_SIZES[size] %} class="{{ MODAL_SIZES[size] }}"{% endif %}{% if id %} data-modal-id="{{ id }}"{% endif %}>
+<div class="modal-header">
+{{ modal_header_back(back, back_name or 'the previous window') }}
+{% if cover_html %}<div class="detail-header-inner">{{ cover_html|safe }}<div class="detail-heading-row"><div class="detail-heading-text"><h1 class="detail-title">{{ title }}</h1>{% if subtitle_html %}{{ subtitle_html|safe }}{% endif %}</div></div></div>{% elif split_title %}<div class="modal-header-split"><h1>{{ title }}</h1><h1>{{ split_title }}</h1></div>{% else %}<h1>{{ title }}</h1>{% endif %}
+</div>
+<div class="modal-body">
+{{ caller() }}
+</div>
+<div class="modal-footer">
+{% if kind in ('form', 'pick', 'question') %}
+<a href="{{ cancel_url or '#' }}" class="btn ghost" data-modal-cancel>Cancel</a>
+{% elif kind in ('view', 'manage') %}
+<a href="{{ done_url or '#' }}" class="btn ghost" data-modal-cancel>Done</a>
+{% endif %}
+{% if retire and kind in ('form', 'view') %}{{ modal_retire(retire) }}{% endif %}
+<span class="spacer"></span>
+{% if extra_html %}{{ extra_html|safe }}{% endif %}
+{% if kind == 'view' and edit_url %}
+<a class="btn primary" href="{{ edit_url }}" data-modal>{{ icon('edit', 'icon-sm') }} Edit</a>
+{% elif kind in ('form', 'pick') and form %}
+{% if save_options %}
+<div class="btn-split">
+    <button type="submit" form="{{ form }}" class="btn primary btn-split-main"{% if save_alt_label %} data-split-main data-label-alt="{{ save_alt_label }}"{% endif %}>{{ icon(save_icon, 'icon-sm') }} <span class="btn-split-label">{{ _save }}</span></button>
+    <div class="action-menu btn-split-more">
+        <button type="button" class="action-menu-trigger btn primary btn-split-trigger" aria-label="More options">{{ icon('chevron-down', 'icon-sm') }}</button>
+        <div class="action-menu-panel" role="menu"><div class="action-menu-section">
+            {% for it in save_options %}
+            <button type="button" class="action-menu-item" role="menuitem" data-submit-form="{{ it.form }}" data-set-name="{{ it.name }}" data-set-value="{{ it.value }}">{{ icon(it.icon, 'icon-sm') }} {{ it.label }}</button>
+            {% endfor %}
+        </div></div>
+    </div>
+</div>
+{% else %}
+<button type="submit"{% if save_id %} id="{{ save_id }}"{% endif %} form="{{ form }}" class="btn primary">{{ icon(save_icon, 'icon-sm') }} {{ _save }}</button>
+{% endif %}
+{% endif %}
+</div>
+</div>
+{% endmacro %}

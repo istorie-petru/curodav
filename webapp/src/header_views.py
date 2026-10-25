@@ -38,13 +38,21 @@ SETTINGS_GROUPS = [
 ]
 
 
+def current_settings_groups() -> list[dict]:
+    """SETTINGS_GROUPS with the Settings entries of the enabled modules added under Modules."""
+    from . import modules
+
+    extra = modules.settings_items()
+    return [{**g, "items": [*g["items"], *extra]} if g["name"] == "Modules" else g for g in SETTINGS_GROUPS]
+
+
 def settings_group(request) -> dict | None:
     """The settings group the request's page belongs to, with its views; None outside Settings."""
     try:
         path = request.scope.get("path", "")
     except AttributeError:
         return None
-    for group in SETTINGS_GROUPS:
+    for group in current_settings_groups():
         for _, url in group["items"]:
             if path == url or path.startswith(url + "/"):
                 views = [{"key": url, "label": text, "url": url, "active": url == _owner(group, path)} for text, url in group["items"]]

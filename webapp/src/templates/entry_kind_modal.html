@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% from "_inputs.html" import text_input %}
 {% block title %}{{ kind.name or 'New entry type' }}{% endblock %}
 {% block content %}
@@ -13,11 +14,7 @@
     <button type="button" class="icon-btn" data-repeatable-remove title="Remove field" aria-label="Remove field">{{ icon('x', 'icon-sm') }}</button>
 </div>
 {% endmacro %}
-<div id="modal-target">
-<div class="modal-header">
-<h1>{{ kind.name or 'New entry type' }}</h1>
-</div>
-<div class="modal-body">
+{% call modal(kind="form", title=((kind.name or 'New entry type')), size="small", retire=([({'action': 'delete', 'url': '/settings/notebook/entry-kinds/delete?name=' ~ (kind.name | urlencode), 'mode': 'confirm', 'label': 'Delete the "' ~ kind.name ~ '" type?', 'redirect': none, 'change': none} if (not is_new and kind.name != 'Term') else none)] | select | list), form='entry-kind-form', creating=(not kind.name), save_icon='check-square') %}
 <form method="post" id="entry-kind-form" action="/settings/notebook/entry-kinds" data-follow-redirect>
     <input type="hidden" name="original" value="{{ kind.name }}">
     <div class="field-grid">
@@ -37,18 +34,5 @@
         </div>
     </div>
 </form>
-</div>
-{% set footer_back_url = '/settings/notebook' %}
-{% set footer_back_mode = 'cancel' %}
-{% set footer_back_label = 'Cancel' %}
-{% if not is_new and kind.name != 'Term' %}
-{% set footer_delete_url = '/settings/notebook/entry-kinds/delete?name=' ~ (kind.name | urlencode) %}
-{% set footer_delete_mode = 'confirm' %}
-{% set footer_delete_label = 'Delete the "' ~ kind.name ~ '" type?' %}
-{% endif %}
-{% set footer_primary_form = 'entry-kind-form' %}
-{% set footer_primary_label = 'Save' %}
-{% set footer_primary_icon = 'check-square' %}
-{% include "_modal_footer.html" %}
-</div>
+{% endcall %}
 {% endblock %}

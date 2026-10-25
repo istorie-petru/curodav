@@ -1271,6 +1271,7 @@ def event_detail(uid: str, request: Request, occurrence_date: str | None = None,
             "occurrence_date": occurrence_date,
             "occurrence_override": occurrence_override,
             "banner": db.banner_for_object(conn, "event", event) if event else None,
+            "linked_tasks": db.links_for_event(conn, uid) if event else [],
         },
     )
 
@@ -1338,6 +1339,8 @@ def edit_event_form(uid: str, request: Request, occurrence_date: str | None = No
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
             **db.project_picker_context(conn),
             "holiday_calendar_names": db.list_holiday_calendar_names(conn),
+            "link_candidates": db.link_candidate_tasks(conn, event) if event else [],
+            "link_selected": [link["task"]["uid"] for link in db.links_for_event(conn, uid)] if event else [],
         },
     )
 
@@ -1405,6 +1408,8 @@ def update_event(
     exclude_sunday: str = Form(""),
     contacts: list[str] = Form([]),
     contacts_present: str = Form(""),
+    links_present: str = Form(""),
+    linked_task_uids: list[str] = Form([]),
     occurrence_date: str = Form(""),
     occ_start_at: str = Form(""),
     occ_end_at: str = Form(""),
@@ -1468,6 +1473,8 @@ def update_event(
             db.upsert_task(conn, task_row)
     if resolved is not None and not existing.get("series_uid") and not _clean_field(recurrence):
         db.set_object_contacts(conn, "event", row["uid"], resolved)
+    if links_present == "1":
+        db.sync_event_links(conn, row["uid"], linked_task_uids)
     if item_tags_field == "1":
         scope = series_scope if isinstance(series_scope, str) and series_scope in ("this", "following", "all") else "this"
         _record_event_tags(conn, row["uid"], item_tags, scope)

@@ -6,6 +6,13 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [4.7.0]
+
+- Modal windows: every modal is now built from one skeleton, so the same things sit in the same places. The header has the Back arrow (only when the window was opened from another), the title and the close button. The footer has Cancel or Done on the left, then one Archive and Delete button, then the one filled button on the right. Back always returns to the previous window and Cancel always closes. New objects say Create and existing ones say Save. The Settings pages and a few special dialogs keep their own layout.
+- Archiving is manual: a shelf deadline no longer archives the shelf. Archive and Restore are the only ways, and restoring keeps the deadline.
+- Tasks and events link to each other with a kind (related, work session or exam). The task edit window has a Linked events field and the event edit window a Linked tasks field, and both detail windows list the links. One data step names the kind of existing links (it takes a backup first); work session hours, difficulty and titles are untouched.
+- Groundwork for modules: a shelf can be marked as managed by a module, which makes it read only in Organise and refuses changes from anywhere but that module's own settings, including from sync and the API. Modules can register their own page type and Settings entry, and a University module exists in the code but is off and shows nothing. A new data step adds its tables.
+
 ## [4.6.2]
 
 - Repeating events: every occurrence now carries the event's tags, so the tag colour shows on all of them, not only the first. Occurrences added later copy the tags too, and a data step fixes existing series (it takes a backup first).
