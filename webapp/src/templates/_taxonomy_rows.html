@@ -30,6 +30,7 @@
             "/labels/" ~ (l.name|urlencode),
             duplicate_url="/settings/labels/new?copy=" ~ (l.name|urlencode)
         ) %}
+        <a href="/settings/labels/{{ l.name|urlencode }}/merge-modal" class="icon-btn" data-modal title="Merge {{ l.name }} into another {{ noun }}" aria-label="Merge {{ l.name }} into another {{ noun }}">{{ icon('git-pull-request', 'icon-sm') }}</a>
         {% if l.archived_at %}
         <form method="post" action="/labels/{{ l.name|urlencode }}/unarchive" data-row-toggle="Restored" data-undo-url="/labels/{{ l.name|urlencode }}/archive" data-row-name="{{ l.name }}">
             <button type="submit" class="icon-btn" title="Unarchive {{ noun }}" aria-label="Unarchive {{ l.name }}">{{ icon('rotate-ccw', 'icon-sm') }}</button>

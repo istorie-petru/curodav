@@ -6,6 +6,10 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [4.8.3]
+
+- Shelves: a shelf can be merged into another from its row in Settings or from its own page. Its items and tags move to the destination and the shelf is removed. The merge picker used to post to an address that does not exist, which is fixed.
+
 ## [4.8.2]
 
 - Tags: a tag can be merged into another from Settings, Tags. Every item carrying it gets the destination instead and the tag is removed; a shelf keeps at least one tag.

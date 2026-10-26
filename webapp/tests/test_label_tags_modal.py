@@ -197,3 +197,18 @@ def test_merge_tag_moves_items_and_removes_source(conn):
     assert tags.merge_error(conn, "Kitchen", "Oil") is not None  # last tag of Kitchen would leave the shelf empty
     with pytest.raises(HTTPException):
         taxonomy.merge_tag(name="Oil", dest="", conn=conn)
+
+
+def test_merge_shelf_hands_items_and_tags_to_the_target(conn):
+    from src.routers import labels as labels_router
+
+    _create(conn, "Kitchen")
+    _create(conn, "Garage")
+    _update(conn, "Kitchen", _rows({"name": "Salt"}))
+    tags.set_object_tags(conn, "task", "t1", ["Salt"])
+    db.set_object_labels(conn, "task", "t1", ["Kitchen"])
+    labels_router.merge_label("Kitchen", dest_name="Garage", conn=conn)
+    assert db.get_label_config(conn, "Kitchen") is None
+    assert db.list_labels_for_object(conn, "task", "t1") == ["Garage"]
+    assert tags.get_tag(conn, "Salt")["label_name"] == "Garage"
+    assert {t["name"] for t in tags.tags_of_label(conn, "Garage")} == {"Garage", "Kitchen", "Salt"}
