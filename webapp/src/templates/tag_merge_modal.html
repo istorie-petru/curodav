@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% block title %}Merge tag{% endblock %}
+{% block content %}
+{% call modal(kind="pick", title='Merge "' ~ tag.name ~ '"', size="small", form='tag-merge-form', save_label='Merge', save_icon='git-pull-request') %}
+<div class="card">
+<form method="post" id="tag-merge-form" action="/settings/tags/merge" data-confirm-sheet="Merge &quot;{{ tag.name }}&quot; into another tag? Every item tagged with it gets the destination instead and this tag is removed." data-cc-change="label" data-cc-action="merge">
+    <input type="hidden" name="name" value="{{ tag.name }}">
+    {% set ms_name = 'dest' %}
+    {% set ms_mode = 'single' %}
+    {% set ms_label = 'Merge into' %}
+    {% set ms_selected = '' %}
+    {% set ms_form_id = 'tag-merge-form' %}
+    {% set ms_items = [] %}
+    {% for n in tag_names %}{% set _ = ms_items.append({'uid': n, 'name': n}) %}{% endfor %}
+    {% include "_widget_list_multiselect.html" %}
+</form>
+</div>
+{% endcall %}
+{% endblock %}

@@ -399,7 +399,7 @@ def main(argv: list[str] | None = None) -> int:
         "--db-path",
         type=Path,
         default=None,
-        help="Path to cache.sqlite (defaults to the app's configured db_path, CC_DB_PATH env var, or ~/.command_center_web/cache.sqlite)",
+        help="Path to the database (defaults to the app configured db_path, CURODAV_DB_PATH or CC_DB_PATH env var, or ~/.curodav/curodav.sqlite)",
     )
     parser.add_argument(
         "--dry-run", action="store_true", help="Report counts without writing anything"

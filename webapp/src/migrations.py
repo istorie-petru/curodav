@@ -7,6 +7,8 @@ a change is a new migration. Steps older than this runner still live in `db.init
 
 from __future__ import annotations
 
+import gzip
+import shutil
 import sqlite3
 import sys
 from collections.abc import Callable
@@ -446,6 +448,35 @@ def _milestone_end_day(conn: sqlite3.Connection) -> None:
     conn.execute("UPDATE university_milestones SET end_day = day WHERE end_day = '' AND day != ''")
 
 
+def _banners_become_files(conn: sqlite3.Connection) -> None:
+    """Uploaded banner images move out of app_meta into the banners folder next to the database."""
+    import base64
+    import json
+
+    from . import banner_files
+
+    for key, raw in conn.execute("SELECT key, value FROM app_meta WHERE key LIKE 'page_banner_%'").fetchall():
+        try:
+            banner = json.loads(raw)
+            data = base64.b64decode(banner["image_b64"], validate=True)
+        except (ValueError, TypeError, KeyError):
+            continue
+        image_type = banner.get("image_type") if banner.get("image_type") in banner_files.IMAGE_TYPES else "jpeg"
+        banner.pop("image_b64")
+        banner.update(banner_files.store(conn, data, image_type))
+        conn.execute("UPDATE app_meta SET value = ? WHERE key = ?", (json.dumps(banner), key))
+
+
+def _login_sessions(conn: sqlite3.Connection) -> None:
+    conn.execute("CREATE TABLE IF NOT EXISTS login_sessions (sid TEXT PRIMARY KEY, created_at TEXT NOT NULL)")
+
+
+def _secrets_leave_the_database(conn: sqlite3.Connection) -> None:
+    from . import secret_store
+
+    secret_store.move_from_database(conn)
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "notebook documents get an is_template flag", _note_templates),
     Migration(2, "frontmatter fields lose the required column", _field_config_without_required, destructive=True),
@@ -475,6 +506,9 @@ MIGRATIONS: list[Migration] = [
     Migration(26, "task and event links get a kind", _links_get_a_kind, destructive=True),
     Migration(27, "University module tables", _university_tables),
     Migration(28, "University classes, exams and readings", _university_items),
+    Migration(29, "banner images move from app_meta to files", _banners_become_files, destructive=True),
+    Migration(30, "login sessions can be revoked", _login_sessions),
+    Migration(31, "login secret, password hash and recovery token move to a file", _secrets_leave_the_database, destructive=True),
     Migration(32, "University course sheet and library references", _university_sheet),
     Migration(33, "University credits target, exam evaluation links and notes", _university_sheet_columns),
     Migration(34, "Citation search index and stored PDFs", _citations_search_and_files),
@@ -507,6 +541,7 @@ def _backup(conn: sqlite3.Connection, number: int) -> Path | None:
         conn.backup(copy)
     finally:
         copy.close()
+    compress_old_backups(source)
     return target
 
 
@@ -523,6 +558,22 @@ def applied_numbers(conn: sqlite3.Connection) -> set[int]:
 def ahead_of_this_version(conn: sqlite3.Connection) -> list[int]:
     """Migrations the database has that this code does not know: it was upgraded by a newer release."""
     return sorted(applied_numbers(conn) - known_numbers())
+
+
+KEEP_UNCOMPRESSED_BACKUPS = 3
+
+
+def compress_old_backups(source: Path, keep: int = KEEP_UNCOMPRESSED_BACKUPS) -> list[Path]:
+    """Gzips all but the newest `keep` pre-migration copies; nothing is deleted."""
+    copies = sorted(source.parent.glob(f"{source.name}.before-migration-*"), key=lambda p: p.stat().st_mtime, reverse=True)
+    packed = []
+    for old in [c for c in copies if c.suffix != ".gz"][keep:]:
+        target = old.with_name(old.name + ".gz")
+        with old.open("rb") as src, gzip.open(target, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+        old.unlink()
+        packed.append(target)
+    return packed
 
 
 def pending(conn: sqlite3.Connection) -> list[Migration]:

@@ -24,7 +24,7 @@ _THIS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_THIS_DIR.parent / "src"))
 sys.path.insert(0, str(_THIS_DIR.parent))
 
-from src import auth, db  # noqa: E402
+from src import auth, db, secret_store  # noqa: E402
 from src.config import load_settings  # noqa: E402
 
 
@@ -51,8 +51,7 @@ def main(argv: list[str] | None = None) -> int:
                 print("--dev-clear only works on a local dev build (CC_DEPLOY_MODE is not 'local').", file=sys.stderr)
                 return 1
             for key in (auth.AUTH_USERNAME_KEY, auth.AUTH_PASSWORD_HASH_KEY):
-                conn.execute("DELETE FROM app_meta WHERE key = ?", (key,))
-            conn.commit()
+                secret_store.remove(conn, key)
             auth.rotate_session_secret(settings, conn)
             print("Stored login deleted. Restart the app; it asks for a new account.")
             return 0

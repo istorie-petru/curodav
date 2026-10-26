@@ -312,7 +312,7 @@ def get_page_banner(conn: sqlite3.Connection, page_key: str) -> dict[str, Any] |
         return None
     if not isinstance(banner, dict) or banner.get("kind") not in ("remote", "upload"):
         return None
-    if banner.get("kind") == "upload" and not banner.get("version"):
+    if banner.get("kind") == "upload" and not banner.get("version") and banner.get("image_b64"):
         b64 = banner.get("image_b64") or ""
         banner["version"] = hashlib.md5(b64.encode("ascii")).hexdigest()[:12]
         set_app_meta(conn, _page_banner_key(page_key), json.dumps(banner))

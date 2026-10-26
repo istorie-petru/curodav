@@ -22,7 +22,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import Scope
 
 from .log import get_logger
-from . import db, perf, reminders, sync, tags
+from . import banner_files, db, perf, reminders, sync, tags
 from .auth import AuthMiddleware, CSRFMiddleware
 from .caldav_bridge import CalDavBridge
 from .config import apply_persisted_radicale_overrides, apply_persisted_timezone, load_settings, uses_default_radicale_credentials
@@ -81,12 +81,7 @@ def _seed_default_media(conn: sqlite3.Connection, pictures_dir: Path = _PICTURES
         db.set_page_banner(
             conn,
             scope,
-            {
-                "kind": "upload",
-                "image_b64": base64.b64encode(data).decode("ascii"),
-                "image_type": "jpeg",
-                "version": hashlib.md5(data).hexdigest()[:12],
-            },
+            {"kind": "upload", **banner_files.store(conn, data, "jpeg")},
         )
 
     banner_bytes = _read(_DEFAULT_PAGE_BANNER_FILE)
@@ -217,7 +212,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Command Center Web", lifespan=lifespan)
+    app = FastAPI(title="Curodav", lifespan=lifespan)
 
     # Every page here is server-rendered HTML built fresh from the SQLite
     # cache on each request (Tasks/Contacts/Calendar all read live DB

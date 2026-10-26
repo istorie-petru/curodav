@@ -18,7 +18,7 @@ Usage:
 
 All subcommands accept --db-path and --backup-dir to override the app's
 configured locations (same CC_DB_PATH / CC_BACKUP_DIR env vars
-src/config.py reads, or ~/.command_center_web/{cache.sqlite,backups}/ by
+src/config.py reads, or ~/.curodav/{curodav.sqlite,backups}/ by
 default).
 """
 

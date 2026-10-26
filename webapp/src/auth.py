@@ -32,6 +32,7 @@ login page as JSON -- everything else gets a 302 to `/login?next=<path>`.
 from __future__ import annotations
 
 import base64
+from datetime import datetime, timezone
 import hashlib
 import hmac
 import json
@@ -43,7 +44,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse
 
 from .log import get_logger
-from . import db
+from . import db, secret_store
 
 logger = get_logger(__name__)
 
@@ -51,7 +52,7 @@ logger = get_logger(__name__)
 # persisted under (see module docstring). Both are module-level constants
 # so src/routers/auth.py (the login/logout routes) and main.py (middleware
 # wiring) can reference them without importing each other.
-SESSION_COOKIE = "cc_session"
+SESSION_COOKIE = "curodav_session"
 AUTH_SECRET_KEY = "auth_session_secret"
 
 AUTH_USERNAME_KEY = "auth_username"
@@ -64,10 +65,9 @@ MIN_PASSWORD_LENGTH = 8
 SETUP_PATH = "/setup"
 
 # PBKDF2-HMAC-SHA256 iteration count for hashing a /setup-chosen password.
-# 260_000 matches Django's current default (a well-reviewed, still-current
-# figure for this primitive as of 2024) -- stdlib-only (hashlib), so no new
-# runtime dependency, consistent with the rest of this module.
-PBKDF2_ITERATIONS = 260_000
+# 600_000 is the current OWASP guidance for this primitive; stdlib-only (hashlib).
+# Hashes stored with fewer rounds are upgraded at the next successful login.
+PBKDF2_ITERATIONS = 600_000
 
 # How long a login stays valid. 30 days -- a personal single-user app where
 # "log me in once, keep me logged in" is the expected UX; the deploy's own
@@ -118,8 +118,8 @@ def has_persisted_credentials(settings, conn=None) -> bool:
 def get_persisted_credentials(conn) -> tuple[str, str] | None:
     """The (username, password_hash) pair /setup persisted, or None when no
     account has been created yet."""
-    username = db.get_app_meta(conn, AUTH_USERNAME_KEY)
-    password_hash = db.get_app_meta(conn, AUTH_PASSWORD_HASH_KEY)
+    username = secret_store.get(conn, AUTH_USERNAME_KEY)
+    password_hash = secret_store.get(conn, AUTH_PASSWORD_HASH_KEY)
     if username and password_hash:
         return username, password_hash
     return None
@@ -128,8 +128,8 @@ def get_persisted_credentials(conn) -> tuple[str, str] | None:
 def set_persisted_credentials(conn, username: str, password: str) -> None:
     """Persists a /setup-chosen account: the username in the clear (it's
     not a secret) and the password hashed (hash_password)."""
-    db.set_app_meta(conn, AUTH_USERNAME_KEY, username)
-    db.set_app_meta(conn, AUTH_PASSWORD_HASH_KEY, hash_password(password))
+    secret_store.put(conn, AUTH_USERNAME_KEY, username)
+    secret_store.put(conn, AUTH_PASSWORD_HASH_KEY, hash_password(password))
 
 
 def new_recovery_token() -> str:
@@ -140,7 +140,7 @@ def new_recovery_token() -> str:
 
 
 def get_recovery_token(conn) -> str | None:
-    return db.get_app_meta(conn, AUTH_RECOVERY_TOKEN_KEY)
+    return secret_store.get(conn, AUTH_RECOVERY_TOKEN_KEY)
 
 
 def ensure_recovery_token(conn) -> str:
@@ -155,7 +155,7 @@ def ensure_recovery_token(conn) -> str:
 
 def regenerate_recovery_token(conn) -> str:
     token = new_recovery_token()
-    db.set_app_meta(conn, AUTH_RECOVERY_TOKEN_KEY, token)
+    secret_store.put(conn, AUTH_RECOVERY_TOKEN_KEY, token)
     return token
 
 
@@ -218,6 +218,13 @@ def _verify_password_hash(password: str, encoded: str) -> bool:
     return hmac.compare_digest(candidate, expected)
 
 
+def _needs_rehash(encoded: str) -> bool:
+    try:
+        return int(encoded.split("$", 3)[1]) < PBKDF2_ITERATIONS
+    except (ValueError, IndexError):
+        return False
+
+
 def verify_credentials(
     settings, username: str | None, password: str | None, conn=None
 ) -> bool:
@@ -244,6 +251,8 @@ def verify_credentials(
         if hmac.compare_digest(username, stored_user) and _verify_password_hash(
             password, stored_hash
         ):
+            if conn is not None and _needs_rehash(stored_hash):
+                secret_store.put(conn, AUTH_PASSWORD_HASH_KEY, hash_password(password))
             return True
     return False
 
@@ -264,11 +273,11 @@ def session_secret(settings, conn=None) -> str:
 
 
 def _persisted_secret(conn) -> str:
-    secret = db.get_app_meta(conn, AUTH_SECRET_KEY)
+    secret = secret_store.get(conn, AUTH_SECRET_KEY)
     if secret:
         return secret
     secret = secrets.token_urlsafe(32)
-    db.set_app_meta(conn, AUTH_SECRET_KEY, secret)
+    secret_store.put(conn, AUTH_SECRET_KEY, secret)
     return secret
 
 
@@ -301,19 +310,55 @@ def rotate_session_secret(settings, conn) -> str:
     if settings and settings.auth_session_secret:
         return settings.auth_session_secret
     secret = secrets.token_urlsafe(32)
-    db.set_app_meta(conn, AUTH_SECRET_KEY, secret)
+    secret_store.put(conn, AUTH_SECRET_KEY, secret)
     return secret
 
 
-def make_session_token(secret: str, username: str, max_age: int = SESSION_MAX_AGE_SECONDS) -> str:
+def start_session(conn) -> str:
+    """Records a new login so it can be revoked; returns its id for the cookie."""
+    sid = secrets.token_urlsafe(16)
+    conn.execute("INSERT INTO login_sessions (sid, created_at) VALUES (?, ?)", (sid, datetime.now(timezone.utc).isoformat()))
+    conn.commit()
+    return sid
+
+
+def end_session(conn, sid: str | None) -> None:
+    if sid:
+        conn.execute("DELETE FROM login_sessions WHERE sid = ?", (sid,))
+        conn.commit()
+
+
+def end_all_sessions(settings, conn) -> str:
+    """Revokes every login: the session rows go, and the signing secret rotates so cookies from before sessions were recorded die too."""
+    conn.execute("DELETE FROM login_sessions")
+    conn.commit()
+    return rotate_session_secret(settings, conn)
+
+
+def session_is_live(conn, sid: str) -> bool:
+    return conn.execute("SELECT 1 FROM login_sessions WHERE sid = ?", (sid,)).fetchone() is not None
+
+
+def make_session_token(secret: str, username: str, max_age: int = SESSION_MAX_AGE_SECONDS, sid: str | None = None) -> str:
     """Builds a signed session cookie value for `username` valid `max_age`
     seconds from now: `base64url(json({"sub","exp"})).hmac_sha256_hex`."""
-    payload = json.dumps(
-        {"sub": username, "exp": int(time.time()) + max_age}, separators=(",", ":")
-    ).encode()
+    claims = {"sub": username, "exp": int(time.time()) + max_age}
+    if sid:
+        claims["sid"] = sid
+    payload = json.dumps(claims, separators=(",", ":")).encode()
     b64 = base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
     sig = hmac.new(secret.encode("utf-8"), b64.encode("ascii"), hashlib.sha256).hexdigest()
     return f"{b64}.{sig}"
+
+
+def session_id(token: str | None) -> str | None:
+    """The sid inside a cookie value, if it has one. Read only after read_session_token has verified the signature."""
+    try:
+        b64 = token.split(".", 1)[0]
+        sid = json.loads(base64.urlsafe_b64decode(b64 + "=" * (-len(b64) % 4))).get("sid")
+    except Exception:
+        return None
+    return sid if isinstance(sid, str) else None
 
 
 def read_session_token(secret: str, token: str | None) -> str | None:
@@ -428,7 +473,7 @@ class AuthMiddleware:
         token = request.cookies.get(SESSION_COOKIE)
         if token:
             secret = self._get_secret(settings, scope)
-            if read_session_token(secret, token):
+            if read_session_token(secret, token) and self._session_live(settings, token):
                 return await self.app(scope, receive, send)
 
         return await self._deny(scope, receive, send, "/login")
@@ -498,6 +543,15 @@ class AuthMiddleware:
         )
         if state is not None:
             state._cc_exposure_warned = True
+
+    @staticmethod
+    def _session_live(settings, token: str) -> bool:
+        """A cookie carrying a session id needs its row; cookies from before sessions were recorded stay valid until they expire."""
+        sid = session_id(token)
+        if not sid:
+            return True
+        with db.connect(settings.db_path, reuse_schema=True) as conn:
+            return session_is_live(conn, sid)
 
     def _get_secret(self, settings, scope) -> str:
         """The signing secret, cached on `app.state` for the process

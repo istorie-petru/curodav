@@ -222,19 +222,55 @@ def move_error(conn: sqlite3.Connection, name: str, dest: str) -> str | None:
     return None
 
 
+def _follow_shelves(conn: sqlite3.Connection, items: list[Any]) -> None:
+    from . import db
+
+    kinds = {"note": "notebook"}
+    for r in items:
+        if kinds.get(r["object_type"], r["object_type"]) in LABEL_OBJECT_TYPES:
+            kind = kinds.get(r["object_type"], r["object_type"])
+            db.set_object_labels(conn, kind, r["object_id"], labels_of(conn, tags_for_object(conn, r["object_type"], r["object_id"])))
+
+
 def move_tag(conn: sqlite3.Connection, name: str, dest: str) -> None:
     """Files a tag under another shelf. Its items keep it, and their shelf links follow: they gain the new shelf and leave
     the old one unless another of their tags still sits there."""
     tag = get_tag(conn, name)
     assert_writable(conn, tag["label_name"], dest)
     conn.execute("UPDATE label_tags SET label_name = ? WHERE name = ? COLLATE NOCASE", (dest, tag["name"]))
-    from . import db
+    _follow_shelves(conn, conn.execute("SELECT object_type, object_id FROM object_tags WHERE tag_name = ? COLLATE NOCASE", (tag["name"],)).fetchall())
+    conn.commit()
 
-    kinds = {"note": "notebook"}
-    for r in conn.execute("SELECT object_type, object_id FROM object_tags WHERE tag_name = ? COLLATE NOCASE", (tag["name"],)).fetchall():
-        if kinds.get(r["object_type"], r["object_type"]) in LABEL_OBJECT_TYPES:
-            kind = kinds.get(r["object_type"], r["object_type"])
-            db.set_object_labels(conn, kind, r["object_id"], labels_of(conn, tags_for_object(conn, r["object_type"], r["object_id"])))
+
+def merge_error(conn: sqlite3.Connection, name: str, dest: str) -> str | None:
+    """Why a tag cannot be merged onto another, or None. A shelf keeps at least one tag, so the last tag of a shelf can only
+    be merged onto a tag of the same shelf."""
+    tag = get_tag(conn, name)
+    if not tag:
+        return f"There is no tag named {name}"
+    target = get_tag(conn, dest) if dest else None
+    if not target:
+        return "Choose a tag to merge into"
+    if target["name"].lower() == tag["name"].lower():
+        return f"{tag['name']} cannot be merged into itself"
+    for shelf in {tag["label_name"], target["label_name"]}:
+        if managed_by(conn, shelf):
+            return str(ManagedLabelError(shelf, managed_by(conn, shelf)))
+    if target["label_name"] != tag["label_name"] and len(tags_of_label(conn, tag["label_name"])) < 2:
+        return f"{tag['name']} is the only tag of {tag['label_name']}, and a shelf keeps at least one tag"
+    return None
+
+
+def merge_tags(conn: sqlite3.Connection, name: str, dest: str) -> None:
+    """Everything tagged with `name` gets `dest` instead, then `name` is removed. Shelf links follow as in move_tag."""
+    tag, target = get_tag(conn, name), get_tag(conn, dest)
+    assert_writable(conn, tag["label_name"], target["label_name"])
+    items = conn.execute("SELECT object_type, object_id FROM object_tags WHERE tag_name = ? COLLATE NOCASE", (tag["name"],)).fetchall()
+    conn.execute("INSERT OR IGNORE INTO object_tags (object_type, object_id, tag_name) "
+                 "SELECT object_type, object_id, ? FROM object_tags WHERE tag_name = ? COLLATE NOCASE", (target["name"], tag["name"]))
+    conn.execute("DELETE FROM object_tags WHERE tag_name = ? COLLATE NOCASE", (tag["name"],))
+    conn.execute("DELETE FROM label_tags WHERE name = ? COLLATE NOCASE", (tag["name"],))
+    _follow_shelves(conn, items)
     conn.commit()
 
 

@@ -2,14 +2,16 @@
 
 # Curodav
 
-A self-hosted **personal organizer** for one person, which you run on your
-own server and open in any browser. It has a home dashboard with widgets, a
-calendar, tasks and projects, habit tracking, contacts and a Notebook for
-longer writing, all organized by one shared label system. You can install it on your phone as an
+A self-hosted **personal organiser** for one person, which you run on your
+own server and open in any browser. It joins a home dashboard with widgets, a
+calendar, tasks, habit tracking, contacts, a Notebook and finance under one
+structure of spaces, shelves and tags. You can install it on your phone as an
 app (a PWA), and it keeps working offline.
 
 No cloud account, no subscription, no telemetry. Your data stays in one file
 on a machine you control.
+
+The name is two halves: "curo" from curator, and "dav" from WebDAV.
 
 |                                                          |                                                          |
 | -------------------------------------------------------- | -------------------------------------------------------- |
@@ -46,7 +48,7 @@ Probably not a fit if:
 
 ## What's inside
 
-- Home, labels and groups can each show as the Secretariat (what is due
+- Home, shelves and spaces can each show as the Secretariat (what is due
   today and this week, with empty sections hidden), as sections, or as a
   dashboard of widgets.
 - The Planner schedules work sessions for tasks, with an hours estimate and
@@ -110,12 +112,12 @@ is fine.
 git clone https://github.com/istorie-petru/curodav.git
 cd curodav/deploy/docker
 cp .env.example .env
-nano .env                    # set RADICALE_PASSWORD and CC_AUTH_SECRET
+nano .env                    # set RADICALE_PASSWORD and CURODAV_AUTH_SECRET
 ./create-radicale-user.sh    # one-time
 docker compose up -d --build
 ```
 
-To generate a good value for `CC_AUTH_SECRET`, run `openssl rand -hex 32`.
+Settings can be written as `CURODAV_...`; the older `CC_...` names still work. To generate a good value for `CURODAV_AUTH_SECRET`, run `openssl rand -hex 32`.
 
 ### Then: create your login
 
@@ -152,7 +154,7 @@ traffic itself**. It speaks plain HTTP. Choose one of these:
 You edit your data in the app, either in a browser or in the installed PWA,
 which also works offline. To get events, tasks or contacts into your
 **phone's own calendar or contacts app**, you create a **Published List** in
-Settings. A Published List is a label filter, such as "everything tagged
+Settings. A Published List is a shelf or tag filter, such as "everything tagged
 Work", that turns into a calendar or address-book feed your phone can
 subscribe to with [DAVx5](https://www.davx5.com/) on Android or the built-in
 account settings on iOS.

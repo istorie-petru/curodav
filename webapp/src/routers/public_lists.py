@@ -51,7 +51,7 @@ def _ics_feed(conn, row: dict) -> Response:
     entity_type = row["entity_type"]
     member_ids = evaluate_label_filter(conn, entity_type, row.get("label_filter"))
     cal = ICalCalendar()
-    cal.add("prodid", "-//Command Center//published-list.ics//EN")
+    cal.add("prodid", "-//Curodav//published-list.ics//EN")
     cal.add("version", "2.0")
     if entity_type == "task":
         for object_id in member_ids:

@@ -19,7 +19,7 @@ import hashlib
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 
-from .. import db
+from .. import banner_files, db
 from ..deps import get_db, templates
 from ..image_sniff import sniff_image_type
 
@@ -134,16 +134,8 @@ def upload_banner(
         db.set_page_banner(
             conn,
             scope,
-            {
-                "kind": "upload",
-                "image_b64": base64.b64encode(data).decode("ascii"),
-                "image_type": image_type,
-                # Short content hash -- cache-busts the /banners/image URL
-                # (see db.get_page_banner's version backfill), so a
-                # re-uploaded banner always gets a fresh immutable-cache URL
-                # instead of the browser re-serving the old image forever.
-                "version": hashlib.md5(data).hexdigest()[:12],
-            },
+            # The version (a short content hash) cache-busts the /banners/image URL.
+            {"kind": "upload", **banner_files.store(conn, data, image_type)},
         )
     return RedirectResponse(url=_safe_page_url(page_url, scope), status_code=303)
 
@@ -174,11 +166,8 @@ def banner_image(scope: str = "", conn=Depends(get_db)):
         compressed, so gzipping it costs CPU and shrinks nothing.
     """
     banner = db.get_page_banner(conn, scope)
-    if not banner or not banner.get("image_b64"):
-        raise HTTPException(404)
-    try:
-        data = base64.b64decode(banner.get("image_b64") or "", validate=True)
-    except (ValueError, TypeError):
+    data = banner_files.read(conn, banner) if banner else None
+    if not data:
         raise HTTPException(404)
     # image_type comes from upload_banner's own allowlist, but a hand-edited
     # app_meta row could carry anything -- re-validate into a known set

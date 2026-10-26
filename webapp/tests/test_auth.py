@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 from starlette.requests import Request
 from starlette.testclient import TestClient
 
+from src import secret_store
 from src import auth, db
 from src.config import Settings
 from src.routers import auth as auth_router
@@ -450,7 +451,7 @@ class TestSessionSecret:
         second = auth.session_secret(settings, conn)
         assert first == second
         assert len(first) >= 32
-        assert db.get_app_meta(conn, auth.AUTH_SECRET_KEY) == first
+        assert secret_store.get(conn, auth.AUTH_SECRET_KEY) == first
 
     def test_persisted_secret_opens_own_conn(self, tmp_path):
         settings = _settings(
@@ -459,7 +460,7 @@ class TestSessionSecret:
         secret = auth.session_secret(settings)
         assert secret
         with db.connect(settings.db_path) as conn:
-            assert db.get_app_meta(conn, auth.AUTH_SECRET_KEY) == secret
+            assert secret_store.get(conn, auth.AUTH_SECRET_KEY) == secret
 
 
 class TestRotateSessionSecret:
@@ -471,7 +472,7 @@ class TestRotateSessionSecret:
         old = auth.session_secret(settings, conn)
         new = auth.rotate_session_secret(settings, conn)
         assert new != old
-        assert db.get_app_meta(conn, auth.AUTH_SECRET_KEY) == new
+        assert secret_store.get(conn, auth.AUTH_SECRET_KEY) == new
 
     def test_old_token_no_longer_verifies_after_rotation(self, conn):
         settings = _settings(auth_session_secret=None)
@@ -491,14 +492,14 @@ class TestRotateSessionSecret:
         assert result == "fixed-env-secret"
         # Nothing to rotate -- a fixed CC_AUTH_SECRET never lives in
         # app_meta in the first place.
-        assert db.get_app_meta(conn, auth.AUTH_SECRET_KEY) is None
+        assert secret_store.get(conn, auth.AUTH_SECRET_KEY) is None
 
     def test_repeated_rotation_produces_different_secrets(self, conn):
         settings = _settings(auth_session_secret=None)
         first = auth.rotate_session_secret(settings, conn)
         second = auth.rotate_session_secret(settings, conn)
         assert first != second
-        assert db.get_app_meta(conn, auth.AUTH_SECRET_KEY) == second
+        assert secret_store.get(conn, auth.AUTH_SECRET_KEY) == second
 
 
 # --------------------------------------------------------------------- #
@@ -640,8 +641,8 @@ class TestAuthMiddlewareForcedSetup:
         first = client.get("/hello")
         assert first.status_code == 302 and "/login?next=" in first.headers["location"]
         with db.connect(settings.db_path) as c:
-            db.set_app_meta(c, auth.AUTH_USERNAME_KEY, "")
-            db.set_app_meta(c, auth.AUTH_PASSWORD_HASH_KEY, "")
+            secret_store.put(c, auth.AUTH_USERNAME_KEY, "")
+            secret_store.put(c, auth.AUTH_PASSWORD_HASH_KEY, "")
         second = client.get("/hello")
         assert second.status_code == 302 and "/login?next=" in second.headers["location"]
 
@@ -1052,7 +1053,7 @@ class TestSetupSubmit:
             radicale_url="",
             conn=conn,
         )
-        persisted = db.get_app_meta(conn, auth.AUTH_SECRET_KEY)
+        persisted = secret_store.get(conn, auth.AUTH_SECRET_KEY)
         assert persisted
         assert req.app.state._cc_auth_secret == persisted
         set_cookie = resp.headers["set-cookie"]
@@ -1202,7 +1203,7 @@ class TestPurgeAllInvalidatesSession:
         assert "max-age=0" in header.lower()
         assert req.app.state._cc_auth_secret is None
         # app_meta is wiped, so an auto-generated secret is gone with it.
-        assert db.get_app_meta(conn, auth.AUTH_SECRET_KEY) is None
+        assert secret_store.get(conn, auth.AUTH_SECRET_KEY) is None
         # 2026-08-29: the "install is configured" cache (a /setup-created
         # account) is dropped too, so a purged production install is
         # forced back through /setup like a genuinely fresh database.
@@ -1236,7 +1237,7 @@ class TestPurgeAllInvalidatesSession:
         # secret, so the signed-in browser is back at /login.
         assert client.get("/hello").status_code == 302
         with db.connect(settings.db_path) as conn:
-            new_secret = db.get_app_meta(conn, auth.AUTH_SECRET_KEY)
+            new_secret = secret_store.get(conn, auth.AUTH_SECRET_KEY)
         assert new_secret and new_secret != old_secret
 
 class TestSkipAuthSwitch:
@@ -1280,3 +1281,55 @@ class TestSkipAuthSwitch:
         resp = auth_router.login_page(request, next="/tasks", conn=conn)
         assert resp.status_code == 302
         assert resp.headers["location"] == "/tasks"
+
+
+def test_old_hash_is_upgraded_at_login(tmp_path, monkeypatch):
+    import hashlib
+
+    settings = _settings(enabled=False)
+    salt = b"s" * 16
+    old = f"pbkdf2_sha256$260000${salt.hex()}${hashlib.pbkdf2_hmac('sha256', b'secret-pass', salt, 260_000).hex()}"
+    with db.connect(settings.db_path) as conn:
+        secret_store.put(conn, auth.AUTH_USERNAME_KEY, "alice")
+        secret_store.put(conn, auth.AUTH_PASSWORD_HASH_KEY, old)
+        assert auth.verify_credentials(settings, "alice", "secret-pass", conn)
+        stored = secret_store.get(conn, auth.AUTH_PASSWORD_HASH_KEY)
+        assert stored != old and stored.split("$")[1] == str(auth.PBKDF2_ITERATIONS)
+        assert auth.verify_credentials(settings, "alice", "secret-pass", conn)
+        assert not auth.verify_credentials(settings, "alice", "wrong", conn)
+
+
+def test_logout_revokes_the_session_and_sign_out_everywhere_ends_all(tmp_path):
+    settings = _settings(enabled=False)
+    with db.connect(settings.db_path) as conn:
+        a, b = auth.start_session(conn), auth.start_session(conn)
+        assert auth.session_is_live(conn, a) and auth.session_is_live(conn, b)
+        auth.end_session(conn, a)
+        assert not auth.session_is_live(conn, a) and auth.session_is_live(conn, b)
+        auth.end_all_sessions(settings, conn)
+        assert not auth.session_is_live(conn, b)
+
+
+def test_a_cookie_with_a_revoked_session_id_is_refused(tmp_path):
+    settings = _settings()
+    with db.connect(settings.db_path) as conn:
+        sid = auth.start_session(conn)
+        token = auth.make_session_token(settings.auth_session_secret, "alice", sid=sid)
+        assert auth.AuthMiddleware._session_live(settings, token)
+        auth.end_session(conn, sid)
+    assert not auth.AuthMiddleware._session_live(settings, token)
+    assert auth.AuthMiddleware._session_live(settings, _token(settings))
+
+
+def test_secrets_sit_in_an_owner_only_file_not_the_database(tmp_path):
+    import os
+    import sqlite3
+
+    settings = _settings(enabled=False)
+    with db.connect(settings.db_path) as conn:
+        auth.set_persisted_credentials(conn, "alice", "secret-pass")
+        auth.session_secret(settings, conn)
+        assert conn.execute("SELECT COUNT(*) FROM app_meta WHERE key IN (?, ?, ?, ?)", secret_store.KEYS).fetchone()[0] == 0
+    path = settings.db_path.parent / secret_store.FILE_NAME
+    assert path.exists() and oct(os.stat(path).st_mode & 0o777) == "0o600"
+    assert b"alice" not in settings.db_path.read_bytes()

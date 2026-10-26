@@ -41,6 +41,7 @@ import pytest
 from starlette.applications import Starlette
 from starlette.requests import Request
 
+from src import secret_store
 from src import auth, config, db, env_file
 from src.routers import settings as settings_router
 
@@ -150,7 +151,7 @@ class TestAccountSettingsAppMetaPath:
             new_password_confirm="", radicale_url="", conn=conn,
         )
         assert "error=" in resp.headers["location"]
-        assert db.get_app_meta(conn, auth.AUTH_USERNAME_KEY) == "alice"
+        assert secret_store.get(conn, auth.AUTH_USERNAME_KEY) == "alice"
 
     def test_changing_with_correct_current_password_succeeds(self, conn):
         auth.set_persisted_credentials(conn, "alice", "oldpassword1")
@@ -261,7 +262,7 @@ class TestAccountSettingsAppMetaPath:
         )
         assert resp.status_code == 303
 
-        new_secret = db.get_app_meta(conn, auth.AUTH_SECRET_KEY)
+        new_secret = secret_store.get(conn, auth.AUTH_SECRET_KEY)
         assert new_secret and new_secret != old_secret
         assert auth.read_session_token(new_secret, old_token) is None
         set_cookie = resp.headers["set-cookie"]

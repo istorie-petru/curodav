@@ -451,6 +451,9 @@ def purge_all_data(conn: sqlite3.Connection) -> None:
     for table in tables:
         conn.execute(f"DELETE FROM {table}")
     conn.commit()
+    row = conn.execute("PRAGMA database_list").fetchone()
+    if row and row[2]:
+        (Path(row[2]).parent / "secrets.json").unlink(missing_ok=True)
 
 
 def _hours_between(start_at: str | None, end_at: str | None) -> float:

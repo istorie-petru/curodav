@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .. import config
 from .notebook import _attach_citation_authors
 
 PAGE_SIZE = 50
@@ -143,7 +144,7 @@ def citation_usage(conn: sqlite3.Connection, uid: str) -> dict[str, int]:
 
 def files_dir(conn: sqlite3.Connection) -> Path:
     row = conn.execute("PRAGMA database_list").fetchone()
-    base = Path(row[2]).parent if row and row[2] else Path.home() / ".command_center_web"
+    base = Path(row[2]).parent if row and row[2] else config.default_db_path().parent
     return base / "library_files"
 
 
@@ -189,12 +190,6 @@ def delete_edition(conn: sqlite3.Connection, uid: str) -> None:
 def delete_citation_editions(conn: sqlite3.Connection, citation_uid: str) -> None:
     for row in conn.execute("SELECT uid FROM citation_editions WHERE citation_uid = ?", (citation_uid,)).fetchall():
         delete_edition(conn, row[0])
-
-
-def files_dir(conn: sqlite3.Connection) -> Path:
-    row = conn.execute("PRAGMA database_list").fetchone()
-    base = Path(row[2]).parent if row and row[2] else Path.home() / ".command_center_web"
-    return base / "library_files"
 
 
 def set_edition_file(conn: sqlite3.Connection, uid: str, data: bytes, label: str) -> str | None:

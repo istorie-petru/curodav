@@ -1,7 +1,7 @@
 {
   "name": "Curodav",
   "short_name": "Curodav",
-  "description": "Tasks, calendar, projects, and contacts in one place.",
+  "description": "Your calendar, tasks, notes and money in one place, on your own server.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

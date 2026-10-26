@@ -130,7 +130,7 @@ def export_events_ics(conn=Depends(get_db)):
     from icalendar import Calendar as ICalCalendar, Event
 
     cal = ICalCalendar()
-    cal.add("prodid", "-//Command Center//command-center.ics//EN")
+    cal.add("prodid", "-//Curodav//curodav.ics//EN")
     cal.add("version", "2.0")
     events = db.list_events(conn)
     for row in events:
@@ -148,7 +148,7 @@ def export_tasks_ics(conn=Depends(get_db)):
     from icalendar import Calendar as ICalCalendar, Todo
 
     cal = ICalCalendar()
-    cal.add("prodid", "-//Command Center//command-center.ics//EN")
+    cal.add("prodid", "-//Curodav//curodav.ics//EN")
     cal.add("version", "2.0")
     for row in db.list_tasks(conn, include_habit_tasks=True):
         cal.add_component(Todo.from_ical(ical_rows.task_row_to_ical(dict(row))))

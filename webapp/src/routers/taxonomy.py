@@ -109,6 +109,29 @@ def move_tag(name: str = Form(...), dest: str = Form(""), conn=Depends(get_db)):
     return RedirectResponse(url="/settings/tags", status_code=303)
 
 
+@settings_router.get("/merge-modal")
+def merge_tag_modal(request: Request, name: str, conn=Depends(get_db)):
+    tag = tags.get_tag(conn, name)
+    if not tag:
+        raise HTTPException(404, f"There is no tag named {name}")
+    owner = tags.managed_by(conn, tag["label_name"])
+    if owner:
+        return templates.TemplateResponse("managed_notice_modal.html", {"request": request, "name": tag["name"], "module": modules.get(owner)})
+    others = sorted((t["name"] for t in tags.list_tags(conn)
+                     if t["name"] != tag["name"] and not tags.managed_by(conn, t["label_name"]) and not tags.merge_error(conn, tag["name"], t["name"])),
+                    key=str.lower)
+    return templates.TemplateResponse("tag_merge_modal.html", {"request": request, "tag": tag, "tag_names": others})
+
+
+@settings_router.post("/merge")
+def merge_tag(name: str = Form(...), dest: str = Form(""), conn=Depends(get_db)):
+    error = tags.merge_error(conn, name, dest.strip())
+    if error:
+        raise HTTPException(400, error)
+    tags.merge_tags(conn, name, dest.strip())
+    return RedirectResponse(url="/settings/tags", status_code=303)
+
+
 calendar_router = APIRouter(prefix="/settings/calendar", tags=["calendar-settings"])
 
 

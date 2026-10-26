@@ -86,7 +86,7 @@ def login_submit(
     if auth.verify_credentials(settings, username, password, conn):
         auth.clear_login_attempts(client_key)
         secret = auth.session_secret(settings, conn)
-        token = auth.make_session_token(secret, username)
+        token = auth.make_session_token(secret, username, sid=auth.start_session(conn))
         response = RedirectResponse(
             url=_safe_next(next) or "/", status_code=303
         )
@@ -109,7 +109,22 @@ def login_submit(
 
 
 @router.post("/logout")
-def logout(request: Request):
+def logout(request: Request, conn=Depends(get_db)):
+    auth.end_session(conn, auth.session_id(request.cookies.get(auth.SESSION_COOKIE)))
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie(
+        auth.SESSION_COOKIE, path="/", samesite="lax", secure=auth.is_secure_request(request)
+    )
+    return response
+
+
+@router.post("/logout-everywhere")
+def logout_everywhere(request: Request, conn=Depends(get_db)):
+    settings = request.app.state.settings
+    secret = auth.end_all_sessions(settings, conn)
+    state = getattr(request.app, "state", None)
+    if state is not None:
+        state._cc_auth_secret = secret
     response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie(
         auth.SESSION_COOKIE, path="/", samesite="lax", secure=auth.is_secure_request(request)
@@ -197,7 +212,7 @@ def setup_submit(
     secret = auth.rotate_session_secret(settings, conn)
     if state is not None:
         state._cc_auth_secret = secret
-    token = auth.make_session_token(secret, username)
+    token = auth.make_session_token(secret, username, sid=auth.start_session(conn))
     response = RedirectResponse(url="/", status_code=303)
     response.set_cookie(
         auth.SESSION_COOKIE,

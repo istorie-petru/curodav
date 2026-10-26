@@ -67,3 +67,7 @@ webapp/encrypted.data
 .vscode/
 tools/editor-bundle/node_modules/
 .venv
+
+# Stray local files that were tracked until 4.9.0
+/curodav.db
+/encrypted.data

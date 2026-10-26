@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import sqlite3
 
 import pytest
@@ -53,7 +54,12 @@ def test_a_destructive_migration_copies_the_database_first(tmp_path):
         pass
     backups = list(tmp_path.glob("old.sqlite.before-migration-0002-*"))
     assert len(backups) == 1
-    with sqlite3.connect(backups[0]) as old:
+    copy = backups[0]
+    if copy.suffix == ".gz":
+        restored = tmp_path / "restored.sqlite"
+        restored.write_bytes(gzip.decompress(copy.read_bytes()))
+        copy = restored
+    with sqlite3.connect(copy) as old:
         assert "required" in _columns(old, "notebook_field_config")
 
 

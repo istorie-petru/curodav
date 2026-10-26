@@ -67,7 +67,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from .. import log as app_log
 from .. import perf
 from ..log import get_logger
-from .. import clock, auth, config, data_health, db, env_file, event_series, finance, finance_stats, flairs, modules, offline_sync, push, release, reminders
+from .. import clock, auth, config, data_health, db, env_file, event_series, finance, finance_stats, flairs, modules, offline_sync, push, release, reminders, secret_store
 from ..header_views import current_settings_groups
 from ..image_sniff import sniff_image_type
 from ..deps import (
@@ -412,7 +412,7 @@ def account_settings(
         auth.set_persisted_credentials(conn, username, new_password)
         db.set_app_meta(conn, config.RADICALE_PASSWORD_KEY, new_password)
     else:
-        db.set_app_meta(conn, auth.AUTH_USERNAME_KEY, username)
+        secret_store.put(conn, auth.AUTH_USERNAME_KEY, username)
     db.set_app_meta(conn, config.RADICALE_USERNAME_KEY, username)
     db.set_app_meta(conn, config.RADICALE_URL_KEY, radicale_url or settings.radicale_base_url)
 
@@ -422,7 +422,7 @@ def account_settings(
     secret = auth.rotate_session_secret(settings, conn)
     if state is not None:
         state._cc_auth_secret = secret
-    token = auth.make_session_token(secret, username)
+    token = auth.make_session_token(secret, username, sid=auth.start_session(conn))
     restart_relevant = bool(new_password or radicale_url)
     response = _redirect_with_note(
         "/settings/data-maintenance" if restart_relevant else "/settings/your-profile",

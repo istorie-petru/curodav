@@ -12,6 +12,30 @@ import zoneinfo
 from dataclasses import dataclass
 from pathlib import Path
 
+from .log import get_logger
+
+LEGACY_DATA_DIR = Path.home() / ".command_center_web"
+DEFAULT_DATA_DIR = Path.home() / ".curodav"
+
+
+def apply_curodav_aliases() -> None:
+    """CURODAV_X settings win over the older CC_X names, which are still read; every reader below keeps asking for CC_X."""
+    for name, value in list(os.environ.items()):
+        if name.startswith("CURODAV_"):
+            os.environ["CC_" + name[len("CURODAV_"):]] = value
+
+
+def default_db_path() -> Path:
+    """~/.curodav/curodav.sqlite, or the legacy folder while that is where the data still sits (scripts/move_data_folder.py moves it); when both exist the legacy one wins, with a warning."""
+    legacy, new = LEGACY_DATA_DIR / "cache.sqlite", DEFAULT_DATA_DIR / "curodav.sqlite"
+    if legacy.exists() and new.exists():
+        get_logger(__name__).warning("Two databases exist, %s and %s; using the first. Rename or move the one you do not use, or set CURODAV_DB_PATH.", legacy, new)
+        return legacy
+    return legacy if legacy.exists() else new
+
+
+apply_curodav_aliases()
+
 # The dev-only Radicale fallback credentials (webapp/.dev/radicale/) --
 # never meant to protect anything reachable off localhost. Named as
 # constants (not just inline literals in load_settings' os.environ.get
@@ -47,11 +71,8 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    db_path = Path(
-        os.environ.get(
-            "CC_DB_PATH", str(Path.home() / ".command_center_web" / "cache.sqlite")
-        )
-    )
+    apply_curodav_aliases()
+    db_path = Path(os.environ.get("CC_DB_PATH", str(default_db_path())))
     return Settings(
         radicale_base_url=os.environ.get(
             "CC_RADICALE_URL", "http://127.0.0.1:5232/devuser/"

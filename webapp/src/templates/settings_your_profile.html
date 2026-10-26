@@ -91,5 +91,20 @@
         {% endif %}
     </div>
 </div>
+{% if has_account %}
+<div class="settings-group">
+    <div class="card">
+        <form method="post" action="/logout-everywhere">
+            <div class="settings-field-row">
+                <span class="settings-field-label">Sign out everywhere
+                    <span class="settings-field-hint">Ends this login and every other one, on every device.</span>
+                </span>
+                <span class="spacer"></span>
+                <button type="submit" class="btn tonal">{{ icon('log-out', 'icon-sm') }} Sign out everywhere</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
 </div>
 {% endblock %}

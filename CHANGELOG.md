@@ -6,6 +6,16 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [4.8.2]
+
+- Tags: a tag can be merged into another from Settings, Tags. Every item carrying it gets the destination instead and the tag is removed; a shelf keeps at least one tag.
+- Safer sign-in: passwords are hashed with 600,000 rounds and older hashes upgrade the next time you log in. Each login is recorded, so logging out ends it and Settings, Your profile has a Sign out everywhere button. The signing secret, password hash and recovery token now live in an owner-only `secrets.json` next to the database, so a backup of the database no longer carries a way to log in (one data step moves them, after a backup).
+- Smaller data: banner images are stored as files in a `banners` folder next to the database instead of inside it (one data step moves them, after a backup), and older pre-migration copies beyond the newest three are compressed.
+- Curodav names: settings can be given as `CURODAV_...` (for example `CURODAV_DB_PATH`); the old `CC_...` names still work. The login cookie is now `curodav_session`, which logs you out once. New installs keep their data in `~/.curodav/curodav.sqlite`; an existing `~/.command_center_web` keeps working, and `scripts/move_data_folder.py` moves it after a backup. The old app name is gone from the login page and the feeds.
+- One description everywhere (README, package files, app manifest) and the README now uses spaces, shelves and tags and explains the name.
+- When both the old and the new data folder hold a database, the old one is used and a warning is logged, so an update never opens a stale copy.
+- Two stray files (`curodav.db`, `encrypted.data`) are no longer tracked, and a core test now rejects SQL built from strings outside a reviewed list of files.
+
 ## [4.8.1]
 
 - University follow-up. A discipline has its own page with the views Overview, Course sheet, Contents, Bibliography and Examination, and the disciplines of the current semester are listed under the University space in the sidebar. The space page shows four widgets and the weekly schedule; the Disciplines view is a card per discipline. The course sheet has Identification, Teaching and Content sections with typed fields, repeatable rows and fields of your own, and a semester has a credits target. Windows save at once and a short toast says what was removed or replaced.

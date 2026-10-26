@@ -379,7 +379,7 @@ write_unit() {
 # curodav -- managed by curodav-ctl. Re-generated on every 'install';
 # use a drop-in at ${UNIT_FILE}.d/ for local overrides.
 [Unit]
-Description=Command Center Web (curodav) -- personal organizer PWA
+Description=Curodav -- personal organiser PWA
 Documentation=${repo_url}
 After=network-online.target
 Wants=network-online.target

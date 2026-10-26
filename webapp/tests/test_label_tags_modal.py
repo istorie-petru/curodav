@@ -176,3 +176,24 @@ def test_move_tag_to_another_shelf_follows_items_and_keeps_last_tag(conn):
     assert tags.move_error(conn, "Salt", "Salt") is not None
     with pytest.raises(HTTPException):
         taxonomy.move_tag(name="Salt", dest="", conn=conn)
+
+
+def test_merge_tag_moves_items_and_removes_source(conn):
+    from src.routers import taxonomy
+
+    _create(conn, "Kitchen")
+    _create(conn, "Garage")
+    _update(conn, "Kitchen", _rows({"name": "Salt"}))
+    _update(conn, "Garage", _rows({"name": "Oil"}))
+    tags.set_object_tags(conn, "task", "t1", ["Salt"])
+    tags.set_object_tags(conn, "task", "t2", ["Salt", "Oil"])
+    db.set_object_labels(conn, "task", "t1", ["Kitchen"])
+    taxonomy.merge_tag(name="Salt", dest="Oil", conn=conn)
+    assert tags.get_tag(conn, "Salt") is None
+    assert tags.tags_for_object(conn, "task", "t1") == ["Oil"]
+    assert tags.tags_for_object(conn, "task", "t2") == ["Oil"]
+    assert db.list_labels_for_object(conn, "task", "t1") == ["Garage"]
+    assert tags.merge_error(conn, "Oil", "Oil") is not None
+    assert tags.merge_error(conn, "Kitchen", "Oil") is not None  # last tag of Kitchen would leave the shelf empty
+    with pytest.raises(HTTPException):
+        taxonomy.merge_tag(name="Oil", dest="", conn=conn)

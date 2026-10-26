@@ -95,3 +95,19 @@ def test_logging_goes_through_the_one_helper():
         if re.search(r"^\s*print\(|logging\.getLogger\(", text, re.M):
             offenders.append(path.name)
     assert not offenders, f"use src/log.py's get_logger: {offenders}"
+
+
+SRC = Path(__file__).resolve().parents[2] / "src"
+# Reviewed 2026-10-25: every f-string SQL in these files interpolates a table, column or placeholder list taken from a
+# fixed code-side list or from an allow-listed sync field set, never a request value. New files must not be added here
+# without the same review.
+F_STRING_SQL_FILES = {
+    "db/citation_library.py", "db/contacts.py", "db/core.py", "db/events.py", "db/labels.py", "db/notebook.py", "db/pages.py", "db/sync.py", "db/tasks.py", "finance.py", "migrations.py", "migrations_citations.py", "offline_sync.py", "secret_store.py",
+    "study_page.py", "tags.py", "university_plan.py",
+}
+
+
+def test_f_string_sql_is_limited_to_reviewed_files():
+    pattern = re.compile(r"\.(execute|executemany|executescript)\(\s*f[\"']")
+    found = {str(p.relative_to(SRC)) for p in SRC.rglob("*.py") if pattern.search(_code(p))}
+    assert found <= F_STRING_SQL_FILES, f"unreviewed f-string SQL in {sorted(found - F_STRING_SQL_FILES)}"
