@@ -1013,6 +1013,12 @@ try {
     if (!d) return "";
     return DOW[(d.getDay() + 6) % 7] + ", " + MON[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
   }
+  // "20 Jan", or "20 Jan 2027" outside the current year: the display of a field marked data-dtf-short.
+  function fmtDateShort(iso) {
+    const d = dateOf(iso);
+    if (!d) return "";
+    return d.getDate() + " " + MON[d.getMonth()] + (d.getFullYear() === new Date().getFullYear() ? "" : " " + d.getFullYear());
+  }
   function build(y, m, d) {
     if (y < 100) y += 2000;
     const dt = new Date(y, m - 1, d);
@@ -1032,6 +1038,11 @@ try {
     if (m) return build(m[3] ? +m[3] : today.getFullYear(), +m[2], +m[1]);
     m = /^(\d{2})(\d{2})(\d{4})$/.exec(t); // 29092023
     if (m) return build(+m[3], +m[2], +m[1]);
+    m = /^(\d{1,2})\s+([a-z]{3})[a-z]*\.?(?:\s+(\d{4}))?$/.exec(t); // "20 Jan", "20 Jan 2027"
+    if (m) {
+      const mi = MON.findIndex((x) => x.toLowerCase() === m[2]);
+      if (mi >= 0) return build(m[3] ? +m[3] : today.getFullYear(), mi + 1, +m[1]);
+    }
     // The field's own display text ("Sat, Sep 26, 2026") parses back.
     m = /^(?:[a-z]{3},?\s+)?([a-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})$/.exec(t);
     if (m) {
@@ -1089,7 +1100,7 @@ try {
   const is12h = (f) => f.dataset.dtf12h === "1";
 
   function display(f, value) {
-    return kindOf(f) === "date" ? fmtDate(value) : fmtTime(value, is12h(f));
+    return kindOf(f) === "date" ? (f.hasAttribute("data-dtf-short") ? fmtDateShort(value) : fmtDate(value)) : fmtTime(value, is12h(f));
   }
   function withinBounds(f, iso) {
     if (kindOf(f) !== "date" || !iso) return true;
@@ -2381,6 +2392,81 @@ try {
 })();
 
 } catch (err) { console.error('citation_fields.js', err); }
+/* library_editions.js */
+try {
+// The book window's edition half (citation_edit_modal.html): choosing an edition fills the edition fields from the data
+// the page carries; "Provided as" shows the link box or the PDF drop slot.
+(function () {
+  function root(el) {
+    return el.closest && el.closest("form") && el.closest("form").querySelector("[data-library-editions]");
+  }
+
+  function setField(scope, name, value) {
+    var input = scope.querySelector('[name="' + name + '"]');
+    if (input) input.value = value || "";
+  }
+
+  function showSource(scope, source) {
+    scope.querySelector("[data-edition-link]").hidden = source !== "link";
+    scope.querySelector("[data-edition-file]").hidden = source !== "local";
+  }
+
+  function pickSource(scope, source) {
+    var form = scope.closest("form");
+    var radio = form.querySelector('input[name="ed_source"][value="' + source + '"]');
+    if (!radio) return;
+    radio.checked = true;
+    radio.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function fillEdition(scope, uid) {
+    var editions = JSON.parse(scope.dataset.editions || "[]");
+    var e = editions.find(function (x) { return x.uid === uid; }) || {};
+    ["edition", "year", "publisher", "place", "isbn", "doi", "url"].forEach(function (k) { setField(scope, "ed_" + k, e[k]); });
+    var file = scope.querySelector('input[type="file"]');
+    if (file) file.value = "";
+    var zone = scope.querySelector(".upload-zone-label");
+    if (zone) zone.textContent = e.source === "local" ? "Replace the PDF" : "Choose or drop a PDF";
+    var state = scope.querySelector("[data-edition-file-state]");
+    if (state) {
+      state.textContent = "";
+      if (e.source === "local" && e.file_state === "ok") {
+        var a = document.createElement("a");
+        a.href = "/library/editions/" + e.uid + "/file";
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.textContent = e.file_label;
+        state.append("Stored: ", a);
+      } else if (e.source === "local") {
+        state.textContent = 'The stored PDF "' + e.file_label + '" is missing from the disk. Drop it again to restore it.';
+      }
+    }
+    var del = scope.querySelector("[data-edition-delete]");
+    if (del) {
+      del.hidden = !e.uid;
+      var box = del.querySelector("input");
+      if (box) box.checked = false;
+    }
+    pickSource(scope, e.source || "none");
+  }
+
+  document.addEventListener("change", function (ev) {
+    var t = ev.target;
+    if (!t.matches) return;
+    if (t.matches('input[name="edition_uid"]')) {
+      var scope = root(t);
+      if (scope) fillEdition(scope, t.value);
+    } else if (t.matches('input[name="ed_source"]')) {
+      var scope2 = root(t);
+      if (scope2) showSource(scope2, t.value);
+    } else if (t.matches(".edition-file-input")) {
+      var label = t.closest(".upload-zone").querySelector(".upload-zone-label");
+      if (label && t.files && t.files.length) label.textContent = t.files[0].name;
+    }
+  });
+})();
+
+} catch (err) { console.error('library_editions.js', err); }
 /* entry_fields.js */
 try {
 // The entry form shows the fields of the chosen type, and hides those of the others.
@@ -2563,6 +2649,98 @@ try {
 })();
 
 } catch (err) { console.error('event_format_toggle.js', err); }
+/* repeatable_rows.js */
+try {
+// Repeatable rows in a window: a host element (data-rows-host, data-rows-template="<id of a <template>>") holds rows (data-row); the plus
+// button (data-rows-add="<host id>") adds one from the template and the minus button (data-rows-remove) drops its row. Pasting several lines
+// into a field marked data-rows-split makes one row per line. Delegated at the document, so content injected into a window needs no set-up.
+(function () {
+  let counter = 0;
+
+  // A row comes from a <template>; "__IDX__" in it becomes a number no other row has, for rows that own a list of rows (a component with its parts).
+  function addRow(host, after, templateId) {
+    const tpl = document.getElementById(templateId || host.getAttribute("data-rows-template"));
+    if (!tpl) return null;
+    counter += 1;
+    const holder = document.createElement("template");
+    holder.innerHTML = tpl.innerHTML.replace(/__IDX__/g, "n" + Date.now().toString(36) + counter);
+    const row = holder.content.firstElementChild;
+    if (!row) return null;
+    if (after && after.nextSibling) host.insertBefore(row, after.nextSibling);
+    else host.appendChild(row);
+    if (window.CCActionMenu) window.CCActionMenu.init();
+    return row;
+  }
+
+  document.addEventListener("click", function (e) {
+    const add = e.target.closest("[data-rows-add]");
+    if (add) {
+      e.preventDefault();
+      const host = document.getElementById(add.getAttribute("data-rows-add"));
+      const row = host && addRow(host, null, add.getAttribute("data-rows-template"));
+      const field = row && row.querySelector("input:not([type=hidden])");
+      if (field) field.focus();
+      return;
+    }
+    const child = e.target.closest("[data-rows-add-child]");
+    if (child) {
+      e.preventDefault();
+      const block = child.closest("[data-row]");
+      const host = child.parentElement.querySelector("[data-rows-host]");
+      const made = host && addRow(host, null);
+      const parent = block && block.querySelector("input[name=ev_key]");
+      const link = made && made.querySelector("input[name=" + (child.getAttribute("data-rows-link") || "sub_parent") + "]");
+      if (link && parent) link.value = parent.value;
+      const field = made && made.querySelector("input:not([type=hidden])");
+      if (field) field.focus();
+      return;
+    }
+    const remove = e.target.closest("[data-rows-remove]");
+    if (remove) {
+      e.preventDefault();
+      const row = remove.closest("[data-row]");
+      if (row) row.remove();
+    }
+  });
+
+  document.addEventListener("paste", function (e) {
+    const input = e.target.closest && e.target.closest("input[data-rows-split]");
+    if (!input) return;
+    const text = (e.clipboardData || window.clipboardData).getData("text");
+    const lines = text.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
+    if (lines.length < 2) return;
+    e.preventDefault();
+    const row = input.closest("[data-row]");
+    const host = row && row.closest("[data-rows-host]");
+    if (!host) return;
+    input.value = lines[0];
+    let after = row;
+    lines.slice(1).forEach(function (line) {
+      const made = addRow(host, after);
+      const field = made && made.querySelector("input[data-rows-split]");
+      if (field) field.value = line;
+      after = made || after;
+    });
+  });
+
+  // A drop-down inside a row (data-rows-pick items in an action menu): the chosen item goes into the row's hidden field and its label.
+  // The open panel is moved out of the row by the menu code, so the row is remembered when its trigger is pressed.
+  let lastPick = null;
+  document.addEventListener("pointerdown", function (e) {
+    const pick = e.target.closest && e.target.closest(".rows-pick");
+    if (pick) lastPick = pick;
+  }, true);
+  document.addEventListener("click", function (e) {
+    const item = e.target.closest && e.target.closest("[data-rows-pick]");
+    if (!item || !lastPick) return;
+    const field = lastPick.querySelector("input[type=hidden]");
+    const label = lastPick.querySelector(".rows-pick-label");
+    if (field) field.value = item.getAttribute("data-rows-pick");
+    if (label) label.innerHTML = item.innerHTML;
+  });
+})();
+
+} catch (err) { console.error('repeatable_rows.js', err); }
 /* holiday_date_sync.js */
 try {
 (function () {

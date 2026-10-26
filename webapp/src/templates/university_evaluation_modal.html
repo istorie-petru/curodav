@@ -1,0 +1,68 @@
+{% from "_inputs.html" import text_input, number_input %}
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_date_time_fields.html" import date_field, time_field with context %}
+{% block title %}{{ 'Edit evaluation' if way else 'New evaluation' }}{% endblock %}
+{% block content %}
+{# One way of evaluating: its components (percent of the way) and its milestones, events and tasks kept apart. #}
+{% macro sub_row(sub) %}
+<div class="ms-block is-sub" data-row><input type="hidden" name="sub_id" value="{{ sub.id }}">
+    <div class="field"><label>Component</label>{{ text_input({'name': 'sub_name', 'value': sub.name}) }}</div>
+    <div class="field"><label>Weight (%)</label>{{ number_input({'name': 'sub_weight', 'value': ('%g'|format(sub.weight)) if sub.weight is not none else '', 'min': 0, 'max': 100, 'step': 'any'}) }}</div>
+    <button type="button" class="icon-btn" data-rows-remove title="Remove" aria-label="Remove">{{ icon('trash', 'icon-sm') }}</button>
+</div>
+{% endmacro %}
+{% macro event_row(m) %}
+<div class="ms-block is-event" data-row><input type="hidden" name="ev_uid" value="{{ m.uid }}"><input type="hidden" name="ev_location" value="{{ m.location }}">
+    <div class="field ms-title"><label>Title</label>{{ text_input({'name': 'ev_title', 'value': m.raw_title}) }}</div>
+    <button type="button" class="icon-btn" data-rows-remove title="Remove" aria-label="Remove">{{ icon('trash', 'icon-sm') }}</button>
+    <div class="field"><label>Start date</label>{{ date_field('ev_day', m.day, label='Start date', short=true) }}</div>
+    <div class="field"><label>Start time</label>{{ time_field('ev_start', m.start, label='Start time') }}</div>
+    <div class="field"><label>End date</label>{{ date_field('ev_end_day', m.end_day, label='End date', short=true) }}</div>
+    <div class="field"><label>End time</label>{{ time_field('ev_end', m.end, label='End time') }}</div>
+</div>
+{% endmacro %}
+{% macro task_row(m) %}
+<div class="ms-block is-task" data-row><input type="hidden" name="tk_uid" value="{{ m.uid }}">
+    <div class="field"><label>Title</label>{{ text_input({'name': 'tk_title', 'value': m.raw_title}) }}</div>
+    <div class="field"><label>Deadline</label>{{ date_field('tk_due', m.due, label='Deadline', short=true) }}</div>
+    <button type="button" class="icon-btn" data-rows-remove title="Remove" aria-label="Remove">{{ icon('trash', 'icon-sm') }}</button>
+</div>
+{% endmacro %}
+{% set _retire = [{'action': 'delete', 'url': '/settings/university/evaluation/' ~ way.id ~ '/delete?discipline=' ~ (d.name|urlencode), 'mode': 'confirm', 'label': 'Delete this way of evaluating with its events and tasks?', 'redirect': none, 'change': none}] if way else none %}
+{% call modal(kind="form", title=(('Edit ' ~ way.name) if way else 'New way of evaluating'), size="large", form='university-evaluation-form', creating=(not way), retire=_retire) %}
+<div class="card">
+<form method="post" id="university-evaluation-form" action="/settings/university/evaluation">
+    <input type="hidden" name="discipline" value="{{ d.name }}"><input type="hidden" name="way_id" value="{{ way.id if way else '' }}">
+    <div class="field-grid">
+        <div class="field field-wide"><label>Name</label>{{ text_input({'name': 'name', 'value': (way.name if way else ''), 'required': true}) }}</div>
+        <div class="field">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'university-evaluation-form' %}{% set ms_name = 'form' %}{% set ms_label = 'Type' %}
+            {% set ms_items = [{'uid': '', 'name': 'Not set'}] %}{% for o in forms %}{% set _ = ms_items.append({'uid': o, 'name': o}) %}{% endfor %}
+            {% set ms_selected = way.form if way else '' %}{% set ms_wide = false %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+        <div class="field"><label>Weight (%)</label>{{ number_input({'name': 'weight', 'value': ('%g'|format(way.weight)) if way and way.weight is not none else '', 'min': 0, 'max': 100, 'step': 'any'}) }}</div>
+        <div class="field field-wide">
+            <div class="field-label-row"><label>Components</label>
+                <button type="button" class="icon-btn" data-rows-add="university-sub-rows" title="Add a component" aria-label="Add a component">{{ icon('plus', 'icon-sm') }}</button></div>
+            <div class="rows-host" id="university-sub-rows" data-rows-host data-rows-template="university-sub-template">{% if way %}{% for s in way.subs %}{{ sub_row(s) }}{% endfor %}{% endif %}</div>
+            <template id="university-sub-template">{{ sub_row({'id': '', 'name': '', 'weight': none}) }}</template>
+        </div>
+        <div class="field field-wide">
+            <div class="field-label-row"><label>Events</label>
+                <button type="button" class="icon-btn" data-rows-add="university-event-rows" title="Add an event" aria-label="Add an event">{{ icon('plus', 'icon-sm') }}</button></div>
+            <div class="rows-host" id="university-event-rows" data-rows-host data-rows-template="university-event-template">{% for m in events %}{{ event_row(m) }}{% endfor %}</div>
+            <template id="university-event-template">{{ event_row({'uid': '', 'raw_title': '', 'day': '', 'start': '', 'end_day': '', 'end': '', 'location': ''}) }}</template>
+        </div>
+        <div class="field field-wide">
+            <div class="field-label-row"><label>Tasks</label>
+                <button type="button" class="icon-btn" data-rows-add="university-task-rows" title="Add a task" aria-label="Add a task">{{ icon('plus', 'icon-sm') }}</button></div>
+            <div class="rows-host" id="university-task-rows" data-rows-host data-rows-template="university-task-template">{% for m in tasks %}{{ task_row(m) }}{% endfor %}</div>
+            <template id="university-task-template">{{ task_row({'uid': '', 'raw_title': '', 'due': ''}) }}</template>
+        </div>
+    </div>
+</form>
+</div>
+{% endcall %}
+{% endblock %}

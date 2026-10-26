@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# curodav-update -- the short command for updating curodav on a host installed with curodav-ctl.
+#
+#   sudo curodav-update            deploy the latest release: the pending migrations are tried on a copy of the database
+#                                  first, the data is snapshotted, and a failed health check rolls code and data back
+#   sudo curodav-update --revert   undo the last update, code and data (asks before discarding data saved since)
+#   sudo curodav-update --revert --yes | --keep-data    the same without the question, or code only
+set -euo pipefail
+
+case "${1:-}" in
+  "" | update)
+    exec curodav-ctl update
+    ;;
+  --revert | revert)
+    shift
+    exec curodav-ctl revert "$@"
+    ;;
+  -h | --help)
+    sed -n '2,8p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    ;;
+  *)
+    echo "Usage: curodav-update [--revert [--yes] [--keep-data]]" >&2
+    exit 2
+    ;;
+esac

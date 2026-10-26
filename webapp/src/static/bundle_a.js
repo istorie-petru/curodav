@@ -856,8 +856,50 @@ document.addEventListener("submit", (event) => {
   document.addEventListener("input", (e) => {
     if (!e.target.matches || !e.target.matches(".multiselect-search-input, .ms-merged .multiselect-new-input")) return;
     const panel = e.target.closest(".multiselect-panel");
-    if (panel) applySearchFilter(panel, e.target.value.trim());
+    if (!panel) return;
+    const wrapper = openPanel && openPanel.panel === panel ? openPanel.anchor : null;
+    if (wrapper && wrapper.dataset.msRemote) {
+      remoteSearch(panel, wrapper, e.target.value.trim());
+      return;
+    }
+    applySearchFilter(panel, e.target.value.trim());
   });
+
+  // Server-searched dropdowns: `data-ms-remote` is a JSON endpoint taking `q` and the chosen values as `selected`
+  // and returning [{uid, name}]. The panel keeps the chosen options and swaps the rest for the matches, so a
+  // library of thousands is never sent whole.
+  const remoteTimers = new WeakMap();
+  function remoteSearch(panel, wrapper, text) {
+    clearTimeout(remoteTimers.get(panel));
+    remoteTimers.set(panel, setTimeout(() => {
+      const params = new URLSearchParams({ q: text });
+      panel.querySelectorAll(".multiselect-option input:checked").forEach((i) => params.append("selected", i.value));
+      fetch(wrapper.dataset.msRemote + "?" + params, { headers: { "X-Requested-With": "fetch" } })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error("search failed"))))
+        .then((items) => {
+          panel.querySelectorAll(".multiselect-option").forEach((row) => {
+            const input = row.querySelector("input");
+            if (input && !input.checked) row.remove();
+          });
+          const present = new Set(Array.from(panel.querySelectorAll(".multiselect-option input")).map((i) => i.value));
+          items.forEach((item) => {
+            if (present.has(item.uid)) return;
+            const label = document.createElement("label");
+            label.className = "multiselect-option";
+            const input = document.createElement("input");
+            input.type = wrapper.dataset.msMode === "single" ? "radio" : "checkbox";
+            input.name = wrapper.dataset.msName;
+            input.value = item.uid;
+            if (wrapper.dataset.msForm) input.setAttribute("form", wrapper.dataset.msForm);
+            const name = document.createElement("span");
+            name.textContent = item.name;
+            label.append(input, name);
+            panel.appendChild(label);
+          });
+        })
+        .catch(() => window.ccToast({ message: "Search failed", variant: "error" }));
+    }, 150));
+  }
 
   window.addEventListener("resize", () => {
     if (openPanel) position(openPanel.panel, openPanel.trigger);

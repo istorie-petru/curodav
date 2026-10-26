@@ -1,0 +1,26 @@
+{# A drop-down for one field of a repeatable row (static/repeatable_rows.js): an action menu whose chosen item goes into a hidden field. #}
+{% macro rows_pick(name, value, items, label) %}
+{% set cur = (items | selectattr('value', 'equalto', value | string) | list | first) or items[0] %}
+<div class="action-menu rows-pick"><input type="hidden" name="{{ name }}" value="{{ cur.value }}">
+    <button type="button" class="action-menu-trigger btn ghost rows-pick-trigger" aria-label="{{ label }}"><span class="rows-pick-label">{{ cur.html | safe }}</span>{{ icon('chevron-down', 'icon-sm') }}</button>
+    <div class="action-menu-panel" role="menu"><div class="action-menu-section">
+        {% for it in items %}<button type="button" class="action-menu-item" role="menuitem" data-rows-pick="{{ it.value }}">{{ it.html | safe }}</button>{% endfor %}
+    </div></div>
+</div>
+{% endmacro %}
+
+{# The importance of a topic as a pill: no colour for normal, then one, two and three stars. #}
+{% macro importance_pill(level) %}
+{%- set n = level | int -%}
+<span class="pill-static pill-{{ ['gray', 'blue', 'orange', 'red'][n if n in (0, 1, 2, 3) else 0] }}">{% if n %}{% for _ in range(n) %}{{ icon('star', 'icon-sm') }}{% endfor %}{% else %}Normal{% endif %}</span>
+{% endmacro %}
+
+{% macro importance_pick(value) %}
+{% set items = [{'value': '0', 'html': importance_pill(0)}, {'value': '1', 'html': importance_pill(1)}, {'value': '2', 'html': importance_pill(2)}, {'value': '3', 'html': importance_pill(3)}] %}
+{{ rows_pick('importance', value, items, 'Importance') }}
+{% endmacro %}
+
+{% macro form_pick(name, value, forms) %}
+{% set items = [{'value': '', 'html': 'Not set'}] %}{% for f in forms %}{% set _ = items.append({'value': f, 'html': f}) %}{% endfor %}
+{{ rows_pick(name, value, items, 'Form of evaluation') }}
+{% endmacro %}

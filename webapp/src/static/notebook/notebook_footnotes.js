@@ -275,7 +275,7 @@
   }
 
   function searchCitations(query, cb) {
-    var url = "/notebook/citations/search?q=" + encodeURIComponent(query || "");
+    var url = "/library/search?q=" + encodeURIComponent(query || "");
     fetch(url, { headers: { Accept: "application/json" } })
       .then(function (resp) {
         return resp.ok ? resp.json() : [];
@@ -530,7 +530,7 @@
         original: data.citations ? data.citations.original.uid : "",
         secondary: data.citations ? data.citations.secondary.uid : "",
       };
-      fetch("/notebook/citations/footnote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      fetch("/library/footnote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
         .then(function (resp) { if (!resp.ok) throw new Error("format failed"); return resp.json(); })
         .then(function (result) {
           writeMark(mark, { "data-note": result.text, "data-footnote-kind": kind, "data-footnote-data": JSON.stringify(data) });

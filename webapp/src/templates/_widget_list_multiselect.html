@@ -15,7 +15,7 @@
 <div class="field {{ 'field-wide' if _wide else '' }} {{ ms_extra_class | default('') }}" {% if ms_hidden | default(false) %}hidden{% endif %}>
     <label class="{{ ms_label_class | default('') }}">{{ ms_label }}</label>
 {% endif %}
-    <div class="multiselect widget-list-multiselect {{ ms_root_class | default('') }}" data-ms data-ms-mode="{{ _mode }}" data-ms-label="{{ ms_label|lower }}"{% if _mode == 'names' %} data-ms-empty="{{ ms_placeholder | default('None') }}"{% endif %}>
+    <div class="multiselect widget-list-multiselect {{ ms_root_class | default('') }}" data-ms data-ms-mode="{{ _mode }}" data-ms-label="{{ ms_label|lower }}"{% if ms_remote | default('') %} data-ms-remote="{{ ms_remote }}" data-ms-name="{{ ms_name }}" data-ms-form="{{ ms_form_id }}"{% endif %}{% if _mode == 'names' %} data-ms-empty="{{ ms_placeholder | default('None') }}"{% endif %}>
         <button type="button" class="multiselect-trigger ms-trigger" aria-haspopup="true" aria-expanded="false" aria-label="{{ ms_label }}">
             <span class="ms-summary">{% if _mode == 'names' %}{% set _on = ms_items | selectattr('checked') | map(attribute='name') | list %}{{ _on | join(', ') if _on else (ms_placeholder | default('None')) }}{% elif _single %}{{ _sel_item.name if _sel_item else (ms_placeholder | default('Select')) }}{% elif _mode == 'select' %}{% if _n == 0 %}No {{ ms_label|lower }}{% elif _n == 1 %}{{ (ms_items | selectattr('uid', 'in', _sel) | first).name }}{% else %}{{ _n }} selected{% endif %}{% else %}{% if _n == 0 or _n >= _total %}All{% elif _n == 1 %}{{ (ms_items | selectattr('uid', 'in', _sel) | first).name }}{% else %}{{ _n }} selected{% endif %}{% endif %}</span>
             <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
@@ -31,7 +31,7 @@
                 {{ search_input({'name': (ms_name ~ '_new') if _single else ms_name, 'class': 'multiselect-new-input', 'aria-label': ('Search or add' if _merged else 'New') ~ ' ' ~ ms_label|lower|replace('shelves', 'shelf')|replace('labels', 'label'), 'form': ms_form_id or none}, 'search' if _merged else 'plus') }}
             </label>
             {% endset %}
-            {% if _merged %}{{ _new_row }}<div class="multiselect-divider"></div>{% elif ms_items | length > 7 or ms_search_always %}{% set _ms_search_label = ms_label|lower %}{% include "_ms_search_row.html" %}{% endif %}
+            {% if _merged %}{{ _new_row }}<div class="multiselect-divider"></div>{% elif ms_items | length > 7 or ms_search_always or ms_remote | default('') %}{% set _ms_search_label = ms_label|lower %}{% include "_ms_search_row.html" %}{% endif %}
             {% for it in ms_items %}
             <label class="multiselect-option">
                 <input type="{{ 'radio' if _single else 'checkbox' }}" name="{{ it.field or ms_name }}" value="{{ it.uid }}"

@@ -66,3 +66,4 @@ webapp/encrypted.data
 .idea/
 .vscode/
 tools/editor-bundle/node_modules/
+.venv

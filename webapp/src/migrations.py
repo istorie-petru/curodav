@@ -7,12 +7,14 @@ a change is a new migration. Steps older than this runner still live in `db.init
 
 from __future__ import annotations
 
-import shutil
 import sqlite3
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+from .migrations_citations import citation_editions
 
 
 @dataclass(frozen=True)
@@ -313,6 +315,137 @@ def _university_items(conn: sqlite3.Connection) -> None:
     )
 
 
+def _university_sheet(conn: sqlite3.Connection) -> None:
+    """The course sheet of a discipline (fixed and custom fields) and what a reading says about a library book."""
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS university_sheet (
+            semester_uid TEXT NOT NULL,
+            discipline_tag TEXT NOT NULL,
+            key TEXT NOT NULL,
+            label TEXT NOT NULL DEFAULT '',
+            value TEXT NOT NULL DEFAULT '',
+            position REAL NOT NULL DEFAULT 0,
+            PRIMARY KEY (semester_uid, discipline_tag, key)
+        );
+        """
+    )
+    cols = _columns(conn, "university_readings")
+    for name in ("locator", "category", "notes"):
+        if name not in cols:
+            conn.execute(f"ALTER TABLE university_readings ADD COLUMN {name} TEXT")
+    exam_cols = _columns(conn, "university_exams")
+    for name in ("component", "notes"):
+        if name not in exam_cols:
+            conn.execute(f"ALTER TABLE university_exams ADD COLUMN {name} TEXT")
+    if "credits_target" not in _columns(conn, "university_semesters"):
+        conn.execute("ALTER TABLE university_semesters ADD COLUMN credits_target REAL")
+
+
+def _university_sheet_columns(conn: sqlite3.Connection) -> None:
+    """Columns that migration 32 gained after some databases had already run it: the semester's credits target, and an exam's evaluation link and notes."""
+    if "credits_target" not in _columns(conn, "university_semesters"):
+        conn.execute("ALTER TABLE university_semesters ADD COLUMN credits_target REAL")
+    exam_cols = _columns(conn, "university_exams")
+    for name in ("component", "notes"):
+        if name not in exam_cols:
+            conn.execute(f"ALTER TABLE university_exams ADD COLUMN {name} TEXT")
+
+
+_CITATION_FTS_COLUMNS = "title, authors, container_title, publisher, isbn, doi, note"
+_CITATION_FTS_AUTHORS = ("(SELECT group_concat(coalesce(json_extract(value, '$.family'), '') || ' ' || coalesce(json_extract(value, '$.given'), ''), ' ') "
+                         "FROM json_each({row}.authors_json))")
+
+
+def _citation_fts_values(row: str) -> str:
+    return (f"{row}.title, coalesce({_CITATION_FTS_AUTHORS.format(row=row)}, ''), {row}.container_title, "
+            f"{row}.publisher, {row}.isbn, {row}.doi, {row}.note")
+
+
+def _citations_search_and_files(conn: sqlite3.Connection) -> None:
+    """Citations gain a stored PDF (file_name, file_label), a keyset-friendly title index and an FTS5 search index kept by triggers."""
+    have = _columns(conn, "citations")
+    for column in ("file_name", "file_label"):
+        if column not in have:
+            conn.execute(f"ALTER TABLE citations ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_citations_title ON citations(title COLLATE NOCASE, uid)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_citations_doi ON citations(doi) WHERE doi != ''")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_citations_isbn ON citations(isbn) WHERE isbn != ''")
+    conn.execute(f"CREATE VIRTUAL TABLE IF NOT EXISTS citations_fts USING fts5({_CITATION_FTS_COLUMNS}, tokenize='unicode61 remove_diacritics 2')")
+    cols = _CITATION_FTS_COLUMNS
+    conn.execute(f"CREATE TRIGGER IF NOT EXISTS citations_fts_insert AFTER INSERT ON citations BEGIN INSERT INTO citations_fts(rowid, {cols}) VALUES (new.rowid, {_citation_fts_values('new')}); END")
+    conn.execute(f"CREATE TRIGGER IF NOT EXISTS citations_fts_delete AFTER DELETE ON citations BEGIN DELETE FROM citations_fts WHERE rowid = old.rowid; END")
+    conn.execute(f"CREATE TRIGGER IF NOT EXISTS citations_fts_update AFTER UPDATE ON citations BEGIN DELETE FROM citations_fts WHERE rowid = old.rowid; INSERT INTO citations_fts(rowid, {cols}) VALUES (new.rowid, {_citation_fts_values('new')}); END")
+    conn.execute("DELETE FROM citations_fts")
+    conn.execute(f"INSERT INTO citations_fts(rowid, {cols}) SELECT rowid, {_citation_fts_values('citations')} FROM citations")
+
+
+def _university_milestones(conn: sqlite3.Connection) -> None:
+    """Exams become milestones of a way of evaluating: each exam row moves over keeping its task and event, on the way its component
+    points at (or on a new way named after it, with the exam's weight). The general form of evaluation goes."""
+    import json
+    import uuid
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS university_milestones (
+            uid TEXT PRIMARY KEY,
+            semester_uid TEXT NOT NULL,
+            discipline_tag TEXT NOT NULL,
+            way_id TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT '',
+            day TEXT NOT NULL DEFAULT '',
+            start TEXT NOT NULL DEFAULT '',
+            end TEXT NOT NULL DEFAULT '',
+            location TEXT NOT NULL DEFAULT '',
+            due TEXT NOT NULL DEFAULT '',
+            notes TEXT NOT NULL DEFAULT '',
+            event_uid TEXT,
+            task_uid TEXT,
+            position INTEGER NOT NULL DEFAULT 0
+        )
+        """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_university_milestones_discipline ON university_milestones(semester_uid, discipline_tag)")
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'university_exams'").fetchone():
+        position = 0
+        for exam in conn.execute("SELECT * FROM university_exams ORDER BY semester_uid, discipline_tag, rowid").fetchall():
+            ways = {}
+            for row in conn.execute("SELECT * FROM university_sheet WHERE semester_uid = ? AND discipline_tag = ? COLLATE NOCASE AND key LIKE 'eval:%'",
+                                    (exam["semester_uid"], exam["discipline_tag"])).fetchall():
+                try:
+                    data = json.loads(row["value"] or "{}")
+                except ValueError:
+                    data = {}
+                ways[data.get("id") or row["key"][5:]] = [sub.get("id") for sub in data.get("subs", [])]
+            event = conn.execute("SELECT * FROM events WHERE uid = ?", (exam["event_uid"],)).fetchone()
+            task = conn.execute("SELECT * FROM tasks WHERE uid = ?", (exam["task_uid"],)).fetchone()
+            title = (task["title"] if task else "") or (event["title"] if event else "") or "Exam"
+            way = exam["component"] if exam["component"] in ways else next((w for w, subs in ways.items() if exam["component"] in subs), None)
+            if not way:
+                way = uuid.uuid4().hex[:8]
+                weight = "" if exam["weight"] is None else f"{exam['weight']:g}"
+                conn.execute("INSERT INTO university_sheet (semester_uid, discipline_tag, key, label, value, position) VALUES (?, ?, ?, ?, ?, ?)",
+                             (exam["semester_uid"], exam["discipline_tag"], f"eval:{way}", title,
+                              json.dumps({"id": way, "form": "", "weight": weight, "subs": []}), 300))
+            start_at, end_at = (event["start_at"] if event else "") or "", (event["end_at"] if event else "") or ""
+            due = ((task["due_at"] if task else "") or "")[:10]
+            conn.execute("INSERT OR IGNORE INTO university_milestones (uid, semester_uid, discipline_tag, way_id, title, day, start, end, location, due, notes, "
+                         "event_uid, task_uid, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                         (exam["task_uid"], exam["semester_uid"], exam["discipline_tag"], way, title, start_at[:10], start_at[11:16], end_at[11:16],
+                          (event["location"] if event else "") or "", due, exam["notes"] or "", exam["event_uid"] if event else None,
+                          exam["task_uid"] if task else None, position))
+            position += 1
+        conn.execute("DROP TABLE university_exams")
+    conn.execute("DELETE FROM university_sheet WHERE key = 'evaluation'")
+
+
+def _milestone_end_day(conn: sqlite3.Connection) -> None:
+    """An event milestone ends on a day of its own, which may differ from its start day."""
+    if "end_day" not in _columns(conn, "university_milestones"):
+        conn.execute("ALTER TABLE university_milestones ADD COLUMN end_day TEXT NOT NULL DEFAULT ''")
+    conn.execute("UPDATE university_milestones SET end_day = day WHERE end_day = '' AND day != ''")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "notebook documents get an is_template flag", _note_templates),
     Migration(2, "frontmatter fields lose the required column", _field_config_without_required, destructive=True),
@@ -342,6 +475,13 @@ MIGRATIONS: list[Migration] = [
     Migration(26, "task and event links get a kind", _links_get_a_kind, destructive=True),
     Migration(27, "University module tables", _university_tables),
     Migration(28, "University classes, exams and readings", _university_items),
+    Migration(32, "University course sheet and library references", _university_sheet),
+    Migration(33, "University credits target, exam evaluation links and notes", _university_sheet_columns),
+    Migration(34, "Citation search index and stored PDFs", _citations_search_and_files),
+    Migration(35, "University exams become milestones of a way of evaluating", _university_milestones, destructive=True),
+    Migration(36, "University event milestones get an end day", _milestone_end_day),
+    Migration(40, "Citation editions with their own PDFs", citation_editions, destructive=True),
+    Migration(41, "Books get status, rating and keywords; editions get a DOI", citation_editions, destructive=True),
 ]
 
 
@@ -350,34 +490,138 @@ def _database_file(conn: sqlite3.Connection) -> Path | None:
     return Path(row[2]) if row and row[2] else None
 
 
-def _backup(conn: sqlite3.Connection, number: int) -> None:
+class MigrationError(RuntimeError):
+    """A migration could not be applied, or the database is ahead of this version."""
+
+
+def _backup(conn: sqlite3.Connection, number: int) -> Path | None:
+    """A consistent copy of the database next to it, through SQLite's own backup so pages still in the WAL are included."""
     source = _database_file(conn)
     if source is None or not source.exists():
-        return
+        return None
     conn.commit()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    shutil.copy2(source, source.with_name(f"{source.name}.before-migration-{number:04d}-{stamp}"))
+    target = source.with_name(f"{source.name}.before-migration-{number:04d}-{stamp}")
+    copy = sqlite3.connect(target)
+    try:
+        conn.backup(copy)
+    finally:
+        copy.close()
+    return target
+
+
+def known_numbers() -> set[int]:
+    return {m.number for m in MIGRATIONS}
+
+
+def applied_numbers(conn: sqlite3.Connection) -> set[int]:
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'").fetchone():
+        return set()
+    return {row[0] for row in conn.execute("SELECT number FROM schema_migrations")}
+
+
+def ahead_of_this_version(conn: sqlite3.Connection) -> list[int]:
+    """Migrations the database has that this code does not know: it was upgraded by a newer release."""
+    return sorted(applied_numbers(conn) - known_numbers())
 
 
 def pending(conn: sqlite3.Connection) -> list[Migration]:
     conn.execute("CREATE TABLE IF NOT EXISTS schema_migrations (number INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)")
-    done = {row[0] for row in conn.execute("SELECT number FROM schema_migrations")}
-    return [m for m in MIGRATIONS if m.number not in done]
+    done = applied_numbers(conn)
+    return sorted((m for m in MIGRATIONS if m.number not in done), key=lambda m: m.number)
 
 
 def run(conn: sqlite3.Connection) -> list[int]:
-    """Applies every pending migration in order and returns the numbers applied."""
+    """Applies every pending migration in number order and returns the numbers applied.
+
+    A database that a newer release has migrated is refused before anything is changed, since older code on a newer schema
+    corrupts data quietly. One backup is taken before the first destructive migration of a run. A migration that fails rolls its
+    own changes back, is not recorded, and stops the run with the backup's name in the message; those already applied stay recorded.
+    """
+    ahead = ahead_of_this_version(conn)
+    if ahead:
+        raise MigrationError(f"This database was migrated by a newer release (migrations {', '.join(map(str, ahead))}). "
+                             f"Restore the backup taken before that update, or run the newer release: 'curodav-ctl revert' does the first.")
+    todo = pending(conn)
+    backup: Path | None = None
     applied = []
-    for migration in pending(conn):
-        if migration.destructive and _has_data(conn):
-            _backup(conn, migration.number)
-        migration.apply(conn)
-        conn.execute("INSERT INTO schema_migrations (number, name, applied_at) VALUES (?, ?, ?)",
-                     (migration.number, migration.name, datetime.now(timezone.utc).isoformat()))
-        conn.commit()
+    for migration in todo:
+        if migration.destructive and backup is None and _has_data(conn):
+            backup = _backup(conn, migration.number)
+        try:
+            if not conn.in_transaction:
+                conn.execute("BEGIN IMMEDIATE")  # DDL is transactional in SQLite; Python only opens a transaction for DML on its own
+            migration.apply(conn)
+            conn.execute("INSERT INTO schema_migrations (number, name, applied_at) VALUES (?, ?, ?)",
+                         (migration.number, migration.name, datetime.now(timezone.utc).isoformat()))
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            hint = f" The database as it was before is in {backup.name}." if backup else ""
+            raise MigrationError(f"Migration {migration.number} ({migration.name}) failed: {exc}.{hint}") from exc
         applied.append(migration.number)
     return applied
 
 
 def _has_data(conn: sqlite3.Connection) -> bool:
     return conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'notebook_field_config'").fetchone() is not None
+
+
+def dry_run(db_path: Path) -> list[int]:
+    """Runs the pending migrations on a throw-away copy of the database, through the same start-up path the app uses, and
+    returns their numbers. The real database is never touched; raises MigrationError when a migration would fail."""
+    import tempfile
+
+    from . import db
+
+    with tempfile.TemporaryDirectory() as tmp:
+        copy = Path(tmp) / db_path.name
+        source = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        target = sqlite3.connect(copy)
+        try:
+            source.backup(target)
+        finally:
+            source.close()
+            target.close()
+        before = sqlite3.connect(copy)
+        try:
+            ahead = ahead_of_this_version(before)
+            have = applied_numbers(before)
+        finally:
+            before.close()
+        if ahead:
+            raise MigrationError(f"The database is ahead of this version (migrations {', '.join(map(str, ahead))}).")
+        try:
+            with db.connect(copy):
+                pass
+        except MigrationError:
+            raise
+        except Exception as exc:
+            raise MigrationError(f"Start-up on a copy of the database failed: {exc}") from exc
+        after = sqlite3.connect(copy)
+        try:
+            return sorted(applied_numbers(after) - have)
+        finally:
+            after.close()
+
+
+def main(argv: list[str]) -> int:
+    """`python -m src.migrations check <database>`: what an update would migrate, tried on a copy. Exit 0 when it works."""
+    if len(argv) != 2 or argv[0] != "check":
+        sys.stderr.write("usage: python -m src.migrations check <database file>\n")
+        return 2
+    path = Path(argv[1])
+    if not path.exists():
+        sys.stdout.write("No database yet: nothing to migrate.\n")
+        return 0
+    try:
+        numbers = dry_run(path)
+    except MigrationError as exc:
+        sys.stderr.write(f"Migration check failed: {exc}\n")
+        return 1
+    sys.stdout.write(f"Migration check passed: {', '.join(map(str, numbers)) if numbers else 'nothing pending'}.\n")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

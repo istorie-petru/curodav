@@ -176,8 +176,8 @@ For the `curodav-ctl` install:
 
 | I want to… | Run |
 |---|---|
-| Update to the latest version | `sudo curodav-ctl update` |
-| Undo the last update | `sudo curodav-ctl revert` |
+| Update to the latest version | `sudo curodav-update` (or `sudo curodav-ctl update`) |
+| Undo the last update, data included | `sudo curodav-update --revert` (or `sudo curodav-ctl revert`) |
 | Check that everything is healthy | `curodav-ctl status` |
 | See the logs | `sudo journalctl -u curodav -f` |
 

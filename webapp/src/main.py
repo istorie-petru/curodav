@@ -139,6 +139,9 @@ async def lifespan(app: FastAPI):
         from . import auth as auth_core
 
         auth_core.ensure_recovery_token(_conn)
+        from . import modules as _modules
+
+        _modules.load_stored(_conn)
     app.state.settings = settings
     steps["database"] = time.perf_counter() - boot
 
@@ -310,6 +313,9 @@ def create_app() -> FastAPI:
 
     app.include_router(university.router)
     app.include_router(university.notes_router)
+    from . import university_discipline
+
+    app.include_router(university_discipline.router)
     app.include_router(taxonomy.settings_router)
     app.include_router(taxonomy.calendar_router)
     app.include_router(labels.router)
@@ -320,6 +326,7 @@ def create_app() -> FastAPI:
     app.include_router(spaces.router)
     app.include_router(projects.router)
     app.include_router(habits.router)
+    app.include_router(notebook.legacy_citations_router)
     app.include_router(notebook.citations_router)
     app.include_router(notebook.glossary_router)
     app.include_router(notebook.router)

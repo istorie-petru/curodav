@@ -4,7 +4,7 @@
     if (!apply) return;
     const params = new URLSearchParams(new FormData(form));
     const query = params.toString();
-    apply.setAttribute("href", "/notebook/citations" + (query ? "?" + query : ""));
+    apply.setAttribute("href", "/library" + (query ? "?" + query : ""));
   }
 
   document.addEventListener("change", (e) => {

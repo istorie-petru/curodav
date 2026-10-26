@@ -24,12 +24,12 @@ import uuid
 from datetime import datetime, timezone
 from urllib.parse import quote, urlencode
 
-from fastapi import APIRouter, Depends, Form, Header, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 
 from .. import tags as tag_store
 from .. import citation_formats, clock, db, icon_font, notebook_fields, notebook_find, notebook_mentions
-from ..deps import get_db, respond, templates, wants_json
+from ..deps import get_db, respond, templates, validation_response, wants_json
 from .labels import COLORS, icon_groups_for
 
 router = APIRouter(prefix="/notebook", tags=["notebook"])
@@ -776,9 +776,7 @@ def document_bibliography_modal(uid: str, request: Request, conn=Depends(get_db)
             "request": request,
             "document": document,
             "attached_uids": [c["uid"] for c in attached],
-            "citation_items": [
-                {"uid": c["uid"], "name": db.format_citation_display(c)} for c in db.list_citations(conn)
-            ],
+            "citation_items": db.picker_items(conn, [c["uid"] for c in attached]),
         },
     )
 
@@ -1132,9 +1130,18 @@ def delete_notebook_field(uid: str, conn=Depends(get_db)):
     return RedirectResponse(url="/settings/notebook", status_code=303)
 
 
-citations_router = APIRouter(prefix="/notebook/citations", tags=["notebook-citations"])
+citations_router = APIRouter(prefix="/library", tags=["notebook-citations"])
 
-_CITATIONS_CRUMB = [{"url": "/notebook", "name": "Notebook"}]
+legacy_citations_router = APIRouter(tags=["notebook-citations"])
+
+
+@legacy_citations_router.get("/notebook/citations{rest:path}")
+def legacy_citations(rest: str, request: Request):
+    """The library used to live under the Notebook; old links still arrive."""
+    query = request.url.query
+    return RedirectResponse(url=f"/library{rest}" + (f"?{query}" if query else ""), status_code=307)
+
+_CITATIONS_CRUMB = [{"url": "/", "name": "Home"}]
 
 
 def _citation_authors_from_form(families: list[str], givens: list[str]) -> list[dict[str, str]]:
@@ -1164,13 +1171,34 @@ def _safe_return_to(return_to: str) -> str:
     return return_to if return_to.startswith("/") and not return_to.startswith("//") else ""
 
 
-def _citation_edit_context(request: Request, c: dict | None, form_action: str, return_to: str = "") -> dict:
+def _citation_delete_label(conn, c: dict | None) -> str:
+    """The delete confirmation, naming what still uses the entry."""
+    if not c:
+        return ""
+    usage = db.citation_usage(conn, c["uid"])
+    used = [f"{n} {word}" for n, word in ((usage["notes"], "notes"), (usage["readings"], "university readings"), (usage["terms"], "glossary terms")) if n]
+    tail = f" It is used in {', '.join(used)}, which lose it." if used else ""
+    files = sum(1 for e in db.list_editions(conn, c["uid"]) if e["file_name"])
+    return f'Delete "{c["title"]}" and its editions?{tail}' + (f" {files} stored PDF{'s' if files != 1 else ''} deleted too." if files else "")
+
+
+def _citation_edit_context(request: Request, c: dict | None, form_action: str, return_to: str = "", conn=None, kind: str = "", selected_edition: str = "") -> dict:
+    editions = db.list_editions(conn, c["uid"]) if (conn and c) else []
+    stored = db.get_citation_raw(conn, c["uid"]) if (conn and c) else None
+    noun = db.book_noun(c) if c else ("Media" if kind == "media" else "Book")
     return {
+        "delete_label": _citation_delete_label(conn, c) if conn else "",
+        "editions": editions,
+        "selected_edition": selected_edition if any(e["uid"] == selected_edition for e in editions) else (editions[0]["uid"] if editions else ""),
+        "edition_data": [{k: e[k] for k in ("uid", "edition", "year", "publisher", "place", "isbn", "doi", "url", "source", "file_label", "file_state", "display")} for e in editions],
         "request": request,
         "crumbs": _CITATIONS_CRUMB,
-        "c": c,
+        "c": stored or c,
+        "noun": noun,
+        "default_type": "webpage" if (not c and kind == "media") else "book",
         "form_action": form_action,
         "citation_types": db.CITATION_TYPES,
+        "statuses": db.CITATION_STATUSES,
         "return_to": _safe_return_to(return_to),
     }
 
@@ -1200,71 +1228,6 @@ def _resolve_citation_year_range(year_from: str, year_to: str) -> tuple[int | No
     return lo, hi
 
 
-def _citation_sort_value(c: dict, field: str):
-    """One field's own sort key for a citation -- `title` (the default/
-        fallback for any unrecognized value) is a plain casefolded string,
-        `type`/`author` are likewise single comparable values, `year` is
-        already a ready-made tuple (db.citation_year_sort_key). Shared by
-        both the primary and secondary sort fields,
-        so there's exactly one place that knows how to compare citations by
-        any given field, not two near-duplicate branches.
-    """
-    if field == "type":
-        return c["type_label"].casefold()
-    if field == "year":
-        return db.citation_year_sort_key(c["year"])
-    if field == "author":
-        # Citations with no authors at all sort after every citation that
-        # has one, regardless of which field is actually being compared.
-        return (not c["author_keys"], c["author_keys"][0].casefold() if c["author_keys"] else "")
-    return c["title"].casefold()
-
-
-def _filter_and_sort_citations(
-    citations: list[dict],
-    type_vals: list[str],
-    author_vals: list[str],
-    year_from: str,
-    year_to: str,
-    sort: str,
-    sort2: str,
-) -> list[dict]:
-    """Shared by the library page and (eventually) any other citation list
-        view -- filters are a plain AND across dimensions, same convention the
-        Browse page's rail already established. Author matching checks
-        EVERY author on a citation, not just the first.
-
-        Sort is primary (`sort`) + secondary (`sort2`) -- two independent
-        fields, not one combined picker. Title is
-        always appended as an unconditional third/tiebreaker level regardless
-        of what's picked, so the result stays fully deterministic even when
-        Primary and Secondary end up equal for two citations (or are the same
-        field picked twice, which simply makes Secondary a no-op).
-    """
-    selected_types, selected_authors = set(type_vals), set(author_vals)
-    if selected_types:
-        citations = [c for c in citations if c["type"] in selected_types]
-    if selected_authors:
-        citations = [c for c in citations if selected_authors & set(c["author_keys"])]
-    year_lo, year_hi = _resolve_citation_year_range(year_from, year_to)
-    if year_lo is not None or year_hi is not None:
-        def _in_range(c: dict) -> bool:
-            year = db.parse_citation_year(c["year"])
-            if year is None:
-                return False
-            if year_lo is not None and year < year_lo:
-                return False
-            if year_hi is not None and year > year_hi:
-                return False
-            return True
-        citations = [c for c in citations if _in_range(c)]
-    citations = sorted(
-        citations,
-        key=lambda c: (_citation_sort_value(c, sort), _citation_sort_value(c, sort2), c["title"].casefold()),
-    )
-    return citations
-
-
 @citations_router.get("")
 def citations_library(
     request: Request,
@@ -1275,20 +1238,23 @@ def citations_library(
     sort: str = "title",
     sort2: str = "title",
     q: str = "",
+    after: str = "",
+    source: list[str] = Query([]),
     conn=Depends(get_db),
 ):
+    source = source if isinstance(source, list) else []
     sort = sort if sort in _CITATION_SORT_KEYS else "title"
     sort2 = sort2 if sort2 in _CITATION_SORT_KEYS else "title"
     type_labels = dict(db.CITATION_TYPES)
-    citations = db.list_citations(conn)
+    year_lo, year_hi = _resolve_citation_year_range(year_from, year_to)
+    page = db.page_citations(conn, q=q, types=type, authors=author, year_lo=year_lo, year_hi=year_hi, sources=source, sort=sort, sort2=sort2, after=after)
+    citations = page["items"]
+    sources = db.sources_for(conn, citations)
     for c in citations:
         c["display_authors"] = db.format_citation_authors(c["authors"])
         c["type_label"] = type_labels.get(c["type"], c["type"])
-        c["author_keys"] = [db.citation_author_key(a) for a in c["authors"]]
-    needle = q.strip().casefold()
-    if needle:
-        citations = [c for c in citations if needle in c["title"].casefold() or needle in c["display_authors"].casefold()]
-    citations = _filter_and_sort_citations(citations, type, author, year_from, year_to, sort, sort2)
+        c["source"] = sources[c["uid"]]
+    params = [(k, v) for k, v in request.query_params.multi_items() if k != "after"]
     return templates.TemplateResponse(
         "notebook_citations_list.html",
         {
@@ -1297,16 +1263,11 @@ def citations_library(
             "active_tab": "notebook",
             "crumbs": _CITATIONS_CRUMB,
             "citations": citations,
-            # Carried straight through to the "Filters" link so reopening
-            # the modal shows the picker pre-set to whatever's already
-            # applied on this page, not a blank form.
+            "total": page["total"],
+            "next_href": "/library?" + urlencode([*params, ("after", page["next"])]) if page["next"] else "",
             "current_query": request.url.query,
-            # Year is one range, not one count per picked value -- either
-            # bound being set counts as a single active filter. Sort is
-            # likewise one count covering both Primary and Secondary
-            # together, not two separate increments.
             "active_filter_count": (
-                len(type) + len(author) + (1 if (year_from or year_to) else 0)
+                len(type) + len(author) + len(source) + (1 if (year_from or year_to) else 0)
                 + (1 if (sort != "title" or sort2 != "title") else 0)
             ),
         },
@@ -1318,6 +1279,7 @@ def citations_filters_modal(
     request: Request,
     type: list[str] = Query([]),
     author: list[str] = Query([]),
+    source: list[str] = Query([]),
     year_from: str = "",
     year_to: str = "",
     sort: str = "title",
@@ -1325,15 +1287,15 @@ def citations_filters_modal(
     conn=Depends(get_db),
 ):
     """The Filters modal. Author options are built from
-        `list_citation_authors_in_use` (distinct values actually in the data,
+        `db.author_options` (distinct values actually in the data,
         same shape as the property-key picker), not a fixed list -- Type is
         the other fixed, small (7-value) list; Year is a from/to interval, two plain number inputs, not a
         dropdown at all -- `_resolve_citation_year_range`'s own comment has
         the "blank End defaults to the present year, but only once Start is
         set" rule. Sort is Primary (`sort`) + Secondary (`sort2`), two
         independent single-select dropdowns sharing the
-        same CITATION_SORT_OPTIONS list -- `_citation_sort_value`/
-        `_filter_and_sort_citations` have the actual comparison logic. Type/
+        same CITATION_SORT_OPTIONS list -- `db.page_citations` has the
+        actual ordering. Type/
         Author render with `ms_search=true` (the new
         in-dropdown fuzzy filter, static/app.js's multiselect IIFE) so a
         library with hundreds of authors stays usable. The Apply button's
@@ -1346,6 +1308,7 @@ def citations_filters_modal(
         just submit itself through modal.js's generic (POST-shaped) form
         handler.
     """
+    source = source if isinstance(source, list) else []
     current_query = request.url.query
     # Same "render the common case server-side, let JS sync the rest"
     # convention this app's other pre-paint defaults use -- the End field
@@ -1359,14 +1322,15 @@ def citations_filters_modal(
             "request": request,
             "type_items": [{"uid": k, "name": v} for k, v in db.CITATION_TYPES],
             "selected_types": type,
-            "author_items": [{"uid": a, "name": a} for a in db.list_citation_authors_in_use(conn)],
+            "author_items": db.author_options(conn, "", author),
             "selected_authors": author,
+            "selected_sources": source,
             "selected_year_from": year_from,
             "selected_year_to": display_year_to,
             "sort_items": [{"uid": k, "name": v} for k, v in CITATION_SORT_OPTIONS],
             "selected_sort": sort,
             "selected_sort2": sort2,
-            "apply_href": "/notebook/citations" + (f"?{current_query}" if current_query else ""),
+            "apply_href": "/library" + (f"?{current_query}" if current_query else ""),
         },
     )
 
@@ -1387,16 +1351,7 @@ def search_citations(q: str = "", limit: int = 20, conn=Depends(get_db)):
         fields for the client to both render a result row and assemble the
         one hardcoded Chicago-inspired footnote string itself without a second round trip.
     """
-    citations = db.list_citations(conn)
-    needle = q.strip().casefold()
-    if needle:
-        def _matches(c: dict) -> bool:
-            haystack = c["title"] + " " + c.get("container_title", "") + " " + " ".join(
-                a.get("family", "") + " " + a.get("given", "") for a in c.get("authors", [])
-            )
-            return needle in haystack.casefold()
-        citations = [c for c in citations if _matches(c)]
-    citations = citations[:limit]
+    citations = db.search_citations(conn, q, limit)
     return JSONResponse(
         [
             {
@@ -1410,6 +1365,17 @@ def search_citations(q: str = "", limit: int = 20, conn=Depends(get_db)):
             for c in citations
         ]
     )
+
+
+@citations_router.get("/options")
+def citation_options(q: str = "", selected: list[str] = Query([]), conn=Depends(get_db)):
+    """Options for a server-searched dropdown (static/app.js, `data-ms-remote`): the chosen entries plus the best matches for `q`."""
+    return JSONResponse(db.picker_items(conn, selected, q))
+
+
+@citations_router.get("/author-options")
+def citation_author_options(q: str = "", selected: list[str] = Query([]), conn=Depends(get_db)):
+    return JSONResponse(db.author_options(conn, q, selected))
 
 
 @citations_router.post("/footnote")
@@ -1426,10 +1392,10 @@ async def citation_footnote(request: Request, conn=Depends(get_db)):
 
 
 @citations_router.get("/new")
-def new_citation_modal(request: Request, return_to: str = "", conn=Depends(get_db)):
+def new_citation_modal(request: Request, return_to: str = "", kind: str = "", conn=Depends(get_db)):
     return templates.TemplateResponse(
         "citation_edit_modal.html",
-        _citation_edit_context(request, None, "/notebook/citations", return_to),
+        _citation_edit_context(request, None, "/library", return_to, kind=kind),
     )
 
 
@@ -1437,7 +1403,7 @@ def new_citation_modal(request: Request, return_to: str = "", conn=Depends(get_d
 def citation_view_modal(uid: str, request: Request, return_to: str = "", conn=Depends(get_db)):
     c = db.get_citation(conn, uid)
     if c is None:
-        return RedirectResponse(url="/notebook/citations", status_code=303)
+        return RedirectResponse(url="/library", status_code=303)
     type_label = dict(db.CITATION_TYPES).get(c["type"], c["type"])
     rows = [(label, c.get(key)) for key, label in _CITATION_VIEW_FIELDS if c.get(key)]
     return templates.TemplateResponse(
@@ -1445,6 +1411,7 @@ def citation_view_modal(uid: str, request: Request, return_to: str = "", conn=De
         {
             "request": request, "active_tab": "notebook", "c": c, "type_label": type_label, "rows": rows,
             "authors": db.format_citation_authors(c["authors"]), "entries": db.list_entries_citing(conn, uid),
+            "editions": db.list_editions(conn, uid), "delete_label": _citation_delete_label(conn, c),
             "return_to": _safe_return_to(return_to),
         },
     )
@@ -1458,14 +1425,84 @@ _CITATION_VIEW_FIELDS = [
 
 
 @citations_router.get("/{uid}/edit")
-def edit_citation_modal(uid: str, request: Request, conn=Depends(get_db)):
+def edit_citation_modal(uid: str, request: Request, edition: str = "", conn=Depends(get_db)):
     c = db.get_citation(conn, uid)
     if c is None:
-        return RedirectResponse(url="/notebook/citations", status_code=303)
+        return RedirectResponse(url="/library", status_code=303)
     return templates.TemplateResponse(
         "citation_edit_modal.html",
-        _citation_edit_context(request, c, f"/notebook/citations/{uid}/update"),
+        _citation_edit_context(request, c, f"/library/{uid}/update", conn=conn, selected_edition=edition),
     )
+
+
+_CITATION_TEXT_FIELDS = ("subtitle", "edition", "volume", "issue", "pages", "publisher", "place", "isbn", "issn", "accessed", "institution", "degree", "editors", "note")
+_EDITION_DETAILS = ("edition", "publisher", "place", "isbn", "doi", "url")
+
+
+def _citation_row_from_form(uid: str, values: dict, author_family: list[str], author_given: list[str]) -> dict:
+    """A field the form did not send (None) is left out, so the stored value stays."""
+    row = {"type": values["type"], "title": values["title"], "year": values["year"].strip(),
+           "container_title": values["container_title"].strip(),
+           "authors": _citation_authors_from_form(author_family, author_given)}
+    for k in ("doi", "url", *_CITATION_TEXT_FIELDS, "status", "rating"):
+        if isinstance(values.get(k), str):
+            row[k] = values[k].strip()
+    if isinstance(values.get("keywords"), str):
+        row["keywords"] = [k.strip() for k in re.split(r"[,;\n]", values["keywords"]) if k.strip()]
+    if uid:
+        row["uid"] = uid
+    return row
+
+
+def _duplicate_error(conn, row: dict, exclude_uid: str) -> dict | None:
+    twin = db.find_duplicate(conn, row, exclude_uid)
+    return {"field": "title", "message": f'"{twin["title"]}" is already in the library. Tick "Allow duplicate" to keep both.'} if twin else None
+
+
+def _write_edition(conn, citation_uid: str, edition_uid: str, edition: dict, source: str, file, delete: str) -> dict | None:
+    """Applies the edition half of the window: the selected edition is changed or deleted, or a new one made when it holds anything.
+    Returns a structured error for a bad file."""
+    if edition_uid and delete:
+        db.delete_edition(conn, edition_uid)
+        return None
+    has_file = file is not None and bool(getattr(file, "filename", ""))
+    source = source if source in ("none", "link", "local") else "none"
+    details = {k: _s(v) for k, v in edition.items()}
+    if source != "link":
+        details["url"] = ""
+    if not edition_uid and not (any(details.values()) or (source == "local" and has_file)):
+        return None
+    uid = db.save_edition(conn, citation_uid, details, edition_uid)
+    if source != "local":
+        db.clear_edition_file(conn, uid)
+    elif has_file:
+        error = db.set_edition_file(conn, uid, file.file.read(), file.filename)
+        if error:
+            return {"field": "file", "message": error}
+    return None
+
+
+def _write_citation(conn, uid: str, values: dict, author_family, author_given, allow_duplicate, x_requested_with, edition_form=None):
+    row = _citation_row_from_form(uid, values, author_family, author_given)
+    edition_form = edition_form or {}
+    if not allow_duplicate:
+        probe = {**row, **{k: v for k in ("doi", "isbn") if (v := _s(edition_form.get("details", {}).get(k)))}}
+        error = _duplicate_error(conn, probe, uid)
+        if error:
+            return validation_response(error, x_requested_with, "/library")
+    saved = db.upsert_citation(conn, row)
+    if edition_form:
+        error = _write_edition(conn, saved, edition_form["uid"], edition_form["details"], edition_form["source"], edition_form["file"], edition_form["delete"])
+        if error:
+            return validation_response(error, x_requested_with, "/library")
+    return respond(x_requested_with, "/library", uid=saved)
+
+
+def _edition_form(edition_uid, ed_edition, ed_year, ed_publisher, ed_place, ed_isbn, ed_doi, ed_url, ed_source, file, delete_edition):
+    if not isinstance(ed_source, str) and not isinstance(edition_uid, str):
+        return None
+    return {"uid": _s(edition_uid), "source": _s(ed_source), "file": file, "delete": _s(delete_edition),
+            "details": {"edition": ed_edition, "year": ed_year, "publisher": ed_publisher, "place": ed_place, "isbn": ed_isbn, "doi": ed_doi, "url": ed_url}}
 
 
 @citations_router.post("")
@@ -1474,39 +1511,42 @@ def create_citation(
     title: str = Form(...),
     year: str = Form(""),
     container_title: str = Form(""),
-    doi: str = Form(""),
-    url: str = Form(""),
     author_family: list[str] = Form([]),
     author_given: list[str] = Form([]),
-    subtitle: str = Form(""),
-    edition: str = Form(""),
-    volume: str = Form(""),
-    issue: str = Form(""),
-    pages: str = Form(""),
-    publisher: str = Form(""),
-    place: str = Form(""),
-    isbn: str = Form(""),
-    issn: str = Form(""),
-    accessed: str = Form(""),
-    institution: str = Form(""),
-    degree: str = Form(""),
-    editors: str = Form(""),
-    note: str = Form(""),
+    doi: str | None = Form(None),
+    url: str | None = Form(None),
+    subtitle: str | None = Form(None),
+    edition: str | None = Form(None),
+    volume: str | None = Form(None),
+    issue: str | None = Form(None),
+    pages: str | None = Form(None),
+    publisher: str | None = Form(None),
+    place: str | None = Form(None),
+    isbn: str | None = Form(None),
+    issn: str | None = Form(None),
+    accessed: str | None = Form(None),
+    institution: str | None = Form(None),
+    degree: str | None = Form(None),
+    editors: str | None = Form(None),
+    note: str | None = Form(None),
+    status: str | None = Form(None),
+    rating: str | None = Form(None),
+    keywords: str | None = Form(None),
+    edition_uid: str | None = Form(None),
+    ed_edition: str = Form(""), ed_year: str = Form(""), ed_publisher: str = Form(""), ed_place: str = Form(""),
+    ed_isbn: str = Form(""), ed_doi: str = Form(""), ed_url: str = Form(""), ed_source: str | None = Form(None),
+    file: UploadFile | None = File(None),
+    delete_edition: str = Form(""),
+    allow_duplicate: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
     title = title.strip()
     if not title:
-        return RedirectResponse(url="/notebook/citations", status_code=303)
-    uid = db.upsert_citation(
-        conn,
-        {
-            "type": type, "title": title, "year": year.strip(),
-            "container_title": container_title.strip(), "doi": doi.strip(), "url": url.strip(),
-            "authors": _citation_authors_from_form(author_family, author_given), **{k: _s(v) for k, v in dict(subtitle=subtitle, edition=edition, volume=volume, issue=issue, pages=pages, publisher=publisher, place=place, isbn=isbn, issn=issn, accessed=accessed, institution=institution, degree=degree, editors=editors, note=note).items()},
-        },
-    )
-    return respond(x_requested_with, "/notebook/citations", uid=uid)
+        return RedirectResponse(url="/library", status_code=303)
+    values = {k: v for k, v in locals().items() if k in ("type", "title", "year", "container_title", "doi", "url", "status", "rating", "keywords", *_CITATION_TEXT_FIELDS)}
+    edition_form = _edition_form(edition_uid, ed_edition, ed_year, ed_publisher, ed_place, ed_isbn, ed_doi, ed_url, ed_source, file, delete_edition)
+    return _write_citation(conn, "", values, author_family, author_given, _s(allow_duplicate), x_requested_with, edition_form)
 
 
 @citations_router.post("/{uid}/update")
@@ -1516,24 +1556,33 @@ def update_citation(
     title: str = Form(...),
     year: str = Form(""),
     container_title: str = Form(""),
-    doi: str = Form(""),
-    url: str = Form(""),
     author_family: list[str] = Form([]),
     author_given: list[str] = Form([]),
-    subtitle: str = Form(""),
-    edition: str = Form(""),
-    volume: str = Form(""),
-    issue: str = Form(""),
-    pages: str = Form(""),
-    publisher: str = Form(""),
-    place: str = Form(""),
-    isbn: str = Form(""),
-    issn: str = Form(""),
-    accessed: str = Form(""),
-    institution: str = Form(""),
-    degree: str = Form(""),
-    editors: str = Form(""),
-    note: str = Form(""),
+    doi: str | None = Form(None),
+    url: str | None = Form(None),
+    subtitle: str | None = Form(None),
+    edition: str | None = Form(None),
+    volume: str | None = Form(None),
+    issue: str | None = Form(None),
+    pages: str | None = Form(None),
+    publisher: str | None = Form(None),
+    place: str | None = Form(None),
+    isbn: str | None = Form(None),
+    issn: str | None = Form(None),
+    accessed: str | None = Form(None),
+    institution: str | None = Form(None),
+    degree: str | None = Form(None),
+    editors: str | None = Form(None),
+    note: str | None = Form(None),
+    status: str | None = Form(None),
+    rating: str | None = Form(None),
+    keywords: str | None = Form(None),
+    edition_uid: str | None = Form(None),
+    ed_edition: str = Form(""), ed_year: str = Form(""), ed_publisher: str = Form(""), ed_place: str = Form(""),
+    ed_isbn: str = Form(""), ed_doi: str = Form(""), ed_url: str = Form(""), ed_source: str | None = Form(None),
+    file: UploadFile | None = File(None),
+    delete_edition: str = Form(""),
+    allow_duplicate: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -1541,23 +1590,26 @@ def update_citation(
     if existing is None:
         if wants_json(x_requested_with):
             return JSONResponse({"error": "citation not found"}, status_code=404)
-        return RedirectResponse(url="/notebook/citations", status_code=303)
+        return RedirectResponse(url="/library", status_code=303)
     title = title.strip() or existing["title"]
-    db.upsert_citation(
-        conn,
-        {
-            "uid": uid, "type": type, "title": title, "year": year.strip(),
-            "container_title": container_title.strip(), "doi": doi.strip(), "url": url.strip(),
-            "authors": _citation_authors_from_form(author_family, author_given), **{k: _s(v) for k, v in dict(subtitle=subtitle, edition=edition, volume=volume, issue=issue, pages=pages, publisher=publisher, place=place, isbn=isbn, issn=issn, accessed=accessed, institution=institution, degree=degree, editors=editors, note=note).items()},
-        },
-    )
-    return respond(x_requested_with, "/notebook/citations")
+    values = {k: v for k, v in locals().items() if k in ("type", "title", "year", "container_title", "doi", "url", "status", "rating", "keywords", *_CITATION_TEXT_FIELDS)}
+    edition_form = _edition_form(edition_uid, ed_edition, ed_year, ed_publisher, ed_place, ed_isbn, ed_doi, ed_url, ed_source, file, delete_edition)
+    return _write_citation(conn, uid, values, author_family, author_given, _s(allow_duplicate), x_requested_with, edition_form)
+
+
+@citations_router.get("/editions/{euid}/file")
+def edition_file(euid: str, conn=Depends(get_db)):
+    path = db.edition_file_path(conn, euid)
+    if path is None:
+        raise HTTPException(404, "This edition has no PDF on disk")
+    label = (db.get_edition(conn, euid) or {}).get("file_label") or path.name
+    return FileResponse(path, media_type="application/pdf", filename=label, content_disposition_type="inline")
 
 
 @citations_router.post("/{uid}/delete")
 def delete_citation(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     db.delete_citation(conn, uid)
-    return respond(x_requested_with, "/notebook/citations")
+    return respond(x_requested_with, "/library")
 
 
 glossary_router = APIRouter(prefix="/notebook/glossary", tags=["notebook-glossary"])

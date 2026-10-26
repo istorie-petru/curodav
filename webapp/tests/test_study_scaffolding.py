@@ -139,3 +139,87 @@ def test_a_shelf_with_a_module_page_type_keeps_it_while_the_module_is_on(monkeyp
     with db.connect(tmp_path / "d.sqlite") as conn:
         db.upsert_label_config(conn, {"name": "Uni", "page_type": "study"})
         assert db.get_label_config(conn, "Uni")["page_type"] == "sections"
+
+
+# ---- turning a module on in Settings ----
+
+def test_a_module_is_turned_on_and_off_from_settings_and_the_choice_is_stored(monkeypatch, tmp_path):
+    from fastapi import HTTPException
+    from src.routers import settings as settings_router
+
+    monkeypatch.delenv("CC_MODULES", raising=False)
+    monkeypatch.setattr(modules, "_stored", set())
+    with db.connect(tmp_path / "c.sqlite") as conn:
+        assert not modules.is_enabled("university")
+        settings_router.set_module("university", enabled="1", conn=conn)
+        assert modules.is_enabled("university") and ("University", "/settings/university") in header_views.current_settings_groups()[3]["items"]
+        modules._stored.clear()  # a restart forgets the memory, the database remembers
+        modules.load_stored(conn)
+        assert modules.is_enabled("university")
+        settings_router.set_module("university", enabled="0", conn=conn)
+        assert not modules.is_enabled("university")
+        with pytest.raises(HTTPException):
+            settings_router.set_module("nope", enabled="1", conn=conn)
+
+
+def test_the_environment_still_forces_a_module_on_and_general_settings_lists_modules(monkeypatch, tmp_path):
+    from tests.settings_app import fake_app
+    from src.routers import settings as settings_router
+
+    monkeypatch.setattr(modules, "_stored", set())
+    monkeypatch.setenv("CC_MODULES", "university")
+    assert modules.is_enabled("university") and "university" in modules.forced_keys()
+    monkeypatch.delenv("CC_MODULES")
+    with db.connect(tmp_path / "c.sqlite") as conn:
+        req = _request("/settings/general")
+        req.scope["app"] = fake_app()
+        html = settings_router.settings_general(req, conn=conn).body.decode()
+        assert "University module" in html and "/settings/modules/university" in html
+
+
+def _legacy_exams(conn):
+    """Puts a database back where it was before migrations 33 and 35: an exam table without the evaluation link and notes."""
+    conn.execute("DROP TABLE university_milestones")
+    conn.execute("CREATE TABLE university_exams (task_uid TEXT PRIMARY KEY, event_uid TEXT NOT NULL, semester_uid TEXT NOT NULL, discipline_tag TEXT NOT NULL, weight REAL)")
+    conn.execute("ALTER TABLE university_semesters DROP COLUMN credits_target")
+    conn.execute("DELETE FROM schema_migrations WHERE number IN (33, 35)")
+
+
+def test_a_database_that_ran_the_first_migration_32_gets_the_later_columns(tmp_path):
+    path = tmp_path / "old.sqlite"
+    with db.connect(path) as conn:
+        _legacy_exams(conn)
+        conn.commit()
+    with db.connect(path) as conn:
+        assert "credits_target" in {r[1] for r in conn.execute("PRAGMA table_info(university_semesters)")}
+        assert {33, 35} <= {r[0] for r in conn.execute("SELECT number FROM schema_migrations")}
+
+
+def test_existing_exams_become_milestones_of_a_way_with_their_task_event_and_a_backup(tmp_path):
+    import json
+
+    path = tmp_path / "old.sqlite"
+    with db.connect(path) as conn:
+        _legacy_exams(conn)
+        conn.execute("ALTER TABLE university_exams ADD COLUMN component TEXT")
+        conn.execute("ALTER TABLE university_exams ADD COLUMN notes TEXT")
+        conn.execute("INSERT INTO university_sheet (semester_uid, discipline_tag, key, label, value, position) VALUES ('s', 'Bio', 'eval:w1', 'Written', ?, 200)",
+                     (json.dumps({"id": "w1", "weight": "60", "subs": [{"id": "c1", "name": "Theory", "weight": "100"}]}),))
+        conn.execute("INSERT INTO university_sheet (semester_uid, discipline_tag, key, label, value, position) VALUES ('s', 'Bio', 'evaluation', 'Form', 'Exam', 1)")
+        for n, (component, weight) in enumerate((("c1", 60), (None, 25))):
+            task, event = f"t{n}", f"e{n}"
+            now = "2026-10-01T00:00:00"
+            db.upsert_task(conn, {"uid": task, "title": f"Exam {n}", "description": "", "due_at": "2027-01-20", "status": "active", "created_at": now, "updated_at": now})
+            db.upsert_event(conn, {"uid": event, "title": f"Exam {n}", "description": "", "start_at": "2027-01-20T09:00", "end_at": "2027-01-20T11:00", "all_day": 0,
+                                   "location": "Aula", "status": "active", "created_at": now, "updated_at": now})
+            conn.execute("INSERT INTO university_exams (task_uid, event_uid, semester_uid, discipline_tag, weight, component) VALUES (?, ?, 's', 'Bio', ?, ?)", (task, event, weight, component))
+        conn.commit()
+    with db.connect(path) as conn:
+        assert not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'university_exams'").fetchone()
+        rows = {r["task_uid"]: dict(r) for r in conn.execute("SELECT * FROM university_milestones")}
+        assert rows["t0"]["way_id"] == "w1" and (rows["t0"]["day"], rows["t0"]["start"], rows["t0"]["end"], rows["t0"]["due"], rows["t0"]["location"]) == ("2027-01-20", "09:00", "11:00", "2027-01-20", "Aula")
+        assert rows["t1"]["way_id"] not in ("", "w1") and rows["t1"]["event_uid"] == "e1"
+        new_way = conn.execute("SELECT label, value FROM university_sheet WHERE key = ?", (f"eval:{rows['t1']['way_id']}",)).fetchone()
+        assert new_way["label"] == "Exam 1" and json.loads(new_way["value"])["weight"] == "25"
+        assert not conn.execute("SELECT 1 FROM university_sheet WHERE key = 'evaluation'").fetchone()
+    assert any(".before-migration-0035-" in f.name for f in tmp_path.iterdir())

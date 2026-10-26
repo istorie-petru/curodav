@@ -319,6 +319,7 @@ from .notebook import (
     save_entry_kind,
     group_entries_by_kind,
     get_citation_format,
+    get_citation_raw,
     set_citation_format,
     detach_notebook_glossary_term,
     list_document_entry_names,
@@ -338,6 +339,7 @@ from .notebook import (
     single_label_tags,
     BUILTIN_NOTEBOOK_FIELD_UIDS,
     CITATION_TYPES,
+    CITATION_STATUSES,
     GLOSSARY_REFERENCE_TYPES,
     NOTEBOOK_FIELD_OPTION_TYPES,
     NOTEBOOK_FIELD_TYPES,
@@ -387,7 +389,6 @@ from .notebook import (
     get_notebook_document_content,
     get_notebook_field_config,
     get_notebook_settings,
-    list_citation_authors_in_use,
     list_citations,
     list_glossary_term_references,
     list_glossary_terms,
@@ -462,4 +463,23 @@ from .sync import (
     touch_sync_device,
     upsert_published_list,
     upsert_push_subscription,
+)
+
+from . import citation_library  # noqa: E402
+from .citation_library import (  # noqa: E402
+    author_options,
+    book_noun,
+    citation_usage,
+    clear_edition_file,
+    delete_edition,
+    edition_file_path,
+    find_duplicate,
+    get_edition,
+    list_editions,
+    page_citations,
+    picker_items,
+    save_edition,
+    search_citations,
+    set_edition_file,
+    sources_for,
 )

@@ -60,7 +60,7 @@
     {% call section_row('') %}Library{% endcall %}
     <div class="folder-grid">
         {{ tile('/notebook/glossary', 'Entries', glossary_count ~ ' entr' ~ ('ies' if glossary_count != 1 else 'y'), 'tag', 'teal') }}
-        {{ tile('/notebook/citations', 'Citations', citation_count ~ ' citation' ~ ('s' if citation_count != 1 else ''), 'book-open', 'slate') }}
+        {{ tile('/library', 'Citations', citation_count ~ ' citation' ~ ('s' if citation_count != 1 else ''), 'book-open', 'slate') }}
         {{ tile('/notebook/journal', 'Journal', journal_count ~ ' week' ~ ('s' if journal_count != 1 else ''), 'calendar', 'amber') }}
         {{ tile('/notebook/templates', 'Templates', template_count ~ ' template' ~ ('s' if template_count != 1 else ''), 'copy', 'sand') }}
     </div>

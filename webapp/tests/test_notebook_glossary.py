@@ -373,7 +373,7 @@ class TestGlossaryTermReferences:
         ref = db.list_glossary_term_references(conn, "t1")[0]
         assert (ref["page_start"], ref["page_end"], ref["pages"]) == ("12", "20", "pp. 12\u201320")
         body = notebook_router.entry_view_modal("t1", _bare_request(), conn=conn).body.decode()
-        assert 'href="/notebook/citations/c1' in body
+        assert 'href="/library/c1' in body
         assert "pp. 12\u201320" in body
         assert db.list_entries_citing(conn, "c1")[0]["uid"] == "t1"
 

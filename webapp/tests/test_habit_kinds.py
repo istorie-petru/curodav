@@ -77,9 +77,11 @@ class TestFormFields:
 
 
 class TestRendering:
-    def test_avoid_row(self, conn):
+    def test_avoid_row(self, conn, frozen_today):
+        today = date(2026, 10, 22)  # a Thursday: two days back is still in the week strip
+        frozen_today(today)
         _habit(conn, "a1", "No smoking", habit_kind="avoid")
-        db.upsert_task_completion(conn, "a1", (date.today() - timedelta(days=2)).isoformat(), _now())
+        db.upsert_task_completion(conn, "a1", (today - timedelta(days=2)).isoformat(), _now())
         resp = habits_router.habits_page(_req(), conn=conn)
         assert [h["uid"] for h in resp.context["on_track"]] == ["a1"]  # never "to do"
         body = resp.body.decode()

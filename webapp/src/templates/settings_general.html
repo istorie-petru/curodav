@@ -12,6 +12,27 @@
 <div class="settings-hint settings-hint-error" data-dm-flash="error">{{ request.query_params.get('error') }}</div>
 {% endif %}
 
+{% if module_rows %}
+<div class="card">
+    {% for m in module_rows %}
+    <form class="settings-field-row" method="post" action="/settings/modules/{{ m.key }}" id="module-{{ m.key }}-form">
+        <span class="settings-field-label">{{ m.title }} module
+            <span class="settings-field-hint">{{ m.description }}{% if m.forced %}. Kept on by the CC_MODULES setting of this run{% endif %}</span>
+        </span>
+        <span class="spacer"></span>
+        {% set ms_name = 'enabled' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = m.title ~ ' module' %}
+        {% set ms_items = [{'uid': '1', 'name': 'On'}, {'uid': '0', 'name': 'Off'}] %}
+        {% set ms_selected = '1' if m.on else '0' %}
+        {% set ms_autosubmit = true %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'module-' ~ m.key ~ '-form' %}
+        {% include "_widget_list_multiselect.html" %}
+    </form>
+    {% endfor %}
+</div>
+{% endif %}
 <div class="card">
     <form class="settings-field-row" method="post" action="/settings/timezone" id="timezone-form">
         <span class="settings-field-label">Timezone

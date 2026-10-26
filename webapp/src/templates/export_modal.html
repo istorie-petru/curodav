@@ -20,6 +20,7 @@
         {'uid': 'citations', 'name': 'Citations', 'data': {'dm-preview': 'Includes: ' ~ citation_count ~ ' Citations'}},
         {'uid': 'glossary', 'name': 'Glossary', 'data': {'dm-preview': 'Includes: ' ~ glossary_count ~ ' Terms'}},
         {'uid': 'labels', 'name': 'Shelves', 'data': {'dm-preview': 'Includes: every shelf and its settings'}}] %}
+    {% for u in university_items | default([]) %}{% set _ = ms_items.append({'uid': u.uid, 'name': u.name, 'data': {'dm-preview': u.preview}}) %}{% endfor %}
     {% include "_widget_list_multiselect.html" %}
     {% set ms_name = 'format' %}
     {% set ms_label = 'Format' %}

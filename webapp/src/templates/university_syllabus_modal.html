@@ -1,14 +1,42 @@
-{% from "_inputs.html" import textarea_input %}
+{% from "_inputs.html" import text_input, number_input %}
+{% from "_rows_pick.html" import importance_pick %}
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
-{% block title %}Syllabus{% endblock %}
+{% block title %}{{ kind_label }}{% endblock %}
 {% block content %}
-{% call modal(kind="form", title='Syllabus of ' ~ d.name, size="medium", form='university-syllabus-form', back=back, back_name=d.name) %}
+{% set _single = (kind == 'competence') %}
+{% call modal(kind="form", title=kind_label ~ ' of ' ~ d.name, size="medium", form='university-syllabus-form') %}
 <div class="card">
 <form method="post" id="university-syllabus-form" action="/settings/university/syllabus/{{ d.name|urlencode }}">
-    <div class="field-grid">
-        <div class="field field-wide"><label>Topics, one per line</label>{{ textarea_input({'name': 'themes', 'rows': 14}, text) }}</div>
+    <input type="hidden" name="kind" value="{{ kind }}">
+    <div class="rows-head {{ 'is-single' if _single }}"><span>No.</span><span>{{ 'Competence' if _single else 'Topic' }}</span>{% if not _single %}<span>Importance</span>{% endif %}<span></span></div>
+    <div class="rows-host" id="university-topic-rows" data-rows-host data-rows-template="university-topic-template">
+        {% for r in rows %}
+        <div class="rows-row {{ 'is-single' if _single }}" data-row>
+            {{ number_input({'name': 'number', 'value': r.number, 'min': 0, 'aria-label': 'Number'}) }}
+            {{ text_input({'name': 'title', 'value': r.title, 'aria-label': 'Title', 'data-rows-split': '1'}) }}
+            {% if not _single %}{{ importance_pick(r.importance) }}{% endif %}
+            <button type="button" class="icon-btn" data-rows-remove title="Remove" aria-label="Remove">{{ icon('trash', 'icon-sm') }}</button>
+        </div>
+        {% endfor %}
+        {% if not rows %}{% for _ in range(3) %}
+        <div class="rows-row {{ 'is-single' if _single }}" data-row>
+            {{ number_input({'name': 'number', 'value': '', 'min': 0, 'aria-label': 'Number'}) }}
+            {{ text_input({'name': 'title', 'value': '', 'aria-label': 'Title', 'data-rows-split': '1'}) }}
+            {% if not _single %}{{ importance_pick(0) }}{% endif %}
+            <button type="button" class="icon-btn" data-rows-remove title="Remove" aria-label="Remove">{{ icon('trash', 'icon-sm') }}</button>
+        </div>
+        {% endfor %}{% endif %}
     </div>
+    <template id="university-topic-template">
+        <div class="rows-row {{ 'is-single' if _single }}" data-row>
+            {{ number_input({'name': 'number', 'value': '', 'min': 0, 'aria-label': 'Number'}) }}
+            {{ text_input({'name': 'title', 'value': '', 'aria-label': 'Title', 'data-rows-split': '1'}) }}
+            {% if not _single %}{{ importance_pick(0) }}{% endif %}
+            <button type="button" class="icon-btn" data-rows-remove title="Remove" aria-label="Remove">{{ icon('trash', 'icon-sm') }}</button>
+        </div>
+    </template>
+    <button type="button" class="btn ghost rows-add" data-rows-add="university-topic-rows">{{ icon('plus', 'icon-sm') }} Add a row</button>
 </form>
 </div>
 {% endcall %}

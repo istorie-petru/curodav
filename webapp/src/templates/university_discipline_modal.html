@@ -1,17 +1,27 @@
-{% from "_inputs.html" import text_input, textarea_input %}
+{% from "_inputs.html" import text_input, number_input %}
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
 {% from "_look_picker.html" import look_picker %}
 {% block title %}{{ 'Edit discipline' if d else 'New discipline' }}{% endblock %}
 {% block content %}
-{% call modal(kind="form", title=('Edit ' ~ d.name if d else 'New discipline'), size="medium", form='university-discipline-form', creating=(not d), back=('/settings/university/discipline/' ~ (d.name|urlencode) if d else none), back_name=(d.name if d else none)) %}
+{% call modal(kind="form", title=('Edit ' ~ d.name if d else 'New discipline'), size="medium", form='university-discipline-form', creating=(not d), retire=([{'action': 'delete', 'url': '/settings/university/discipline/' ~ (d.name|urlencode) ~ '/remove', 'mode': 'confirm', 'label': 'Remove ' ~ d.name ~ '? It must have no timetable, exams or readings.', 'redirect': none, 'change': none}] if d else none)) %}
 <div class="card">
-<form method="post" id="university-discipline-form" action="/settings/university/discipline">
+<form method="post" id="university-discipline-form" action="/settings/university/discipline"{% if not d %} data-follow-redirect{% endif %}>
     <input type="hidden" name="old" value="{{ d.name if d else '' }}">
     <div class="field-grid">
         <div class="field field-wide"><label>Name</label>{{ text_input({'name': 'name', 'value': (d.name if d else ''), 'required': true}) }}</div>
-        {{ look_picker('look-discipline', 'university-discipline-form', d.color if d else 'blue', d.icon if d else none, colors, icon_groups, default_icon='book-open', label='Look') }}
-        <div class="field field-wide"><label>Teachers</label>{{ textarea_input({'name': 'teacher_names', 'rows': 2}, teacher_names) }}</div>
+        <div class="field"><label>Abbreviation</label>{{ text_input({'name': 'abbreviation', 'value': values.abbreviation | default('')}) }}</div>
+        <div class="field"><label>Code</label>{{ text_input({'name': 'code', 'value': values.code | default('')}) }}</div>
+        <div class="field"><label>Credits</label>{{ number_input({'name': 'credits', 'value': values.credits | default(''), 'min': 0, 'step': 'any'}) }}</div>
+        <div class="field">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'university-discipline-form' %}{% set ms_name = 'type' %}{% set ms_label = 'Type' %}
+            {% set ms_items = [{'uid': '', 'name': 'Not set'}, {'uid': 'Compulsory', 'name': 'Compulsory'}, {'uid': 'Optional', 'name': 'Optional'}, {'uid': 'Facultative', 'name': 'Facultative'}] %}
+            {% set ms_selected = values.type | default('') %}{% set ms_wide = false %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+        {% call look_picker('look-discipline', 'university-discipline-form', d.color if d else 'blue', d.icon if d else none, colors, icon_groups, default_icon='book-open', label='Look') %}
+        {% if d %}<a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ ('/settings/university/discipline/' ~ d.name ~ '/edit')|urlencode }}&amp;from_modal=1" data-modal class="look-side-btn" title="{{ 'Change banner' if banner else 'Add banner' }}" aria-label="{{ 'Change banner' if banner else 'Add banner' }}">{{ icon('upload') }}</a>{% endif %}
+        {% endcall %}
     </div>
 </form>
 </div>

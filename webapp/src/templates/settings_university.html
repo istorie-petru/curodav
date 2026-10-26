@@ -3,53 +3,70 @@
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_empty_state.html" import empty_state %}
-{% from "_detail_section.html" import detail_section %}
-{% from "_label_pill.html" import label_pill, tag_pill with context %}
-{% call page_header_narrow("University", "graduation-cap") %}
-{% if semester %}
-<a href="/settings/university/import" data-modal class="btn ghost btn-sm btn-icon-only" title="Import" aria-label="Import">{{ icon('upload', 'icon-sm') }}</a>
-<a href="/settings/university/export?what=semester" class="btn ghost btn-sm btn-icon-only" title="Export the semester" aria-label="Export the semester">{{ icon('download', 'icon-sm') }}</a>
-<a href="/settings/university/discipline/new" data-modal class="btn ghost btn-sm btn-icon-only" title="Add discipline" aria-label="Add discipline">{{ icon('plus', 'icon-sm') }}</a>
-{% endif %}
-{% endcall %}
+{% from "_label_pill.html" import tag_pill %}
+{% call page_header_narrow("University", "graduation-cap") %}{% endcall %}
+{% include "_flash.html" %}
 <div id="modal-target">
 {% if not semester %}
 <div class="card">
-{% call empty_state('Nothing set up yet', icon_name='graduation-cap', text='Describe a semester and Curodav keeps its classes, exams and readings as ordinary events and tasks.', size='compact') %}
-<a href="/settings/university/semester" data-modal class="btn primary">{{ icon('plus', 'icon-sm') }} Set up a semester</a>
+{% call empty_state('Nothing set up yet', 'graduation-cap', 'Describe a semester and Curodav keeps its classes, exams and readings as ordinary events and tasks.') %}
+<a href="/settings/university/semester" data-modal class="btn primary">{{ icon('plus') }} Set up a semester</a>
 {% endcall %}
 </div>
 {% else %}
-<div class="card">
-    <div class="detail-meta-grid">
-        <div class="detail-meta-item"><span class="detail-meta-label">Semester</span><span class="detail-meta-value">{{ semester.name }}</span></div>
-        <div class="detail-meta-item"><span class="detail-meta-label">Shelf</span><span class="detail-meta-value">{{ label_pill(semester.shelf_name) }}</span></div>
-        <div class="detail-meta-item"><span class="detail-meta-label">Semester dates</span><span class="detail-meta-value">{{ (semester.start_date or '')|dtf_date }} to {{ (semester.end_date or '')|dtf_date }}</span></div>
-        <div class="detail-meta-item"><span class="detail-meta-label">Classes end</span><span class="detail-meta-value">{{ (semester.class_end_date or '')|dtf_date if semester.class_end_date else 'Not set' }}</span></div>
-        {% if semester.holiday_calendar %}<div class="detail-meta-item"><span class="detail-meta-label">Holidays</span><span class="detail-meta-value">{{ semester.holiday_calendar }}</span></div>{% endif %}
+<div class="uni-semester">
+    <div class="uni-semester-main">
+        <div class="uni-semester-name">{{ semester.name }}</div>
+        <div class="uni-semester-line">{{ semester.start_date|short_day if semester.start_date else 'Not set' }} to {{ semester.end_date|short_day if semester.end_date else 'Not set' }}{% if semester.class_end_date %} · classes end {{ semester.class_end_date|short_day }}{% endif %}{% if semester.credits_target %} · {{ credits_planned|round(1)|string|replace('.0', '') }} of {{ semester.credits_target|round(1)|string|replace('.0', '') }} credits{% elif credits_planned %} · {{ credits_planned|round(1)|string|replace('.0', '') }} credits{% endif %}{% if calendar %} · {{ calendar }}{% endif %}</div>
     </div>
-    <p class="settings-note">Change the dates, or the class end date for every class at once, in the semester window. The Organise pages show this shelf read only.</p>
-    <a href="/settings/university/semester" data-modal class="btn ghost">{{ icon('edit', 'icon-sm') }} Edit semester</a>
+    <a href="/groups/{{ group|urlencode }}" class="icon-btn" title="Open the study page" aria-label="Open the study page">{{ icon('arrow-right', 'icon-sm') }}</a>
+    <a href="/settings/university/semester" data-modal class="icon-btn uni-semester-edit" title="Edit semester" aria-label="Edit semester">{{ icon('edit', 'icon-sm') }}</a>
 </div>
+{% if semesters|length > 1 %}
 <div class="card table-scroll table-responsive">
+    <div class="uni-card-head"><h2>Semesters</h2>
+        <a href="/settings/university/semester?new=1" data-modal class="icon-btn" title="New semester" aria-label="New semester">{{ icon('plus', 'icon-sm') }}</a></div>
+    <table class="entity-table">
+        <thead><tr><th class="col-name">Semester</th><th class="col-opt-1">Dates</th><th class="col-actions">Actions</th></tr></thead>
+        <tbody>
+        {% for s in semesters %}
+        <tr>
+            <td class="col-name">{{ s.name }}{% if s.uid == semester.uid %} <span class="text-muted">current</span>{% endif %}</td>
+            <td class="col-opt-1 uni-nowrap">{{ s.start_date|short_day if s.start_date else 'Not set' }} to {{ s.end_date|short_day if s.end_date else 'Not set' }}</td>
+            <td class="col-actions">{% if s.uid != semester.uid %}
+                <form class="form-inline" method="post" action="/settings/university/semester/select"><input type="hidden" name="uid" value="{{ s.uid }}">
+                    <button type="submit" class="icon-btn" title="Make current" aria-label="Make current">{{ icon('check', 'icon-sm') }}</button></form>{% endif %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="uni-semester-new"><a href="/settings/university/semester?new=1" data-modal class="btn ghost btn-sm">{{ icon('plus', 'icon-sm') }} New semester</a></div>
+{% endif %}
+<div class="card table-scroll table-responsive">
+    <div class="uni-card-head"><h2>Disciplines</h2>
+        <a href="/settings/university/discipline/new" data-modal class="icon-btn" title="Add discipline" aria-label="Add discipline">{{ icon('plus', 'icon-sm') }}</a></div>
     {% if disciplines %}
     <table class="entity-table">
-        <thead><tr><th class="col-name">Discipline</th><th class="col-meta col-opt-2">Teachers</th><th class="col-meta col-opt-1">Timetable</th><th class="col-meta col-opt-1">Exams</th><th class="col-meta col-opt-1">Readings</th></tr></thead>
+        <thead><tr><th class="col-name">Discipline</th><th class="col-opt-2">Teachers</th><th class="col-opt-1">Timetable</th><th class="col-opt-1">Exams</th><th class="col-opt-1">Readings</th><th class="col-actions">Actions</th></tr></thead>
         <tbody>
         {% for d in disciplines %}
         <tr>
-            <td class="col-name"><a href="{{ url_for_discipline(d.name) }}" data-modal>{{ tag_pill(d) }}</a></td>
-            <td class="col-meta col-opt-2">{{ d.teachers | map(attribute='name') | join(', ') or 'None' }}</td>
-            <td class="col-meta col-opt-1">{{ d.slots }} slot{{ "s" if d.slots != 1 }}</td>
-            <td class="col-meta col-opt-1">{{ d.exams }}</td>
-            <td class="col-meta col-opt-1">{{ d.readings }}</td>
+            <td class="col-name"><a href="{{ url_for_discipline(d.name) }}">{{ tag_pill(d) }}</a></td>
+            <td class="col-opt-2">{{ d.teachers | map(attribute='name') | join(', ') or 'None' }}</td>
+            <td class="col-opt-1">{{ d.slots }}</td><td class="col-opt-1">{{ d.exams }}</td><td class="col-opt-1">{{ d.readings }}</td>
+            <td class="col-actions">
+                <a href="/settings/university/discipline/{{ d.name|urlencode }}/edit" data-modal class="icon-btn" title="Edit discipline" aria-label="Edit discipline">{{ icon('edit', 'icon-sm') }}</a>
+                <a href="{{ url_for_discipline(d.name) }}" class="icon-btn" title="Open its page" aria-label="Open its page">{{ icon('arrow-right', 'icon-sm') }}</a>
+            </td>
         </tr>
         {% endfor %}
         </tbody>
     </table>
     {% else %}
-    {% call empty_state('No disciplines yet', icon_name='book-open', size='compact') %}
-    <a href="/settings/university/discipline/new" data-modal class="btn primary">{{ icon('plus', 'icon-sm') }} Add a discipline</a>
+    {% call empty_state('No disciplines yet', 'book-open', 'Add the disciplines of this semester to build their timetable.') %}
+    <a href="/settings/university/discipline/new" data-modal class="btn primary">{{ icon('plus') }} Add a discipline</a>
     {% endcall %}
     {% endif %}
 </div>

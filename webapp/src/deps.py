@@ -256,6 +256,21 @@ def _avatar(contact: dict | None, cls: str = "", lazy: bool = False) -> Markup:
 templates.env.globals["avatar"] = _avatar
 
 
+def _study_children(conn, group: str) -> list[dict]:
+    """The disciplines of the current semester when the space holds one, so they show under it like shelves do."""
+    try:
+        from urllib.parse import quote
+        from . import tags, university_plan
+
+        semester = university_plan.semester_for_group(conn, group)
+        if not semester:
+            return []
+        return [{**t, "path": f"/groups/{group}/disciplines/{t['name']}", "href": f"/groups/{quote(group, safe='')}/disciplines/{quote(t['name'], safe='')}",
+                 "is_project": False, "abbreviation": ""} for t in tags.tags_of_label(conn, semester["shelf_name"])]
+    except Exception:
+        return []
+
+
 def _sidebar_groups(request: Request) -> list[dict]:
     """The nav rail's group section. Every group gets an entry
         that links to its page (/groups/<name>); its `children` are its members
@@ -269,7 +284,7 @@ def _sidebar_groups(request: Request) -> list[dict]:
         with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
             groups = db.list_groups(conn)
             for g in groups:
-                g["children"] = [l for l in g["labels"] if l.get("sidebar_pin")]
+                g["children"] = [l for l in g["labels"] if l.get("sidebar_pin")] or _study_children(conn, g["name"])
             return groups
     except Exception:
         return []
@@ -737,6 +752,35 @@ def _dtf_date(value) -> str:
 
 
 templates.env.filters["dtf_date"] = _dtf_date
+
+
+def _short_date(value) -> str:
+    """"Tue 3 Nov", with the year only when it is not this year's: for tables where a long date would wrap."""
+    try:
+        d = date.fromisoformat(str(value or "")[:10])
+    except ValueError:
+        return ""
+    from . import clock
+
+    year = "" if d.year == clock.today().year else f" {d.year}"
+    return f"{_DTF_DOW[d.weekday()]} {d.day} {_DTF_MON[d.month - 1]}{year}"
+
+
+templates.env.filters["short_date"] = _short_date
+
+
+def _short_day(value) -> str:
+    """"19 Oct", with the year only when it is not this year's: the shortest date there is."""
+    from . import clock
+
+    try:
+        d = date.fromisoformat(str(value or "")[:10])
+    except ValueError:
+        return ""
+    return f"{d.day} {_DTF_MON[d.month - 1]}" + ("" if d.year == clock.today().year else f" {d.year}")
+
+
+templates.env.filters["short_day"] = _short_day
 
 
 @pass_context

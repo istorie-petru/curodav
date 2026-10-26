@@ -3,7 +3,7 @@
 {% from "_detail_section.html" import detail_section %}
 {% block title %}{{ c.title }}{% endblock %}
 {% block content %}
-{% call modal(kind="view", title=((c.title)), size="medium", back=(return_to), back_name='Back', retire=[{'action': 'delete', 'url': '/notebook/citations/' ~ c.uid ~ '/delete', 'mode': 'confirm', 'label': 'Delete "' ~ c.title ~ '"? Any document this is attached to loses it from its bibliography too.', 'redirect': none, 'change': none}], edit_url='/notebook/citations/' ~ c.uid ~ '/edit') %}
+{% call modal(kind="view", title=((c.title)), size="medium", back=(return_to), back_name='Back', retire=[{'action': 'delete', 'url': '/library/' ~ c.uid ~ '/delete', 'mode': 'confirm', 'label': delete_label, 'redirect': none, 'change': none}], edit_url='/library/' ~ c.uid ~ '/edit') %}
 {% call detail_section('Citation') %}
     <div class="detail-meta-grid">
         <div class="detail-meta-item">
@@ -26,6 +26,16 @@
         {% endif %}
     </div>
 {% endcall %}
+{% call detail_section('Editions', count=editions|length) %}
+    {% for e in editions %}
+    <div>{{ e.display }}{% if e.isbn %} <span class="detail-meta-label">ISBN {{ e.isbn }}</span>{% endif %}
+        {% if e.file_state == 'ok' %} · <a href="/library/editions/{{ e.uid }}/file" target="_blank" rel="noopener">{{ e.file_label }}</a>
+        {% elif e.file_state == 'missing' %} · <span class="detail-meta-label">File missing, edit the edition to upload it again</span>{% endif %}
+        {% if e.url %} · <a href="{{ e.url }}" target="_blank" rel="noopener noreferrer">Link</a>{% endif %}</div>
+    {% else %}
+    <span class="detail-meta-label">{{ 'No editions, link only' if c.url else 'Metadata only, no file or link' }}</span>
+    {% endfor %}
+{% endcall %}
 {% if rows %}
 {% call detail_section('Details') %}
     <div class="detail-meta-grid">
@@ -41,7 +51,7 @@
 {% endif %}
 {% call detail_section('Cited by entries', count=entries|length) %}
     {% if entries %}
-    <ul class="entry-mentions">{% for e in entries %}<li><a href="/notebook/glossary/{{ e.uid }}?return_to=/notebook/citations/{{ c.uid }}" data-modal>{{ e.term }}</a>{% if e.pages %} <span class="detail-meta-label">{{ e.pages }}</span>{% endif %}</li>{% endfor %}</ul>
+    <ul class="entry-mentions">{% for e in entries %}<li><a href="/notebook/glossary/{{ e.uid }}?return_to=/library/{{ c.uid }}" data-modal>{{ e.term }}</a>{% if e.pages %} <span class="detail-meta-label">{{ e.pages }}</span>{% endif %}</li>{% endfor %}</ul>
     {% else %}
     <span class="detail-meta-label">No entries yet</span>
     {% endif %}

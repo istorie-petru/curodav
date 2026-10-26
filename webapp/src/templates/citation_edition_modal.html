@@ -1,0 +1,30 @@
+{% from "_inputs.html" import text_input, file_input, checkbox_input %}
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% block title %}{{ 'Edit edition' if e else 'Add edition' }}{% endblock %}
+{% block content %}
+{% call modal(kind="form", title=('Edit edition' if e else 'Add edition'), size="medium", back=back, back_name='Back', retire=([{'action': 'delete', 'url': '/library/editions/' ~ e.uid ~ '/delete', 'mode': 'confirm', 'label': 'Delete this edition' ~ (' and its stored PDF' if e.file_name else '') ~ '?', 'redirect': none, 'change': none}] if e else none), form='edition-form', creating=(not e), save_icon='check-square') %}
+<div class="card">
+<form method="post" id="edition-form" action="{{ form_action }}" enctype="multipart/form-data">
+    <p class="detail-meta-label">An edition of {{ c.title }}</p>
+    <div class="field-grid">
+        <div class="field field-wide"><label>Label</label>{{ text_input({'name': 'label', 'value': (e.label if e else ''), 'placeholder': 'For example: Penguin paperback, scan of the library copy', 'autofocus': true}) }}</div>
+        <div class="field"><label>Edition</label>{{ text_input({'name': 'edition', 'value': (e.edition if e else '')}) }}</div>
+        <div class="field"><label>Year</label>{{ text_input({'name': 'year', 'value': (e.year if e else '')}) }}</div>
+        <div class="field"><label>Publisher</label>{{ text_input({'name': 'publisher', 'value': (e.publisher if e else '')}) }}</div>
+        <div class="field"><label>Place of publication</label>{{ text_input({'name': 'place', 'value': (e.place if e else '')}) }}</div>
+        <div class="field"><label>ISBN</label>{{ text_input({'name': 'isbn', 'value': (e.isbn if e else '')}) }}</div>
+        <div class="field"><label>URL</label>{{ text_input({'name': 'url', 'value': (e.url if e else '')}, 'url') }}</div>
+        <div class="field field-wide">
+            <label>PDF</label>
+            {{ file_input({'name': 'file', 'accept': 'application/pdf', 'aria-label': 'PDF file'}) }}
+            {% if e and e.file_state != 'none' %}
+            <span class="field-hint">{% if e.file_state == 'ok' %}Stored: <a href="/library/editions/{{ e.uid }}/file" target="_blank" rel="noopener">{{ e.file_label }}</a>{% else %}The stored PDF "{{ e.file_label }}" is missing from the disk. Choose it again to restore it.{% endif %}
+            <label class="checkbox-label">{{ checkbox_input({'name': 'remove_file', 'value': '1'}) }} Remove the stored PDF</label></span>
+            {% endif %}
+        </div>
+    </div>
+</form>
+</div>
+{% endcall %}
+{% endblock %}

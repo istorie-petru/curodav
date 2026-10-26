@@ -1,19 +1,20 @@
 {% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
 {% from "_inputs.html" import search_input %}
-{% block title %}Citations{% endblock %}
+{% block title %}Library{% endblock %}
 {% block main_class %}notebook-plain-title{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_action_menu.html" import action_menu with context %}
-{% call page_header_narrow("Citations", "book-open") %}
-    <form method="get" action="/notebook/citations" class="form-inline notebook-glossary-search-form">
+{% call page_header_narrow("Library", "library") %}
+    <form method="get" action="/library" class="form-inline notebook-glossary-search-form">
         {% for k in ('type','author') %}{% for v in request.query_params.getlist(k) %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}{% endfor %}
         {% for k in ('year_from','year_to','sort','sort2') %}{% if request.query_params.get(k) %}<input type="hidden" name="{{ k }}" value="{{ request.query_params.get(k) }}">{% endif %}{% endfor %}
-        {{ search_input({'name': 'q', 'value': q, 'aria-label': 'Search citations', 'autocomplete': 'off'}) }}
+        {{ search_input({'name': 'q', 'value': q, 'aria-label': 'Search the library', 'autocomplete': 'off'}) }}
     </form>
-    <a href="/notebook/citations/filters{% if current_query %}?{{ current_query }}{% endif %}" data-modal class="btn ghost" title="Filter and sort citations">{{ icon('filter', 'icon-sm') }} Filters{% if active_filter_count %} ({{ active_filter_count }}){% endif %}</a>
-    <a href="/notebook/citations/new" data-modal class="btn primary" title="Add citation">{{ icon('plus', 'icon-sm') }} Add citation</a>
+    <a href="/library/filters{% if current_query %}?{{ current_query }}{% endif %}" data-modal class="btn ghost" title="Filter and sort the library">{{ icon('filter', 'icon-sm') }} Filters{% if active_filter_count %} ({{ active_filter_count }}){% endif %}</a>
+    <a href="/library/new?kind=media" data-modal class="btn ghost" title="Add media">{{ icon('plus', 'icon-sm') }} Add media</a>
+    <a href="/library/new" data-modal class="btn primary" title="Add book">{{ icon('plus', 'icon-sm') }} Add book</a>
 {% endcall %}
 <div id="modal-target">
 <div class="settings-group">
@@ -21,31 +22,32 @@
 {# Two distinct empty states (same "no documents at all" vs. "filters
    narrowed it to nothing" rule notebook_list.html's Browse page already
    follows) -- this one skips the table/empty_state_row below entirely
-   rather than showing "No citations yet" underneath a filter that's
+   rather than showing "Nothing in the library yet" underneath a filter that's
    plainly hiding real citations. #}
-{% call empty_state('No citations match the current filters', size='compact') %}<a href="/notebook/citations">Clear filters</a>{% endcall %}
+{% call empty_state('Nothing in the library matches the current filters', size='compact') %}<a href="/library">Clear filters</a>{% endcall %}
 {% else %}
 {% if citations %}
 <div class="card contact-list notebook-folder-list" id="citations-list">
     {% for c in citations %}
     <div class="contact-row-wrap" data-uid="{{ c.uid }}">
-        <a class="contact-row" href="/notebook/citations/{{ c.uid }}" data-modal>
+        <a class="contact-row" href="/library/{{ c.uid }}" data-modal>
             <span class="notebook-row-icon">{{ icon('book-open', 'icon-sm') }}</span>
             <span class="contact-row-main">
                 <span class="contact-row-name">{{ c.title }}</span>
                 <span class="contact-row-sub">{{ c.display_authors or 'No author' }}{% if c.year %} · {{ c.year }}{% endif %}</span>
             </span>
-            <span class="notebook-row-edited">{{ c.type_label }}</span>
+            <span class="notebook-row-edited">{% if c.source.files %}{{ icon('file', 'icon-sm') }}{% if c.source.missing %} File missing · {% endif %}{% elif c.source.url %}{{ icon('link', 'icon-sm') }}{% endif %}{% if c.source.editions > 1 %} {{ c.source.editions }} editions ·{% endif %} {{ c.type_label }}</span>
         </a>
         {{ action_menu([
-            {'label': 'Edit', 'icon': 'edit', 'href': '/notebook/citations/' ~ c.uid ~ '/edit', 'modal': true},
-            {'label': 'Delete citation', 'icon': 'trash', 'danger': true, 'form_action': '/notebook/citations/' ~ c.uid ~ '/delete', 'confirm': 'Delete "' ~ c.title ~ '"? Any document this is attached to loses it from its bibliography too.'},
+            {'label': 'Edit', 'icon': 'edit', 'href': '/library/' ~ c.uid ~ '/edit', 'modal': true},
+            {'label': 'Delete citation', 'icon': 'trash', 'danger': true, 'form_action': '/library/' ~ c.uid ~ '/delete', 'confirm': 'Delete "' ~ c.title ~ '"? Any note or reading using it loses it, and its editions and their stored PDFs are deleted too.'},
         ], aria_label='More actions for ' ~ c.title) }}
     </div>
     {% endfor %}
 </div>
+<p class="muted" id="citations-count">{{ total }} {{ 'entry' if total == 1 else 'entries' }}{% if next_href %} · <a href="{{ next_href }}">Next page</a>{% endif %}</p>
 {% else %}
-{{ empty_state('No citations yet', icon_name='book-open') }}
+{{ empty_state('Nothing in the library yet', icon_name='book-open') }}
 {% endif %}
 {% endif %}
 

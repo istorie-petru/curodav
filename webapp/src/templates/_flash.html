@@ -1,0 +1,3 @@
+{# The short message a redirect carries in ?note= or ?error=; static/toast.js turns it into a toast. #}
+{% if request.query_params.get('note') %}<div class="settings-hint settings-hint-accent" data-dm-flash="note">{{ request.query_params.get('note') }}</div>{% endif %}
+{% if request.query_params.get('error') %}<div class="settings-hint settings-hint-error" data-dm-flash="error">{{ request.query_params.get('error') }}</div>{% endif %}

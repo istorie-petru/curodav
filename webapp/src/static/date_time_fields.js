@@ -17,6 +17,12 @@
     if (!d) return "";
     return DOW[(d.getDay() + 6) % 7] + ", " + MON[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
   }
+  // "20 Jan", or "20 Jan 2027" outside the current year: the display of a field marked data-dtf-short.
+  function fmtDateShort(iso) {
+    const d = dateOf(iso);
+    if (!d) return "";
+    return d.getDate() + " " + MON[d.getMonth()] + (d.getFullYear() === new Date().getFullYear() ? "" : " " + d.getFullYear());
+  }
   function build(y, m, d) {
     if (y < 100) y += 2000;
     const dt = new Date(y, m - 1, d);
@@ -36,6 +42,11 @@
     if (m) return build(m[3] ? +m[3] : today.getFullYear(), +m[2], +m[1]);
     m = /^(\d{2})(\d{2})(\d{4})$/.exec(t); // 29092023
     if (m) return build(+m[3], +m[2], +m[1]);
+    m = /^(\d{1,2})\s+([a-z]{3})[a-z]*\.?(?:\s+(\d{4}))?$/.exec(t); // "20 Jan", "20 Jan 2027"
+    if (m) {
+      const mi = MON.findIndex((x) => x.toLowerCase() === m[2]);
+      if (mi >= 0) return build(m[3] ? +m[3] : today.getFullYear(), mi + 1, +m[1]);
+    }
     // The field's own display text ("Sat, Sep 26, 2026") parses back.
     m = /^(?:[a-z]{3},?\s+)?([a-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})$/.exec(t);
     if (m) {
@@ -93,7 +104,7 @@
   const is12h = (f) => f.dataset.dtf12h === "1";
 
   function display(f, value) {
-    return kindOf(f) === "date" ? fmtDate(value) : fmtTime(value, is12h(f));
+    return kindOf(f) === "date" ? (f.hasAttribute("data-dtf-short") ? fmtDateShort(value) : fmtDate(value)) : fmtTime(value, is12h(f));
   }
   function withinBounds(f, iso) {
     if (kindOf(f) !== "date" || !iso) return true;

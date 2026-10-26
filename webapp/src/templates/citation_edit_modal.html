@@ -1,92 +1,139 @@
-{% from "_inputs.html" import text_input %}
+{% from "_inputs.html" import text_input, textarea_input, checkbox_input %}
+{% from "_upload_zone.html" import upload_zone %}
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
 {% from "_citation_author_row.html" import citation_author_row %}
-{% block title %}{{ "Edit citation" if c else "Add citation" }}{% endblock %}
+{# The book or media window, in two panes (event_form.html's split): the work on the left, the edition being edited on the right. #}
+{% set _sel = (editions | selectattr('uid', 'equalto', selected_edition) | list | first) if (c and selected_edition) else none %}
+{% block title %}{{ ("Edit " if c else "Add ") ~ noun|lower }}{% endblock %}
 {% block content %}
-{% call modal(kind="form", title=(("Edit citation" if c else "Add citation")), size="medium", back=(return_to or (crumbs[-1].url if crumbs else '')), back_name=('Back' if return_to else (crumbs[-1].name if crumbs else '')), retire=([({'action': 'delete', 'url': '/notebook/citations/' ~ c.uid ~ '/delete', 'mode': 'confirm', 'label': 'Delete "' ~ c.title ~ '"? Any document this is attached to loses it from its bibliography too.', 'redirect': none, 'change': none} if (c) else none)] | select | list), form='citation-form', creating=(not c), save_icon='check-square') %}
-<div class="card">
-<form method="post" id="citation-form" action="{{ form_action }}">
-    <div class="field-grid">
-        <div class="field field-wide">
-            <label>Title</label>
-            {{ text_input({'name': 'title', 'value': (c.title if c else ''), 'required': true, 'autofocus': true}) }}
-        </div>
-        {% set main_author = (c.authors[0] if c and c.authors else {}) %}
-        <div class="field">
-            <label>Main author: last name</label>
-            {{ text_input({'name': 'author_family', 'value': main_author.get('family', '')}) }}
-        </div>
-        <div class="field">
-            <label>Main author: first name</label>
-            {{ text_input({'name': 'author_given', 'value': main_author.get('given', '')}) }}
-        </div>
-        <div class="field">
-            {% set ms_mode = 'single' %}
-            {% set ms_form_id = 'citation-form' %}
-            {% set ms_name = 'type' %}
-            {% set ms_label = 'Type' %}
-            {% set ms_items = [] %}
-            {% for t_key, t_label in citation_types %}{% set _ = ms_items.append({'uid': t_key, 'name': t_label}) %}{% endfor %}
-            {% set ms_selected = c.type if c else 'book' %}
-            {% set ms_wide = false %}
-            {% include "_widget_list_multiselect.html" %}
-        </div>
-        <div class="field">
-            <label>Year</label>
-            {{ text_input({'name': 'year', 'value': (c.year if c else '')}) }}
-        </div>
-        {% macro cfield(name, label, types, wide=false, labels='') %}
-        <div class="field{% if wide %} field-wide{% endif %}" data-cite-types="{{ types }}"{% if labels %} data-cite-labels="{{ labels }}"{% endif %}>
-            <label>{{ label }}</label>
-            {{ text_input({'name': name, 'value': (c[name] if c else '')}) }}
-        </div>
-        {% endmacro %}
-        {{ cfield('subtitle', 'Subtitle', 'book chapter report thesis', true) }}
-        {{ cfield('container_title', 'Container', 'chapter article-journal webpage conference-paper', true, 'article-journal:Journal;chapter:Book title;webpage:Website;conference-paper:Proceedings') }}
-        {{ cfield('editors', 'Editors', 'chapter conference-paper', true) }}
-        {{ cfield('edition', 'Edition', 'book') }}
-        {{ cfield('volume', 'Volume', 'book chapter article-journal') }}
-        {{ cfield('issue', 'Issue', 'article-journal') }}
-        {{ cfield('pages', 'Pages', 'chapter article-journal conference-paper') }}
-        {{ cfield('publisher', 'Publisher', 'book chapter report conference-paper') }}
-        {{ cfield('place', 'Place of publication', 'book chapter report conference-paper') }}
-        {{ cfield('institution', 'Institution', 'thesis report') }}
-        {{ cfield('degree', 'Degree', 'thesis') }}
-        {{ cfield('isbn', 'ISBN', 'book chapter') }}
-        {{ cfield('issn', 'ISSN', 'article-journal') }}
-        {{ cfield('accessed', 'Accessed', 'webpage') }}
-        <div class="field">
-            <label>DOI</label>
-            {{ text_input({'name': 'doi', 'value': (c.doi if c else '')}) }}
-        </div>
-        <div class="field">
-            <label>URL</label>
-            {{ text_input({'name': 'url', 'value': (c.url if c else '')}, 'url') }}
-        </div>
-        <div class="field field-wide">
-            <label>Note</label>
-            {{ text_input({'name': 'note', 'value': (c.note if c else '')}) }}
-        </div>
-        <div class="field field-wide" data-repeatable-rows-scope>
-            <div class="field-label-row">
-                <label>Other authors</label>
-                <button type="button" class="icon-btn" data-repeatable-add="citation-author-rows" data-repeatable-template="citation-author-row-template" title="Add author" aria-label="Add author">{{ icon('plus', 'icon-sm') }}</button>
+{% call modal(kind="form", title=(("Edit " if c else "Add ") ~ noun|lower), split_title='Edition', size="medium", back=(return_to or (crumbs[-1].url if crumbs else '')), back_name=('Back' if return_to else (crumbs[-1].name if crumbs else '')), retire=([({'action': 'delete', 'url': '/library/' ~ c.uid ~ '/delete', 'mode': 'confirm', 'label': delete_label, 'redirect': none, 'change': none} if (c) else none)] | select | list), form='citation-form', creating=(not c), save_icon='check-square') %}
+<form method="post" id="citation-form" action="{{ form_action }}" enctype="multipart/form-data">
+<div class="qa-split qa-with-side" data-modal-wide>
+    <div class="qa-create">
+        <h2 class="qa-side-title">{{ noun }}</h2>
+        <div class="card">
+            <div class="field-grid">
+                <div class="field field-wide">
+                    <label>Title</label>
+                    {{ text_input({'name': 'title', 'value': (c.title if c else ''), 'required': true, 'autofocus': true}) }}
+                </div>
+                <div class="field field-wide">
+                    <label>Subtitle</label>
+                    {{ text_input({'name': 'subtitle', 'value': (c.subtitle if c else '')}) }}
+                </div>
+                {% set main_author = (c.authors[0] if c and c.authors else {}) %}
+                <div class="field field-wide">
+                    <label>Author: last name</label>
+                    {{ text_input({'name': 'author_family', 'value': main_author.get('family', '')}) }}
+                </div>
+                <div class="field field-wide">
+                    <label>Author: first name</label>
+                    {{ text_input({'name': 'author_given', 'value': main_author.get('given', '')}) }}
+                </div>
+                <div class="field field-wide" data-repeatable-rows-scope>
+                    <div class="field-label-row">
+                        <label>Other authors</label>
+                        <button type="button" class="icon-btn" data-repeatable-add="citation-author-rows" data-repeatable-template="citation-author-row-template" title="Add author" aria-label="Add author">{{ icon('plus', 'icon-sm') }}</button>
+                    </div>
+                    <div id="citation-author-rows">
+                        {% for a in ((c.authors if c else [])[1:]) %}
+                        {{ citation_author_row(a.family, a.given) }}
+                        {% endfor %}
+                    </div>
+                    <template id="citation-author-row-template">
+                        {{ citation_author_row('', '') }}
+                    </template>
+                </div>
+                <div class="field field-wide">
+                    <label>Original year</label>
+                    {{ text_input({'name': 'year', 'value': (c.year if c else '')}) }}
+                </div>
+                <div class="field field-wide">
+                    {% set ms_mode = 'single' %}{% set ms_form_id = 'citation-form' %}{% set ms_name = 'type' %}{% set ms_label = 'Type' %}{% set ms_remote = '' %}
+                    {% set ms_items = [] %}{% for t_key, t_label in citation_types %}{% set _ = ms_items.append({'uid': t_key, 'name': t_label}) %}{% endfor %}
+                    {% set ms_selected = c.type if c else default_type %}{% set ms_wide = false %}
+                    {% include "_widget_list_multiselect.html" %}
+                </div>
+                <div class="field field-wide">
+                    {% set ms_mode = 'single' %}{% set ms_form_id = 'citation-form' %}{% set ms_name = 'status' %}{% set ms_label = 'Status' %}
+                    {% set ms_items = [] %}{% for s_key, s_label in statuses %}{% set _ = ms_items.append({'uid': s_key, 'name': s_label}) %}{% endfor %}
+                    {% set ms_selected = c.status if c else '' %}{% set ms_wide = false %}
+                    {% include "_widget_list_multiselect.html" %}
+                </div>
+                <div class="field field-wide">
+                    {% set ms_mode = 'single' %}{% set ms_form_id = 'citation-form' %}{% set ms_name = 'rating' %}{% set ms_label = 'Rating' %}
+                    {% set ms_items = [{'uid': '0', 'name': 'No rating'}, {'uid': '1', 'name': '1 star'}, {'uid': '2', 'name': '2 stars'}, {'uid': '3', 'name': '3 stars'}, {'uid': '4', 'name': '4 stars'}, {'uid': '5', 'name': '5 stars'}] %}
+                    {% set ms_selected = (c.rating|string) if c else '0' %}{% set ms_wide = false %}
+                    {% include "_widget_list_multiselect.html" %}
+                </div>
+                <div class="field field-wide">
+                    <label>Keywords</label>
+                    {{ text_input({'name': 'keywords', 'value': (c.keywords | join(', ') if c else ''), 'placeholder': 'Separated by commas', 'autocomplete': 'off'}) }}
+                </div>
+                {% macro cfield(name, label, types, wide=false, labels='') %}
+                <div class="field field-wide" data-cite-types="{{ types }}"{% if labels %} data-cite-labels="{{ labels }}"{% endif %}>
+                    <label>{{ label }}</label>
+                    {{ text_input({'name': name, 'value': (c[name] if c else '')}) }}
+                </div>
+                {% endmacro %}
+                {{ cfield('container_title', 'Container', 'chapter article-journal webpage conference-paper', true, 'article-journal:Journal;chapter:Book title;webpage:Website;conference-paper:Proceedings') }}
+                {{ cfield('editors', 'Editors', 'chapter conference-paper', true) }}
+                {{ cfield('volume', 'Volume', 'book chapter article-journal') }}
+                {{ cfield('issue', 'Issue', 'article-journal') }}
+                {{ cfield('pages', 'Pages', 'chapter article-journal conference-paper') }}
+                {{ cfield('institution', 'Institution', 'thesis report') }}
+                {{ cfield('degree', 'Degree', 'thesis') }}
+                {{ cfield('issn', 'ISSN', 'article-journal') }}
+                {{ cfield('accessed', 'Accessed', 'webpage') }}
+                <div class="field field-wide">
+                    <label>Note</label>
+                    {{ textarea_input({'name': 'note', 'rows': 3}, (c.note if c else '')) }}
+                </div>
+                <div class="field field-wide">
+                    <label class="checkbox-label">{{ checkbox_input({'name': 'allow_duplicate', 'value': '1'}) }} Allow duplicate</label>
+                </div>
             </div>
-            <div id="citation-author-rows">
-                {% for a in ((c.authors if c else [])[1:]) %}
-                {{ citation_author_row(a.family, a.given) }}
-                {% endfor %}
-            </div>
-            <template id="citation-author-row-template">
-                {{ citation_author_row('', '') }}
-            </template>
         </div>
     </div>
-</form>
+    <div class="qa-series" data-library-editions data-editions='{{ edition_data | tojson }}'>
+        <h2 class="qa-side-title">Edition</h2>
+        <div class="card">
+            <div class="field-grid">
+                <div class="field field-wide">
+                    {% set ms_mode = 'single' %}{% set ms_form_id = 'citation-form' %}{% set ms_name = 'edition_uid' %}{% set ms_label = 'Edition' %}{% set ms_remote = '' %}
+                    {% set ms_items = [] %}{% for e in editions %}{% set _ = ms_items.append({'uid': e.uid, 'name': e.display}) %}{% endfor %}
+                    {% set _ = ms_items.append({'uid': '', 'name': 'Add a new edition'}) %}
+                    {% set ms_selected = selected_edition %}{% set ms_wide = true %}
+                    {% include "_widget_list_multiselect.html" %}
+                </div>
+                <div class="field field-wide"><label>Edition</label>{{ text_input({'name': 'ed_edition', 'value': (_sel.edition if _sel else ''), 'placeholder': 'For example 2nd'}) }}</div>
+                <div class="field field-wide"><label>Year of publishing</label>{{ text_input({'name': 'ed_year', 'value': (_sel.year if _sel else '')}) }}</div>
+                <div class="field field-wide"><label>Publisher</label>{{ text_input({'name': 'ed_publisher', 'value': (_sel.publisher if _sel else '')}) }}</div>
+                <div class="field field-wide"><label>Place of publication</label>{{ text_input({'name': 'ed_place', 'value': (_sel.place if _sel else '')}) }}</div>
+                <div class="field field-wide"><label>ISBN</label>{{ text_input({'name': 'ed_isbn', 'value': (_sel.isbn if _sel else '')}) }}</div>
+                <div class="field field-wide"><label>DOI</label>{{ text_input({'name': 'ed_doi', 'value': (_sel.doi if _sel else '')}) }}</div>
+                <div class="field field-wide edition-source-row">
+                    {% set ms_mode = 'single' %}{% set ms_form_id = 'citation-form' %}{% set ms_name = 'ed_source' %}{% set ms_label = 'Provided as' %}{% set ms_remote = '' %}
+                    {% set ms_items = [{'uid': 'none', 'name': 'None'}, {'uid': 'link', 'name': 'Link'}, {'uid': 'local', 'name': 'Local file'}] %}
+                    {% set ms_selected = _sel.source if _sel else 'none' %}{% set ms_wide = false %}
+                    {% include "_widget_list_multiselect.html" %}
+                    <div class="edition-source-slot" data-edition-link{% if not _sel or _sel.source != 'link' %} hidden{% endif %}>
+                        <label>Link</label>
+                        {{ text_input({'name': 'ed_url', 'value': (_sel.url if _sel else ''), 'aria-label': 'Link to the edition', 'placeholder': 'https://'}, 'url') }}
+                    </div>
+                    <div class="edition-source-slot" data-edition-file{% if not _sel or _sel.source != 'local' %} hidden{% endif %}>
+                        {{ upload_zone('file', 'edition-file-input', 'citation-form', ('Replace the PDF' if _sel and _sel.source == 'local' else 'Choose or drop a PDF'), 'application/pdf') }}
+                        <span class="field-hint" data-edition-file-state>{% if _sel and _sel.source == 'local' %}{% if _sel.file_state == 'ok' %}Stored: <a href="/library/editions/{{ _sel.uid }}/file" target="_blank" rel="noopener">{{ _sel.file_label }}</a>{% else %}The stored PDF "{{ _sel.file_label }}" is missing from the disk. Drop it again to restore it.{% endif %}{% endif %}</span>
+                    </div>
+                </div>
+                <div class="field field-wide" data-edition-delete{% if not _sel %} hidden{% endif %}>
+                    <label class="checkbox-label">{{ checkbox_input({'name': 'delete_edition', 'value': '1'}) }} Delete this edition and its stored PDF</label>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
+</form>
 {% endcall %}
 {% endblock %}
-<!-- No extra_scripts block -- only ever opened via data-modal, same as
-     notebook_field_edit_modal.html; contact_phone_email_rows.js is
-     already loaded globally in base.html. -->

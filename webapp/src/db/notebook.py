@@ -982,6 +982,10 @@ def _attach_citation_authors(row: dict[str, Any]) -> dict[str, Any]:
         row["authors"] = json.loads(row.pop("authors_json") or "[]")
     except (json.JSONDecodeError, TypeError):
         row["authors"] = []
+    try:
+        row["keywords"] = [str(k) for k in json.loads(row.pop("keywords_json", "[]") or "[]")]
+    except (json.JSONDecodeError, TypeError):
+        row["keywords"] = []
     return row
 
 
@@ -1026,14 +1030,29 @@ def list_citations(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return [_attach_citation_authors(dict(r)) for r in rows]
 
 
-def get_citation(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
+def get_citation_raw(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
+    """The book exactly as stored, without the details read up from its editions."""
     row = conn.execute("SELECT * FROM citations WHERE uid = ?", (uid,)).fetchone()
     return _attach_citation_authors(dict(row)) if row else None
+
+
+def get_citation(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
+    """The book with the details its editions hold (DOI, link, publisher, place, edition, ISBN) read from the first edition that has one."""
+    row = conn.execute("SELECT * FROM citations WHERE uid = ?", (uid,)).fetchone()
+    if not row:
+        return None
+    c = _attach_citation_authors(dict(row))
+    editions = conn.execute("SELECT * FROM citation_editions WHERE citation_uid = ? ORDER BY year, created_at", (uid,)).fetchall()
+    for field in ("doi", "url", "publisher", "place", "edition", "isbn"):
+        c[field] = next((e[field] for e in editions if e[field]), "") or c[field]
+    c["year"] = c["year"] or next((e["year"] for e in editions if e["year"]), "")
+    return c
 
 
 CITATION_EXTRA_FIELDS = ("subtitle", "edition", "volume", "issue", "pages", "publisher", "place", "isbn", "issn",
                          "accessed", "institution", "degree", "editors", "note")
 _CITATION_BASE_FIELDS = ("type", "title", "authors_json", "year", "container_title", "doi", "url")
+CITATION_STATUSES = [("", "No status"), ("to_read", "To read"), ("reading", "Reading"), ("read", "Read"), ("dropped", "Dropped")]
 
 
 def upsert_citation(conn: sqlite3.Connection, row: dict[str, Any]) -> str:
@@ -1046,8 +1065,16 @@ def upsert_citation(conn: sqlite3.Connection, row: dict[str, Any]) -> str:
     values = {
         "type": row.get("type") or "book", "title": row.get("title") or "",
         "authors_json": json.dumps(row.get("authors") or []), "year": row.get("year") or "",
-        "container_title": row.get("container_title") or "", "doi": row.get("doi") or "", "url": row.get("url") or "",
+        "container_title": row.get("container_title") or "",
     }
+    for name in ("doi", "url"):
+        values[name] = ((row[name] if name in row else (existing[name] if existing else "")) or "").strip()
+    keywords = row["keywords"] if "keywords" in row else (json.loads(existing["keywords_json"]) if existing else [])
+    values["keywords_json"] = json.dumps([k.strip() for k in keywords if k.strip()])
+    status = row["status"] if "status" in row else (existing["status"] if existing else "")
+    values["status"] = status if status in dict(CITATION_STATUSES) else ""
+    rating = row["rating"] if "rating" in row else (existing["rating"] if existing else 0)
+    values["rating"] = int(rating) if str(rating).isdigit() and 0 <= int(rating) <= 5 else 0
     for name in CITATION_EXTRA_FIELDS:
         values[name] = row[name] if name in row else (existing[name] if existing else "")
         values[name] = (values[name] or "").strip()
@@ -1079,6 +1106,9 @@ def set_citation_format(conn: sqlite3.Connection, style: str) -> None:
 
 
 def delete_citation(conn: sqlite3.Connection, uid: str) -> None:
+    from .citation_library import delete_citation_editions
+
+    delete_citation_editions(conn, uid)
     conn.execute("DELETE FROM citations WHERE uid = ?", (uid,))
     conn.execute("DELETE FROM notebook_citations WHERE citation_uid = ?", (uid,))
     conn.execute("DELETE FROM glossary_term_references WHERE ref_type = 'citation' AND ref_uid = ?", (uid,))
@@ -1215,20 +1245,6 @@ def citation_author_key(author: dict[str, Any]) -> str:
     if family and given:
         return f"{family}, {given}"
     return family or given
-
-
-def list_citation_authors_in_use(conn: sqlite3.Connection) -> list[str]:
-    """Every distinct author (any position, not just first) across the
-    whole library -- the citations/filters modal's Author dropdown is
-    built from this instead of a fixed list, same "distinct values
-    actually in the data" shape as list_notebook_property_keys_in_use."""
-    seen: set[str] = set()
-    for c in list_citations(conn):
-        for a in c["authors"]:
-            key = citation_author_key(a)
-            if key:
-                seen.add(key)
-    return sorted(seen, key=str.casefold)
 
 
 def parse_citation_year(year: str) -> int | None:

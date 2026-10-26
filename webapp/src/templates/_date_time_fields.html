@@ -1,9 +1,9 @@
 
 {% macro _week_start() %}{{ week_start(request) if request is defined else 'monday' }}{% endmacro %}
 
-{% macro date_field(name, value='', required=false, min='', max='', compact=false, label='Date', input_class='', attrs='', role='') %}
-<div class="dtf dtf-date{% if compact %} dtf--compact{% endif %}" data-dtf="date" data-dtf-week-start="{{ _week_start() }}"{% if min %} data-dtf-min="{{ min }}"{% endif %}{% if max %} data-dtf-max="{{ max }}"{% endif %}{% if required %} data-dtf-required{% endif %}{% if role %} data-dtr-role="{{ role }}"{% endif %}>
-    <input type="text" class="dtf-input" value="{{ value|dtf_date }}" autocomplete="off" spellcheck="false" aria-label="{{ label }}">
+{% macro date_field(name, value='', required=false, min='', max='', compact=false, label='Date', input_class='', attrs='', role='', short=false) %}
+<div class="dtf dtf-date{% if compact %} dtf--compact{% endif %}" data-dtf="date"{% if short %} data-dtf-short{% endif %} data-dtf-week-start="{{ _week_start() }}"{% if min %} data-dtf-min="{{ min }}"{% endif %}{% if max %} data-dtf-max="{{ max }}"{% endif %}{% if required %} data-dtf-required{% endif %}{% if role %} data-dtr-role="{{ role }}"{% endif %}>
+    <input type="text" class="dtf-input" value="{{ value|short_day if short else value|dtf_date }}" autocomplete="off" spellcheck="false" aria-label="{{ label }}">
     <button type="button" class="dtf-btn" tabindex="-1" aria-label="Choose {{ label|lower }}" aria-haspopup="dialog">{{ icon('chevron-down', 'icon-sm') }}</button>
     <input type="hidden" class="dtf-value{% if input_class %} {{ input_class }}{% endif %}"{% if name %} name="{{ name }}"{% endif %} value="{{ (value or '')[:10] }}" {{ attrs|safe }}>
 </div>

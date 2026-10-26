@@ -1,5 +1,6 @@
 {% from "_inputs.html" import search_input %}
 {% from "_quick_add_target.html" import quick_add_href, quick_add_title with context %}
+{% set active_tab = 'library' if (request is defined and request.url.path.startswith('/library')) else active_tab %}
 <!DOCTYPE html>
 <html lang="en" data-terminology="{{ terminology(request) if request is defined else 'standard' }}">
 <head>
@@ -110,6 +111,7 @@
         <a href="/calendar/fourweek" data-tab="calendar" class="tab-btn {% if active_tab in ('calendar', 'calendar_week') %}active{% endif %}" title="Calendar" aria-label="Calendar">{{ icon('calendar') }}<span>Calendar</span></a>
         <a href="/tasks" data-tab="tasks" class="tab-btn {% if active_tab in ('tasks', 'habits') %}active{% endif %}" title="Tasks" aria-label="Tasks">{{ icon('check-square') }}<span>Tasks</span></a>
         <a href="/notebook" data-tab="notebook" class="tab-btn {% if active_tab == 'notebook' %}active{% endif %}" title="Notebook" aria-label="Notebook">{{ icon('notebook') }}<span>Notebook</span></a>
+        <a href="/library" data-tab="library" class="tab-btn {% if active_tab == 'library' %}active{% endif %}" title="Library" aria-label="Library">{{ icon('library') }}<span>Library</span></a>
         <a href="/finance" data-tab="finance" class="tab-btn {% if active_tab == 'finance' %}active{% endif %}" title="Finance" aria-label="Finance">{{ icon('dollar-sign') }}<span>Finance</span></a>
         <a href="/contacts" data-tab="contacts" class="tab-btn {% if active_tab == 'contacts' %}active{% endif %}" title="Contacts" aria-label="Contacts">{{ icon('address-book') }}<span>Contacts</span></a>
         {% set _sb_groups = sidebar_groups(request) %}
@@ -122,7 +124,7 @@
         {# namespace(): child_active is written inside the loop and read after it. #}
         {% set ns = namespace(child_active=false, member_active=false) %}
         {% for child in g.children %}
-          {% if request.url.path == '/labels/' ~ child.name %}{% set ns.child_active = true %}{% endif %}
+          {% if request.url.path == (child.path or '/labels/' ~ child.name) %}{% set ns.child_active = true %}{% endif %}
         {% endfor %}
         {% for m in g.labels %}
           {% if request.url.path == '/labels/' ~ m.name %}{% set ns.member_active = true %}{% endif %}
@@ -138,8 +140,8 @@
           {% if has_children %}
           <div class="sidebar-tree-children">
             {% for child in g.children %}
-            {% set child_href = '/labels/' ~ child.name %}
-            <a href="{{ child_href }}" class="tab-btn tab-btn-child {% if request.url.path == child_href %}active{% endif %}" title="{{ child.name }}">{{ icon(child.icon or ('folder' if child.is_project else 'tag')) }}<span>{{ child.abbreviation or child.name }}</span></a>
+            {% set child_href = child.href or '/labels/' ~ child.name %}
+            <a href="{{ child_href }}" class="tab-btn tab-btn-child {% if request.url.path == (child.path or child_href) %}active{% endif %}" title="{{ child.name }}">{{ icon(child.icon or ('folder' if child.is_project else 'tag')) }}<span>{{ child.abbreviation or child.name }}</span></a>
             {% endfor %}
           </div>
           {% endif %}

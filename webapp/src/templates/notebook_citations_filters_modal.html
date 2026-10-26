@@ -8,7 +8,7 @@
 </div>
 <div class="modal-body">
 <div class="card">
-<form method="get" action="/notebook/citations" id="citations-filters-form">
+<form method="get" action="/library" id="citations-filters-form">
     <div class="field-grid">
         <div class="field field-wide">
             {% set ms_mode = 'select' %}
@@ -22,9 +22,18 @@
         <div class="field field-wide">
             {% set ms_mode = 'select' %}
             {% set ms_form_id = 'citations-filters-form' %}
+            {% set ms_name = 'source' %}
+            {% set ms_label = 'Source' %}
+            {% set ms_items = [{'uid': 'file', 'name': 'Has a PDF'}, {'uid': 'url', 'name': 'Has a link'}, {'uid': 'none', 'name': 'Metadata only'}] %}
+            {% set ms_selected = selected_sources %}{% set ms_remote = '' %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+        <div class="field field-wide">
+            {% set ms_mode = 'select' %}
+            {% set ms_form_id = 'citations-filters-form' %}
             {% set ms_name = 'author' %}
             {% set ms_label = 'Author' %}
-            {% set ms_items = author_items %}
+            {% set ms_items = author_items %}{% set ms_remote = '/library/author-options' %}
             {% set ms_selected = selected_authors %}
             {% include "_widget_list_multiselect.html" %}
         </div>
@@ -39,7 +48,7 @@
         <div class="field">
             {% set ms_mode = 'single' %}
             {% set ms_form_id = 'citations-filters-form' %}
-            {% set ms_name = 'sort' %}
+            {% set ms_remote = '' %}{% set ms_name = 'sort' %}
             {% set ms_label = 'Sort by' %}
             {% set ms_items = sort_items %}
             {% set ms_selected = selected_sort %}
@@ -49,7 +58,7 @@
         <div class="field">
             {% set ms_mode = 'single' %}
             {% set ms_form_id = 'citations-filters-form' %}
-            {% set ms_name = 'sort2' %}
+            {% set ms_remote = '' %}{% set ms_name = 'sort2' %}
             {% set ms_label = 'Then by' %}
             {% set ms_items = sort_items %}
             {% set ms_selected = selected_sort2 %}
@@ -61,9 +70,9 @@
 </div>
 </div>
 <div class="modal-footer">
-    <a href="/notebook/citations" class="btn ghost" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Cancel</a>
+    <a href="/library" class="btn ghost" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Cancel</a>
     <span class="spacer"></span>
-    <a href="/notebook/citations" class="btn ghost">Clear filters</a>
+    <a href="/library" class="btn ghost">Clear filters</a>
     <a href="{{ apply_href }}" id="citations-filters-apply" class="btn primary">{{ icon('filter', 'icon-sm') }} Apply</a>
 </div>
 </div>

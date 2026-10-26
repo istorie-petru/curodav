@@ -98,7 +98,7 @@ def get_group_page_type(conn: sqlite3.Connection, group: str) -> str:
 
 
 def set_group_page_type(conn: sqlite3.Connection, group: str, page_type: str) -> None:
-    if page_type in PAGE_TYPES:
+    if page_type in PAGE_TYPES or page_type in page_types():
         ensure_group(conn, group)
         conn.execute("UPDATE label_groups SET page_type = ? WHERE name = ?", (page_type, group.strip()))
         conn.commit()

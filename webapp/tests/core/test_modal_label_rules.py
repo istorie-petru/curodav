@@ -13,7 +13,7 @@ from src import main
 MODAL_ROUTES = [
     "/tasks/new", "/events/new", "/contacts/new", "/settings/labels/new", "/habits/new", "/groups/new",
     "/finance/transactions/new", "/settings/finance-accounts/new", "/notebook/new",
-    "/notebook/citations/new", "/notebook/glossary/new", "/settings/notebook/new", "/settings/holidays/new",
+    "/library/new", "/notebook/glossary/new", "/settings/notebook/new", "/settings/holidays/new",
     "/settings/time-blocks/new", "/quick/add",
 ]
 SKIPPED_INPUT_TYPES = {"hidden", "radio", "checkbox", "file"}

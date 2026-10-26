@@ -67,7 +67,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from .. import log as app_log
 from .. import perf
 from ..log import get_logger
-from .. import clock, auth, config, data_health, db, env_file, event_series, finance, finance_stats, flairs, offline_sync, push, release, reminders
+from .. import clock, auth, config, data_health, db, env_file, event_series, finance, finance_stats, flairs, modules, offline_sync, push, release, reminders
 from ..header_views import current_settings_groups
 from ..image_sniff import sniff_image_type
 from ..deps import (
@@ -189,10 +189,21 @@ def settings_general(request: Request, conn=Depends(get_db)):
             "current_timezone": db.get_app_meta(conn, config.TIMEZONE_KEY) or "",
             "timezone_options": [{"uid": "", "name": "System default"}]
             + [{"uid": z, "name": z} for z in config.TIMEZONE_CHOICES],
+            "module_rows": [{"key": m.key, "title": m.title, "description": m.description, "on": modules.is_enabled(m.key), "forced": m.key in modules.forced_keys()}
+                            for m in modules.MODULES.values()],
             "current_default_currency": finance.default_currency(conn),
             "currency_options": [{"uid": "", "name": "None"}] + [{"uid": c, "name": c} for c in finance_stats.CURRENCIES],
         },
     )
+
+
+@router.post("/settings/modules/{key}")
+def set_module(key: str, enabled: str = Form("0"), conn=Depends(get_db)):
+    """Turns a module on or off from the General settings page."""
+    if key not in modules.MODULES:
+        raise HTTPException(404, "No such module")
+    modules.set_enabled(conn, key, enabled == "1")
+    return RedirectResponse(url="/settings/general", status_code=303)
 
 
 @router.get("/settings/logs")

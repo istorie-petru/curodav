@@ -1,0 +1,62 @@
+{% from "_inputs.html" import text_input, number_input, textarea_input %}
+{% from "_rows_pick.html" import form_pick %}
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% block title %}{{ sec.label }}{% endblock %}
+{% block content %}
+{% set _kind = sec.key %}
+{% macro custom_row(c) %}
+<div class="rows-row {{ 'is-three' if _kind == 'evaluation' else 'is-pair' }}" data-row>
+    {{ text_input({'name': 'custom_label', 'value': c.label, 'aria-label': 'Name'}) }}
+    {% if _kind == 'evaluation' %}{{ form_pick('custom_a', c.form, forms) }}{{ number_input({'name': 'custom_b', 'value': c.weight, 'min': 0, 'max': 100, 'step': 'any', 'aria-label': 'Weight in percent'}) }}
+    {% elif _kind == 'teaching' %}{{ number_input({'name': 'custom_a', 'value': c.value, 'min': 0, 'step': 'any', 'aria-label': 'Hours per week'}) }}
+    {% else %}{{ text_input({'name': 'custom_a', 'value': c.value, 'aria-label': 'Value'}) }}{% endif %}
+    <button type="button" class="icon-btn" data-rows-remove title="Remove" aria-label="Remove">{{ icon('trash', 'icon-sm') }}</button>
+</div>
+{% endmacro %}
+{% call modal(kind="form", title=d.name ~ ': ' ~ sec.label|lower, size="medium", form='university-sheet-form') %}
+<div class="card">
+<form method="post" id="university-sheet-form" action="/settings/university/sheet/{{ d.name|urlencode }}">
+    <input type="hidden" name="section" value="{{ sec.key }}">
+    <div class="field-grid">
+        {% if sec.key == 'identification' %}<div class="field field-wide"><label>Name</label>{{ text_input({'name': 'name', 'value': d.name, 'required': true}) }}</div>{% endif %}
+        {% for f in sec.fields %}
+        {% if f.type == 'select' %}
+        <div class="field">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'university-sheet-form' %}{% set ms_name = 'f_' ~ f.key %}{% set ms_label = f.label %}
+            {% set ms_items = [{'uid': '', 'name': 'Not set'}] %}{% for o in f.options %}{% set _ = ms_items.append({'uid': o, 'name': o}) %}{% endfor %}
+            {% set ms_selected = f.value %}{% set ms_wide = false %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+        {% elif f.type == 'number' %}<div class="field"><label>{{ f.label }}</label>{{ number_input({'name': 'f_' ~ f.key, 'value': f.value, 'min': 0, 'step': 'any'}) }}</div>
+        {% elif f.type == 'long' %}<div class="field field-wide"><label>{{ f.label }}</label>{{ textarea_input({'name': 'f_' ~ f.key, 'rows': 3}, f.value) }}</div>
+        {% else %}<div class="field"><label>{{ f.label }}</label>{{ text_input({'name': 'f_' ~ f.key, 'value': f.value}) }}</div>
+        {% endif %}
+        {% endfor %}
+        {% if sec.key == 'teaching' %}
+        <div class="field field-wide">
+            {% set ms_name = 'lecture_teachers' %}{% set ms_icon = 'address-book' %}{% set ms_label = 'Lecture teachers' %}{% set ms_form_id = 'university-sheet-form' %}
+            {% set ms_items = contact_items(request) %}{% set ms_selected = lecture %}{% set ms_mode = 'select' %}{% set ms_allow_new = true %}{% set ms_pill = false %}{% set ms_wide = true %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+        <div class="field field-wide">
+            {% set ms_name = 'seminar_teachers' %}{% set ms_icon = 'address-book' %}{% set ms_label = 'Seminar and lab teachers' %}{% set ms_form_id = 'university-sheet-form' %}
+            {% set ms_items = contact_items(request) %}{% set ms_selected = seminar %}{% set ms_mode = 'select' %}{% set ms_allow_new = true %}{% set ms_pill = false %}{% set ms_wide = true %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+        {% endif %}
+        <div class="field field-wide">
+            <label>{{ {'evaluation': 'More ways to evaluate', 'teaching': 'More teaching activities', 'identification': 'Your own fields', 'content': 'Your own fields'}[sec.key] }}</label>
+            <div class="rows-head {{ 'is-three' if sec.key == 'evaluation' else 'is-pair' }}"><span>{{ {'evaluation': 'Component', 'teaching': 'Activity'}.get(sec.key, 'Field') }}</span>
+                {% if sec.key == 'evaluation' %}<span>Form</span><span>Weight (%)</span>{% elif sec.key == 'teaching' %}<span>Hours per week</span>{% else %}<span>Value</span>{% endif %}<span></span></div>
+            <div class="rows-host" id="university-custom-rows" data-rows-host data-rows-template="university-custom-template">
+                {% for c in sec.custom %}{{ custom_row(c) }}{% endfor %}
+            </div>
+            <template id="university-custom-template">{{ custom_row({'label': '', 'value': '', 'form': '', 'weight': ''}) }}</template>
+            <button type="button" class="btn ghost rows-add" data-rows-add="university-custom-rows">{{ icon('plus', 'icon-sm') }} Add</button>
+        </div>
+    </div>
+</form>
+</div>
+{% endcall %}
+{% endblock %}

@@ -24,7 +24,7 @@ def conn(tmp_path):
         yield c
 
 
-def _bare_request(path="/notebook/citations", query_string: bytes = b""):
+def _bare_request(path="/library", query_string: bytes = b""):
     return Request(
         {
             "type": "http", "method": "GET", "path": path, "query_string": query_string,
@@ -303,10 +303,10 @@ class TestDistinctAuthors:
         assert db.citation_author_key({"family": "Cher", "given": ""}) == "Cher"
         assert db.citation_author_key({"family": "", "given": ""}) == ""
 
-    def test_list_citation_authors_in_use_dedupes_across_citations_and_positions(self, conn):
+    def test_author_options_dedupe_across_citations_and_positions(self, conn):
         _citation(conn, uid="c1", authors=[{"family": "Bloch", "given": "Marc"}, {"family": "Febvre", "given": "Lucien"}])
         _citation(conn, uid="c2", title="Second", authors=[{"family": "Bloch", "given": "Marc"}])
-        assert db.list_citation_authors_in_use(conn) == ["Bloch, Marc", "Febvre, Lucien"]
+        assert [a["uid"] for a in db.author_options(conn)] == ["Bloch, Marc", "Febvre, Lucien"]
 
 
 class TestParseCitationYear:
@@ -357,7 +357,7 @@ class TestCitationsFiltering:
             _bare_request(), type=["thesis"], author=[], year_from="", year_to="", sort="title", conn=conn
         )
         assert resp.context["citations"] == []
-        assert "No citations match the current filters" in resp.body.decode()
+        assert "Nothing in the library matches the current filters" in resp.body.decode()
 
 
 class TestCitationsYearRangeFiltering:
@@ -523,7 +523,7 @@ class TestCitationsSecondarySort:
 class TestCitationsFiltersModal:
     def test_renders_options_and_current_selection(self, conn):
         _citation(conn, uid="c1", type="book", year="1924", authors=[{"family": "Bloch", "given": "Marc"}])
-        req = _bare_request("/notebook/citations/filters", query_string=b"type=book&year_from=1900&year_to=1950")
+        req = _bare_request("/library/filters", query_string=b"type=book&year_from=1900&year_to=1950")
         resp = notebook_router.citations_filters_modal(
             req, type=["book"], author=[], year_from="1900", year_to="1950", sort="title", conn=conn
         )
@@ -531,17 +531,17 @@ class TestCitationsFiltersModal:
         assert resp.context["selected_year_from"] == "1900"
         assert resp.context["selected_year_to"] == "1950"
         assert any(i["uid"] == "Bloch, Marc" for i in resp.context["author_items"])
-        assert resp.context["apply_href"] == "/notebook/citations?type=book&year_from=1900&year_to=1950"
+        assert resp.context["apply_href"] == "/library?type=book&year_from=1900&year_to=1950"
 
     def test_apply_href_is_bare_path_with_no_active_filters(self, conn):
-        req = _bare_request("/notebook/citations/filters")
+        req = _bare_request("/library/filters")
         resp = notebook_router.citations_filters_modal(
             req, type=[], author=[], year_from="", year_to="", sort="title", conn=conn
         )
-        assert resp.context["apply_href"] == "/notebook/citations"
+        assert resp.context["apply_href"] == "/library"
 
     def test_both_year_fields_blank_by_default_no_autocomplete(self, conn):
-        req = _bare_request("/notebook/citations/filters")
+        req = _bare_request("/library/filters")
         resp = notebook_router.citations_filters_modal(
             req, type=[], author=[], year_from="", year_to="", sort="title", conn=conn
         )
@@ -549,17 +549,17 @@ class TestCitationsFiltersModal:
         assert resp.context["selected_year_to"] == ""
 
     def test_primary_and_secondary_sort_both_carried_through(self, conn):
-        req = _bare_request("/notebook/citations/filters", query_string=b"sort=year&sort2=author")
+        req = _bare_request("/library/filters", query_string=b"sort=year&sort2=author")
         resp = notebook_router.citations_filters_modal(
             req, type=[], author=[], year_from="", year_to="", sort="year", sort2="author", conn=conn
         )
         assert resp.context["selected_sort"] == "year"
         assert resp.context["selected_sort2"] == "author"
-        assert resp.context["apply_href"] == "/notebook/citations?sort=year&sort2=author"
+        assert resp.context["apply_href"] == "/library?sort=year&sort2=author"
 
     def test_from_set_with_blank_to_displays_present_year(self, conn):
         current_year = datetime.now(timezone.utc).year
-        req = _bare_request("/notebook/citations/filters", query_string=b"year_from=1900")
+        req = _bare_request("/library/filters", query_string=b"year_from=1900")
         resp = notebook_router.citations_filters_modal(
             req, type=[], author=[], year_from="1900", year_to="", sort="title", conn=conn
         )
@@ -578,9 +578,20 @@ class TestCitationsSearch:
             app.dependency_overrides[get_db] = lambda: c
             try:
                 cl = TestClient(app)
-                by_title = cl.get("/notebook/citations?q=alpha").text
-                by_author = cl.get("/notebook/citations?q=jones").text
+                by_title = cl.get("/library?q=alpha").text
+                by_author = cl.get("/library?q=jones").text
             finally:
                 app.dependency_overrides.clear()
         assert "Alpha Book" in by_title and "Beta Paper" not in by_title
         assert "Beta Paper" in by_author and "Alpha Book" not in by_author
+
+
+def test_pages_under_library_highlight_the_library_tab_not_the_notebook():
+    from starlette.testclient import TestClient
+
+    from src.main import app
+
+    with TestClient(app) as client:
+        html = client.get("/library").text
+    nav = [l for l in html.splitlines() if 'data-tab="library"' in l or 'data-tab="notebook"' in l]
+    assert any("active" in l for l in nav if 'data-tab="library"' in l) and not any("active" in l for l in nav if 'data-tab="notebook"' in l)

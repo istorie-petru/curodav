@@ -1,6 +1,7 @@
-"""The study page: the University shelf's own page type. It shows the week as a grid coloured by discipline, the exams with a countdown,
-the readings still open, and quick creation on an empty day. It reads classes by tag and date range from the event rows (a series is
-never expanded here), so a semester of several hundred classes costs one small query per week."""
+"""The study page: the page of the space that holds the University semester. Overview is the weekly schedule (odd weeks in the left half of a
+day, even weeks in the right half) above four small widgets (the next examination, the next homework, the next tasks and how much of the
+semester is left). Disciplines is one bordered card per discipline. Nothing here reads dated class events: the schedule comes from the
+timetable slots, so it is the same for any week."""
 
 from __future__ import annotations
 
@@ -9,84 +10,143 @@ from urllib.parse import quote
 
 from fastapi import Request
 
-from . import clock, db, tags
+from . import clock, tags
 from . import university_plan as up
 from .deps import templates
 
-
-def _week_start(request: Request, today: date) -> date:
-    raw = request.query_params.get("week", "")
-    try:
-        day = date.fromisoformat(raw)
-    except ValueError:
-        day = today
-    return day - timedelta(days=day.weekday())
+_OPEN = ("done", "archived")
 
 
-def _classes_between(conn, semester_uid: str, start: date, end: date) -> list[dict]:
-    series = [r["series_uid"] for r in conn.execute("SELECT series_uid FROM university_slots WHERE semester_uid = ?", (semester_uid,))]
-    if not series:
-        return []
-    marks = ", ".join("?" for _ in series)
-    rows = conn.execute(
-        f"SELECT uid, title, description, start_at, end_at, location, series_uid FROM events WHERE series_uid IN ({marks}) AND start_at >= ? AND start_at < ? "
-        "ORDER BY start_at", (*series, start.isoformat(), (end + timedelta(days=1)).isoformat())).fetchall()
-    return [dict(r) for r in rows]
+def _minutes(clock_text: str) -> int:
+    hh, mm = (clock_text or "0:0").split(":")[:2]
+    return int(hh) * 60 + int(mm)
 
 
-def build(conn, semester: dict, week: date, today: date) -> dict:
+def when(day: str | None, today: date) -> str:
+    """A date as short as it can be said: "today", "tomorrow", "in 6 days", then "3 Nov"."""
+    if not day:
+        return "No date"
+    d = date.fromisoformat(day[:10])
+    n = (d - today).days
+    if n < 0:
+        return "overdue"
+    if n == 0:
+        return "today"
+    if n == 1:
+        return "tomorrow"
+    if n <= 14:
+        return f"in {n} days"
+    return f"{d.day} {d.strftime('%b')}" + ("" if d.year == today.year else f" {d.year}")
+
+
+def layout_day(blocks: list[dict], start_min: int, total_min: int) -> None:
+    """Top, height, left and width of each block of one day, in percent. Odd-week classes take the left half, even-week classes the right half,
+    weekly classes the whole width; blocks of one kind that overlap share their width."""
+    base = {"all": (0.0, 100.0), "odd": (0.0, 50.0), "even": (50.0, 100.0)}
+    for group in base:
+        members = sorted([b for b in blocks if b["weeks"] == group], key=lambda x: (x["from"], x["to"]))
+        lanes: list[int] = []
+        for b in members:
+            lane = next((i for i, end in enumerate(lanes) if end <= b["from"]), None)
+            if lane is None:
+                lanes.append(b["to"])
+                lane = len(lanes) - 1
+            else:
+                lanes[lane] = b["to"]
+            b["lane"] = lane
+        count = max(len(lanes), 1)
+        lo, hi = base[group]
+        for b in members:
+            width = (hi - lo) / count
+            b.update(left=round(lo + b["lane"] * width, 3), width=round(width, 3))
+    for b in blocks:
+        b.update(top=round((b["from"] - start_min) / total_min * 100, 3), height=max(round((b["to"] - b["from"]) / total_min * 100, 3), 3))
+
+
+def schedule(conn, semester: dict, group: str) -> dict:
+    """The weekly timetable as a grid: Monday to Friday, plus the weekend when a class falls on it."""
     looks = {t["name"]: t for t in tags.tags_of_label(conn, semester["shelf_name"])}
-    kinds = {r["series_uid"]: (r["kind"], r["discipline_tag"]) for r in conn.execute(
-        "SELECT series_uid, kind, discipline_tag FROM university_slots WHERE semester_uid = ?", (semester["uid"],))}
-    week_end = week + timedelta(days=6)
-    classes = _classes_between(conn, semester["uid"], week, week_end)
-    exams = up.list_exams(conn, semester["uid"], today=today)
-    notes = up.class_notes_by_event(conn, [c["uid"] for c in classes])
+    abbr = up.abbreviations(conn, semester["uid"])
+    slots = up.list_slots(conn, semester["uid"])
+    used = {s["weekday"] for s in slots}
+    last_day = 6 if 6 in used else (5 if 5 in used else 4)
+    first_h = min([_minutes(s["start"]) // 60 for s in slots] + [8])
+    last_h = max([-(-_minutes(s["end"] or s["start"]) // 60) for s in slots] + [17])
+    start_min, total_min = first_h * 60, (last_h - first_h) * 60
     days = []
-    for i in range(7):
-        d = week + timedelta(days=i)
-        iso = d.isoformat()
-        day_classes = []
-        for c in classes:
-            if c["start_at"][:10] != iso:
-                continue
-            kind, tag = kinds.get(c["series_uid"], ("other", ""))
-            day_classes.append({**c, "start": c["start_at"][11:16], "end": (c.get("end_at") or "")[11:16], "kind_label": up.SLOT_KINDS.get(kind, "Class"),
-                                "discipline": tag, "note_uid": notes.get(c["uid"]), "look": looks.get(tag, {"color": "gray", "icon": ""})})
-        day_exams = [{**e, "look": looks.get(e["discipline"], {"color": "gray", "icon": ""})} for e in exams if e["date"] == iso]
-        days.append({"date": iso, "label": d.strftime("%a"), "day": d.day, "month": d.strftime("%b"), "is_today": d == today, "classes": day_classes,
-                     "exams": day_exams, "new_url": f"/events/new?date={iso}&start_time=10:00&end_time=12:00"})
-    upcoming = [{**e, "look": looks.get(e["discipline"], {"color": "gray", "icon": ""})} for e in exams if e["days_left"] >= 0][:4]
-    readings = [{**r, "look": looks.get(r["discipline"], {"color": "gray", "icon": ""})} for r in up.list_readings(conn, semester["uid"])
-                if r["status"] not in ("done", "archived")][:8]
-    return {"days": days, "upcoming": upcoming, "readings": readings, "next_class": next_class(conn, semester, looks, kinds, today),
-            "exams_this_week": [e for e in upcoming if week.isoformat() <= e["date"] <= week_end.isoformat()]}
+    for wd in range(last_day + 1):
+        blocks = []
+        for s in (x for x in slots if x["weekday"] == wd):
+            look = looks.get(s["discipline"], {"color": "gray", "icon": ""})
+            blocks.append({"discipline": s["discipline"], "short": abbr.get(s["discipline"], s["discipline"]), "color": look.get("color") or "gray", "weeks": s["weeks"],
+                           "start": s["start"], "end": s["end"], "room": s["room"], "kind_label": up.SLOT_KINDS.get(s["kind"], "Class"),
+                           "from": _minutes(s["start"]), "to": max(_minutes(s["end"] or s["start"]), _minutes(s["start"]) + 30),
+                           "url": f"/groups/{quote(group, safe='')}/disciplines/{quote(s['discipline'], safe='')}"})
+        layout_day(blocks, start_min, total_min)
+        days.append({"label": up.WEEKDAYS[wd][:3], "blocks": blocks})
+    return {"days": days, "hours": list(range(first_h, last_h)), "has_parity": any(s["weeks"] != "all" for s in slots), "empty": not slots}
 
 
-def next_class(conn, semester: dict, looks: dict, kinds: dict, today: date) -> dict | None:
-    series = list(kinds)
-    if not series:
-        return None
-    marks = ", ".join("?" for _ in series)
-    now = clock.local_now().strftime("%Y-%m-%dT%H:%M")
-    row = conn.execute(f"SELECT uid, title, start_at, end_at, location, series_uid FROM events WHERE series_uid IN ({marks}) AND start_at >= ? "
-                       "ORDER BY start_at LIMIT 1", (*series, now)).fetchone()
-    if not row:
-        return None
-    kind, tag = kinds.get(row["series_uid"], ("other", ""))
-    return {**dict(row), "start": row["start_at"][11:16], "day": row["start_at"][:10], "discipline": tag, "kind_label": up.SLOT_KINDS.get(kind, "Class"),
-            "look": looks.get(tag, {"color": "gray", "icon": ""})}
+def widgets(conn, semester: dict, today: date) -> dict:
+    """The four widgets above the schedule."""
+    uid = semester["uid"]
+    abbr = up.abbreviations(conn, uid)
+    names = [t["name"] for t in tags.tags_of_label(conn, semester["shelf_name"])]
+
+    def short(name: str) -> str:
+        return abbr.get(name, name)
+
+    exams = [e for e in up.list_milestones(conn, uid, today=today) if e["days_left"] is not None and e["days_left"] >= 0]
+    exam = ({"title": exams[0]["title"], "short": short(exams[0]["discipline"]), "when": when(exams[0]["date"], today),
+             "url": f"/events/{exams[0]['event_uid']}" if exams[0]["event_uid"] else f"/tasks/{exams[0]['task_uid']}"}
+            if exams else None)
+    homework = []
+    for name in names:
+        homework += [{"title": h["title"], "short": short(name), "due": h["due"], "when": when(h["due"], today), "url": f"/tasks/{h['task_uid']}"}
+                     for h in up.list_homework(conn, uid, name) if h["status"] not in _OPEN]
+    tasks = [{"title": r["title"], "short": short(r["discipline"]), "due": r["due"], "when": when(r["due"], today), "url": f"/tasks/{r['task_uid']}"}
+             for r in up.list_readings(conn, uid) if r["status"] not in _OPEN]
+    key = lambda x: (not x["due"], x["due"] or "")  # noqa: E731 -- dated first, soonest first
+    start = date.fromisoformat(semester["start_date"]) if semester.get("start_date") else None
+    end = date.fromisoformat(semester["end_date"] or semester["class_end_date"]) if (semester.get("end_date") or semester.get("class_end_date")) else None
+    left = {"big": "Semester", "small": "", "percent": 0}
+    if start and end and end > start:
+        total = (end - start).days
+        if today < start:
+            left = {"big": f"Starts {when(start.isoformat(), today)}", "small": f"{(end - start).days // 7} weeks long", "percent": 0}
+        elif today > end:
+            left = {"big": "Semester over", "small": f"ended {end.day} {end.strftime('%b')}", "percent": 100}
+        else:
+            weeks = max(1, -(-(end - today).days // 7))
+            left = {"big": f"{weeks} week{'s' if weeks != 1 else ''} left", "small": f"ends {end.day} {end.strftime('%b')}", "percent": round(100 * (today - start).days / total)}
+    return {"exam": exam, "homework": sorted(homework, key=key)[:2], "tasks": sorted(tasks, key=key)[:2], "left": left}
+
+
+def cards(conn, semester: dict, group: str) -> list[dict]:
+    """One card per discipline: its name and icon, and one line of text only when something needs saying: an exam is coming, or contents or
+    the evaluation are not set up yet."""
+    uid = semester["uid"]
+    today = clock.today()
+    out = []
+    for d in up.disciplines(conn, semester):
+        name = d["name"]
+        exams = [e for e in up.list_milestones(conn, uid, name, today) if e["days_left"] is not None and 0 <= e["days_left"] <= 30]
+        missing = [label for label, ok in (("contents", bool(up.list_topics(conn, uid, name))), ("examination", bool(up.get_evaluation(conn, uid, name)))) if not ok]
+        out.append({"name": name, "color": d.get("color") or "gray", "icon": d.get("icon") or "book-open",
+                    "url": f"/groups/{quote(group, safe='')}/disciplines/{quote(name, safe='')}",
+                    "exam": f"{exams[0]['title']} {when(exams[0]['date'], today)}" if exams else "", "missing": ("Not set up: " + ", ".join(missing)) if missing else ""})
+    return out
 
 
 def render(conn, request: Request, name: str, label: dict):
-    semester = conn.execute("SELECT * FROM university_semesters WHERE shelf_name = ? COLLATE NOCASE", (name,)).fetchone()
+    semester = up.semester_for_group(conn, name)
     today = clock.today()
-    ctx = {"request": request, "label": label, "name": name, "semester": dict(semester) if semester else None, "today": today.isoformat(),
-           "settings_url": "/settings/university"}
-    if semester:
-        week = _week_start(request, today)
-        ctx.update(build(conn, dict(semester), week, today))
-        base = f"/labels/{quote(name, safe='')}"
-        ctx.update(prev_url=f"{base}?week={(week - timedelta(days=7)).isoformat()}", next_url=f"{base}?week={(week + timedelta(days=7)).isoformat()}",
-                   today_url=base, week_label=f"{week.strftime('%d %b')} to {(week + timedelta(days=6)).strftime('%d %b %Y')}")
+    base = f"/groups/{quote(name, safe='')}"
+    view = "disciplines" if request.query_params.get("view") == "disciplines" else "overview"
+    ctx = {"request": request, "label": label, "name": name, "enc": quote(name, safe=""), "semester": semester, "view": view,
+           "views": [{"key": k, "label": text, "url": url, "active": k == view} for k, text, url in (("overview", "Overview", base), ("disciplines", "Disciplines", f"{base}?view=disciplines"))]}
+    if semester and view == "disciplines":
+        ctx["cards"] = cards(conn, semester, name)
+    elif semester:
+        ctx.update(schedule=schedule(conn, semester, name), widgets=widgets(conn, semester, today))
     return templates.TemplateResponse("study_page.html", ctx)

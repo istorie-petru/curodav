@@ -1,0 +1,26 @@
+{% from "_inputs.html" import text_input %}
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_date_time_fields.html" import date_field with context %}
+{% block title %}{{ 'Edit homework' if item else 'New homework' }}{% endblock %}
+{% block content %}
+{% set _retire = [{'action': 'delete', 'url': '/settings/university/homework/' ~ item.task_uid ~ '/delete?discipline=' ~ (d.name|urlencode), 'mode': 'confirm', 'label': 'Delete this homework?', 'redirect': none, 'change': none}] if item else none %}
+{% call modal(kind="form", title=('Edit homework' if item else 'New homework'), size="small", form='university-homework-form', creating=(not item), retire=_retire) %}
+<div class="card">
+<form method="post" id="university-homework-form" action="/settings/university/homework">
+    <input type="hidden" name="discipline" value="{{ d.name }}">
+    <input type="hidden" name="task_uid" value="{{ item.task_uid if item else '' }}">
+    <div class="field-grid">
+        <div class="field field-wide"><label>Title</label>{{ text_input({'name': 'title', 'value': (item.title if item else ''), 'required': true}) }}</div>
+        <div class="field"><label>Due date</label>{{ date_field('due', item.due if item else '', label='Due date') }}</div>
+        <div class="field">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'university-homework-form' %}{% set ms_name = 'status' %}{% set ms_label = 'Status' %}
+            {% set ms_items = [{'uid': 'active', 'name': 'Active'}, {'uid': 'in_progress', 'name': 'In progress'}, {'uid': 'waiting', 'name': 'Waiting'}, {'uid': 'done', 'name': 'Done'}] %}
+            {% set ms_selected = item.status if item else 'active' %}{% set ms_wide = false %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+    </div>
+</form>
+</div>
+{% endcall %}
+{% endblock %}

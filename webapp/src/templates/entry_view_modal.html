@@ -2,7 +2,7 @@
 {% from "_modal.html" import modal %}
 {% from "_detail_section.html" import detail_section %}
 {% macro ref_line(ref, entry_uid) %}{% if ref %}
-            <span class="detail-meta-value entry-section-ref"><a href="/notebook/citations/{{ ref.ref_uid }}?return_to=/notebook/glossary/{{ entry_uid }}" data-modal>{{ ref.name }}</a>{% if ref.pages %} {% if ref.pages.lower().startswith(("http://", "https://")) %}<a class="detail-meta-label" href="{{ ref.pages }}" target="_blank" rel="noopener noreferrer">{{ ref.pages }}</a>{% else %}<span class="detail-meta-label">{{ ref.pages }}</span>{% endif %}{% endif %}</span>
+            <span class="detail-meta-value entry-section-ref"><a href="/library/{{ ref.ref_uid }}?return_to=/notebook/glossary/{{ entry_uid }}" data-modal>{{ ref.name }}</a>{% if ref.pages %} {% if ref.pages.lower().startswith(("http://", "https://")) %}<a class="detail-meta-label" href="{{ ref.pages }}" target="_blank" rel="noopener noreferrer">{{ ref.pages }}</a>{% else %}<span class="detail-meta-label">{{ ref.pages }}</span>{% endif %}{% endif %}</span>
         {% endif %}{% endmacro %}
 {% block title %}{{ entry.term }}{% endblock %}
 {% block content %}
@@ -62,7 +62,7 @@
 {% if references %}
 {% call detail_section('References', count=references|length) %}
     {% if references %}
-    <ul class="entry-mentions">{% for r in references %}<li><a href="/notebook/citations/{{ r.ref_uid }}?return_to=/notebook/glossary/{{ entry.uid }}" data-modal>{{ r.name }}</a>{% if r.pages %} {% if r.pages.lower().startswith(("http://", "https://")) %}<a class="detail-meta-label" href="{{ r.pages }}" target="_blank" rel="noopener noreferrer">{{ r.pages }}</a>{% else %}<span class="detail-meta-label">{{ r.pages }}</span>{% endif %}{% endif %}</li>{% endfor %}</ul>
+    <ul class="entry-mentions">{% for r in references %}<li><a href="/library/{{ r.ref_uid }}?return_to=/notebook/glossary/{{ entry.uid }}" data-modal>{{ r.name }}</a>{% if r.pages %} {% if r.pages.lower().startswith(("http://", "https://")) %}<a class="detail-meta-label" href="{{ r.pages }}" target="_blank" rel="noopener noreferrer">{{ r.pages }}</a>{% else %}<span class="detail-meta-label">{{ r.pages }}</span>{% endif %}{% endif %}</li>{% endfor %}</ul>
     {% endif %}
 {% endcall %}
 {% endif %}

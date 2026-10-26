@@ -1,0 +1,27 @@
+{% from "_inputs.html" import textarea_input %}
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% block title %}Class contents{% endblock %}
+{% block content %}
+{% call modal(kind="form", title=discipline ~ ' ' ~ (kind|lower) ~ ', ' ~ (event.start_at|dtf_date), size="medium", form='university-class-form') %}
+<div class="card">
+<form method="post" id="university-class-form" action="/university/class/{{ event.uid }}/content">
+    <div class="field-grid">
+        <div class="field field-wide">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'university-class-form' %}{% set ms_name = 'topic_uid' %}{% set ms_label = 'Planned content' %}
+            {% set ms_items = [{'uid': '', 'name': 'None'}] %}{% for t in topics %}{% set _ = ms_items.append({'uid': t.uid, 'name': t.number ~ '. ' ~ t.title}) %}{% endfor %}
+            {% set ms_selected = topic_uid %}{% set ms_wide = true %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+        <div class="field field-wide">
+            {% set ms_mode = 'select' %}{% set ms_form_id = 'university-class-form' %}{% set ms_name = 'competences' %}{% set ms_label = 'Competences' %}
+            {% set ms_items = [] %}{% for c in competences %}{% set _ = ms_items.append({'uid': c.uid, 'name': c.number ~ '. ' ~ c.title}) %}{% endfor %}
+            {% set ms_selected = competence_uids %}{% set ms_wide = true %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+        <div class="field field-wide"><label>What else was covered</label>{{ textarea_input({'name': 'text', 'rows': 4}, text) }}</div>
+    </div>
+</form>
+</div>
+{% endcall %}
+{% endblock %}
