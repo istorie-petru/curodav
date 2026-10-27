@@ -109,6 +109,14 @@ def plan_semester(conn: sqlite3.Connection, shelf_name: str) -> dict[str, Any]:
     return {"shelf": shelf_name.strip(), "adopts": bool(existing), "tags": [t["name"] for t in tags.tags_of_label(conn, shelf_name)] if existing else []}
 
 
+def adoptable_shelves(conn: sqlite3.Connection, current: str = "") -> list[str]:
+    """Shelves a semester can take over: not archived, not managed by a module, not already a semester. `current` stays listed."""
+    taken = {r["shelf_name"].lower() for r in conn.execute("SELECT shelf_name FROM university_semesters")}
+    names = [l["name"] for l in db.list_labels(conn)
+             if not l.get("archived_at") and not tags.managed_by(conn, l["name"]) and l["name"].lower() not in taken]
+    return sorted(([current] if current else []) + names, key=str.lower)
+
+
 def semester_group(conn: sqlite3.Connection, semester: dict[str, Any]) -> str:
     """The space the semester's shelf sits in; its page is the study page."""
     row = conn.execute("SELECT label_group FROM label_config WHERE name = ? COLLATE NOCASE", (semester["shelf_name"],)).fetchone()
@@ -139,7 +147,8 @@ def semester_for_group(conn: sqlite3.Connection, group: str) -> dict[str, Any] |
 
 def save_semester(conn: sqlite3.Connection, *, uid: str | None, name: str, shelf_name: str, start_date: str, end_date: str,
                   class_end_date: str, holiday_calendar: str = "", group_name: str = "", credits_target: str = "") -> str:
-    name, shelf_name = name.strip(), (shelf_name.strip() or name.strip())
+    name, picked = name.strip(), shelf_name.strip()
+    shelf_name = picked or name
     if not name:
         raise PlanError("The semester needs a name")
     start, end, class_end = _date(start_date, "Start date"), _date(end_date, "End date"), _date(class_end_date, "Class end date")
@@ -154,18 +163,23 @@ def save_semester(conn: sqlite3.Connection, *, uid: str | None, name: str, shelf
     if target is not None and target < 0:
         raise PlanError("Credits to reach cannot be negative")
     existing = get_semester(conn, uid)
-    if existing:
+    switching = bool(existing and picked and picked.lower() != existing["shelf_name"].lower())
+    if existing and not switching:
         shelf_name = existing["shelf_name"]
-    elif conn.execute("SELECT 1 FROM university_semesters WHERE shelf_name = ? COLLATE NOCASE", (shelf_name,)).fetchone():
+    elif switching and tags.managed_by(conn, picked):
+        raise PlanError(f"{picked} is managed already")
+    if (switching or not existing) and conn.execute("SELECT 1 FROM university_semesters WHERE shelf_name = ? COLLATE NOCASE", (shelf_name,)).fetchone():
         raise PlanError(f"{shelf_name} already holds a semester")
     with _owner():
+        if switching:
+            db.upsert_label_config(conn, {"name": existing["shelf_name"], "managed_by": None})
         if db.get_label_config(conn, shelf_name) is None:
             db.upsert_label_config(conn, {"name": shelf_name, "color": "blue", "icon": "graduation-cap", "created_at": _now()})
         db.upsert_label_config(conn, {"name": shelf_name, "managed_by": MODULE_KEY})
     uid = existing["uid"] if existing else str(uuid.uuid4())
     conn.execute(
         "INSERT INTO university_semesters (uid, shelf_name, name, start_date, end_date, class_end_date, holiday_calendar, credits_target, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET name=excluded.name, start_date=excluded.start_date, "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET shelf_name=excluded.shelf_name, name=excluded.name, start_date=excluded.start_date, "
         "end_date=excluded.end_date, class_end_date=excluded.class_end_date, holiday_calendar=excluded.holiday_calendar, credits_target=excluded.credits_target",
         (uid, shelf_name, name, start.isoformat() if start else None, end.isoformat() if end else None,
          class_end.isoformat() if class_end else None, holiday_calendar.strip() or None, target, existing["created_at"] if existing else _now()),

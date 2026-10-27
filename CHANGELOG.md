@@ -6,6 +6,10 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [4.8.4]
+
+- University: the semester window has a Shelf dropdown showing the shelf that holds the semester. A new semester can take over a shelf you already have (its items stay, its tags become the disciplines) or create one from its name, and an existing semester can be pointed at another shelf. Shelves managed by a module or already used by a semester are not offered.
+
 ## [4.8.3]
 
 - Shelves: a shelf can be merged into another from its row in Settings or from its own page. Its items and tags move to the destination and the shelf is removed. The merge picker used to post to an address that does not exist, which is fixed.

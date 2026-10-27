@@ -437,3 +437,26 @@ def test_class_content_is_a_topic_free_text_or_nothing(conn, sem):
     db.upsert_event(conn, {"uid": "e1", "title": "x", "description": "", "all_day": 0, "status": "active", "start_at": "2026-10-12T09:00"})
     with pytest.raises(up.PlanError, match="not a class"):
         up.save_class_content(conn, "e1", "", "x")
+
+
+def test_a_semester_takes_over_the_shelf_picked_for_it(conn):
+    db.upsert_label_config(conn, {"name": "Old uni"})
+    db.upsert_label_config(conn, {"name": "Home"})
+    tags.add_default_tag(conn, "Old uni")
+    tags.record(conn, "task", "t1", ["Old uni"])
+    assert "Old uni" in up.adoptable_shelves(conn)
+    uid = up.save_semester(conn, uid=None, name="Autumn 2026", shelf_name="Old uni", start_date="", end_date="", class_end_date="")
+    assert up.get_semester(conn, uid)["shelf_name"] == "Old uni"
+    assert tags.managed_by(conn, "Old uni") == up.MODULE_KEY
+    assert "Old uni" not in up.adoptable_shelves(conn)
+
+
+def test_a_semester_can_be_moved_to_another_shelf(conn):
+    db.upsert_label_config(conn, {"name": "Old uni"})
+    tags.add_default_tag(conn, "Old uni")
+    uid = up.save_semester(conn, uid=None, name="First Semester", shelf_name="", start_date="", end_date="", class_end_date="")
+    assert up.get_semester(conn, uid)["shelf_name"] == "First Semester"
+    assert up.adoptable_shelves(conn, "First Semester")[0:1] == ["First Semester"]
+    up.save_semester(conn, uid=uid, name="First Semester", shelf_name="Old uni", start_date="", end_date="", class_end_date="")
+    assert up.get_semester(conn, uid)["shelf_name"] == "Old uni"
+    assert tags.managed_by(conn, "Old uni") == up.MODULE_KEY and not tags.managed_by(conn, "First Semester")

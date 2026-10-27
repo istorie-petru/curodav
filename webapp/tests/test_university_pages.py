@@ -94,7 +94,7 @@ def test_export_and_import_round_trip_through_the_versioned_file(conn, sem):
     assert kind == "discipline" and data["timetable"][0]["weeks"] == "even" and data["exams"][0]["weight"] == 60 and data["themes"][1]["title"] == "Membranes"
     assert study_format.load(up.export_file(conn, sem, "semester")[1])[0] == "semester"
     # importing the file into a fresh semester recreates the discipline
-    fresh_conn_semester = up.get_semester(conn, up.save_semester(conn, uid=sem["uid"], name="Autumn 2026", shelf_name="University", start_date="2026-10-05",
+    fresh_conn_semester = up.get_semester(conn, up.save_semester(conn, uid=sem["uid"], name="Autumn 2026", shelf_name="", start_date="2026-10-05",
                                                                end_date="2027-02-14", class_end_date="2026-12-18"))
     up.delete_slot(conn, sem["uid"], up.list_slots(conn, sem["uid"])[0]["series_uid"])
     up.delete_milestone(conn, up.list_milestones(conn, sem["uid"])[0]["uid"])
@@ -184,13 +184,13 @@ def test_a_slot_saves_straight_away_and_says_so_only_when_text_was_lost(conn, se
 
 def test_the_semester_saves_directly_and_a_shorter_class_end_says_what_went(conn, sem):
     up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "kind": "lecture", "weeks": "all"})
-    resp = university.semester_save("Autumn 2026", "2026-10-05", "2027-02-14", "2026-11-30", "", sem["uid"], credits_target="30", conn=conn)
+    resp = university.semester_save("Autumn 2026", "2026-10-05", "2027-02-14", "2026-11-30", "", sem["uid"], credits_target="30", shelf="", conn=conn)
     assert "2%20classes" in resp.headers["location"]
     assert db.get_label_config(conn, "Autumn 2026") is None or True
 
 
 def test_a_new_semester_gets_its_own_shelf_in_the_university_space_and_the_menu_switches(conn, sem):
-    university.semester_save("Spring 2027", "2027-02-22", "2027-07-01", "2027-06-04", "", "", credits_target="", conn=conn)
+    university.semester_save("Spring 2027", "2027-02-22", "2027-07-01", "2027-06-04", "", "", credits_target="", shelf="", conn=conn)
     assert db.get_label_config(conn, "Spring 2027")["label_group"] == "University" and up.current_semester(conn)["name"] == "Spring 2027"
     resp = university.semester_select(sem["uid"], conn=conn)
     assert resp.headers["location"] == "/groups/University" and up.current_semester(conn)["uid"] == sem["uid"]
@@ -252,11 +252,11 @@ def test_topic_rows_keep_a_renamed_topic_and_its_classes_and_continue_the_number
 
 def test_the_semester_has_a_credits_target_and_the_page_shows_the_progress(conn, sem):
     up.save_sheet(conn, sem["uid"], "Biology", {"credits": "6"})
-    university.semester_save("Autumn 2026", "2026-10-05", "2027-02-14", "2026-12-18", "", sem["uid"], credits_target="30", conn=conn)
+    university.semester_save("Autumn 2026", "2026-10-05", "2027-02-14", "2026-12-18", "", sem["uid"], credits_target="30", shelf="", conn=conn)
     assert up.get_semester(conn, sem["uid"])["credits_target"] == 30.0
     assert "6 of 30" in _html(university.university_settings(_request(), conn=conn))
     with pytest.raises(HTTPException):
-        university.semester_save("Autumn 2026", "", "", "", "", sem["uid"], credits_target="lots", conn=conn)
+        university.semester_save("Autumn 2026", "", "", "", "", sem["uid"], credits_target="lots", shelf="", conn=conn)
 
 
 def test_a_reading_points_at_a_library_book_with_a_page_and_a_category(conn, sem):

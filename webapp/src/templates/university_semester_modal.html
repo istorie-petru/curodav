@@ -10,6 +10,14 @@
     <input type="hidden" name="uid" value="{{ semester.uid if semester else '' }}">
     <div class="field-grid">
         <div class="field field-wide"><label>Name</label>{{ text_input({'name': 'name', 'value': (semester.name if semester else ''), 'required': true}) }}</div>
+        <div class="field field-wide">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'university-semester-form' %}{% set ms_name = 'shelf' %}{% set ms_label = 'Shelf' %}
+            {% set ms_items = [] %}{% if not semester %}{% set _ = ms_items.append({'uid': '', 'name': 'Create one from the name'}) %}{% endif %}
+            {% for n in shelves %}{% set _ = ms_items.append({'uid': n, 'name': n}) %}{% endfor %}
+            {% set ms_selected = semester.shelf_name if semester else '' %}{% set ms_wide = false %}
+            {% include '_widget_list_multiselect.html' %}
+            <p class="field-hint">The shelf that holds this semester. A shelf you already have is taken over as it is: its items stay, and its tags become the disciplines.</p>
+        </div>
         <div class="field"><label>Start date</label>{{ date_field('start_date', semester.start_date if semester else '', label='Start date') }}</div>
         <div class="field"><label>End date</label>{{ date_field('end_date', semester.end_date if semester else '', label='End date') }}</div>
         <div class="field"><label>Class end date</label>{{ date_field('class_end_date', semester.class_end_date if semester else '', label='Class end date') }}</div>

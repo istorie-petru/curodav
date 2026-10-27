@@ -1,6 +1,6 @@
 [project]
 name = "curodav"
-version = "4.8.3"
+version = "4.8.4"
 description = "Curodav is a personal organiser for one person: calendar, tasks, habits, contacts, a notebook and finance in one structure of spaces, shelves and tags, hosted by you, working offline, with no cloud account and no telemetry."
 requires-python = ">=3.12"
 
