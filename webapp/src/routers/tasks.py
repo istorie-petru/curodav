@@ -950,8 +950,7 @@ def update_task(
     if not isinstance(exclude_sunday, str):
         exclude_sunday = ""
     existing = db.get_task(conn, uid) or {}
-    if existing and university_plan.is_locked(conn, "task", uid):  # an exam: title and description are the module's
-        title, description = existing.get("title") or title, existing.get("description") or ""
+    managed = bool(existing) and university_plan.is_locked(conn, "task", uid)  # an exam: a new title is applied everywhere
     # `isinstance`, not `is None` -- a direct (non-HTTP) router call in a
     # test that omits `status` entirely gets FastAPI's raw `Form(None)`
     # marker object here, not a literal `None` (same guard shape
@@ -996,6 +995,8 @@ def update_task(
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
+    if managed and title != existing.get("title"):
+        university_plan.rename_everywhere(conn, "task", row["uid"], title)
     if item_tags_field == "1":
         tag_store.record(conn, "task", row["uid"], item_tags)
     # Per-habit reminder time -- same "only the habit form sends it" rule.
@@ -1043,8 +1044,6 @@ async def update_field(uid: str, request: Request, conn=Depends(get_db)):
     existing = db.get_task(conn, uid)
     if existing is None:
         return JSONResponse({"error": "task not found"}, status_code=404)
-    if field in ("title", "description") and university_plan.is_locked(conn, "task", uid):
-        return JSONResponse({"error": "This exam is edited in the University settings"}, status_code=400)
     error = validation.task_error(
         value if field == "title" else "x", existing.get("start_at"), value if field == "due_at" else None,
         value if field == "status" else None, STATUSES,
@@ -1066,6 +1065,8 @@ async def update_field(uid: str, request: Request, conn=Depends(get_db)):
         db.upsert_task(conn, row)
     except db.MultipleProjectLabelsError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
+    if field == "title" and university_plan.is_locked(conn, "task", uid):
+        university_plan.rename_everywhere(conn, "task", uid, row["title"])
     return JSONResponse({"ok": True})
 
 

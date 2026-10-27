@@ -1044,6 +1044,48 @@ def is_locked(conn: sqlite3.Connection, kind: str, uid: str) -> bool:
     return bool(conn.execute("SELECT 1 FROM university_milestones WHERE task_uid = ?", (uid,)).fetchone())
 
 
+def _slot_chain(conn: sqlite3.Connection, series_uid: str) -> set[str]:
+    """The series of one slot: the one given and every half it was split into or continues."""
+    chain, todo = set(), [series_uid]
+    while todo:
+        current = todo.pop()
+        if current in chain:
+            continue
+        chain.add(current)
+        for r in conn.execute("SELECT series_uid, continues FROM university_slots WHERE series_uid = ? OR continues = ?", (current, current)).fetchall():
+            todo += [r["series_uid"], r["continues"] or ""]
+    chain.discard("")
+    return chain
+
+
+def rename_everywhere(conn: sqlite3.Connection, kind: str, uid: str, title: str) -> None:
+    """A class or an exam edited elsewhere (the calendar, the task page) can take a new title: it is applied to every class of the
+    slot, or to the exam's event and task together, so the module and the item never disagree."""
+    title = (title or "").strip()
+    if not title or not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'university_slots'").fetchone():
+        return
+    column = "event_uid" if kind == "event" else "task_uid"
+    ms = conn.execute(f"SELECT * FROM university_milestones WHERE {column} = ?", (uid,)).fetchone()
+    if ms:
+        conn.execute("UPDATE university_milestones SET title = ? WHERE uid = ?", (title, ms["uid"]))
+        for event_uid in (ms["event_uid"],):
+            event = db.get_event(conn, event_uid) if event_uid else None
+            if event and event["title"] != title:
+                db.upsert_event(conn, {**event, "title": title, "updated_at": _now()})
+        task = db.get_task(conn, ms["task_uid"]) if ms["task_uid"] else None
+        if task and task["title"] != title:
+            db.upsert_task(conn, {**task, "title": title, "updated_at": _now()})
+        conn.commit()
+        return
+    event = db.get_event(conn, uid) if kind == "event" else None
+    if event and event.get("series_uid"):
+        for series in _slot_chain(conn, event["series_uid"]):
+            for m in series_members(conn, series):
+                if m["title"] != title:
+                    db.upsert_event(conn, {**m, "title": title, "updated_at": _now()})
+        conn.commit()
+
+
 # ---------------------------------------------------------------- homework and class contents (the discipline page)
 
 def list_homework(conn: sqlite3.Connection, semester_uid: str, discipline: str) -> list[dict[str, Any]]:

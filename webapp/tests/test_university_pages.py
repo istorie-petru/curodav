@@ -122,7 +122,7 @@ def test_the_study_page_without_a_semester_points_to_the_settings(conn):
     assert "No semester set up" in html
 
 
-def test_classes_and_exams_keep_their_title_and_description_outside_the_module(conn, sem):
+def test_classes_and_exams_can_be_edited_elsewhere_and_a_new_title_applies_everywhere(conn, sem):
     from src.routers import calendar as cal, tasks as tasks_router
     series = up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "kind": "lecture", "weeks": "all"})
     cls = up.series_members(conn, series)[0]
@@ -138,10 +138,17 @@ def test_classes_and_exams_keep_their_title_and_description_outside_the_module(c
         kwargs.update(given, uid=uid, conn=conn)
         return fn(**kwargs)
 
+    members = up.series_members(conn, series)
     call(cal.update_event, cls["uid"], title="Renamed", description="x", start_at=cls["start_at"], end_at=cls["end_at"])
-    assert db.get_event(conn, cls["uid"])["title"] == "Biology Lecture" and db.get_event(conn, cls["uid"])["description"] == ""
-    call(tasks_router.update_task, exam_uid, title="Renamed", description="x")
-    assert db.get_task(conn, exam_uid)["title"] == "Final"
+    assert db.get_event(conn, cls["uid"])["description"] == "x"
+    assert {db.get_event(conn, m["uid"])["title"] for m in members} == {"Renamed"}
+    assert db.get_event(conn, members[1]["uid"])["description"] == ""
+    call(tasks_router.update_task, exam_uid, title="Final exam", description="bring ID")
+    assert db.get_task(conn, exam_uid)["description"] == "bring ID"
+    assert db.get_task(conn, exam_uid)["title"] == "Final exam" and db.get_event(conn, exam["event_uid"])["title"] == "Final exam"
+    assert up.list_milestones(conn, sem["uid"])[0]["raw_title"] == "Final exam"
+    call(cal.update_event, "free", title="Dentist again", description="", start_at="2026-10-12T09:00", end_at="2026-10-12T10:00")
+    assert db.get_event(conn, "free")["title"] == "Dentist again"
 
 
 def test_the_shelf_page_goes_to_the_space_and_the_space_shows_the_study_page(conn, sem):

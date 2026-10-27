@@ -18,9 +18,10 @@
                               all_day_name='all_day', all_day=(event and event.all_day) or (not event and prefill_all_day), required=true, title=('' if series_split | default(false) else 'Date & time')) }}
         </div>
         {% endset %}
-        {% call title_date_row(event.title if event else (prefill_title or ''), qa=(quick_add_kind | default('')), locked=university_locked(request, 'event', event.uid if event else '')) %}
+        {% call title_date_row(event.title if event else (prefill_title or ''), qa=(quick_add_kind | default(''))) %}
         {{ _dt_block }}
         {% endcall %}
+        {% if event and university_locked(request, 'event', event.uid) %}<p class="field-hint field-wide">Renaming this class or exam renames it everywhere: every class of its slot, or the exam's event and task.</p>{% endif %}
         {% if occurrence and not series_split | default(false) %}
         <div class="field field-wide event-start-end-field">
             <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
@@ -68,7 +69,7 @@
         </div>
         <div class="field field-wide">
             <label>Description</label>
-            {{ textarea_input({'name': 'description', 'rows': '3', 'readonly': university_locked(request, 'event', event.uid if event else ''), 'class': 'is-fixed' if university_locked(request, 'event', event.uid if event else '') else ''}, event.description if event else '') }}
+            {{ textarea_input({'name': 'description', 'rows': '3'}, event.description if event else '') }}
         </div>
         {{ details_end() }}
     </div>

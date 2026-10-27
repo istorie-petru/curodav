@@ -1427,8 +1427,7 @@ def update_event(
     tags = dashboard_router._combine_tags(tags, tags_labels)
     tags = dashboard_router._with_project(conn, tags, project, project_field)
     existing = db.get_event(conn, uid) or {}
-    if existing and university_plan.is_locked(conn, "event", uid):  # a class or exam: title and description are the module's
-        title, description = existing.get("title") or title, existing.get("description") or ""
+    managed = bool(existing) and university_plan.is_locked(conn, "event", uid)  # a class or exam: a new title is applied everywhere
     # 1.4 (§ Task & calendar semantics): "changing the title of a
     # work-allocation event changes the associated task rather than
     # creating an independent event with a conflicting name." A
@@ -1466,6 +1465,8 @@ def update_event(
     except db.MultipleProjectLabelsError as exc:
         raise HTTPException(400, str(exc))
 
+    if managed and title != existing.get("title"):
+        university_plan.rename_everywhere(conn, "event", uid, title)
     if work_task_uid:
         task = db.get_task(conn, work_task_uid)
         if task and task.get("title") != title:

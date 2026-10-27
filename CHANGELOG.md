@@ -6,6 +6,10 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [4.8.7]
+
+- University: the description of a class or an exam can be edited in the calendar and on the task page. The title can too, and a new title is applied everywhere: to every class of the slot, or to the exam's event and task together and to its entry in the evaluation. The edit forms say so under the title.
+
 ## [4.8.6]
 
 - Contents: the edit window of a class also holds its date, start and end time and room, and a delete button, so one lecture or seminar can be moved, given another room or removed without touching the rest of its slot.
