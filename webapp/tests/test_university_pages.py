@@ -640,3 +640,28 @@ def test_the_sidebar_lists_the_disciplines_under_the_university_space_and_highli
     assert [(c["name"], c["path"]) for c in group["children"]] == [("Biology", "/groups/University/disciplines/Biology")]
     html = _html(discipline_page("University", "Biology", request, view="overview", conn=conn))
     assert 'href="/groups/University/disciplines/Biology" class="tab-btn tab-btn-child active"' in html and "has-active-child" in html
+
+
+def test_other_items_leave_out_what_is_tracked_elsewhere(conn, sem):
+    up.save_homework(conn, sem, "Biology", task_uid=None, title="Linked task", due="2026-11-05", status="")
+    up.save_homework(conn, sem, "Biology", task_uid=None, title="Habit task", due="", status="")
+    up.save_homework(conn, sem, "Biology", task_uid=None, title="Plain task", due="", status="")
+    tasks = {t["title"]: t["uid"] for t in db.list_tasks(conn)}
+    conn.execute("UPDATE tasks SET is_habit = 1 WHERE uid = ?", (tasks["Habit task"],))
+    for uid, series in (("old-class", "old-series"), ("exam-day", None), ("trip", None)):
+        db.upsert_event(conn, {"uid": uid, "title": uid, "description": "", "all_day": 0, "status": "active", "start_at": "2026-11-10T08:00",
+                               "end_at": "2026-11-10T09:00", "series_uid": series, "tags": ["Biology"]})
+        up._tag_item(conn, "event", uid, "Biology")
+    db.add_event_task_relation(conn, "exam-day", tasks["Linked task"])
+    assert [i["title"] for i in up.list_other_items(conn, sem["uid"], "Biology")] == ["trip", "Plain task"]
+
+
+def test_a_way_can_be_an_elimination_round_with_notes(conn, sem):
+    up.save_way(conn, sem["uid"], "Biology", {"id": "", "name": "Quiz", "form": "Exam", "weight": "30", "elimination": True, "notes": "pass mark 5", "subs": [], "milestones": []})
+    up.save_way(conn, sem["uid"], "Biology", {"id": "", "name": "Final", "form": "Exam", "weight": "100", "subs": [], "milestones": []})
+    quiz, final = sorted(up.get_evaluation(conn, sem["uid"], "Biology"), key=lambda w: w["name"] == "Final")
+    assert quiz["elimination"] and quiz["weight"] is None and quiz["stored_weight"] == 30 and quiz["notes"] == "pass mark 5"
+    assert not final["elimination"] and final["weight"] == 100
+    assert up.evaluation_warnings([quiz, final]) == []
+    up.save_way(conn, sem["uid"], "Biology", {"id": final["id"], "name": "Final", "form": "Exam", "weight": "100", "subs": [], "milestones": []})
+    assert next(w for w in up.get_evaluation(conn, sem["uid"], "Biology") if w["name"] == "Quiz")["stored_weight"] == 30

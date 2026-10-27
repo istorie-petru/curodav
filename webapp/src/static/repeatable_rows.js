@@ -85,4 +85,17 @@
     if (field) field.value = item.getAttribute("data-rows-pick");
     if (label) label.innerHTML = item.innerHTML;
   });
+
+  // An icon toggle that sets a hidden flag and greys out the field beside it (data-flag-toggle on the button, data-flag-target on the field's input).
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest && e.target.closest("[data-flag-toggle]");
+    if (!btn) return;
+    const on = btn.getAttribute("aria-pressed") !== "true";
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    const scope = btn.closest("form") || document;
+    const flag = scope.querySelector('input[name="' + btn.getAttribute("data-flag-toggle") + '"]');
+    if (flag) flag.value = on ? "1" : "";
+    const target = scope.querySelector('input[name="' + btn.getAttribute("data-flag-target") + '"]');
+    if (target) { target.readOnly = on; target.classList.toggle("is-greyed", on); }
+  });
 })();

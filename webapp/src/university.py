@@ -263,7 +263,7 @@ async def way_save(request: Request, conn=Depends(get_db)):
         entry.setdefault("title", form.getlist("tk_title")[i])
     subs = [{"id": i, "name": n, "weight": w} for i, n, w in zip(form.getlist("sub_id"), form.getlist("sub_name"), form.getlist("sub_weight"))]
     way = {"id": str(form.get("way_id") or ""), "name": str(form.get("name") or ""), "form": str(form.get("form") or ""), "weight": str(form.get("weight") or ""),
-           "subs": subs, "milestones": list(milestones.values())}
+           "elimination": bool(form.get("elimination")), "notes": str(form.get("notes") or ""), "subs": subs, "milestones": list(milestones.values())}
     try:
         warnings = up.save_way(conn, semester["uid"], d["name"], way)
     except up.PlanError as exc:

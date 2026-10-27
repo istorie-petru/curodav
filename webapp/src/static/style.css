@@ -5692,6 +5692,11 @@ tr.uni-past td{color:var(--fg-secondary);}
 .uni-way-head > div{flex:1; min-width:0; display:flex; flex-direction:column;}
 .uni-way-head b{font-size:16px; font-weight:var(--font-weight-semibold, 600);}
 .uni-way-weight{font-size:20px; font-weight:var(--font-weight-semibold, 600);}
+.uni-way-weight.is-greyed{font-size:14px; color:var(--fg-secondary);}
+.input-with-action{display:flex; align-items:center; gap:var(--space-2);}
+.input-with-action input[type=number]{flex:1; min-width:0;}
+.input-with-action .icon-btn[aria-pressed=true]{color:var(--accent, currentColor); background:var(--bg-hover, transparent);}
+input.is-greyed{opacity:.5; background:var(--bg-hover, transparent);}
 .uni-way small{font-size:13px; opacity:.85;}
 .uni-way-item{display:flex; align-items:flex-start; gap:var(--space-2); padding-top:var(--space-2); border-top:1px solid currentColor; border-top-color:color-mix(in srgb,currentColor 25%,transparent);}
 .uni-way-item span{display:flex; flex-direction:column;}

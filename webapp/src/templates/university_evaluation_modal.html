@@ -42,7 +42,11 @@
             {% set ms_selected = way.form if way else '' %}{% set ms_wide = false %}
             {% include '_widget_list_multiselect.html' %}
         </div>
-        <div class="field"><label>Weight (%)</label>{{ number_input({'name': 'weight', 'value': ('%g'|format(way.weight)) if way and way.weight is not none else '', 'min': 0, 'max': 100, 'step': 'any'}) }}</div>
+        <div class="field"><label>Weight (%)</label>
+            <div class="input-with-action">{{ number_input({'name': 'weight', 'value': ('%g'|format(way.stored_weight)) if way and way.stored_weight is not none else '', 'min': 0, 'max': 100, 'step': 'any', 'readonly': true if way and way.elimination else none, 'class': 'is-greyed' if way and way.elimination else none}) }}
+                <input type="hidden" name="elimination" value="{{ '1' if way and way.elimination else '' }}">
+                <button type="button" class="icon-btn" data-flag-toggle="elimination" data-flag-target="weight" aria-pressed="{{ 'true' if way and way.elimination else 'false' }}" title="Elimination round: it does not count toward the grade" aria-label="Elimination round">{{ icon('x-circle', 'icon-sm') }}</button></div></div>
+        <div class="field field-wide"><label>Notes</label>{{ text_input({'name': 'notes', 'value': (way.notes if way else ''), 'maxlength': 200, 'placeholder': 'Estimate or notes for this evaluation'}) }}</div>
         <div class="field field-wide">
             <div class="field-label-row"><label>Components</label>
                 <button type="button" class="icon-btn" data-rows-add="university-sub-rows" title="Add a component" aria-label="Add a component">{{ icon('plus', 'icon-sm') }}</button></div>

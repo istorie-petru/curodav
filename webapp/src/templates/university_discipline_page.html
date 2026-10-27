@@ -124,8 +124,9 @@
         {% for w in evaluation.ways %}
         <div class="uni-way is-{{ w.tone }}">
             <div class="uni-way-head"><div><b>{{ w.name }}</b>{% if w.form %}<small>{{ w.form }}</small>{% endif %}</div>
-                <span class="uni-way-weight">{% if w.weight is not none %}{{ w.weight|round(2)|string|replace('.0', '') }}%{% endif %}</span>
+                <span class="uni-way-weight{% if w.elimination %} is-greyed{% endif %}">{% if w.elimination %}{{ icon('x-circle', 'icon-sm') }} Elimination{% elif w.weight is not none %}{{ w.weight|round(2)|string|replace('.0', '') }}%{% endif %}</span>
                 {{ edit_btn('/settings/university/evaluation/' ~ w.id ~ '/edit?discipline=' ~ enc, 'Edit this way of evaluating') }}</div>
+            {% if w.notes %}<small>{{ w.notes }}</small>{% endif %}
             {% if w.subs %}<small>{% for s in w.subs %}{{ s.name }}{% if s.weight is not none %} {{ s.weight|round(2)|string|replace('.0', '') }}%{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</small>{% endif %}
             {% for m in w.milestones %}
             <div class="uni-way-item">{{ icon('calendar' if m.event_uid else 'check-square', 'icon-sm') }}

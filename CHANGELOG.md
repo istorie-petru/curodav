@@ -6,6 +6,11 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [4.8.5]
+
+- University: Other tasks and events on a discipline now lists only what is tracked nowhere else. Repeating events (the timetable), habits, and anything linked to an event or task, such as exam and homework dates, are left out because they show under the timetable and evaluation.
+- Evaluation: a way of evaluating has an icon button beside its weight that marks it as an elimination round. The weight is greyed out and left out of the 100% check, and the card says Elimination instead of a percentage. A short notes line under the type and weight holds an estimate or remarks.
+
 ## [4.8.4]
 
 - University: the semester window has a Shelf dropdown showing the shelf that holds the semester. A new semester can take over a shelf you already have (its items stay, its tags become the disciplines) or create one from its name, and an existing semester can be pointed at another shelf. Shelves managed by a module or already used by a semester are not offered.

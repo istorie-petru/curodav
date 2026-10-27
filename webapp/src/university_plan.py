@@ -1040,15 +1040,19 @@ def list_homework(conn: sqlite3.Connection, semester_uid: str, discipline: str) 
 
 
 def list_other_items(conn: sqlite3.Connection, semester_uid: str, discipline: str) -> list[dict[str, Any]]:
-    """Tasks and events that carry the discipline tag and were made by hand: not a class, a milestone or a reading, so the module does not manage them."""
-    out = [{"kind": "task", "uid": h["task_uid"], "title": h["title"], "when": h["due"], "status": h["status"]} for h in list_homework(conn, semester_uid, discipline)]
+    """Tasks and events that carry the discipline tag and are tracked nowhere else: not a class, a repeating event, a habit,
+    a milestone, a reading, nor anything linked to an event or task (an exam or homework date is shown under evaluation)."""
+    linked = {r[0] for r in conn.execute("SELECT task_uid FROM event_task_relations UNION SELECT event_uid FROM event_task_relations")}
+    habits = {r[0] for r in conn.execute("SELECT uid FROM tasks WHERE is_habit = 1")}
+    out = [{"kind": "task", "uid": h["task_uid"], "title": h["title"], "when": h["due"], "status": h["status"]}
+           for h in list_homework(conn, semester_uid, discipline) if h["task_uid"] not in linked and h["task_uid"] not in habits]
     rows = conn.execute(
         "SELECT e.uid FROM events e JOIN object_tags o ON o.object_id = e.uid AND o.object_type = 'event' WHERE o.tag_name = ? COLLATE NOCASE "
         "AND e.uid NOT IN (SELECT event_uid FROM university_milestones WHERE event_uid IS NOT NULL) "
-        "AND COALESCE(e.series_uid, '') NOT IN (SELECT series_uid FROM university_slots)", (discipline,)).fetchall()
+        "AND COALESCE(e.series_uid, '') = ''", (discipline,)).fetchall()
     for r in rows:
         event = db.get_event(conn, r["uid"])
-        if event:
+        if event and event["uid"] not in linked:
             out.append({"kind": "event", "uid": event["uid"], "title": event["title"], "when": event["start_at"][:10], "status": event.get("status") or ""})
     out.sort(key=lambda i: (i["status"] in ("done", "archived"), i["when"] or "9999", i["title"]))
     return out
@@ -1206,11 +1210,14 @@ def get_evaluation(conn: sqlite3.Connection, semester_uid: str, discipline: str,
         except ValueError:
             data = {}
         weight = _num(data.get("weight"))
-        comp = {"id": data.get("id") or key[5:], "name": row["label"], "form": data.get("form", ""), "weight": weight, "effective": weight, "subs": [], "milestones": []}
+        elimination = bool(data.get("elimination"))
+        comp = {"id": data.get("id") or key[5:], "name": row["label"], "form": data.get("form", ""), "weight": None if elimination else weight,
+                "stored_weight": weight, "elimination": elimination, "notes": data.get("notes", ""), "effective": None if elimination else weight,
+                "subs": [], "milestones": []}
         for sub in data.get("subs", []):
             w = _num(sub.get("weight"))
             comp["subs"].append({"id": sub.get("id") or "", "name": sub.get("name", ""), "weight": w, "parent": comp["id"],
-                                 "effective": round(weight * w / 100, 4) if weight is not None and w is not None else None})
+                                 "effective": round(weight * w / 100, 4) if comp["weight"] is not None and w is not None else None})
         out.append(comp)
     if with_milestones and out:
         by_way: dict[str, list[dict[str, Any]]] = {}
@@ -1270,7 +1277,8 @@ def save_evaluation(conn: sqlite3.Connection, semester_uid: str, discipline: str
                 subs.append({"id": sub.get("id") or uuid.uuid4().hex[:8], "name": sub["name"].strip(), "weight": str(sub.get("weight") or "").strip()})
         n += 1
         cid = comp.get("id") or uuid.uuid4().hex[:8]
-        _put_sheet(conn, semester_uid, discipline, f"eval:{cid}", name, json.dumps({"id": cid, "form": (comp.get("form") or "").strip(), "weight": str(comp.get("weight") or "").strip(), "subs": subs}), 200 + n)
+        _put_sheet(conn, semester_uid, discipline, f"eval:{cid}", name, json.dumps({"id": cid, "form": (comp.get("form") or "").strip(), "weight": str(comp.get("weight") or "").strip(), "subs": subs,
+                                                                                                     "elimination": bool(comp.get("elimination")), "notes": (comp.get("notes") or "").strip()}), 200 + n)
         plans.append(({"id": cid, "name": name}, comp.get("milestones")))
     for way, milestones in plans:
         if milestones is None:
@@ -1292,7 +1300,7 @@ def save_evaluation(conn: sqlite3.Connection, semester_uid: str, discipline: str
 
 def _ways_as_input(conn: sqlite3.Connection, semester_uid: str, discipline: str) -> list[dict[str, Any]]:
     fmt = lambda v: "" if v is None else f"{v:g}"  # noqa: E731
-    return [{"id": w["id"], "name": w["name"], "form": w["form"], "weight": fmt(w["weight"]), "subs": [{**x, "weight": fmt(x["weight"])} for x in w["subs"]]}
+    return [{"id": w["id"], "name": w["name"], "form": w["form"], "weight": fmt(w["stored_weight"]), "elimination": w["elimination"], "notes": w["notes"], "subs": [{**x, "weight": fmt(x["weight"])} for x in w["subs"]]}
             for w in get_evaluation(conn, semester_uid, discipline, with_milestones=False)]
 
 
