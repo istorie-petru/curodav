@@ -1,12 +1,18 @@
-{% from "_inputs.html" import textarea_input %}
+{% from "_inputs.html" import textarea_input, text_input %}
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
-{% block title %}Class contents{% endblock %}
+{% from "_date_time_fields.html" import date_field, time_field with context %}
+{% block title %}Edit class{% endblock %}
 {% block content %}
-{% call modal(kind="form", title=discipline ~ ' ' ~ (kind|lower) ~ ', ' ~ (event.start_at|dtf_date), size="medium", form='university-class-form') %}
+{% set _retire = [{'action': 'delete', 'url': '/university/class/' ~ event.uid ~ '/delete', 'mode': 'confirm', 'label': 'Delete this class? The other classes of the slot stay.', 'redirect': none, 'change': none}] %}
+{% call modal(kind="form", title=discipline ~ ' ' ~ (kind|lower) ~ ', ' ~ (event.start_at|dtf_date), size="medium", form='university-class-form', retire=_retire) %}
 <div class="card">
 <form method="post" id="university-class-form" action="/university/class/{{ event.uid }}/content">
     <div class="field-grid">
+        <div class="field"><label>Date</label>{{ date_field('day', event.start_at[:10], label='Date', required=true) }}</div>
+        <div class="field"><label>Room</label>{{ text_input({"name": "room", "value": (event.location or "")}) }}</div>
+        <div class="field"><label>Start time</label>{{ time_field('start', event.start_at[11:16], required=true, label='Start time') }}</div>
+        <div class="field"><label>End time</label>{{ time_field('end', (event.end_at or '')[11:16], required=true, label='End time') }}</div>
         <div class="field field-wide">
             {% set ms_mode = 'single' %}{% set ms_form_id = 'university-class-form' %}{% set ms_name = 'topic_uid' %}{% set ms_label = 'Planned content' %}
             {% set ms_items = [{'uid': '', 'name': 'None'}] %}{% for t in topics %}{% set _ = ms_items.append({'uid': t.uid, 'name': t.number ~ '. ' ~ t.title}) %}{% endfor %}

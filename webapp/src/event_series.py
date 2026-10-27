@@ -23,6 +23,13 @@ MAX_ROWS = 3000
 _DAYS = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
 
 
+# Called as hook(conn, old_series_uid, new_series_uid) whenever a series is split in two, so a module that keeps data on a series
+# (the University timetable) can follow the new half.
+SPLIT_HOOKS: list = []
+# Called as test(conn, series_uid); true when deleting one occurrence should split the series instead of leaving a gap in it.
+SPLIT_ON_DELETE: list = []
+
+
 class CannotShift(ValueError):
     pass
 
@@ -378,12 +385,27 @@ def scope_rows(conn, uid: str, scope: str) -> list[dict[str, Any]]:
 
 
 def delete_scope(conn, uid: str, scope: str) -> int:
-    """Deletes one occurrence, it and every later one, or the whole series; returns the number of rows deleted."""
+    """Deletes one occurrence, it and every later one, or the whole series; returns the number of rows deleted.
+    For a series that asks for it (the University classes) deleting one occurrence changes the series itself: the later
+    occurrences become a series of their own and the earlier ones keep a rule that ends before the deleted one, so no rule
+    describes a date that no longer exists."""
     event = db.get_event(conn, uid)
     if not event:
         return 0
-    rows = scope_rows(conn, uid, scope)
     series_uid = event.get("series_uid")
+    if scope == "this" and series_uid and any(test(conn, series_uid) for test in SPLIT_ON_DELETE):
+        later = [r for r in members(conn, series_uid) if (r["start_at"], r["uid"]) > (event["start_at"], event["uid"])]
+        if later:
+            split_following(conn, later[0]["uid"])
+        db.delete_event(conn, uid)
+        left = members(conn, series_uid)
+        if left:
+            _end_rule_before(conn, series_uid, _minute(event["start_at"]), len(left))
+        else:
+            conn.execute("DELETE FROM event_series WHERE uid = ?", (series_uid,))
+            conn.commit()
+        return 1
+    rows = scope_rows(conn, uid, scope)
     for r in rows:
         db.delete_event(conn, r["uid"])
     if series_uid:
@@ -448,6 +470,8 @@ def split_following(conn, uid: str, delta: timedelta = timedelta(0)) -> str:
     for r in rows:
         conn.execute("UPDATE events SET series_uid = ? WHERE uid = ?", (new_series["uid"], r["uid"]))
     conn.commit()
+    for hook in SPLIT_HOOKS:
+        hook(conn, series["uid"], new_series["uid"])
     return new_series["uid"]
 
 

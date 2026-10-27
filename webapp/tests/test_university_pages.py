@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from src import clock, db, study_format, tags, university
+from src import clock, db, event_series, study_format, tags, university
 from src.university_discipline import discipline_page
 from src import university_plan as up
 from src.routers.labels import COLORS
@@ -164,7 +164,7 @@ def test_homework_and_class_contents_save_through_the_pages(conn, sem):
     university.homework_save("Biology", "", "Lab report", "2026-11-05", "active", conn=conn)
     assert up.list_homework(conn, sem["uid"], "Biology")[0]["title"] == "Lab report"
     uid = up.series_members(conn, series)[0]["uid"]
-    university.class_content_save(uid, topic_uid="", competences=[], text="Guest talk", conn=conn)
+    university.class_content_save(uid, topic_uid="", competences=[], text="Guest talk", day="", start="", end="", room="", conn=conn)
     assert db.get_event(conn, uid)["description"] == "Guest talk"
     assert "Guest talk" in _html(discipline_page("University", "Biology", _request(), view="contents", conn=conn))
 
@@ -206,7 +206,7 @@ def test_topics_are_placed_in_order_with_a_toast_and_competences_ride_along(conn
     assert "2%20topics%20placed" in resp.headers["location"]
     first = up.series_members(conn, series)[0]
     comp = [c["uid"] for c in up.list_topics(conn, sem["uid"], "Biology", "competence")]
-    university.class_content_save(first["uid"], up.list_topics(conn, sem["uid"], "Biology", "lecture")[0]["uid"], comp, "Bring slides", conn=conn)
+    university.class_content_save(first["uid"], up.list_topics(conn, sem["uid"], "Biology", "lecture")[0]["uid"], comp, "Bring slides", day="", start="", end="", room="", conn=conn)
     text = db.get_event(conn, first["uid"])["description"]
     assert text == "1. Cells\nCompetences: 1. Analyse; 2. Report\n\nBring slides"
     assert up.class_free_text(conn, first["uid"], text) == "Bring slides"
@@ -665,3 +665,49 @@ def test_a_way_can_be_an_elimination_round_with_notes(conn, sem):
     assert up.evaluation_warnings([quiz, final]) == []
     up.save_way(conn, sem["uid"], "Biology", {"id": final["id"], "name": "Final", "form": "Exam", "weight": "100", "subs": [], "milestones": []})
     assert next(w for w in up.get_evaluation(conn, sem["uid"], "Biology") if w["name"] == "Quiz")["stored_weight"] == 30
+
+
+def test_one_class_can_be_moved_and_deleted_from_the_contents_page(conn, sem):
+    series = up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "kind": "lecture", "weeks": "all", "room": "A"})
+    first, second, third = up.series_members(conn, series)[:3]
+    university.class_content_save(second["uid"], topic_uid="", competences=[], text="Moved", day="2026-10-14", start="14:00", end="15:30", room="B2", conn=conn)
+    moved = db.get_event(conn, second["uid"])
+    assert moved["start_at"] == "2026-10-14T14:00" and moved["end_at"] == "2026-10-14T15:30" and moved["location"] == "B2" and moved["description"] == "Moved"
+    assert up.list_slots(conn, sem["uid"], "Biology")[0]["start"] == "10:00"
+    count = len(up.list_classes(conn, sem["uid"], "Biology"))
+    university.class_delete(third["uid"], conn=conn)
+    assert db.get_event(conn, third["uid"]) is None and len(up.list_classes(conn, sem["uid"], "Biology")) == count - 1
+    assert [m["uid"] for m in up.series_members(conn, series)] == [first["uid"], second["uid"]]  # the rule of the earlier classes ends before the deleted one
+    assert event_series.get_series(conn, series)["rule"].endswith("UNTIL=2026-10-18")
+    visible = up.list_slots(conn, sem["uid"], "Biology")
+    assert len(visible) == 1 and visible[0]["first"] == "2026-10-26" and visible[0]["series_uid"] != series
+    assert [c["date"] for c in up.list_classes(conn, sem["uid"], "Biology")][:3] == ["2026-10-05", "2026-10-14", "2026-10-26"]
+    with pytest.raises(up.PlanError):
+        up.save_class_schedule(conn, first["uid"], "2026-10-05", "12:00", "10:00", "")
+    with pytest.raises(up.PlanError):
+        up.delete_class(conn, "no-such-class")
+
+
+def test_editing_a_timetable_slot_keeps_every_class_in_the_contents(conn, sem):
+    from datetime import date as _d
+    series = up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "kind": "lecture", "weeks": "all"}, None, _d(2026, 9, 1))
+    total = len(up.list_classes(conn, sem["uid"], "Biology"))
+    later = up.save_slot(conn, sem, "Biology", {"weekday": 2, "start": "14:00", "end": "16:00", "kind": "seminar", "weeks": "all"}, series, _d(2026, 11, 3))
+    assert len(up.list_slots(conn, sem["uid"], "Biology")) == 1 and up.list_slots(conn, sem["uid"], "Biology")[0]["series_uid"] == later
+    classes = up.list_classes(conn, sem["uid"], "Biology")
+    assert total == 11 and len(classes) == 12  # five lectures stay, seven seminars follow
+    assert {c["kind"] for c in classes} == {"lecture", "seminar"}
+    with pytest.raises(up.PlanError):
+        up.save_slot(conn, sem, "Biology", {"weekday": 2, "start": "10:00", "end": "11:00", "kind": "seminar", "weeks": "all"}, series, _d(2027, 3, 1))
+
+
+def test_deleting_one_occurrence_of_a_calendar_series_splits_the_rule(conn, sem):
+    series = up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "kind": "lecture", "weeks": "all"})
+    members = up.series_members(conn, series)
+    event_series.delete_scope(conn, members[4]["uid"], "this")  # what the calendar's delete does
+    assert [m["uid"] for m in up.series_members(conn, series)] == [m["uid"] for m in members[:4]]
+    later = db.get_event(conn, members[5]["uid"])["series_uid"]
+    assert later != series and [m["uid"] for m in up.series_members(conn, later)] == [m["uid"] for m in members[5:]]
+    assert event_series.get_series(conn, later)["rule"].count("UNTIL") == 1
+    assert up.list_slots(conn, sem["uid"], "Biology")[0]["series_uid"] == later
+    assert len(up.list_classes(conn, sem["uid"], "Biology")) == len(members) - 1

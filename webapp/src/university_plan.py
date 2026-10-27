@@ -348,12 +348,29 @@ def _planned_dates(conn: sqlite3.Connection, semester: dict[str, Any], slot: dic
     return dates
 
 
+def _follow_split(conn: sqlite3.Connection, old_series: str, new_series: str) -> None:
+    """The later half of a class series that was split (a class deleted, or an edit from some day on) is a slot of the same kind."""
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'university_slots'").fetchone():
+        return
+    row = conn.execute("SELECT * FROM university_slots WHERE series_uid = ?", (old_series,)).fetchone()
+    if row:
+        conn.execute("INSERT OR IGNORE INTO university_slots (series_uid, semester_uid, discipline_tag, kind, weeks, continues) VALUES (?, ?, ?, ?, ?, ?)",
+                     (new_series, row["semester_uid"], row["discipline_tag"], row["kind"], row["weeks"], old_series))
+        conn.commit()
+
+
+event_series.SPLIT_HOOKS.append(_follow_split)
+event_series.SPLIT_ON_DELETE.append(lambda conn, series_uid: bool(
+    conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'university_slots'").fetchone()
+    and conn.execute("SELECT 1 FROM university_slots WHERE series_uid = ?", (series_uid,)).fetchone()))
+
+
 def series_members(conn: sqlite3.Connection, series_uid: str) -> list[dict[str, Any]]:
     return event_series.members(conn, series_uid)
 
 
-def list_slots(conn: sqlite3.Connection, semester_uid: str, discipline: str | None = None) -> list[dict[str, Any]]:
-    """The timetable, read from the event series themselves."""
+def list_slots(conn: sqlite3.Connection, semester_uid: str, discipline: str | None = None, history: bool = False) -> list[dict[str, Any]]:
+    """The timetable, read from the event series themselves. The past half of a slot edited from some day on is left out unless `history`."""
     sql = "SELECT * FROM university_slots WHERE semester_uid = ?"
     args: list[Any] = [semester_uid]
     if discipline:
@@ -367,19 +384,22 @@ def list_slots(conn: sqlite3.Connection, semester_uid: str, discipline: str | No
             continue
         first = members[0]
         parts = event_series.parts_of(series["rule"])
-        out.append({"series_uid": row["series_uid"], "discipline": row["discipline_tag"], "kind": row["kind"], "weeks": row["weeks"],
+        out.append({"series_uid": row["series_uid"], "continues": row["continues"] if "continues" in row.keys() else None, "discipline": row["discipline_tag"], "kind": row["kind"], "weeks": row["weeks"],
                     "weekday": _BYDAY.index(parts.get("BYDAY", "MO").split(",")[0]), "start": first["start_at"][11:16], "end": (first.get("end_at") or "")[11:16],
                     "room": first.get("location") or "", "count": len(members), "first": first["start_at"][:10], "last": members[-1]["start_at"][:10],
                     "teachers": [c["uid"] for c in db.list_object_contacts(conn, "event", first["uid"])]})
-    out = [s for s in out if not _superseded(s, out)]
+    if not history:
+        out = [s for s in out if not _superseded(s, out)]
     out.sort(key=lambda s: (s["weekday"], s["start"]))
     return out
 
 
 def _superseded(slot: dict[str, Any], slots: list[dict[str, Any]]) -> bool:
-    """The past half of a slot that was edited from some day on: a later series of the same discipline and kind starts right after it ends."""
+    """The past half of a slot that was edited from some day on: a later series of the same discipline starts right after it ends, or says it continues it."""
+    if any(o["continues"] == slot["series_uid"] for o in slots):
+        return True
     last = date.fromisoformat(slot["last"])
-    return any(o is not slot and o["discipline"].lower() == slot["discipline"].lower() and o["kind"] == slot["kind"]
+    return any(o is not slot and o["discipline"].lower() == slot["discipline"].lower()
                and timedelta(0) < date.fromisoformat(o["first"]) - last <= timedelta(days=21) for o in slots)
 
 
@@ -418,7 +438,7 @@ def _edit_following(conn: sqlite3.Connection, semester: dict[str, Any], discipli
     """Applies a timetable edit to the classes from today on with the calendar's "this and following" scope; past classes stay put."""
     future = [m for m in members if m["start_at"][:10] >= today]
     if not future:
-        return series_uid
+        raise PlanError("Every class of this slot is already past, so there is nothing left to change")
     cut = future[0]
     title = _class_title(discipline, slot["kind"])
     if not plan["rebuilds"]:
@@ -439,8 +459,10 @@ def _edit_following(conn: sqlite3.Connection, semester: dict[str, Any], discipli
                 db.upsert_event(conn, {**m, "description": kept[m["start_at"][:10]]})
     new_series = (db.get_event(conn, cut["uid"]) or {}).get("series_uid") or series_uid
     if new_series != series_uid:
-        conn.execute("INSERT OR REPLACE INTO university_slots (series_uid, semester_uid, discipline_tag, kind, weeks) VALUES (?, ?, ?, ?, ?)",
-                     (new_series, semester["uid"], discipline, slot["kind"], slot["weeks"]))
+        conn.execute("INSERT OR REPLACE INTO university_slots (series_uid, semester_uid, discipline_tag, kind, weeks, continues) VALUES (?, ?, ?, ?, ?, ?)",
+                     (new_series, semester["uid"], discipline, slot["kind"], slot["weeks"], series_uid if series_members(conn, series_uid) else None))
+        if not series_members(conn, series_uid):
+            conn.execute("DELETE FROM university_slots WHERE series_uid = ?", (series_uid,))
     else:
         conn.execute("UPDATE university_slots SET kind = ?, weeks = ? WHERE series_uid = ?", (slot["kind"], slot["weeks"], series_uid))
     conn.commit()
@@ -457,7 +479,7 @@ def save_slot(conn: sqlite3.Connection, semester: dict[str, Any], discipline: st
         raise PlanError("That timetable produces no classes between the semester dates")
     title = _class_title(discipline, slot["kind"])
     old_members = series_members(conn, series_uid) if series_uid else []
-    if series_uid and plan["past"]:
+    if series_uid and (plan["past"] or plan["rebuilds"]):
         return _edit_following(conn, semester, discipline, slot, series_uid, old_members, plan, today.isoformat())
     if series_uid and not plan["rebuilds"]:
         for m in old_members:
@@ -676,7 +698,7 @@ def unassign_topic(conn: sqlite3.Connection, event_uid: str) -> None:
 
 def class_events(conn: sqlite3.Connection, semester_uid: str, discipline: str, kind: str | None = None) -> list[dict[str, Any]]:
     rows = []
-    for slot in list_slots(conn, semester_uid, discipline):
+    for slot in list_slots(conn, semester_uid, discipline, history=True):
         if kind and slot["kind"] != kind:
             continue
         rows += series_members(conn, slot["series_uid"])
@@ -1086,7 +1108,7 @@ def is_homework(conn: sqlite3.Connection, task_uid: str) -> bool:
 def list_classes(conn: sqlite3.Connection, semester_uid: str, discipline: str, today: date | None = None) -> list[dict[str, Any]]:
     """Every class of the discipline with the topic or text it carries and its note, for the Contents view."""
     today = (today or clock.today()).isoformat()
-    kinds = {s["series_uid"]: s["kind"] for s in list_slots(conn, semester_uid, discipline)}
+    kinds = {s["series_uid"]: s["kind"] for s in list_slots(conn, semester_uid, discipline, history=True)}
     events = class_events(conn, semester_uid, discipline)
     topic_of: dict[str, str] = {}
     competences_of: dict[str, list[str]] = {}
@@ -1120,6 +1142,35 @@ def save_class_content(conn: sqlite3.Connection, event_uid: str, topic_uid: str,
     composed = composed_text(conn, event_uid)
     text = (text or "").strip()
     _write_description(conn, event_uid, f"{composed}\n\n{text}" if composed and text else (composed or text))
+
+
+def _class_event(conn: sqlite3.Connection, event_uid: str) -> dict[str, Any]:
+    event = db.get_event(conn, event_uid)
+    if not event or not conn.execute("SELECT 1 FROM university_slots WHERE series_uid = ?", (event.get("series_uid"),)).fetchone():
+        raise PlanError("That event is not a class of the semester")
+    return event
+
+
+def save_class_schedule(conn: sqlite3.Connection, event_uid: str, day: str, start: str, end: str, room: str) -> None:
+    """Moves one class to another day or hour, or gives it another room, without touching the rest of its slot."""
+    event = _class_event(conn, event_uid)
+    when = _date(day, "Date")
+    if not when:
+        raise PlanError("A class needs a date")
+    first, last = _clock(start, "Start time"), _clock(end, "End time")
+    if last <= first:
+        raise PlanError("The class ends before it starts")
+    db.upsert_event(conn, {**event, "start_at": f"{when.isoformat()}T{first.strftime('%H:%M')}", "end_at": f"{when.isoformat()}T{last.strftime('%H:%M')}",
+                           "location": (room or "").strip(), "updated_at": _now()})
+    conn.commit()
+
+
+def delete_class(conn: sqlite3.Connection, event_uid: str) -> None:
+    """Removes one class of a slot, with its place in the planned contents. The other classes of the slot stay."""
+    _class_event(conn, event_uid)
+    conn.execute("DELETE FROM university_topic_classes WHERE event_uid = ?", (event_uid,))
+    event_series.delete_scope(conn, event_uid, "this")
+    conn.commit()
 
 
 def class_free_text(conn: sqlite3.Connection, event_uid: str, description: str) -> str:

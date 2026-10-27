@@ -488,9 +488,31 @@ def class_content_form(event_uid: str, request: Request, conn=Depends(get_db)):
 
 
 @notes_router.post("/class/{event_uid}/content")
-def class_content_save(event_uid: str, topic_uid: str = Form(""), competences: list[str] = Form(default=[]), text: str = Form(""), conn=Depends(get_db)):
+def class_content_save(event_uid: str, topic_uid: str = Form(""), competences: list[str] = Form(default=[]), text: str = Form(""),
+                       day: str = Form(""), start: str = Form(""), end: str = Form(""), room: str = Form(""), conn=Depends(get_db)):
+    _semester(conn)
+    event = db.get_event(conn, event_uid)
     try:
+        if day or start or end:
+            up.save_class_schedule(conn, event_uid, day, start, end, room or "")
         up.save_class_content(conn, event_uid, topic_uid, text, competences)
     except up.PlanError as exc:
         _bad(exc)
-    return RedirectResponse(HOME, status_code=303)
+    return _note(url_for_discipline(_class_discipline(conn, event), "contents") if event else HOME)
+
+
+@notes_router.post("/class/{event_uid}/delete")
+def class_delete(event_uid: str, conn=Depends(get_db)):
+    _semester(conn)
+    event = db.get_event(conn, event_uid)
+    discipline = _class_discipline(conn, event)
+    try:
+        up.delete_class(conn, event_uid)
+    except up.PlanError as exc:
+        _bad(exc)
+    return _note(url_for_discipline(discipline, "contents") if discipline else HOME)
+
+
+def _class_discipline(conn, event) -> str:
+    row = conn.execute("SELECT discipline_tag FROM university_slots WHERE series_uid = ?", (event.get("series_uid") if event else None,)).fetchone()
+    return row["discipline_tag"] if row else ""

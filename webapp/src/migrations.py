@@ -344,6 +344,12 @@ def _university_sheet(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE university_semesters ADD COLUMN credits_target REAL")
 
 
+def _university_slot_continues(conn: sqlite3.Connection) -> None:
+    """A timetable edit from some day on starts a new series; it remembers the one it continues so the timetable lists them as one slot."""
+    if "continues" not in _columns(conn, "university_slots"):
+        conn.execute("ALTER TABLE university_slots ADD COLUMN continues TEXT")
+
+
 def _university_sheet_columns(conn: sqlite3.Connection) -> None:
     """Columns that migration 32 gained after some databases had already run it: the semester's credits target, and an exam's evaluation link and notes."""
     if "credits_target" not in _columns(conn, "university_semesters"):
@@ -516,6 +522,7 @@ MIGRATIONS: list[Migration] = [
     Migration(36, "University event milestones get an end day", _milestone_end_day),
     Migration(40, "Citation editions with their own PDFs", citation_editions, destructive=True),
     Migration(41, "Books get status, rating and keywords; editions get a DOI", citation_editions, destructive=True),
+    Migration(42, "University timetable slots remember the series they continue", _university_slot_continues),
 ]
 
 

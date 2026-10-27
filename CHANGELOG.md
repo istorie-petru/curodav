@@ -6,6 +6,12 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [4.8.6]
+
+- Contents: the edit window of a class also holds its date, start and end time and room, and a delete button, so one lecture or seminar can be moved, given another room or removed without touching the rest of its slot.
+- Deleting a class, from Contents or from the calendar, now changes the weekly slot itself instead of leaving a gap in it: the earlier classes keep a rule that ends before the deleted one, the later ones become a slot of their own with the same kind, and the timetable still lists one slot. Other repeating events in the calendar behave as before.
+- Timetable edits: changing the kind, the day or the hour of a slot after some classes were held no longer leaves the past classes as a second timetable row or drops them from Contents. The held classes stay as they were and the rest follow the new slot. An edit that leaves nothing to change now says so instead of doing nothing, and editing a whole slot before term keeps the class it started from (migration 42).
+
 ## [4.8.5]
 
 - University: Other tasks and events on a discipline now lists only what is tracked nowhere else. Repeating events (the timetable), habits, and anything linked to an event or task, such as exam and homework dates, are left out because they show under the timetable and evaluation.
