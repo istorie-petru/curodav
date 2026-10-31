@@ -77,7 +77,7 @@
             <div class="habit-amount-pair">
                 <div class="habit-amount-cell">
                     <label for="habit-target">Amount</label>
-                    {{ number_input({'name': 'target_per_day', 'id': 'habit-target', 'min': '2', 'max': '999999', 'step': '1', 'inputmode': 'numeric', 'value': (_target if _target > 1 else ''), 'placeholder': '8'}) }}
+                    {{ number_input({'name': 'target_per_day', 'id': 'habit-target', 'min': '2', 'max': '999999', 'step': '1', 'inputmode': 'numeric', 'value': (_target if _target > 1 else '')}) }}
                 </div>
                 <div class="habit-amount-cell">
                     <label for="habit-unit">Unit</label>
@@ -85,7 +85,7 @@
                 </div>
             </div>
         </div>
-        {% set _current = task.reminder_time if task and task.reminder_time else '' %}
+        {% set _current = task.reminder_time if task and task.reminder_time else ('' if task else (default_reminder_time | default(''))) %}
         {% set _slots = [] %}
         {% for h in range(24) %}{% for m in (0, 30) %}{% set _ = _slots.append('%02d:%02d'|format(h, m)) %}{% endfor %}{% endfor %}
         {% if _current and _current not in _slots %}{% set _ = _slots.append(_current) %}{% endif %}

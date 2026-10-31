@@ -34,6 +34,6 @@ def test_python_built_markup_uses_data_style_for_the_avatar_swatch():
 def test_every_modal_template_includes_the_shared_footer():
     missing = [
         name for name in MODAL_TEMPLATES
-        if not any(m in (TEMPLATES_DIR / name).read_text() for m in ('{% include "_modal_footer.html" %}', '{% from "_modal.html" import modal %}'))
+        if not re.search(r'\{% include "_modal_footer.html" %\}|\{% from "_modal.html" import modal\b', (TEMPLATES_DIR / name).read_text())
     ]
     assert missing == [], f"Not using the shared footer partial: {missing}"

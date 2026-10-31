@@ -4,7 +4,7 @@
 {# One task as a list row: select box, the title (opens the view modal), its due date, its labels, then at the far
    right the status, the one inline editor, next to the menu. Everything else is edited in the edit modal.
    `skip_tag` is the heading's tag or shelf name: a pill that only repeats a heading is left out. #}
-{% macro task_list_row(t, skip_tag='') %}
+{% macro task_list_row(t, skip_tag="") %}
 <div class="contact-row-wrap task-row{% if t.status in ('done', 'archived') %} task-row-completed{% endif %}" data-uid="{{ t.uid }}">
     {{ checkbox_input({'class': 'row-select', 'data-uid': (t.uid), 'aria-label': 'Select ' ~ (t.title), 'autocomplete': 'off'}) }}
     <a class="contact-row task-row-title" href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a>

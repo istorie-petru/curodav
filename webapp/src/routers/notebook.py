@@ -28,7 +28,7 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 
 from .. import tags as tag_store
-from .. import citation_formats, clock, db, icon_font, notebook_fields, notebook_find, notebook_mentions
+from .. import app_defaults, citation_formats, clock, db, icon_font, note_versions, notebook_fields, notebook_find, notebook_mentions
 from ..deps import get_db, respond, templates, validation_response, wants_json
 from .labels import COLORS, icon_groups_for
 
@@ -100,7 +100,7 @@ def list_documents(request: Request, conn=Depends(get_db)):
     import json as _json
 
     folders = db.list_notebook_folders(conn)
-    recent = db.latest_notebook_document(conn)
+    recent = db.recent_notebook_documents(conn)
     report = db.get_app_meta(conn, "notebook_label_report")
     return templates.TemplateResponse(
         "notebook_home.html",
@@ -108,7 +108,7 @@ def list_documents(request: Request, conn=Depends(get_db)):
             "request": request,
             "active_tab": "notebook",
             "folders": folders,
-            "continue_note": recent,
+            "recent_notes": recent,
             "label_report": _json.loads(report) if report else [],
             "glossary_count": len(db.list_glossary_terms(conn)),
             "citation_count": len(db.list_citations(conn)),
@@ -374,8 +374,9 @@ def _template_field_values(conn, template_uid: str) -> list[dict]:
     return _typed_fields(schema, template["properties"] if template else [])
 
 
-def new_note_context(request: Request, conn, label: str = "", template_uid: str = "") -> dict:
+def new_note_context(request: Request, conn, label: str = "", template_uid: str = "", tag: str = "") -> dict:
     """What the new-note form needs; shared by the New note modal and the sidebar's New modal."""
+    template_uid = template_uid or app_defaults.folder_template(conn, label.strip())
     template = db.get_notebook_document(conn, template_uid) if template_uid else None
     if template is not None and not template["is_template"]:
         template, template_uid = None, ""
@@ -384,20 +385,21 @@ def new_note_context(request: Request, conn, label: str = "", template_uid: str 
         {"uid": n, "name": n, **type_looks.get(n, db.NOTEBOOK_TYPE_LOOK_FALLBACK)} for n in db.list_notebook_note_types_in_use(conn)]
     tag_names = db.list_tag_names_in_use(conn)
     label = label.strip()
+    tag = tag.strip() or ("" if label else app_defaults.get(conn, "note_tag"))
     project_ctx = db.project_picker_context(conn)
     return {
         "request": request, "label": label, "template_items": _new_note_templates(conn), "template_uid": template_uid,
         "note_type_items": types, "note_type": template["note_type"] if template else "",
         "typed_fields": _template_field_values(conn, template_uid), "typed_form_id": "notebook-new-form",
         "tag_name_items": [{"uid": n, "name": n} for n in tag_names if n not in project_ctx["project_names"]],
-        "labels_selected": [label] if label and label not in project_ctx["project_names"] else [],
+        "labels_selected": [tag or label] if (tag or label) and (tag or label) not in project_ctx["project_names"] else [],
         "pf_tags": [label] if label else [], **project_ctx,
     }
 
 
 @router.get("/new")
-def new_note_modal(request: Request, label: str = "", template: str = "", conn=Depends(get_db)):
-    return templates.TemplateResponse("notebook_new_modal.html", {"nn": new_note_context(request, conn, label, template), "request": request})
+def new_note_modal(request: Request, label: str = "", template: str = "", tag: str = "", conn=Depends(get_db)):
+    return templates.TemplateResponse("notebook_new_modal.html", {"nn": new_note_context(request, conn, label, template, tag), "request": request})
 
 
 @router.get("/new/fields")
@@ -555,6 +557,10 @@ def document_page(uid: str, request: Request, back_to: str = "", back_label: str
         return RedirectResponse(url="/notebook", status_code=303)
     back_to = _safe_return_to(back_to)
     crumbs = [{"url": back_to, "name": back_label or "Notebook"}] if back_to else _NOTEBOOK_HOME_CRUMB
+    if not back_to and not document["is_template"]:
+        kind, name = db.notebook_folder_of(conn, uid)
+        if kind in ("project", "label"):
+            crumbs = _NOTEBOOK_HOME_CRUMB + [{"url": "/notebook/folder?" + urlencode({"kind": kind, "name": name}), "name": name}]
     if document["is_template"] and not back_to:
         crumbs = [{"url": "/notebook/templates", "name": "Templates"}]
     citations = db.list_notebook_citations(conn, uid)
@@ -861,21 +867,32 @@ def update_document_glossary(
 # own API is JS-object in/out, and there's no HTML fragment that can
 # represent live rich-block-editor state, so this pair talks raw JSON
 # instead of this app's normal server-rendered-fragment convention.
+# The ETag is the note's revision; a save that names an older one in If-Match is refused, so an editor left open
+# never overwrites a change made elsewhere (features/api-and-mcp.md).
 @router.get("/{uid}/content")
 def get_document_content(uid: str, conn=Depends(get_db)):
     db.migrate_document_images(conn, uid)
     content = db.get_notebook_document_content(conn, uid)
     if content is None:
         return JSONResponse({"error": "document not found"}, status_code=404)
-    return JSONResponse(content)
+    doc = db.get_notebook_document(conn, uid)
+    return JSONResponse(content, headers={"ETag": f'"{doc.get("updated_at") or ""}"'})
 
 
 @router.put("/{uid}/content")
 async def put_document_content(uid: str, request: Request, conn=Depends(get_db)):
     content = await request.json()
+    doc = db.get_notebook_document(conn, uid)
+    if doc is None:
+        return JSONResponse({"error": "document not found"}, status_code=404)
+    asked = request.headers.get("if-match", "").strip().strip('"')
+    if asked and asked != (doc.get("updated_at") or ""):
+        return JSONResponse({"error": "conflict", "message": "The note changed since it was opened."}, status_code=409)
+    note_versions.save_before_web_save(conn, uid)
     if not db.set_notebook_document_content(conn, uid, content):
         return JSONResponse({"error": "document not found"}, status_code=404)
-    return JSONResponse({"ok": True})
+    revision = (db.get_notebook_document(conn, uid) or {}).get("updated_at") or ""
+    return JSONResponse({"ok": True, "revision": revision}, headers={"ETag": f'"{revision}"'})
 
 
 field_settings_router = APIRouter(prefix="/settings/notebook", tags=["notebook-field-settings"])

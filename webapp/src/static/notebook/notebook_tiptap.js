@@ -22,14 +22,9 @@
     if (text === lastSaved) return;
     var body = JSON.stringify({ time: Date.now(), blocks: blocks, version: "tiptap" });
     var started = performance.now();
-    fetch(contentUrl, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: body,
-      keepalive: !!leaving && body.length < 60000,
-    })
+    window.NotebookSave.put(contentUrl, body, !!leaving && body.length < 60000)
       .then(function (resp) {
-        if (!resp.ok) throw new Error("save failed");
+        if (!resp) return;
         measure("editor save", started);
         lastSaved = text;
         failedSaves = 0;
@@ -205,11 +200,7 @@
     };
   }
 
-  fetch(contentUrl, { headers: { Accept: "application/json" } })
-    .then(function (resp) {
-      if (!resp.ok) throw new Error("load failed");
-      return resp.json();
-    })
+  window.NotebookSave.load(contentUrl)
     .catch(function () {
       return { blocks: [] };
     })

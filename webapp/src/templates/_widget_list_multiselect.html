@@ -39,7 +39,7 @@
                        {% if it.data %}{% for _k, _v in it.data.items() %}data-{{ _k }}="{{ _v }}" {% endfor %}{% endif %}
                        {% if (it.checked if it.checked is defined else (it.uid in _sel or (_single and not _sel and loop.first))) %}checked{% endif %}
                        {% if _autosubmit %}data-change-submit{% endif %}>
-                {% if _pill and it.uid != '__no_label__' %}{% if it.color is defined %}{{ tag_pill(it) }}{% else %}{{ label_pill(it.name) }}{% endif %}
+                {% if _pill and it.uid != '__no_label__' %}{% if it.color is defined %}{{ tag_pill(it, link=false) }}{% else %}{{ label_pill(it.name) }}{% endif %}
                 {% elif it.color is defined and it.color %}<span class="cell-tag cal-{{ it.color }}">{% if it.icon %}{{ icon(it.icon, 'icon-sm') }} {% endif %}{{ it.name }}</span>
                 {% else %}<span>{{ it.name }}</span>{% endif %}
             </label>

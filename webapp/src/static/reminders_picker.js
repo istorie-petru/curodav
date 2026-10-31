@@ -37,6 +37,7 @@
     const trigger = document.createElement("button");
     trigger.type = "button";
     trigger.className = "multiselect-trigger ms-trigger";
+    trigger.setAttribute("aria-label", "Reminders");
     trigger.setAttribute("aria-haspopup", "true");
     trigger.setAttribute("aria-expanded", "false");
     trigger.innerHTML =

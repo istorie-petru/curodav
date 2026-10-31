@@ -109,7 +109,7 @@
         </div>
         <a href="/" data-tab="dashboard" class="tab-btn {% if active_tab == 'dashboard' %}active{% endif %}" title="Home" aria-label="Home">{{ icon('home') }}<span>Home</span></a>
         <a href="/calendar/fourweek" data-tab="calendar" class="tab-btn {% if active_tab in ('calendar', 'calendar_week') %}active{% endif %}" title="Calendar" aria-label="Calendar">{{ icon('calendar') }}<span>Calendar</span></a>
-        <a href="/tasks" data-tab="tasks" class="tab-btn {% if active_tab in ('tasks', 'habits') %}active{% endif %}" title="Tasks" aria-label="Tasks">{{ icon('check-square') }}<span>Tasks</span></a>
+        <a href="/tasks/open" data-tab="tasks" class="tab-btn {% if active_tab in ('tasks', 'habits') %}active{% endif %}" title="Tasks" aria-label="Tasks">{{ icon('check-square') }}<span>Tasks</span></a>
         <a href="/notebook" data-tab="notebook" class="tab-btn {% if active_tab == 'notebook' %}active{% endif %}" title="Notebook" aria-label="Notebook">{{ icon('notebook') }}<span>Notebook</span></a>
         <a href="/library" data-tab="library" class="tab-btn {% if active_tab == 'library' %}active{% endif %}" title="Library" aria-label="Library">{{ icon('library') }}<span>Library</span></a>
         <a href="/finance" data-tab="finance" class="tab-btn {% if active_tab == 'finance' %}active{% endif %}" title="Finance" aria-label="Finance">{{ icon('dollar-sign') }}<span>Finance</span></a>

@@ -98,7 +98,7 @@
         {% if ov_by_tag %}
         {% for tag, rows, count in ov_by_tag %}
         <section class="ov-section">
-            <h2 class="ov-heading">{{ tag_pill(tag) }} <span class="ov-count">{{ count }}</span></h2>
+            <h2 class="ov-heading">{{ tag_pill(tag, link=false) }} <span class="ov-count">{{ count }}</span></h2>
             {% for t in rows %}{{ ov_task_row(t) }}{% endfor %}
         </section>
         {% endfor %}

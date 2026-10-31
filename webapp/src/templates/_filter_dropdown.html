@@ -11,7 +11,7 @@
 {% set _total = fd_items | length %}
 {% set _sel_item = (fd_items | selectattr('value', 'equalto', fd_selected) | list | first) if _single else none %}
 <div class="multiselect widget-list-multiselect filter-dropdown" data-ms data-ms-mode="{{ 'single' if _single else ('names' if _names else 'filter') }}" data-ms-label="{{ fd_label|lower }}"{% if _names %} data-ms-empty="{{ fd_placeholder | default('None') }}"{% endif %}>
-    <button type="button" class="multiselect-trigger ms-trigger filter-dropdown-trigger" aria-haspopup="true" aria-expanded="false">
+    <button type="button" class="multiselect-trigger ms-trigger filter-dropdown-trigger" aria-haspopup="true" aria-expanded="false" aria-label="{{ fd_label }}">
         <span class="ms-summary">{% if _single %}{{ _sel_item.name if _sel_item else fd_label }}{% elif _names %}{% set _on = fd_items | selectattr('value', 'in', _sel) | map(attribute='name') | list %}{{ _on | join(', ') if _on else (fd_placeholder | default('None')) }}{% else %}{% if _n == 0 %}{{ fd_label }}{% else %}{{ fd_label }} ({{ _n }}){% endif %}{% endif %}</span>
         <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
     </button>

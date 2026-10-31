@@ -257,7 +257,7 @@ def create_app() -> FastAPI:
 
     app.mount("/static", _VersionedStaticFiles(directory=_BASE_DIR / "static"), name="static")
 
-    from .routers import auth, banners, calendar, contacts, dashboard, export, finance, flairs as flairs_router, habits, label_pages, labels, notebook, perf as perf_router, projects, public_lists, published_lists, push, pwa, quick_capture, search, secretariat_page, settings, spaces, sync_api, tasks, taxonomy, timeline
+    from .routers import auth, banners, calendar, contacts, dashboard, defaults, export, finance, flairs as flairs_router, habits, label_pages, labels, notebook, perf as perf_router, projects, public_lists, published_lists, push, pwa, quick_capture, search, secretariat_page, settings, spaces, sync_api, tasks, taxonomy, timeline
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error_page(request: Request, exc: StarletteHTTPException):
@@ -282,6 +282,14 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(auth.router)
+    from .routers import settings_api_access
+
+    app.include_router(settings_api_access.router)
+    from .routers import api_v1, mcp as mcp_router, oauth
+
+    app.include_router(oauth.router)
+    app.include_router(api_v1.router)
+    app.include_router(mcp_router.router)
     app.include_router(public_lists.router)
     app.include_router(dashboard.router)
     app.include_router(secretariat_page.home_router)
@@ -325,6 +333,7 @@ def create_app() -> FastAPI:
     app.include_router(notebook.citations_router)
     app.include_router(notebook.glossary_router)
     app.include_router(notebook.router)
+    app.include_router(defaults.router)
     app.include_router(notebook.field_settings_router)
     app.include_router(notebook.frontmatter_settings_router)
     app.include_router(finance.router)

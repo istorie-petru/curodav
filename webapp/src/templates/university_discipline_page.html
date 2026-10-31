@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_empty_state.html" import empty_state %}
-{% from "_widget_items.html" import widget_pill %}
+{% from "_widget_items.html" import widget_pill, icon_pill %}
 {% from "_rows_pick.html" import importance_pill %}
 {% from "_action_menu.html" import action_menu %}
 {% block title %}{{ d.name }}{% endblock %}
@@ -13,46 +13,50 @@
     {{ edit_btn('/settings/university/discipline/' ~ enc ~ '/edit', 'Edit the discipline') }}
 {% endcall %}
 {% include "_flash.html" %}
-<div class="uni-page">
 {% if view == 'overview' %}
-<div class="uni-split">
-<div class="uni-main">
-    <div class="uni-widgets">
-        <section class="uni-widget"><div class="uni-widget-label">Classes left</div><div class="uni-widget-big">{{ classes_left }}</div><div class="uni-widget-small">of {{ classes_total }}</div></section>
-        <section class="uni-widget"><div class="uni-widget-label">Topics placed</div><div class="uni-widget-big">{{ topics_done }}</div><div class="uni-widget-small">of {{ topics_total }}</div></section>
-        <section class="uni-widget"><div class="uni-widget-label">Readings read</div><div class="uni-widget-big">{{ read_done }}</div><div class="uni-widget-small">of {{ read_total }}</div></section>
-    </div>
-    <section class="uni-panel">
-        <div class="uni-panel-head"><h2>Next classes</h2></div>
+<p class="ov-line">
+    <span>{{ classes_left }} of {{ classes_total }} classes left</span>
+    {% if topics_total %}<span>{{ topics_done }} of {{ topics_total }} topics placed</span>{% endif %}
+    {% if read_total %}<span>{{ read_done }} of {{ read_total }} readings read</span>{% endif %}
+    {% for k in absences if k.limit is not none %}<span{% if k.over %} class="is-overdue"{% endif %}>{{ k.label }} absences {{ k.missed }} of {{ k.limit }}</span>{% endfor %}
+</p>
+<div class="sec-grid ov-grid">
+<div class="sec-col">
+    <section class="ov-section">
+        <h2 class="ov-heading">Next classes</h2>
         {% for c in upcoming %}
-        <div class="uni-item">
-            <div class="uni-item-text"><b>{{ c.topic or c.free_text or 'No topic yet' }}</b><small>{{ c.date|short_date }}, {{ c.start }} · {{ c.kind_label }} {{ c.number }}{% if c.room %} · {{ c.room }}{% endif %}</small></div>
+        <div class="sec-row"><span class="sec-lead">{{ icon_pill(d.color, 'calendar') }}</span>
+            <a class="sec-title" href="/university/class/{{ c.uid }}/content" data-modal>{{ c.topic or c.free_text or (c.kind_label ~ ' ' ~ c.number) }}</a>
+            <span class="sec-pills">{{ widget_pill(c.date|relative_date ~ ' ' ~ c.start, 'gray') }}
             {{ action_menu([{'href': '/university/class/' ~ c.uid ~ '/content', 'icon': 'edit', 'label': 'Change the topic', 'modal': true},
-                            {'href': '/events/' ~ c.uid ~ '/edit', 'icon': 'calendar-clock', 'label': 'Reschedule or move', 'modal': true},
-                            {'href': '/events/' ~ c.uid ~ '/delete-scope', 'icon': 'calendar-x', 'label': 'Cancel this class', 'modal': true, 'danger': true}], 'Class actions') }}
-        </div>
-        {% else %}<div class="uni-item"><div class="uni-item-text"><b class="is-none">No class coming up</b></div></div>{% endfor %}
+                            {'href': '/events/' ~ c.uid ~ '/edit', 'icon': 'calendar-clock', 'label': 'Reschedule', 'modal': true},
+                            {'form_action': '/university/class/' ~ c.uid ~ '/attendance', 'fields': {'status': 'cancelled', 'keep_note': '1'}, 'icon': 'calendar-x', 'label': 'Cancelled', 'danger': true}], 'Class actions') }}</span></div>
+        {% else %}{{ empty_state('No class coming up', size='compact') }}{% endfor %}
     </section>
-    <section class="uni-panel">
-        <div class="uni-panel-head"><h2>Timetable</h2>{{ add_btn('/settings/university/slot/new?discipline=' ~ enc, 'Add a weekly class') }}</div>
+    <section class="ov-section">
+        <h2 class="ov-heading">Timetable {{ add_btn('/settings/university/slot/new?discipline=' ~ enc, 'Add a weekly class') }}</h2>
         {% for s in slots %}
-        <div class="uni-item">
-            <div class="uni-item-text"><b>{{ s.weekday_name }} {{ s.start }} to {{ s.end }}</b><small>{{ s.kind_label }} · {{ {'all': 'every week', 'odd': 'odd weeks', 'even': 'even weeks'}[s.weeks] }}{% if s.room %} · {{ s.room }}{% endif %}{% if s.teacher_names %} · {{ s.teacher_names }}{% endif %}</small></div>
-            {{ edit_btn('/settings/university/slot/' ~ s.series_uid ~ '/edit', 'Edit the weekly class') }}
-        </div>
-        {% else %}{% call empty_state('No timetable yet', 'clock', 'A weekly class repeats until the classes end.') %}<a href="/settings/university/slot/new?discipline={{ enc }}" data-modal class="btn primary">{{ icon('plus') }} Add a weekly class</a>{% endcall %}{% endfor %}
+        <div class="sec-row"><span class="sec-lead">{{ icon('clock', 'icon-sm') }}</span>
+            <a class="sec-title" href="/settings/university/slot/{{ s.series_uid }}/edit" data-modal>{{ s.weekday_name }} {{ s.start }} to {{ s.end }}{% if s.room %}, {{ s.room }}{% endif %}{% if s.teacher_names %}, {{ s.teacher_names }}{% endif %}</a>
+            <span class="sec-pills">{{ widget_pill(s.kind_label, 'gray') }}{% if s.weeks != 'all' %}{{ widget_pill(s.weeks|capitalize ~ ' weeks', 'gray') }}{% endif %}</span></div>
+        {% else %}{% call empty_state('No timetable yet', size='compact') %}<a href="/settings/university/slot/new?discipline={{ enc }}" data-modal class="btn primary">{{ icon('plus') }} Add a weekly class</a>{% endcall %}{% endfor %}
     </section>
 </div>
-<aside class="uni-side">
-    {% for p in pending %}
-    <a class="uni-pending is-{{ p.tone }}" href="{{ p.url }}" data-modal><b>{{ p.title }}</b><small>{{ p.when }}{% if p.detail %} · {{ p.detail }}{% endif %}</small></a>
-    {% else %}<div class="uni-widget"><div class="uni-widget-label">Pending</div><div class="uni-widget-big is-none">Nothing pending</div></div>{% endfor %}
-</aside>
+<div class="sec-col">
+    <section class="ov-section">
+        <h2 class="ov-heading">Pending <span class="ov-count">{{ pending|length }}</span></h2>
+        {% for p in pending %}
+        <div class="sec-row"><span class="sec-lead">{{ icon(p.icon, 'icon-sm') }}</span>
+            <a class="sec-title" href="{{ p.url }}" data-modal>{{ p.title }}</a>
+            <span class="sec-pills">{% if p.detail %}{{ widget_pill(p.detail, 'gray') }}{% endif %}{{ widget_pill(p.when|capitalize, p.tone) }}</span></div>
+        {% else %}{{ empty_state('Nothing pending', size='compact') }}{% endfor %}
+    </section>
+</div>
 </div>
 
 {% elif view == 'sheet' %}
 {% if sheet_empty %}
-<div class="card">{% call empty_state('The course sheet is empty', 'file-text', 'Identification, teaching, evaluation and content, each with fields of your own.') %}<a href="/settings/university/sheet/{{ enc }}?section=identification" data-modal class="btn primary">{{ icon('edit') }} Fill it in</a>{% endcall %}</div>
+<div class="card">{% call empty_state('The course sheet is empty', 'file-text') %}<a href="/settings/university/sheet/{{ enc }}?section=identification" data-modal class="btn primary">{{ icon('edit') }} Fill it in</a>{% endcall %}</div>
 {% else %}
 {% set empty_secs = sheet.sections | rejectattr('has_content') | list %}
 {% set empty_groups = groups | rejectattr('rows') | list %}
@@ -64,7 +68,7 @@
 {% endif %}
 {% for sec in sheet.sections if sec.has_content %}
 <div class="card">
-    <div class="uni-card-head"><h2>{{ sec.label }}</h2>{{ edit_btn('/settings/university/sheet/' ~ enc ~ '?section=' ~ sec.key, 'Edit ' ~ sec.label|lower) }}</div>
+    <div class="card-title widget-header"><h2>{{ sec.label }}</h2>{{ edit_btn('/settings/university/sheet/' ~ enc ~ '?section=' ~ sec.key, 'Edit ' ~ sec.label|lower) }}</div>
     <div class="uni-sheet">
         {% if sec.key == 'identification' %}<div class="uni-sheet-row"><span>Name</span><p>{{ d.name }}</p></div>{% endif %}
         {% for f in sec.shown %}<div class="uni-sheet-row"><span>{{ f.label }}</span><p>{{ f.value }}</p></div>{% endfor %}
@@ -78,7 +82,7 @@
 {% endfor %}
 {% for g in groups if g.rows %}
 <div class="card table-scroll table-responsive">
-    <div class="uni-card-head"><h2>{{ 'Competences' if g.kind == 'competence' else 'Planned contents: ' ~ g.label|lower }}</h2>{{ edit_btn('/settings/university/syllabus/' ~ enc ~ '?kind=' ~ g.kind, 'Edit ' ~ g.label|lower) }}</div>
+    <div class="card-title widget-header"><h2>{{ 'Competences' if g.kind == 'competence' else 'Planned contents: ' ~ g.label|lower }}</h2>{{ edit_btn('/settings/university/syllabus/' ~ enc ~ '?kind=' ~ g.kind, 'Edit ' ~ g.label|lower) }}</div>
     <table class="entity-table"><thead><tr><th>No.</th><th>{{ 'Competence' if g.kind == 'competence' else 'Topic' }}</th>{% if g.kind != 'competence' %}<th>Importance</th>{% endif %}<th>Applied on</th></tr></thead><tbody>
     {% for t in g.rows %}<tr><td>{{ t.number }}</td><td>{{ t.title }}</td>{% if g.kind != 'competence' %}<td>{{ importance_pill(t.importance) }}</td>{% endif %}<td>{% for dt in t.dates %}{{ dt|short_date }}{{ ', ' if not loop.last }}{% else %}Not applied{% endfor %}</td></tr>{% endfor %}
     </tbody></table>
@@ -88,7 +92,7 @@
 
 {% elif view == 'contents' %}
 <div class="card table-scroll table-responsive">
-    <div class="uni-card-head"><h2>Contents of the classes</h2>
+    <div class="card-title widget-header"><h2>Contents of the classes</h2>
         <span class="uni-card-actions">
         <a href="/settings/university/syllabus/{{ enc }}?kind=lecture" data-modal class="icon-btn" title="Plan the lectures" aria-label="Plan the lectures">{{ icon('book-open', 'icon-sm') }}</a>
         <a href="/settings/university/syllabus/{{ enc }}?kind=seminar" data-modal class="icon-btn" title="Plan the seminars" aria-label="Plan the seminars">{{ icon('users', 'icon-sm') }}</a>
@@ -98,48 +102,90 @@
         {% if can_place %}<form method="post" action="/settings/university/syllabus/{{ enc }}/assign" class="form-inline"><button type="submit" class="icon-btn" title="Apply the planned contents to the classes in order" aria-label="Apply the planned contents to the classes in order">{{ icon('list-checks', 'icon-sm') }}</button></form>{% endif %}</div>
     {% if classes %}
     <table class="entity-table"><thead><tr><th>Date</th><th>Class</th><th>Covered</th><th class="col-actions">Actions</th></tr></thead><tbody>
-    {% for c in classes %}<tr class="{{ 'uni-past' if c.past }}"><td>{{ c.date|short_date }}, {{ c.start }}{% if c.is_next %} {{ widget_pill('Next', 'blue') }}{% endif %}</td><td>{{ c.kind_label }} {{ c.number }}</td><td>{% if c.topic_name %}<b>{{ c.topic_name }}</b>{% endif %}{% if c.competence_names %}<br><small>{{ c.competence_names | join('; ') }}</small>{% endif %}{% if c.free_text %}<br><small>{{ c.free_text }}</small>{% endif %}{% if not c.topic_name and not c.competence_names and not c.free_text %}<span class="study-muted">Nothing yet</span>{% endif %}</td>
+    {% for c in classes %}<tr class="{{ 'uni-past' if c.past }}"><td>{{ c.date|short_date }}, {{ c.start }}{% if c.is_next %} {{ widget_pill('Next', 'blue') }}{% endif %}</td><td>{{ c.kind_label }} {{ c.number }}</td><td>{% if c.topic_name %}<b>{{ c.topic_name }}</b>{% endif %}{% if c.competence_names %}<br><small>{{ c.competence_names | join('; ') }}</small>{% endif %}{% if c.free_text %}<br><small>{{ c.free_text }}</small>{% endif %}{% if not c.topic_name and not c.competence_names and not c.free_text %}<span class="text-muted">Nothing yet</span>{% endif %}</td>
         <td class="col-actions">{{ edit_btn('/university/class/' ~ c.uid ~ '/content', 'Edit this class') }}
         {% if c.note_uid %}<a href="/notebook/{{ c.note_uid }}" class="icon-btn" title="Open note" aria-label="Open note">{{ icon('file-text', 'icon-sm') }}</a>
         {% else %}<form method="post" action="/university/class/{{ c.uid }}/note" class="form-inline"><button type="submit" class="icon-btn" title="Make note" aria-label="Make note">{{ icon('file-plus', 'icon-sm') }}</button></form>{% endif %}</td></tr>{% endfor %}
     </tbody></table>
-    {% else %}{% call empty_state('No classes yet', 'calendar', 'Add a class in the overview first.') %}<a href="/settings/university/slot/new?discipline={{ enc }}" data-modal class="btn primary">{{ icon('plus') }} Add a weekly class</a>{% endcall %}{% endif %}
+    {% else %}{% call empty_state('No classes yet', 'calendar') %}<a href="/settings/university/slot/new?discipline={{ enc }}" data-modal class="btn primary">{{ icon('plus') }} Add a weekly class</a>{% endcall %}{% endif %}
 </div>
+
+{% elif view == 'attendance' %}
+{% if attendance.kinds %}
+<p class="ov-line">{% for k in attendance.kinds %}<span{% if k.over %} class="is-overdue"{% endif %}>{{ k.label }}: {{ k.missed }} missed of {{ k.held }} held{% if k.limit is not none %}, {{ k.limit }} allowed{% endif %}</span>{% endfor %}
+    <a href="/settings/university/sheet/{{ enc }}?section=teaching" data-modal class="icon-btn" title="Absences allowed" aria-label="Absences allowed">{{ icon('edit', 'icon-sm') }}</a></p>
+<div class="card table-scroll table-responsive">
+    <table class="entity-table">
+        <thead><tr><th>Date</th><th>Class</th><th>Status</th><th class="col-opt-1">Note</th><th class="col-actions">Actions</th></tr></thead>
+        <tbody>
+        {% for c in shown %}
+        <tr class="{{ '' if c.past else 'uni-past' }}"><td class="uni-nowrap">{{ c.date|short_day }}, {{ c.start }}</td><td>{{ c.kind_label }} {{ c.number }}</td>
+            <td>{{ widget_pill(c.status_label, c.tone) }}</td><td class="col-opt-1">{{ c.note }}</td>
+            <td class="col-actions">{% set _items = [] %}{% for key, label in [('attended', 'Attended'), ('missed', 'Missed'), ('excused', 'Excused'), ('made_up', 'Made up'), ('cancelled', 'Cancelled')] if key != c.status %}{% set _ = _items.append({'form_action': '/university/class/' ~ c.uid ~ '/attendance', 'fields': {'status': key, 'keep_note': '1'}, 'icon': {'attended': 'check', 'missed': 'x', 'excused': 'file-check', 'made_up': 'rotate-ccw', 'cancelled': 'calendar-x'}[key], 'label': label}) %}{% endfor %}
+                {% set _ = _items.append({'href': '/university/class/' ~ c.uid ~ '/attendance', 'icon': 'edit', 'label': 'Add a note', 'modal': true}) %}{{ action_menu(_items, 'Attendance') }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card">{% call empty_state('No classes yet', 'calendar') %}<a href="/settings/university/slot/new?discipline={{ enc }}" data-modal class="btn primary">{{ icon('plus') }} Add a weekly class</a>{% endcall %}</div>
+{% endif %}
 
 {% elif view == 'bibliography' %}
 <div class="card table-scroll table-responsive">
-    <div class="uni-card-head"><h2>Bibliography</h2><a href="/library" class="icon-btn" title="Open the library" aria-label="Open the library">{{ icon('library', 'icon-sm') }}</a>{{ add_btn('/settings/university/reading/new?discipline=' ~ enc, 'Add a reference') }}</div>
+    <div class="card-title widget-header"><h2>Bibliography</h2><a href="/library" class="icon-btn" title="Open the library" aria-label="Open the library">{{ icon('library', 'icon-sm') }}</a>{{ add_btn('/settings/university/reading/new?discipline=' ~ enc, 'Add a reference') }}</div>
     {% if readings %}
     <table class="entity-table"><thead><tr><th>Book</th><th class="col-opt-1">Page or chapter</th><th>Category</th><th class="col-opt-1">Due</th><th>Status</th><th class="col-actions">Actions</th></tr></thead><tbody>
     {% for r in readings %}<tr><td>{{ r.title }}{% if r.author %}<br><small>{{ r.author }}</small>{% endif %}{% if r.notes %}<br><small>{{ r.notes }}</small>{% endif %}</td><td class="col-opt-1">{{ r.locator or 'None' }}</td><td>{{ widget_pill(r.category_label, {'obligatory': 'red', 'recommended': 'blue'}.get(r.category, 'gray')) }}</td><td class="col-opt-1">{{ r.due|short_date if r.due else 'None' }}</td><td>{{ status_pill(r.status) }}</td><td class="col-actions">{{ edit_btn('/settings/university/reading/' ~ r.task_uid ~ '/edit', 'Edit reference') }}</td></tr>{% endfor %}
     </tbody></table>
-    {% else %}{% call empty_state('No references yet', 'library', 'Point at books of the library, with a page or a chapter.') %}<a href="/settings/university/reading/new?discipline={{ enc }}" data-modal class="btn primary">{{ icon('plus') }} Add a reference</a>{% endcall %}{% endif %}
+    {% else %}{% call empty_state('No references yet', 'library') %}<a href="/settings/university/reading/new?discipline={{ enc }}" data-modal class="btn primary">{{ icon('plus') }} Add a reference</a>{% endcall %}{% endif %}
 </div>
 
 {% elif view == 'exams' %}
-<div class="card">
-    <div class="uni-card-head"><h2>Evaluation</h2>{{ add_btn('/settings/university/evaluation/new?discipline=' ~ enc, 'Add a way of evaluating') }}</div>
-    {% if evaluation.ways %}
-    <div class="uni-ways">
-        {% for w in evaluation.ways %}
-        <div class="uni-way is-{{ w.tone }}">
-            <div class="uni-way-head"><div><b>{{ w.name }}</b>{% if w.form %}<small>{{ w.form }}</small>{% endif %}</div>
-                <span class="uni-way-weight{% if w.elimination %} is-greyed{% endif %}">{% if w.elimination %}{{ icon('x-circle', 'icon-sm') }} Elimination{% elif w.weight is not none %}{{ w.weight|round(2)|string|replace('.0', '') }}%{% endif %}</span>
-                {{ edit_btn('/settings/university/evaluation/' ~ w.id ~ '/edit?discipline=' ~ enc, 'Edit this way of evaluating') }}</div>
-            {% if w.notes %}<small>{{ w.notes }}</small>{% endif %}
-            {% if w.subs %}<small>{% for s in w.subs %}{{ s.name }}{% if s.weight is not none %} {{ s.weight|round(2)|string|replace('.0', '') }}%{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</small>{% endif %}
-            {% for m in w.milestones %}
-            <div class="uni-way-item">{{ icon('calendar' if m.event_uid else 'check-square', 'icon-sm') }}
-                <span><b>{{ m.title }}</b><small>{% if m.day %}{{ m.day|short_day }}{% if m.start %}, {{ m.start }}{% endif %}{% if m.end_day and m.end_day != m.day %} to {{ m.end_day|short_day }}{% if m.end %}, {{ m.end }}{% endif %}{% elif m.end %} to {{ m.end }}{% endif %}{% endif %}{% if m.day and m.due %} · {% endif %}{% if m.due %}due {{ m.due|short_day }}{% endif %}{% if not m.day and not m.due %}No date yet{% endif %}{% if m.days_left is not none %} · {{ 'past' if m.days_left < 0 else ('today' if m.days_left == 0 else 'in ' ~ m.days_left ~ ' days') }}{% endif %}</small></span></div>
-            {% endfor %}
-        </div>
+{% set st = standing %}
+<p class="ov-line">
+    {% if st.final is not none %}<span{% if st.passed is sameas false %} class="is-overdue"{% endif %}>Final grade {{ '%g'|format(st.final) }}{% if st.passed is sameas false %}, not passed{% endif %}</span>
+    {% elif st.so_far is not none %}<span>{{ '%g'|format(st.so_far) }} so far, {{ st.graded }} of {{ st.weighted }} graded</span>{% endif %}
+    <span>Passing grade {{ '%g'|format(st.passing) }}</span>
+    {% for w in st.warnings %}<span>{{ w }}</span>{% endfor %}
+    {% if st.ways %}<a href="/settings/university/grades?discipline={{ enc }}" data-modal class="icon-btn" title="Grades" aria-label="Grades">{{ icon('award', 'icon-sm') }}</a>{% endif %}
+    {{ add_btn('/settings/university/evaluation/new?discipline=' ~ enc, 'Add a way of evaluating') }}
+</p>
+{% if st.ways %}
+<div class="card-grid uni-ways">
+    {% for w in st.ways %}
+    <div class="card">
+        <div class="card-title widget-header"><h2>{{ w.name }}</h2><div class="spacer"></div>
+            {% if w.form %}{{ widget_pill(w.form, w.tone) }}{% endif %}
+            {% if w.elimination %}{{ widget_pill('Elimination', 'gray') }}{% elif w.weight is not none %}{{ widget_pill('%g'|format(w.weight) ~ '%', 'gray') }}{% endif %}
+            {% if w.grade is not none %}{{ widget_pill('%g'|format(w.grade), 'green' if w.passed is not sameas false else 'red') }}{% endif %}
+            {{ edit_btn('/settings/university/evaluation/' ~ w.id ~ '/edit?discipline=' ~ enc, 'Edit') }}</div>
+        {% if w.criteria %}<p class="uni-text">{{ w.criteria }}</p>{% endif %}
+        {% if w.min_grade is not none %}<div class="sec-row"><span class="sec-lead">{{ icon('flag', 'icon-sm') }}</span><span class="sec-title">At least {{ '%g'|format(w.min_grade) }} to pass</span></div>{% endif %}
+        {% for sub in w.subs %}
+        <div class="sec-row"><span class="sec-lead">{{ icon('list', 'icon-sm') }}</span><span class="sec-title">{{ sub.name }}</span>
+            <span class="sec-pills">{% if sub.weight is not none %}{{ widget_pill('%g'|format(sub.weight) ~ '%', 'gray') }}{% endif %}{% if sub.grade is not none %}{{ widget_pill('%g'|format(sub.grade), 'blue') }}{% endif %}</span></div>
         {% endfor %}
+        {% for m in w.milestones %}
+        <div class="sec-row"><span class="sec-lead">{{ icon('calendar' if m.event_uid else 'check-square', 'icon-sm') }}</span>
+            {% if m.event_uid or m.task_uid %}<a class="sec-title" href="{{ ('/events/' ~ m.event_uid) if m.event_uid else ('/tasks/' ~ m.task_uid) }}" data-modal>{{ m.title }}</a>{% else %}<span class="sec-title">{{ m.title }}</span>{% endif %}
+            <span class="sec-pills">{% if m.date %}{{ widget_pill((m.date|short_day) ~ ((', ' ~ m.start) if m.day and m.start else ''), 'red' if m.days_left is not none and 0 <= m.days_left <= 7 else 'gray') }}{% else %}{{ widget_pill('No date', 'orange') }}{% endif %}{% if m.status == 'done' %}{{ widget_pill('Done', 'green') }}{% endif %}</span></div>
+        {% endfor %}
+        {% for c in w.condition_rows %}
+        <div class="sec-row"><span class="sec-lead">{{ icon('check-circle' if c.is_met else ('x-circle' if c.is_met is sameas false else 'circle'), 'icon-sm') }}</span><span class="sec-title">{{ c.label }}</span>
+            <span class="sec-pills">{% if c.kind == 'other' %}<form class="form-inline" method="post" action="/settings/university/evaluation/{{ w.id }}/condition/{{ c.id }}"><input type="hidden" name="discipline" value="{{ d.name }}"><input type="hidden" name="met" value="{{ '' if c.met else '1' }}">
+                <button type="submit" class="btn ghost btn-sm">{{ 'Undo' if c.met else 'Met' }}</button></form>{% endif %}
+                {{ widget_pill('Met' if c.is_met else ('Not met' if c.is_met is sameas false else 'Not known yet'), 'green' if c.is_met else ('red' if c.is_met is sameas false else 'gray')) }}</span></div>
+        {% endfor %}
+        {% if w.notes %}<p class="uni-text text-muted">{{ w.notes }}</p>{% endif %}
     </div>
-    {% for w in evaluation.warnings %}<p class="uni-warn">{{ icon('alert-triangle', 'icon-sm') }} {{ w }}</p>{% endfor %}
-    {% else %}{% call empty_state('No ways of evaluating yet', 'file-check', 'Add the exam, project, continuous assessment or homework that make up the grade, with their weights and dates.') %}<a href="/settings/university/evaluation/new?discipline={{ enc }}" data-modal class="btn primary">{{ icon('plus') }} Add the evaluation</a>{% endcall %}{% endif %}
+    {% endfor %}
 </div>
+{% else %}
+<div class="card">{% call empty_state('No evaluation yet', 'file-check') %}<a href="/settings/university/evaluation/new?discipline={{ enc }}" data-modal class="btn primary">{{ icon('plus') }} Add a way of evaluating</a>{% endcall %}</div>
+{% endif %}
 <div class="card table-scroll table-responsive">
-    <div class="uni-card-head"><h2>Other tasks and events</h2>{{ add_btn('/settings/university/homework/new?discipline=' ~ enc, 'Add a task') }}</div>
+    <div class="card-title widget-header"><h2>Other tasks and events</h2>{{ add_btn('/settings/university/homework/new?discipline=' ~ enc, 'Add a task') }}</div>
     {% if others %}
     <table class="entity-table"><thead><tr><th>Title</th><th class="col-opt-1">Kind</th><th>When</th><th class="col-opt-1">Status</th><th class="col-actions">Actions</th></tr></thead><tbody>
     {% for o in others %}<tr><td>{{ o.title }}</td><td class="col-opt-1">{{ 'Event' if o.kind == 'event' else 'Task' }}</td><td class="uni-nowrap">{{ o.when|short_date if o.when else 'None' }}</td>
@@ -147,8 +193,7 @@
         <td class="col-actions">{{ edit_btn(('/settings/university/homework/' ~ o.uid ~ '/edit') if o.kind == 'task' else ('/events/' ~ o.uid), 'Edit') }}
             <form class="form-inline" method="post" action="{{ ('/settings/university/homework/' ~ o.uid ~ '/delete') if o.kind == 'task' else ('/settings/university/event/' ~ o.uid ~ '/delete') }}?discipline={{ enc }}"><button type="submit" class="icon-btn" title="Delete" aria-label="Delete">{{ icon('trash', 'icon-sm') }}</button></form></td></tr>{% endfor %}
     </tbody></table>
-    {% else %}{% call empty_state('Nothing else tagged here', 'check-square', 'Tasks and events you make yourself with this discipline tag show up here.') %}<a href="/settings/university/homework/new?discipline={{ enc }}" data-modal class="btn primary">{{ icon('plus') }} Add a task</a>{% endcall %}{% endif %}
+    {% else %}{% call empty_state('No other tasks or events', 'check-square') %}<a href="/settings/university/homework/new?discipline={{ enc }}" data-modal class="btn primary">{{ icon('plus') }} Add a task</a>{% endcall %}{% endif %}
 </div>
 {% endif %}
-</div>
 {% endblock %}

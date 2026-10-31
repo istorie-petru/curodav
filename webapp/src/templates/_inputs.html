@@ -22,3 +22,22 @@
    every in-dropdown search or add box goes through this (or its JS twin,
    CCSearchField in static/search_field.js). #}
 {% macro search_input(attrs, icon_name='search') -%}<span class="search-field">{{ icon(icon_name, 'icon-sm') }}<input type="text"{{ _attrs(attrs) }}></span>{%- endmacro %}
+{# The upload input (modals-and-inputs.md, Upload input): a box of the normal input height that takes a picked or
+   dropped file and shows its name with a clear button. `current` is the stored file's name; with `remove_name` the
+   clear button marks it for removal on Save. `large` is the drop zone that fills an upload or import modal.
+   static/upload_zone.js does the drop, the name and the clear button. #}
+{% macro upload_input(name, accept=None, form=None, label='Choose', current=None, current_url=None, remove_name=None, multiple=False, large=False, formats=None, attrs=None) -%}
+{%- set _a = {'name': name, 'accept': accept, 'form': form, 'multiple': multiple, 'aria-label': label} -%}
+{%- if attrs %}{% set _ = _a.update(attrs) %}{% endif -%}
+<div class="upload-input{% if large %} upload-input-large{% endif %}" data-upload-input{% if current %} data-upload-stored{% endif %}>
+<label class="{{ 'upload-zone' if large else 'upload-input-box' }}" data-upload-zone>
+{{ icon('upload') if large else icon('upload', 'icon-sm') }}
+<span class="upload-input-value{% if large %} upload-zone-label{% endif %}" data-upload-value data-empty="{{ label }}">{{ current or label }}</span>
+{% if large and formats %}<span class="upload-zone-formats">{{ formats }}</span>{% endif %}
+<input type="file"{{ _attrs(_a) }}>
+</label>
+{% if current_url %}<a class="icon-btn" href="{{ current_url }}" target="_blank" rel="noopener" aria-label="Open {{ current }}" title="Open {{ current }}">{{ icon('external-link', 'icon-sm') }}</a>{% endif %}
+<button type="button" class="icon-btn upload-input-clear" data-upload-clear aria-label="Clear the file" title="Clear the file"{% if not current %} hidden{% endif %}>{{ icon('x', 'icon-sm') }}</button>
+{% if remove_name %}<input type="hidden" name="{{ remove_name }}" value="" data-upload-remove{% if form %} form="{{ form }}"{% endif %}>{% endif %}
+</div>
+{%- endmacro %}

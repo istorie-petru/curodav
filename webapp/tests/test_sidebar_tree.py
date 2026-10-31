@@ -173,3 +173,21 @@ class TestSidebarQuickAdd:
         resp = labels_router.manage_labels(_request("/settings/labels", conn), conn=conn)
         body = resp.body.decode()
         assert 'class="header-add" href="/quick/add?default_tab=label"' in body
+
+
+def test_a_space_can_list_tags_instead_of_shelves_and_hide_or_reorder(conn):
+    from src import deps, tags
+
+    for name in ("Work", "Home"):
+        _label(conn, name)
+        db.set_group_members(conn, name + " space", [name])
+    tags.add_default_tag(conn, "Work")
+    db.set_group_sidebar(conn, "Work space", True, 2, ["Work"], "tags")
+    db.set_group_sidebar(conn, "Home space", True, 1, [], "shelves")
+    groups = deps._sidebar_groups(_request("/", conn))
+    assert [g["name"] for g in groups] == ["Home space", "Work space"]
+    work = groups[1]
+    assert work["sidebar_kind"] == "tags"
+    assert [c["href"] for c in work["children"]] == ["/labels/Work?tag=Work"]
+    db.set_group_sidebar(conn, "Home space", False, 1, [], "shelves")
+    assert [g["name"] for g in deps._sidebar_groups(_request("/", conn))] == ["Work space"]

@@ -120,7 +120,7 @@ class TestTableMarkup:
     def test_labels_cell_is_plain_read_only_pills(self, conn):
         db.upsert_task(conn, {"uid": "t1", "title": "t1", "description": "", "status": "active", "tags": ["Alpha"], "created_at": _now()})
         db.upsert_task(conn, {"uid": "t2", "title": "t2", "description": "", "status": "active", "tags": [], "created_at": _now()})
-        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
+        body = tasks_router.list_tasks(_request(), group="shelf", conn=conn).body.decode()
         assert "task-labels-select" not in body
         assert "task-label-checkbox" not in body
         assert 'class="task-row-tags"' in body

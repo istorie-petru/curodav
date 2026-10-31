@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .migrations_citations import citation_editions
+from . import migrations_university
 
 
 @dataclass(frozen=True)
@@ -483,6 +484,35 @@ def _secrets_leave_the_database(conn: sqlite3.Connection) -> None:
     secret_store.move_from_database(conn)
 
 
+def _space_sidebar(conn: sqlite3.Connection) -> None:
+    for column, spec in (("sidebar_show", "INTEGER NOT NULL DEFAULT 1"), ("sidebar_order", "INTEGER NOT NULL DEFAULT 0")):
+        if column not in _columns(conn, "label_groups"):
+            conn.execute(f"ALTER TABLE label_groups ADD COLUMN {column} {spec}")
+
+
+def _space_sidebar_kind(conn: sqlite3.Connection) -> None:
+    if "sidebar_kind" not in _columns(conn, "label_groups"):
+        conn.execute("ALTER TABLE label_groups ADD COLUMN sidebar_kind TEXT NOT NULL DEFAULT 'shelves'")
+
+
+def _search_index(conn: sqlite3.Connection) -> None:
+    from . import search_index
+
+    search_index.install(conn)
+
+
+def _access_tokens(conn: sqlite3.Connection) -> None:
+    from . import access_tokens
+
+    access_tokens.ensure_schema(conn)
+
+
+def _note_versions(conn: sqlite3.Connection) -> None:
+    from . import note_versions
+
+    note_versions.ensure_schema(conn)
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "notebook documents get an is_template flag", _note_templates),
     Migration(2, "frontmatter fields lose the required column", _field_config_without_required, destructive=True),
@@ -523,6 +553,13 @@ MIGRATIONS: list[Migration] = [
     Migration(40, "Citation editions with their own PDFs", citation_editions, destructive=True),
     Migration(41, "Books get status, rating and keywords; editions get a DOI", citation_editions, destructive=True),
     Migration(42, "University timetable slots remember the series they continue", _university_slot_continues),
+    Migration(65, "University attendance: missed, excused, cancelled and made-up classes", migrations_university.attendance),
+    Migration(66, "University grades of a way of evaluating and its components", migrations_university.grades),
+    Migration(73, "Spaces choose how they appear in the sidebar", _space_sidebar),
+    Migration(74, "Spaces list shelves or tags in the sidebar", _space_sidebar_kind),
+    Migration(78, "Full-text search over notes, entries, tasks, events and contacts", _search_index),
+    Migration(79, "API tokens, OAuth clients and codes, API activity", _access_tokens),
+    Migration(80, "Earlier versions of notes changed through the API", _note_versions),
 ]
 
 

@@ -4,7 +4,7 @@
    Back is the header chevron and is shown only when `back` is given; Cancel is the footer button, always closes.
    retire: list of {"action": "archive"|"delete", ...}. Archive: url, restore_url, archived, confirm, change.
    Delete: url, mode ("undo" | "confirm" | "link"), label, redirect, change.
-   split_title: a second heading for the two-pane header (the event series). save_alt_label: label the split main button takes when rule fields change.
+   save_alt_label: the label the split primary takes when the series fields change.
    subtitle_html: lines under the title in a cover header (contact role and organisation).
    cover_html: the cover block (.detail-cover-wrap) for a header with a cover image.
    creating: a form that makes a new object says Create; one that changes an object says Save. save_label overrides both for the actions that are neither.
@@ -39,14 +39,36 @@
 {% endif %}
 {% endmacro %}
 
-{% macro modal(kind, title, size='medium', back=None, back_name=None, id=None, form=None, cancel_url=None, save_label=None, creating=False, save_icon='check-square', save_id=None, save_options=None, save_alt_label=None, split_title=None, cover_html=None, subtitle_html=None, retire=None, edit_url=None, done_url=None, extra_html=None) %}
+{# Split modal (modals-and-inputs.md, Split modals): split_start(key, main_title), the main pane, split_side(title), the
+   side pane, split_end(). `key` names the modal kind, so a collapsed side pane stays collapsed for that kind. #}
+{% macro split_start(key, main_title=None) %}
+<div class="modal-split" data-modal-split="{{ key }}" data-modal-wide>
+<div class="modal-split-main">
+{% if main_title %}<h2 class="modal-split-title">{{ main_title }}</h2>{% endif %}
+{% endmacro %}
+{% macro split_side(title, title_id=None, side_class=None, attrs=None) %}
+</div>
+<aside class="modal-split-side{% if side_class %} {{ side_class }}{% endif %}" aria-label="{{ title }}"{% if attrs %} {{ attrs|safe }}{% endif %}>
+<div class="modal-split-head">
+<h2 class="modal-split-title"{% if title_id %} id="{{ title_id }}"{% endif %}>{{ title }}</h2>
+<button type="button" class="icon-btn modal-split-toggle" data-modal-split-toggle aria-expanded="true" aria-label="Hide {{ title|lower }}" title="Hide {{ title|lower }}" data-label-show="Show {{ title|lower }}" data-label-hide="Hide {{ title|lower }}">{{ icon('chevron-right', 'icon-sm') }}</button>
+</div>
+<div class="modal-split-body">
+{% endmacro %}
+{% macro split_end() %}
+</div>
+</aside>
+</div>
+{% endmacro %}
+
+{% macro modal(kind, title, size='medium', back=None, back_name=None, id=None, form=None, cancel_url=None, save_label=None, creating=False, save_icon='check-square', save_id=None, save_options=None, save_alt_label=None, cover_html=None, subtitle_html=None, retire=None, edit_url=None, done_url=None, extra_html=None) %}
 {% set _save = save_label or ('Create' if creating else 'Save') %}
 {% if kind not in MODAL_KINDS %}{{ raise_error('Unknown modal kind: ' ~ kind) }}{% endif %}
 {% if size not in MODAL_SIZES %}{{ raise_error('Unknown modal size: ' ~ size) }}{% endif %}
 <div id="modal-target"{% if MODAL_SIZES[size] %} class="{{ MODAL_SIZES[size] }}"{% endif %}{% if id %} data-modal-id="{{ id }}"{% endif %}>
 <div class="modal-header">
 {{ modal_header_back(back, back_name or 'the previous window') }}
-{% if cover_html %}<div class="detail-header-inner">{{ cover_html|safe }}<div class="detail-heading-row"><div class="detail-heading-text"><h1 class="detail-title">{{ title }}</h1>{% if subtitle_html %}{{ subtitle_html|safe }}{% endif %}</div></div></div>{% elif split_title %}<div class="modal-header-split"><h1>{{ title }}</h1><h1>{{ split_title }}</h1></div>{% else %}<h1>{{ title }}</h1>{% endif %}
+{% if cover_html %}<div class="detail-header-inner">{{ cover_html|safe }}<div class="detail-heading-row"><div class="detail-heading-text"><h1 class="detail-title">{{ title }}</h1>{% if subtitle_html %}{{ subtitle_html|safe }}{% endif %}</div></div></div>{% else %}<h1>{{ title }}</h1>{% endif %}
 </div>
 <div class="modal-body">
 {{ caller() }}

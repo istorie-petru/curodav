@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% from "_modal.html" import modal %}
+{% from "_modal.html" import modal, split_start, split_side, split_end %}
 {% block title %}{% if event %}Edit event{% else %}New event{% endif %}{% endblock %}
 {% block content %}
 {% set _series = event and series_member | default(false) %}
-{% call modal(kind="form", title=('Event' if _series else ('Edit event' if event else 'New event')), split_title=('The whole series' if _series else none), size="medium",
+{% call modal(kind="form", title=('Event' if _series else ('Edit event' if event else 'New event')), size="medium",
               back=(('/events/' ~ event.uid ~ ('?occurrence_date=' ~ occurrence_date if occurrence_date and event.recurrence else '')) if event else none), back_name=(event.title if event else none),
               retire=([{'action': 'delete', 'url': '/events/' ~ event.uid ~ '/delete-scope' ~ ('?occurrence_date=' ~ (occurrence_date | urlencode) if occurrence_date else ''), 'mode': 'link'} if (event.recurrence or event.series_uid) else {'action': 'delete', 'url': '/events/' ~ event.uid ~ '/delete', 'mode': 'undo', 'label': event.title, 'redirect': '/calendar', 'change': 'event'}] if event else none),
               form='event-form', creating=(not event), save_label=('Save this event' if _series else none),
@@ -13,23 +13,18 @@
 {# A repeating event edits in two panes, like the new-item window: this event alone on the left, the series on the right. #}
 {% set series_split = true %}
 <form method="post" id="event-form" action="/events/{{ event.uid }}" data-cc-change="event" data-cc-action="edit">
-<div class="qa-split qa-with-side" data-modal-wide>
-    <div class="qa-create">
-        <h2 class="qa-side-title">Event</h2>
+{{ split_start('event-series', 'This event') }}
         <div class="card">
             {% include "_event_form_fields.html" %}
         </div>
-    </div>
     {# The rule fields belong to the same form: a changed rule saves the series (static/series_scope.js). #}
-    <div class="qa-series" data-series-rules>
-        <h2 class="qa-side-title">The whole series</h2>
+{{ split_side('The whole series', attrs='data-series-rules') }}
         <div class="card">
             <div class="field-grid">
             {% include "_event_series_fields.html" %}
             </div>
         </div>
-    </div>
-</div>
+{{ split_end() }}
 </form>
 {% else %}
 <div class="card">

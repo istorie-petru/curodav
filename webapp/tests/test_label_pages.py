@@ -392,7 +392,7 @@ class TestLabelPillLinks:
         from src.routers import tasks as tasks_router
         db.upsert_task(conn, {"uid": "t1", "title": "Draft", "description": "", "status": "active",
                               "tags": ["Gym", "Home"], "created_at": _now()})
-        body = tasks_router.list_tasks(_request("/tasks"), conn=conn).body.decode()
+        body = tasks_router.list_tasks(_request("/tasks"), group="shelf", conn=conn).body.decode()
         assert '<a class="shelf-link" href="/labels/Gym">Gym</a>' in body
         assert 'href="/labels/Gym?tag=Gym"' in body
 

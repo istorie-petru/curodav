@@ -110,7 +110,7 @@ def test_turning_the_module_on_adds_its_settings_entry_and_page(monkeypatch, tmp
     monkeypatch.setenv("CC_MODULES", "university")
     assert ("University", "/settings/university") in header_views.current_settings_groups()[3]["items"]
     with db.connect(tmp_path / "c.sqlite") as conn:
-        assert "Nothing set up yet" in university.university_settings(_request("/settings/university"), conn=conn).body.decode()
+        assert "No semester yet" in university.university_settings(_request("/settings/university"), conn=conn).body.decode()
 
 
 def test_the_settings_page_is_not_found_while_the_module_is_off(monkeypatch, tmp_path):

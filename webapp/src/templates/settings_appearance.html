@@ -43,7 +43,6 @@
     <a href="/banners/editor?scope=__page_header__&amp;page_url={{ '/settings/appearance'|urlencode }}" data-modal class="look-side-btn" title="{{ 'Change banner' if current_page_header_banner else 'Add banner' }}" aria-label="{{ 'Change banner' if current_page_header_banner else 'Add banner' }}">{{ icon('image') }}</a>
     {% endcall %}
     <form id="accent-form" method="post" action="/settings/appearance/accent" hidden></form>
-    <p class="settings-field-hint settings-look-hint">Accent used for buttons, links, and highlights throughout the app; banner is the background image for every standard page's header strip (Tasks, Calendar, Settings, ...)</p>
     <form class="settings-field-row" method="post" action="/settings/label-icons" id="label-icons-form">
         <span class="settings-field-label">Show icons next to shelves
             <span class="settings-field-hint">Each shelf's icon before its name, wherever shelves appear</span>
@@ -61,7 +60,6 @@
     </form>
     <form class="settings-field-row" method="post" action="/settings/edit-mode" id="edit-mode-form">
         <span class="settings-field-label">Edit mode
-            <span class="settings-field-hint">Show widget editing controls (move, resize, reorder, delete, add) on every dashboard page until turned off</span>
         </span>
         <span class="spacer"></span>
         {% set ms_name = 'enabled' %}

@@ -3,10 +3,8 @@
 {% block title %}Managed by {{ module.title }}{% endblock %}
 {% block content %}
 {# Shown in place of the edit modal of a shelf or tag that a module manages: the module's settings page is the one writer. #}
-{% call modal(kind="view", title=name, size="small", edit_url=none) %}
-<div class="card">
-    <p>{{ name }} is managed by the {{ module.title }} module, so it is read only here.</p>
-    <p><a href="{{ module.settings_url }}">{{ icon('external-link', 'icon-sm') }} Open {{ module.title }} settings</a></p>
-</div>
+{% set _open %}<a class="btn ghost" href="{{ module.settings_url }}">{{ icon('external-link', 'icon-sm') }} {{ module.title }} settings</a>{% endset %}
+{% call modal(kind="view", title=name, size="small", edit_url=none, extra_html=_open) %}
+<p class="modal-sentence">{{ name }} is managed by the {{ module.title }} module, so it is read only here.</p>
 {% endcall %}
 {% endblock %}

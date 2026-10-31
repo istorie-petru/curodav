@@ -8,7 +8,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from .. import clock, db, derived_state, finance, finance_stats, habit_heatmap, habit_view, university_plan, work_sessions
+from .. import app_defaults, clock, db, derived_state, finance, finance_stats, habit_heatmap, habit_view, university_plan, work_sessions
 from .. import tags as tag_store
 from .. import validation
 from ..deps import get_db, respond, templates, validation_response
@@ -180,34 +180,38 @@ def _due_at_key(t: dict) -> str:
     return t.get("due_at") or "9999"
 
 
-def _build_task_groups(conn, open_tasks: list[dict], completed_tasks: list[dict]) -> list[dict]:
-    """The list's sections: one per shelf (alphabetical), then tasks with no tag, then Completed last.
-
-    A shelf section holds a sub-group per tag; a task sits under every tag it carries. `tasks` is the section's
-    tasks without repeats. `open_tasks` is pre-sorted by due date and each group keeps that order. Completed
-    tasks stay together in the one trailing group, newest change first."""
-    shelves: dict[str, dict[str, list[dict]]] = {}
-    loose: list[dict] = []
-    for t in open_tasks:
-        items = t.get("tag_items") or []
-        for item in items:
-            shelves.setdefault(item["label"], {}).setdefault(item["name"], []).append(t)
-        if not items:
-            loose.append(t)
-    groups = []
-    for shelf, by_tag in sorted(shelves.items(), key=lambda kv: kv[0].lower()):
-        subgroups = []
-        for name, members in sorted(by_tag.items(), key=lambda kv: kv[0].lower()):
-            look = next(i for i in members[0]["tag_items"] if i["name"] == name)
-            subgroups.append({"name": name, "color": look["color"], "icon": look["icon"], "tasks": members})
-        unique = {t["uid"]: t for sub in subgroups for t in sub["tasks"]}
-        groups.append({"kind": "label", "name": shelf, "subgroups": subgroups,
-                       "tasks": sorted(unique.values(), key=_due_at_key)})
-    if loose:
-        groups.append({"kind": "unassigned", "name": "No tag", "subgroups": [], "tasks": loose})
+def _build_task_groups(conn, open_tasks: list[dict], completed_tasks: list[dict], mode: str = "", today: str = "") -> list[dict]:
+    """The list's sections. By default open tasks are split by due date (Overdue, Today, This week, Later, No date); `shelf`
+    gives one section per shelf instead and `none` a single plain list. Completed tasks stay together in a trailing
+    section, newest change first. In the date and plain modes a task appears once; in `shelf` mode once per shelf.
+    `open_tasks` is pre-sorted by due date and each section keeps that order."""
+    today = today or clock.today().isoformat()
+    week_end = (date.fromisoformat(today) + timedelta(days=6)).isoformat()
+    groups: list[dict] = []
+    if mode == "shelf":
+        shelves: dict[str, list[dict]] = {}
+        loose: list[dict] = []
+        for t in open_tasks:
+            for shelf in dict.fromkeys(i["label"] for i in t.get("tag_items") or []):
+                shelves.setdefault(shelf, []).append(t)
+            if not t.get("tag_items"):
+                loose.append(t)
+        groups = [{"kind": "label", "name": shelf, "tasks": members} for shelf, members in sorted(shelves.items(), key=lambda kv: kv[0].lower())]
+        if loose:
+            groups.append({"kind": "unassigned", "name": "No tag", "tasks": loose})
+    elif mode == "none":
+        if open_tasks:
+            groups.append({"kind": "plain", "name": "", "tasks": open_tasks})
+    else:
+        buckets = {"Overdue": [], "Today": [], "This week": [], "Later": [], "No date": []}
+        for t in open_tasks:
+            day = (t.get("due_at") or "")[:10]
+            key = "No date" if not day else "Overdue" if day < today else "Today" if day == today else "This week" if day <= week_end else "Later"
+            buckets[key].append(t)
+        groups = [{"kind": "unassigned" if name == "No date" else "date", "name": name, "tasks": members} for name, members in buckets.items() if members]
     completed_sorted = sorted(completed_tasks, key=lambda t: t.get("updated_at") or "", reverse=True)
     if completed_sorted:
-        groups.append({"kind": "completed", "name": "Completed", "subgroups": [], "tasks": completed_sorted})
+        groups.append({"kind": "completed", "name": "Completed", "tasks": completed_sorted})
     return groups
 
 
@@ -216,7 +220,9 @@ def _tasks_list_context(
     request: Request,
     date_filter: str = "all",
     q: str | None = None,
+    group: str = "",
 ) -> dict:
+    group = group if group in ("shelf", "none") else ""
     """Build the full render context for the Table view -- now the *only*
         Tasks view. Shared between
         the full page (list_tasks) and the async-CRUD region fragment
@@ -249,7 +255,7 @@ def _tasks_list_context(
     for t in _rendered:
         t["work_hours"] = _hours[t["uid"]]
 
-    groups = _build_task_groups(conn, open_tasks, completed_tasks)
+    groups = _build_task_groups(conn, open_tasks, completed_tasks, group)
     has_main_tasks = bool(open_tasks or completed_tasks)
     has_any = has_main_tasks
 
@@ -264,6 +270,7 @@ def _tasks_list_context(
             "date_filter_labels": DATE_FILTER_LABELS,
             "active_date_filter": date_filter,
             "q": q or "",
+            "group": group,
             "tag_names": tag_names,
             "today_iso": clock.today().isoformat(),
             "soon_iso": (clock.today() + timedelta(days=2)).isoformat(),
@@ -272,14 +279,21 @@ def _tasks_list_context(
     return ctx
 
 
+@router.get("/open")
+def open_tasks(conn=Depends(get_db)):
+    """The Tasks tab: the view chosen in Settings > Defaults."""
+    return RedirectResponse(url=app_defaults.TASKS_VIEW_URLS[app_defaults.view_of(conn, "tasks_view", app_defaults.TASKS_VIEWS)], status_code=302)
+
+
 @router.get("")
 def list_tasks(
     request: Request,
     date_filter: str = "all",
     q: str | None = None,
+    group: str = "",
     conn=Depends(get_db),
 ):
-    ctx = _tasks_list_context(conn, request, date_filter, q)
+    ctx = _tasks_list_context(conn, request, date_filter, q, group)
     return templates.TemplateResponse("tasks_list.html", ctx)
 
 
@@ -289,6 +303,7 @@ def tasks_regions(
     region: str = "table",
     date_filter: str = "all",
     q: str | None = None,
+    group: str = "",
     conn=Depends(get_db),
 ):
     """Async-CRUD region fragment (features/async-crud.md): renders a single
@@ -300,7 +315,7 @@ def tasks_regions(
     active date filter."""
     if region != "table":
         return JSONResponse({"error": f"unknown region '{region}'"}, status_code=400)
-    ctx = _tasks_list_context(conn, request, date_filter, q)
+    ctx = _tasks_list_context(conn, request, date_filter, q, group)
     html = templates.env.get_template("_tasks_body.html").render(ctx)
     return HTMLResponse(html)
 
@@ -338,7 +353,7 @@ def new_task_form(
     if habit:
         return templates.TemplateResponse(
             "habit_task_form.html",
-            {"request": request, "active_tab": "tasks", "task": None},
+            {"request": request, "active_tab": "tasks", "task": None, "default_reminder_time": app_defaults.get(conn, "habit_reminder")},
         )
     tag_names = db.list_tag_names_in_use(conn)
     # `project` may be a freshly-promoted label with no object_labels rows

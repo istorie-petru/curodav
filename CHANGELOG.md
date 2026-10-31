@@ -6,6 +6,16 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [4.9.0]
+
+- University: a setup page with a click-to-add timetable, Exams, Attendance and Work views, attendance (missed, excused, cancelled and made-up classes), entry conditions and grades per way of evaluating, quick disciplines and defaults (migrations 65 and 66).
+- API and MCP: personal bearer tokens, an OAuth 2.0 server for Claude connectors (discovery, registration, PKCE, rotating refresh) with consent behind the login, full-text search, read tools, and write tools for notes with a revision check, protected custom blocks and restorable earlier versions (migrations 78 to 80). Settings, API access manages tokens and shows activity.
+- Notebook editor saves name their revision: a stale save is refused with a Reload toast, and editor saves keep note versions.
+- Modals and inputs: keyboard for dropdowns, menus and pickers, a discard question on unsaved windows, a collapsible split pane, an upload input and one font size in every modal; hint text and reference tables are gone from windows.
+- Defaults page for quiet hours, calendar view, event and class reminders, habit reminder, the note tag and where Tasks opens. Spaces choose whether the sidebar lists shelves or tags (migrations 73 and 74).
+- Contacts list is A to Z with tag pills and Group by; Tasks group by date sections; global search reaches notes; the Notebook home lists the five most recent notes; the contact form has a plain Birthday field with a Year unknown switch.
+- Styles: duplicate card, pill, tag and checkbox rules merged into shared classes and unused rules removed.
+
 ## [4.8.7]
 
 - University: the description of a class or an exam can be edited in the calendar and on the task page. The title can too, and a new title is applied everywhere: to every class of the slot, or to the exam's event and task together and to its entry in the evaluation. The edit forms say so under the title.

@@ -28,8 +28,7 @@
     {% set ms_root_class = 'dm-format-select' %}
     {% set ms_items = [{'uid': 'standard', 'name': 'Standard (.ics/.vcf)'}, {'uid': 'csv', 'name': 'Spreadsheet (.csv)'}] %}
     {% include "_widget_list_multiselect.html" %}
-    <p class="dm-count-hint" data-dm-hint>Includes: {{ event_count }} Events, {{ task_count }} Tasks, {{ contact_count }} Contacts &middot; All data downloads as one .zip bundle (.ics/.vcf).</p>
+    <p class="dm-count-hint" data-dm-hint role="status">Includes: {{ event_count }} Events, {{ task_count }} Tasks, {{ contact_count }} Contacts</p>
 </form>
-{% include "_data_formats_table.html" %}
 {% endcall %}
 {% endblock %}

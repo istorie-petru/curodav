@@ -54,6 +54,7 @@
     const trigger = document.createElement("button");
     trigger.type = "button";
     trigger.className = "multiselect-trigger ms-trigger";
+    trigger.setAttribute("aria-label", "Repeats");
     trigger.setAttribute("aria-haspopup", "true");
     trigger.setAttribute("aria-expanded", "false");
     const summary = document.createElement("span");
@@ -97,6 +98,7 @@
     const endsTrigger = document.createElement("button");
     endsTrigger.type = "button";
     endsTrigger.className = "multiselect-trigger ms-trigger";
+    endsTrigger.setAttribute("aria-label", "Ends");
     endsTrigger.setAttribute("aria-haspopup", "true");
     endsTrigger.setAttribute("aria-expanded", "false");
     const endsSummary = document.createElement("span");

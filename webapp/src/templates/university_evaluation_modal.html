@@ -1,4 +1,6 @@
-{% from "_inputs.html" import text_input, number_input %}
+{% from "_inputs.html" import text_input, number_input, textarea_input %}
+{% from "_rows_pick.html" import rows_pick %}
+{% from "_form_rows.html" import details_start, details_end %}
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
 {% from "_date_time_fields.html" import date_field, time_field with context %}
@@ -20,6 +22,13 @@
     <div class="field"><label>Start time</label>{{ time_field('ev_start', m.start, label='Start time') }}</div>
     <div class="field"><label>End date</label>{{ date_field('ev_end_day', m.end_day, label='End date', short=true) }}</div>
     <div class="field"><label>End time</label>{{ time_field('ev_end', m.end, label='End time') }}</div>
+</div>
+{% endmacro %}
+{% macro condition_row(c) %}
+<div class="ms-block is-sub" data-row><input type="hidden" name="cond_id" value="{{ c.id }}"><input type="hidden" name="cond_met" value="{{ '1' if c.met else '' }}">
+    <div class="field"><label>Condition</label>{{ rows_pick('cond_pick', c.pick, condition_options, 'Condition') }}</div>
+    <div class="field"><label>Value</label>{{ text_input({'name': 'cond_value', 'value': c.value}) }}</div>
+    <button type="button" class="icon-btn" data-rows-remove title="Remove" aria-label="Remove">{{ icon('trash', 'icon-sm') }}</button>
 </div>
 {% endmacro %}
 {% macro task_row(m) %}
@@ -46,7 +55,8 @@
             <div class="input-with-action">{{ number_input({'name': 'weight', 'value': ('%g'|format(way.stored_weight)) if way and way.stored_weight is not none else '', 'min': 0, 'max': 100, 'step': 'any', 'readonly': true if way and way.elimination else none, 'class': 'is-greyed' if way and way.elimination else none}) }}
                 <input type="hidden" name="elimination" value="{{ '1' if way and way.elimination else '' }}">
                 <button type="button" class="icon-btn" data-flag-toggle="elimination" data-flag-target="weight" aria-pressed="{{ 'true' if way and way.elimination else 'false' }}" title="Elimination round: it does not count toward the grade" aria-label="Elimination round">{{ icon('x-circle', 'icon-sm') }}</button></div></div>
-        <div class="field field-wide"><label>Notes</label>{{ text_input({'name': 'notes', 'value': (way.notes if way else ''), 'maxlength': 200, 'placeholder': 'Estimate or notes for this evaluation'}) }}</div>
+        <div class="field"><label>Minimum grade</label>{{ number_input({'name': 'min_grade', 'value': ('%g'|format(way.min_grade)) if way and way.min_grade is not none else '', 'min': 0, 'step': 'any'}) }}</div>
+        <div class="field field-wide"><label>Criteria</label>{{ textarea_input({'name': 'criteria', 'rows': 2}, way.criteria if way else '') }}</div>
         <div class="field field-wide">
             <div class="field-label-row"><label>Components</label>
                 <button type="button" class="icon-btn" data-rows-add="university-sub-rows" title="Add a component" aria-label="Add a component">{{ icon('plus', 'icon-sm') }}</button></div>
@@ -65,6 +75,15 @@
             <div class="rows-host" id="university-task-rows" data-rows-host data-rows-template="university-task-template">{% for m in tasks %}{{ task_row(m) }}{% endfor %}</div>
             <template id="university-task-template">{{ task_row({'uid': '', 'raw_title': '', 'due': ''}) }}</template>
         </div>
+        <div class="field field-wide">
+            <div class="field-label-row"><label>Conditions</label>
+                <button type="button" class="icon-btn" data-rows-add="university-condition-rows" title="Add a condition" aria-label="Add a condition">{{ icon('plus', 'icon-sm') }}</button></div>
+            <div class="rows-host" id="university-condition-rows" data-rows-host data-rows-template="university-condition-template">{% if way %}{% for c in way.conditions %}{{ condition_row(c) }}{% endfor %}{% endif %}</div>
+            <template id="university-condition-template">{{ condition_row({'id': '', 'pick': 'other', 'value': '', 'met': false}) }}</template>
+        </div>
+        {{ details_start(open=(way and way.notes)) }}
+        <div class="field field-wide"><label>Notes</label>{{ text_input({'name': 'notes', 'value': (way.notes if way else ''), 'maxlength': 200}) }}</div>
+        {{ details_end() }}
     </div>
 </form>
 </div>

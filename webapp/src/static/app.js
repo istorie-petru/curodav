@@ -305,6 +305,7 @@ document.addEventListener("submit", (event) => {
     // #multiselect-portal at that point, so a `.multiselect:has(.panel.is-
     // open)` selector can never see it from the wrapper.
     anchor.classList.remove("is-open");
+    if (openPanel.trigger) openPanel.trigger.setAttribute("aria-expanded", "false");
     panel.style.left = panel.style.top = panel.style.minWidth = "";
     // Move it back to exactly where it started -- insertBefore(node, null)
     // is the same as appendChild, so a null nextSibling (it was already
@@ -361,6 +362,7 @@ document.addEventListener("submit", (event) => {
     panel.classList.add("is-open");
     anchor.classList.add("is-open");
     position(panel, trigger);
+    trigger.setAttribute("aria-expanded", "true");
     openPanel = { panel, trigger, anchor, nextSibling };
     if (searchInput) searchInput.focus();
   }
@@ -401,20 +403,137 @@ document.addEventListener("submit", (event) => {
     }
   });
 
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeOpenPanel();
-    // Enter inside the in-panel search box must never submit whatever
-    // `<form>` the panel's checkboxes belong to -- filtering is already
-    // live on every keystroke, there's no "commit" step to trigger, and
-    // this input lives inside a portaled panel so a stray Enter bubbling
-    // up through its `form="..."` association would otherwise submit the
-    // enclosing modal prematurely (same class of trap as the ms_allow_new
-    // "New shelf..." input's own Enter handling, see that code's
-    // comment).
-    if (e.key === "Enter" && e.target.matches && e.target.matches(".multiselect-search-input")) {
-      e.preventDefault();
+  // Keyboard (modals-and-inputs.md, Keyboard and focus). Capture phase, so an open panel takes Esc before the
+  // modal does and arrows never reach the radios' native "arrow selects the next radio".
+  function optionInputs(panel) {
+    return Array.from(panel.querySelectorAll(".multiselect-option:not([hidden]):not(.multiselect-new-option) input:not([disabled])"));
+  }
+
+  function searchBoxOf(panel) {
+    return panel.querySelector(".multiselect-search-input, .ms-merged .multiselect-new-input");
+  }
+
+  function focusOption(panel, index) {
+    const inputs = optionInputs(panel);
+    if (!inputs.length) return;
+    inputs[Math.max(0, Math.min(index, inputs.length - 1))].focus();
+  }
+
+  function openFromKeyboard(trigger) {
+    const panel = resolvePanel(trigger.closest(".multiselect"));
+    if (!panel) return;
+    // A click, so pickers that build their panel on open (the look picker's icons) do so for the keyboard too.
+    if (!(openPanel && openPanel.panel === panel)) trigger.click();
+    if (searchBoxOf(panel)) return;
+    const inputs = optionInputs(panel);
+    if (!inputs.length) {
+      const first = panel.querySelector("input:checked:not([type=hidden])") || panel.querySelector("button, input:not([type=hidden])");
+      if (first) first.focus();
+      return;
     }
-  });
+    const checked = inputs.findIndex((i) => i.checked);
+    focusOption(panel, checked === -1 ? 0 : checked);
+  }
+
+  function closeAndReturn() {
+    const trigger = openPanel && openPanel.trigger;
+    closeOpenPanel();
+    if (trigger) trigger.focus();
+  }
+
+  document.addEventListener("keydown", (e) => {
+    const trigger = e.target.closest && e.target.closest(".multiselect-trigger");
+    if (trigger && !(openPanel && openPanel.trigger === trigger)) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        openFromKeyboard(trigger);
+      }
+      return;
+    }
+    if (!openPanel) return;
+    const { panel } = openPanel;
+    const inPanel = panel.contains(e.target);
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      closeAndReturn();
+      return;
+    }
+    if (e.key === "Tab") {
+      if (!inPanel && e.target !== openPanel.trigger) return;
+      // A composite panel (the look picker) is walked with Tab until its last stop; a list panel closes at once.
+      if (inPanel && !panel.querySelector(".multiselect-option")) {
+        const stops = Array.from(panel.querySelectorAll("button, input:not([type=hidden]), [tabindex='0']")).filter(
+          (el) => el.getClientRects().length && !el.disabled && el.tabIndex >= 0 && !(el.type === "radio" && !el.checked && panel.querySelector('input[type="radio"][name="' + el.name + '"]:checked'))
+        );
+        // The focused element may be a roving cell that is not a stop itself: go by document order from it.
+        const after = (el) => e.target.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING;
+        const next = e.shiftKey ? stops.filter((el) => el !== e.target && !after(el) && !el.contains(e.target)).pop() : stops.find((el) => after(el) && !e.target.contains(el));
+        if (next) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          next.focus();
+          return;
+        }
+      }
+      // Focus goes back to the button first, so the browser's own Tab then moves on from it.
+      openPanel.trigger.focus();
+      closeOpenPanel();
+      return;
+    }
+    if (!inPanel) return;
+    const search = searchBoxOf(panel);
+    const inputs = optionInputs(panel);
+    const index = inputs.indexOf(e.target);
+    const onSearch = e.target === search;
+    // Outside an option list (the look picker's swatches and icon grid) the keys keep their own meaning.
+    if (index === -1 && !(onSearch && inputs.length)) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      e.stopPropagation();
+      if (onSearch) {
+        if (e.key === "ArrowDown") focusOption(panel, 0);
+        return;
+      }
+      if (e.key === "ArrowUp" && index <= 0 && search) search.focus();
+      else focusOption(panel, e.key === "ArrowDown" ? index + 1 : index - 1);
+    } else if ((e.key === "Home" || e.key === "End") && !onSearch) {
+      e.preventDefault();
+      focusOption(panel, e.key === "Home" ? 0 : inputs.length - 1);
+    } else if (e.key === "Enter" && index !== -1) {
+      e.preventDefault();
+      e.stopPropagation();
+      const input = inputs[index];
+      if (input.type === "radio") {
+        const trigger = openPanel.trigger;
+        if (!input.checked) {
+          input.checked = true;
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        if (openPanel) closeAndReturn();
+        else trigger.focus(); // a picker that closed its own panel on the change
+      } else {
+        input.checked = !input.checked;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    } else if (e.key === "Enter" && e.target.matches(".multiselect-search-input")) {
+      // Enter in the search box picks the first match and never submits the form the options belong to.
+      e.preventDefault();
+      const first = inputs[0];
+      if (!first) return;
+      if (first.type === "radio") {
+        first.checked = true;
+        first.dispatchEvent(new Event("change", { bubbles: true }));
+        if (openPanel) closeAndReturn();
+      } else {
+        first.checked = !first.checked;
+        first.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    } else if (index !== -1 && search && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && e.key !== " ") {
+      // Typing on an option goes on in the search box.
+      search.focus();
+    }
+  }, true);
 
   document.addEventListener("input", (e) => {
     if (!e.target.matches || !e.target.matches(".multiselect-search-input, .ms-merged .multiselect-new-input")) return;
@@ -1087,6 +1206,7 @@ document.addEventListener("submit", (event) => {
     const currentIndex = items.indexOf(document.activeElement);
     if (e.key === "Escape") {
       e.preventDefault();
+      e.stopPropagation();
       closeMenu();
       menu.trigger.focus();
     } else if (e.key === "ArrowDown") {
@@ -1111,7 +1231,10 @@ document.addEventListener("submit", (event) => {
   });
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Tab") closeMenu();
+    if (e.key !== "Tab" || !activeMenu) return;
+    // Focus goes back to the trigger first, so Tab moves on from it (the panel lives at body level, outside any modal).
+    if (activeMenu.panel.contains(document.activeElement)) activeMenu.trigger.focus();
+    closeMenu();
   });
 
   // A fixed panel doesn't follow page scroll -- closing on any scroll
@@ -1136,8 +1259,18 @@ document.addEventListener("submit", (event) => {
         e.preventDefault(); // keep the wrapping status-card <a> from navigating
         e.stopPropagation();
         if (activeMenu === menu) closeMenu();
-        else showMenu(menu);
+        else {
+          showMenu(menu);
+          // A keyboard press (detail 0) puts focus on the first item, so the arrows work at once.
+          if (e.detail === 0) panel.querySelector(".action-menu-item")?.focus();
+        }
       }, true);
+      trigger.addEventListener("keydown", (e) => {
+        if (e.key !== "ArrowDown" || activeMenu === menu) return;
+        e.preventDefault();
+        showMenu(menu);
+        panel.querySelector(".action-menu-item")?.focus();
+      });
 
       panel.addEventListener("keydown", (e) => handleKeydown(e, { trigger, panel }));
 

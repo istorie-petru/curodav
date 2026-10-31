@@ -573,6 +573,7 @@ try {
     const trigger = document.createElement("button");
     trigger.type = "button";
     trigger.className = "multiselect-trigger ms-trigger";
+    trigger.setAttribute("aria-label", "Repeats");
     trigger.setAttribute("aria-haspopup", "true");
     trigger.setAttribute("aria-expanded", "false");
     const summary = document.createElement("span");
@@ -616,6 +617,7 @@ try {
     const endsTrigger = document.createElement("button");
     endsTrigger.type = "button";
     endsTrigger.className = "multiselect-trigger ms-trigger";
+    endsTrigger.setAttribute("aria-label", "Ends");
     endsTrigger.setAttribute("aria-haspopup", "true");
     endsTrigger.setAttribute("aria-expanded", "false");
     const endsSummary = document.createElement("span");
@@ -909,6 +911,7 @@ try {
     const trigger = document.createElement("button");
     trigger.type = "button";
     trigger.className = "multiselect-trigger ms-trigger";
+    trigger.setAttribute("aria-label", "Reminders");
     trigger.setAttribute("aria-haspopup", "true");
     trigger.setAttribute("aria-expanded", "false");
     trigger.innerHTML =
@@ -1375,6 +1378,8 @@ try {
       e.stopPropagation(); // not the modal underneath
       return close(true);
     }
+    // Tab leaves through the field, so the browser moves on to the next one (the panel lives outside the modal).
+    if (e.key === "Tab") return close(true);
     const day = e.target.closest && e.target.closest(".dtf-day");
     if (day) {
       const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
@@ -1399,6 +1404,10 @@ try {
       e.preventDefault();
       const n = e.key === "ArrowDown" ? t.nextElementSibling : t.previousElementSibling;
       if (n) n.focus();
+    } else if (t && (e.key === "Home" || e.key === "End")) {
+      e.preventDefault();
+      const all = t.parentElement.querySelectorAll(".dtf-opt");
+      (e.key === "Home" ? all[0] : all[all.length - 1]).focus();
     }
   }
 
@@ -2206,6 +2215,37 @@ try {
     input.files = files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
+  // The upload input (_inputs.html): the box shows the chosen file's name and a clear button. Clearing a stored
+  // file sets the hidden remove field, so Save drops it.
+  document.addEventListener("change", function (e) {
+    var input = e.target;
+    if (!input.matches || !input.matches('[data-upload-input] input[type="file"]')) return;
+    var root = input.closest("[data-upload-input]");
+    var value = root.querySelector("[data-upload-value]");
+    var names = Array.prototype.map.call(input.files || [], function (f) { return f.name; });
+    if (value) value.textContent = names.length ? names.join(", ") : value.getAttribute("data-empty");
+    var clear = root.querySelector("[data-upload-clear]");
+    if (clear) clear.hidden = !names.length && !root.hasAttribute("data-upload-stored");
+    var remove = root.querySelector("[data-upload-remove]");
+    if (remove && names.length) remove.value = "";
+  });
+  document.addEventListener("click", function (e) {
+    var clear = e.target.closest && e.target.closest("[data-upload-clear]");
+    if (!clear) return;
+    var root = clear.closest("[data-upload-input]");
+    var input = root.querySelector('input[type="file"]');
+    var value = root.querySelector("[data-upload-value]");
+    var remove = root.querySelector("[data-upload-remove]");
+    if (input) input.value = "";
+    if (value) value.textContent = value.getAttribute("data-empty");
+    if (remove) remove.value = "1";
+    root.removeAttribute("data-upload-stored");
+    clear.hidden = true;
+    if (input) {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      input.focus();
+    }
+  });
   // Edit on a stored image: re-open the crop editor on it. Apply fills the
   // zone's input and the upload form submits itself (data-autosubmit).
   document.addEventListener("click", function (e) {
@@ -2425,22 +2465,10 @@ try {
     ["edition", "year", "publisher", "place", "isbn", "doi", "url"].forEach(function (k) { setField(scope, "ed_" + k, e[k]); });
     var file = scope.querySelector('input[type="file"]');
     if (file) file.value = "";
-    var zone = scope.querySelector(".upload-zone-label");
-    if (zone) zone.textContent = e.source === "local" ? "Replace the PDF" : "Choose or drop a PDF";
-    var state = scope.querySelector("[data-edition-file-state]");
-    if (state) {
-      state.textContent = "";
-      if (e.source === "local" && e.file_state === "ok") {
-        var a = document.createElement("a");
-        a.href = "/library/editions/" + e.uid + "/file";
-        a.target = "_blank";
-        a.rel = "noopener";
-        a.textContent = e.file_label;
-        state.append("Stored: ", a);
-      } else if (e.source === "local") {
-        state.textContent = 'The stored PDF "' + e.file_label + '" is missing from the disk. Drop it again to restore it.';
-      }
-    }
+    var value = scope.querySelector("[data-upload-value]");
+    if (value) value.textContent = e.source === "local" && e.file_state === "ok" ? e.file_label : value.dataset.empty;
+    var open = scope.querySelector("[data-upload-input] a.icon-btn");
+    if (open) open.hidden = !(e.source === "local" && e.file_state === "ok");
     var del = scope.querySelector("[data-edition-delete]");
     if (del) {
       del.hidden = !e.uid;
@@ -2459,9 +2487,6 @@ try {
     } else if (t.matches('input[name="ed_source"]')) {
       var scope2 = root(t);
       if (scope2) showSource(scope2, t.value);
-    } else if (t.matches(".edition-file-input")) {
-      var label = t.closest(".upload-zone").querySelector(".upload-zone-label");
-      if (label && t.files && t.files.length) label.textContent = t.files[0].name;
     }
   });
 })();
@@ -3909,7 +3934,7 @@ try {
 
   function placeNext() {
     const side = document.querySelector(".qa-next");
-    const split = side && side.closest(".qa-split");
+    const split = side && side.closest(".modal-split");
     if (!side || !split) return;
     const title = PHONE.matches && document.querySelector(".quick-add-panel.is-active input[data-qa-search]");
     const anchor = title && title.closest(".field");

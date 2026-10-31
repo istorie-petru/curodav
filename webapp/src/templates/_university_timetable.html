@@ -1,0 +1,27 @@
+{# The weekly timetable of the semester, drawn with the calendar's own grid and event blocks. `schedule` comes from study_page.schedule; with
+   editing, each empty hour is a link that adds a class at that hour. #}
+<div class="card calendar-viewport uni-timetable">
+<div class="time-grid-wrap">
+    <div class="time-grid-head week" data-style="grid-template-columns:repeat({{ schedule.days|length }},1fr)">
+        {% for d in schedule.days %}<div class="thd"><span class="thd-dow">{{ d.label }}</span></div>{% endfor %}
+    </div>
+    <div class="time-grid-body" data-style="height:{{ schedule.height }}px">
+        <div class="time-gutter">{% for h in schedule.hours %}<div class="hr-label" data-style="top:{{ h.top }}px">{{ h.hour | fmt_hour }}</div>{% endfor %}</div>
+        <div class="time-cols week" data-style="grid-template-columns:repeat({{ schedule.days|length }},1fr)">
+            {% for d in schedule.days %}
+            <div class="time-col">
+                {% for c in d.cells %}<a class="uni-hour" href="{{ c.url }}" data-modal aria-label="{{ c.label }}" title="{{ c.label }}" data-style="top:{{ c.top }}px; height:{{ schedule.cell_height }}px"></a>{% endfor %}
+                {% for b in d.blocks %}
+                <a class="week-event is-translucent uni-class cal-{{ b.color }}" href="{{ b.url }}"{% if b.modal %} data-modal{% endif %}
+                   title="{{ b.discipline }}, {{ b.kind_label|lower }} {{ b.start }} to {{ b.end }}{% if b.room %}, {{ b.room }}{% endif %}{% if b.weeks != 'all' %}, {{ b.weeks }} weeks{% endif %}"
+                   data-style="top:{{ b.top }}px; height:{{ b.height }}px; left:{{ b.left }}%; width:{{ b.width }}%;">
+                    <span class="we-name">{{ b.short }}</span><span class="we-room">{{ b.start }}{% if b.room %} {{ b.room }}{% endif %}</span>
+                </a>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% if schedule.has_parity %}<div class="card-footer uni-timetable-note">Left half odd weeks, right half even weeks</div>{% endif %}
+</div>

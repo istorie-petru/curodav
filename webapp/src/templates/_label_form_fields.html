@@ -28,7 +28,7 @@
         <input type="hidden" name="tag_idx" value="{{ i }}">
         <input type="hidden" name="tag_old_{{ i }}" value="{{ t.name if t else '' }}">
         <input type="hidden" name="tag_del_{{ i }}" value="">
-        <div class="label-tag-name">{{ text_input({'name': 'tag_name_' ~ i, 'value': t.name if t else '', 'placeholder': 'Tag name', 'aria-label': 'Tag name', 'form': 'label-form'}) }}</div>
+        <div class="label-tag-name">{{ text_input({'name': 'tag_name_' ~ i, 'value': t.name if t else '', 'aria-label': 'Tag name', 'form': 'label-form'}) }}</div>
         {{ look_picker('look-tag-' ~ i, 'label-form', t.color if t else (p.color if p else 'blue'), t.icon if t else (p.icon if p else none), colors, icon_groups, color_field='tag_color_' ~ i, icon_field='tag_icon_' ~ i, no_icon_label='No icon', default_icon='tag', label='', wide=false, extra_class='label-tag-look') }}
         <button type="button" class="icon-btn" data-tag-remove title="Remove tag" aria-label="Remove tag">{{ icon('x', 'icon-sm') }}</button>
     </div>

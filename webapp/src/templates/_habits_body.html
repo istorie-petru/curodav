@@ -26,7 +26,7 @@
     </section>
     {% endif %}
 {% else %}
-{% call empty_state('No habits yet', 'repeat', 'A habit is something you want to do on a schedule: daily, a few times a week, or on set days.') %}
+{% call empty_state('No habits yet', 'repeat') %}
 <a class="btn primary" href="/tasks/new?habit=1" data-modal>{{ icon('plus') }} New habit</a>
 {% endcall %}
 {% endif %}

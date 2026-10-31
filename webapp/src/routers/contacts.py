@@ -121,7 +121,7 @@ def _with_contact_project(conn, tags: list[str], project, project_field) -> list
     return db.apply_project_choice(conn, tags, project)
 
 
-def _parse_birthday_field(birthday: str) -> str | None:
+def _parse_birthday_field(birthday: str, yearless: str = "") -> str | None:
     """single-project-per-task) already
         uses. A blank field is "no birthday," not an error -- same as every
         other optional contact field on this router.
@@ -129,6 +129,8 @@ def _parse_birthday_field(birthday: str) -> str | None:
     v = (birthday or "").strip()
     if not v:
         return None
+    if yearless == "1" and len(v) == 10:
+        v = f"--{v[5:]}"
     try:
         return db.parse_contact_birthday(v)
     except ValueError as exc:
@@ -193,9 +195,10 @@ def _social_profile_list(types: list[str], values: list[str]) -> list[dict]:
 
 
 def _contacts_list_context(
-    conn, request: Request, q: str | None, tags: list[str], filtered: bool, show: str = ""
+    conn, request: Request, q: str | None, tags: list[str], filtered: bool, show: str = "", group: str = ""
 ) -> dict:
     show = show if show in ("archived", "all") else ""
+    group = group if group in ("shelf", "org") else ""
     show_archived = bool(show)
     contacts = [_attach_photo_url(c) for c in db.list_contacts(conn, q=q, include_archived=show_archived)]
     if show == "archived":
@@ -221,7 +224,9 @@ def _contacts_list_context(
         "request": request,
         "active_tab": "contacts",
         "contacts": contacts,
-        "contact_groups": _group_contacts_by_label(contacts, {cfg["name"] for cfg in db.list_project_labels(conn)}),
+        "contact_groups": _group_contacts(contacts, group, {cfg["name"] for cfg in db.list_project_labels(conn)}),
+        "group": group,
+        "group_mode": group,
         "q": q or "",
         "contact_tags": all_tags,
         "contact_filter_items": filter_items,
@@ -234,6 +239,25 @@ def _contacts_list_context(
         # whenever that's the real reason the list is empty.
         "contacts_filter_active": bool(q) or filtered or len(contacts) != total_before_filtering,
     }
+
+
+def _group_contacts(contacts: list[dict], mode: str = "", project_names: set[str] | None = None) -> list[dict]:
+    """The list's sections: first letters by default, or one per shelf or organization. A contact sits in exactly one section."""
+    if mode == "shelf":
+        return _group_contacts_by_label(contacts, project_names)
+    ordered = sorted(contacts, key=lambda c: (c.get("full_name") or "").lower())
+    buckets: dict[str, list[dict]] = {}
+    for c in ordered:
+        if mode == "org":
+            key = (c.get("org") or "").strip()
+        else:
+            first = (c.get("full_name") or "").strip()[:1].upper()
+            key = first if first.isalpha() else "#"
+        buckets.setdefault(key, []).append(c)
+    groups = [{"name": k, "contacts": buckets[k]} for k in sorted(buckets, key=str.lower) if k]
+    if mode == "org" and "" in buckets:
+        groups.append({"name": None, "contacts": buckets[""]})
+    return groups
 
 
 def _group_contacts_by_label(contacts: list[dict], project_names: set[str] | None = None) -> list[dict]:
@@ -270,12 +294,13 @@ def list_contacts(
     tag: list[str] = Query([]),
     archived: str = "",
     show: str = "",
+    group: str = "",
     conn=Depends(get_db),
 ):
     filtered = "contacts_filtered" in request.query_params
     return templates.TemplateResponse(
         "contacts_list.html",
-        _contacts_list_context(conn, request, q, tag, filtered, show="all" if archived == "1" else show),
+        _contacts_list_context(conn, request, q, tag, filtered, show="all" if archived == "1" else show, group=group),
     )
 
 
@@ -349,6 +374,7 @@ def contacts_regions(
     tag: list[str] = Query([]),
     archived: str = "",
     show: str = "",
+    group: str = "",
     conn=Depends(get_db),
 ):
     """Async-CRUD region fragment (features/async-crud.md): renders the
@@ -359,7 +385,7 @@ def contacts_regions(
     if region != "list":
         return JSONResponse({"error": f"unknown region '{region}'"}, status_code=400)
     filtered = "contacts_filtered" in request.query_params
-    ctx = _contacts_list_context(conn, request, q, tag, filtered, show="all" if archived == "1" else show)
+    ctx = _contacts_list_context(conn, request, q, tag, filtered, show="all" if archived == "1" else show, group=group)
     html = templates.env.get_template("_contacts_body.html").render(ctx)
     return HTMLResponse(html)
 
@@ -434,6 +460,7 @@ async def create_contact(
     social_type: list[str] = Form([]),
     social_value: list[str] = Form([]),
     birthday: str = Form(""),
+    birthday_yearless: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     tags_labels_new: str = Form(""),
@@ -450,7 +477,7 @@ async def create_contact(
     if item_tags_field == "1":
         tags_labels = tag_store.labels_of(conn, item_tags[:1])
     resolved_tags = _with_contact_project(conn, _resolve_contact_label(tags, tags_labels, tags_labels_new), project, project_field)
-    birthday_value = _parse_birthday_field(birthday)
+    birthday_value = _parse_birthday_field(birthday, birthday_yearless if isinstance(birthday_yearless, str) else "")
     photo_result = await _read_photo(photo)
     photo_b64, photo_type = photo_result if photo_result else (None, None)
     uid = str(uuid.uuid4())
@@ -602,6 +629,7 @@ async def update_contact(
     social_type: list[str] = Form([]),
     social_value: list[str] = Form([]),
     birthday: str = Form(""),
+    birthday_yearless: str = Form(""),
     tags: str = Form(""),
     tags_labels: list[str] = Form([]),
     tags_labels_new: str = Form(""),
@@ -618,7 +646,7 @@ async def update_contact(
     if item_tags_field == "1":
         tags_labels = tag_store.labels_of(conn, item_tags[:1])
     resolved_tags = _with_contact_project(conn, _resolve_contact_label(tags, tags_labels, tags_labels_new), project, project_field)
-    birthday_value = _parse_birthday_field(birthday)
+    birthday_value = _parse_birthday_field(birthday, birthday_yearless if isinstance(birthday_yearless, str) else "")
     existing = db.get_contact(conn, uid) or {}
     is_draft = bool(existing.get("is_draft"))
     row = dict(existing)

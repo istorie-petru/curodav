@@ -1,72 +1,194 @@
 {% extends "base.html" %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_empty_state.html" import empty_state %}
+{% from "_widget_items.html" import widget_pill, icon_pill %}
+{% from "_label_pill.html" import tag_pill %}
+{% from "_action_menu.html" import action_menu %}
 {% block title %}{{ name }}{% endblock %}
+{% macro discipline_pill(look) %}{{ tag_pill(look, href='/groups/' ~ enc ~ '/disciplines/' ~ (look.name|urlencode)) }}{% endmacro %}
+{% macro when_pill(days, day) %}{{ widget_pill(day|relative_date if days is not none and (days < 0 or days > 14) else ('Today' if days == 0 else ('Tmw' if days == 1 else 'In ' ~ days ~ ' days')), 'red' if days is not none and days <= 2 else 'gray') }}{% endmacro %}
+{% macro met_pill(value) %}{% if value is sameas true %}{{ widget_pill('Can sit', 'green') }}{% elif value is sameas false %}{{ widget_pill('Conditions not met', 'red') }}{% endif %}{% endmacro %}
 {% block content %}
 {% call page_header_narrow(name, label.icon or 'graduation-cap', icon_color=label.color, views=views) %}{% endcall %}
 {% include "_flash.html" %}
 {% if not semester %}
-<div class="card">{% call empty_state('No semester set up', 'graduation-cap', 'Describe a semester in the University settings.') %}<a class="btn primary" href="/settings/university">Open University settings</a>{% endcall %}</div>
+<div class="card">{% call empty_state('No semester set up', 'graduation-cap') %}<a class="btn primary" href="/settings/university">{{ icon('plus') }} Set up a semester</a>{% endcall %}</div>
+
 {% elif view == 'disciplines' %}
-<div class="study-page">
 {% if cards %}
-<div class="uni-cards">
+<div class="card-grid uni-cards">
     {% for c in cards %}
     <a class="uni-card" href="{{ c.url }}" data-style="--blk:var(--cal-accent-{{ c.color }})">
-        <span class="uni-card-badge">{{ icon(c.icon, 'icon-sm') }}</span>
-        <span class="uni-card-title"><b>{{ c.name }}</b>{% if c.exam %}<small>{{ c.exam }}</small>{% endif %}{% if c.missing %}<small>{{ c.missing }}</small>{% endif %}</span>
+        {{ icon_pill(c.color, c.icon) }}
+        <span class="uni-card-title"><b>{{ c.name }}</b>{% if c.line %}<span>{{ c.line }}</span>{% endif %}</span>
     </a>
     {% endfor %}
 </div>
 {% else %}
-<div class="card">{% call empty_state('No disciplines yet', 'book-open', 'Add the disciplines of this semester.') %}<a href="/settings/university/discipline/new" data-modal class="btn primary">{{ icon('plus') }} Add a discipline</a>{% endcall %}</div>
+<div class="card">{% call empty_state('No disciplines yet', 'book-open') %}<a href="/settings/university" class="btn primary">{{ icon('plus') }} Add disciplines</a>{% endcall %}</div>
 {% endif %}
-</div>
-{% else %}
-<div class="study-page">
-<div class="uni-widgets">
-    <section class="uni-widget"><div class="uni-widget-label">Next examination</div>
-        {% if widgets.exam %}<a class="uni-widget-big" href="{{ widgets.exam.url }}" data-modal>{{ widgets.exam.title }}</a><div class="uni-widget-small">{{ widgets.exam.short }}, {{ widgets.exam.when }}</div>
-        {% else %}<div class="uni-widget-big is-none">None planned</div>{% endif %}</section>
-    <section class="uni-widget"><div class="uni-widget-label">Homework</div>
-        {% for h in widgets.homework %}{% if loop.first %}<a class="uni-widget-big" href="{{ h.url }}" data-modal>{{ h.title }}</a><div class="uni-widget-small">{{ h.short }}, {{ h.when }}</div>
-        {% else %}<a class="uni-widget-next" href="{{ h.url }}" data-modal>{{ h.title }} <span>{{ h.short }}, {{ h.when }}</span></a>{% endif %}
-        {% else %}<div class="uni-widget-big is-none">Nothing due</div>{% endfor %}</section>
-    <section class="uni-widget"><div class="uni-widget-label">Tasks</div>
-        {% for t in widgets.tasks %}{% if loop.first %}<a class="uni-widget-big" href="{{ t.url }}" data-modal>{{ t.title }}</a><div class="uni-widget-small">{{ t.short }}, {{ t.when }}</div>
-        {% else %}<a class="uni-widget-next" href="{{ t.url }}" data-modal>{{ t.title }} <span>{{ t.short }}, {{ t.when }}</span></a>{% endif %}
-        {% else %}<div class="uni-widget-big is-none">Nothing due</div>{% endfor %}</section>
-    <section class="uni-widget"><div class="uni-widget-label">Semester</div>
-        <div class="uni-widget-big">{{ widgets.left.big }}</div><div class="uni-widget-small">{{ widgets.left.small }}</div>
-        <div class="uni-progress"><span data-style="width:{{ widgets.left.percent }}%"></span></div></section>
-</div>
-{% if schedule.empty %}
-<div class="card">{% call empty_state('No timetable yet', 'clock', 'Add the weekly classes of a discipline.') %}<a class="btn primary" href="{{ '/groups/' ~ enc ~ '?view=disciplines' }}">Open the disciplines</a>{% endcall %}</div>
-{% else %}
-<div class="card study-grid">
-    <div class="study-grid-head"><span class="study-gutter"></span>{% for d in schedule.days %}<span class="study-col-head">{{ d.label }}</span>{% endfor %}</div>
-    <div class="study-grid-body" data-style="--hr-h:48px; --cols:{{ schedule.days|length }}">
-        <div class="study-gutter">{% for h in schedule.hours %}<span class="study-hour">{{ '%02d' % h }}:00</span>{% endfor %}</div>
-        {% for d in schedule.days %}
-        <div class="study-col" data-style="height:calc({{ schedule.hours|length }} * var(--hr-h))">
-            {% for h in schedule.hours %}<span class="study-line" data-style="top:calc({{ loop.index0 }} * var(--hr-h))"></span>{% endfor %}
-            {% for b in d.blocks %}
-            <a class="study-block" href="{{ b.url }}" title="{{ b.discipline }}, {{ b.kind_label|lower }}{% if b.weeks != 'all' %}, {{ b.weeks }} weeks{% endif %}"
-               data-style="top:{{ b.top }}%;height:{{ b.height }}%;left:{{ b.left }}%;width:{{ b.width }}%;--blk:var(--cal-accent-{{ b.color }})">
-                <b>{{ b.short }}</b><span>{{ b.start }}{% if b.room %} {{ b.room }}{% endif %}</span></a>
-            {% endfor %}
-        </div>
+
+{% elif view == 'exams' %}
+{% if exams.finals %}
+<p class="ov-line">{% for f in exams.finals %}<span>{{ f.look.name }}: {% if f.final is not none %}{{ '%g'|format(f.final) }}{% if f.passed is sameas false %}, not passed{% endif %}{% elif f.so_far is not none %}{{ '%g'|format(f.so_far) }} so far{% else %}no grade yet{% endif %}</span>{% endfor %}</p>
+{% endif %}
+{% if exams.count %}
+<div class="card table-scroll table-responsive">
+    <table class="entity-table uni-exams">
+        <thead><tr><th>When</th><th>Discipline</th><th>Evaluation</th><th class="col-opt-1">Weight</th><th class="col-opt-1">Conditions</th><th class="col-actions">Actions</th></tr></thead>
+        {% for g in exams.groups %}
+        <tbody><tr class="uni-group-row"><th colspan="6">{{ g.label }}</th></tr>
+        {% for m in g.rows %}
+        <tr><td class="uni-nowrap">{{ m.date|short_day }}{% if m.start %}, {{ m.start }}{% endif %} {{ when_pill(m.days_left, m.date) }}</td>
+            <td>{{ discipline_pill(m.look) }}</td>
+            <td>{% if m.item_url %}<a href="{{ m.item_url }}" data-modal>{{ m.title }}</a>{% else %}{{ m.title }}{% endif %}{% if m.way and m.way != m.title %} <span class="text-muted">{{ m.way }}</span>{% endif %}{% if m.location %} <span class="text-muted">{{ m.location }}</span>{% endif %}</td>
+            <td class="col-opt-1">{{ ('%g'|format(m.weight) ~ '%') if m.weight is not none else '' }}</td>
+            <td class="col-opt-1">{{ met_pill(m.eligible) }}</td>
+            <td class="col-actions"><a href="{{ m.url }}" data-modal class="icon-btn" title="Edit" aria-label="Edit">{{ icon('edit', 'icon-sm') }}</a></td></tr>
+        {% endfor %}</tbody>
         {% endfor %}
-    </div>
-    {% if schedule.has_parity %}<div class="study-grid-note">Left half: odd weeks. Right half: even weeks.</div>{% endif %}
+        {% if exams.undated %}<tbody><tr class="uni-group-row"><th colspan="6">No date yet</th></tr>
+        {% for m in exams.undated %}<tr><td>None</td><td>{{ discipline_pill(m.look) }}</td><td>{{ m.title }}</td><td class="col-opt-1">{{ ('%g'|format(m.weight) ~ '%') if m.weight is not none else '' }}</td><td class="col-opt-1">{{ met_pill(m.eligible) }}</td>
+            <td class="col-actions"><a href="{{ m.url }}" data-modal class="icon-btn" title="Edit" aria-label="Edit">{{ icon('edit', 'icon-sm') }}</a></td></tr>{% endfor %}</tbody>{% endif %}
+        {% if exams.past %}<tbody><tr class="uni-group-row"><th colspan="6">Past</th></tr>
+        {% for m in exams.past %}<tr class="uni-past"><td class="uni-nowrap">{{ m.date|short_day }}</td><td>{{ discipline_pill(m.look) }}</td><td>{{ m.title }}</td><td class="col-opt-1">{{ ('%g'|format(m.weight) ~ '%') if m.weight is not none else '' }}</td>
+            <td class="col-opt-1">{% if m.grade is not none %}{{ widget_pill('%g'|format(m.grade), 'blue') }}{% endif %}</td>
+            <td class="col-actions"><a href="{{ m.url }}" data-modal class="icon-btn" title="Edit" aria-label="Edit">{{ icon('edit', 'icon-sm') }}</a></td></tr>{% endfor %}</tbody>{% endif %}
+    </table>
 </div>
-<div class="study-week-list">
-    {% for d in schedule.days if d.blocks %}
-    <section class="uni-widget"><div class="uni-widget-label">{{ d.label }}</div>
-        {% for b in d.blocks %}<a class="uni-widget-next" href="{{ b.url }}">{{ b.short }} <span>{{ b.start }} to {{ b.end }}{% if b.room %}, {{ b.room }}{% endif %}{% if b.weeks != 'all' %}, {{ b.weeks }} weeks{% endif %}</span></a>{% endfor %}</section>
-    {% endfor %}
-</div>
+{% else %}
+<div class="card">{% call empty_state('No exams yet', 'file-check') %}{% endcall %}</div>
 {% endif %}
+
+{% elif view == 'attendance' %}
+{% if attendance %}
+<div class="card table-scroll table-responsive">
+    <table class="entity-table">
+        <thead><tr><th>Discipline</th><th>Classes</th><th>Held</th><th>Missed</th><th>Allowed</th><th>Left</th></tr></thead>
+        <tbody>
+        {% for a in attendance %}{% for k in a.kinds %}
+        <tr><td>{% if loop.first %}{{ discipline_pill(a.discipline) }}{% endif %}</td><td>{{ k.label }}</td><td>{{ k.held }} of {{ k.total }}</td><td>{{ k.missed }}</td>
+            <td>{{ k.limit if k.limit is not none else 'No limit' }}</td>
+            <td>{% if k.left is not none %}{{ widget_pill(k.left if not k.over else 'Over by ' ~ (0 - k.left), 'red' if k.over else ('orange' if k.at_risk else 'green')) }}{% endif %}</td></tr>
+        {% endfor %}{% endfor %}
+        </tbody>
+    </table>
+</div>
+<div class="card table-scroll table-responsive">
+    <div class="card-title widget-header"><h2>Missed classes</h2></div>
+    {% if missed %}
+    <table class="entity-table">
+        <thead><tr><th>Date</th><th>Discipline</th><th>Class</th><th class="col-opt-1">Note</th><th class="col-actions">Actions</th></tr></thead>
+        <tbody>
+        {% for c in missed %}
+        <tr><td class="uni-nowrap">{{ c.date|short_day }}, {{ c.start }}</td><td>{{ discipline_pill(c.look) }}</td><td>{{ c.kind_label }} {{ c.number }}</td><td class="col-opt-1">{{ c.note }}</td>
+            <td class="col-actions">{{ action_menu([
+                {'form_action': '/university/class/' ~ c.uid ~ '/attendance', 'fields': {'status': 'made_up', 'back': 'semester', 'keep_note': '1'}, 'icon': 'rotate-ccw', 'label': 'Made up'},
+                {'form_action': '/university/class/' ~ c.uid ~ '/attendance', 'fields': {'status': 'excused', 'back': 'semester', 'keep_note': '1'}, 'icon': 'file-check', 'label': 'Excused'},
+                {'form_action': '/university/class/' ~ c.uid ~ '/attendance', 'fields': {'status': 'attended', 'back': 'semester', 'keep_note': '1'}, 'icon': 'check', 'label': 'Attended'},
+                {'href': '/university/class/' ~ c.uid ~ '/attendance?back=semester', 'icon': 'edit', 'label': 'Add a note', 'modal': true}], 'Attendance') }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}{{ empty_state('No missed classes', size='compact') }}{% endif %}
+</div>
+{% else %}
+<div class="card">{% call empty_state('No classes yet', 'calendar') %}<a href="/settings/university" class="btn primary">{{ icon('plus') }} Add the timetable</a>{% endcall %}</div>
+{% endif %}
+
+{% elif view == 'work' %}
+{% if work %}
+<div class="card table-scroll table-responsive">
+    <table class="entity-table">
+        <thead><tr><th>Title</th><th>Discipline</th><th class="col-opt-1">Kind</th><th>Due</th><th class="col-actions">Actions</th></tr></thead>
+        <tbody>
+        {% for w in work %}
+        <tr><td><a href="{{ w.url }}" data-modal>{{ w.title }}</a></td><td>{{ discipline_pill(w.look) }}</td><td class="col-opt-1">{{ w.kind }}</td>
+            <td class="uni-nowrap">{% if w.due %}{{ widget_pill(('Overdue · ' if w.overdue else '') ~ (w.due|relative_date), 'red' if w.overdue else 'gray') }}{% else %}None{% endif %}</td>
+            <td class="col-actions"><a href="{{ w.url }}" data-modal class="icon-btn" title="Edit" aria-label="Edit">{{ icon('edit', 'icon-sm') }}</a></td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card">{% call empty_state('Nothing due', 'check-square') %}{% endcall %}</div>
+{% endif %}
+
+{% else %}
+{% set s = summary %}
+<p class="ov-line">
+    {% if s.week %}<span>Week {{ s.week }} of {{ s.weeks }}, {{ s.parity }}</span>{% endif %}
+    {% if s.left %}<span>{{ s.left|capitalize }}</span>{% endif %}
+    {% if exams_this_fortnight %}<span>{{ exams_this_fortnight }} exam{{ 's' if exams_this_fortnight != 1 }} in the next two weeks</span>{% endif %}
+    {% if over %}<span class="is-overdue">{{ over }} over the absence limit</span>{% endif %}
+    {% if s.credits_target %}<span>{{ '%g'|format(s.credits) }} of {{ '%g'|format(s.credits_target) }} credits</span>{% elif s.credits %}<span>{{ '%g'|format(s.credits) }} credits</span>{% endif %}
+</p>
+{% if s.percent is not none %}<div class="ov-progress" role="progressbar" aria-label="Semester progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ s.percent }}"><span class="ov-progress-fill" data-style="width:{{ s.percent }}%"></span></div>{% endif %}
+
+{% if next_classes or exams_soon or due %}
+<section class="ov-next">
+    <h2 class="ov-heading">Next</h2>
+    <div class="ov-next-row">
+        {% for c in next_classes[:2] %}
+        {% set look = (disciplines | selectattr('name', 'equalto', c.discipline) | first) or {'color': 'gray', 'icon': 'book-open'} %}
+        <a class="ov-next-item" href="/events/{{ c.event.uid }}" data-modal>{{ icon_pill(look.color, look.icon or 'book-open') }}
+            <span class="ov-next-title">{{ c.discipline }} {{ c.kind_label|lower }}</span><span class="ov-next-when">{{ c.event.start_at[:10]|relative_date }} {{ c.event.start_at|fmt_time }}</span></a>
+        {% endfor %}
+        {% if exams_soon %}{% set m = exams_soon[0] %}
+        <a class="ov-next-item" href="{{ m.item_url or m.url }}" data-modal>{{ icon_pill(m.look.color, 'file-check') }}
+            <span class="ov-next-title">{{ m.title }}</span><span class="ov-next-when">{{ m.date|relative_date }}</span></a>
+        {% endif %}
+        {% if due %}{% set w = due[0] %}
+        <a class="ov-next-item" href="{{ w.url }}" data-modal>{{ icon_pill(w.look.color, 'check-square') }}
+            <span class="ov-next-title">{{ w.title }}</span><span class="ov-next-when">{{ w.due|relative_date if w.due else 'No date' }}</span></a>
+        {% endif %}
+    </div>
+</section>
+{% endif %}
+
+{% if schedule.empty %}
+<div class="card">{% call empty_state('No timetable yet', 'clock') %}<a class="btn primary" href="/settings/university">{{ icon('plus') }} Add the timetable</a>{% endcall %}</div>
+{% else %}
+{% include "_university_timetable.html" %}
+{% endif %}
+
+<div class="sec-grid ov-grid">
+    <div class="sec-col">
+        <section class="ov-section">
+            <h2 class="ov-heading">Exams <span class="ov-count">{{ exams_soon|length }}</span></h2>
+            {% for m in exams_soon %}
+            <div class="sec-row"><span class="sec-lead">{{ icon_pill(m.look.color, m.look.icon or 'file-check') }}</span>
+                <a class="sec-title" href="{{ m.item_url or m.url }}" data-modal>{{ m.title }}</a><span class="sec-pills">{{ when_pill(m.days_left, m.date) }}</span></div>
+            {% else %}{{ empty_state('No exams coming', size='compact') }}{% endfor %}
+        </section>
+        <section class="ov-section">
+            <h2 class="ov-heading">Due <span class="ov-count">{{ due|length }}</span></h2>
+            {% for w in due %}
+            <div class="sec-row"><span class="sec-lead">{{ icon_pill(w.look.color, 'check-square') }}</span>
+                <a class="sec-title" href="{{ w.url }}" data-modal>{{ w.title }}</a><span class="sec-pills">{% if w.due %}{{ widget_pill(('Overdue · ' if w.overdue else '') ~ (w.due|relative_date), 'red' if w.overdue else 'gray') }}{% endif %}</span></div>
+            {% else %}{{ empty_state('Nothing due', size='compact') }}{% endfor %}
+        </section>
+    </div>
+    <div class="sec-col">
+        <section class="ov-section">
+            <h2 class="ov-heading">Absences</h2>
+            {% for a in absences %}
+            <div class="sec-row"><span class="sec-lead">{{ icon_pill(a.look.color, a.look.icon or 'book-open') }}</span>
+                <a class="sec-title" href="/groups/{{ enc }}/disciplines/{{ a.look.name|urlencode }}?view=attendance">{{ a.look.name }} {{ a.label|lower }}</a>
+                <span class="sec-pills">{{ widget_pill(('Over by ' ~ (0 - a.left)) if a.over else (a.left ~ ' left'), 'red' if a.over else ('orange' if a.at_risk else 'gray')) }}</span></div>
+            {% else %}{{ empty_state('No absence limits set', size='compact') }}{% endfor %}
+        </section>
+        {% if missed %}
+        <section class="ov-section">
+            <h2 class="ov-heading">Missed</h2>
+            {% for c in missed %}
+            <div class="sec-row"><span class="sec-lead">{{ icon_pill(c.look.color, c.look.icon or 'book-open') }}</span>
+                <a class="sec-title" href="/university/class/{{ c.uid }}/attendance?back=semester" data-modal>{{ c.look.name }} {{ c.kind_label|lower }} {{ c.number }}</a>
+                <span class="sec-pills">{{ widget_pill(c.date|relative_date, 'gray') }}</span></div>
+            {% endfor %}
+        </section>
+        {% endif %}
+    </div>
 </div>
 {% endif %}
 {% endblock %}

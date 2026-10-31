@@ -247,8 +247,11 @@
     openConfirm = null;
   }
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && openConfirm) closeConfirm();
-  });
+    if (e.key !== "Escape" || !openConfirm || !openConfirm.isAlive()) return;
+    // The confirm is the innermost thing open, so Esc closes it alone.
+    e.stopImmediatePropagation();
+    closeConfirm();
+  }, true);
 
   function ccConfirmSheet({ anchor, message, confirmLabel = "Delete", onConfirm, typedConfirm }) {
     closeConfirm();
@@ -280,6 +283,7 @@
 
   window.ccToast = ccToast;
   window.ccConfirmSheet = ccConfirmSheet;
+  window.ccConfirmOpen = () => !!(openConfirm && openConfirm.isAlive());
   window.ccEmptyState = ccEmptyState;
 
   // A redirect carries its message as ?note= / ?error=; the template renders it

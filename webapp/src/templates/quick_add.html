@@ -1,6 +1,6 @@
 {% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
-{% from "_modal.html" import modal %}
+{% from "_modal.html" import modal, split_start, split_side, split_end %}
 {% block title %}New{% endblock %}
 {% block content %}
 
@@ -26,7 +26,7 @@
 {% set _kinds = [default_tab] if default_tab in ('contact', 'label') else ['task', 'event'] %}
 {% set _kind_meta = {'task': ('Task', 'check-square'), 'event': ('Event', 'calendar'), 'contact': ('Contact', 'user'), 'label': ('Shelf', 'tag')} %}
 {% call modal(kind="form", title=(('New ' ~ _kind_meta[_kinds[0]][0] | lower) if _kinds | length == 1 else 'New'), size="medium", form=default_tab ~ '-form', creating=(true), save_id='quick-add-save', save_icon='check-square') %}
-<div class="qa-split{% if _kinds | length > 1 %} qa-with-side{% endif %}"{% if _kinds | length > 1 %} data-modal-wide{% endif %}>
+{% if _kinds | length > 1 %}{{ split_start('new-item') }}{% endif %}
 <div class="qa-create">
 {% if _kinds | length > 1 %}
 <div class="qa-kinds" role="tablist" aria-label="Type">
@@ -71,11 +71,9 @@
 </div>
 </div>
 {% if _kinds | length > 1 %}
-<aside class="qa-next" aria-label="Coming up and matches">
-    <h2 class="qa-side-title" id="qa-side-title">Coming up</h2>
+{{ split_side('Coming up', title_id='qa-side-title', side_class='qa-next') }}
     <div id="qa-next-list" class="qa-next-list">{% include "_quick_next_rows.html" %}</div>
-</aside>
+{{ split_end() }}
 {% endif %}
-</div>
 {% endcall %}
 {% endblock %}

@@ -31,10 +31,10 @@ def header_views(kind: str, active: str, label: str = "", day: str = "", agenda:
 
 SETTINGS_GROUPS = [
     {"name": "Account", "icon": "user-check", "items": [("Profile", "/settings/your-profile"), ("Notifications", "/settings/notifications")]},
-    {"name": "Preferences", "icon": "sun", "items": [("General", "/settings/general"), ("Appearance", "/settings/appearance")]},
+    {"name": "Preferences", "icon": "sun", "items": [("General", "/settings/general"), ("Defaults", "/settings/defaults"), ("Appearance", "/settings/appearance")]},
     {"name": "Organise", "icon": "tag", "items": [("Shelves", "/settings/labels"), ("Tags", "/settings/tags"), ("Spaces", "/settings/groups")]},
     {"name": "Modules", "icon": "file-text", "items": [("Notebook", "/settings/notebook"), ("Finance", "/settings/finance-accounts"), ("Calendar", "/settings/calendar")]},
-    {"name": "System", "icon": "database", "items": [("Data", "/settings/data-maintenance"), ("Published lists", "/published-lists"), ("Logs", "/settings/logs")]},
+    {"name": "System", "icon": "database", "items": [("Data", "/settings/data-maintenance"), ("Published lists", "/published-lists"), ("Logs", "/settings/logs"), ("API access", "/settings/api-access")]},
 ]
 
 

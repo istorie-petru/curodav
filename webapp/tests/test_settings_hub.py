@@ -131,6 +131,7 @@ class TestSettingsHub:
         urls = {c["url"] for c in resp.context["categories"]}
         assert urls == {
             "/settings/general",
+            "/settings/defaults",
             "/settings/your-profile",
             "/settings/notifications",  # 2026-09-27
             "/settings/appearance",
@@ -142,6 +143,7 @@ class TestSettingsHub:
             "/settings/calendar",
             "/settings/data-maintenance",
             "/settings/logs",
+            "/settings/api-access",
             # "/settings/flairs" was a hub category briefly (2026-09-29) --
             # moved into a modal button on Settings > Appearance the same
             # day (HUB_CATEGORIES' own comment); /settings/flairs itself
@@ -351,8 +353,8 @@ class TestDataAndBackupCategoryRemoved:
         assert resp.status_code == 200
         body = resp.body.decode()
         assert 'action="/export/import/auto"' in body
-        assert "data-dm-dropzone" in body
-        assert "auto-detects type" in body
+        assert "data-upload-zone" in body and "data-dm-file" in body
+        assert "Choose or drop a file" in body
         assert 'name="merge"' in body
 
 

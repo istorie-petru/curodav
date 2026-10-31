@@ -577,7 +577,9 @@ def list_groups(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     groups: dict[str, dict[str, Any]] = {}
     for r in conn.execute("SELECT * FROM label_groups ORDER BY name COLLATE NOCASE").fetchall():
         groups[r["name"].lower()] = {"name": r["name"], "labels": [], "icon": r["icon"] or None,
-                                     "color": r["color"] or "gray", "created_at": r["created_at"]}
+                                     "color": r["color"] or "gray", "created_at": r["created_at"],
+                                     "sidebar_show": r["sidebar_show"] != 0, "sidebar_order": r["sidebar_order"] or 0,
+                                     "sidebar_kind": r["sidebar_kind"] if r["sidebar_kind"] == "tags" else "shelves"}
     rows = conn.execute(
         "SELECT name, label_group FROM label_config WHERE TRIM(COALESCE(label_group, '')) != '' "
         "ORDER BY name COLLATE NOCASE"
@@ -675,6 +677,18 @@ GROUP_DEFAULT_ICON = "layers"
 def set_group_style(conn: sqlite3.Connection, group: str, icon: str | None, color: str | None) -> None:
     ensure_group(conn, group)
     conn.execute("UPDATE label_groups SET icon = ?, color = ? WHERE name = ?", (icon or None, color or "gray", group.strip()))
+    conn.commit()
+
+
+def set_group_sidebar(conn: sqlite3.Connection, group: str, show: bool, order: int, shelves: list[str], kind: str = "shelves") -> None:
+    """A space's sidebar entry: whether it appears, its position among spaces (0 = by name), and which member
+    shelves sit under its chevron (their `sidebar_pin`)."""
+    group = group.strip()
+    conn.execute("UPDATE label_groups SET sidebar_show = ?, sidebar_order = ?, sidebar_kind = ? WHERE name = ?",
+                 (1 if show else 0, max(0, min(int(order or 0), 999)), "tags" if kind == "tags" else "shelves", group))
+    wanted = {s.strip() for s in shelves if s and s.strip()}
+    for name in group_member_names(conn, group):
+        conn.execute("UPDATE label_config SET sidebar_pin = ? WHERE name = ?", (1 if name in wanted else 0, name))
     conn.commit()
 
 

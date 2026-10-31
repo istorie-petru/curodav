@@ -501,6 +501,8 @@ def _group_form_context(conn, request: Request, group: dict | None, copy_of: dic
         "group_default_icon": db.GROUP_DEFAULT_ICON,
         "banner": db.get_page_banner(conn, db.group_page_key(name)) if group else None,
         "page_types": [(k, db.PAGE_TYPE_LABELS[k]) for k in db.PAGE_TYPES],
+        "sidebar": {"show": group.get("sidebar_show", 1) != 0, "order": group.get("sidebar_order") or 0, "kind": group.get("sidebar_kind") or "shelves",
+                    "shelves": [n for n in members if db.effective_label_config(conn, n).get("sidebar_pin")]} if group else None,
         "page_type": db.get_group_page_type(conn, (group or copy_of)["name"]) if (group or copy_of) else "dashboard",
     }
 
@@ -620,6 +622,11 @@ def update_group(
     members: list[str] = Form([]),
     members_submitted: str = Form(""),
     page_type: str = Form(""),
+    sidebar_submitted: str = Form(""),
+    sidebar_show: str = Form(""),
+    sidebar_order: str = Form("0"),
+    sidebar_kind: str = Form("shelves"),
+    sidebar_shelves: list[str] = Form([]),
     request: Request = None,
     conn=Depends(get_db),
 ):
@@ -638,6 +645,11 @@ def update_group(
     if members_submitted:
         db.set_group_members(conn, name, members)
     db.set_group_style(conn, name, icon or None, color)
+    if isinstance(sidebar_submitted, str) and sidebar_submitted:
+        order = sidebar_order.strip() if isinstance(sidebar_order, str) else ""
+        db.set_group_sidebar(conn, name, bool(sidebar_show) and isinstance(sidebar_show, str), int(order) if order.isdigit() else 0,
+                             sidebar_shelves if isinstance(sidebar_shelves, list) else [],
+                             sidebar_kind if isinstance(sidebar_kind, str) else "shelves")
     if isinstance(page_type, str) and page_type:
         db.set_group_page_type(conn, name, page_type)
     final = db.rename_group(conn, name, new_name) if new_name else name

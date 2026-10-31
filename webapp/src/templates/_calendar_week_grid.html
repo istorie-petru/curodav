@@ -86,7 +86,7 @@
             {% endfor %}
         </div>
         {% else %}
-        {{ empty_state('No unscheduled work', text='Every open task already has scheduled work.', size='compact') }}
+        {{ empty_state('No unscheduled work', size='compact') }}
         {% endif %}
         </div>
         </div>
@@ -109,7 +109,7 @@
             </div>
             {% endif %}
             {% endfor %}
-            {% if not ns.any %}{{ empty_state('Nothing all day', text='No all-day events or due tasks this week.', size='compact') }}{% endif %}
+            {% if not ns.any %}{{ empty_state('Nothing all day', size='compact') }}{% endif %}
         </div>
     </aside>
 </div>

@@ -20,6 +20,7 @@ EXEMPT_PAGES = {
     "notebook_citations_list.html",
     "settings_appearance.html",
     "settings_data_maintenance.html",
+    "settings_defaults.html",
     "settings_flairs.html",
     "settings_general.html",
     "settings_notebook.html",
@@ -45,7 +46,7 @@ def _footer(html):
 
 
 def test_every_modal_calls_the_macro():
-    bare = {n for n, t in _modal_templates().items() if "import modal " not in t}
+    bare = {n for n, t in _modal_templates().items() if not re.search(r'import modal\b', t)}
     assert bare - EXEMPT_PAGES == set(), f"Modals must call the modal macro: {sorted(bare - EXEMPT_PAGES)}"
     assert EXEMPT_PAGES - bare == set(), f"Migrated, remove from the exempt list: {sorted(EXEMPT_PAGES - bare)}"
 

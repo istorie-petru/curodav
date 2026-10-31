@@ -34,7 +34,7 @@
     {% if kind == 'journal' %}
     <form method="post" action="/notebook/journal/week" class="form-inline"><input type="hidden" name="week" value="{{ current_week }}"><button type="submit" class="btn primary" data-fab title="This week's note">{{ icon('plus', 'icon-sm') }} Week</button></form>
     {% else %}
-    <a href="/notebook/new{% if kind == 'label' %}?label={{ name | urlencode }}{% endif %}" data-modal class="btn primary" data-fab title="New document">{{ icon('plus', 'icon-sm') }} New</a>
+    <a href="/notebook/new{% if kind == 'label' %}?label={{ name | urlencode }}{% if tag %}&tag={{ tag | urlencode }}{% endif %}{% endif %}" data-modal class="btn primary" data-fab title="New document">{{ icon('plus', 'icon-sm') }} New</a>
     {% endif %}
 {% endcall %}
 {% if journal_weeks %}{{ journal_strip(journal_weeks, '', true) }}{% endif %}

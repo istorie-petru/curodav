@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .. import clock, db, event_series, grid_layout, habit_heatmap, habit_view, recurrence_expand, university_plan
+from .. import app_defaults, clock, db, event_series, grid_layout, habit_heatmap, habit_view, recurrence_expand, university_plan
 from .. import tags as tag_store
 from .. import validation
 from ..deps import HIDE_SLEEP_HOURS_KEY, _four_week_position, _week_start, get_db, respond, templates, validation_response, wants_json
@@ -556,7 +556,7 @@ def _month_view_context(conn, request: Request, year: int | None, month: int | N
 
 
 @router.get("")
-def calendar_root_redirect(label: str | None = None):
+def calendar_root_redirect(label: str | None = None, conn=Depends(get_db)):
     """The "Calendar" tabbar destination is the 4-Week view now, not Month. Registered at the bare `/calendar` root (same URL
         base.html's "Calendar" tab links to and every event-mutation redirect
         already targets, e.g. create_event's `respond(x_requested_with,
@@ -573,7 +573,8 @@ def calendar_root_redirect(label: str | None = None):
         `_bucket_month_items` underneath it are shared with the 4-Week grid, so
         there's no dead-weight cost to keeping it importable.
     """
-    url = "/calendar/fourweek"
+    view = app_defaults.view_of(conn, "calendar_view", app_defaults.CALENDAR_VIEWS) if hasattr(conn, "execute") else "fourweek"
+    url = f"/calendar/{view}"
     if label:
         url += f"?label={label}"
     return RedirectResponse(url=url, status_code=302)
@@ -1140,7 +1141,7 @@ def new_event_form(
         prefill_all_day = True
     else:
         prefill_start = f"{date}T{start_time}" if date and start_time else (f"{date}T09:00" if date else None)
-        prefill_end = f"{date}T{end_time}" if date and end_time else None
+        prefill_end = f"{date}T{end_time}" if date and end_time else app_defaults.event_end(conn, prefill_start)
     tag_names = db.list_tag_names_in_use(conn)
     return templates.TemplateResponse(
         "event_form.html",
@@ -1154,6 +1155,7 @@ def new_event_form(
             "prefill_start": prefill_start,
             "prefill_end": prefill_end,
             "prefill_all_day": prefill_all_day,
+            "default_reminders": app_defaults.event_reminders(conn),
             "tag_names": tag_names,
             "tag_name_items": [{"uid": n, "name": n} for n in tag_names],
             **db.project_picker_context(conn),

@@ -4,71 +4,77 @@
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_empty_state.html" import empty_state %}
 {% from "_label_pill.html" import tag_pill %}
-{% call page_header_narrow("University", "graduation-cap") %}{% endcall %}
+{% call page_header_narrow("University", "graduation-cap") %}
+    {% if semester %}<a href="/groups/{{ group|urlencode }}" class="icon-btn" title="Open the study page" aria-label="Open the study page">{{ icon('arrow-right', 'icon-sm') }}</a>{% endif %}
+{% endcall %}
 {% include "_flash.html" %}
 <div id="modal-target">
 {% if not semester %}
 <div class="card">
-{% call empty_state('Nothing set up yet', 'graduation-cap', 'Describe a semester and Curodav keeps its classes, exams and readings as ordinary events and tasks.') %}
+{% call empty_state('No semester yet', 'graduation-cap') %}
 <a href="/settings/university/semester" data-modal class="btn primary">{{ icon('plus') }} Set up a semester</a>
 {% endcall %}
 </div>
 {% else %}
-<div class="uni-semester">
-    <div class="uni-semester-main">
-        <div class="uni-semester-name">{{ semester.name }}</div>
-        <div class="uni-semester-line">{{ semester.start_date|short_day if semester.start_date else 'Not set' }} to {{ semester.end_date|short_day if semester.end_date else 'Not set' }}{% if semester.class_end_date %} · classes end {{ semester.class_end_date|short_day }}{% endif %}{% if semester.credits_target %} · {{ credits_planned|round(1)|string|replace('.0', '') }} of {{ semester.credits_target|round(1)|string|replace('.0', '') }} credits{% elif credits_planned %} · {{ credits_planned|round(1)|string|replace('.0', '') }} credits{% endif %}{% if calendar %} · {{ calendar }}{% endif %}</div>
-    </div>
-    <a href="/groups/{{ group|urlencode }}" class="icon-btn" title="Open the study page" aria-label="Open the study page">{{ icon('arrow-right', 'icon-sm') }}</a>
-    <a href="/settings/university/semester" data-modal class="icon-btn uni-semester-edit" title="Edit semester" aria-label="Edit semester">{{ icon('edit', 'icon-sm') }}</a>
+<div class="card">
+    <div class="card-title widget-header"><h2>{{ semester.name }}</h2><div class="spacer"></div>
+        <a href="/settings/university/semester?new=1" data-modal class="icon-btn" title="New semester" aria-label="New semester">{{ icon('plus', 'icon-sm') }}</a>
+        <a href="/settings/university/semester" data-modal class="icon-btn" title="Edit semester" aria-label="Edit semester">{{ icon('edit', 'icon-sm') }}</a></div>
+    <p class="ov-line">
+        <span>{{ semester.start_date|short_day if semester.start_date else 'No start date' }} to {{ semester.end_date|short_day if semester.end_date else 'no end date' }}</span>
+        {% if semester.class_end_date %}<span>Classes end {{ semester.class_end_date|short_day }}</span>{% endif %}
+        {% if semester.credits_target %}<span>{{ '%g'|format(credits_planned) }} of {{ '%g'|format(semester.credits_target) }} credits</span>{% elif credits_planned %}<span>{{ '%g'|format(credits_planned) }} credits</span>{% endif %}
+        {% if calendar %}<span>{{ calendar }}</span>{% endif %}
+    </p>
+    {% if semesters|length > 1 %}
+    {% for s in semesters if s.uid != semester.uid %}
+    <div class="sec-row"><span class="sec-lead">{{ icon('graduation-cap', 'icon-sm') }}</span><span class="sec-title">{{ s.name }}</span>
+        <span class="sec-pills"><form class="form-inline" method="post" action="/settings/university/semester/select"><input type="hidden" name="uid" value="{{ s.uid }}">
+            <button type="submit" class="btn ghost btn-sm">Make current</button></form></span></div>
+    {% endfor %}
+    {% endif %}
 </div>
-{% if semesters|length > 1 %}
+
+<section class="ov-section">
+    <h2 class="ov-heading">Timetable</h2>
+    {% include "_university_timetable.html" %}
+</section>
+
 <div class="card table-scroll table-responsive">
-    <div class="uni-card-head"><h2>Semesters</h2>
-        <a href="/settings/university/semester?new=1" data-modal class="icon-btn" title="New semester" aria-label="New semester">{{ icon('plus', 'icon-sm') }}</a></div>
-    <table class="entity-table">
-        <thead><tr><th class="col-name">Semester</th><th class="col-opt-1">Dates</th><th class="col-actions">Actions</th></tr></thead>
-        <tbody>
-        {% for s in semesters %}
-        <tr>
-            <td class="col-name">{{ s.name }}{% if s.uid == semester.uid %} <span class="text-muted">current</span>{% endif %}</td>
-            <td class="col-opt-1 uni-nowrap">{{ s.start_date|short_day if s.start_date else 'Not set' }} to {{ s.end_date|short_day if s.end_date else 'Not set' }}</td>
-            <td class="col-actions">{% if s.uid != semester.uid %}
-                <form class="form-inline" method="post" action="/settings/university/semester/select"><input type="hidden" name="uid" value="{{ s.uid }}">
-                    <button type="submit" class="icon-btn" title="Make current" aria-label="Make current">{{ icon('check', 'icon-sm') }}</button></form>{% endif %}</td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% else %}
-<div class="uni-semester-new"><a href="/settings/university/semester?new=1" data-modal class="btn ghost btn-sm">{{ icon('plus', 'icon-sm') }} New semester</a></div>
-{% endif %}
-<div class="card table-scroll table-responsive">
-    <div class="uni-card-head"><h2>Disciplines</h2>
+    <div class="card-title widget-header"><h2>Disciplines</h2><div class="spacer"></div>
         <a href="/settings/university/discipline/new" data-modal class="icon-btn" title="Add discipline" aria-label="Add discipline">{{ icon('plus', 'icon-sm') }}</a></div>
     {% if disciplines %}
     <table class="entity-table">
-        <thead><tr><th class="col-name">Discipline</th><th class="col-opt-2">Teachers</th><th class="col-opt-1">Timetable</th><th class="col-opt-1">Exams</th><th class="col-opt-1">Readings</th><th class="col-actions">Actions</th></tr></thead>
+        <thead><tr><th class="col-name">Discipline</th><th class="col-opt-2">Teachers</th><th class="col-opt-1">Classes</th><th class="col-opt-1">Milestones</th><th class="col-opt-1">Readings</th><th class="col-actions">Actions</th></tr></thead>
         <tbody>
         {% for d in disciplines %}
         <tr>
-            <td class="col-name"><a href="{{ url_for_discipline(d.name) }}">{{ tag_pill(d) }}</a></td>
+            <td class="col-name">{{ tag_pill(d, href=url_for_discipline(d.name)) }}</td>
             <td class="col-opt-2">{{ d.teachers | map(attribute='name') | join(', ') or 'None' }}</td>
-            <td class="col-opt-1">{{ d.slots }}</td><td class="col-opt-1">{{ d.exams }}</td><td class="col-opt-1">{{ d.readings }}</td>
-            <td class="col-actions">
-                <a href="/settings/university/discipline/{{ d.name|urlencode }}/edit" data-modal class="icon-btn" title="Edit discipline" aria-label="Edit discipline">{{ icon('edit', 'icon-sm') }}</a>
-                <a href="{{ url_for_discipline(d.name) }}" class="icon-btn" title="Open its page" aria-label="Open its page">{{ icon('arrow-right', 'icon-sm') }}</a>
-            </td>
+            <td class="col-opt-1">{{ d.slots }}</td><td class="col-opt-1">{{ d.milestones }}</td><td class="col-opt-1">{{ d.readings }}</td>
+            <td class="col-actions"><a href="/settings/university/discipline/{{ d.name|urlencode }}/edit" data-modal class="icon-btn" title="Edit discipline" aria-label="Edit discipline">{{ icon('edit', 'icon-sm') }}</a></td>
         </tr>
         {% endfor %}
         </tbody>
     </table>
     {% else %}
-    {% call empty_state('No disciplines yet', 'book-open', 'Add the disciplines of this semester to build their timetable.') %}
-    <a href="/settings/university/discipline/new" data-modal class="btn primary">{{ icon('plus') }} Add a discipline</a>
-    {% endcall %}
+    {{ empty_state('No disciplines yet', size='compact') }}
     {% endif %}
+</div>
+
+<div class="card">
+    <div class="card-title widget-header"><h2>Defaults</h2></div>
+    <form method="post" action="/settings/university/defaults" id="university-defaults-form">
+        {% for key, label, items in [('class_reminder', 'Class reminder', reminder_items), ('exam_reminder', 'Exam reminder', reminder_items),
+                                     ('class_length', 'Class length', length_items), ('passing_grade', 'Passing grade', grade_items)] %}
+        <div class="settings-field-row">
+            <span class="settings-field-label">{{ label }}</span><span class="spacer"></span>
+            {% set ms_name = key %}{% set ms_mode = 'single' %}{% set ms_label = label %}{% set ms_items = items %}{% set ms_selected = defaults[key] %}
+            {% set ms_autosubmit = true %}{% set ms_bare = true %}{% set ms_form_id = 'university-defaults-form' %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+        {% endfor %}
+    </form>
 </div>
 {% endif %}
 </div>

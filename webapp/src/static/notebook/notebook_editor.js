@@ -41,14 +41,9 @@
         if (blocks === lastSaved) return null;
         var body = JSON.stringify(data);
         var startedSave = performance.now();
-        return fetch(contentUrl, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: body,
-          // A request started while the page is going away survives it only with keepalive, which has a size limit.
-          keepalive: !!leaving && body.length < KEEPALIVE_LIMIT,
-        }).then(function (resp) {
-          if (!resp.ok) throw new Error("save failed");
+        // A request started while the page is going away survives it only with keepalive, which has a size limit.
+        return window.NotebookSave.put(contentUrl, body, !!leaving && body.length < KEEPALIVE_LIMIT).then(function (resp) {
+          if (!resp) return;
           measure("editor save", startedSave);
           lastSaved = blocks;
           failedSaves = 0;
@@ -387,11 +382,7 @@
     mount.addEventListener("paste", around, true);
   }
 
-  fetch(contentUrl, { headers: { Accept: "application/json" } })
-    .then(function (resp) {
-      if (!resp.ok) throw new Error("load failed");
-      return resp.json();
-    })
+  window.NotebookSave.load(contentUrl)
     .catch(function () {
       return { blocks: [] };
     })

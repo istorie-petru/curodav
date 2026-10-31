@@ -1,0 +1,72 @@
+{% from "_empty_state.html" import empty_state %}
+{% extends "base.html" %}
+{% block title %}API access - Settings{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("API access", "key") }}
+{% include "_flash.html" %}
+{% if fresh_secret %}
+<div class="card" id="api-fresh-token">
+    <h2>New token</h2>
+    <p>Copy it now; it is not shown again.</p>
+    <p><code class="api-secret">{{ fresh_secret }}</code></p>
+</div>
+{% endif %}
+<div class="card">
+    <h2>Connector</h2>
+    <div class="settings-field-row">
+        <span class="settings-field-label">MCP address</span>
+        <span class="spacer"></span>
+        <code>{{ base }}/mcp</code>
+    </div>
+    <div class="settings-field-row">
+        <span class="settings-field-label">REST API</span>
+        <span class="spacer"></span>
+        <code>{{ base }}/api/v1</code>
+    </div>
+</div>
+{% macro token_table(rows, noun) %}
+<table class="entity-table">
+    <thead><tr><th class="col-name">Name</th><th class="col-opt-1">Access</th><th class="col-opt-1">Created</th><th class="col-opt-2">Last used</th><th class="col-actions">Actions</th></tr></thead>
+    <tbody>
+    {% for t in rows %}
+    <tr>
+        <td class="col-name">{{ t.client_name or t.name }}</td>
+        <td class="col-opt-1">{{ 'Read and edit' if 'write' in t.scopes.split() else 'Read' }}</td>
+        <td class="col-opt-1">{{ t.created_at|short_day }}</td>
+        <td class="col-opt-2">{{ t.last_used_at|short_day if t.last_used_at else 'Never' }}</td>
+        <td class="col-actions">
+            <form class="form-inline" method="post" action="/settings/api-access/tokens/{{ t.uid }}/revoke" data-confirm-sheet="Remove access for {{ t.client_name or t.name }}? It stops working at once.">
+                <button type="submit" class="icon-btn danger" title="Remove access" aria-label="Remove access">{{ icon('trash', 'icon-sm') }}</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endmacro %}
+<div class="card table-scroll table-responsive">
+    <div class="table-toolbar"><h2>Tokens</h2><span class="spacer"></span>
+        <a href="/settings/api-access/new" data-modal class="btn ghost btn-sm btn-icon-only" title="New token" aria-label="New token">{{ icon('plus', 'icon-sm') }}</a></div>
+    {% if personal %}{{ token_table(personal, 'token') }}{% else %}{{ empty_state('No tokens', icon_name='key', size='compact') }}{% endif %}
+</div>
+<div class="card table-scroll table-responsive">
+    <h2>Connected apps</h2>
+    {% if apps %}{{ token_table(apps, 'app') }}{% else %}{{ empty_state('No connected apps', icon_name='link', size='compact') }}{% endif %}
+</div>
+<div class="card table-scroll table-responsive">
+    <h2>Recent activity</h2>
+    {% if activity %}
+    <table class="entity-table">
+        <thead><tr><th class="col-opt-1">When</th><th class="col-name">Who</th><th class="col-opt-2">What</th></tr></thead>
+        <tbody>
+        {% for a in activity %}
+        <tr><td class="col-opt-1">{{ a.at|short_day }}</td><td class="col-name">{{ a.token_name }}</td><td class="col-opt-2">{{ a.surface|upper }} {{ a.action }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    {{ empty_state('Nothing yet', icon_name='list', size='compact') }}
+    {% endif %}
+</div>
+{% endblock %}

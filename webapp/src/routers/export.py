@@ -82,12 +82,7 @@ def import_modal(request: Request):
     Success closes the dialog and reloads the page (the same close-and-
     reload every other modal form gets); the server-side note rides back
     as a redirect the fetch follows."""
-    from .. import modules
-
-    return templates.TemplateResponse(
-        "import_modal.html",
-        {"request": request, "active_tab": "settings_data_maintenance", "university_on": modules.is_enabled("university")},
-    )
+    return templates.TemplateResponse("import_modal.html", {"request": request, "active_tab": "settings_data_maintenance"})
 
 
 def export_context(conn) -> dict:

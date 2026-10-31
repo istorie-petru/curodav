@@ -13,7 +13,6 @@
             {{ date_field('due_at', task.due_at[:10] if task and task.due_at else '', label='Due date') }}
         </div>
         {% endcall %}
-        {% if task and university_locked(request, 'task', task.uid) %}<p class="field-hint field-wide">Renaming this exam renames it everywhere: its event and task together.</p>{% endif %}
         {% set tag_type = 'task' %}{% set tag_uid = task.uid if task else '' %}{% set tag_old = task.tags if task else [] %}{% set tag_prefill = prefill_tags or [] %}
         {% include "_tag_row.html" %}
         {% set st_name = 'status' %}{% set st_label = 'Status' %}{% set st_items = status_items %}
@@ -29,7 +28,7 @@
         {% set ms_mode = 'single' %}
         {% set ms_name = 'holiday_calendar' %}
         {% set ms_label = 'Respects Labor Laws' if _playful else 'Holiday calendar' %}
-        {% set ms_items = [{'uid': '', 'name': '(none)'}] %}
+        {% set ms_items = [{'uid': '', 'name': 'None'}] %}
         {% for name in holiday_calendar_names|default([]) %}{% set _ = ms_items.append({'uid': name, 'name': name}) %}{% endfor %}
         {% set ms_selected = task.holiday_calendar if task and task.holiday_calendar not in (None, 'None', 'Nothing') else '' %}
         {% set ms_allow_new = false %}

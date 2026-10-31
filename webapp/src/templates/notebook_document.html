@@ -131,6 +131,7 @@
 {% block extra_scripts %}
 {% if new_editor %}
 <script defer src="{{ static_url('perf_client.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_save.js') }}"></script>
 <script defer src="{{ static_url('notebook/notebook_floating.js') }}"></script>
 <script defer src="{{ static_url('notebook/notebook_toc.js') }}"></script>
 <script defer src="{{ static_url('notebook/notebook_mentions.js') }}"></script>
@@ -145,6 +146,7 @@
 <script defer src="{{ static_url('notebook/vendor/editorjs.umd.js') }}"></script>
 <script defer src="{{ static_url('notebook/vendor/header.umd.js') }}"></script>
 <script defer src="{{ static_url('notebook/vendor/list.umd.js') }}"></script>
+<script defer src="{{ static_url('notebook/notebook_save.js') }}"></script>
 <script defer src="{{ static_url('notebook/notebook_floating.js') }}"></script>
 <script defer src="{{ static_url('notebook/notebook_glossary_autofill.js') }}"></script>
 <script defer src="{{ static_url('notebook/notebook_mentions.js') }}"></script>

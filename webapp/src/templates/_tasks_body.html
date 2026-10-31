@@ -1,28 +1,20 @@
 {% from "_empty_state.html" import empty_state %}
 {% from "_task_list_row.html" import task_list_row with context %}
 {% from "_section_row.html" import section_row %}
-{% from "_label_pill.html" import tag_pill with context %}
 <div id="tasks-body" class="main-shell-body">
 {% if has_any %}
 {% if has_main_tasks %}
 <div id="task-table" class="card contact-list task-list">
     {% for grp in groups %}
-    {% call section_row('', muted=grp.kind in ('unassigned', 'completed')) %}{% if grp.kind == 'label' %}<a class="shelf-link" href="/labels/{{ grp.name | urlencode }}">{{ grp.name }}</a>{% else %}{{ grp.name }}{% endif %}{% endcall %}
-    {% if grp.kind == 'label' and grp.subgroups | length > 1 %}
-    {% for sub in grp.subgroups %}
-    {% call section_row('') %}{{ tag_pill(sub, '/labels/' ~ (grp.name | urlencode) ~ '?tag=' ~ (sub.name | urlencode)) }}{% endcall %}
-    {% for t in sub.tasks %}{{ task_list_row(t, sub.name) }}{% endfor %}
-    {% endfor %}
-    {% else %}
+    {% if grp.kind != 'plain' %}{% call section_row(grp.tasks | length, muted=grp.kind in ('unassigned', 'completed')) %}{% if grp.kind == 'label' %}<a class="shelf-link" href="/labels/{{ grp.name | urlencode }}">{{ grp.name }}</a>{% else %}{{ grp.name }}{% endif %}{% endcall %}{% endif %}
     {% for t in grp.tasks %}{{ task_list_row(t) }}{% endfor %}
-    {% endif %}
     {% endfor %}
 </div>
 {% endif %}
 
 {% else %}
 {% if q or active_date_filter != 'all' %}
-{{ empty_state('No tasks match this filter', 'check-square', 'Try a different date range, or clear the search.') }}
+{{ empty_state('No tasks match this filter', 'check-square') }}
 {% elif is_inbox %}
 {{ empty_state('Nothing to triage', 'check-square', 'Tasks captured with no project-linked list show up here. Use the bulk "Move to list" action to file them.') }}
 {% else %}

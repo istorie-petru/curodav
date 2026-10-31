@@ -13,7 +13,7 @@
    this separate script, hence this id instead. #}
 {% set ms_id = 'property-key-ms-' ~ row_key %}
 <div id="{{ ms_id }}" class="multiselect widget-list-multiselect notebook-property-key-select" data-ms data-ms-mode="single" data-ms-label="property name">
-    <button type="button" class="multiselect-trigger ms-trigger" aria-haspopup="true" aria-expanded="false">
+    <button type="button" class="multiselect-trigger ms-trigger" aria-haspopup="true" aria-expanded="false" aria-label="Property name">
         <span class="ms-summary">{{ selected if selected else 'Name' }}</span>
         <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
     </button>

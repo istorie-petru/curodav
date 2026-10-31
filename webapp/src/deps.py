@@ -282,9 +282,19 @@ def _sidebar_groups(request: Request) -> list[dict]:
     """
     try:
         with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
-            groups = db.list_groups(conn)
+            groups = sorted((g for g in db.list_groups(conn) if g["sidebar_show"]),
+                            key=lambda g: (g["sidebar_order"] == 0, g["sidebar_order"], g["name"].lower()))
             for g in groups:
-                g["children"] = [l for l in g["labels"] if l.get("sidebar_pin")] or _study_children(conn, g["name"])
+                picked = [l for l in g["labels"] if l.get("sidebar_pin")]
+                if g["sidebar_kind"] == "tags":
+                    from urllib.parse import quote
+
+                    from . import tags
+                    g["children"] = [{**t, "href": f"/labels/{quote(l['name'], safe='')}?tag={quote(t['name'], safe='')}", "path": f"/labels/{l['name']}",
+                                      "is_project": False, "abbreviation": ""}
+                                     for l in (picked or g["labels"]) for t in tags.tags_of_label(conn, l["name"])]
+                else:
+                    g["children"] = picked or _study_children(conn, g["name"])
             return groups
     except Exception:
         return []

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Defaults - Settings{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_section_row.html" import section_row %}
+{{ page_header_narrow("Defaults", "sliders") }}
+<div id="modal-target">
+{% for g in groups %}
+{% if not loop.first %}<hr class="settings-divider">{% endif %}
+<div class="settings-group">
+{% call section_row('') %}{{ g.name }}{% endcall %}
+<div class="card">
+    {% for r in g.rows %}
+    {% if r.href %}
+    <a class="settings-field-row" href="{{ r.href }}">
+        <span class="settings-field-label">{{ r.label }}
+            <span class="settings-field-hint">{{ r.hint }}</span>
+        </span>
+        <span class="spacer"></span>
+        {{ icon('chevron-right', 'icon-sm') }}
+    </a>
+    {% else %}
+    <form class="settings-field-row" method="post" action="/settings/defaults" id="default-{{ r.key }}-form">
+        <input type="hidden" name="key" value="{{ r.key }}">
+        <span class="settings-field-label">{{ r.label }}
+            <span class="settings-field-hint">{{ r.hint }}</span>
+        </span>
+        <span class="spacer"></span>
+        {% set ms_name = 'value' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = r.label %}
+        {% set ms_items = r['items'] %}
+        {% set ms_selected = r.value %}
+        {% set ms_autosubmit = true %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'default-' ~ r.key ~ '-form' %}
+        {% include "_widget_list_multiselect.html" %}
+    </form>
+    {% endif %}
+    {% endfor %}
+</div>
+</div>
+{% endfor %}
+</div>
+{% endblock %}

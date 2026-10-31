@@ -82,6 +82,16 @@ SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 
 PUBLIC_PATHS = {"/login", "/health"}
 
+# Paths that bring their own credentials (a bearer token, or the OAuth flow itself) and must never accept the session
+# cookie; see api_auth.py. The consent page /oauth/authorize is not among them: it needs the normal login.
+API_PATHS = {"/mcp", "/oauth/register", "/oauth/token", "/.well-known/oauth-protected-resource",
+             "/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-authorization-server"}
+API_PREFIX = "/api/v1/"
+
+
+def is_api_path(path: str) -> bool:
+    return path in API_PATHS or path.startswith(API_PREFIX)
+
 
 def auth_enabled(settings, conn=None) -> bool:
     """Whether login is enforced for this install: true when EITHER the
@@ -453,7 +463,7 @@ class AuthMiddleware:
             return await self.app(scope, receive, send)
         settings = self._get_settings(scope)
         path = scope["path"]
-        if path in PUBLIC_PATHS or path.startswith("/static/") or path.startswith("/public/"):
+        if path in PUBLIC_PATHS or path.startswith("/static/") or path.startswith("/public/") or is_api_path(path):
             return await self.app(scope, receive, send)
 
         if skip_auth_applies(settings, scope):
@@ -678,7 +688,8 @@ class CSRFMiddleware:
         self._get_settings = get_settings
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or scope["method"] in CSRF_SAFE_METHODS:
+        if scope["type"] != "http" or scope["method"] in CSRF_SAFE_METHODS or is_api_path(scope["path"]):
+            # API paths never read the session cookie, so a forged request has nothing to ride on.
             return await self.app(scope, receive, send)
         settings = self._get_settings(scope)
         if not auth_enabled(settings):

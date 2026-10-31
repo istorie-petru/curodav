@@ -91,3 +91,19 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 })();
+
+// The header's back arrow returns to the view the user came from (page, view mode, filters, scroll) via real history;
+// its href, the parent page, is only the fallback for a fresh tab or an arrival from outside the app.
+(function () {
+  var SKIP = /^\/(login|setup|logout)(\/|$)/;
+  document.addEventListener("click", function (e) {
+    var back = e.target.closest && e.target.closest(".page-header-narrow-back");
+    if (!back || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var ref;
+    try { ref = new URL(document.referrer); } catch (err) { return; }
+    if (ref.origin !== location.origin || SKIP.test(ref.pathname) || history.length < 2) return;
+    if (ref.pathname + ref.search === location.pathname + location.search) return;
+    e.preventDefault();
+    history.back();
+  });
+})();

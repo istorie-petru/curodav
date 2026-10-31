@@ -1,5 +1,5 @@
-"""The Tasks list's grouping: one section per shelf (alphabetical), tasks with no tag, then Completed last. A shelf
-section holds a sub-group per tag, and a task sits under every tag it carries. Every group is due-date ascending."""
+"""The Tasks list's grouping: by default sections by due date (Overdue, Today, This week, Later, No date) with a task
+appearing once; `shelf` gives one section per shelf, `none` one plain list. Completed is always last."""
 
 from __future__ import annotations
 
@@ -68,67 +68,87 @@ def _group(groups, kind, name=None):
     raise AssertionError(f"no group kind={kind} name={name} in {[ (g['kind'], g['name']) for g in groups ]}")
 
 
-def _groups(conn):
-    return tasks_router.list_tasks(_request(), conn=conn).context["groups"]
+def _groups(conn, group=""):
+    return tasks_router.list_tasks(_request(), group=group, conn=conn).context["groups"]
 
 
-class TestFixedGroupOrder:
+def _day(offset):
+    from src import clock
+    return (clock.today() + timedelta(days=offset)).isoformat()
+
+
+class TestDateSections:
+    def test_tasks_fall_into_their_section_in_fixed_order(self, conn):
+        for uid, off in (("late", -2), ("now", 0), ("soon", 3), ("far", 30)):
+            _task(conn, uid, due_at=_day(off))
+        _task(conn, "undated")
+        _task(conn, "fin", status="done")
+        groups = _groups(conn)
+        assert [g["name"] for g in groups] == ["Overdue", "Today", "This week", "Later", "No date", "Completed"]
+        assert [[t["uid"] for t in g["tasks"]] for g in groups] == [["late"], ["now"], ["soon"], ["far"], ["undated"], ["fin"]]
+
+    def test_a_task_with_tags_on_two_shelves_appears_once(self, conn):
+        _shelf_tag(conn, "Work", "Client A")
+        _shelf_tag(conn, "Home", "Chores")
+        _tagged(conn, "t1", ["Client A", "Chores"], due_at=_day(0))
+        assert [t["uid"] for g in _groups(conn) for t in g["tasks"]] == ["t1"]
+
+    def test_empty_sections_are_left_out(self, conn):
+        _task(conn, "a", due_at=_day(0))
+        assert [g["name"] for g in _groups(conn)] == ["Today"]
+
+    def test_a_section_is_due_date_ascending(self, conn):
+        for uid, off in (("z", 3), ("a", 1), ("m", 2)):
+            _task(conn, uid, due_at=_day(off))
+        assert [t["uid"] for t in _groups(conn)[0]["tasks"]] == ["a", "m", "z"]
+
+
+class TestShelfSections:
     def test_shelves_then_untagged_then_completed(self, conn):
         _shelf_tag(conn, "Home", "Chores")
         _tagged(conn, "a1", ["Chores"])
         _task(conn, "loose1", tags=[])
         _tagged(conn, "done1", ["Chores"], status="done")
-        assert [g["kind"] for g in _groups(conn)] == ["label", "unassigned", "completed"]
+        assert [g["kind"] for g in _groups(conn, "shelf")] == ["label", "unassigned", "completed"]
 
     def test_shelves_are_alphabetical_case_insensitive(self, conn):
         for shelf in ("banana", "Apple", "cherry"):
             _shelf_tag(conn, shelf, shelf)
             _tagged(conn, shelf, [shelf])
-        assert [g["name"] for g in _groups(conn)] == ["Apple", "banana", "cherry"]
+        assert [g["name"] for g in _groups(conn, "shelf")] == ["Apple", "banana", "cherry"]
 
-
-class TestTagSubgroups:
-    def test_a_shelf_section_has_a_subgroup_per_tag(self, conn):
-        _shelf_tag(conn, "Work", "Client A")
-        _shelf_tag(conn, "Work", "Client B")
-        _tagged(conn, "a1", ["Client A"])
-        _tagged(conn, "b1", ["Client B"])
-        work = _group(_groups(conn), "label", "Work")
-        assert [(s["name"], [t["uid"] for t in s["tasks"]]) for s in work["subgroups"]] == [("Client A", ["a1"]), ("Client B", ["b1"])]
-
-    def test_a_task_sits_under_every_tag_but_is_counted_once_in_its_section(self, conn):
+    def test_two_tags_on_one_shelf_list_the_task_once(self, conn):
         _shelf_tag(conn, "Work", "Client A")
         _shelf_tag(conn, "Work", "Client B")
         _tagged(conn, "t1", ["Client A", "Client B"])
-        work = _group(_groups(conn), "label", "Work")
-        assert all([t["uid"] for t in s["tasks"]] == ["t1"] for s in work["subgroups"])
+        work = _group(_groups(conn, "shelf"), "label", "Work")
         assert [t["uid"] for t in work["tasks"]] == ["t1"]
 
     def test_a_task_with_tags_on_two_shelves_appears_in_both_sections(self, conn):
         _shelf_tag(conn, "Work", "Client A")
         _shelf_tag(conn, "Home", "Chores")
         _tagged(conn, "t1", ["Client A", "Chores"])
-        groups = _groups(conn)
-        assert [g["name"] for g in groups] == ["Home", "Work"]
+        assert [g["name"] for g in _groups(conn, "shelf")] == ["Home", "Work"]
 
-    def test_sections_and_subgroups_are_due_date_ascending(self, conn):
-        _shelf_tag(conn, "Work", "Client A")
-        _tagged(conn, "z", ["Client A"], due_at="2026-09-03")
-        _tagged(conn, "a", ["Client A"], due_at="2026-09-01")
-        _tagged(conn, "m", ["Client A"], due_at="2026-09-02")
-        work = _group(_groups(conn), "label", "Work")
-        assert [t["uid"] for t in work["tasks"]] == ["a", "m", "z"]
-        assert [t["uid"] for t in work["subgroups"][0]["tasks"]] == ["a", "m", "z"]
+
+class TestPlainList:
+    def test_none_gives_one_list_without_headings(self, conn):
+        _task(conn, "a", due_at=_day(0))
+        _task(conn, "b")
+        groups = _groups(conn, "none")
+        assert [g["kind"] for g in groups] == ["plain"]
+        assert [t["uid"] for t in groups[0]["tasks"]] == ["a", "b"]
+        body = tasks_router.list_tasks(_request(), group="none", conn=conn).body.decode()
+        assert 'class="section-row' not in body
 
 
 class TestCompletedGroup:
-    def test_completed_tasks_pulled_out_of_their_shelf_group(self, conn):
-        _shelf_tag(conn, "Home", "Chores")
-        _tagged(conn, "open", ["Chores"])
-        _tagged(conn, "done", ["Chores"], status="done")
-        _task(conn, "loose_done", tags=[], status="archived")
+    def test_completed_tasks_pulled_out_of_their_section(self, conn):
+        _task(conn, "open", due_at=_day(0))
+        _task(conn, "done", status="done")
+        _task(conn, "loose_done", status="archived")
         groups = _groups(conn)
-        assert {t["uid"] for t in _group(groups, "label", "Home")["tasks"]} == {"open"}
+        assert {t["uid"] for t in _group(groups, "date", "Today")["tasks"]} == {"open"}
         assert {t["uid"] for t in _group(groups, "completed")["tasks"]} == {"done", "loose_done"}
 
     def test_completed_group_is_most_recent_first(self, conn):

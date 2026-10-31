@@ -1,4 +1,4 @@
-{% from "_inputs.html" import text_input %}
+{% from "_inputs.html" import text_input, number_input, switch_input %}
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
 {% block title %}{% if group %}Edit space{% else %}New space{% endif %}{% endblock %}
@@ -24,6 +24,29 @@
         {% set ms_selected = candidates|selectattr('member')|map(attribute='name')|list %}
         {% set ms_form_id = 'group-form' %}
         {% include "_widget_list_multiselect.html" %}
+        {% if group and sidebar %}
+        <input type="hidden" name="sidebar_submitted" value="1">
+        <div class="field">
+            <label for="group-sidebar-show">Show in sidebar</label>
+            <div class="switch-row">{{ switch_input({'id': 'group-sidebar-show', 'name': 'sidebar_show', 'value': '1', 'checked': sidebar.show}) }}</div>
+        </div>
+        <div class="field">
+            <label for="group-sidebar-order">Sidebar position</label>
+            {{ number_input({'id': 'group-sidebar-order', 'name': 'sidebar_order', 'value': sidebar.order, 'min': '0', 'max': '999', 'inputmode': 'numeric'}) }}
+        </div>
+        {% set st_name = 'sidebar_kind' %}{% set st_label = 'Sidebar lists' %}
+        {% set st_items = [{'uid': 'shelves', 'name': 'Shelves'}, {'uid': 'tags', 'name': 'Tags'}] %}
+        {% set st_selected = sidebar.kind %}{% set st_form_id = 'group-form' %}
+        {% include "_status_type_row.html" %}
+        {% set ms_name = 'sidebar_shelves' %}
+        {% set ms_mode = 'select' %}
+        {% set ms_label = 'Sidebar shelves' %}
+        {% set ms_items = [] %}
+        {% for c in candidates if c.member %}{% set _ = ms_items.append({'uid': c.name, 'name': c.name}) %}{% endfor %}
+        {% set ms_selected = sidebar.shelves %}
+        {% set ms_form_id = 'group-form' %}
+        {% include "_widget_list_multiselect.html" %}
+        {% endif %}
     </div>
 </form>
 {% endcall %}

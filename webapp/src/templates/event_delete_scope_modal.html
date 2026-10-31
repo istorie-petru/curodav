@@ -5,7 +5,7 @@
 {# Asked before deleting a repeating event: just the occurrence that was open, or every event in the series. #}
 {% call modal(kind="question", title="Delete repeating event", size="small", back='/events/' ~ event.uid ~ ('?occurrence_date=' ~ (occurrence_date | urlencode) if occurrence_date else ''), back_name=event.title) %}
 <div class="card">
-    <p>{{ event.title }} repeats. What should be deleted?</p>
+    <p class="modal-sentence">{{ event.title }} repeats. What should be deleted?</p>
     {% if in_series %}
     <form method="post" action="/events/{{ event.uid }}/delete" data-delete-undo="This event" data-delete-undo-redirect="/calendar" data-cc-change="event">
         <button type="submit" class="btn ghost scope-choice">{{ icon('trash', 'icon-sm') }} This event</button>

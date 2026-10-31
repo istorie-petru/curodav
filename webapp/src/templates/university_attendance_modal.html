@@ -1,0 +1,20 @@
+{% from "_inputs.html" import text_input %}
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% block title %}Attendance{% endblock %}
+{% block content %}
+{% call modal(kind="form", title=discipline ~ ', ' ~ (event.start_at[:10]|short_day), size="small", form='university-attendance-form') %}
+<div class="card">
+<form method="post" id="university-attendance-form" action="/university/class/{{ event.uid }}/attendance">
+    <input type="hidden" name="back" value="{{ back }}">
+    <div class="field-grid">
+        {% set ms_mode = 'single' %}{% set ms_form_id = 'university-attendance-form' %}{% set ms_name = 'status' %}{% set ms_label = 'Status' %}
+        {% set ms_items = [] %}{% for k, n in statuses.items() %}{% set _ = ms_items.append({'uid': k, 'name': n}) %}{% endfor %}
+        {% set ms_selected = mark.status %}{% set ms_wide = true %}
+        {% include '_widget_list_multiselect.html' %}
+        <div class="field field-wide"><label>Note</label>{{ text_input({'name': 'note', 'value': mark.note, 'maxlength': 200}) }}</div>
+    </div>
+</form>
+</div>
+{% endcall %}
+{% endblock %}

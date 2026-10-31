@@ -1,0 +1,20 @@
+{% from "_inputs.html" import number_input %}
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% block title %}Grades{% endblock %}
+{% block content %}
+{% macro grade_field(id, label) %}<div class="field"><label>{{ label }}</label>{{ number_input({'name': 'grade_' ~ id, 'value': ('%g'|format(grades[id])) if id in grades else '', 'min': 0, 'step': 'any'}) }}</div>{% endmacro %}
+{% call modal(kind="form", title='Grades: ' ~ d.name, size="medium", form='university-grades-form') %}
+<div class="card">
+<form method="post" id="university-grades-form" action="/settings/university/grades">
+    <input type="hidden" name="discipline" value="{{ d.name }}">
+    <div class="field-grid">
+        {% for w in ways %}
+        {{ grade_field(w.id, w.name) }}
+        {% for s in w.subs %}{{ grade_field(s.id, w.name ~ ', ' ~ s.name) }}{% endfor %}
+        {% endfor %}
+    </div>
+</form>
+</div>
+{% endcall %}
+{% endblock %}

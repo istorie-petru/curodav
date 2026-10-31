@@ -14,6 +14,10 @@ from src import auth, main
 ROUTERS = Path(__file__).resolve().parents[2] / "src" / "routers"
 PUBLIC_ROUTE_PREFIXES = ("/static", "/public/")
 PUBLIC_ROUTES = {"/login", "/health", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
+# OAuth discovery, registration and token exchange are public by design (RFC 8414, 9728, 7591, 6749); every other API
+# path answers 401 without a bearer token, which the walk below already accepts.
+OAUTH_PUBLIC_ROUTES = {"/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp",
+                       "/.well-known/oauth-authorization-server", "/oauth/register", "/oauth/token"}
 
 
 def _code(path: Path) -> str:
@@ -55,7 +59,7 @@ def test_every_route_requires_a_session_unless_allow_listed(locked_client):
     for route in locked_client.app.routes:
         path = getattr(route, "path", "")
         methods = getattr(route, "methods", None) or {"GET"}
-        if not path or "{" in path or path in PUBLIC_ROUTES or path.startswith(PUBLIC_ROUTE_PREFIXES):
+        if not path or "{" in path or path in PUBLIC_ROUTES or path in OAUTH_PUBLIC_ROUTES or path.startswith(PUBLIC_ROUTE_PREFIXES):
             continue
         method = "GET" if "GET" in methods else sorted(methods)[0]
         response = locked_client.request(method, path)
@@ -102,7 +106,7 @@ SRC = Path(__file__).resolve().parents[2] / "src"
 # fixed code-side list or from an allow-listed sync field set, never a request value. New files must not be added here
 # without the same review.
 F_STRING_SQL_FILES = {
-    "db/citation_library.py", "db/contacts.py", "db/core.py", "db/events.py", "db/labels.py", "db/notebook.py", "db/pages.py", "db/sync.py", "db/tasks.py", "finance.py", "migrations.py", "migrations_citations.py", "offline_sync.py", "secret_store.py",
+    "db/citation_library.py", "db/contacts.py", "db/core.py", "db/events.py", "db/labels.py", "db/notebook.py", "db/pages.py", "db/sync.py", "db/tasks.py", "api_service.py", "finance.py", "migrations.py", "migrations_citations.py", "offline_sync.py", "search_index.py", "secret_store.py",
     "study_page.py", "tags.py", "university_plan.py",
 }
 

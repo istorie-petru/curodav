@@ -47,7 +47,7 @@
 {% elif q or kind %}
 {% call empty_state('No entries match', icon_name='search', size='compact') %}<a href="/notebook/glossary">Clear search</a>{% endcall %}
 {% else %}
-{% call empty_state('No entries yet', icon_name='tag', text='Terms, people, places and events live here.') %}<a href="/notebook/glossary/new" data-modal class="btn primary">{{ icon('plus') }} New entry</a>{% endcall %}
+{% call empty_state('No entries yet', icon_name='tag') %}<a href="/notebook/glossary/new" data-modal class="btn primary">{{ icon('plus') }} New entry</a>{% endcall %}
 {% endif %}
 </div>
 {% endblock %}

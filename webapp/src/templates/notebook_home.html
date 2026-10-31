@@ -28,10 +28,10 @@
         </div>
     </div>
     {% endif %}
-    {% if continue_note %}
-    {% call section_row('') %}Continue writing{% endcall %}
+    {% if recent_notes %}
+    {% call section_row('') %}Recent{% endcall %}
     <div class="card contact-list notebook-folder-list">
-        {% with documents = [continue_note], select = false, sort = 'updated', back_to = '/notebook', back_label = 'Notebook' %}{% include "_notebook_folder_rows.html" %}{% endwith %}
+        {% with documents = recent_notes, select = false, sort = 'updated', back_to = '/notebook', back_label = 'Notebook' %}{% include "_notebook_folder_rows.html" %}{% endwith %}
     </div>
     {% endif %}
     {% if pinned %}
@@ -55,7 +55,7 @@
     </div>
     {% endif %}
     {% if not folders.projects and not folders.labels %}
-    {% call empty_state('No documents yet', icon_name='notebook', text="Start writing and it'll show up here.") %}<a href="/notebook/new" data-modal class="btn primary">{{ icon('plus') }} New document</a>{% endcall %}
+    {% call empty_state('No documents yet', icon_name='notebook') %}<a href="/notebook/new" data-modal class="btn primary">{{ icon('plus') }} New document</a>{% endcall %}
     {% endif %}
     {% call section_row('') %}Library{% endcall %}
     <div class="folder-grid">

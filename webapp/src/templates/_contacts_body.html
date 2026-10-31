@@ -1,6 +1,6 @@
 {% from "_inputs.html" import checkbox_input %}
 {% from "_empty_state.html" import empty_state %}
-{% from "_label_pill.html" import label_pill with context %}
+{% from "_label_pill.html" import label_pill, tag_pill with context %}
 {% from "_action_menu.html" import action_menu with context %}
 {% from "_section_row.html" import section_row %}
 <div id="contacts-body" class="main-shell-body">
@@ -8,7 +8,7 @@
 <div class="card contact-list" id="contacts-list">
     {% for group in contact_groups %}
     {% if group.name or contact_groups|length > 1 %}
-    {% call section_row(group.contacts|length ~ ' contact' ~ ('s' if group.contacts|length != 1 else ''), muted=not group.name) %}{% if group.name %}{{ label_pill(group.name) }}{% else %}Unlabeled{% endif %}{% endcall %}
+    {% call section_row(group.contacts|length ~ ' contact' ~ ('s' if group.contacts|length != 1 else ''), muted=not group.name) %}{% if not group.name %}{{ 'No organization' if group_mode == 'org' else 'Unlabeled' }}{% elif group_mode == 'shelf' %}{{ label_pill(group.name) }}{% else %}{{ group.name }}{% endif %}{% endcall %}
     {% endif %}
     {% for c in group.contacts %}
     <div class="contact-row-wrap" data-uid="{{ c.uid }}" data-undo-row>
@@ -26,6 +26,8 @@
                 </span>
             </span>
         </a>
+        {% set _tags = c.tag_items or [] %}
+        {% if _tags %}<span class="contact-row-tags">{% for tag in _tags[:3] %}{{ tag_pill(tag, '/contacts?contacts_filtered=1&tag=' ~ (tag.name | lower | urlencode)) }}{% endfor %}{% if _tags|length > 3 %}<span class="cell-tag cal-gray" title="{{ _tags[3:] | map(attribute='name') | join(', ') }}">+{{ _tags|length - 3 }}</span>{% endif %}</span>{% endif %}
         {{ action_menu([
             {'label': 'Edit contact', 'icon': 'edit', 'href': '/contacts/' ~ c.uid ~ '/edit', 'modal': true},
             {'label': 'Unarchive contact', 'icon': 'archive', 'form_action': '/contacts/' ~ c.uid ~ '/unarchive', 'change': 'contact'} if c.archived_at else
@@ -38,7 +40,7 @@
 </div>
 {% else %}
 {% if contacts_filter_active %}
-{{ empty_state('No contacts match', 'address-book', 'Try clearing the search or shelf filter.') }}
+{{ empty_state('No contacts match', 'address-book') }}
 {% else %}
 {% call empty_state('No contacts yet', 'address-book', 'Add your first contact to get started.') %}
 <a class="btn primary" href="/contacts/new" data-modal data-fab>{{ icon('plus') }} New contact</a>

@@ -20,7 +20,7 @@
         {% endfor %}
     </div>
     {% else %}
-    {% call empty_state('No journal entries yet', icon_name='calendar', text='Each week gets its own note, filed by year.') %}
+    {% call empty_state('No journal entries yet', icon_name='calendar') %}
     <form method="post" action="/notebook/journal/week"><input type="hidden" name="week" value="{{ current_week }}"><button type="submit" class="btn primary">{{ icon('plus') }} This week's note</button></form>
     {% endcall %}
     {% endif %}

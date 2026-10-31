@@ -574,6 +574,109 @@ try {
   let pendingChange = null;
   let pendingForceReload = false;
   let customCloseHandler = null;
+  // Unsaved-changes guard (modals-and-inputs.md): the forms' values when the modal content arrived, and the element
+  // that opened the modal, which gets focus back on close.
+  let cleanState = null;
+  let opener = null;
+
+  function formState() {
+    if (!body) return "";
+    const parts = [];
+    body.querySelectorAll("form").forEach((form) => {
+      if (form.hasAttribute("data-modal-get") || (form.method || "").toLowerCase() === "get") return;
+      for (const [k, v] of new FormData(form)) parts.push(k + "=" + (typeof v === "string" ? v : v.name + ":" + v.size));
+    });
+    return parts.join("&");
+  }
+
+  function markClean() {
+    cleanState = formState();
+  }
+
+  // The baseline is taken at the user's first press inside the modal, after every field script has set its own
+  // starting values, so a script filling a hidden field on load never counts as a change.
+  ["pointerdown", "keydown"].forEach((type) => {
+    document.addEventListener(type, (e) => {
+      if (cleanState !== null || !overlay.classList.contains("is-open") || !e.isTrusted) return;
+      if (overlay.contains(e.target) || (e.target.closest && e.target.closest("#multiselect-portal"))) markClean();
+    }, true);
+  });
+
+  function isDirty() {
+    return cleanState !== null && formState() !== cleanState;
+  }
+
+  // Runs `leave` (close, or go back) at once, or after the user agrees to drop what they typed.
+  function guardLeave(leave) {
+    if (!isDirty()) return leave();
+    const back = document.activeElement;
+    window.ccConfirmSheet({ message: "Discard your changes?", confirmLabel: "Discard", onConfirm: leave });
+    // Enter discards, Esc keeps editing and returns focus to where it was.
+    const ok = document.querySelector(".toast-confirm .toast-confirm-ok");
+    if (ok) {
+      ok.focus();
+      const onKey = (e) => {
+        if (e.key !== "Escape") return;
+        window.removeEventListener("keydown", onKey, true);
+        if (back && back.isConnected) setTimeout(() => back.focus(), 0);
+      };
+      window.addEventListener("keydown", onKey, true);
+    }
+  }
+
+  // Split modals (modals-and-inputs.md): the side pane folds into a strip; the choice is kept per modal kind on
+  // this device. Under 720px the pane sits under the main one and starts folded.
+  const PHONE = window.matchMedia("(max-width: 720px)");
+
+  function splitKey(split) {
+    return "cc-split:" + split.getAttribute("data-modal-split") + (PHONE.matches ? ":phone" : "");
+  }
+
+  function setSplitCollapsed(split, collapsed, remember) {
+    split.classList.toggle("is-collapsed", collapsed);
+    const toggle = split.querySelector("[data-modal-split-toggle]");
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      const label = toggle.getAttribute(collapsed ? "data-label-show" : "data-label-hide");
+      toggle.setAttribute("aria-label", label);
+      toggle.setAttribute("title", label);
+    }
+    if (dialog) dialog.classList.toggle("is-wide", !!body.querySelector(".modal-split:not(.is-collapsed), [data-modal-wide]:not(.modal-split)"));
+    if (remember) {
+      try {
+        localStorage.setItem(splitKey(split), collapsed ? "1" : "0");
+      } catch (err) { /* storage blocked: the pane just opens again next time */ }
+    }
+  }
+
+  function applySplits() {
+    if (!body) return;
+    body.querySelectorAll(".modal-split[data-modal-split]").forEach((split) => {
+      let stored = null;
+      try {
+        stored = localStorage.getItem(splitKey(split));
+      } catch (err) { /* ignore */ }
+      setSplitCollapsed(split, stored === null ? PHONE.matches : stored === "1", false);
+    });
+  }
+
+  document.addEventListener("click", (e) => {
+    const toggle = e.target.closest && e.target.closest("[data-modal-split-toggle]");
+    if (!toggle) return;
+    const split = toggle.closest(".modal-split");
+    if (split) setSplitCollapsed(split, !split.classList.contains("is-collapsed"), true);
+  });
+
+  // A folded pane never hides an error: an invalid field inside it unfolds it before the browser reports it.
+  document.addEventListener("invalid", (e) => {
+    const split = e.target.closest && e.target.closest(".modal-split.is-collapsed");
+    if (split && split.querySelector(".modal-split-side").contains(e.target)) setSplitCollapsed(split, false, false);
+  }, true);
+
+  function goBackOrClose() {
+    if (modalStack.length) openModal(modalStack[modalStack.length - 1], null);
+    else closeModal();
+  }
 
    function closeModal() {
      // A modal that owns a buffer record (a new contact's draft) names the
@@ -594,7 +697,11 @@ try {
      if (header) header.innerHTML = "";
      if (footer) footer.innerHTML = "";
      currentUrl = null;
+     cleanState = null;
      modalStack.length = 0;
+     dialog && dialog.classList.remove("is-wide");
+     if (opener && opener.isConnected && typeof opener.focus === "function") opener.focus({ preventScroll: true });
+     opener = null;
      if (pendingReload) {
        pendingReload = false;
        const change = pendingForceReload ? null : pendingChange;
@@ -654,10 +761,12 @@ try {
      const fragment = injectModalContent(html);
      if (!fragment) return;
      wireContent();
+     applySplits();
      stabilizeHeight(fragment);
      applyHeightTier(fragment);
      applyCoverHandle();
      animateContentSwap();
+     cleanState = null;
    }
 
    // The first visible text field gets focus, so the user can type straight away.
@@ -669,7 +778,7 @@ try {
 
   function focusFirstField(root) {
     const fields = root.querySelectorAll(
-      "input:not([data-no-autofocus]):not([type=hidden]):not([type=radio]):not([type=checkbox]), textarea:not([data-no-autofocus])"
+      "input:not([data-no-autofocus]):not([type=hidden]):not([type=radio]):not([type=checkbox]):not([type=file]), textarea:not([data-no-autofocus])"
     );
     for (const el of fields) {
       if (el.disabled || el.readOnly || !el.getClientRects().length) continue;
@@ -678,7 +787,18 @@ try {
     }
   }
 
+  // Details opens by itself when a field inside it already holds a value, so nothing stored stays hidden.
+  function openFilledDetails() {
+    body.querySelectorAll("details.form-details:not([open])").forEach((d) => {
+      const filled = Array.from(d.querySelectorAll("input, textarea")).some(
+        (el) => /^(text|url|email|tel|number|textarea)$/.test(el.type) && !el.classList.contains("multiselect-new-input") && el.value.trim() !== ""
+      );
+      if (filled) d.open = true;
+    });
+  }
+
   function wireContent() {
+    openFilledDetails();
     // Lets a page script (e.g. push_settings.js) set itself up on content
     // that was injected after the page loaded.
     if (window.CCActionMenu) window.CCActionMenu.init();
@@ -686,14 +806,14 @@ try {
      body.querySelectorAll("[data-modal-cancel]").forEach((el) => {
        el.addEventListener("click", (e) => {
          e.preventDefault();
-         closeModal();
+         guardLeave(closeModal);
        });
      });
      if (footer) {
        footer.querySelectorAll("[data-modal-cancel]").forEach((el) => {
          el.addEventListener("click", (e) => {
            e.preventDefault();
-           closeModal();
+           guardLeave(closeModal);
          });
        });
      }
@@ -876,6 +996,7 @@ try {
 
    async function openModal(url, trigger) {
      const wasOpen = overlay.classList.contains("is-open");
+     if (!wasOpen) opener = trigger || document.activeElement;
      if (trigger) trigger.classList.add("is-loading");
      let html;
      const endBusy = window.ccBusy ? window.ccBusy.begin() : null;
@@ -917,6 +1038,7 @@ try {
        const size = trigger ? trigger.getAttribute("data-modal-size") : null;
        dialog.classList.toggle("is-wide", size === "wide" || !!(body && body.querySelector("[data-modal-wide]")));
      }
+     applySplits();
      // Show/hide the modal header based on whether the fragment
      // populated it -- the close button stays visible regardless
      // so the user always has an escape route.
@@ -927,6 +1049,7 @@ try {
      applyHeightTier(fragment);
      applyCoverHandle();
      if (wasOpen) animateContentSwap();
+     cleanState = null;
      // data-no-autofocus (habits H3): a view modal's secondary inputs
      // (the habit detail's "Log a day" form) shouldn't grab focus -- and
      // scroll the modal / raise a phone keyboard -- on open.
@@ -1010,6 +1133,10 @@ try {
     const trigger = e.target.closest("[data-modal], .modal-header-back");
     if (!trigger) return;
     e.preventDefault();
+    if (trigger.classList.contains("modal-header-back")) {
+      guardLeave(() => openModal(trigger.getAttribute("href"), trigger));
+      return;
+    }
     // Loading feedback (style.css's .is-loading) between tap and the
     // modal actually appearing -- previously nothing acknowledged the
     // click at all until the fetch resolved, which read as a dead tap on
@@ -1033,9 +1160,9 @@ try {
     openModal(form.action + (query ? "?" + query : ""), form);
   });
 
-  if (closeBtn) closeBtn.addEventListener("click", closeModal);
+  if (closeBtn) closeBtn.addEventListener("click", () => guardLeave(closeModal));
   overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) closeModal();
+    if (e.target === overlay) guardLeave(closeModal);
   });
 
   const FOCUSABLE_SELECTOR = [
@@ -1083,8 +1210,17 @@ try {
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && overlay.classList.contains("is-open")) {
-      if (modalStack.length) openModal(modalStack[modalStack.length - 1], null);
-      else closeModal();
+      // An open confirm toast takes Esc for itself.
+      if (window.ccConfirmOpen && window.ccConfirmOpen()) return;
+      guardLeave(goBackOrClose);
+    }
+    // Ctrl+Enter (Cmd+Enter) presses the primary from anywhere in the form, a long text box included.
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && overlay.classList.contains("is-open") && footer) {
+      const primary = footer.querySelector('.btn.primary[type="submit"]:not([disabled]), .btn-split-main:not([disabled])');
+      if (primary) {
+        e.preventDefault();
+        primary.click();
+      }
     }
     if (e.key === "Tab" && overlay.classList.contains("is-open")) trapTabKey(e);
   });
@@ -1428,6 +1564,22 @@ try {
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
+})();
+
+// The header's back arrow returns to the view the user came from (page, view mode, filters, scroll) via real history;
+// its href, the parent page, is only the fallback for a fresh tab or an arrival from outside the app.
+(function () {
+  var SKIP = /^\/(login|setup|logout)(\/|$)/;
+  document.addEventListener("click", function (e) {
+    var back = e.target.closest && e.target.closest(".page-header-narrow-back");
+    if (!back || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var ref;
+    try { ref = new URL(document.referrer); } catch (err) { return; }
+    if (ref.origin !== location.origin || SKIP.test(ref.pathname) || history.length < 2) return;
+    if (ref.pathname + ref.search === location.pathname + location.search) return;
+    e.preventDefault();
+    history.back();
+  });
 })();
 
 } catch (err) { console.error('page_header_bar.js', err); }

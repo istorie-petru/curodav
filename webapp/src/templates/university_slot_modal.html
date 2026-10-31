@@ -8,9 +8,18 @@
 {% call modal(kind="form", title=('Edit weekly class' if series_uid else 'New weekly class'), size="medium", form='university-slot-form', creating=(not series_uid), retire=_retire) %}
 <div class="card">
 <form method="post" id="university-slot-form" action="/settings/university/slot">
-    <input type="hidden" name="discipline" value="{{ d.name }}">
     <input type="hidden" name="series_uid" value="{{ series_uid }}">
+    {% if d %}<input type="hidden" name="discipline" value="{{ d.name }}">{% else %}<input type="hidden" name="back" value="settings">{% endif %}
     <div class="field-grid">
+        {% if not d %}
+        <div class="field field-wide">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'university-slot-form' %}{% set ms_name = 'discipline' %}{% set ms_label = 'Discipline' %}
+            {% set ms_items = [] %}{% for x in disciplines %}{% set _ = ms_items.append({'uid': x.name, 'name': x.name}) %}{% endfor %}
+            {% set ms_selected = '' %}{% set ms_wide = true %}{% set ms_allow_new = true %}{% set ms_placeholder = 'None' %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+        {% set ms_allow_new = false %}
+        {% endif %}
         {% macro pick(name, label, items, selected) %}
         <div class="field">
             {% set ms_mode = 'single' %}{% set ms_form_id = 'university-slot-form' %}{% set ms_name = name %}{% set ms_label = label %}
@@ -28,8 +37,8 @@
         <div class="field"><label>Room</label>{{ text_input({'name': 'room', 'value': (slot.room if slot else '')}) }}</div>
         <div class="field field-wide">
             {% set ms_mode = 'select' %}{% set ms_form_id = 'university-slot-form' %}{% set ms_name = 'teachers' %}{% set ms_label = 'Teachers' %}
-            {% set ms_items = [] %}{% for t in d.teachers %}{% set _ = ms_items.append({'uid': t.uid, 'name': t.name}) %}{% endfor %}
-            {% set ms_selected = slot.teachers if slot else (d.teachers | map(attribute='uid') | list) %}{% set ms_wide = true %}
+            {% set ms_items = [] %}{% for t in teachers %}{% set _ = ms_items.append({'uid': t.uid, 'name': t.name}) %}{% endfor %}
+            {% set ms_selected = slot.teachers if slot else ((d.teachers | map(attribute='uid') | list) if d else []) %}{% set ms_wide = true %}{% set ms_allow_new = true %}
             {% include '_widget_list_multiselect.html' %}
         </div>
     </div>

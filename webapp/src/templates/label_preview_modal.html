@@ -20,7 +20,7 @@
         {% if label_tag_pills %}
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">Tags</span>
-            <span class="detail-meta-value">{% for t in label_tag_pills %}{{ tag_pill(t) }} {% endfor %}</span>
+            <span class="detail-meta-value">{% for t in label_tag_pills %}{{ tag_pill(t, link=false) }} {% endfor %}</span>
         </div>
         {% endif %}
         {% if label_status %}

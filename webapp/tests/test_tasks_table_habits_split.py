@@ -134,7 +134,7 @@ class TestGroupNameAndAddButtonInTableHeader:
         _seed_task(conn, "t1", tags=["Garden"])
         _seed_task(conn, "t2", tags=["Gym"])
         _seed_task(conn, "t3", tags=[])
-        body = tasks_router.list_tasks(_request(), conn=conn).body.decode()
+        body = tasks_router.list_tasks(_request(), group="shelf", conn=conn).body.decode()
         task_list = body.split('id="task-table"', 1)[1]
         assert "<thead>" not in task_list.split("</div>\n</div>", 1)[0]
         assert task_list.count('class="section-row') >= 3

@@ -1,12 +1,7 @@
-{# The one drag-and-drop zone for media uploads. Clicking it opens the file
-   picker; dropping a file hands it to the same input (static/upload_zone.js),
-   which the crop editor (static/avatar_cropper.js) is already wired to.
-   `form_id` is the upload form the input belongs to (it may live in the
-   modal footer). #}
+{# The large upload input for media (the drop zone that fills an upload modal). Kept as its own name for the
+   callers that pass a class for the crop editor (static/avatar_cropper.js); `form_id` is the upload form the input
+   belongs to (it may live in the modal footer). #}
+{% from "_inputs.html" import upload_input %}
 {% macro upload_zone(name, input_class, form_id, label='Choose or drop an image', accept='image/jpeg,image/png,image/gif,image/webp') %}
-<label class="upload-zone" data-upload-zone>
-    {{ icon('upload') }}
-    <span class="upload-zone-label">{{ label }}</span>
-    <input type="file" name="{{ name }}" accept="{{ accept }}" class="{{ input_class }}" form="{{ form_id }}" aria-label="{{ label }}">
-</label>
+{{ upload_input(name, accept=accept, form=form_id, label=label, large=true, attrs={'class': input_class}) }}
 {% endmacro %}

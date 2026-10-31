@@ -379,6 +379,8 @@
       e.stopPropagation(); // not the modal underneath
       return close(true);
     }
+    // Tab leaves through the field, so the browser moves on to the next one (the panel lives outside the modal).
+    if (e.key === "Tab") return close(true);
     const day = e.target.closest && e.target.closest(".dtf-day");
     if (day) {
       const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
@@ -403,6 +405,10 @@
       e.preventDefault();
       const n = e.key === "ArrowDown" ? t.nextElementSibling : t.previousElementSibling;
       if (n) n.focus();
+    } else if (t && (e.key === "Home" || e.key === "End")) {
+      e.preventDefault();
+      const all = t.parentElement.querySelectorAll(".dtf-opt");
+      (e.key === "Home" ? all[0] : all[all.length - 1]).focus();
     }
   }
 

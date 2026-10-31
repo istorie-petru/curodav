@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 
-from . import clock, db, event_series, study_lists, tags
+from . import app_defaults, clock, db, event_series, study_lists, tags
 
 MODULE_KEY = "university"
 PAGE_TYPE = "study"
@@ -194,6 +194,79 @@ def save_semester(conn: sqlite3.Connection, *, uid: str | None, name: str, shelf
     return uid
 
 
+# ---------------------------------------------------------------- defaults
+
+FALLBACKS = {"class_reminder": "", "exam_reminder": "1440", "class_length": "110", "passing_grade": "5"}
+REMINDER_CHOICES = (("", "None"), ("0", "When it starts"), ("5", "5 minutes before"), ("10", "10 minutes before"), ("15", "15 minutes before"),
+                    ("30", "30 minutes before"), ("60", "1 hour before"), ("1440", "1 day before"), ("10080", "1 week before"))
+LENGTH_CHOICES = (("50", "50 minutes"), ("80", "80 minutes"), ("90", "90 minutes"), ("100", "100 minutes"), ("110", "110 minutes"),
+                  ("120", "2 hours"), ("150", "150 minutes"), ("180", "3 hours"))
+GRADE_CHOICES = ("4", "5", "6", "50", "60")
+
+
+def defaults(conn: sqlite3.Connection) -> dict[str, str]:
+    """The module's settings, kept with the app's other defaults: the reminder of a class and of an exam (minutes before, empty for none),
+    the usual length of a class in minutes, and the grade that passes."""
+    out = {}
+    for name, fallback in FALLBACKS.items():
+        stored = db.get_app_meta(conn, app_defaults.KEYS[name])
+        out[name] = stored if stored is not None else fallback
+    return out
+
+
+def _minutes_or_none(value: str, field: str) -> str:
+    value = (value or "").strip()
+    if value and (not value.isdigit() or int(value) > 7 * 24 * 60):
+        raise PlanError(f"{field} must be a number of minutes up to a week")
+    return value
+
+
+def save_defaults(conn: sqlite3.Connection, semester: dict[str, Any] | None, *, class_reminder: str, exam_reminder: str, class_length: str,
+                  passing_grade: str, today: date | None = None) -> int:
+    """Saves the defaults; a changed reminder is applied to the classes (or exam events) from today on. Returns how many events changed."""
+    class_reminder, exam_reminder = _minutes_or_none(class_reminder, "The class reminder"), _minutes_or_none(exam_reminder, "The exam reminder")
+    length = (class_length or "").strip()
+    if not length.isdigit() or not 15 <= int(length) <= 600:
+        raise PlanError("The length of a class is a number of minutes between 15 and 600")
+    try:
+        grade = float((passing_grade or "").replace(",", "."))
+    except ValueError:
+        raise PlanError("The passing grade must be a number") from None
+    before = defaults(conn)
+    for name, value in (("class_reminder", class_reminder), ("exam_reminder", exam_reminder), ("class_length", length), ("passing_grade", f"{grade:g}")):
+        app_defaults.put(conn, name, value)
+    changed = 0
+    if semester and before["class_reminder"] != class_reminder:
+        changed += _apply_reminders(conn, _future_events(conn, semester["uid"], "class", today), app_defaults.class_reminders(conn))
+    if semester and before["exam_reminder"] != exam_reminder:
+        changed += _apply_reminders(conn, _future_events(conn, semester["uid"], "exam", today), exam_reminders(conn))
+    return changed
+
+
+def exam_reminders(conn: sqlite3.Connection) -> list[int]:
+    value = defaults(conn)["exam_reminder"]
+    return [int(value)] if value else []
+
+
+def _future_events(conn: sqlite3.Connection, semester_uid: str, kind: str, today: date | None) -> list[dict[str, Any]]:
+    iso = (today or clock.today()).isoformat()
+    if kind == "class":
+        rows = conn.execute("SELECT e.uid FROM events e JOIN university_slots s ON s.series_uid = e.series_uid WHERE s.semester_uid = ? AND e.start_at >= ?", (semester_uid, iso))
+    else:
+        rows = conn.execute("SELECT e.uid FROM events e JOIN university_milestones m ON m.event_uid = e.uid WHERE m.semester_uid = ? AND e.start_at >= ?", (semester_uid, iso))
+    return [e for e in (db.get_event(conn, r["uid"]) for r in rows.fetchall()) if e]
+
+
+def _apply_reminders(conn: sqlite3.Connection, events: list[dict[str, Any]], reminders: list[int]) -> int:
+    changed = 0
+    for e in events:
+        if list(e.get("reminders") or []) != reminders:
+            db.upsert_event(conn, {**e, "reminders": reminders, "updated_at": _now()})
+            changed += 1
+    conn.commit()
+    return changed
+
+
 # ---------------------------------------------------------------- disciplines
 
 def _teacher_uids(conn: sqlite3.Connection, tag: str) -> list[str]:
@@ -259,6 +332,46 @@ def save_discipline(conn: sqlite3.Connection, semester: dict[str, Any], *, old: 
         for uid in wanted:
             _tag_item(conn, "contact", uid, name)
     return name
+
+
+_SMALL_WORDS = {"a", "an", "and", "of", "the", "in", "to", "for", "si", "și", "de", "din", "la", "în", "cu", "pe", "al", "ale"}
+
+
+def auto_abbreviation(name: str) -> str:
+    """A short name for the timetable: the initials of a name of several words ("Istoria Arheologiei" is IA), else its first four letters."""
+    words = [w for w in name.replace("-", " ").split() if w.lower() not in _SMALL_WORDS] or name.split()
+    if len(words) > 1:
+        return "".join(w[0] for w in words if w[0].isalnum()).upper()[:5]
+    return name.strip()[:4].upper()
+
+
+def quick_discipline(conn: sqlite3.Connection, semester: dict[str, Any], name: str, colors) -> str:
+    """A discipline made from its name alone (typed in the timetable): a colour no other discipline of the semester uses yet, and an abbreviation."""
+    name = name.strip()
+    known = next((d["name"] for d in disciplines(conn, semester) if d["name"].lower() == name.lower()), None)
+    if known:
+        return known
+    taken = {(d.get("color") or "") for d in disciplines(conn, semester)}
+    color = next((c for c in colors if c not in taken and c not in ("gray", "slate", "sand", "brown")), "blue")
+    saved = save_discipline(conn, semester, old="", name=name, color=color, icon="book-open", teacher_names=None, colors=colors)
+    save_sheet(conn, semester["uid"], saved, {"abbreviation": auto_abbreviation(saved)})
+    return saved
+
+
+def tag_teachers(conn: sqlite3.Connection, discipline: str, entries: list[str]) -> list[str]:
+    """Contact uids for a list of picked uids and typed names (a typed name becomes a contact), each carrying the discipline's tag."""
+    uids = db.resolve_contact_entries(conn, [e for e in entries if e])
+    for uid in uids:
+        _tag_item(conn, "contact", uid, discipline)
+    return uids
+
+
+def semester_teachers(conn: sqlite3.Connection, semester: dict[str, Any]) -> list[dict[str, str]]:
+    seen: dict[str, dict[str, str]] = {}
+    for d in disciplines(conn, semester):
+        for t in d["teachers"]:
+            seen.setdefault(t["uid"], t)
+    return sorted(seen.values(), key=lambda t: t["name"].lower())
 
 
 def removal_blockers(conn: sqlite3.Connection, semester: dict[str, Any], tag: str) -> str | None:
@@ -499,7 +612,7 @@ def save_slot(conn: sqlite3.Connection, semester: dict[str, Any], discipline: st
     now = _now()
     row = {"uid": str(uuid.uuid4()), "title": title, "description": "", "start_at": f"{first.isoformat()}T{slot['start']}",
            "end_at": f"{first.isoformat()}T{slot['end']}", "all_day": 0, "location": slot["room"], "status": "active", "tags": _labels(conn, discipline),
-           "holiday_calendar": semester.get("holiday_calendar"), "created_at": now, "updated_at": now}
+           "reminders": app_defaults.class_reminders(conn), "holiday_calendar": semester.get("holiday_calendar"), "created_at": now, "updated_at": now}
     db.upsert_event(conn, row)
     _tag_item(conn, "event", row["uid"], discipline)
     event_series.create_series(conn, row, slot_rule(slot["weekday"], slot["weeks"], until), contacts=slot["teachers"])
@@ -729,106 +842,7 @@ def apply_assign_in_order(conn: sqlite3.Connection, semester_uid: str, disciplin
     return len(plan["pairs"])
 
 
-# ---------------------------------------------------------------- exams and readings
-
-def _milestone_title(discipline: str, way: str, title: str) -> str:
-    return title.strip() or f"{discipline}: {way}".strip(": ")
-
-
-def _milestone_row(conn: sqlite3.Connection, uid: str) -> sqlite3.Row | None:
-    return conn.execute("SELECT * FROM university_milestones WHERE uid = ?", (uid,)).fetchone()
-
-
-def _drop_milestone_items(conn: sqlite3.Connection, row: sqlite3.Row, *, event: bool = True, task: bool = True) -> None:
-    if event and row["event_uid"]:
-        db.delete_event(conn, row["event_uid"])
-    if task and row["task_uid"]:
-        db.delete_task(conn, row["task_uid"])
-
-
-def _save_milestone(conn: sqlite3.Connection, semester_uid: str, discipline: str, way: dict[str, Any], ms: dict[str, Any], position: int) -> str:
-    """A milestone is an event on its day (a day you are somewhere), a task due on its deadline (a day you hand something in), or both,
-    joined by an exam link; a date creates or moves the item and clearing it removes the item."""
-    day, due = _date(ms.get("day"), "Date", False), _date(ms.get("due"), "Deadline", False)
-    start = _clock(ms.get("start") or "09:00", "Start time")
-    end = _clock(ms.get("end") or _plus_two_hours(start.strftime("%H:%M")), "End time")
-    end_day = _date(ms.get("end_day"), "End date", False) or day
-    if day and (end_day, end) <= (day, start):
-        raise PlanError("The event ends before it starts")
-    title = _milestone_title(discipline, way["name"], ms.get("title") or "")
-    uid = ms.get("uid") or ""
-    old = _milestone_row(conn, uid) if uid else None
-    uid = uid if old else str(uuid.uuid4())
-    now = _now()
-    event_uid, task_uid = (old["event_uid"] if old else None), (old["task_uid"] if old else None)
-    if old and not day and event_uid:
-        _drop_milestone_items(conn, old, task=False)
-        event_uid = None
-    if old and not due and task_uid:
-        _drop_milestone_items(conn, old, event=False)
-        task_uid = None
-    if day:
-        event_uid = event_uid or str(uuid.uuid4())
-        prev = db.get_event(conn, event_uid)
-        db.upsert_event(conn, {**(prev or {}), "uid": event_uid, "title": title, "description": (prev or {}).get("description") or "",
-                               "start_at": f"{day.isoformat()}T{start.strftime('%H:%M')}", "end_at": f"{end_day.isoformat()}T{end.strftime('%H:%M')}", "all_day": 0,
-                               "location": (ms.get("location") or "").strip(), "status": "active", "tags": _labels(conn, discipline),
-                               "created_at": (prev or {}).get("created_at") or now, "updated_at": now})
-        _tag_item(conn, "event", event_uid, discipline)
-    if due:
-        task_uid = task_uid or str(uuid.uuid4())
-        prev = db.get_task(conn, task_uid)
-        db.upsert_task(conn, {**(prev or {}), "uid": task_uid, "title": title, "description": (prev or {}).get("description") or "",
-                              "due_at": due.isoformat(), "status": (prev or {}).get("status") or "active", "tags": _labels(conn, discipline),
-                              "created_at": (prev or {}).get("created_at") or now, "updated_at": now})
-        _tag_item(conn, "task", task_uid, discipline)
-    if event_uid and task_uid:
-        db.add_event_task_relation(conn, event_uid, task_uid, kind="exam")
-    conn.execute("INSERT INTO university_milestones (uid, semester_uid, discipline_tag, way_id, title, day, start, end_day, end, location, due, notes, event_uid, task_uid, position) "
-                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET discipline_tag = excluded.discipline_tag, way_id = excluded.way_id, "
-                 "title = excluded.title, day = excluded.day, start = excluded.start, end_day = excluded.end_day, end = excluded.end, location = excluded.location, due = excluded.due, "
-                 "notes = excluded.notes, event_uid = excluded.event_uid, task_uid = excluded.task_uid, position = excluded.position",
-                 (uid, semester_uid, discipline, way["id"], (ms.get("title") or "").strip(), day.isoformat() if day else "", start.strftime("%H:%M") if day else "",
-                  end_day.isoformat() if day else "", end.strftime("%H:%M") if day else "", (ms.get("location") or "").strip() if day else "", due.isoformat() if due else "", (ms.get("notes") or "").strip(),
-                  event_uid, task_uid, position))
-    return uid
-
-
-def list_milestones(conn: sqlite3.Connection, semester_uid: str, discipline: str | None = None, today: date | None = None, way_id: str | None = None) -> list[dict[str, Any]]:
-    """Milestones as the pages show them, dated ones first. `date` is the event day or else the deadline; `weight` is the way's share of the grade."""
-    today = today or clock.today()
-    sql = "SELECT * FROM university_milestones WHERE semester_uid = ?"
-    args: list[Any] = [semester_uid]
-    if discipline:
-        sql += " AND discipline_tag = ? COLLATE NOCASE"
-        args.append(discipline)
-    if way_id:
-        sql += " AND way_id = ?"
-        args.append(way_id)
-    out, ways = [], {}
-    for r in conn.execute(sql + " ORDER BY position", args).fetchall():
-        key = r["discipline_tag"].lower()
-        if key not in ways:
-            ways[key] = {w["id"]: w for w in get_evaluation(conn, semester_uid, r["discipline_tag"], with_milestones=False)}
-        way = ways[key].get(r["way_id"]) or {"name": "", "weight": None}
-        when = r["day"] or r["due"]
-        status = (db.get_task(conn, r["task_uid"]) or {}).get("status") if r["task_uid"] else ""
-        out.append({"uid": r["uid"], "discipline": r["discipline_tag"], "way_id": r["way_id"], "way": way["name"], "weight": way["weight"],
-                    "title": _milestone_title(r["discipline_tag"], way["name"], r["title"]), "raw_title": r["title"], "day": r["day"], "start": r["start"], "end_day": r["end_day"], "end": r["end"],
-                    "location": r["location"], "due": r["due"], "notes": r["notes"], "event_uid": r["event_uid"] or "", "task_uid": r["task_uid"] or "",
-                    "date": when, "days_left": (date.fromisoformat(when) - today).days if when else None, "status": status or ""})
-    out.sort(key=lambda m: (not m["date"], m["date"], m["start"]))
-    return out
-
-
-def delete_milestone(conn: sqlite3.Connection, uid: str) -> None:
-    row = _milestone_row(conn, uid)
-    if not row:
-        return
-    _drop_milestone_items(conn, row)
-    conn.execute("DELETE FROM university_milestones WHERE uid = ?", (uid,))
-    conn.commit()
-
+# ---------------------------------------------------------------- readings
 
 READING_CATEGORIES = {"obligatory": "Obligatory", "recommended": "Recommended", "auxiliary": "Auxiliary"}
 
@@ -915,7 +929,7 @@ def export_discipline(conn: sqlite3.Connection, semester: dict[str, Any], name: 
             "timetable": [{"weekday": s["weekday"], "start": s["start"], "end": s["end"], "room": s["room"], "kind": s["kind"], "weeks": s["weeks"]}
                           for s in list_slots(conn, semester["uid"], d["name"])],
             "themes": [{"number": t["number"], "title": t["title"], "importance": t["importance"]} for t in list_topics(conn, semester["uid"], d["name"])],
-            "exams": [{"title": e["title"], "date": e["day"] or e["due"], "time": e["start"], "weight": e["weight"]} for e in list_milestones(conn, semester["uid"], d["name"])],
+            "exams": [{"title": e["title"], "date": e["day"] or e["due"], "time": e["start"], "weight": e["weight"]} for e in _evaluation().list_milestones(conn, semester["uid"], d["name"])],
             "readings": [{"title": r["title"], "author": r["author"]} for r in list_readings(conn, semester["uid"], d["name"])]}
 
 
@@ -923,6 +937,11 @@ def export_semester(conn: sqlite3.Connection, semester: dict[str, Any]) -> dict[
     return {"name": semester["name"], "start_date": semester.get("start_date") or "", "end_date": semester.get("end_date") or "",
             "class_end_date": semester.get("class_end_date") or "",
             "disciplines": [export_discipline(conn, semester, d["name"]) for d in disciplines(conn, semester)]}
+
+
+def _evaluation():
+    from . import university_evaluation
+    return university_evaluation
 
 
 def _disciplines_of(kind: str, data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -965,16 +984,13 @@ def apply_import(conn: sqlite3.Connection, semester: dict[str, Any], kind: str, 
             save_syllabus(conn, semester["uid"], name, "\n".join(f"{t['number']}. {t['title']}{' ' + '*' * t['importance'] if t['importance'] else ''}" for t in d["themes"]))
         for e in d["exams"]:
             if e["date"]:
-                save_way(conn, semester["uid"], name, {"id": "", "name": e["title"], "weight": "" if e["weight"] is None else f"{e['weight']:g}", "subs": [],
+                _evaluation().save_way(conn, semester["uid"], name, {"id": "", "name": e["title"], "weight": "" if e["weight"] is None else f"{e['weight']:g}", "subs": [],
                                                        "milestones": [{"title": e["title"], "day": e["date"], "start": e["time"] or "09:00"}]})
         for r in d["readings"]:
             save_reading(conn, semester, name, task_uid=None, title=r["title"], author=r["author"], due="", status="active")
     return len(_disciplines_of(kind, data))
 
 
-def _plus_two_hours(start: str) -> str:
-    t = _clock(start, "Start time")
-    return time(min(t.hour + 2, 23), t.minute).strftime("%H:%M")
 
 
 # ---------------------------------------------------------------- lecture notes
@@ -1233,7 +1249,8 @@ SHEET_SECTIONS = (
         ("type", "Type", "select", ("Compulsory", "Optional", "Facultative")), ("language", "Language of teaching", "text", ()))),
     ("teaching", "Teaching", (
         ("hours_lecture", "Lecture hours per week", "number", ()), ("hours_seminar", "Seminar hours per week", "number", ()),
-        ("hours_lab", "Lab hours per week", "number", ()))),
+        ("hours_lab", "Lab hours per week", "number", ()), ("absences_lecture", "Lecture absences allowed", "number", ()),
+        ("absences_seminar", "Seminar absences allowed", "number", ()), ("absences_lab", "Lab absences allowed", "number", ()))),
     ("content", "Content", (
         ("objectives", "Objectives", "long", ()), ("prerequisites", "Prerequisites", "long", ()), ("summary", "Summary", "long", ()))),
 )
@@ -1283,145 +1300,6 @@ def get_sheet(conn: sqlite3.Connection, semester_uid: str, discipline: str) -> d
             "seminar_teachers": _contact_list(conn, (rows.get("teachers_seminar") or {}).get("value", ""))}
 
 
-def _num(value: Any) -> float | None:
-    try:
-        return float(str(value).replace(",", ".")) if str(value).strip() else None
-    except ValueError:
-        return None
-
-
-def get_evaluation(conn: sqlite3.Connection, semester_uid: str, discipline: str, with_milestones: bool = True) -> list[dict[str, Any]]:
-    """The ways a discipline is evaluated: each has a name and a weight in percent of the whole, may have components whose weights are percent
-    of their way (`subs`), and may have dated milestones. `effective` is the share of the whole grade; a component's is its weight times its way's."""
-    import json
-    out = []
-    for key, row in _sheet_rows(conn, semester_uid, discipline).items():
-        if not key.startswith("eval:"):
-            continue
-        try:
-            data = json.loads(row["value"] or "{}")
-        except ValueError:
-            data = {}
-        weight = _num(data.get("weight"))
-        elimination = bool(data.get("elimination"))
-        comp = {"id": data.get("id") or key[5:], "name": row["label"], "form": data.get("form", ""), "weight": None if elimination else weight,
-                "stored_weight": weight, "elimination": elimination, "notes": data.get("notes", ""), "effective": None if elimination else weight,
-                "subs": [], "milestones": []}
-        for sub in data.get("subs", []):
-            w = _num(sub.get("weight"))
-            comp["subs"].append({"id": sub.get("id") or "", "name": sub.get("name", ""), "weight": w, "parent": comp["id"],
-                                 "effective": round(weight * w / 100, 4) if comp["weight"] is not None and w is not None else None})
-        out.append(comp)
-    if with_milestones and out:
-        by_way: dict[str, list[dict[str, Any]]] = {}
-        for m in list_milestones(conn, semester_uid, discipline):
-            by_way.setdefault(m["way_id"], []).append(m)
-        for comp in out:
-            comp["milestones"] = by_way.get(comp["id"], [])
-    return out
-
-
-def evaluation_warnings(components: list[dict[str, Any]]) -> list[str]:
-    """What does not add up: the weights of the whole should reach 100, and the components of one way should reach 100 of it."""
-    notes = []
-    weights = [c["weight"] for c in components if c["weight"] is not None]
-    if weights and abs(sum(weights) - 100) > 0.01:
-        notes.append(f"The evaluation weights add up to {sum(weights):g}%, not 100%")
-    for c in components:
-        subs = [s["weight"] for s in c["subs"] if s["weight"] is not None]
-        if subs and abs(sum(subs) - 100) > 0.01:
-            notes.append(f"The components of {c['name'] or 'a way of evaluating'} add up to {sum(subs):g}%, not 100%")
-    return notes
-
-
-EVALUATION_TONES = {"Exam": "red", "Colloquium": "red", "Oral": "red", "Practical": "red", "Continuous assessment": "orange", "Project": "blue", "Homework": "blue"}
-EVALUATION_FORMS = ("Exam", "Colloquium", "Continuous assessment", "Project", "Homework", "Oral", "Practical", "Other")
-
-
-def save_evaluation(conn: sqlite3.Connection, semester_uid: str, discipline: str, components: list[dict[str, Any]]) -> list[str]:
-    """Replaces the ways of evaluating with the given ones ({id, name, weight, subs: [{id, name, weight}], milestones: [{uid, title, day, start, end,
-    location, due, notes}]}). Ids that were sent are kept; a way with no name is dropped. A way or milestone that is no longer sent is removed with its
-    events and tasks. Returns the warnings, which the user may keep: weights
-    that do not add up, and what was removed."""
-    import json
-    sent = {c.get("id") for c in components if c.get("id")}
-    removed = 0
-    for old in get_evaluation(conn, semester_uid, discipline, with_milestones=False):
-        if old["id"] not in sent:
-            for m in list_milestones(conn, semester_uid, discipline, way_id=old["id"]):
-                delete_milestone(conn, m["uid"])
-                removed += 1
-    conn.execute("DELETE FROM university_sheet WHERE semester_uid = ? AND discipline_tag = ? COLLATE NOCASE AND key LIKE 'eval:%'", (semester_uid, discipline))
-    n = 0
-    plans = []
-    for comp in components:
-        name = (comp.get("name") or "").strip()
-        if not name:
-            continue
-        if str(comp.get("weight") or "").strip() and _num(comp.get("weight")) is None:
-            conn.rollback()
-            raise PlanError(f"Weight of {name} must be a number")
-        subs = []
-        for sub in comp.get("subs", []):
-            if (sub.get("name") or "").strip():
-                if str(sub.get("weight") or "").strip() and _num(sub.get("weight")) is None:
-                    conn.rollback()
-                    raise PlanError(f"Weight of {sub['name']} must be a number")
-                subs.append({"id": sub.get("id") or uuid.uuid4().hex[:8], "name": sub["name"].strip(), "weight": str(sub.get("weight") or "").strip()})
-        n += 1
-        cid = comp.get("id") or uuid.uuid4().hex[:8]
-        _put_sheet(conn, semester_uid, discipline, f"eval:{cid}", name, json.dumps({"id": cid, "form": (comp.get("form") or "").strip(), "weight": str(comp.get("weight") or "").strip(), "subs": subs,
-                                                                                                     "elimination": bool(comp.get("elimination")), "notes": (comp.get("notes") or "").strip()}), 200 + n)
-        plans.append(({"id": cid, "name": name}, comp.get("milestones")))
-    for way, milestones in plans:
-        if milestones is None:
-            continue
-        keep = {m.get("uid") for m in milestones if m.get("uid")}
-        for old in list_milestones(conn, semester_uid, discipline, way_id=way["id"]):
-            if old["uid"] not in keep:
-                delete_milestone(conn, old["uid"])
-                removed += 1
-        for i, ms in enumerate(milestones):
-            if any(str(ms.get(k) or "").strip() for k in ("title", "day", "due", "notes")):
-                _save_milestone(conn, semester_uid, discipline, way, ms, i)
-    conn.commit()
-    notes = evaluation_warnings(get_evaluation(conn, semester_uid, discipline, with_milestones=False))
-    if removed:
-        notes.append(f"{removed} milestone{'s' if removed != 1 else ''} removed with {'its' if removed == 1 else 'their'} events and tasks")
-    return notes
-
-
-def _ways_as_input(conn: sqlite3.Connection, semester_uid: str, discipline: str) -> list[dict[str, Any]]:
-    fmt = lambda v: "" if v is None else f"{v:g}"  # noqa: E731
-    return [{"id": w["id"], "name": w["name"], "form": w["form"], "weight": fmt(w["stored_weight"]), "elimination": w["elimination"], "notes": w["notes"], "subs": [{**x, "weight": fmt(x["weight"])} for x in w["subs"]]}
-            for w in get_evaluation(conn, semester_uid, discipline, with_milestones=False)]
-
-
-def save_way(conn: sqlite3.Connection, semester_uid: str, discipline: str, way: dict[str, Any]) -> list[str]:
-    """Adds a way of evaluating, or replaces the one with the same id in its place; the other ways and their milestones are left as they are."""
-    ways = _ways_as_input(conn, semester_uid, discipline)
-    if way.get("id") and any(w["id"] == way["id"] for w in ways):
-        ways = [way if w["id"] == way["id"] else w for w in ways]
-    else:
-        ways.append(way)
-    return save_evaluation(conn, semester_uid, discipline, ways)
-
-
-def delete_way(conn: sqlite3.Connection, semester_uid: str, discipline: str, way_id: str) -> list[str]:
-    return save_evaluation(conn, semester_uid, discipline, [w for w in _ways_as_input(conn, semester_uid, discipline) if w["id"] != way_id])
-
-
-def evaluation_rows(conn: sqlite3.Connection, semester_uid: str, discipline: str, today: date | None = None) -> dict[str, Any]:
-    """The Examination page: every way of evaluating with its components and dated milestones."""
-    ways = get_evaluation(conn, semester_uid, discipline)
-    today = today or clock.today()
-    for w in ways:
-        for m in w["milestones"]:
-            m["days_left"] = (date.fromisoformat(m["date"]) - today).days if m["date"] else None
-    for w in ways:
-        w["tone"] = EVALUATION_TONES.get(w["form"], "orange")
-    return {"ways": ways, "warnings": evaluation_warnings(ways)}
-
 
 def sheet_filled(sheet: dict[str, Any]) -> bool:
     return any(v for v in sheet["values"].values()) or any(sec["custom"] for sec in sheet["sections"]) or bool(sheet["lecture_teachers"] or sheet["seminar_teachers"])
@@ -1440,7 +1318,7 @@ def save_sheet(conn: sqlite3.Connection, semester_uid: str, discipline: str, val
     label is dropped. None leaves them as they are."""
     for i, (key, label) in enumerate(SHEET_FIELDS):
         if key in values:
-            if key in ("credits",) or key.startswith("hours_"):
+            if key in ("credits",) or key.startswith(("hours_", "absences_")):
                 try:
                     float(str(values[key]).replace(",", ".") or 0)
                 except ValueError:

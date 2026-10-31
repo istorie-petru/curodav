@@ -14,7 +14,7 @@
 
   function placeNext() {
     const side = document.querySelector(".qa-next");
-    const split = side && side.closest(".qa-split");
+    const split = side && side.closest(".modal-split");
     if (!side || !split) return;
     const title = PHONE.matches && document.querySelector(".quick-add-panel.is-active input[data-qa-search]");
     const anchor = title && title.closest(".field");

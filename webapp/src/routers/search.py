@@ -25,10 +25,12 @@ from __future__ import annotations
 
 from typing import Annotated, Optional
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
-from .. import db
+from .. import db, search_index
 from ..deps import get_db, templates
 
 router = APIRouter(tags=["search"])
@@ -52,6 +54,21 @@ def _matching_pages(conn, q: str, limit: int = 5) -> list[dict]:
         return pages[:limit]
     q_lower = q.lower()
     return [p for p in pages if q_lower in p["title"].lower()][:limit]
+
+
+def _notebook_pages(conn, q: str, limit: int = 5) -> list[dict]:
+    """Notes matching the query by full text and notebook folders by name, as plain navigation results."""
+    if not q:
+        return []
+    q_lower = q.lower()
+    notes = [{"title": d["title"] or "Untitled", "url": f"/notebook/{d['uid']}", "subtitle": "Note"}
+             for d in search_index.search_notes(conn, q, limit)]
+    folders = db.list_notebook_folders(conn)
+    named = [f for kind in ("projects", "labels") for f in folders[kind] if f.get("kind") != "unfiled" and q_lower in f["name"].lower()]
+    kinds = {"projects": "project", "labels": "label"}
+    found = [{"title": f["name"], "url": f"/notebook/folder?kind={kinds[k]}&name={quote(f['name'])}", "subtitle": "Notebook folder"}
+             for k in ("projects", "labels") for f in folders[k] if f in named]
+    return notes + found[:limit]
 
 
 def _page_result(page: dict) -> dict:
@@ -138,7 +155,7 @@ def api_search(
         # contacts gets exactly that, no pages mixed in) -- a page isn't
         # linkable to anything, and a type-filtered request has already
         # said it doesn't want anything outside that filter.
-        picked.extend(_page_result(p) for p in _matching_pages(conn, q))
+        picked.extend(_page_result(p) for p in _matching_pages(conn, q) + _notebook_pages(conn, q))
     return JSONResponse({"results": picked, "context": context_title})
 
 

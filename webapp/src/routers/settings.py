@@ -101,7 +101,7 @@ HUB_DESCRIPTIONS = {
     "Preferences": "Display preferences, theme and header banner",
     "Organise": "Shelves, tags, spaces and projects",
     "Modules": "Notebook layout and entry types, finance accounts",
-    "System": "Backups and maintenance, published lists, logs",
+    "System": "Backups and maintenance, published lists, logs, API access",
 }
 def _hub_groups() -> list[dict]:
     return [

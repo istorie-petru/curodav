@@ -1,13 +1,14 @@
 """University module pages: the Settings page, its modals and previews, and the study page."""
 
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from src import clock, db, event_series, study_format, tags, university
+from src import db, event_series, study_format, university
 from src.university_discipline import discipline_page
+from src import university_evaluation as ue
 from src import university_plan as up
 from src.routers.labels import COLORS
 from university_helpers import add_exam
@@ -39,12 +40,12 @@ def sem(conn):
 
 def test_the_page_offers_to_set_up_a_semester_first(conn):
     html = _html(university.university_settings(_request(), conn=conn))
-    assert "Nothing set up yet" in html and "/settings/university/semester" in html
+    assert "No semester yet" in html and "/settings/university/semester" in html
 
 
 def test_the_page_lists_the_semester_and_its_disciplines(conn, sem):
     html = _html(university.university_settings(_request(), conn=conn))
-    assert "Autumn 2026" in html and "Biology" in html and "Dr Ionescu" in html and "/groups/University/disciplines/Biology" in html and "classes end" in html
+    assert "Autumn 2026" in html and "Biology" in html and "Dr Ionescu" in html and "/groups/University/disciplines/Biology" in html and "Classes end" in html
 
 
 def test_the_forms_and_the_discipline_view_render(conn, sem):
@@ -97,12 +98,12 @@ def test_export_and_import_round_trip_through_the_versioned_file(conn, sem):
     fresh_conn_semester = up.get_semester(conn, up.save_semester(conn, uid=sem["uid"], name="Autumn 2026", shelf_name="", start_date="2026-10-05",
                                                                end_date="2027-02-14", class_end_date="2026-12-18"))
     up.delete_slot(conn, sem["uid"], up.list_slots(conn, sem["uid"])[0]["series_uid"])
-    up.delete_milestone(conn, up.list_milestones(conn, sem["uid"])[0]["uid"])
+    ue.delete_milestone(conn, ue.list_milestones(conn, sem["uid"])[0]["uid"])
     up.delete_reading(conn, up.list_readings(conn, sem["uid"])[0]["task_uid"])
     plan = up.plan_import(conn, fresh_conn_semester, kind, data)
     assert "1 timetable slots, 2 topics, 1 exams, 1 readings" in plan["lines"][0] and "already exists" in plan["warnings"][0]
     up.apply_import(conn, fresh_conn_semester, kind, data, colors=COLORS)
-    assert len(up.list_slots(conn, sem["uid"])) == 1 and len(up.list_milestones(conn, sem["uid"])) == 1 and len(up.list_readings(conn, sem["uid"])) == 1
+    assert len(up.list_slots(conn, sem["uid"])) == 1 and len(ue.list_milestones(conn, sem["uid"])) == 1 and len(up.list_readings(conn, sem["uid"])) == 1
     assert len(up.list_topics(conn, sem["uid"], "Biology")) == 2
 
 
@@ -127,7 +128,7 @@ def test_classes_and_exams_can_be_edited_elsewhere_and_a_new_title_applies_every
     series = up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "kind": "lecture", "weeks": "all"})
     cls = up.series_members(conn, series)[0]
     exam_uid = add_exam(conn, sem, title="Final", day="2027-01-20", start="09:00", end="11:00", weight="")
-    exam = up.list_milestones(conn, sem["uid"])[0]
+    exam = ue.list_milestones(conn, sem["uid"])[0]
     assert up.is_locked(conn, "event", cls["uid"]) and up.is_locked(conn, "event", exam["event_uid"]) and up.is_locked(conn, "task", exam_uid)
     db.upsert_event(conn, {"uid": "free", "title": "Dentist", "description": "", "all_day": 0, "status": "active", "start_at": "2026-10-12T09:00", "end_at": "2026-10-12T10:00"})
     assert not up.is_locked(conn, "event", "free")
@@ -146,7 +147,7 @@ def test_classes_and_exams_can_be_edited_elsewhere_and_a_new_title_applies_every
     call(tasks_router.update_task, exam_uid, title="Final exam", description="bring ID")
     assert db.get_task(conn, exam_uid)["description"] == "bring ID"
     assert db.get_task(conn, exam_uid)["title"] == "Final exam" and db.get_event(conn, exam["event_uid"])["title"] == "Final exam"
-    assert up.list_milestones(conn, sem["uid"])[0]["raw_title"] == "Final exam"
+    assert ue.list_milestones(conn, sem["uid"])[0]["raw_title"] == "Final exam"
     call(cal.update_event, "free", title="Dentist again", description="", start_at="2026-10-12T09:00", end_at="2026-10-12T10:00")
     assert db.get_event(conn, "free")["title"] == "Dentist again"
 
@@ -156,7 +157,7 @@ def test_the_shelf_page_goes_to_the_space_and_the_space_shows_the_study_page(con
     resp = label_pages.label_page("Autumn 2026", _request("/labels/Autumn 2026"), conn=conn)
     assert resp.status_code == 303 and resp.headers["location"] == "/groups/University"
     html = _html(label_pages.group_page("University", _request("/groups/University"), conn=conn))
-    assert "Next examination" in html and "view=agenda" not in html and "view=board" not in html
+    assert "ov-line" in html and "view=exams" in html and "view=agenda" not in html and "view=board" not in html
 
 
 def test_a_missing_discipline_or_group_is_not_found(conn, sem):
@@ -178,14 +179,16 @@ def test_homework_and_class_contents_save_through_the_pages(conn, sem):
 
 
 def test_a_slot_saves_straight_away_and_says_so_only_when_text_was_lost(conn, sem):
-    resp = university.slot_save("Biology", "", "0", "10:00", "12:00", "A2", "lecture", "all", [], conn=conn)
+    def save(series="", weekday="0", start="10:00", end="12:00"):
+        return university.slot_save(discipline="Biology", discipline_new="", series_uid=series, weekday=weekday, start=start, end=end, room="A2",
+                                    kind="lecture", weeks="all", teachers=[], back="", conn=conn)
+    resp = save()
     assert resp.status_code == 303 and "note=" not in resp.headers["location"] and len(up.list_slots(conn, sem["uid"])) == 1
     series = up.list_slots(conn, sem["uid"])[0]["series_uid"]
     db.upsert_event(conn, {**up.series_members(conn, series)[0], "description": "typed"})
-    resp = university.slot_save("Biology", series, "1", "10:00", "12:00", "A2", "lecture", "all", [], conn=conn)
-    assert "note=" in resp.headers["location"]
+    assert "note=" in save(series, "1").headers["location"]
     with pytest.raises(HTTPException) as exc:
-        university.slot_save("Biology", "", "0", "12:00", "10:00", "", "lecture", "all", [], conn=conn)
+        save(start="12:00", end="10:00")
     assert exc.value.status_code == 400
 
 
@@ -292,8 +295,8 @@ def _components():
 
 
 def test_the_evaluation_is_one_list_with_components_whose_weights_are_percent_of_their_way(conn, sem):
-    assert up.save_evaluation(conn, sem["uid"], "Biology", _components()) == []
-    comps = up.get_evaluation(conn, sem["uid"], "Biology")
+    assert ue.save_evaluation(conn, sem["uid"], "Biology", _components()) == []
+    comps = ue.get_evaluation(conn, sem["uid"], "Biology")
     assert [(c["name"], c["weight"], c["effective"]) for c in comps] == [("Exam", 60.0, 60.0), ("Project", 40.0, 40.0)]
     assert [(x["name"], x["weight"], x["effective"]) for x in comps[0]["subs"]] == [("Theory", 70.0, 42.0), ("Practice", 30.0, 18.0)]
 
@@ -302,26 +305,26 @@ def test_weights_that_do_not_add_up_warn_but_are_kept(conn, sem):
     comps = _components()
     comps[0]["subs"][1]["weight"] = "20"
     comps[1]["weight"] = "30"
-    warnings = up.save_evaluation(conn, sem["uid"], "Biology", comps)
+    warnings = ue.save_evaluation(conn, sem["uid"], "Biology", comps)
     assert warnings == ["The evaluation weights add up to 90%, not 100%", "The components of Exam add up to 90%, not 100%"]
-    assert len(up.get_evaluation(conn, sem["uid"], "Biology")) == 2
+    assert len(ue.get_evaluation(conn, sem["uid"], "Biology")) == 2
     with pytest.raises(up.PlanError, match="must be a number"):
-        up.save_evaluation(conn, sem["uid"], "Biology", [{"id": "", "name": "X", "weight": "lots", "subs": []}])
-    assert len(up.get_evaluation(conn, sem["uid"], "Biology")) == 2
+        ue.save_evaluation(conn, sem["uid"], "Biology", [{"id": "", "name": "X", "weight": "lots", "subs": []}])
+    assert len(ue.get_evaluation(conn, sem["uid"], "Biology")) == 2
 
 
 def test_the_ids_of_ways_survive_an_edit_and_their_milestones_stay(conn, sem):
     add_exam(conn, sem, title="Final", weight="60")
-    way = up.get_evaluation(conn, sem["uid"], "Biology")[0]
-    up.save_evaluation(conn, sem["uid"], "Biology", [{"id": way["id"], "name": "Written exam", "weight": "60", "subs": [], "milestones": [
+    way = ue.get_evaluation(conn, sem["uid"], "Biology")[0]
+    ue.save_evaluation(conn, sem["uid"], "Biology", [{"id": way["id"], "name": "Written exam", "weight": "60", "subs": [], "milestones": [
         {"uid": m["uid"], "title": m["title"], "day": m["day"], "due": m["due"]} for m in way["milestones"]]}])
-    again = up.get_evaluation(conn, sem["uid"], "Biology")[0]
+    again = ue.get_evaluation(conn, sem["uid"], "Biology")[0]
     assert again["id"] == way["id"] and again["name"] == "Written exam" and [m["uid"] for m in again["milestones"]] == [m["uid"] for m in way["milestones"]]
-    assert up.list_milestones(conn, sem["uid"])[0]["weight"] == 60.0
+    assert ue.list_milestones(conn, sem["uid"])[0]["weight"] == 60.0
 
 
 def test_the_examination_page_lists_every_way_with_its_milestones_and_dates(conn, sem):
-    up.save_evaluation(conn, sem["uid"], "Biology", _components() + [{"id": "", "name": "Homework", "weight": "", "subs": [], "milestones": [{"title": "Hand in", "due": "2027-01-05"}]}])
+    ue.save_evaluation(conn, sem["uid"], "Biology", _components() + [{"id": "", "name": "Homework", "weight": "", "subs": [], "milestones": [{"title": "Hand in", "due": "2027-01-05"}]}])
     add_exam(conn, sem, title="Final", day="2027-01-20", weight="10")
     page = _html(discipline_page("University", "Biology", _request(), view="exams", conn=conn))
     assert "Theory" in page and "Project" in page and "Hand in" in page and "Final" in page and "evaluation/new?discipline=Biology" in page and "/evaluation/" in page
@@ -345,7 +348,7 @@ def test_the_way_window_saves_a_way_with_components_events_and_tasks_apart_and_t
 
     resp = asyncio.run(university.way_save(FakeRequest(), conn=conn))
     assert "note=" in resp.headers["location"] and "The%20components" in resp.headers["location"]
-    way = up.get_evaluation(conn, sem["uid"], "Biology")[0]
+    way = ue.get_evaluation(conn, sem["uid"], "Biology")[0]
     assert (way["name"], way["form"], way["weight"]) == ("Project", "Project", 60.0) and [s["name"] for s in way["subs"]] == ["Theory", "Practice"]
     assert sorted((bool(m["event_uid"]), bool(m["task_uid"]), m["title"]) for m in way["milestones"]) == [(False, True, "Send"), (True, False, "Presentation"), (True, False, "Test")]
     presentation = next(m for m in way["milestones"] if m["title"] == "Presentation")
@@ -356,18 +359,18 @@ def test_the_way_window_saves_a_way_with_components_events_and_tasks_apart_and_t
 
 
 def test_a_new_way_has_no_milestones_of_its_own_whatever_its_type(conn, sem):
-    up.save_way(conn, sem["uid"], "Biology", {"id": "", "name": "Project", "form": "Project", "weight": "100", "subs": []})
-    assert up.get_evaluation(conn, sem["uid"], "Biology")[0]["milestones"] == [] and db.list_events(conn) == []
+    ue.save_way(conn, sem["uid"], "Biology", {"id": "", "name": "Project", "form": "Project", "weight": "100", "subs": []})
+    assert ue.get_evaluation(conn, sem["uid"], "Biology")[0]["milestones"] == [] and db.list_events(conn) == []
 
 
 def test_editing_a_way_keeps_its_place_and_the_other_ways_and_deleting_one_removes_its_items(conn, sem):
     add_exam(conn, sem, title="Final", weight="50")
-    up.save_way(conn, sem["uid"], "Biology", {"id": "", "name": "Homework", "form": "Homework", "weight": "50", "subs": [], "milestones": [{"title": "Hand in", "due": "2027-01-05"}]})
-    first, second = up.get_evaluation(conn, sem["uid"], "Biology")
-    up.save_way(conn, sem["uid"], "Biology", {"id": first["id"], "name": "Written exam", "form": "Exam", "weight": "50", "subs": []})
-    assert [(w["name"], len(w["milestones"])) for w in up.get_evaluation(conn, sem["uid"], "Biology")] == [("Written exam", 1), ("Homework", 1)]
-    notes = up.delete_way(conn, sem["uid"], "Biology", second["id"])
-    assert [w["name"] for w in up.get_evaluation(conn, sem["uid"], "Biology")] == ["Written exam"] and db.get_task(conn, second["milestones"][0]["task_uid"]) is None and notes
+    ue.save_way(conn, sem["uid"], "Biology", {"id": "", "name": "Homework", "form": "Homework", "weight": "50", "subs": [], "milestones": [{"title": "Hand in", "due": "2027-01-05"}]})
+    first, second = ue.get_evaluation(conn, sem["uid"], "Biology")
+    ue.save_way(conn, sem["uid"], "Biology", {"id": first["id"], "name": "Written exam", "form": "Exam", "weight": "50", "subs": []})
+    assert [(w["name"], len(w["milestones"])) for w in ue.get_evaluation(conn, sem["uid"], "Biology")] == [("Written exam", 1), ("Homework", 1)]
+    notes = ue.delete_way(conn, sem["uid"], "Biology", second["id"])
+    assert [w["name"] for w in ue.get_evaluation(conn, sem["uid"], "Biology")] == ["Written exam"] and db.get_task(conn, second["milestones"][0]["task_uid"]) is None and notes
 
 
 def test_the_course_sheet_shows_only_what_has_content_and_offers_the_rest_as_buttons(conn, sem):
@@ -447,8 +450,6 @@ def test_university_export_and_import_live_in_the_system_dialogs(conn, sem, monk
     monkeypatch.delenv("CC_MODULES")
     with pytest.raises(ValueError, match="Turn the University module on"):
         export_router._import_one(conn, "biology.json", one.body, False)
-    html = export_router.templates.get_template("_data_formats_table.html").render({"university_on": True})
-    assert "University semester or discipline" in html
 
 
 def test_the_university_pages_no_longer_carry_import_or_export_buttons(conn, sem):
@@ -491,11 +492,10 @@ def test_the_schedule_is_the_timetable_with_odd_weeks_left_even_weeks_right_and_
     days = study_page.schedule(conn, sem, "University")["days"]
     assert [d["label"] for d in days] == ["Mon", "Tue", "Wed", "Thu", "Fri"]
     monday, wednesday = days[0]["blocks"][0], {b["weeks"]: b for b in days[2]["blocks"]}
-    assert (monday["left"], monday["width"]) == (0.0, 100.0)
+    assert (monday["left"], monday["width"]) == (0.0, 100.0) and monday["top"] == 96.0 and monday["height"] == 96.0
     assert (wednesday["odd"]["left"], wednesday["odd"]["width"]) == (0.0, 50.0) and (wednesday["even"]["left"], wednesday["even"]["width"]) == (50.0, 50.0)
     html = _study(conn)
-    assert "study-grid" in html and "Left half: odd weeks. Right half: even weeks." in html
-    assert "study-week-nav" not in html and "is-today" not in html and 'title="Previous week"' not in html and "study-legend" not in html
+    assert "week-event is-translucent" in html and "Left half odd weeks, right half even weeks" in html and 'title="Previous week"' not in html
 
 
 def test_overlapping_classes_of_one_kind_share_their_half(conn, sem):
@@ -506,35 +506,31 @@ def test_overlapping_classes_of_one_kind_share_their_half(conn, sem):
     assert [(b["left"], b["width"]) for b in blocks] == [(0.0, 25.0), (25.0, 25.0), (50.0, 50.0)]
 
 
-def test_the_widgets_show_the_next_exam_two_homeworks_two_tasks_and_what_is_left_of_the_semester(conn, sem, frozen_today):
+def test_the_overview_shows_the_week_the_exams_coming_and_what_is_due(conn, sem, frozen_today):
     frozen_today(date(2026, 10, 26))
     add_exam(conn, sem, title="Final", day="2026-11-03", start="09:00", end="11:00")
     add_exam(conn, sem, title="Later", day="2026-12-01", start="09:00", end="11:00")
-    for title, due in (("Lab 3", "2026-11-09"), ("Lab 1", "2026-10-27"), ("Lab 2", "2026-11-02")):
+    for title, due in (("Lab 3", "2026-11-09"), ("Lab 1", "2026-10-27")):
         up.save_homework(conn, sem, "Biology", task_uid=None, title=title, due=due, status="")
     up.save_homework(conn, sem, "Biology", task_uid=None, title="Done one", due="2026-10-26", status="done")
-    up.save_reading(conn, sem, "Biology", task_uid=None, title="Chapter A", due="2026-11-20")
     up.save_reading(conn, sem, "Biology", task_uid=None, title="Chapter B", due="2026-10-30")
-    up.save_reading(conn, sem, "Biology", task_uid=None, title="Chapter C", due="2026-11-30")
     from src import study_page
 
-    w = study_page.widgets(conn, sem, date(2026, 10, 26))
-    assert w["exam"]["title"] == "Final" and w["exam"]["when"] == "in 8 days"
-    assert [(h["title"], h["when"]) for h in w["homework"]] == [("Lab 1", "tomorrow"), ("Lab 2", "in 7 days")]
-    assert [(t["title"], t["when"]) for t in w["tasks"]] == [("Chapter B", "in 4 days"), ("Chapter A", "20 Nov")]
-    assert w["left"]["big"] == "16 weeks left" and w["left"]["small"] == "ends 14 Feb" and 0 < w["left"]["percent"] < 20
+    data = study_page.overview(conn, sem, "University", date(2026, 10, 26), datetime(2026, 10, 26, 8, 0))
+    assert data["summary"]["week"] == 4 and data["summary"]["parity"] == "even" and data["summary"]["left"] == "16 weeks left"
+    assert [m["title"] for m in data["exams_soon"]] == ["Final", "Later"] and data["exams_this_fortnight"] == 1
+    assert [w["title"] for w in data["due"]] == ["Lab 1", "Chapter B", "Lab 3"]
     html = _study(conn)
-    assert "Next examination" in html and "Lab 1" in html and "Chapter B" in html and "weeks left" in html and "pill-" not in html.split("uni-widgets")[1].split("study-grid")[0]
+    assert "Week 4 of" in html and "Lab 1" in html and "Chapter B" in html and "Done one" not in html
 
 
-def test_the_widgets_say_so_when_there_is_nothing_and_the_semester_can_be_over(conn, sem):
+def test_the_overview_says_so_when_there_is_nothing_and_the_semester_can_be_over(conn, sem):
     from src import study_page
 
-    w = study_page.widgets(conn, sem, date(2027, 3, 1))
-    assert w["exam"] is None and w["homework"] == [] and w["tasks"] == [] and w["left"]["big"] == "Semester over"
-    assert study_page.widgets(conn, sem, date(2026, 9, 1))["left"]["big"] == "Starts 5 Oct" or "Starts" in study_page.widgets(conn, sem, date(2026, 9, 1))["left"]["big"]
+    assert study_page.summary(conn, sem, date(2027, 3, 1))["left"] == "over"
+    assert study_page.summary(conn, sem, date(2026, 9, 1))["left"].startswith("starts")
     empty = _study(conn)
-    assert "None planned" in empty and "Nothing due" in empty
+    assert "No exams coming" in empty and "Nothing due" in empty
 
 
 def test_the_dates_are_as_short_as_they_can_be():
@@ -548,30 +544,22 @@ def test_the_dates_are_as_short_as_they_can_be():
 def test_the_disciplines_view_is_a_bordered_card_per_discipline_with_one_line_of_news_only(conn, sem, frozen_today):
     frozen_today(date(2026, 10, 7))
     page = _study(conn, b"view=disciplines")
-    assert "uni-card" in page and "Biology" in page and "/groups/University/disciplines/Biology" in page and "Not set up: contents, examination" in page
-    for gone in ("topics", "credits", "read", "Dr "):
-        assert gone not in page.split("uni-cards")[1].split("</main>")[0]
+    assert "uni-card" in page and "/groups/University/disciplines/Biology" in page and "No contents or evaluation yet" in page
     up.save_topic_rows(conn, sem["uid"], "Biology", [("1", "Cells", "0")])
-    up.save_evaluation(conn, sem["uid"], "Biology", [{"id": "", "name": "Exam", "weight": "100", "subs": [], "milestones": [{"title": "Final", "day": "2026-10-09", "start": "09:00"}]}])
+    ue.save_evaluation(conn, sem["uid"], "Biology", [{"id": "", "name": "Exam", "weight": "100", "subs": [], "milestones": [{"title": "Final", "day": "2026-10-09", "start": "09:00"}]}])
     page = _study(conn, b"view=disciplines")
-    assert "Not set up" not in page and "Final in 2 days" in page
-    way = up.get_evaluation(conn, sem["uid"], "Biology")[0]
-    up.save_evaluation(conn, sem["uid"], "Biology", [{"id": way["id"], "name": "Exam", "weight": "100", "subs": [], "milestones": [
-        {"uid": way["milestones"][0]["uid"], "title": "Final", "day": "2027-02-01", "start": "09:00"}]}])
-    assert "Final in" not in _study(conn, b"view=disciplines")
+    assert "yet" not in page.split("uni-cards")[1] and "Final in 2 days" in page
 
 
-def test_the_space_page_has_only_overview_and_disciplines_and_no_header_menu(conn, sem):
+def test_the_space_page_has_its_five_views_and_no_header_menu(conn, sem):
     from src.routers import label_pages
 
     page = _study(conn)
-    header = page.split("</header>")[0] if "</header>" in page else page
-    assert 'aria-label="University settings"' not in page and "view=agenda" not in page and "view=board" not in page
-    assert page.count("view=disciplines") >= 1
-    assert "uni-semester-menu" not in page and 'aria-label="Semester"' not in page
+    for view in ("view=disciplines", "view=exams", "view=attendance", "view=work"):
+        assert view in page
+    assert 'aria-label="University settings"' not in page and "view=agenda" not in page and 'aria-label="Semester"' not in page
     for view in (b"view=agenda", b"view=board"):
-        html = _html(label_pages.group_page("University", _request("/groups/University", view), conn=conn))
-        assert "Next examination" in html
+        assert "ov-line" in _html(label_pages.group_page("University", _request("/groups/University", view), conn=conn))
 
 
 def test_the_discipline_overview_has_no_setup_card(conn, sem):
@@ -585,24 +573,22 @@ def test_the_discipline_overview_is_two_columns_of_lists_with_no_tables(conn, se
     up.apply_assign_in_order(conn, sem["uid"], "Biology")
     page = _html(discipline_page("University", "Biology", _request(), view="overview", conn=conn))
     main = page.split("<main")[1].split("</main>")[0]
-    assert "<table" not in main and "uni-split" in main and "uni-side" in main and "uni-setup" not in main
+    assert "<table" not in main and "sec-grid" in main
     nxt = main.split("Next classes")[1].split("Timetable")[0]
-    assert nxt.count("uni-item\"") == 2 and "2. Membranes" in nxt and "3. Transport" in nxt and "1. Cells" not in nxt
-    assert "Change the topic" in nxt and "Reschedule or move" in nxt and "Cancel this class" in nxt and "/delete-scope" in nxt
+    assert nxt.count('class="sec-row"') == 2 and "2. Membranes" in nxt and "3. Transport" in nxt and "1. Cells" not in nxt
+    assert "Change the topic" in nxt and "Reschedule" in nxt and "/attendance" in nxt and "/delete-scope" not in nxt
 
 
-def test_pending_exams_homework_and_undated_evaluations_sit_in_colored_cards_in_the_thin_column(conn, sem, frozen_today):
+def test_pending_exams_homework_and_undated_evaluations_are_listed_by_date(conn, sem, frozen_today):
     frozen_today(date(2026, 10, 26))
-    up.save_evaluation(conn, sem["uid"], "Biology", [
+    ue.save_evaluation(conn, sem["uid"], "Biology", [
         {"id": "", "name": "Exam", "weight": "60", "subs": [], "milestones": [{"title": "Exam", "day": "2026-11-03", "start": "09:00"}]},
         {"id": "", "name": "Project", "weight": "40", "subs": [], "milestones": [{"title": "Project", "day": ""}]}])
     up.save_homework(conn, sem, "Biology", task_uid=None, title="Lab 1", due="2026-10-27", status="")
     up.save_homework(conn, sem, "Biology", task_uid=None, title="Old", due="2026-10-01", status="done")
-    side = _html(discipline_page("University", "Biology", _request(), view="overview", conn=conn)).split("uni-side")[1].split("</aside>")[0]
-    assert "is-exam" in side and "Exam" in side and "in 8 days · 60%" in side
-    assert "is-dated" in side and "Project" in side and "No date yet · 40%" in side
-    assert "is-homework" in side and "Lab 1" in side and "tomorrow" in side and "Old" not in side
-    assert side.index("is-exam") < side.index("is-dated") < side.index("is-homework")
+    side = _html(discipline_page("University", "Biology", _request(), view="overview", conn=conn)).split("Pending")[1]
+    assert "Exam" in side and "60%" in side and "In 8 days" in side and "Project" in side and "No date" in side and "Lab 1" in side and "Old" not in side
+    assert side.index("Lab 1") < side.index("Exam") < side.index("Project")
 
 
 def test_a_cancelled_class_no_longer_counts_as_a_place_for_its_topic(conn, sem):
@@ -627,8 +613,8 @@ def test_other_items_are_the_tasks_and_events_made_by_hand_and_an_event_can_be_d
     assert "Other tasks and events" in page and "Field trip" in page and "/event/trip/delete" in page and "uni-way" in page
     university.other_event_delete("trip", discipline="Biology", conn=conn)
     assert db.get_event(conn, "trip") is None
-    university.other_event_delete(up.list_milestones(conn, sem["uid"])[0]["event_uid"], discipline="Biology", conn=conn)
-    assert len(db.list_events(conn)) > 0 and up.list_milestones(conn, sem["uid"])[0]["event_uid"]
+    university.other_event_delete(ue.list_milestones(conn, sem["uid"])[0]["event_uid"], discipline="Biology", conn=conn)
+    assert len(db.list_events(conn)) > 0 and ue.list_milestones(conn, sem["uid"])[0]["event_uid"]
 
 
 
@@ -664,14 +650,14 @@ def test_other_items_leave_out_what_is_tracked_elsewhere(conn, sem):
 
 
 def test_a_way_can_be_an_elimination_round_with_notes(conn, sem):
-    up.save_way(conn, sem["uid"], "Biology", {"id": "", "name": "Quiz", "form": "Exam", "weight": "30", "elimination": True, "notes": "pass mark 5", "subs": [], "milestones": []})
-    up.save_way(conn, sem["uid"], "Biology", {"id": "", "name": "Final", "form": "Exam", "weight": "100", "subs": [], "milestones": []})
-    quiz, final = sorted(up.get_evaluation(conn, sem["uid"], "Biology"), key=lambda w: w["name"] == "Final")
+    ue.save_way(conn, sem["uid"], "Biology", {"id": "", "name": "Quiz", "form": "Exam", "weight": "30", "elimination": True, "notes": "pass mark 5", "subs": [], "milestones": []})
+    ue.save_way(conn, sem["uid"], "Biology", {"id": "", "name": "Final", "form": "Exam", "weight": "100", "subs": [], "milestones": []})
+    quiz, final = sorted(ue.get_evaluation(conn, sem["uid"], "Biology"), key=lambda w: w["name"] == "Final")
     assert quiz["elimination"] and quiz["weight"] is None and quiz["stored_weight"] == 30 and quiz["notes"] == "pass mark 5"
     assert not final["elimination"] and final["weight"] == 100
-    assert up.evaluation_warnings([quiz, final]) == []
-    up.save_way(conn, sem["uid"], "Biology", {"id": final["id"], "name": "Final", "form": "Exam", "weight": "100", "subs": [], "milestones": []})
-    assert next(w for w in up.get_evaluation(conn, sem["uid"], "Biology") if w["name"] == "Quiz")["stored_weight"] == 30
+    assert ue.evaluation_warnings([quiz, final]) == []
+    ue.save_way(conn, sem["uid"], "Biology", {"id": final["id"], "name": "Final", "form": "Exam", "weight": "100", "subs": [], "milestones": []})
+    assert next(w for w in ue.get_evaluation(conn, sem["uid"], "Biology") if w["name"] == "Quiz")["stored_weight"] == 30
 
 
 def test_one_class_can_be_moved_and_deleted_from_the_contents_page(conn, sem):

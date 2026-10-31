@@ -177,6 +177,12 @@ def _folder_rows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return rows
 
 
+def notebook_folder_of(conn: sqlite3.Connection, uid: str) -> tuple[str, str]:
+    """The folder a note sits in as (kind, name); ("", "") for a template or a missing note."""
+    row = next((r for r in _folder_rows(conn) if r["uid"] == uid), None)
+    return row["folder"] if row else ("", "")
+
+
 def list_notebook_subfolders(conn: sqlite3.Connection, label: str) -> list[dict[str, Any]]:
     """The sub-folders of a shelf folder: one per tag that its notes carry, with a count and the tag's own look.
     A shelf whose notes carry only its same-named default tag has none."""
@@ -295,10 +301,10 @@ def set_folder_readme(conn: sqlite3.Connection, label_name: str, body: str) -> N
     conn.commit()
 
 
-def latest_notebook_document(conn: sqlite3.Connection) -> dict[str, Any] | None:
-    """The most recently edited note, for the home's Continue card."""
-    row = conn.execute("SELECT uid, title FROM notebook_documents WHERE is_template = 0 ORDER BY updated_at DESC LIMIT 1").fetchone()
-    return dict(row) if row else None
+def recent_notebook_documents(conn: sqlite3.Connection, limit: int = 5) -> list[dict[str, Any]]:
+    """The most recently edited notes, for the home's Recent card."""
+    rows = conn.execute("SELECT uid, title FROM notebook_documents WHERE is_template = 0 ORDER BY updated_at DESC LIMIT ?", (limit,))
+    return [dict(r) for r in rows]
 
 
 def list_notebook_folders(conn: sqlite3.Connection) -> dict[str, list[dict[str, Any]]]:

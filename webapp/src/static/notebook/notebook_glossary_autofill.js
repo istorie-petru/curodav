@@ -7,12 +7,8 @@
     var mount = document.getElementById("notebook-editor");
     if (!editor || !mount) return;
     var data = await editor.save();
-    var resp = await fetch(mount.getAttribute("data-content-url"), {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    if (!resp.ok) throw new Error("save failed");
+    var resp = await window.NotebookSave.put(mount.getAttribute("data-content-url"), JSON.stringify(data), false);
+    if (!resp) throw new Error("save refused");
   }
 
   document.addEventListener("click", async function (e) {

@@ -1,22 +1,16 @@
-{% from "_inputs.html" import switch_input, file_input %}
+{% from "_inputs.html" import switch_input, upload_input %}
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
 {% block title %}Import data{% endblock %}
 {% block content %}
 {% call modal(kind="form", title='Import data', size="small", form='import-form', save_label='Import', save_id='import-submit-btn', save_icon='upload') %}
 <form id="import-form" method="post" action="/export/import/auto" enctype="multipart/form-data" class="dm-import-form">
-    <label class="dm-dropzone" data-dm-dropzone>
-        {{ file_input({'name': 'file', 'accept': '.ics,.vcf,.csv,.md,.markdown,.zip,.json,text/calendar,text/vcard,text/csv,text/markdown,application/zip,application/json', 'class': 'sr-only', 'required': true, 'data-dm-file': true}) }}
-        <span class="dm-dropzone-icon" aria-hidden="true">{{ icon('upload') }}</span>
-        <span class="dm-dropzone-title" data-dm-dropzone-title>Drop a file here &mdash; auto-detects type</span>
-        <span class="dm-dropzone-formats">.ics &middot; .vcf &middot; .csv &middot; .md &middot; .zip &middot; .json</span>
-    </label>
+    {{ upload_input('file', accept='.ics,.vcf,.csv,.md,.markdown,.zip,.json,text/calendar,text/vcard,text/csv,text/markdown,application/zip,application/json', label='Choose or drop a file', large=true, formats='.ics · .vcf · .csv · .md · .zip · .json', attrs={'required': true, 'data-dm-file': true}) }}
     <p class="dm-status" data-dm-status role="status"></p>
     <div class="field">
         <label for="import-merge">Merge with existing data</label>
         <div class="switch-row">{{ switch_input({'id': 'import-merge', 'name': 'merge', 'value': '1', 'checked': true}) }}</div>
     </div>
 </form>
-{% include "_data_formats_table.html" %}
 {% endcall %}
 {% endblock %}

@@ -15,3 +15,11 @@
 {% set fd_form_id = 'tasks-filters-form' %}
 {% include '_filter_dropdown.html' %}
 
+
+{% set fd_name = 'group' %}
+{% set fd_label = 'Group by' %}
+{% set fd_items = [{'value': '', 'name': 'Date'}, {'value': 'shelf', 'name': 'Shelf'}, {'value': 'none', 'name': 'None'}] %}
+{% set fd_selected = group | default('') %}
+{% set fd_mode = 'single' %}
+{% set fd_form_id = 'tasks-filters-form' %}
+{% include '_filter_dropdown.html' %}

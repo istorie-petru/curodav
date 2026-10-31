@@ -1,9 +1,10 @@
 {% from "_inputs.html" import radio_input %}
-{% macro contact_type_picker(field_name, options, selected, row_key, extra_class='', form_id='') %}
+{% macro contact_type_picker(field_name, options, selected, row_key, extra_class='', form_id='', label=None) %}
+{% set _label = label or ((field_name[3:] if field_name[:3] in ('ws_', 'pt_') else field_name) | replace('_', ' ') | capitalize) %}
 {% set _form = form_id or ms_form_id %}
 {% set proxy_id = field_name ~ '-proxy-' ~ row_key %}
 <div class="multiselect widget-list-multiselect contact-type-select {{ extra_class }}" data-ms data-ms-mode="single" data-ms-label="{{ field_name | replace('_', ' ') }}">
-    <button type="button" class="multiselect-trigger ms-trigger" aria-haspopup="true" aria-expanded="false">
+    <button type="button" class="multiselect-trigger ms-trigger" aria-haspopup="true" aria-expanded="false" aria-label="{{ _label }}">
         <span class="ms-summary">{{ selected }}</span>
         <span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
     </button>

@@ -131,11 +131,11 @@ def test_an_unknown_file_is_rejected_with_the_list_of_supported_types(conn):
     assert "error" in location and "zip" in location.lower()
 
 
-def test_the_import_and_export_dialogs_list_what_can_be_imported_and_exported(conn):
+def test_the_import_dialog_names_the_file_types_and_export_offers_every_kind_of_data(conn):
     from starlette.requests import Request
     request = Request({"type": "http", "method": "GET", "path": "/export/modal", "query_string": b"", "scheme": "http",
                        "server": ("testserver", 80), "root_path": "", "headers": []})
-    for body in (export_router.import_modal(request).body.decode(), export_router.export_modal(request, conn=conn).body.decode()):
-        assert "Supported data" in body and "Finance transactions" in body and "Notes and templates" in body
-    assert 'value="notes"' in export_router.export_modal(request, conn=conn).body.decode()
+    assert ".ics · .vcf · .csv · .md · .zip · .json" in export_router.import_modal(request).body.decode()
+    export = export_router.export_modal(request, conn=conn).body.decode()
+    assert all(f'value="{kind}"' in export for kind in ("events", "tasks", "contacts", "notes", "finance", "citations", "glossary"))
 

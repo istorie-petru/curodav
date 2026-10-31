@@ -31,6 +31,13 @@
 {% set fd_form_id = 'contacts-filters-form' %}
 {% include '_filter_dropdown.html' %}
 {% endif %}
+{% set fd_name = 'group' %}
+{% set fd_label = 'Group by' %}
+{% set fd_items = [{'value': '', 'name': 'A to Z'}, {'value': 'shelf', 'name': 'Shelf'}, {'value': 'org', 'name': 'Organization'}] %}
+{% set fd_selected = group %}
+{% set fd_mode = 'single' %}
+{% set fd_form_id = 'contacts-filters-form' %}
+{% include '_filter_dropdown.html' %}
 {% set fd_name = 'show' %}
 {% set fd_label = 'Show' %}
 {% set fd_items = [{'value': '', 'name': 'Active'}, {'value': 'archived', 'name': 'Archived'}, {'value': 'all', 'name': 'All'}] %}

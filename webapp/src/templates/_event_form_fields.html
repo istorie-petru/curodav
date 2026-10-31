@@ -21,7 +21,6 @@
         {% call title_date_row(event.title if event else (prefill_title or ''), qa=(quick_add_kind | default(''))) %}
         {{ _dt_block }}
         {% endcall %}
-        {% if event and university_locked(request, 'event', event.uid) %}<p class="field-hint field-wide">Renaming this class or exam renames it everywhere: every class of its slot, or the exam's event and task.</p>{% endif %}
         {% if occurrence and not series_split | default(false) %}
         <div class="field field-wide event-start-end-field">
             <input type="hidden" name="occurrence_date" value="{{ occurrence_date }}">
@@ -40,7 +39,7 @@
         {% include "_contacts_row.html" %}
         {% if event %}{% set link_label = 'Linked tasks' %}{% set link_name = 'linked_task_uids' %}{% set link_form_id = 'event-form' %}{% include "_link_field.html" %}{% endif %}
         {# reminders_picker.js and recurrence_picker.js upgrade these two inputs in place; routers/calendar.py still takes the raw values. #}
-        {{ reminder_row(event.reminders|join(', ') if event else '', wide=true) }}
+        {{ reminder_row(event.reminders|join(', ') if event else (default_reminders | default([]) | join(', ')), wide=true) }}
         {% if not series_split | default(false) %}{% include "_event_series_fields.html" %}{% endif %}
 
         {% set _has_location = event and event.location and event.location not in (None, 'None', 'Nothing') %}

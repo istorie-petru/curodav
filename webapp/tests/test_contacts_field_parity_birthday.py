@@ -252,6 +252,15 @@ class TestRenderedMarkup:
         body = resp.body.decode()
         assert 'value="1990-05-17"' in body
 
+    def test_yearless_switch_stores_a_date_without_its_year(self):
+        assert contacts_router._parse_birthday_field("2000-05-17", "1") == "--05-17"
+        assert contacts_router._parse_birthday_field("1990-05-17", "") == "1990-05-17"
+
+    def test_edit_form_shows_a_yearless_birthday_with_the_switch_on(self, conn):
+        uid = _make_contact(conn, birthday="--05-17")
+        body = contacts_router.edit_contact_form(uid, _fake_request(f"/contacts/{uid}/edit"), conn=conn).body.decode()
+        assert 'value="2000-05-17"' in body and 'name="birthday_yearless"' in body and "role=\"switch\" name=\"birthday_yearless\" value=\"1\" checked" in body
+
     def test_detail_shows_formatted_full_birthday(self, conn):
         uid = _make_contact(conn, birthday="1990-05-17")
         resp = contacts_router.contact_detail(uid, _fake_request(f"/contacts/{uid}"), conn=conn)

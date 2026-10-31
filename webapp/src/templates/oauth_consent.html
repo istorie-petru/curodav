@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Connect an app — Curodav</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ static_url('favicon-32.png') }}">
+    <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    <script nonce="{{ csp_nonce() }}">
+      (function () {
+        var stored = localStorage.getItem("commandCenterWeb.theme");
+        var theme = stored || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        if (theme === "dark") document.documentElement.setAttribute("data-theme", "dark");
+      })();
+    </script>
+</head>
+<body>
+    <div class="auth-wrap">
+        <div class="auth-card">
+            <h1 class="auth-brand">{{ icon('command') }} Connect an app</h1>
+            {% if error %}
+            <p class="auth-error" role="alert">{{ error }}</p>
+            {% else %}
+            <p><strong>{{ client_name }}</strong> wants to read your notes, library, entries, tasks, events and contacts{% if 'write' in scopes %}, and to edit your notes{% endif %}.</p>
+            <p>It returns to {{ redirect_host }}. You can disconnect it any time in Settings, under API access.</p>
+            <form method="post" action="/oauth/authorize">
+                {% for key, value in fields.items() %}
+                <input type="hidden" name="{{ key }}" value="{{ value }}">
+                {% endfor %}
+                <button type="submit" name="decision" value="allow" class="btn primary auth-submit" autofocus>{{ 'Allow read and edit' if 'write' in scopes else 'Allow read access' }}</button>
+                <button type="submit" name="decision" value="deny" class="btn auth-submit">Cancel</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

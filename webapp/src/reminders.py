@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
 from .log import get_logger
-from . import db, habit_view, perf, push, recurrence_expand
+from . import app_defaults, db, habit_view, perf, push, recurrence_expand
 
 log = get_logger(__name__)
 
@@ -242,6 +242,8 @@ def due_notifications(conn, now: datetime | None = None) -> list[Notification]:
     """Everything that should fire at `now` (local naive) and hasn't been
     sent yet."""
     now = now or datetime.now()
+    if app_defaults.in_quiet_hours(conn, now):
+        return []
     on = enabled_types(conn)
     candidates: list[Notification] = []
     if "events" in on:

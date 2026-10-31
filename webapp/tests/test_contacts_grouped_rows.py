@@ -86,7 +86,7 @@ class TestRenderedGrouping:
         _make_contact(conn, "c1", full_name="Zed", tags=["Work"])
         _make_contact(conn, "c2", full_name="Amy", tags=["Family"])
         _make_contact(conn, "c3", full_name="Sam", tags=[])
-        body = contacts_router.list_contacts(_request(), conn=conn).body.decode()
+        body = contacts_router.list_contacts(_request(), group="shelf", conn=conn).body.decode()
         family_pos = body.index(">Family<")
         work_pos = body.index(">Work<")
         unlabeled_pos = body.index(">Unlabeled<")
@@ -99,15 +99,30 @@ class TestRenderedGrouping:
         # it from" flat list.
         _make_contact(conn, "c1", full_name="Zed", tags=["Work"])
         _make_contact(conn, "c2", full_name="Amy", tags=["Work"])
-        body = contacts_router.list_contacts(_request(), conn=conn).body.decode()
+        body = contacts_router.list_contacts(_request(), group="shelf", conn=conn).body.decode()
         assert 'class="section-row"' in body
         assert ">Work<" in body and "2 contacts" in body
 
     def test_no_section_heading_when_nobody_has_a_label(self, conn):
         _make_contact(conn, "c1", full_name="Zed")
-        body = contacts_router.list_contacts(_request(), conn=conn).body.decode()
+        body = contacts_router.list_contacts(_request(), group="shelf", conn=conn).body.decode()
         assert 'class="section-row' not in body
         assert ">Unlabeled<" not in body
+
+    def test_default_list_is_a_to_z_and_a_contact_with_two_shelves_appears_once(self, conn):
+        _make_contact(conn, "c1", full_name="Zed", tags=["Work", "Family"])
+        _make_contact(conn, "c2", full_name="Amy", tags=["Family"])
+        groups = contacts_router._group_contacts(
+            contacts_router.db.list_contacts(conn), "")
+        assert [g["name"] for g in groups] == ["A", "Z"]
+        body = contacts_router.list_contacts(_request(), conn=conn).body.decode()
+        assert body.count('class="contact-row-wrap"') == 2
+
+    def test_group_by_organization_puts_contacts_without_one_last(self):
+        contacts = [{"uid": "c1", "full_name": "A", "org": "Zeta"}, {"uid": "c2", "full_name": "B", "org": ""},
+                    {"uid": "c3", "full_name": "C", "org": "Acme"}]
+        groups = contacts_router._group_contacts(contacts, "org")
+        assert [g["name"] for g in groups] == ["Acme", "Zeta", None]
 
 
 class TestRowActions:

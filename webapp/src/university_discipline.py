@@ -1,13 +1,16 @@
-"""The page of one discipline, under the page of the space that holds the semester: an overview and the views Syllabus, Contents,
-Bibliography and Exams and homework. Pages show; small windows (a slot, a topic list, an exam, a reading, a class's contents) edit."""
+"""The page of one discipline, under the page of the space that holds the semester: an overview and the views Course sheet, Contents,
+Attendance, Bibliography and Examination. Pages show; small windows (a slot, a topic list, a way of evaluating, a reading, a class) edit."""
 
 from __future__ import annotations
 
+from datetime import date
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from . import clock, db, tags
+from . import clock
+from . import university_attendance as ua
+from . import university_evaluation as ue
 from . import university_plan as up
 from .deps import get_db, templates
 from .study_page import when
@@ -15,7 +18,8 @@ from .university import _enabled
 
 router = APIRouter(prefix="/groups/{group}/disciplines", tags=["university"], dependencies=[Depends(_enabled)])
 
-VIEWS = (("overview", "Overview"), ("sheet", "Course sheet"), ("contents", "Contents"), ("bibliography", "Bibliography"), ("exams", "Examination"))
+VIEWS = (("overview", "Overview"), ("sheet", "Course sheet"), ("contents", "Contents"), ("attendance", "Attendance"), ("bibliography", "Bibliography"),
+         ("exams", "Examination"))
 
 
 def _views(group: str, name: str, active: str) -> list[dict]:
@@ -27,7 +31,7 @@ def build(conn, semester: dict, discipline: dict, view: str, today) -> dict:
     uid, name = semester["uid"], discipline["name"]
     ctx: dict = {"view": view}
     classes = up.list_classes(conn, uid, name, today)
-    milestones = up.list_milestones(conn, uid, name, today)
+    milestones = ue.list_milestones(conn, uid, name, today)
     readings = up.list_readings(conn, uid, name)
     topics = up.list_topics(conn, uid, name)
     if view == "overview":
@@ -47,16 +51,19 @@ def build(conn, semester: dict, discipline: dict, view: str, today) -> dict:
             way_url = f"/settings/university/evaluation/{m['way_id']}/edit?discipline={quote(name, safe='')}"
             weight = f"{m['weight']:g}%" if m["weight"] is not None else ""
             if m["date"] and m["days_left"] >= 0:
-                pending.append({"tone": "exam" if m["event_uid"] else "homework", "title": m["title"], "when": when(m["date"], today), "detail": weight, "url": way_url, "sort": m["date"]})
+                pending.append({"icon": "calendar" if m["event_uid"] else "check-square", "title": m["title"], "when": when(m["date"], today),
+                                "tone": "red" if m["days_left"] <= 7 else "gray", "detail": weight, "url": way_url, "sort": m["date"]})
             elif not m["date"]:
-                pending.append({"tone": "dated", "title": m["title"], "when": "No date yet", "detail": weight, "url": way_url, "sort": "9998"})
+                pending.append({"icon": "calendar", "title": m["title"], "when": "No date", "tone": "orange", "detail": weight, "url": way_url, "sort": "9998"})
         for h in up.list_homework(conn, uid, name):
             if h["status"] not in ("done", "archived"):
-                pending.append({"tone": "homework", "title": h["title"], "when": when(h["due"], today) if h["due"] else "No date", "detail": "", "url": f"/settings/university/homework/{h['task_uid']}/edit", "sort": h["due"] or "9999"})
-        pending.sort(key=lambda p: ({"exam": 0, "dated": 1, "homework": 2}[p["tone"]], p["sort"]))
+                pending.append({"icon": "check-square", "title": h["title"], "when": when(h["due"], today) if h["due"] else "No date", "tone": "gray", "detail": "",
+                                "url": f"/settings/university/homework/{h['task_uid']}/edit", "sort": h["due"] or "9999"})
+        pending.sort(key=lambda p: p["sort"])
+        attendance = ua.discipline_attendance(conn, uid, name, today)
         ctx.update(slots=slots, upcoming=upcoming, pending=pending, topics_done=len([t for t in topics if t["events"]]), topics_total=len(topics),
                    read_done=len([r for r in readings if r["status"] == "done"]), read_total=len(readings), classes_total=len(classes),
-                   classes_left=len([c for c in classes if c["date"] >= iso]))
+                   classes_left=len([c for c in classes if c["date"] >= iso]), absences=attendance["kinds"])
     elif view == "sheet":
         by_event = {c["uid"]: c for c in classes}
         groups = []
@@ -81,10 +88,20 @@ def build(conn, semester: dict, discipline: dict, view: str, today) -> dict:
         if nxt:
             nxt["is_next"] = True
         ctx.update(classes=classes, can_place=bool(topics and classes))
+    elif view == "attendance":
+        data = ua.discipline_attendance(conn, uid, name, today)
+        iso = today.isoformat()
+        shown = [c for c in data["classes"] if c["past"]] + [c for c in data["classes"] if not c["past"]][:3]
+        ctx.update(attendance=data, shown=sorted(shown, key=lambda c: (c["date"], c["start"]), reverse=True), today_iso=iso)
     elif view == "bibliography":
         ctx.update(readings=readings)
     elif view == "exams":
-        ctx.update(others=up.list_other_items(conn, uid, name), evaluation=up.evaluation_rows(conn, uid, name, today))
+        standing = ue.standing(conn, uid, name, today)
+        for w in standing["ways"]:
+            w["tone"] = ue.EVALUATION_TONES.get(w["form"], "orange")
+            for m in w["milestones"]:
+                m["days_left"] = (date.fromisoformat(m["date"]) - today).days if m["date"] else None
+        ctx.update(others=up.list_other_items(conn, uid, name), standing=standing)
     return ctx
 
 

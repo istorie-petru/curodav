@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from src import db, tags, university, university_plan as up
+from src import db, tags, university, university_evaluation as ue, university_plan as up
 from src.routers.labels import COLORS
 from university_helpers import add_exam
 
@@ -230,7 +230,7 @@ def test_moving_the_class_end_shortens_and_extends_every_series_but_not_exams(co
     up.set_class_end(conn, sem["uid"], date(2027, 1, 11))
     members = up.series_members(conn, series)
     assert members[-1]["start_at"].startswith("2027-01-11") and len(members) == 15 and all(not (m.get("description") or "") for m in members)
-    assert up.list_milestones(conn, sem["uid"])[0]["task_uid"] == exam
+    assert ue.list_milestones(conn, sem["uid"])[0]["task_uid"] == exam
     assert up.get_semester(conn, sem["uid"])["class_end_date"] == "2027-01-11"
 
 
@@ -284,13 +284,13 @@ def test_assigning_in_order_skips_classes_with_typed_text_and_names_them(conn, s
 # ---- exams and readings ----
 
 def _evaluation(conn, sem, ways):
-    return up.save_evaluation(conn, sem["uid"], "Biology", ways)
+    return ue.save_evaluation(conn, sem["uid"], "Biology", ways)
 
 
 def test_a_milestone_with_a_day_and_a_deadline_is_an_event_and_a_task_joined_by_an_exam_link(conn, sem):
     _bio(conn, sem)
     uid = add_exam(conn, sem, title="", day="2027-01-20", start="09:00", end="11:30", weight="60", location="Aula")
-    ms = up.list_milestones(conn, sem["uid"], today=date(2027, 1, 10))[0]
+    ms = ue.list_milestones(conn, sem["uid"], today=date(2027, 1, 10))[0]
     assert (ms["title"], ms["day"], ms["start"], ms["end"], ms["weight"], ms["days_left"]) == ("Biology: Exam", "2027-01-20", "09:00", "11:30", 60.0, 10)
     link = db.links_for_task(conn, uid)[0]
     assert link["kind"] == "exam" and link["event"]["uid"] == ms["event_uid"]
@@ -301,11 +301,11 @@ def test_a_milestone_with_a_day_and_a_deadline_is_an_event_and_a_task_joined_by_
 def test_editing_a_milestone_moves_its_task_and_event_together(conn, sem):
     _bio(conn, sem)
     uid = add_exam(conn, sem, title="Final")
-    way = up.get_evaluation(conn, sem["uid"], "Biology")[0]
+    way = ue.get_evaluation(conn, sem["uid"], "Biology")[0]
     m = way["milestones"][0]
     _evaluation(conn, sem, [{"id": way["id"], "name": "Final", "weight": "40", "subs": [], "milestones": [
         {"uid": m["uid"], "title": "Final exam", "day": "2027-01-22", "start": "10:00", "end": "12:00", "due": "2027-01-22"}]}])
-    ms = up.list_milestones(conn, sem["uid"])[0]
+    ms = ue.list_milestones(conn, sem["uid"])[0]
     assert (ms["title"], ms["day"], ms["start"], ms["weight"], ms["task_uid"]) == ("Final exam", "2027-01-22", "10:00", 40.0, uid)
     assert db.get_task(conn, uid)["due_at"].startswith("2027-01-22") and len(db.list_events(conn)) == 1
 
@@ -316,7 +316,7 @@ def test_a_way_may_have_no_milestone_and_a_milestone_may_be_only_an_event_or_onl
         {"id": "", "name": "Continuous", "weight": "30", "subs": [{"id": "", "name": "Seminars", "weight": "100"}]},
         {"id": "", "name": "Project", "weight": "70", "subs": [], "milestones": [
             {"title": "Presentation", "day": "2027-01-12", "start": "10:00"}, {"title": "Send", "due": "2027-01-05"}]}])
-    ways = {w["name"]: w for w in up.get_evaluation(conn, sem["uid"], "Biology")}
+    ways = {w["name"]: w for w in ue.get_evaluation(conn, sem["uid"], "Biology")}
     assert ways["Continuous"]["milestones"] == [] and [m["title"] for m in ways["Project"]["milestones"]] == ["Send", "Presentation"]
     send, present = ways["Project"]["milestones"]
     assert send["event_uid"] == "" and send["task_uid"] and present["event_uid"] and present["task_uid"] == ""
@@ -326,20 +326,20 @@ def test_a_way_may_have_no_milestone_and_a_milestone_may_be_only_an_event_or_onl
 def test_clearing_a_date_removes_that_half_and_removing_a_milestone_removes_both_with_a_toast(conn, sem):
     _bio(conn, sem)
     add_exam(conn, sem, title="Final")
-    way = up.get_evaluation(conn, sem["uid"], "Biology")[0]
+    way = ue.get_evaluation(conn, sem["uid"], "Biology")[0]
     m = way["milestones"][0]
     base = {"id": way["id"], "name": "Final", "weight": "", "subs": []}
     _evaluation(conn, sem, [dict(base, milestones=[{"uid": m["uid"], "title": "Final", "day": "2027-01-20", "due": ""}])])
-    assert up.list_milestones(conn, sem["uid"])[0]["task_uid"] == "" and db.get_task(conn, m["task_uid"]) is None and len(db.list_events(conn)) == 1
+    assert ue.list_milestones(conn, sem["uid"])[0]["task_uid"] == "" and db.get_task(conn, m["task_uid"]) is None and len(db.list_events(conn)) == 1
     notes = _evaluation(conn, sem, [dict(base, milestones=[])])
-    assert up.list_milestones(conn, sem["uid"]) == [] and db.list_events(conn) == [] and any("1 milestone removed" in n for n in notes)
+    assert ue.list_milestones(conn, sem["uid"]) == [] and db.list_events(conn) == [] and any("1 milestone removed" in n for n in notes)
 
 
 def test_removing_a_way_removes_its_milestones_with_their_events_and_tasks(conn, sem):
     _bio(conn, sem)
     uid = add_exam(conn, sem, title="Final")
     notes = _evaluation(conn, sem, [])
-    assert up.list_milestones(conn, sem["uid"]) == [] and db.list_events(conn) == [] and db.get_task(conn, uid) is None and notes
+    assert ue.list_milestones(conn, sem["uid"]) == [] and db.list_events(conn) == [] and db.get_task(conn, uid) is None and notes
 
 
 def test_milestone_input_is_checked(conn, sem):
@@ -406,7 +406,7 @@ def test_homework_is_a_tagged_task_that_is_not_an_exam_or_a_reading(conn, sem):
     up.save_homework(conn, sem, "Biology", task_uid=uid, title="Lab report 2", due="", status="done")
     assert up.list_homework(conn, sem["uid"], "Biology")[0]["status"] == "done"
     with pytest.raises(up.PlanError, match="not homework"):
-        up.save_homework(conn, sem, "Biology", task_uid=up.list_milestones(conn, sem["uid"])[0]["task_uid"], title="x", due="", status="")
+        up.save_homework(conn, sem, "Biology", task_uid=ue.list_milestones(conn, sem["uid"])[0]["task_uid"], title="x", due="", status="")
 
 
 def test_the_classes_list_numbers_each_kind_and_shows_topic_and_note(conn, sem):

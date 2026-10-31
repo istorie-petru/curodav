@@ -57,15 +57,18 @@
     let names = pane._cats[pane._active] || [];
     if (query) names = Object.keys(pane._all).filter((n) => n.includes(query.replace(/\s+/g, "-")));
     const noIcon = !query && pane._active === "suggested"
-      ? '<button type="button" class="look-icon' + (picked ? "" : " is-selected") + '" data-icon="" title="' + pane.dataset.noIcon + '">' + svg(pane.dataset.defaultIcon) + "</button>"
+      ? '<button type="button" class="look-icon' + (picked ? "" : " is-selected") + '" data-icon="" tabindex="-1" title="' + pane.dataset.noIcon + '" aria-label="' + pane.dataset.noIcon + '">' + svg(pane.dataset.defaultIcon) + "</button>"
       : "";
     pane.querySelector(".look-icon-grid").innerHTML = noIcon + names.map((n) =>
-      '<button type="button" class="look-icon' + (n === picked ? " is-selected" : "") + '" data-icon="' + n + '" title="' + nice(n) + '">' + svg(n) + "</button>").join("");
+      '<button type="button" class="look-icon' + (n === picked ? " is-selected" : "") + '" data-icon="' + n + '" tabindex="-1" title="' + nice(n) + '" aria-label="' + nice(n) + '">' + svg(n) + "</button>").join("");
+    // One Tab stop for the whole grid (the picked icon, else the first); the arrows move inside it.
+    const stop = pane.querySelector(".look-icon.is-selected") || pane.querySelector(".look-icon");
+    if (stop) stop.tabIndex = 0;
   }
 
   function paintCats(pane) {
     pane.querySelector(".look-cats").innerHTML = pane._titles.map(([key, title]) =>
-      '<button type="button" class="look-cat' + (key === pane._active && !pane.querySelector(".look-icon-search").value ? " is-active" : "") + '" data-cat="' + key + '">' + title + "</button>").join("");
+      '<button type="button" class="look-cat' + (key === pane._active && !pane.querySelector(".look-icon-search").value ? " is-active" : "") + '" data-cat="' + key + '" tabindex="' + (key === pane._active ? "0" : "-1") + '">' + title + "</button>").join("");
   }
 
   function buildPane(pane) {
@@ -108,6 +111,7 @@
       paintCats(pane);
       paintGrid(pane);
       pane.querySelector(".look-icon-grid").scrollTop = 0;
+      if (e.detail === 0) pane.querySelector('.look-cat[tabindex="0"]')?.focus();
       return;
     }
     const cell = e.target.closest && e.target.closest(".look-icon");
@@ -128,6 +132,36 @@
     paintCats(pane);
     paintGrid(pane);
   });
+
+  // The category list is one Tab stop; Up and Down move through it and Enter opens one.
+  document.addEventListener("keydown", (e) => {
+    const cat = e.target.closest && e.target.closest(".look-cat");
+    if (!cat || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const next = e.key === "ArrowDown" ? cat.nextElementSibling : cat.previousElementSibling;
+    if (!next) return;
+    cat.tabIndex = -1;
+    next.tabIndex = 0;
+    next.focus();
+  }, true);
+
+  // Arrows move through the icon grid by cell and by row.
+  document.addEventListener("keydown", (e) => {
+    const cell = e.target.closest && e.target.closest(".look-icon");
+    const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+    if (!cell || !(step || e.key === "ArrowUp" || e.key === "ArrowDown")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const cells = Array.from(cell.parentElement.querySelectorAll(".look-icon"));
+    const i = cells.indexOf(cell);
+    const perRow = Math.max(1, cells.filter((c) => c.offsetTop === cells[0].offsetTop).length);
+    const target = cells[i + (step || (e.key === "ArrowDown" ? perRow : -perRow))];
+    if (!target) return;
+    cell.tabIndex = -1;
+    target.tabIndex = 0;
+    target.focus();
+  }, true);
 
   // Enter in the search box must not submit the form behind the panel.
   document.addEventListener("keydown", (e) => {

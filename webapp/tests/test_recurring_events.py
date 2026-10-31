@@ -151,7 +151,7 @@ def test_the_edit_form_of_a_series_has_one_form_with_event_fields_and_a_rules_pa
     # the main save is "this event"; the menu offers following and all
     assert 'name="series_scope" value="this"' in body
     assert 'data-set-value="following"' in body and 'data-set-value="all"' in body and "Save this event" in body
-    assert '<h1>Event</h1>' in body and '<h1>The whole series</h1>' in body and "<h1>Edit event</h1>" not in body
+    assert '<h1>Event</h1>' in body and 'data-modal-split="event-series"' in body and ">The whole series</h2>" in body and "<h1>Edit event</h1>" not in body
 
 
 # ---- the migration of legacy repeating events

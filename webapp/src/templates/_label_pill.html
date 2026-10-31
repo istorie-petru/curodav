@@ -2,4 +2,4 @@
 
 
 {# A tag pill: the tag's own colour and icon, always with its icon. Tags have no pages, so it links only where given an `href` (a shelf page filtered by the tag). #}
-{% macro tag_pill(t, href=none) %}{% set _body %}{% if t.icon %}{{ icon(t.icon, 'icon-sm') }} {% endif %}{{ t.name }}{% endset %}{% if href %}<a class="cell-tag cal-{{ t.color or 'gray' }} label-pill-link" href="{{ href }}" draggable="false" title="{{ t.name }}">{{ _body }}</a>{% else %}<span class="cell-tag cal-{{ t.color or 'gray' }}" title="{{ t.name }}">{{ _body }}</span>{% endif %}{% endmacro %}
+{% macro tag_pill(t, href=none, link=true) %}{% if href is none and link and t.label %}{% set href = '/labels/' ~ (t.label | urlencode) ~ '?tag=' ~ (t.name | urlencode) %}{% endif %}{% set _body %}{% if t.icon %}{{ icon(t.icon, 'icon-sm') }} {% endif %}{{ t.name }}{% endset %}{% if href %}<a class="cell-tag cal-{{ t.color or 'gray' }} label-pill-link" href="{{ href }}" draggable="false" title="{{ t.name }}">{{ _body }}</a>{% else %}<span class="cell-tag cal-{{ t.color or 'gray' }}" title="{{ t.name }}">{{ _body }}</span>{% endif %}{% endmacro %}

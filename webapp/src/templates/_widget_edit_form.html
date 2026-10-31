@@ -64,7 +64,6 @@
                 {{ number_input({'name': 'limit', 'class': 'stepper-input', 'min': '0', 'value': (widget.config.limit if widget.config.limit is defined and widget.config.limit is not none else '')}) }}
                 <button type="button" class="stepper-btn stepper-inc" aria-label="Increase limit">+</button>
             </div>
-            <div class="field-hint">0 = up to 20</div>
         </div>
         {% set _w = widget.config.width or '' %}
         {% set ms_name = 'width' %}
