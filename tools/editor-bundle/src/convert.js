@@ -113,7 +113,7 @@ export function blocksToHtml(blocks) {
           return (
             `<div data-type="timeline" data-color="${data.color || ""}" data-dates="${!!data.showDates}">` +
             (data.items || [])
-              .map((item) => `<div data-type="timeline-item"><div data-type="timeline-date">${escapeHtml(item.date || "")}</div><div data-type="timeline-title">${item.title || ""}</div><div data-type="timeline-desc">${item.description || ""}</div></div>`)
+              .map((item) => `<div data-type="timeline-item"><div data-type="timeline-date">${escapeHtml(item.date || "")}</div><div data-type="timeline-title">${item.title || ""}</div>${item.noDescription ? "" : `<div data-type="timeline-desc">${item.description || ""}</div>`}</div>`)
               .join("") +
             "</div>"
           );
@@ -124,9 +124,12 @@ export function blocksToHtml(blocks) {
         case "table": {
           const rows = (data.content || []).filter((row) => row.length);
           if (!rows.length) return "";
+          const align = data.align || {};
+          const widths = data.colWidths || [];
+          const attrs = (c) => `${align[c] ? ` data-align="${escapeHtml(align[c])}"` : ""}${widths[c] ? ` colwidth="${Number(widths[c])}"` : ""}`;
           return (
             "<table><tbody>" +
-            rows.map((row, r) => "<tr>" + row.map((cell) => `<${data.withHeadings && r === 0 ? "th" : "td"}><p>${cell}</p></${data.withHeadings && r === 0 ? "th" : "td"}>`).join("") + "</tr>").join("") +
+            rows.map((row, r) => "<tr>" + row.map((cell, c) => { const tag = data.withHeadings && r === 0 ? "th" : "td"; return `<${tag}${attrs(c)}><p>${cell}</p></${tag}>`; }).join("") + "</tr>").join("") +
             "</tbody></table>"
           );
         }
@@ -191,7 +194,12 @@ export function docToBlocks(doc, schema) {
           data: {
             showDates: !!node.attrs.showDates,
             color: node.attrs.color || "",
-            items: node.content.content.map((item) => ({ title: inline(item.child(1)), description: inline(item.child(2)), date: item.child(0).textContent })),
+            items: node.content.content.map((item) => ({
+              title: inline(item.child(1)),
+              description: item.childCount > 2 ? inline(item.child(2)) : "",
+              date: item.child(0).textContent,
+              ...(item.childCount > 2 ? {} : { noDescription: true }),
+            })),
           },
         });
         break;
@@ -203,7 +211,14 @@ export function docToBlocks(doc, schema) {
         break;
       case "table": {
         const rows = node.content.content.map((row) => row.content.content.map((cell) => inline(cell.firstChild)));
-        blocks.push({ type: "table", data: { withHeadings: node.firstChild.firstChild.type.name === "tableHeader", content: rows } });
+        const first = node.firstChild.content.content;
+        const align = {};
+        first.forEach((cell, c) => { if (cell.attrs.align) align[c] = cell.attrs.align; });
+        const colWidths = first.map((cell) => (cell.attrs.colwidth && cell.attrs.colwidth[0]) || 0);
+        const data = { withHeadings: node.firstChild.firstChild.type.name === "tableHeader", content: rows };
+        if (Object.keys(align).length) data.align = align;
+        if (colWidths.some(Boolean)) data.colWidths = colWidths;
+        blocks.push({ type: "table", data });
         break;
       }
       default:

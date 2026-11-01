@@ -4,7 +4,7 @@
   "description": "Builds the Notebook editor bundle committed at webapp/src/static/notebook/vendor/tiptap.bundle.js",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test test/roundtrip.test.mjs"
+    "test": "node --test test/"
   },
   "dependencies": {
     "@tiptap/core": "2.11.5",

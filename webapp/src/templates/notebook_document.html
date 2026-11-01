@@ -12,12 +12,12 @@
    static/notebook/vendor/NOTICE.md for why (CSP blocks unnonced inline
    <style>, which is all a third-party vendored bundle can produce). #}
 {% if new_editor %}<link rel="stylesheet" href="{{ static_url('notebook/notebook_tiptap.css') }}">{% else %}<link rel="stylesheet" href="{{ static_url('notebook/vendor/editorjs.css') }}">{% endif %}
-<link rel="stylesheet" href="{{ static_url('notebook/vendor/header.css') }}">
-<link rel="stylesheet" href="{{ static_url('notebook/vendor/list.css') }}">
-<link rel="stylesheet" href="{{ static_url('notebook/notebook_table.css') }}">
+{% if not new_editor %}<link rel="stylesheet" href="{{ static_url('notebook/vendor/header.css') }}">{% endif %}
+{% if not new_editor %}<link rel="stylesheet" href="{{ static_url('notebook/vendor/list.css') }}">{% endif %}
+{% if not new_editor %}<link rel="stylesheet" href="{{ static_url('notebook/notebook_table.css') }}">{% endif %}
 <link rel="stylesheet" href="{{ static_url('notebook/notebook_mentions.css') }}">
 <link rel="stylesheet" href="{{ static_url('notebook/notebook_image.css') }}">
-<link rel="stylesheet" href="{{ static_url('notebook/vendor/inlinecode.css') }}">
+{% if not new_editor %}<link rel="stylesheet" href="{{ static_url('notebook/vendor/inlinecode.css') }}">{% endif %}
 {# Notebook's own dark-theme + focus-outline patches on top of the vendor
    CSS above -- loaded last so its selectors' higher specificity (not
    source order) is what actually wins; see that file's own header

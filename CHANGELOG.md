@@ -6,6 +6,21 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [5.0.3]
+
+- Notebook editor, leaving blocks: Enter adds a paragraph to a quote, and Enter on an empty line (or Ctrl+Enter anywhere in a quote, callout, timeline, table, code block or list) leaves the block. A second Enter leaves a callout, Enter on an empty timeline item leaves the timeline, and Backspace in an empty callout, timeline item or quote source removes it.
+- Notebook editor, lists: Backspace at the start of an item with text takes it out of the list (or one level out when nested), and the list buttons remove the bullets, numbers or checkboxes of the whole list when the list is already on.
+- Notebook editor, timeline: the description is optional, and the toolbar adds, deletes and moves items and deletes the timeline.
+- Notebook editor, tables: while the caret is in a table, a grip above each column and beside each row selects it and plus buttons at the edges add a column or row. Enter moves to the cell below and adds a row at the end, columns resize and can be aligned left, center or right, and these are saved with the note (legacy alignment is kept).
+- Notebook editor, keyboard: Tab and Shift+Tab indent code, Backspace turns a heading into a paragraph, Escape selects any block, Ctrl+A selects the current block before the note, and Ctrl+K, Ctrl+Shift+H, Alt+Up and Down and Ctrl+D link, highlight, move and duplicate.
+- Notebook editor, saving: a failed save retries by itself and when the connection returns, leaving with unsaved changes (or with a note too large for a closing request) asks first, and the note is converted only when it is saved instead of on every keystroke. A read-only note shows a banner that says why.
+- Notebook editor, adding blocks: typing `/` on an empty line opens a slash menu (headings, lists, quote, callout, timeline, table, code, divider, figure, endnote, link to a note) that filters as you type and works with the arrow keys, Enter and Escape. The toolbar no longer has an Add menu; it only edits what is there.
+- Notebook editor, toolbar: the controls for what the caret is in (table, timeline, quote, callout, figure, link, text color) follow the other editing icons on the same row, and start a second row of the same bar only when they would not all fit. Colors and the callout type are chosen from a dropdown. On a wide window the toolbar wraps onto more rows (its bar grows to hold them) instead of scrolling; on a phone, inside such a block, only that block's controls show, with a button to bring the rest back. The timeline's add button reads "+ Entry".
+- Notebook editor, hints: every empty field of a custom block (timeline date, title and description, callout, quote source) shows its hint as faint text.
+- Journal: the week jump is a navigator like the calendar's, with an arrow to the week before, the open week's name, an arrow to the week after and a "This week" button.
+- Page header: the bar has roomier spacing at normal widths; when its controls or title run out of room the spacing is the first thing to shrink, before the title is cut or anything moves into the ... menu.
+- Notebook editor, spacing: paragraphs sit closer, list and quote indents share one value, and the legacy table and list stylesheets no longer load for the new editor.
+
 ## [5.0.2]
 
 - Notebook conversion: notes written by the former editor keep their content when opened. Lists whose items were stored as plain text no longer open empty, old separate checklist blocks become task lists, a note with an empty table no longer fails to open, a timeline date containing `&` no longer forces the note read-only, and a plain highlight no longer gains an empty class. The round-trip tests cover each case.

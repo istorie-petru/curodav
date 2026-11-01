@@ -11,10 +11,10 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
-from . import api_service, api_write, note_versions
+from . import access_tokens, api_service, api_write, note_versions
 
 PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26")
 SERVER_INFO = {"name": "curodav", "title": "Curodav", "version": "5.0.0"}
@@ -35,11 +35,12 @@ class Tool:
     properties: dict[str, Any]
     required: tuple[str, ...]
     run: Callable[[sqlite3.Connection, dict[str, Any], dict[str, Any]], Any]
-    scope: str = "read"
+    scope: str = "read:notes"
 
     def schema(self) -> dict[str, Any]:
-        annotations = {"title": self.title, "readOnlyHint": self.scope == "read", "openWorldHint": False}
-        if self.scope != "read":
+        reading = self.scope.startswith("read")
+        annotations = {"title": self.title, "readOnlyHint": reading, "openWorldHint": False}
+        if not reading:
             annotations |= {"destructiveHint": False, "idempotentHint": False}
         return {"name": self.name, "title": self.title, "description": self.description,
                 "inputSchema": {"type": "object", "properties": self.properties, "required": list(self.required),
@@ -61,7 +62,7 @@ TOOLS = [
           "kinds": {"type": "array", "items": {"type": "string", "enum": list(api_service.SEARCH_KINDS)},
                     "description": "Limit to these kinds."},
           "limit": _LIMIT}, ("query",),
-         lambda c, a, _t: {"results": api_service.search(c, a["query"], a.get("kinds"), a.get("limit"))}),
+         lambda c, a, t: {"results": api_service.search(c, a["query"], api_service.kinds_for(t, a.get("kinds")), a.get("limit"))}),
     Tool("list_notes", "List notes", "Notes, most recently edited first, filtered by shelf, tag, note type or edit date.",
          {"shelf": _s("Shelf name."), "tag": _s("Tag name."), "note_type": _s("Note type, such as person."),
           "updated_since": _s("ISO date or time; only notes edited at or after it."), "cursor": _CURSOR, "limit": _LIMIT}, (),
@@ -126,14 +127,18 @@ TOOLS = [
           "summary": _s("A few words on what the change does, shown in the note's versions.")},
          ("uid", "revision", "ops"),
          lambda c, a, t: api_write.edit_note(c, a["uid"], a["revision"], a["ops"], source="mcp", token_uid=t.get("uid", ""),
-                                             summary=a.get("summary", "")), scope="write"),
+                                             summary=a.get("summary", "")), scope="write:notes"),
     Tool("restore_note_version", "Restore a note version",
          "Puts an earlier version of a note back; the current content is kept as a version first.",
          {"version_uid": _s("A uid from list_note_versions.")}, ("version_uid",),
-         lambda c, a, t: api_write.restore_version(c, a["version_uid"], source="mcp", token_uid=t.get("uid", "")), scope="write"),
+         lambda c, a, t: api_write.restore_version(c, a["version_uid"], source="mcp", token_uid=t.get("uid", "")), scope="write:notes"),
     Tool("list_organisation", "List spaces, shelves and tags", "Every space with its shelves, and every tag with its shelf.",
          {}, (), lambda c, a, _t: api_service.list_organisation(c)),
 ]
+_AREA = {"search": "read", "list_organisation": "read", "list_tasks": "read:calendar", "get_task": "read:calendar",
+         "list_events": "read:calendar", "get_event": "read:calendar", "university_overview": "read:university",
+         "list_exams": "read:university", "get_discipline": "read:university"}
+TOOLS = [replace(t, scope=_AREA[t.name]) if t.name in _AREA else t for t in TOOLS]
 TOOLS_BY_NAME = {t.name: t for t in TOOLS}
 
 
@@ -157,13 +162,10 @@ def _check_args(tool: Tool, args: Any) -> str | None:
     return None
 
 
-def _scopes(token: dict[str, Any] | None) -> set[str]:
-    return set((token or {}).get("scopes", "read").split())
-
-
 def visible_tools(token: dict[str, Any] | None) -> list[Tool]:
-    """The tools this token may call; a read-only token never sees the edit tools."""
-    return [t for t in TOOLS if t.scope in _scopes(token)]
+    """The tools this token may call: a token sees only the areas it may read, and the edit tools only with their scope."""
+    token = token if token is not None else {"scopes": "read"}
+    return [t for t in TOOLS if access_tokens.has_scope(token, t.scope)]
 
 
 def call_tool(conn: sqlite3.Connection, name: str, args: Any, token: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -187,6 +189,7 @@ def _error(msg_id: Any, code: int, message: str) -> dict[str, Any]:
 
 def handle(conn: sqlite3.Connection, message: Any, token: dict[str, Any] | None = None) -> dict[str, Any] | None:
     """Answers one JSON-RPC message for `token` (its scopes decide the tools); a notification or a client's own response gets None."""
+    token = token if token is not None else {"scopes": "read"}
     if isinstance(message, dict) and "method" not in message and ("result" in message or "error" in message):
         return None
     if not isinstance(message, dict) or message.get("jsonrpc") != "2.0" or not isinstance(message.get("method"), str):

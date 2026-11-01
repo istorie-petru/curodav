@@ -1,17 +1,26 @@
-{# Fast travel between journal weeks: the week before, this week and the week after the open one. Folders are the main way to get around. #}
+{# Week navigator for the journal, like the calendar's: an arrow to the week before, the open week, an arrow to the week after, and a way back to this week. Folders are the main way to get around. #}
 {% macro journal_strip(weeks, active_week='') %}
 {% set _ns = namespace(i=-1, now=-1) %}
 {% for w in weeks %}{% if w.week == active_week %}{% set _ns.i = loop.index0 %}{% endif %}{% if w.is_current %}{% set _ns.now = loop.index0 %}{% endif %}{% endfor %}
-{% set _picks = [] %}
-{% if _ns.i > 0 %}{% set _ = _picks.append(weeks[_ns.i - 1]) %}{% endif %}
-{% if _ns.now >= 0 and _ns.now != _ns.i and weeks[_ns.now] not in _picks %}{% set _ = _picks.append(weeks[_ns.now]) %}{% endif %}
-{% if _ns.i >= 0 and _ns.i < weeks|length - 1 and weeks[_ns.i + 1] not in _picks %}{% set _ = _picks.append(weeks[_ns.i + 1]) %}{% endif %}
-{% if _picks %}
+{% set _prev = weeks[_ns.i - 1] if _ns.i > 0 else none %}
+{% set _next = weeks[_ns.i + 1] if _ns.i >= 0 and _ns.i < weeks|length - 1 else none %}
+{% set _now = weeks[_ns.now] if _ns.now >= 0 and _ns.now != _ns.i else none %}
+{% macro step(w, side) %}
+{% set _name = 'Week ' ~ w.nr %}
+{% if w.uid %}<a class="icon-btn cal-nav-{{ side }}" href="/notebook/{{ w.uid }}" title="{{ _name }}" aria-label="{{ _name }}">{{ icon('chevron-left' if side == 'prev' else 'chevron-right', 'icon-sm') }}</a>
+{% else %}<button type="submit" name="week" value="{{ w.week }}" class="icon-btn cal-nav-{{ side }}" title="{{ _name }}" aria-label="{{ _name }}">{{ icon('chevron-left' if side == 'prev' else 'chevron-right', 'icon-sm') }}</button>{% endif %}
+{% endmacro %}
+{% if _prev or _next or _now %}
 <form method="post" action="/notebook/journal/week" class="journal-jump" aria-label="Jump to another week">
-    {% for w in _picks %}
-    {% if w.uid %}<a class="btn ghost btn-sm" href="/notebook/{{ w.uid }}">{{ 'This week' if w.is_current else 'Week ' ~ w.nr }}</a>
-    {% else %}<button type="submit" name="week" value="{{ w.week }}" class="btn ghost btn-sm">{{ 'This week' if w.is_current else 'Week ' ~ w.nr }}</button>{% endif %}
-    {% endfor %}
+    {% if _ns.i >= 0 %}
+    {% if _prev %}{{ step(_prev, 'prev') }}{% else %}<span class="icon-btn is-disabled" aria-hidden="true">{{ icon('chevron-left', 'icon-sm') }}</span>{% endif %}
+    <span class="cal-nav-label journal-jump-label" aria-live="polite">Week {{ weeks[_ns.i].nr }}</span>
+    {% if _next %}{{ step(_next, 'next') }}{% else %}<span class="icon-btn is-disabled" aria-hidden="true">{{ icon('chevron-right', 'icon-sm') }}</span>{% endif %}
+    {% endif %}
+    {% if _now %}
+    {% if _now.uid %}<a class="btn ghost btn-sm" href="/notebook/{{ _now.uid }}">This week</a>
+    {% else %}<button type="submit" name="week" value="{{ _now.week }}" class="btn ghost btn-sm">This week</button>{% endif %}
+    {% endif %}
 </form>
 {% endif %}
 {% endmacro %}

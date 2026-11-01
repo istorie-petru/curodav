@@ -21,7 +21,18 @@ from urllib.parse import urlsplit
 
 from . import clock
 
-SCOPES = ("read", "write")
+# What a token may do, area by area. Editing an area includes reading it. The older "read" (every area) and "write"
+# (edit notes) are still understood.
+SCOPES = {
+    "read:notes": "Read notes, entries and the library",
+    "read:calendar": "Read tasks, events and contacts",
+    "read:university": "Read university",
+    "write:notes": "Edit notes",
+    "write:university": "Edit university",
+}
+READ_SCOPES = ("read:notes", "read:calendar", "read:university")
+DEFAULT_SCOPES = " ".join(READ_SCOPES)
+_LEGACY = {"read": READ_SCOPES, "write": ("write:notes",)}
 TOKEN_PREFIX = "cdv_"
 ACCESS_TTL = timedelta(hours=1)
 REFRESH_TTL = timedelta(days=60)
@@ -98,19 +109,44 @@ def _new_secret() -> str:
     return TOKEN_PREFIX + secrets.token_urlsafe(32)
 
 
-def normal_scopes(text: str | None) -> str:
-    """The asked-for scopes we know, space-separated; read is always included, since writing needs reading first."""
-    asked = [s for s in (text or "").split() if s in SCOPES]
-    return " ".join(dict.fromkeys(["read", *asked]))
+def normal_scopes(text: str | None, default: str = DEFAULT_SCOPES) -> str:
+    """The scopes we know among `text`, space-separated in a fixed order; editing an area adds reading it. Nothing known
+    gives `default`."""
+    asked: set[str] = set()
+    for word in (text or "").split():
+        for scope in _LEGACY.get(word, (word,)):
+            if scope in SCOPES:
+                asked |= {scope, scope.replace("write:", "read:")}
+    return " ".join(s for s in SCOPES if s in asked) or default
+
+
+def has_scope(token: dict[str, Any] | None, scope: str) -> bool:
+    """Whether the token may do `scope`; "read" asks for any reading at all."""
+    held = set(normal_scopes((token or {}).get("scopes"), "").split())
+    return bool(held & set(READ_SCOPES)) if scope == "read" else scope in held
+
+
+def set_scopes(conn: sqlite3.Connection, uid: str, scopes: str) -> bool:
+    """Changes what a token may do, from the next request on. A token with no scope left keeps reading nothing."""
+    cur = conn.execute("UPDATE api_tokens SET scopes = ? WHERE uid = ? AND revoked_at IS NULL", (normal_scopes(scopes, ""), uid))
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def get_token(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
+    for t in list_tokens(conn):
+        if t["uid"] == uid:
+            return t
+    return None
 
 
 # ---- Tokens ----
 
-def create_personal_token(conn: sqlite3.Connection, name: str, scopes: str = "read") -> tuple[str, str]:
+def create_personal_token(conn: sqlite3.Connection, name: str, scopes: str = DEFAULT_SCOPES) -> tuple[str, str]:
     """Makes a token that does not expire and returns (uid, secret). The secret is never readable again."""
     secret, uid = _new_secret(), str(uuid.uuid4())
     conn.execute("INSERT INTO api_tokens (uid, name, kind, scopes, token_hash, created_at) VALUES (?, ?, 'personal', ?, ?, ?)",
-                 (uid, (name or "").strip()[:80] or "Token", normal_scopes(scopes), _hash(secret), _iso(_now())))
+                 (uid, (name or "").strip()[:80] or "Token", normal_scopes(scopes, ""), _hash(secret), _iso(_now())))
     conn.commit()
     return uid, secret
 
@@ -142,7 +178,7 @@ def check_token(conn: sqlite3.Connection, secret: str | None, scope: str = "read
     now = _now()
     if row["expires_at"] and datetime.fromisoformat(row["expires_at"]) <= now:
         return None
-    if scope not in row["scopes"].split():
+    if not has_scope(dict(row), scope):
         return None
     last = row["last_used_at"]
     if not last or now - datetime.fromisoformat(last) > timedelta(minutes=1):

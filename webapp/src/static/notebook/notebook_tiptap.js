@@ -7,6 +7,9 @@
   var contentUrl = mount.getAttribute("data-content-url");
   var openedAt = performance.now();
   var saveTimer = null;
+  var retryTimer = null;
+  var inFlight = false;
+  var bigBody = false;
   var lastSaved = null;
   var failedSaves = 0;
   var handle = null;
@@ -16,14 +19,30 @@
     if (window.ccPerf) window.ccPerf.add(name, performance.now() - since);
   }
 
+  function scheduleRetry() {
+    if (retryTimer) return;
+    var wait = Math.min(30000, 3000 * Math.pow(2, Math.min(failedSaves, 4)));
+    retryTimer = setTimeout(function () {
+      retryTimer = null;
+      save(false);
+    }, wait);
+  }
+
   function save(leaving) {
     var blocks = handle.blocks();
     var text = JSON.stringify(blocks);
-    if (text === lastSaved) return;
+    if (text === lastSaved) {
+      failedSaves = 0;
+      return;
+    }
     var body = JSON.stringify({ time: Date.now(), blocks: blocks, version: "tiptap" });
+    // A keep-alive request is capped at 64 KB, so a larger note cannot be sent safely while the page closes.
+    bigBody = body.length >= 60000;
     var started = performance.now();
-    window.NotebookSave.put(contentUrl, body, !!leaving && body.length < 60000)
+    inFlight = true;
+    window.NotebookSave.put(contentUrl, body, !!leaving && !bigBody)
       .then(function (resp) {
+        inFlight = false;
         if (!resp) return;
         measure("editor save", started);
         lastSaved = text;
@@ -31,7 +50,9 @@
         document.dispatchEvent(new CustomEvent("notebook-saved"));
       })
       .catch(function () {
-        if (failedSaves++ === 0) window.ccToast({ message: "Could not save this document. Your last changes are not stored yet.", variant: "error" });
+        inFlight = false;
+        if (failedSaves++ === 0) window.ccToast({ message: "Could not save this document. Your last changes are not stored yet. Trying again.", variant: "error" });
+        scheduleRetry();
       });
   }
 
@@ -41,6 +62,28 @@
     saveTimer = null;
     save(true);
   }
+
+  function unsaved() {
+    return !!(saveTimer || retryTimer || inFlight) || failedSaves > 0;
+  }
+
+  window.addEventListener("online", function () {
+    if (failedSaves > 0) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
+      save(false);
+    }
+  });
+
+  // Leaving with changes that may not arrive (a failed or slow save, or a note too large for a closing request) asks first.
+  window.addEventListener("beforeunload", function (e) {
+    if (!handle || handle.readOnly || !unsaved()) return;
+    saveNow();
+    if (bigBody || inFlight || failedSaves > 0 || retryTimer) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
 
   mount.addEventListener(
     "keydown",
@@ -236,7 +279,16 @@
       }
       measure("editor open", openedAt);
       if (handle.readOnly) {
-        window.ccToast({ message: "This note uses content the new editor cannot hold yet, so it is read-only here.", variant: "info" });
+        var banner = document.createElement("div");
+        banner.className = "nb-readonly-banner";
+        banner.setAttribute("role", "status");
+        var what = handle.reasons.length ? "It holds " + handle.reasons.join(" and ") + " blocks the new editor cannot hold yet" : "It holds content the new editor cannot hold yet";
+        banner.append(what + ", so it is read-only here and nothing is changed. ");
+        var link = document.createElement("a");
+        link.href = "?editor=legacy";
+        link.textContent = "Open it in the old editor to edit";
+        banner.append(link, ".");
+        mount.parentNode.insertBefore(banner, mount);
       }
       document.addEventListener("visibilitychange", function () {
         if (document.visibilityState === "hidden") saveNow();

@@ -4758,7 +4758,9 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .entry-card-links{display:flex; gap:var(--space-3);}
 .entry-section-body{white-space:pre-wrap;}
 .entry-mentions{margin:0; padding-left:var(--space-4);}
-.journal-jump{display:flex; flex-wrap:nowrap; gap:var(--space-1); margin:0;}
+.journal-jump{display:flex; flex-wrap:nowrap; align-items:center; gap:var(--space-1); margin:0;}
+.journal-jump .is-disabled{opacity:.35; pointer-events:none;}
+.journal-jump-label{white-space:nowrap;}
 .task-list .contact-row-wrap{min-height:40px; gap:var(--space-3); padding-block:var(--space-1); border-bottom:none;}
 .task-row .task-status-select{flex:none; width:118px;}
 .task-row{flex-wrap:nowrap;}
@@ -4888,8 +4890,12 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
   .page-header-region > .page-header-narrow.has-banner{
     height:56px; min-height:56px; aspect-ratio:auto; margin:0; flex:none; width:100%; box-sizing:border-box;
     border-radius:0; border-width:0 0 1px; border-bottom:1px solid var(--separator);
-    padding:0 var(--space-3); flex-wrap:nowrap;
+    padding:0 var(--space-4); gap:var(--space-3); flex-wrap:nowrap;
   }
+  /* Roomy by default; the spacing goes first when the bar runs out of width, before any control moves into the ... menu. */
+  .page-header-region .page-header-narrow-actions{gap:var(--space-3);}
+  .page-header-region .page-header-narrow.is-tight{gap:var(--space-1); padding-inline:var(--space-2);}
+  .page-header-region .page-header-narrow.is-tight .page-header-narrow-actions{gap:var(--space-1);}
   .page-header-region > .page-header-rows{
     border-bottom:1px solid var(--separator); background:var(--bg-elevated);
     margin-left:52px; min-width:0;
@@ -4970,12 +4976,12 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
   .page-header-region .header-icon{order:8;}
   .page-header-region .page-header-narrow-actions .btn.primary, .page-header-region .header-add{order:9;}
   .page-header-region > .page-header-rows{box-shadow:0 1px 0 var(--separator); border-bottom:0;}
-  .page-header-rows > .nbtb .nbtb-row{height:44px; padding:0 12px; gap:2px; border:0;}
+  .page-header-rows > .nbtb .nbtb-row{min-height:44px; height:auto; padding:7px 12px; gap:2px 2px; border:0; box-sizing:border-box;}
   .nbtb .icon-btn.nbtb-btn{border:0; background:transparent; width:30px; height:30px; color:var(--fg-secondary);}
   .nbtb .icon-btn.nbtb-btn:hover{background:var(--bg-hover); color:var(--fg-primary);}
   .nbtb .multiselect-trigger{border:0; background:transparent; box-shadow:none; height:30px; font-weight:var(--font-weight-medium, 500);}
   .nbtb .multiselect-trigger:hover{background:var(--bg-hover);}
-  .nbtb .nbtb-row.nbtb-context{height:36px; background:var(--accent-subtle); border-top:1px solid var(--separator); font-size:var(--text-sm);}
+  .nbtb .nbtb-context{font-size:var(--text-sm);}
 }
 @media (max-width:720px){
   .header-add{display:none;}

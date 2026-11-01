@@ -1,6 +1,7 @@
 // The Notebook's own blocks as Tiptap nodes: coloured quote, callout, timeline and divider style.
 import { Node, Mark, Extension, mergeAttributes, InputRule } from "@tiptap/core";
-import { Plugin, PluginKey, NodeSelection } from "@tiptap/pm/state";
+import { Plugin, PluginKey, NodeSelection, TextSelection } from "@tiptap/pm/state";
+import { TableMap } from "@tiptap/pm/tables";
 import Blockquote from "@tiptap/extension-blockquote";
 import HorizontalRule from "@tiptap/extension-horizontal-rule";
 
@@ -23,6 +24,37 @@ const field = (name, tag, content, extra = {}) =>
     ...extra,
   });
 
+
+// Shared keyboard helpers: find the enclosing node of a type, and leave a block by adding a paragraph after it.
+export const depthOf = ($pos, names) => {
+  for (let depth = $pos.depth; depth > 0; depth--) if (names.includes($pos.node(depth).type.name)) return depth;
+  return 0;
+};
+
+// Puts an empty paragraph after the node at `depth` and moves the caret there. `trim` characters before the caret are deleted first.
+export const exitAfter = (editor, depth, trim = 0) =>
+  editor.commands.command(({ tr, state }) => {
+    const { $from } = state.selection;
+    let end = $from.after(depth);
+    if (trim) {
+      tr.delete($from.pos - trim, $from.pos);
+      end -= trim;
+    }
+    tr.insert(end, state.schema.nodes.paragraph.create());
+    tr.setSelection(TextSelection.create(tr.doc, end + 1));
+    return true;
+  });
+
+// Replaces the node at `depth` with an empty paragraph (an emptied custom block collapses back to plain text).
+export const collapseToParagraph = (editor, depth) =>
+  editor.commands.command(({ tr, state }) => {
+    const { $from } = state.selection;
+    const from = $from.before(depth);
+    tr.replaceWith(from, $from.after(depth), state.schema.nodes.paragraph.create());
+    tr.setSelection(TextSelection.create(tr.doc, from + 1));
+    return true;
+  });
+
 export const QuoteCaption = field("quoteCaption", "quote-caption", "inline*");
 
 export const Quote = Blockquote.extend({
@@ -38,6 +70,45 @@ export const Quote = Blockquote.extend({
   },
   renderHTML({ HTMLAttributes }) {
     return ["blockquote", mergeAttributes(HTMLAttributes, { class: "cdx-nb-quote" }), 0];
+  },
+  addKeyboardShortcuts() {
+    return {
+      // Enter adds a paragraph to the quote; Enter on an empty last paragraph, or in the source line, leaves it.
+      Enter: ({ editor }) => {
+        const { $from, empty } = editor.state.selection;
+        const quote = depthOf($from, ["blockquote"]);
+        if (!quote || !empty) return false;
+        const kind = $from.parent.type.name;
+        if (kind === "quoteCaption") return exitAfter(editor, quote);
+        if (kind !== "paragraph" || $from.depth !== quote + 1) return false;
+        const last = $from.index(quote) === $from.node(quote).childCount - 1 || $from.node(quote).child($from.index(quote) + 1).type.name === "quoteCaption";
+        if ($from.parent.content.size === 0 && last) {
+          if ($from.node(quote).childCount === 1) return collapseToParagraph(editor, quote);
+          return editor.commands.command(({ tr, state }) => {
+            const end = $from.after(quote) - $from.parent.nodeSize;
+            tr.delete($from.before(), $from.after());
+            tr.insert(end, state.schema.nodes.paragraph.create());
+            tr.setSelection(TextSelection.create(tr.doc, end + 1));
+            return true;
+          });
+        }
+        return editor.commands.command(({ tr }) => {
+          tr.split($from.pos);
+          return true;
+        });
+      },
+      // Backspace in an empty source line removes it and goes back to the quote text.
+      Backspace: ({ editor }) => {
+        const { $from, empty } = editor.state.selection;
+        if (!empty || $from.parent.type.name !== "quoteCaption" || $from.parent.content.size) return false;
+        return editor.commands.command(({ tr }) => {
+          const before = $from.before();
+          tr.delete(before, $from.after());
+          tr.setSelection(TextSelection.near(tr.doc.resolve(before), -1));
+          return true;
+        });
+      },
+    };
   },
 });
 
@@ -133,11 +204,29 @@ export const Callout = Node.create({
     const inside = (editor, names) => names.includes(editor.state.selection.$from.parent.type.name);
     return {
       Enter: ({ editor }) => {
-        if (inside(editor, ["calloutTitle"])) {
-          const { $from } = editor.state.selection;
-          return editor.commands.setTextSelection($from.after() + 1);
+        const { $from } = editor.state.selection;
+        if (inside(editor, ["calloutTitle"])) return editor.commands.setTextSelection($from.after() + 1);
+        if (inside(editor, ["calloutMessage"])) {
+          // A second Enter (a line break right before the caret, or nothing written) leaves the callout.
+          const callout = depthOf($from, ["callout"]);
+          const before = $from.parent.maybeChild($from.index() - 1);
+          const atEnd = $from.parentOffset === $from.parent.content.size;
+          if ($from.parent.content.size === 0) return exitAfter(editor, callout);
+          if (atEnd && before && before.type.name === "hardBreak") return exitAfter(editor, callout, 1);
+          return editor.commands.setHardBreak();
         }
-        if (inside(editor, ["calloutMessage"])) return editor.commands.setHardBreak();
+        return false;
+      },
+      // Backspace never merges the parts: at the start of the text it goes back to the title; an empty callout collapses.
+      Backspace: ({ editor }) => {
+        const { $from, empty } = editor.state.selection;
+        if (!empty || $from.parentOffset !== 0) return false;
+        const kind = $from.parent.type.name;
+        if (kind !== "calloutTitle" && kind !== "calloutMessage") return false;
+        const callout = depthOf($from, ["callout"]);
+        const node = $from.node(callout);
+        if (!node.textContent.length) return collapseToParagraph(editor, callout);
+        if (kind === "calloutMessage") return editor.commands.setTextSelection($from.before() - 1);
         return false;
       },
     };
@@ -150,7 +239,7 @@ export const TimelineDescription = field("timelineDescription", "timeline-desc",
 
 export const TimelineItem = Node.create({
   name: "timelineItem",
-  content: "timelineDate timelineTitle timelineDescription",
+  content: "timelineDate timelineTitle timelineDescription?",
   defining: true,
   isolating: true,
   parseHTML: () => [{ tag: 'div[data-type="timeline-item"]' }],
@@ -179,41 +268,135 @@ export const Timeline = Node.create({
   },
   parseHTML: () => [{ tag: 'div[data-type="timeline"]' }],
   renderHTML: ({ HTMLAttributes }) => ["div", mergeAttributes(HTMLAttributes, { "data-type": "timeline", class: "nbtl" }), 0],
+  addCommands() {
+    const spot = (state) => {
+      const { $from } = state.selection;
+      const item = depthOf($from, ["timelineItem"]);
+      return item ? { $from, item, list: item - 1 } : null;
+    };
+    const blank = (state, withDescription = true) =>
+      state.schema.nodes.timelineItem.create(null, [
+        state.schema.nodes.timelineDate.create(),
+        state.schema.nodes.timelineTitle.create(),
+        ...(withDescription ? [state.schema.nodes.timelineDescription.create()] : []),
+      ]);
+    return {
+      timelineAddItem: () => ({ tr, state }) => {
+        const at = spot(state);
+        if (!at) return false;
+        const end = at.$from.after(at.item);
+        tr.insert(end, blank(state));
+        tr.setSelection(TextSelection.create(tr.doc, end + 4));
+        return true;
+      },
+      timelineDeleteItem: () => ({ tr, state }) => {
+        const at = spot(state);
+        if (!at) return false;
+        const { $from, item, list } = at;
+        const parent = $from.node(list);
+        if (parent.childCount < 2) return false;
+        const index = $from.index(list);
+        tr.delete($from.before(item), $from.after(item));
+        let start = $from.start(list);
+        for (let i = 0; i < Math.max(0, index - 1); i++) start += parent.child(i).nodeSize;
+        tr.setSelection(TextSelection.near(tr.doc.resolve(start + 2), 1));
+        return true;
+      },
+      timelineMoveItem: (direction) => ({ tr, state }) => {
+        const at = spot(state);
+        if (!at) return false;
+        const { $from, item, list } = at;
+        const index = $from.index(list);
+        const parent = $from.node(list);
+        const to = index + direction;
+        if (to < 0 || to >= parent.childCount) return false;
+        const from = $from.before(item);
+        const node = parent.child(index);
+        const caret = $from.pos - from;
+        tr.delete(from, from + node.nodeSize);
+        const target = direction < 0 ? from - parent.child(to).nodeSize : from + parent.child(to).nodeSize;
+        tr.insert(target, node);
+        tr.setSelection(TextSelection.create(tr.doc, target + caret));
+        return true;
+      },
+      timelineToggleDescription: () => ({ tr, state }) => {
+        const at = spot(state);
+        if (!at) return false;
+        const { $from, item } = at;
+        const node = $from.node(item);
+        const start = $from.start(item);
+        if (node.childCount > 2) {
+          const last = node.lastChild;
+          const from = start + node.content.size - last.nodeSize;
+          tr.delete(from, from + last.nodeSize);
+          tr.setSelection(TextSelection.near(tr.doc.resolve(from - 1), -1));
+        } else {
+          const end = start + node.content.size;
+          tr.insert(end, state.schema.nodes.timelineDescription.create());
+          tr.setSelection(TextSelection.create(tr.doc, end + 1));
+        }
+        return true;
+      },
+    };
+  },
   addKeyboardShortcuts() {
     const where = (editor) => {
       const { $from } = editor.state.selection;
-      for (let depth = $from.depth; depth > 0; depth--) if ($from.node(depth).type.name === "timelineItem") return { depth, $from };
-      return null;
+      const depth = depthOf($from, ["timelineItem"]);
+      return depth ? { depth, $from } : null;
     };
+    const blankItem = (item) => !item.textContent.length;
     return {
+      // Enter walks date, title, description, then adds an item; on an empty item it leaves the timeline instead.
       Enter: ({ editor }) => {
         const spot = where(editor);
         if (!spot) return false;
         const { $from, depth } = spot;
+        const item = $from.node(depth);
         const field = $from.parent.type.name;
-        if (field === "timelineDate" || field === "timelineTitle") return editor.commands.setTextSelection($from.after() + 1);
-        const itemEnd = $from.after(depth);
-        return editor
-          .chain()
-          .insertContentAt(itemEnd, { type: "timelineItem", content: [{ type: "timelineDate" }, { type: "timelineTitle" }, { type: "timelineDescription" }] })
-          .setTextSelection(itemEnd + 4)
-          .run();
+        const last = field === "timelineDescription" || (field === "timelineTitle" && item.childCount < 3);
+        if (!last) return editor.commands.setTextSelection($from.after() + 1);
+        if (blankItem(item)) {
+          if ($from.node(depth - 1).childCount < 2) return collapseToParagraph(editor, depth - 1);
+          return editor.commands.command(({ tr, state }) => {
+            const from = $from.before(depth);
+            const to = $from.after(depth);
+            const end = $from.after(depth - 1) - (to - from);
+            tr.delete(from, to);
+            tr.insert(end, state.schema.nodes.paragraph.create());
+            tr.setSelection(TextSelection.create(tr.doc, end + 1));
+            return true;
+          });
+        }
+        return editor.commands.timelineAddItem();
       },
+      "Mod-Enter": ({ editor }) => {
+        const spot = where(editor);
+        return spot ? exitAfter(editor, spot.depth - 1) : false;
+      },
+      // Backspace removes an empty item (the last one turns the timeline into a paragraph) or an empty description.
       Backspace: ({ editor }) => {
         const spot = where(editor);
-        if (!spot) return false;
+        const { empty } = editor.state.selection;
+        if (!spot || !empty) return false;
         const { $from, depth } = spot;
         const item = $from.node(depth);
-        const list = $from.node(depth - 1);
-        if (item.textContent.length || $from.parentOffset !== 0 || list.childCount < 2) return false;
-        return editor.chain().deleteRange({ from: $from.before(depth), to: $from.after(depth) }).run();
+        const field = $from.parent.type.name;
+        if ($from.parentOffset !== 0) return false;
+        if (blankItem(item)) {
+          if ($from.node(depth - 1).childCount < 2) return collapseToParagraph(editor, depth - 1);
+          return editor.commands.timelineDeleteItem();
+        }
+        if (field === "timelineDescription" && !$from.parent.content.size) return editor.commands.timelineToggleDescription();
+        return false;
       },
     };
   },
 });
 
 // Clicking a block's edge or icon, or pressing Escape inside one, selects the whole block (so it can be moved or deleted).
-const SELECTABLE = ["blockquote", "callout", "timeline", "table", "figure", "horizontalRule"];
+const SELECTABLE = ["blockquote", "callout", "timeline", "table", "figure", "horizontalRule", "codeBlock", "bulletList", "orderedList", "taskList", "heading", "paragraph"];
+const CLICK_SELECTABLE = ["blockquote", "callout", "timeline", "table", "figure", "horizontalRule"];
 export const BlockSelect = Extension.create({
   name: "blockSelect",
   addKeyboardShortcuts() {
@@ -233,7 +416,7 @@ export const BlockSelect = Extension.create({
         key: new PluginKey("blockSelect"),
         props: {
           handleClickOn(view, pos, node, nodePos, event) {
-            if (!SELECTABLE.includes(node.type.name)) return false;
+            if (!CLICK_SELECTABLE.includes(node.type.name)) return false;
             const dom = view.nodeDOM(nodePos);
             const onEdge = event.target === dom || (event.target.closest && event.target.closest(".cdx-nb-callout__icon"));
             if (!onEdge) return false;

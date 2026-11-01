@@ -13,15 +13,27 @@ import TableHeader from "@tiptap/extension-table-header";
 import TableCell from "@tiptap/extension-table-cell";
 import { blocksToHtml, docToBlocks, lossy, unsupportedBlocks } from "./convert.js";
 import { BlockExtensions } from "./nodes.js";
+import { KeyExtensions } from "./keys.js";
+import { TableControls } from "./tablecontrols.js";
+import { SlashMenu } from "./slash.js";
 import { Markdown } from "./markdown.js";
 import { CodeHighlight } from "./highlight.js";
 import { HeadingNumbers } from "./headings.js";
 import { mergeAttributes } from "@tiptap/core";
 
+const ALIGN = {
+  default: null,
+  parseHTML: (el) => el.getAttribute("data-align"),
+  renderHTML: (attrs) => (attrs.align ? { "data-align": attrs.align } : {}),
+};
+
 function extensions() {
   return [
     StarterKit.configure({ heading: { levels: [1, 2, 3, 4, 5] }, blockquote: false, horizontalRule: false }),
     ...BlockExtensions,
+    ...KeyExtensions,
+    TableControls,
+    SlashMenu,
     Markdown,
     CodeHighlight,
     HeadingNumbers,
@@ -36,18 +48,22 @@ function extensions() {
     }).configure({ openOnClick: false, HTMLAttributes: { target: null, rel: null } }),
     TaskList,
     TaskItem.configure({ nested: true }),
-    Table,
+    Table.configure({ resizable: true, cellMinWidth: 60, lastColumnResizable: false }),
     TableRow,
-    TableHeader.extend({ content: "paragraph" }),
-    TableCell.extend({ content: "paragraph" }),
+    TableHeader.extend({ content: "paragraph", addAttributes() { return { ...this.parent?.(), align: ALIGN }; } }),
+    TableCell.extend({ content: "paragraph", addAttributes() { return { ...this.parent?.(), align: ALIGN }; } }),
+    // Empty fields of the custom blocks always show their hint; a plain paragraph only does while the caret is in it.
     Placeholder.configure({
-      placeholder: ({ node }) =>
-        ({ paragraph: "Start writing...", calloutTitle: "Title (optional)", calloutMessage: "Callout text", quoteCaption: "Source", timelineDate: "Date", timelineTitle: "Title", timelineDescription: "Description" })[node.type.name] || "",
+      showOnlyCurrent: false,
+      includeChildren: true,
+      placeholder: ({ node, hasAnchor }) =>
+        ({ paragraph: hasAnchor ? "Start writing..." : "", calloutTitle: "Title (optional)", calloutMessage: "Callout text", quoteCaption: "Source", timelineDate: "Date", timelineTitle: "Title", timelineDescription: "Description" })[node.type.name] || "",
     }),
   ];
 }
 
-// `blocks` is the stored Editor.js block list; `onChange` gets the new block list after each edit.
+// `blocks` is the stored Editor.js block list; `onChange` is called after each edit and the caller reads `blocks()` when it
+// needs them (converting the whole note on every keystroke made long notes slow).
 function create(mount, blocks, onChange) {
   const readOnly = lossy(blocks);
   const editor = new Editor({
@@ -56,9 +72,9 @@ function create(mount, blocks, onChange) {
     extensions: extensions(),
     content: blocksToHtml(blocks),
     editable: !readOnly,
-    onUpdate: ({ editor: e }) => onChange(docToBlocks(e.state.doc, e.schema)),
+    onUpdate: () => onChange(),
   });
-  return { editor, readOnly, blocks: () => docToBlocks(editor.state.doc, editor.schema) };
+  return { editor, readOnly, reasons: readOnly ? unsupportedBlocks(blocks) : [], blocks: () => docToBlocks(editor.state.doc, editor.schema) };
 }
 
 window.CurodavEditor = { create, blocksToHtml, docToBlocks, lossy, extensions };

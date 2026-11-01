@@ -5,7 +5,10 @@ body:has(.nbtb) .notebook-page-main > #notebook-editor{padding:var(--space-4) va
 /* Text rhythm: one line height, one gap between blocks, headings with more air above than below. */
 #notebook-editor .tiptap{outline:none; min-height:60vh; padding:0; line-height:1.65; font-size:var(--text-base);}
 #notebook-editor .tiptap > *{margin-top:0; margin-bottom:0;}
-#notebook-editor .tiptap > * + *{margin-top:1em;}
+#notebook-editor .tiptap{--nb-indent:1.5em; --nb-gap:1em; --nb-gap-text:.65em;}
+#notebook-editor .tiptap > * + *{margin-top:var(--nb-gap);}
+#notebook-editor .tiptap > p + p{margin-top:var(--nb-gap-text);}
+#notebook-editor .tiptap > p + ul,#notebook-editor .tiptap > p + ol,#notebook-editor .tiptap > ul + p,#notebook-editor .tiptap > ol + p{margin-top:var(--nb-gap-text);}
 #notebook-editor .tiptap li p,#notebook-editor .tiptap td p,#notebook-editor .tiptap th p,#notebook-editor .tiptap blockquote p:first-child{margin:0;}
 #notebook-editor .tiptap h1,#notebook-editor .tiptap h2,#notebook-editor .tiptap h3,#notebook-editor .tiptap h4,#notebook-editor .tiptap h5{line-height:1.25; margin-bottom:0;}
 #notebook-editor .tiptap h1{font-size:2em;} #notebook-editor .tiptap h2{font-size:1.65em;} #notebook-editor .tiptap h3{font-size:1.4em;}
@@ -14,7 +17,7 @@ body:has(.nbtb) .notebook-page-main > #notebook-editor{padding:var(--space-4) va
 #notebook-editor .tiptap > h3:not(:first-child){margin-top:1.5em;} #notebook-editor .tiptap > h4:not(:first-child){margin-top:1.2em;}
 #notebook-editor .tiptap > h5:not(:first-child){margin-top:1em;}
 #notebook-editor .tiptap > h1 + *,#notebook-editor .tiptap > h2 + *,#notebook-editor .tiptap > h3 + *,#notebook-editor .tiptap > h4 + *,#notebook-editor .tiptap > h5 + *{margin-top:.35em;}
-#notebook-editor .tiptap ul,#notebook-editor .tiptap ol{padding-left:1.5em;}
+#notebook-editor .tiptap ul,#notebook-editor .tiptap ol{padding-left:var(--nb-indent);}
 #notebook-editor .tiptap li > p{margin:0;}
 #notebook-editor .tiptap li + li{margin-top:.2em;}
 #notebook-editor .tiptap li > ul,#notebook-editor .tiptap li > ol{margin-top:.2em;}
@@ -22,7 +25,7 @@ body:has(.nbtb) .notebook-page-main > #notebook-editor{padding:var(--space-4) va
 #notebook-editor .tiptap ul[data-type="taskList"] li{display:flex; align-items:baseline; gap:var(--space-2);}
 #notebook-editor .tiptap ul[data-type="taskList"] li > label{flex:none;}
 #notebook-editor .tiptap ul[data-type="taskList"] li > div{flex:1; min-width:0;}
-#notebook-editor .tiptap ul[data-type="taskList"] ul[data-type="taskList"]{padding-left:1.5em;}
+#notebook-editor .tiptap ul[data-type="taskList"] ul[data-type="taskList"]{padding-left:var(--nb-indent);}
 #notebook-editor .tiptap a{color:var(--tag-blue-fg);}
 #notebook-editor .tiptap code{font-family:var(--font-mono, ui-monospace, "SF Mono", Consolas, monospace); font-size:.9em; background:var(--bg-secondary); border-radius:var(--radius-xs, 4px); padding:.1em .35em;}
 
@@ -30,13 +33,30 @@ body:has(.nbtb) .notebook-page-main > #notebook-editor{padding:var(--space-4) va
 #notebook-editor .tiptap pre{background:var(--bg-secondary); color:var(--fg-primary); border:1px solid var(--border); border-radius:var(--radius-control); padding:var(--space-3) var(--space-4); overflow:auto; font-size:13px; line-height:1.5; tab-size:2;}
 #notebook-editor .tiptap pre code{background:none; padding:0; border-radius:0; font-size:inherit; white-space:pre-wrap;}
 
-/* Tables */
-#notebook-editor .tiptap table{border-collapse:collapse; width:100%; table-layout:fixed; overflow:hidden;}
-#notebook-editor .tiptap th,#notebook-editor .tiptap td{border:1px solid var(--border); padding:var(--space-1) var(--space-2); vertical-align:top; text-align:left; min-width:4em;}
+/* Tables: a plain grid at rest. While the caret is inside, a grip sits above each column and beside each row, and plus
+   buttons at the right and bottom edges add a column or a row. */
+#notebook-editor .tiptap .tableWrapper{--nb-table-pad:var(--space-4); --nb-table-room:32px; overflow-x:auto; padding:var(--nb-table-pad) var(--nb-table-room) var(--nb-table-room) var(--nb-table-pad); margin-inline:calc(-1 * var(--nb-table-pad)) calc(-1 * var(--nb-table-room)); margin-bottom:calc(-1 * var(--nb-table-room));}
+#notebook-editor .tiptap > .tableWrapper{margin-top:calc(var(--nb-gap) - var(--space-4));}
+#notebook-editor .tiptap > .tableWrapper:first-child{margin-top:calc(-1 * var(--space-4));}
+#notebook-editor .tiptap table{border-collapse:collapse; width:100%; table-layout:fixed;}
+#notebook-editor .tiptap th,#notebook-editor .tiptap td{position:relative; border:1px solid var(--border); padding:var(--space-1) var(--space-2); vertical-align:top; text-align:left; min-width:60px;}
 #notebook-editor .tiptap th{background:var(--bg-secondary); font-weight:var(--font-weight-bold);}
 #notebook-editor .tiptap td p,#notebook-editor .tiptap th p{margin:0;}
+#notebook-editor .tiptap [data-align="center"]{text-align:center;}
+#notebook-editor .tiptap [data-align="right"]{text-align:right;}
 #notebook-editor .tiptap .selectedCell{background:var(--accent-neutral-subtle);}
 #notebook-editor .tiptap .column-resize-handle{background:var(--accent); width:2px; position:absolute; top:0; bottom:0; right:-1px; pointer-events:none;}
+#notebook-editor .tiptap.resize-cursor{cursor:col-resize;}
+#notebook-editor .tiptap .nbtc-grip,#notebook-editor .tiptap .nbtc-add{position:absolute; z-index:2; padding:0; border:0; cursor:pointer; background:var(--accent-neutral-subtle-strong); user-select:none;}
+#notebook-editor .tiptap .nbtc-grip{opacity:.6; border-radius:var(--radius-pill, 999px);}
+#notebook-editor .tiptap .nbtc-grip:hover{opacity:1; background:var(--accent-neutral-hover);}
+#notebook-editor .tiptap .nbtc-col{top:-9px; left:25%; right:25%; height:5px;}
+#notebook-editor .tiptap .nbtc-row{left:-9px; top:25%; bottom:25%; width:5px;}
+#notebook-editor .tiptap .nbtc-add{display:flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; color:var(--fg-secondary); font-size:14px; line-height:1;}
+#notebook-editor .tiptap .nbtc-add::before{content:"+";}
+#notebook-editor .tiptap .nbtc-add:hover{background:var(--accent); color:var(--bg-elevated);}
+#notebook-editor .tiptap .nbtc-add-col{top:0; right:-26px;}
+#notebook-editor .tiptap .nbtc-add-row{left:0; bottom:-26px;}
 
 #notebook-editor .tiptap .is-empty::before{content:attr(data-placeholder); float:left; height:0; pointer-events:none; color:var(--fg-tertiary);}
 #notebook-editor .ProseMirror{position:relative; white-space:pre-wrap; white-space:break-spaces; word-wrap:break-word; font-variant-ligatures:none; font-feature-settings:"liga" 0;}
@@ -45,7 +65,7 @@ body:has(.nbtb) .notebook-page-main > #notebook-editor{padding:var(--space-4) va
 #notebook-editor .ProseMirror-hideselection *::selection{background:transparent;}
 
 /* Quote, callout, divider: the colors come from notebook_blocks.css; these rules shape the editable versions. */
-#notebook-editor .tiptap blockquote.cdx-nb-quote{border-left:3px solid var(--nb-color-fg); padding:.2em 0 .2em 1em;}
+#notebook-editor .tiptap blockquote.cdx-nb-quote{border-left:3px solid var(--nb-color-fg); padding:.2em 0 .2em var(--nb-indent);}
 #notebook-editor .tiptap blockquote.cdx-nb-quote p + p{margin-top:.5em;}
 #notebook-editor .tiptap .quote-caption{margin-top:.4em; font-size:.9em; color:var(--fg-secondary);}
 #notebook-editor .tiptap .quote-caption:not(.is-empty)::before{content:"\2014\00a0";}
@@ -68,7 +88,7 @@ body:has(.nbtb) .notebook-page-main > #notebook-editor{padding:var(--space-4) va
 #notebook-editor .tiptap .nbtl-item::after{content:""; position:absolute; top:calc(.45em + 14px); bottom:-1px; left:calc(var(--nbtl-date-width, 0px) + var(--space-3) + 5px); width:2px; background:var(--nbtl-line, var(--border));}
 #notebook-editor .tiptap .nbtl-item:last-child::after{display:none;}
 #notebook-editor .tiptap .nbtl[data-dates="true"]{--nbtl-date-width:96px;}
-#notebook-editor .tiptap .timeline-date{grid-column:1; grid-row:1; width:0; overflow:hidden; color:var(--fg-tertiary); font-size:var(--text-sm); text-align:right;}
+#notebook-editor .tiptap .timeline-date{grid-column:1; grid-row:1; width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:var(--fg-tertiary); font-size:var(--text-sm); text-align:right;}
 #notebook-editor .tiptap .nbtl[data-dates="true"] .timeline-date{width:96px;}
 #notebook-editor .tiptap .timeline-title{grid-column:3; grid-row:1; color:var(--fg-primary);}
 #notebook-editor .tiptap .timeline-desc{grid-column:3; grid-row:2; color:var(--fg-secondary);}
@@ -111,7 +131,13 @@ body:has(.nbtb) .notebook-page-main > #notebook-editor{padding:var(--space-4) va
 .nbtb{position:sticky; top:0; z-index:5; background:var(--bg-elevated); border-bottom:1px solid var(--border); padding:0; margin:0 0 var(--space-3);}
 .nbtb-row{display:flex; flex-wrap:wrap; gap:var(--space-1); align-items:center; padding:var(--space-1) var(--space-3);}
 .nbtb-row + .nbtb-row{border-top:1px solid var(--border);}
-.nbtb-context{background:var(--bg-secondary);}
+/* The context controls join the row's own flow, so they sit right after the other icons and wrap one by one. */
+.nbtb-context{display:contents;}
+.nbtb-context > *{flex:none;}
+.nbtb-context[hidden]{display:none;}
+.nbtb-break,.page-header-rows > .nbtb .nbtb-row > .nbtb-break{flex:0 0 100%; height:0; padding:0; margin:0;}
+.nbtb-break[hidden]{display:none;}
+.nbtb .icon-btn.nbtb-btn.nbtb-labeled{width:auto; padding:0 var(--space-2); gap:var(--space-1); font-size:var(--text-sm); font-weight:var(--font-weight-medium, 500);}
 .nbtb-row[hidden]{display:none;}
 .nbtb-group{display:inline-flex; gap:2px; padding-right:var(--space-2); margin-right:var(--space-1); border-right:1px solid var(--border);}
 .nbtb-btn.is-active{background:var(--bg-secondary); color:var(--fg-primary);}
@@ -139,3 +165,21 @@ body:has(.nbtb) .notebook-page-main > #notebook-editor{padding:var(--space-4) va
 .page-header-rows > .nbtb .nbtb-row{flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none;}
 .page-header-rows > .nbtb .nbtb-row::-webkit-scrollbar{display:none;}
 .page-header-rows > .nbtb .nbtb-row > *{flex:none;}
+/* On a wide window the toolbar wraps onto more rows instead of scrolling. */
+@media (min-width:721px){.page-header-rows > .nbtb .nbtb-row{flex-wrap:wrap; overflow:visible;}}
+.nbtb-more{display:none;}
+/* On a phone, inside a table, timeline, callout and so on, only that block's controls show; the pilcrow button brings the rest back. */
+@media (max-width:720px){
+  .nbtb.has-context:not(.show-all) .nbtb-row > :not(.nbtb-context):not(.nbtb-more){display:none;}
+  .nbtb.has-context .nbtb-more{display:inline-flex;}
+}
+
+/* A note the editor cannot hold yet stays readable; the banner says why and how to edit it. */
+.nb-readonly-banner{margin:0 0 var(--space-3); padding:var(--space-2) var(--space-3); border:1px solid var(--border); border-radius:var(--radius-control); background:var(--bg-secondary); color:var(--fg-secondary); font-size:var(--text-sm);}
+.nb-readonly-banner a{color:var(--tag-blue-fg);}
+
+/* Slash menu: the list of blocks that can be added, opened by typing "/" on an empty line. */
+.nbslash{position:fixed; z-index:60; width:240px; max-height:min(320px, 60vh); overflow-y:auto; padding:var(--space-1); background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-control); box-shadow:var(--shadow-md, 0 6px 20px rgba(0,0,0,.18));}
+.nbslash-item{display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); padding:var(--space-1) var(--space-2); border-radius:var(--radius-md); color:var(--fg-primary); cursor:pointer;}
+.nbslash-item.is-active,.nbslash-item:hover{background:var(--bg-secondary);}
+.nbslash-hint{color:var(--fg-tertiary); font-size:var(--text-sm); font-family:var(--font-mono, ui-monospace, monospace);}

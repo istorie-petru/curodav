@@ -27,7 +27,7 @@ def glyph(name: str) -> str:
 TOOLBAR_ICONS = (
     "bold", "code", "eraser", "git-commit-vertical", "hash", "image", "italic", "link", "list", "list-checks",
     "list-ordered", "megaphone", "minus", "palette", "redo-2", "strikethrough", "subscript", "superscript", "table",
-    "underline", "undo-2", "plus", "braces", "quote", "chevron-down", "table-properties", "trash-2", "brackets", "ellipsis", "arrow-up", "arrow-down", "copy",
+    "underline", "undo-2", "plus", "braces", "quote", "chevron-down", "table-properties", "trash-2", "brackets", "ellipsis", "arrow-up", "arrow-down", "copy", "align-left", "align-center", "align-right", "between-vertical-start", "between-vertical-end", "between-horizontal-start", "between-horizontal-end", "list-plus", "list-minus", "square-minus", "panel-top", "calendar", "calendar-off", "message-square-plus", "eye", "eye-off", "check", "unlink", "pilcrow",
 )
 
 

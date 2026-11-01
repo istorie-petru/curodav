@@ -21,6 +21,7 @@ def test_the_new_editor_is_the_default_and_legacy_stays_available(monkeypatch, t
         assert "tiptap.bundle.js" in page and "editorjs.umd.js" not in page
         legacy = client.get("/notebook/d1?editor=legacy").text
         assert "editorjs.umd.js" in legacy and "tiptap.bundle.js" not in legacy
+        assert "notebook_table.css" in legacy and "notebook_table.css" not in page
 
 
 def test_every_link_to_a_note_opens_the_new_editor_and_a_note_it_cannot_hold_stays_there(monkeypatch, tmp_path):

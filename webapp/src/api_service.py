@@ -20,6 +20,15 @@ from .notebook_markdown import blocks_to_markdown
 
 MAX_LIMIT = 100
 SEARCH_KINDS = ("note", "entry", "citation", "task", "event", "contact")
+KIND_SCOPES = {"note": "read:notes", "entry": "read:notes", "citation": "read:notes", "task": "read:calendar",
+               "event": "read:calendar", "contact": "read:calendar"}
+
+
+def kinds_for(token: dict[str, Any] | None, kinds: list[str] | None = None) -> list[str]:
+    """The search kinds `token` may read, out of `kinds` (all of them when None)."""
+    from . import access_tokens
+
+    return [k for k in (kinds or SEARCH_KINDS) if k in KIND_SCOPES and access_tokens.has_scope(token, KIND_SCOPES[k])]
 
 
 class NotFound(LookupError):
@@ -46,7 +55,7 @@ def _url(kind: str, uid: str) -> str:
 def search(conn: sqlite3.Connection, query: str, kinds: list[str] | None = None, limit: int | None = 20) -> list[dict[str, Any]]:
     """Every kind asked for, best match first across kinds."""
     limit = _limit(limit, 20)
-    wanted = [k for k in (kinds or SEARCH_KINDS) if k in SEARCH_KINDS]
+    wanted = [k for k in (SEARCH_KINDS if kinds is None else kinds) if k in SEARCH_KINDS]
     hits: list[dict[str, Any]] = []
     for kind in wanted:
         if kind == "note":

@@ -67,9 +67,11 @@ def authenticate(request: Request, conn, scope: str = "read") -> dict[str, Any]:
     return token
 
 
-def require_read(request: Request, conn=Depends(get_db)) -> dict[str, Any]:
-    return authenticate(request, conn, "read")
+def require(scope: str):
+    """A dependency that lets a request through when its token holds `scope` ("read" is any reading at all)."""
+    def check(request: Request, conn=Depends(get_db)) -> dict[str, Any]:
+        return authenticate(request, conn, scope)
+    return check
 
 
-def require_write(request: Request, conn=Depends(get_db)) -> dict[str, Any]:
-    return authenticate(request, conn, "write")
+require_read = require("read")

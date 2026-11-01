@@ -82,6 +82,7 @@ def test_the_journal_note_offers_the_weeks_around_it_as_a_fast_jump(conn):
     body = router.document_page(uid, _request(f"/notebook/{uid}"), conn=conn).body.decode()
     assert 'class="journal-jump"' in body and "Week 43" in body and "Week 41" in body
     assert body.index("page-header-narrow-actions") < body.index('class="journal-jump"') < body.index("page-header-rows")
+    assert "cal-nav-prev" in body and "cal-nav-next" in body and "journal-jump-label" in body
 
 
 def test_an_ordinary_note_has_no_strip(conn):

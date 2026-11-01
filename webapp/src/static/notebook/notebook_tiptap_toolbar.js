@@ -55,13 +55,12 @@
     try { glyphs = JSON.parse(mount.dataset.toolbarIcons || "{}"); } catch (e) { glyphs = {}; }
     var root = el("div", "nbtb");
     var rowOne = el("div", "nbtb-row");
-    var rowTwo = el("div", "nbtb-row nbtb-context");
-    var rowThree = el("div", "nbtb-row nbtb-context");
+    // What the caret is in (table, timeline, callout, link, color) is shown on the same row as the other editing choices.
+    var rowTwo = el("div", "nbtb-context");
+    var rowThree = el("div", "nbtb-context");
     rowTwo.hidden = true;
     rowThree.hidden = true;
     root.appendChild(rowOne);
-    root.appendChild(rowTwo);
-    root.appendChild(rowThree);
     var bar = document.querySelector(".page-header-rows");
     if (bar) bar.appendChild(root);
     else mount.parentNode.insertBefore(root, mount);
@@ -161,6 +160,19 @@
       return shell;
     }
 
+    // An icon button for the controls of what the caret is in; `on` marks it as switched on.
+    function ibtn(parent, name, label, run, on) {
+      var b = button(parent, name, label, run);
+      if (on) b.classList.add("is-active");
+      return b;
+    }
+
+    // A color chosen from a list, with the current one shown on the button.
+    function colorMenu(parent, label, current, onPick, withNone) {
+      var items = (withNone ? [["", "No color"]] : []).concat(COLORS.map(function (c) { return [c, c.charAt(0).toUpperCase() + c.slice(1)]; }));
+      dropdown(parent, label, items, onPick).set(current === undefined ? label : current);
+    }
+
     var STYLES = [
       ["paragraph", "Paragraph", function () { chain().setParagraph().run(); }],
       ["h1", "Heading 1", function () { chain().setHeading({ level: 1 }).run(); }],
@@ -195,19 +207,15 @@
     button(marks, "palette", "Text colour", function () { mode = mode === "color" ? null : "color"; lastSig = ""; paintContext(); }, function () { return editor.isActive("textColor"); });
     button(marks, "eraser", "Clear formatting", function () { chain().unsetAllMarks().run(); });
     var lists = group(rowOne);
-    button(lists, "list", "Bulleted list", function () { chain().toggleBulletList().run(); }, function () { return editor.isActive("bulletList"); });
-    button(lists, "list-ordered", "Numbered list", function () { chain().toggleOrderedList().run(); }, function () { return editor.isActive("orderedList"); });
-    button(lists, "list-checks", "Checklist", function () { chain().toggleTaskList().run(); }, function () { return editor.isActive("taskList"); });
-    actionMenu(rowOne, "plus", "Add", [
-      ["megaphone", "Callout", function () { chain().insertContent({ type: "callout", attrs: { type: "note" }, content: [{ type: "calloutTitle" }, { type: "calloutMessage" }] }).run(); }],
-      ["git-commit-vertical", "Timeline", function () { chain().insertContent({ type: "timeline", content: [{ type: "timelineItem", content: [{ type: "timelineDate" }, { type: "timelineTitle" }, { type: "timelineDescription" }] }] }).run(); }],
-      ["quote", "Quote", function () { chain().toggleBlockquote().run(); }],
-      ["braces", "Code block", function () { chain().toggleCodeBlock().run(); }],
-      ["minus", "Divider", function () { chain().setHorizontalRule().run(); }],
-      ["table", "Table", function () { chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(); }],
-      ["image", "Figure", function () { files.click(); }],
-      ["hash", "Endnote", function () { hooks.insertEndnote(); }],
-    ]);
+    function toggleList(name, toggle) {
+      return function () { if (editor.isActive(name)) chain().unwrapList().run(); else chain()[toggle]().run(); };
+    }
+    button(lists, "list", "Bulleted list", toggleList("bulletList", "toggleBulletList"), function () { return editor.isActive("bulletList"); });
+    button(lists, "list-ordered", "Numbered list", toggleList("orderedList", "toggleOrderedList"), function () { return editor.isActive("orderedList"); });
+    button(lists, "list-checks", "Checklist", toggleList("taskList", "toggleTaskList"), function () { return editor.isActive("taskList"); });
+    // Blocks are added from the slash menu in the editor; the editor tells the toolbar about the two that need its helpers.
+    editor.view.dom.addEventListener("nb-add-figure", function () { files.click(); });
+    editor.view.dom.addEventListener("nb-add-endnote", function () { hooks.insertEndnote(); });
     function topBlock() {
       var $from = editor.state.selection.$from;
       return $from.depth < 1 ? null : { index: $from.index(0), node: $from.node(1), pos: $from.before(1) };
@@ -329,22 +337,39 @@
           if (e.key === "Enter") { e.preventDefault(); apply(); }
           if (e.key === "Escape") { e.preventDefault(); mode = null; lastSig = ""; paintContext(); editor.view.focus(); }
         });
-        text(rowThree, "Apply", apply);
-        text(rowThree, "Remove", function () { chain().extendMarkRange("link").unsetLink().run(); mode = null; lastSig = ""; paintContext(); });
+        ibtn(rowThree, "check", "Apply link", apply);
+        ibtn(rowThree, "unlink", "Remove link", function () { chain().extendMarkRange("link").unsetLink().run(); mode = null; lastSig = ""; paintContext(); });
         setTimeout(function () { url.focus(); }, 0);
       } else if (mode === "color") {
         rowThree.hidden = false;
-        [["tc", "Text"], ["hl", "Highlight"]].forEach(function (kind) {
-          var label = el("span", "nbtb-label");
-          label.textContent = kind[1];
-          rowThree.appendChild(label);
-          swatches(rowThree, kind[0], function (color) { chain().setMark("textColor", { class: "nb-" + kind[0] + "-" + color }).run(); });
+        [["tc", "Text color"], ["hl", "Highlight"]].forEach(function (kind) {
+          colorMenu(rowThree, kind[1], undefined, function (color) { chain().setMark("textColor", { class: "nb-" + kind[0] + "-" + color }).run(); });
         });
-        text(rowThree, "None", function () { chain().unsetMark("textColor").run(); });
+        ibtn(rowThree, "eraser", "No color", function () { chain().unsetMark("textColor").run(); });
       }
     }
 
+    function layoutContext() {
+      contextBreak.hidden = true;
+      if (!root.classList.contains("has-context") || window.innerWidth <= 720) return;
+      var own = Array.prototype.filter.call(rowOne.children, function (c) { return !c.hidden && c !== contextBreak && !c.classList.contains("nbtb-context") && c.offsetParent; });
+      var ctx = Array.prototype.slice.call(rowTwo.children).concat(Array.prototype.slice.call(rowThree.children)).filter(function (c) { return c.offsetParent; });
+      if (!own.length || !ctx.length) return;
+      var first = own[0].getBoundingClientRect().top;
+      var wrapped = ctx.some(function (c) { return c.getBoundingClientRect().top > first + 4; });
+      contextBreak.hidden = !wrapped;
+    }
+    window.addEventListener("resize", layoutContext);
+    if (window.ResizeObserver) new ResizeObserver(layoutContext).observe(rowOne);
+
     function paintContext() {
+      paintContextRows();
+      root.classList.toggle("has-context", !rowTwo.hidden || !rowThree.hidden);
+      layoutContext();
+      setTimeout(layoutContext, 60);
+    }
+
+    function paintContextRows() {
       paintMode();
       rowTwo.replaceChildren();
       rowTwo.hidden = true;
@@ -364,10 +389,10 @@
         label.textContent = "Columns";
         rowTwo.appendChild(label);
         [1, 2, 3, 4].forEach(function (n) { text(rowTwo, String(n), function () { set({ columns: n }); }, (data.columns || 1) === n ? "is-active" : ""); });
-        text(rowTwo, "Narrower", function () { set({ width: Math.max(20, (data.width || 100) - 10) }); });
-        text(rowTwo, "Wider", function () { set({ width: Math.min(100, (data.width || 100) + 10) }); });
-        text(rowTwo, data.numbered ? "Numbered" : "Not numbered", function () { set({ numbered: !data.numbered }); }, data.numbered ? "is-active" : "");
-        text(rowTwo, "Add pictures", function () { files.click(); });
+        ibtn(rowTwo, "minus", "Narrower", function () { set({ width: Math.max(20, (data.width || 100) - 10) }); });
+        ibtn(rowTwo, "plus", "Wider", function () { set({ width: Math.min(100, (data.width || 100) + 10) }); });
+        ibtn(rowTwo, "hash", data.numbered ? "Numbered figure" : "Not numbered", function () { set({ numbered: !data.numbered }); }, data.numbered);
+        ibtn(rowTwo, "image", "Add pictures", function () { files.click(); });
         field(rowTwo, "Caption", (data.caption || "").replace(/<[^>]+>/g, ""), function (v) { set({ caption: v }); });
         field(rowTwo, "Source", (data.credit || "").replace(/<[^>]+>/g, ""), function (v) { set({ credit: v }); });
         return;
@@ -375,14 +400,10 @@
       var callout = ancestor(["callout"]);
       if (callout) {
         show();
-        Object.keys(CALLOUT_COLORS).forEach(function (type) {
-          var b = el("button", "nb-type-swatch nb-color-swatch", { type: "button", "data-color": CALLOUT_COLORS[type], title: type, "aria-label": type });
-          if (callout.attrs.type === type) b.classList.add("nb-color-swatch--active");
-          b.addEventListener("mousedown", function (e) { e.preventDefault(); });
-          b.addEventListener("click", function () { chain().updateAttributes("callout", { type: type }).run(); });
-          rowTwo.appendChild(b);
-        });
-        text(rowTwo, callout.attrs.hideTitle ? "Show title" : "Hide title", function () { chain().updateAttributes("callout", { hideTitle: !callout.attrs.hideTitle }).run(); });
+        dropdown(rowTwo, "Callout type", Object.keys(CALLOUT_COLORS).map(function (t) { return [t, t.charAt(0).toUpperCase() + t.slice(1)]; }), function (type) {
+          chain().updateAttributes("callout", { type: type }).run();
+        }).set(callout.attrs.type);
+        ibtn(rowTwo, callout.attrs.hideTitle ? "eye-off" : "eye", callout.attrs.hideTitle ? "Show title" : "Hide title", function () { chain().updateAttributes("callout", { hideTitle: !callout.attrs.hideTitle }).run(); });
         return;
       }
       var timeline = ancestor(["timeline"]);
@@ -391,9 +412,9 @@
         show();
         var name = timeline ? "timeline" : "blockquote";
         var node = timeline || quote;
-        swatches(rowTwo, "color", function (color) { chain().updateAttributes(name, { color: color }).run(); }, node.attrs.color);
+        colorMenu(rowTwo, "Color", node.attrs.color || "", function (color) { chain().updateAttributes(name, { color: color }).run(); }, !!timeline);
         if (quote && !timeline && !quote.lastChild.type.name.match(/quoteCaption/)) {
-          text(rowTwo, "Add source", function () {
+          ibtn(rowTwo, "message-square-plus", "Add source", function () {
             var $from = editor.state.selection.$from;
             for (var d = $from.depth; d > 0; d--) {
               if ($from.node(d).type.name !== "blockquote") continue;
@@ -403,16 +424,39 @@
             }
           });
         }
-        if (timeline) text(rowTwo, timeline.attrs.showDates ? "Hide dates" : "Show dates", function () { chain().updateAttributes("timeline", { showDates: !timeline.attrs.showDates }).run(); });
+        if (timeline) {
+          ibtn(rowTwo, timeline.attrs.showDates ? "calendar-off" : "calendar", timeline.attrs.showDates ? "Hide dates" : "Show dates", function () { chain().updateAttributes("timeline", { showDates: !timeline.attrs.showDates }).run(); });
+          var itemDepth = 0;
+          for (var td = editor.state.selection.$from.depth; td > 0; td--) if (editor.state.selection.$from.node(td).type.name === "timelineItem") { itemDepth = td; break; }
+          var hasDescription = itemDepth && editor.state.selection.$from.node(itemDepth).childCount > 2;
+          var items = group(rowTwo);
+          var addEntry = ibtn(items, "plus", "Add a new entry to the timeline", function () { chain().timelineAddItem().run(); });
+          addEntry.classList.add("nbtb-labeled");
+          addEntry.appendChild(document.createTextNode("Entry"));
+          ibtn(items, "list-minus", "Delete this entry", function () { chain().timelineDeleteItem().run(); });
+          ibtn(items, "arrow-up", "Move this entry up", function () { chain().timelineMoveItem(-1).run(); });
+          ibtn(items, "arrow-down", "Move this entry down", function () { chain().timelineMoveItem(1).run(); });
+          if (itemDepth) ibtn(items, "align-left", hasDescription ? "Remove description" : "Add description", function () { chain().timelineToggleDescription().run(); }, hasDescription);
+          ibtn(rowTwo, "trash-2", "Delete timeline", function () { chain().deleteNode("timeline").run(); });
+        }
         return;
       }
       if (ancestor(["table"])) {
         show();
-        actionMenu(rowTwo, "table-properties", "Table", [
-          ["plus", "Row above", function () { chain().addRowBefore().run(); }], ["plus", "Row below", function () { chain().addRowAfter().run(); }], ["trash-2", "Delete row", function () { chain().deleteRow().run(); }],
-          ["plus", "Column left", function () { chain().addColumnBefore().run(); }], ["plus", "Column right", function () { chain().addColumnAfter().run(); }], ["trash-2", "Delete column", function () { chain().deleteColumn().run(); }],
-          ["table", "Header row", function () { chain().toggleHeaderRow().run(); }], ["trash-2", "Delete table", function () { chain().deleteTable().run(); }],
-        ]);
+        var rowsGroup = group(rowTwo);
+        ibtn(rowsGroup, "between-vertical-start", "Row above", function () { chain().addRowBefore().run(); });
+        ibtn(rowsGroup, "between-vertical-end", "Row below", function () { chain().addRowAfter().run(); });
+        ibtn(rowsGroup, "list-minus", "Delete row", function () { chain().deleteRow().run(); });
+        var colsGroup = group(rowTwo);
+        ibtn(colsGroup, "between-horizontal-start", "Column left", function () { chain().addColumnBefore().run(); });
+        ibtn(colsGroup, "between-horizontal-end", "Column right", function () { chain().addColumnAfter().run(); });
+        ibtn(colsGroup, "square-minus", "Delete column", function () { chain().deleteColumn().run(); });
+        var alignGroup = group(rowTwo);
+        ibtn(alignGroup, "align-left", "Align column left", function () { chain().alignColumn("left").run(); });
+        ibtn(alignGroup, "align-center", "Align column center", function () { chain().alignColumn("center").run(); });
+        ibtn(alignGroup, "align-right", "Align column right", function () { chain().alignColumn("right").run(); });
+        ibtn(rowTwo, "panel-top", "Header row", function () { chain().toggleHeaderRow().run(); });
+        ibtn(rowTwo, "trash-2", "Delete table", function () { chain().deleteTable().run(); });
       }
     }
 
@@ -426,12 +470,22 @@
       if (mode === "link" || document.querySelector(".multiselect-panel.is-open")) return;
       var sel = editor.state.selection;
       var sig = [mode, sel.node ? sel.node.type.name + JSON.stringify(sel.node.attrs) : ""];
-      for (var d = sel.$from.depth; d > 0; d--) sig.push(sel.$from.node(d).type.name + JSON.stringify(sel.$from.node(d).attrs));
+      for (var d = sel.$from.depth; d > 0; d--) sig.push(sel.$from.node(d).type.name + JSON.stringify(sel.$from.node(d).attrs) + (sel.$from.node(d).type.name === "timelineItem" ? sel.$from.node(d).childCount : ""));
       sig = sig.join("|");
       if (sig === lastSig) return;
       lastSig = sig;
       paintContext();
     }
+    // The context controls follow the other icons; when they would not all fit on the row they start a second row.
+    var contextBreak = el("span", "nbtb-break");
+    contextBreak.hidden = true;
+    rowOne.appendChild(contextBreak);
+    rowOne.appendChild(rowTwo);
+    rowOne.appendChild(rowThree);
+    // On phones only the controls of what the caret is in show; this button brings the rest back.
+    var more = button(rowOne, "pilcrow", "Show all formatting", function () { root.classList.toggle("show-all"); });
+    more.classList.add("nbtb-more");
+    editor.view.dom.addEventListener("nb-open-link", function () { mode = "link"; lastSig = ""; paintContext(); });
     editor.on("selectionUpdate", refresh);
     editor.on("transaction", function () { if (!root.contains(document.activeElement)) refresh(); });
     refresh();

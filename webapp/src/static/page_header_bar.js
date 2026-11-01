@@ -56,6 +56,15 @@
         // Desktop: the whole strip is one line. Phones: the strip wraps (views get their own row), so only the
         // controls beside the title must fit their own box.
         var box = DESKTOP.matches ? strip : actions;
+        // Squeezed means something overflows or a title is already cut short; spacing goes before anything moves.
+        var squeezed = function () {
+          if (box.scrollWidth > box.clientWidth + 1) return true;
+          return Array.prototype.some.call(strip.querySelectorAll("*"), function (el) {
+            return el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).textOverflow === "ellipsis";
+          });
+        };
+        strip.classList.remove("is-tight");
+        if (squeezed()) strip.classList.add("is-tight");
         var kids = Array.prototype.filter.call(actions.children, function (c) { return getComputedStyle(c).display !== "none"; });
         var guard = kids.length;
         while (guard-- > 0 && box.scrollWidth > box.clientWidth + 1 && kids.length) {
