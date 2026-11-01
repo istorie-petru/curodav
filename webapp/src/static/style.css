@@ -4758,7 +4758,7 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .entry-card-links{display:flex; gap:var(--space-3);}
 .entry-section-body{white-space:pre-wrap;}
 .entry-mentions{margin:0; padding-left:var(--space-4);}
-.journal-jump{display:flex; flex-wrap:wrap; gap:var(--space-1); padding:var(--space-2) 0;}
+.journal-jump{display:flex; flex-wrap:nowrap; gap:var(--space-1); margin:0;}
 .task-list .contact-row-wrap{min-height:40px; gap:var(--space-3); padding-block:var(--space-1); border-bottom:none;}
 .task-row .task-status-select{flex:none; width:118px;}
 .task-row{flex-wrap:nowrap;}

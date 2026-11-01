@@ -284,7 +284,7 @@ export const TextColor = Mark.create({
   name: "textColor",
   parseHTML: () => [{ tag: "mark" }],
   addAttributes() {
-    return { class: { default: "" } };
+    return { class: { default: null } };
   },
   renderHTML: ({ HTMLAttributes }) => ["mark", HTMLAttributes, 0],
 });

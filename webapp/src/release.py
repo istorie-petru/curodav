@@ -1,4 +1,4 @@
 """Running version and release title, shown in the Settings banner. git-push.sh rewrites both at release time."""
 
-VERSION = "5.0.1"
-TITLE = "Cards and calmer windows"
+VERSION = "5.0.2"
+TITLE = "Safer note conversion"

@@ -3,7 +3,7 @@
 import { DOMSerializer } from "@tiptap/pm/model";
 
 const SUPPORTED_INLINE = new Set(["b", "strong", "i", "em", "s", "strike", "del", "u", "code", "a", "br", "mark", "sub", "sup", "data"]);
-const SUPPORTED_BLOCKS = new Set(["paragraph", "header", "list", "quote", "code", "delimiter", "table", "callout", "timeline", "image"]);
+const SUPPORTED_BLOCKS = new Set(["paragraph", "header", "list", "checklist", "quote", "code", "delimiter", "table", "callout", "timeline", "image"]);
 const COLORS = ["red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "gray"];
 const CALLOUT_TYPES = ["note", "tip", "warning", "danger", "important"];
 
@@ -23,11 +23,24 @@ function inlineIsSupported(markup) {
   return true;
 }
 
+// Old lists stored plain strings as items, and the separate checklist block stored {text, checked}.
+function normalizeBlock(block) {
+  const data = block.data || {};
+  if (block.type === "checklist") {
+    return { type: "list", data: { style: "checklist", items: (data.items || []).map((item) => ({ content: item.text || "", meta: { checked: !!item.checked }, items: [] })) } };
+  }
+  if (block.type === "list" && (data.items || []).some((item) => typeof item === "string")) {
+    return { type: "list", data: { ...data, items: data.items.map((item) => (typeof item === "string" ? { content: item, meta: {}, items: [] } : item)) } };
+  }
+  return block;
+}
+
 function listItemsSupported(items) {
   return (items || []).every((item) => inlineIsSupported(item.content) && listItemsSupported(item.items));
 }
 
-function blockIsSupported(block) {
+function blockIsSupported(raw) {
+  const block = normalizeBlock(raw);
   const data = block.data || {};
   if (!SUPPORTED_BLOCKS.has(block.type)) return false;
   switch (block.type) {
@@ -40,7 +53,7 @@ function blockIsSupported(block) {
     case "callout":
       return inlineIsSupported(data.title) && inlineIsSupported(data.message) && CALLOUT_TYPES.includes(data.type || "note");
     case "timeline":
-      return (data.items || []).every((item) => inlineIsSupported(item.title) && inlineIsSupported(item.description) && !/[<&]/.test(item.date || ""));
+      return (data.items || []).every((item) => inlineIsSupported(item.title) && inlineIsSupported(item.description) && typeof (item.date || "") === "string");
     case "image":
       return Array.isArray(data.images) ? data.images.length > 0 : !!data.url;
     case "delimiter":
@@ -80,7 +93,8 @@ function listHtml(data) {
 
 export function blocksToHtml(blocks) {
   return (blocks || [])
-    .map((block) => {
+    .map((raw) => {
+      const block = normalizeBlock(raw);
       const data = block.data || {};
       switch (block.type) {
         case "paragraph":
@@ -108,7 +122,8 @@ export function blocksToHtml(blocks) {
         case "delimiter":
           return `<hr data-style="${data.style || "stars"}">`;
         case "table": {
-          const rows = data.content || [];
+          const rows = (data.content || []).filter((row) => row.length);
+          if (!rows.length) return "";
           return (
             "<table><tbody>" +
             rows.map((row, r) => "<tr>" + row.map((cell) => `<${data.withHeadings && r === 0 ? "th" : "td"}><p>${cell}</p></${data.withHeadings && r === 0 ? "th" : "td"}>`).join("") + "</tr>").join("") +

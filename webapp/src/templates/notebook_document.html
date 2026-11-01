@@ -38,11 +38,12 @@
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 <h1 class="sr-only">{{ document.title }}</h1>
 {% set _template_extra %}{% if document.is_template %}<span class="cell-tag cal-gray">Template</span>{% endif %}{% endset %}
+{% from "_journal_strip.html" import journal_strip %}
 {% call page_header_narrow(document.title, 'copy' if document.is_template else 'notebook', title_extra=_template_extra, sidebar_toggle=(sidebar_layout == 'sidebar')) %}
+    {% if journal_weeks %}{{ journal_strip(journal_weeks, document.journal_week) }}{% endif %}
     <a href="/notebook/{{ document.uid }}/properties" data-modal class="icon-btn" title="Edit document properties" aria-label="Edit document properties">{{ icon('edit', 'icon-sm') }}</a>
 {% endcall %}
 
-{% if journal_weeks %}{% from "_journal_strip.html" import journal_strip %}{{ journal_strip(journal_weeks, document.journal_week) }}{% endif %}
 {% if sidebar_layout == 'sidebar' %}
 <div class="notebook-page-layout main-shell-body">
     <div class="notebook-page-main">

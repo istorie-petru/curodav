@@ -67,3 +67,20 @@ test("a closing marker typed before the opening one is still found", async () =>
   assert.equal(handle.blocks()[0].data.text.includes("<b>") || handle.blocks()[0].data.text.includes("<strong>"), true, handle.blocks()[0].data.text);
   handle.editor.destroy();
 });
+
+test("notes stored by older versions keep their content", () => {
+  const strings = roundTrip([{ type: "list", data: { style: "unordered", items: ["a", "b"] } }]);
+  assert.deepEqual(strings[0].data.items.map((item) => item.content), ["a", "b"]);
+  const checklist = [{ type: "checklist", data: { items: [{ text: "x", checked: true }] } }];
+  assert.equal(lossy(checklist), false);
+  const out = roundTrip(checklist);
+  assert.deepEqual([out[0].type, out[0].data.style, out[0].data.items[0].meta.checked], ["list", "checklist", true]);
+});
+
+test("an empty table, a timeline date with an ampersand and a plain highlight do not break or change", () => {
+  assert.doesNotThrow(() => roundTrip([{ type: "table", data: { content: [] } }]));
+  const dated = [{ type: "timeline", data: { showDates: true, color: "", items: [{ title: "t", description: "d", date: "1 & 2" }] } }];
+  assert.equal(lossy(dated), false);
+  assert.equal(roundTrip(dated)[0].data.items[0].date, "1 & 2");
+  assert.equal(roundTrip([{ type: "paragraph", data: { text: "<mark>m</mark>" } }])[0].data.text, "<mark>m</mark>");
+});

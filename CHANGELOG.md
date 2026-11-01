@@ -6,6 +6,11 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [5.0.2]
+
+- Notebook conversion: notes written by the former editor keep their content when opened. Lists whose items were stored as plain text no longer open empty, old separate checklist blocks become task lists, a note with an empty table no longer fails to open, a timeline date containing `&` no longer forces the note read-only, and a plain highlight no longer gains an empty class. The round-trip tests cover each case.
+- Journal: the week jump (the week before, this week, the week after) now sits in the header bar of a journal note and of a year folder instead of in its own row under it.
+
 ## [5.0.1]
 
 - Cards: the University and Library pages use one widget card (a quiet label, a title, a muted line, an arrow that opens something), equal height in a row, with one gradient card at most per page for something urgent. List sections and the course sheet are plain, without boxes.
