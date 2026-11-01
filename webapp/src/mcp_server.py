@@ -14,7 +14,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any
 
-from . import access_tokens, api_service, api_write, note_versions
+from . import access_tokens, api_service, api_university, api_write, note_versions
+from .university_plan import SHEET_FIELDS
 
 PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26")
 SERVER_INFO = {"name": "curodav", "title": "Curodav", "version": "5.0.0"}
@@ -52,6 +53,7 @@ def _s(description: str, **extra: Any) -> dict[str, Any]:
     return {"type": "string", "description": description, **extra}
 
 
+_SEM = {"type": "string", "description": "A semester uid; the current one when left out."}
 _LIMIT = {"type": "integer", "minimum": 1, "maximum": api_service.MAX_LIMIT, "description": "Page size."}
 _CURSOR = _s("The `next` value of the previous page.")
 
@@ -111,7 +113,8 @@ TOOLS = [
           "upcoming": {"type": "boolean", "description": "Only those today or later."}}, (),
          lambda c, a, _t: api_service.list_exams(c, **a)),
     Tool("get_discipline", "Read a discipline",
-         "One discipline: timetable, ways of evaluating with grades and conditions, exams, readings and attendance per class.",
+         "One discipline: course sheet, planned topics, timetable, ways of evaluating with grades and conditions, exams, readings "
+         "and attendance per class, with the ids the university edit tools take.",
          {"name": _s("Discipline name."), "semester_uid": _s("A semester uid; the current one when left out.")}, ("name",),
          lambda c, a, _t: api_service.get_discipline(c, a["name"], semester_uid=a.get("semester_uid", ""))),
     Tool("list_note_versions", "List a note's versions",
@@ -132,6 +135,62 @@ TOOLS = [
          "Puts an earlier version of a note back; the current content is kept as a version first.",
          {"version_uid": _s("A uid from list_note_versions.")}, ("version_uid",),
          lambda c, a, t: api_write.restore_version(c, a["version_uid"], source="mcp", token_uid=t.get("uid", "")), scope="write:notes"),
+    Tool("university_save_semester", "Save a semester",
+         "Creates a semester, or changes the name and dates of the one with uid. Dates are YYYY-MM-DD; the class end date is the last day of classes.",
+         {"name": _s("The semester's name, such as Autumn 2026."), "start_date": _s("First day."), "end_date": _s("Last day, exams included."),
+          "class_end_date": _s("Last day of classes."), "uid": _s("The semester to change; left out, a new one is made.")}, ("name",),
+         lambda c, a, _t: api_university.save_semester(c, **a), scope="write:university"),
+    Tool("university_save_discipline", "Save a discipline",
+         "Adds a discipline to the semester (a free colour and an abbreviation are picked), or renames one given old_name.",
+         {"name": _s("The discipline's name."), "old_name": _s("The current name, to rename it."), "color": _s("A colour name, such as blue."),
+          "icon": _s("An icon name."), "semester_uid": _SEM}, ("name",),
+         lambda c, a, _t: api_university.save_discipline(c, **a), scope="write:university"),
+    Tool("university_set_course_sheet", "Fill a course sheet",
+         "Fills course sheet fields of a discipline by key. Keys: " + ", ".join(f"{k} ({label})" for k, label in SHEET_FIELDS)
+         + ". Fields left out stay as they are. extra replaces the discipline's own added fields: a list of {section, label, value}, "
+           "section one of identification, teaching, content.",
+         {"discipline": _s("Discipline name."), "fields": {"type": "object", "description": "Field key to value."},
+          "extra": {"type": "array", "items": {"type": "object"}, "description": "Own fields as {section, label, value}."},
+          "semester_uid": _SEM}, ("discipline",),
+         lambda c, a, _t: api_university.set_course_sheet(c, **a), scope="write:university"),
+    Tool("university_set_teachers", "Set the teachers",
+         "Who teaches the lectures and who the seminars and labs, by name. A list that is left out stays as it is.",
+         {"discipline": _s("Discipline name."), "lecture": {"type": "array", "items": {"type": "string"}, "description": "Names."},
+          "seminar": {"type": "array", "items": {"type": "string"}, "description": "Names."}, "semester_uid": _SEM}, ("discipline",),
+         lambda c, a, _t: api_university.set_teachers(c, **a), scope="write:university"),
+    Tool("university_save_class_slot", "Add a weekly class",
+         "Adds a weekly class to the timetable and creates its classes up to the class end date, or changes the slot series_uid "
+         "(from today on). kind is lecture, seminar, lab or other; weeks is all, odd or even; times are HH:MM.",
+         {"discipline": _s("Discipline name."), "weekday": _s("Monday to Sunday."), "start": _s("HH:MM."), "end": _s("HH:MM."),
+          "kind": _s("lecture, seminar, lab or other."), "weeks": _s("all, odd or even."), "room": _s("Room."),
+          "series_uid": _s("The slot to change, from get_discipline."), "semester_uid": _SEM},
+         ("discipline", "weekday", "start", "end"),
+         lambda c, a, _t: api_university.save_class_slot(c, **a), scope="write:university"),
+    Tool("university_save_evaluation", "Save a way of evaluating",
+         "Adds a way of evaluating to a discipline, or replaces the one with way.id (from get_discipline); the other ways stay. "
+         "way: {id?, name, weight (percent), form?, min_grade?, elimination?, criteria?, notes?, parts?: [{name, weight}], "
+         "exams?: [{uid?, title, day (YYYY-MM-DD), start (HH:MM), end, location, due, notes}]}. Exams left out keep the current ones; "
+         "a list replaces them.",
+         {"discipline": _s("Discipline name."), "way": {"type": "object", "description": "The way of evaluating."}, "semester_uid": _SEM},
+         ("discipline", "way"),
+         lambda c, a, _t: api_university.save_evaluation_way(c, **a), scope="write:university"),
+    Tool("university_set_topics", "Set the planned topics",
+         "Replaces the planned topics of one kind of class, in order; topics that keep their number and title keep their classes.",
+         {"discipline": _s("Discipline name."), "topics": {"type": "array", "items": {"type": "string"}, "description": "Titles in order."},
+          "kind": _s("lecture, seminar, lab or competence."), "semester_uid": _SEM}, ("discipline", "topics"),
+         lambda c, a, _t: api_university.set_topics(c, **a), scope="write:university"),
+    Tool("university_save_reading", "Save a reading",
+         "Adds a reading to a discipline, or changes the one with task_uid: a library entry (citation_uid) or a title and author, "
+         "with pages or chapter in locator. category is obligatory, recommended or auxiliary.",
+         {"discipline": _s("Discipline name."), "title": _s("Title."), "author": _s("Author."), "citation_uid": _s("A library entry."),
+          "locator": _s("Pages or chapter."), "category": _s("obligatory, recommended or auxiliary."), "due": _s("YYYY-MM-DD."),
+          "notes": _s("Notes."), "task_uid": _s("The reading to change."), "semester_uid": _SEM}, ("discipline",),
+         lambda c, a, _t: api_university.save_reading(c, **a), scope="write:university"),
+    Tool("university_save_homework", "Save homework",
+         "Adds homework to a discipline, or changes the one with task_uid.",
+         {"discipline": _s("Discipline name."), "title": _s("What to hand in."), "due": _s("YYYY-MM-DD."),
+          "status": _s("active or done."), "task_uid": _s("The homework to change."), "semester_uid": _SEM}, ("discipline", "title"),
+         lambda c, a, _t: api_university.save_homework(c, **a), scope="write:university"),
     Tool("list_organisation", "List spaces, shelves and tags", "Every space with its shelves, and every tag with its shelf.",
          {}, (), lambda c, a, _t: api_service.list_organisation(c)),
 ]
@@ -155,7 +214,7 @@ def _check_args(tool: Tool, args: Any) -> str | None:
         kind = spec["type"]
         item = (spec.get("items") or {}).get("type", "string")
         ok = {"string": isinstance(value, str), "integer": isinstance(value, int) and not isinstance(value, bool),
-              "boolean": isinstance(value, bool),
+              "boolean": isinstance(value, bool), "object": isinstance(value, dict),
               "array": isinstance(value, list) and all(isinstance(v, dict if item == "object" else str) for v in value)}[kind]
         if not ok:
             return f"{name} must be a {kind}"

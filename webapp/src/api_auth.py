@@ -58,12 +58,14 @@ def authenticate(request: Request, conn, scope: str = "read") -> dict[str, Any]:
         raise HTTPException(status_code=429, detail={"error": "rate_limited", "message": "Too many failed attempts; try later."},
                             headers={"Retry-After": str(FAILED_WINDOW_SECONDS)})
     secret = _bearer(request)
-    token = access_tokens.check_token(conn, secret, scope)
+    token = access_tokens.check_token(conn, secret, None)
     if token is None:
         if secret:
             _failed.setdefault(key, []).append(clock.now().timestamp())
-            raise _deny(request, 401, "invalid_token", "The token is unknown, expired, revoked or lacks the scope.")
+            raise _deny(request, 401, "invalid_token", "The token is unknown, expired or revoked.")
         raise _deny(request, 401, "", "A bearer token is required.")
+    if not access_tokens.has_scope(token, scope):
+        raise _deny(request, 403, "insufficient_scope", f"This token may not use {scope}; change its access in Settings, API access.")
     return token
 
 

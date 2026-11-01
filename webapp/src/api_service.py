@@ -368,14 +368,16 @@ def get_discipline(conn: sqlite3.Connection, name: str, *, semester_uid: str = "
     attendance = ua.discipline_attendance(conn, sid, found["name"], today)
     return {
         "name": found["name"], "semester": _semester_out(semester), "teachers": [t["name"] for t in found["teachers"] if t["name"]],
-        "timetable": [{"kind": s["kind"], "weekday": _WEEKDAYS[s["weekday"]], "start": s["start"], "end": s["end"], "room": s["room"],
+        "course_sheet": up.get_sheet(conn, sid, found["name"])["values"],
+        "topics": {kind: [t["title"] for t in up.list_topics(conn, sid, found["name"], kind)] for kind in up.TOPIC_KINDS},
+        "timetable": [{"series_uid": s["series_uid"], "kind": s["kind"], "weekday": _WEEKDAYS[s["weekday"]], "start": s["start"], "end": s["end"], "room": s["room"],
                        "weeks": s["weeks"], "first": s["first"], "last": s["last"]} for s in up.list_slots(conn, sid, found["name"])],
-        "evaluation": [{"name": w["name"], "weight": w["weight"], "min_grade": w["min_grade"], "grade": w["grade"], "passed": w["passed"],
+        "evaluation": [{"id": w["id"], "name": w["name"], "weight": w["weight"], "min_grade": w["min_grade"], "grade": w["grade"], "passed": w["passed"],
                         "eligible": w["eligible"], "conditions": [{"label": r["label"], "met": r["is_met"]} for r in w["condition_rows"]]}
                        for w in standing["ways"]],
         "grade": standing["final"], "grade_so_far": standing["so_far"], "passing_grade": standing["passing"], "passed": standing["passed"],
         "exams": [_exam_out(m) for m in ue.list_milestones(conn, sid, found["name"], today)],
-        "readings": [{k: r[k] for k in ("title", "author", "locator", "category_label", "due", "status", "citation_id")}
+        "readings": [{k: r[k] for k in ("task_uid", "title", "author", "locator", "category_label", "due", "status", "citation_id")}
                      for r in up.list_readings(conn, sid, found["name"])],
         "attendance": _attendance_out(attendance["kinds"]),
         "classes": [{"date": c["date"], "start": c["start"], "kind": c["kind_label"], "number": c["number"], "status": c["status_label"],

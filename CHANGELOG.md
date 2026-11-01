@@ -6,6 +6,13 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [5.0.4]
+
+- API access: a token holds five separate permissions (read notes, entries and the library; read tasks, events and contacts; read university; edit notes; edit university), each a switch in the token window. A token's permissions can be changed after it is made, from the edit button in its row, and the table shows what each one may do. An app connecting through the sign-in page gets the same switches, and nothing is granted when they are all off. A request outside a token's permissions gets 403, and MCP lists only the tools a token may use.
+- University over MCP: with the edit university permission, a connected assistant can save a semester and disciplines, fill a discipline's course sheet and its own fields, set lecture and seminar teachers, add weekly classes to the timetable, add or change a way of evaluating with its exams, set the planned topics, and add readings and homework. Each edit goes through the same checks as the University windows. Reading a discipline now includes its course sheet, topics and the ids these edits take.
+- Switches: an on switch fills with the accent color and a white thumb, so on and off read apart in both themes.
+- Saving feedback: a switch or dropdown that saves as soon as it changes shows a "Saved" toast once the page is back, and a window's save message (such as "Access saved") stays visible when the page reloads to show the change.
+
 ## [5.0.3]
 
 - Notebook editor, leaving blocks: Enter adds a paragraph to a quote, and Enter on an empty line (or Ctrl+Enter anywhere in a quote, callout, timeline, table, code block or list) leaves the block. A second Enter leaves a callout, Enter on an empty timeline item leaves the timeline, and Backspace in an empty callout, timeline item or quote source removes it.

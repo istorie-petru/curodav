@@ -5287,3 +5287,8 @@ input.is-greyed{opacity:.5; background:var(--bg-hover, transparent);}
 #notebook-new-form #notebook-new-fields{display:contents;}
 #notebook-new-form #notebook-new-fields > .field:not(:first-child){order:2;}
 #notebook-new-form .field-grid > .tag-field{order:1;}
+
+/* ---- Switches (API thread, 5.0.4) ----
+   An on switch fills with the accent and a white thumb, so on and off read apart at a glance in both themes. */
+.switch input:checked + .slider{background:var(--accent);}
+.switch input:checked + .slider::before{background:var(--fg-on-accent);}

@@ -367,7 +367,7 @@ wheels = [
 
 [[package]]
 name = "command-center-web"
-version = "5.0.3"
+version = "5.0.4"
 source = { virtual = "webapp" }
 dependencies = [
     { name = "caldav" },
@@ -462,7 +462,7 @@ wheels = [
 
 [[package]]
 name = "curodav"
-version = "5.0.3"
+version = "5.0.4"
 source = { virtual = "." }
 
 [[package]]

@@ -643,7 +643,14 @@ document.addEventListener("submit", (event) => {
 
   document.addEventListener("change", (e) => {
     if (e.target.matches && e.target.matches("[data-change-submit]") && e.target.form) {
-      e.target.form.requestSubmit();
+      const form = e.target.form;
+      // A setting saved by changing it reloads the page; say so once the page is back.
+      const overlay = document.getElementById("modal-overlay");
+      const inModal = overlay && overlay.contains(form);
+      if (form.method === "post" && !inModal && !form.matches("[data-cc-change], [data-smart-form]") && window.ccToastNext) {
+        window.ccToastNext({ message: "Saved" });
+      }
+      form.requestSubmit();
     }
   });
 

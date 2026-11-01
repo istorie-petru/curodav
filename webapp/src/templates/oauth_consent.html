@@ -21,13 +21,13 @@
             {% if error %}
             <p class="auth-error" role="alert">{{ error }}</p>
             {% else %}
-            <p><strong>{{ client_name }}</strong> wants to read your notes, library, entries, tasks, events and contacts{% if 'write' in scopes %}, and to edit your notes{% endif %}.</p>
-            <p>It returns to {{ redirect_host }}. You can disconnect it any time in Settings, under API access.</p>
+            <p><strong>{{ client_name }}</strong> asks for access to Curodav. It returns to {{ redirect_host }}.</p>
             <form method="post" action="/oauth/authorize">
                 {% for key, value in fields.items() %}
                 <input type="hidden" name="{{ key }}" value="{{ value }}">
                 {% endfor %}
-                <button type="submit" name="decision" value="allow" class="btn primary auth-submit" autofocus>{{ 'Allow read and edit' if 'write' in scopes else 'Allow read access' }}</button>
+                <div class="field-grid">{% include "_api_scope_switches.html" %}</div>
+                <button type="submit" name="decision" value="allow" class="btn primary auth-submit" autofocus>Allow</button>
                 <button type="submit" name="decision" value="deny" class="btn auth-submit">Cancel</button>
             </form>
             {% endif %}

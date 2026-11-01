@@ -28,15 +28,16 @@
 </div>
 {% macro token_table(rows, noun) %}
 <table class="entity-table">
-    <thead><tr><th class="col-name">Name</th><th class="col-opt-1">Access</th><th class="col-opt-1">Created</th><th class="col-opt-2">Last used</th><th class="col-actions">Actions</th></tr></thead>
+    <thead><tr><th class="col-name">Name</th><th>Access</th><th class="col-opt-1">Created</th><th class="col-opt-2">Last used</th><th class="col-actions">Actions</th></tr></thead>
     <tbody>
     {% for t in rows %}
     <tr>
         <td class="col-name">{{ t.client_name or t.name }}</td>
-        <td class="col-opt-1">{{ 'Read and edit' if 'write' in t.scopes.split() else 'Read' }}</td>
+        <td>{{ t.access }}</td>
         <td class="col-opt-1">{{ t.created_at|short_day }}</td>
         <td class="col-opt-2">{{ t.last_used_at|short_day if t.last_used_at else 'Never' }}</td>
         <td class="col-actions">
+            <a href="/settings/api-access/tokens/{{ t.uid }}/edit" data-modal class="icon-btn" title="Change access" aria-label="Change access">{{ icon('edit', 'icon-sm') }}</a>
             <form class="form-inline" method="post" action="/settings/api-access/tokens/{{ t.uid }}/revoke" data-confirm-sheet="Remove access for {{ t.client_name or t.name }}? It stops working at once.">
                 <button type="submit" class="icon-btn danger" title="Remove access" aria-label="Remove access">{{ icon('trash', 'icon-sm') }}</button>
             </form>

@@ -415,8 +415,27 @@ try {
 
   // A redirect carries its message as ?note= / ?error=; the template renders it
   // as a [data-dm-flash] banner (the no-JS fallback) and this turns it into a toast.
+  // A toast for the next page load, for a save that reloads or leaves the page (a switch that saves when it changes).
+  // A redirect's own ?note= or ?error= wins over it.
+  const NEXT_KEY = "ccToastNext";
+  window.ccToastNext = (options) => {
+    try {
+      sessionStorage.setItem(NEXT_KEY, JSON.stringify({ at: Date.now(), options }));
+    } catch (_) {}
+  };
+
+  function pendingToast(hasFlash) {
+    let pending = null;
+    try {
+      pending = JSON.parse(sessionStorage.getItem(NEXT_KEY) || "null");
+      sessionStorage.removeItem(NEXT_KEY);
+    } catch (_) {}
+    if (pending && !hasFlash && Date.now() - pending.at < 15000) ccToast(pending.options);
+  }
+
   function flashToToast() {
     const flashes = document.querySelectorAll("[data-dm-flash]");
+    pendingToast(flashes.length > 0);
     if (!flashes.length) return;
     flashes.forEach((el) => {
       ccToast({
@@ -1084,7 +1103,14 @@ document.addEventListener("submit", (event) => {
 
   document.addEventListener("change", (e) => {
     if (e.target.matches && e.target.matches("[data-change-submit]") && e.target.form) {
-      e.target.form.requestSubmit();
+      const form = e.target.form;
+      // A setting saved by changing it reloads the page; say so once the page is back.
+      const overlay = document.getElementById("modal-overlay");
+      const inModal = overlay && overlay.contains(form);
+      if (form.method === "post" && !inModal && !form.matches("[data-cc-change], [data-smart-form]") && window.ccToastNext) {
+        window.ccToastNext({ message: "Saved" });
+      }
+      form.requestSubmit();
     }
   });
 

@@ -98,8 +98,8 @@ def authorize_page(request: Request, conn=Depends(get_db)):
     if response is not None:
         return response
     return _consent_page(request, {"error": None, "client_name": checked["client"]["client_name"],
-                                   "redirect_host": checked["redirect_uri"].split("/")[2], "scopes": checked["scopes"].split(),
-                                   "fields": params})
+                                   "redirect_host": checked["redirect_uri"].split("/")[2],
+                                   "scope_rows": access_tokens.scope_rows(checked["scopes"]), "fields": params})
 
 
 @router.post("/oauth/authorize")
@@ -115,6 +115,8 @@ async def authorize_decision(request: Request):
         back = {"iss": base_url(request)}
         if checked["state"]:
             back["state"] = checked["state"]
-        if form.get("decision") != "allow":
+        if form.get("scopes_sent"):
+            checked["scopes"] = access_tokens.normal_scopes(" ".join(str(v) for v in form.getlist("grant")), "")
+        if form.get("decision") != "allow" or not checked["scopes"]:
             return _back_to_client(checked["redirect_uri"], {"error": "access_denied", **back})
         return _back_to_client(checked["redirect_uri"], {"code": access_tokens.issue_code(conn, checked), **back})

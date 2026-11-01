@@ -38,7 +38,7 @@ def _take_fresh(request: Request) -> str | None:
 
 @router.get(PATH)
 def api_access_page(request: Request, conn=Depends(get_db)):
-    tokens = access_tokens.list_tokens(conn)
+    tokens = [t | {"access": access_tokens.describe(t["scopes"])} for t in access_tokens.list_tokens(conn)]
     return templates.TemplateResponse(request, "settings_api_access.html", {
         "active_tab": "settings_api_access", "crumbs": [{"url": "/settings", "name": "Settings"}], "title": "API access",
         "personal": [t for t in tokens if t["kind"] == "personal"], "apps": [t for t in tokens if t["kind"] == "oauth"],
@@ -49,14 +49,31 @@ def api_access_page(request: Request, conn=Depends(get_db)):
 
 @router.get(PATH + "/new")
 def new_token_modal(request: Request):
-    return templates.TemplateResponse(request, "settings_api_token_modal.html", {})
+    return templates.TemplateResponse(request, "settings_api_token_modal.html", {
+        "token": None, "scope_rows": access_tokens.scope_rows(access_tokens.DEFAULT_SCOPES)})
+
+
+@router.get(PATH + "/tokens/{uid}/edit")
+def edit_token_modal(uid: str, request: Request, conn=Depends(get_db)):
+    token = access_tokens.get_token(conn, uid)
+    if token is None:
+        return RedirectResponse(url=f"{PATH}?error=That token no longer exists", status_code=303)
+    return templates.TemplateResponse(request, "settings_api_token_modal.html", {
+        "token": token, "scope_rows": access_tokens.scope_rows(token["scopes"])})
 
 
 @router.post(PATH + "/tokens")
-def create_token(name: str = Form(""), can_edit: str = Form(""), conn=Depends(get_db)):
-    _uid, secret = access_tokens.create_personal_token(conn, name, "read write" if can_edit == "1" else "read")
+def create_token(name: str = Form(""), grant: list[str] = Form(default=[]), scopes_sent: str = Form(""), conn=Depends(get_db)):
+    _uid, secret = access_tokens.create_personal_token(conn, name, " ".join(grant) if scopes_sent else access_tokens.DEFAULT_SCOPES)
     _fresh.append((secret, clock.now()))
     return RedirectResponse(url=PATH, status_code=303)
+
+
+@router.post(PATH + "/tokens/{uid}")
+def save_token_access(uid: str, grant: list[str] = Form(default=[]), conn=Depends(get_db)):
+    if not access_tokens.set_scopes(conn, uid, " ".join(grant)):
+        return RedirectResponse(url=f"{PATH}?error=That token no longer exists", status_code=303)
+    return RedirectResponse(url=f"{PATH}?note=Access saved", status_code=303)
 
 
 @router.post(PATH + "/tokens/{uid}/revoke")

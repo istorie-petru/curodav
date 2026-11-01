@@ -120,6 +120,27 @@ def normal_scopes(text: str | None, default: str = DEFAULT_SCOPES) -> str:
     return " ".join(s for s in SCOPES if s in asked) or default
 
 
+def scope_rows(scopes: str) -> list[dict[str, Any]]:
+    """One row per scope for the switches in Settings and on the consent page."""
+    held = set(normal_scopes(scopes, "").split())
+    return [{"key": key, "label": label, "on": key in held} for key, label in SCOPES.items()]
+
+
+def describe(scopes: str) -> str:
+    """A short summary for the token table: what may be read and what may be edited."""
+    held = normal_scopes(scopes, "").split()
+    if not held:
+        return "Nothing"
+    reads = [SCOPES[s].removeprefix("Read ") for s in held if s.startswith("read:")]
+    edits = [SCOPES[s].removeprefix("Edit ") for s in held if s.startswith("write:")]
+    parts = []
+    if reads:
+        parts.append("Reads " + ", ".join(reads))
+    if edits:
+        parts.append("edits " + " and ".join(edits))
+    return "; ".join(parts)
+
+
 def has_scope(token: dict[str, Any] | None, scope: str) -> bool:
     """Whether the token may do `scope`; "read" asks for any reading at all."""
     held = set(normal_scopes((token or {}).get("scopes"), "").split())
@@ -168,8 +189,8 @@ def revoke_token(conn: sqlite3.Connection, uid: str) -> bool:
     return cur.rowcount > 0
 
 
-def check_token(conn: sqlite3.Connection, secret: str | None, scope: str = "read") -> dict[str, Any] | None:
-    """The token row when `secret` is a live token holding `scope`, else None. Marks it used."""
+def check_token(conn: sqlite3.Connection, secret: str | None, scope: str | None = "read") -> dict[str, Any] | None:
+    """The token row when `secret` is a live token holding `scope` (None: any), else None. Marks it used."""
     if not secret or not secret.startswith(TOKEN_PREFIX):
         return None
     row = conn.execute("SELECT * FROM api_tokens WHERE token_hash = ?", (_hash(secret),)).fetchone()
@@ -178,7 +199,7 @@ def check_token(conn: sqlite3.Connection, secret: str | None, scope: str = "read
     now = _now()
     if row["expires_at"] and datetime.fromisoformat(row["expires_at"]) <= now:
         return None
-    if not has_scope(dict(row), scope):
+    if scope is not None and not has_scope(dict(row), scope):
         return None
     last = row["last_used_at"]
     if not last or now - datetime.fromisoformat(last) > timedelta(minutes=1):

@@ -1,0 +1,9 @@
+{# One switch per thing a token may do. Expects `scope_rows` (key, label, on) from the router. #}
+{% from "_inputs.html" import switch_input %}
+<input type="hidden" name="scopes_sent" value="1">
+{% for row in scope_rows %}
+<div class="field field-wide switch-row">
+    <label for="scope-{{ loop.index }}">{{ row.label }}</label>
+    {{ switch_input({'name': 'grant', 'value': row.key, 'id': 'scope-' ~ loop.index, 'checked': row.on}) }}
+</div>
+{% endfor %}

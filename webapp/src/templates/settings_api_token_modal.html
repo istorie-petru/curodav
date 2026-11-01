@@ -1,18 +1,14 @@
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
 {% from "_form_rows.html" import title_row %}
-{% from "_inputs.html" import switch_input %}
-{% block title %}New token{% endblock %}
+{% block title %}{{ (token.client_name or token.name) if token else 'New token' }}{% endblock %}
 {% block content %}
-{% call modal(kind="form", title='New token', size="small", form='api-token-form', creating=True) %}
+{% call modal(kind="form", title=((token.client_name or token.name) if token else 'New token'), size="small", form='api-token-form', creating=not token) %}
 <div class="card">
-<form method="post" id="api-token-form" action="/settings/api-access/tokens" data-follow-redirect>
+<form method="post" id="api-token-form" action="/settings/api-access/tokens{% if token %}/{{ token.uid }}{% endif %}" data-follow-redirect>
     <div class="field-grid">
-        {{ title_row('', 'Name', true, 'name') }}
-        <div class="field field-wide switch-row">
-            <label for="api-token-can-edit">Can edit notes</label>
-            {{ switch_input({'name': 'can_edit', 'value': '1', 'id': 'api-token-can-edit'}) }}
-        </div>
+        {% if not token %}{{ title_row('', 'Name', true, 'name') }}{% endif %}
+        {% include "_api_scope_switches.html" %}
     </div>
 </form>
 </div>

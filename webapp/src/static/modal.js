@@ -298,9 +298,17 @@
 
    // The first visible text field gets focus, so the user can type straight away.
   // Re-renders the page's smart regions in place; a page without any is reloaded.
+  // The toast a save just raised, carried over when the page has to reload to show the change.
+  let lastSaveToast = null;
+
+  function reloadKeepingToast() {
+    if (lastSaveToast && window.ccToastNext) window.ccToastNext(lastSaveToast);
+    window.location.reload();
+  }
+
   function refreshPage() {
-    if (!window.ccSmartRefresh) return window.location.reload();
-    window.ccSmartRefresh().then((done) => { if (!done) window.location.reload(); });
+    if (!window.ccSmartRefresh) return reloadKeepingToast();
+    window.ccSmartRefresh().then((done) => { if (!done) reloadKeepingToast(); });
   }
 
   function focusFirstField(root) {
@@ -428,10 +436,12 @@
             // A handler that answers a fetch with `redirect(...?note=/?error=)`
             // (the settings pages) reports through a toast, since the
             // redirected page itself is never shown here.
+            lastSaveToast = null;
             if (resp.redirected) {
               const q = new URL(resp.url, window.location.href).searchParams;
-              if (q.get("error")) window.ccToast({ message: q.get("error"), variant: "error" });
-              else if (q.get("note")) window.ccToast({ message: q.get("note") });
+              if (q.get("error")) lastSaveToast = { message: q.get("error"), variant: "error" };
+              else if (q.get("note")) lastSaveToast = { message: q.get("note") };
+              if (lastSaveToast) window.ccToast(lastSaveToast);
             }
             if (keepOpen) {
               pendingReload = true;

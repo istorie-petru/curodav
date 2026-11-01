@@ -172,7 +172,7 @@ def test_full_oauth_flow_gives_a_token_that_opens_mcp(app_client):
     client_id = _register(app_client).json()["client_id"]
     code = _approve(app_client, client_id)
     tokens = _exchange(app_client, client_id, code).json()
-    assert tokens["token_type"] == "Bearer" and tokens["scope"] == "read"
+    assert tokens["token_type"] == "Bearer" and tokens["scope"] == "read:notes read:calendar read:university"
     app_client.cookies.clear()
     ping = app_client.post("/mcp", headers=_bearer(tokens["access_token"]), json={"jsonrpc": "2.0", "id": 1, "method": "ping"})
     assert ping.json()["result"] == {}
@@ -263,7 +263,7 @@ def test_a_read_token_neither_sees_nor_calls_the_edit_tools(app_client):
     assert "error" in call.json()
     patch = app_client.patch("/api/v1/notes/n1/blocks", headers={**_bearer(secret), "If-Match": '"2026-10-01T10:00:00+00:00"'},
                              json={"ops": [{"op": "append", "markdown": "x"}]})
-    assert patch.status_code == 401
+    assert patch.status_code == 403 and patch.json()["detail"]["error"] == "insufficient_scope"
 
 
 def test_a_write_token_edits_through_mcp_and_the_change_can_be_undone(app_client):
@@ -292,11 +292,40 @@ def test_rest_edit_needs_the_current_revision_in_if_match(app_client):
     assert refused.status_code == 422
 
 
-def test_oauth_can_grant_edit_access_when_asked(app_client):
+def test_the_consent_page_lets_the_user_pick_what_the_app_may_do(app_client):
     client_id = _register(app_client).json()["client_id"]
     _login(app_client)
     params = _authorize_params(client_id, scope="read write")
-    assert "Allow read and edit" in app_client.get("/oauth/authorize", params=params).text
-    decision = app_client.post("/oauth/authorize", data={**params, "decision": "allow"}, headers={"Origin": "http://testserver"})
+    page = app_client.get("/oauth/authorize", params=params).text
+    assert "Edit notes" in page and "Edit university" in page
+    decision = app_client.post("/oauth/authorize", data={**params, "decision": "allow", "scopes_sent": "1",
+                                                         "grant": ["read:university", "write:university"]},
+                               headers={"Origin": "http://testserver"})
     code = parse_qs(urlsplit(decision.headers["location"]).query)["code"][0]
-    assert _exchange(app_client, client_id, code).json()["scope"] == "read write"
+    assert _exchange(app_client, client_id, code).json()["scope"] == "read:university write:university"
+
+
+def test_switching_every_permission_off_on_the_consent_page_denies(app_client):
+    client_id = _register(app_client).json()["client_id"]
+    _login(app_client)
+    decision = app_client.post("/oauth/authorize", data={**_authorize_params(client_id), "decision": "allow", "scopes_sent": "1"},
+                               headers={"Origin": "http://testserver"})
+    assert parse_qs(urlsplit(decision.headers["location"]).query)["error"] == ["access_denied"]
+
+
+def test_a_token_reads_only_the_areas_it_holds(app_client):
+    _blocks_note(app_client)
+    _uid, secret = _personal_token(app_client, "read:notes")
+    assert app_client.get("/api/v1/notes", headers=_bearer(secret)).status_code == 200
+    assert app_client.get("/api/v1/tasks", headers=_bearer(secret)).status_code == 403
+    assert app_client.get("/api/v1/university", headers=_bearer(secret)).status_code == 403
+    tools = _tools(app_client, secret)
+    assert "get_note" in tools and "list_tasks" not in tools and "university_overview" not in tools
+    results = app_client.get("/api/v1/search?q=kant&kinds=task&kinds=note", headers=_bearer(secret)).json()["results"]
+    assert {r["kind"] for r in results} <= {"note"}
+
+
+def test_older_read_and_write_scopes_still_work(app_client):
+    _uid, secret = _personal_token(app_client, "read write")
+    assert {"edit_note", "list_tasks", "get_discipline"} <= _tools(app_client, secret)
+    assert "university_save_discipline" not in _tools(app_client, secret)
