@@ -18,9 +18,7 @@
 {% elif is_inbox %}
 {{ empty_state('Nothing to triage', 'check-square', 'Tasks captured with no project-linked list show up here. Use the bulk "Move to list" action to file them.') }}
 {% else %}
-{% call empty_state('No tasks yet', 'check-square', 'Add your first task to get started.') %}
-<a class="btn primary" href="/tasks/new" data-modal data-fab>{{ icon('plus') }} New task</a>
-{% endcall %}
+{{ empty_state('No tasks yet', 'check-square') }}
 {% endif %}
 {% endif %}
 </div>

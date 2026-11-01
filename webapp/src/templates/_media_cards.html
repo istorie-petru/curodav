@@ -1,0 +1,20 @@
+{# Cover-first cards of the Library's Now view: a cover, the title, the author and the rating. #}
+{% macro media_card(c) %}
+<article class="media-card" data-uid="{{ c.uid }}">
+    <a class="media-card-cover" href="/library/{{ c.uid }}" data-modal aria-label="{{ c.title }}">
+        {% if c.cover %}<img src="{{ c.cover }}" alt="" loading="lazy">{% else %}<span class="media-cover-empty">{{ icon(c.kind.icon) }}</span>{% endif %}
+    </a>
+    <div class="media-card-body">
+        <a class="media-card-title" href="/library/{{ c.uid }}" data-modal>{{ c.title }}</a>
+        <span class="media-card-sub">{{ c.display_authors or c.kind.name }}{% if c.stars %} · {{ c.stars }}{% endif %}</span>
+    </div>
+</article>
+{% endmacro %}
+{% macro media_section(title, items) %}
+{% if items %}
+<section class="media-section">
+    <h2 class="media-section-title">{{ title }} <span class="media-section-count">{{ items|length }}</span></h2>
+    <div class="media-grid">{% for c in items %}{{ media_card(c) }}{% endfor %}</div>
+</section>
+{% endif %}
+{% endmacro %}

@@ -1,4 +1,5 @@
 {% from "_inputs.html" import text_input, number_input %}
+{% from "_form_rows.html" import details_start, details_end %}
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
 {% from "_date_time_fields.html" import date_field with context %}
@@ -19,6 +20,7 @@
         </div>
         <div class="field"><label>Start date</label>{{ date_field('start_date', semester.start_date if semester else '', label='Start date') }}</div>
         <div class="field"><label>End date</label>{{ date_field('end_date', semester.end_date if semester else '', label='End date') }}</div>
+        {{ details_start(open=(semester and (semester.credits_target is not none or semester.holiday_calendar))) }}
         <div class="field"><label>Class end date</label>{{ date_field('class_end_date', semester.class_end_date if semester else '', label='Class end date') }}</div>
         <div class="field"><label>Credits to reach</label>{{ number_input({'name': 'credits_target', 'value': ((semester.credits_target|int if semester.credits_target == semester.credits_target|int else semester.credits_target) if semester and semester.credits_target is not none else ''), 'min': 0, 'step': 'any'}) }}</div>
         <div class="field">
@@ -27,6 +29,7 @@
             {% set ms_selected = (semester.holiday_calendar or '') if semester else '' %}{% set ms_wide = false %}
             {% include '_widget_list_multiselect.html' %}
         </div>
+        {{ details_end() }}
     </div>
 </form>
 </div>

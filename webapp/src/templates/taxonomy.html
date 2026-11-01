@@ -1,3 +1,4 @@
+{% set page_add = ({'href': new_url, 'label': 'Add ' ~ noun} if view in ('time_blocks', 'holidays') else none) %}
 {% extends "base.html" %}
 {% from "_inputs.html" import checkbox_input %}
 {% block title %}{{ title }} - Settings{% endblock %}
@@ -27,7 +28,6 @@
         {% set fd_selected = 'time-blocks' if view == 'time_blocks' else 'holidays' %}
         {% include '_filter_dropdown.html' %}
         <span class="spacer"></span>
-        <a href="{{ new_url }}" data-modal class="btn ghost btn-sm btn-icon-only" title="Add {{ noun }}" aria-label="Add {{ noun }}">{{ icon('plus', 'icon-sm') }}</a>
     </form>
     {% endif %}
     <div id="taxonomy-table" data-view="{{ view }}">

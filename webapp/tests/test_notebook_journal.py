@@ -77,16 +77,16 @@ def test_a_year_folder_lists_its_weeks_newest_first_with_a_strip_of_every_week(c
     assert len(weeks) == 53 and [w["nr"] for w in weeks if w["uid"]] == [42, 43]
 
 
-def test_the_strip_is_also_on_each_journal_note_so_weeks_are_one_click_away(conn):
+def test_the_journal_note_offers_the_weeks_around_it_as_a_fast_jump(conn):
     uid = db.create_journal_entry(conn, "2026-42")
     body = router.document_page(uid, _request(f"/notebook/{uid}"), conn=conn).body.decode()
-    assert 'class="journal-strip is-sticky"' in body and "is-active" in body
+    assert 'class="journal-jump"' in body and "Week 43" in body and "Week 41" in body
 
 
 def test_an_ordinary_note_has_no_strip(conn):
     db.upsert_notebook_document(conn, {"uid": "n", "title": "Plain", "document_type": "full", "note_type": "", "content_json": "{}",
                                        "created_at": "2026-10-01", "updated_at": "2026-10-01"})
-    assert 'class="journal-strip' not in router.document_page("n", _request("/notebook/n"), conn=conn).body.decode()
+    assert 'class="journal-jump' not in router.document_page("n", _request("/notebook/n"), conn=conn).body.decode()
 
 
 def test_opening_a_week_redirects_to_its_note_and_a_bad_week_goes_back(conn):

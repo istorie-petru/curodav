@@ -1,3 +1,4 @@
+{% set page_add = {'href': '/notebook/glossary/new', 'label': 'New entry'} %}
 {% extends "base.html" %}
 {% from "_inputs.html" import search_input %}
 {% from "_empty_state.html" import empty_state %}
@@ -20,7 +21,6 @@
         {% include '_filter_dropdown.html' %}
         </div>
     </form>
-    <a href="/notebook/glossary/new" data-modal class="btn primary" title="Add entry" data-fab>{{ icon('plus', 'icon-sm') }} New</a>
 {% endcall %}
 <div class="notebook-folder-body" id="entries-body">
 {% if groups %}
@@ -47,7 +47,7 @@
 {% elif q or kind %}
 {% call empty_state('No entries match', icon_name='search', size='compact') %}<a href="/notebook/glossary">Clear search</a>{% endcall %}
 {% else %}
-{% call empty_state('No entries yet', icon_name='tag') %}<a href="/notebook/glossary/new" data-modal class="btn primary">{{ icon('plus') }} New entry</a>{% endcall %}
+{{ empty_state('No entries yet', icon_name='tag') }}
 {% endif %}
 </div>
 {% endblock %}

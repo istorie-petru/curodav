@@ -1,3 +1,4 @@
+{% set page_add = {'post': '/notebook/journal/week', 'fields': {'week': current_week}, 'label': "This week's note"} %}
 {% extends "base.html" %}
 {% from "_empty_state.html" import empty_state %}
 {% from "_folder_icon.html" import folder_icon %}
@@ -6,7 +7,6 @@
 {% block main_class %}main-full-width notebook-main notebook-home-page{% endblock %}
 {% block content %}
 {% call page_header_narrow("Journal", "calendar") %}
-    <form method="post" action="/notebook/journal/week" class="form-inline"><input type="hidden" name="week" value="{{ current_week }}"><button type="submit" class="btn primary" data-fab title="This week's note">{{ icon('plus', 'icon-sm') }} Week</button></form>
 {% endcall %}
 <div class="notebook-home">
     {% if years %}

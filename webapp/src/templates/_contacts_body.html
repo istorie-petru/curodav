@@ -42,9 +42,7 @@
 {% if contacts_filter_active %}
 {{ empty_state('No contacts match', 'address-book') }}
 {% else %}
-{% call empty_state('No contacts yet', 'address-book', 'Add your first contact to get started.') %}
-<a class="btn primary" href="/contacts/new" data-modal data-fab>{{ icon('plus') }} New contact</a>
-{% endcall %}
+{{ empty_state('No contacts yet', 'address-book') }}
 {% endif %}
 {% endif %}
 </div>

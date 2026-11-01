@@ -15,7 +15,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from . import db, modules, tags
+from . import clock, db, modules, tags
 from . import university_evaluation as ue
 from . import university_attendance as ua
 from . import university_plan as up
@@ -453,7 +453,7 @@ def syllabus_assign(name: str, conn=Depends(get_db)):
         parts.append(f"{len(plan['blocked'])} classes with their own text were skipped")
     if plan["left_over"]:
         parts.append(f"{plan['left_over']} topics found no free class")
-    return _note(url_for_discipline(d["name"], "contents"), "; ".join(parts) if placed or plan["blocked"] or plan["left_over"] else "Nothing to place")
+    return _note(url_for_discipline(d["name"], "classes"), "; ".join(parts) if placed or plan["blocked"] or plan["left_over"] else "Nothing to place")
 
 
 # ---------------------------------------------------------------- bibliography (readings are references to library books)
@@ -500,8 +500,12 @@ def reading_delete(task_uid: str, discipline: str = "", conn=Depends(get_db)):
 
 @router.get("/homework/new")
 def homework_new(request: Request, discipline: str, conn=Depends(get_db)):
-    d = _discipline(conn, _semester(conn), discipline)
-    return templates.TemplateResponse("university_homework_modal.html", {"request": request, "d": d, "item": None})
+    semester = _semester(conn)
+    d = _discipline(conn, semester, discipline)
+    # homework is usually due at the next class, so that day is already filled in
+    today = clock.today().isoformat()
+    due = next((c["date"] for c in up.list_classes(conn, semester["uid"], d["name"], clock.today()) if c["date"] >= today), "")
+    return templates.TemplateResponse("university_homework_modal.html", {"request": request, "d": d, "item": None, "due": due})
 
 
 @router.get("/homework/{task_uid}/edit")
@@ -518,12 +522,12 @@ def homework_edit(task_uid: str, request: Request, conn=Depends(get_db)):
 
 @router.post("/homework")
 def homework_save(discipline: str = Form(...), task_uid: str = Form(""), title: str = Form(""), due: str = Form(""), status: str = Form("active"),
-                  conn=Depends(get_db)):
+                  back: str = Form(""), conn=Depends(get_db)):
     try:
         up.save_homework(conn, _semester(conn), discipline, task_uid=task_uid or None, title=title, due=due, status=status)
     except up.PlanError as exc:
         _bad(exc)
-    return _note(url_for_discipline(discipline, "exams"))
+    return _note(url_for_discipline(discipline, "" if back == "overview" else "exams"))
 
 
 @router.post("/homework/{task_uid}/delete")
@@ -586,7 +590,7 @@ def class_content_save(event_uid: str, topic_uid: str = Form(""), competences: l
         up.save_class_content(conn, event_uid, topic_uid, text, competences)
     except up.PlanError as exc:
         _bad(exc)
-    return _note(url_for_discipline(_class_discipline(conn, event), "contents") if event else HOME)
+    return _note(url_for_discipline(_class_discipline(conn, event), "classes") if event else HOME)
 
 
 @notes_router.post("/class/{event_uid}/delete")
@@ -598,7 +602,7 @@ def class_delete(event_uid: str, conn=Depends(get_db)):
         up.delete_class(conn, event_uid)
     except up.PlanError as exc:
         _bad(exc)
-    return _note(url_for_discipline(discipline, "contents") if discipline else HOME)
+    return _note(url_for_discipline(discipline, "classes") if discipline else HOME)
 
 
 @notes_router.get("/class/{event_uid}/attendance")
@@ -625,9 +629,11 @@ def attendance_save(event_uid: str, status: str = Form(...), note: str = Form(""
         ua.set_status(conn, event_uid, status, note)
     except up.PlanError as exc:
         _bad(exc)
+    if back == "calendar":
+        return RedirectResponse("/calendar", status_code=303)
     if back == "semester":
-        return _note(f"/groups/{quote(up.semester_group(conn, semester), safe='')}?view=attendance")
-    return _note(url_for_discipline(discipline, "attendance") if discipline else HOME)
+        return _note(f"/groups/{quote(up.semester_group(conn, semester), safe='')}")
+    return _note(url_for_discipline(discipline, "classes") if discipline else HOME)
 
 
 def _class_discipline(conn, event) -> str:

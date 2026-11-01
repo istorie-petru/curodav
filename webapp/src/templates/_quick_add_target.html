@@ -9,3 +9,17 @@
 {% set _qa_label = label.name if (active_tab == 'label' and label is defined and label) else '' -%}
 {% if _qa_label %}New item in {{ _qa_label }}{% else %}{{ {'contacts': 'New contact', 'labels': 'New shelf'}.get(active_tab, 'New task or event') }}{% endif %}
 {%- endmacro %}
+{# The one Add control of a page, in the sidebar above Settings and in the phone bar. A page sets `page_add` at the top of its template
+   ({'href': ..., 'label': ...}, or {'post': url, 'fields': {...}, 'label': ...} for an add that needs no window); a page that sets nothing
+   gets the find-or-add window. #}
+{% macro page_add_target() -%}
+{{ page_add if page_add is defined and page_add else {'href': quick_add_href(), 'label': quick_add_title()} }}
+{%- endmacro %}
+{% macro add_control(add, cls, label_text='Add') -%}
+{% if add.post %}
+<form method="post" action="{{ add.post }}" class="form-inline sidebar-add-form">{% for k, v in (add.fields or {}).items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+<button type="submit" class="{{ cls }}" title="{{ add.label }}" aria-label="{{ add.label }}">{{ icon('plus') }}<span>{{ label_text }}</span></button></form>
+{% else %}
+<a href="{{ add.href }}" data-modal class="{{ cls }}" title="{{ add.label }}" aria-label="{{ add.label }}">{{ icon('plus') }}<span>{{ label_text }}</span></a>
+{% endif %}
+{%- endmacro %}

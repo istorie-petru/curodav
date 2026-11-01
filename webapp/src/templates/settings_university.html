@@ -1,3 +1,4 @@
+{% set page_add = ({'href': '/settings/university/semester', 'label': 'Set up a semester'} if not semester else {'href': '/settings/university/discipline/new', 'label': 'New discipline'}) %}
 {% extends "base.html" %}
 {% block title %}University - Settings{% endblock %}
 {% block content %}
@@ -11,9 +12,7 @@
 <div id="modal-target">
 {% if not semester %}
 <div class="card">
-{% call empty_state('No semester yet', 'graduation-cap') %}
-<a href="/settings/university/semester" data-modal class="btn primary">{{ icon('plus') }} Set up a semester</a>
-{% endcall %}
+{{ empty_state('No semester yet', 'graduation-cap') }}
 </div>
 {% else %}
 <div class="card">
@@ -41,8 +40,7 @@
 </section>
 
 <div class="card table-scroll table-responsive">
-    <div class="card-title widget-header"><h2>Disciplines</h2><div class="spacer"></div>
-        <a href="/settings/university/discipline/new" data-modal class="icon-btn" title="Add discipline" aria-label="Add discipline">{{ icon('plus', 'icon-sm') }}</a></div>
+    <div class="card-title widget-header"><h2>Disciplines</h2><div class="spacer"></div></div>
     {% if disciplines %}
     <table class="entity-table">
         <thead><tr><th class="col-name">Discipline</th><th class="col-opt-2">Teachers</th><th class="col-opt-1">Classes</th><th class="col-opt-1">Milestones</th><th class="col-opt-1">Readings</th><th class="col-actions">Actions</th></tr></thead>

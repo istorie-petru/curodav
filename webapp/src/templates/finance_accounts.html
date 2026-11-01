@@ -1,3 +1,4 @@
+{% set page_add = {'href': '/settings/finance-accounts/new', 'label': 'New account'} %}
 {% from "_inputs.html" import checkbox_input %}
 {% from "_row_action_buttons.html" import row_action_buttons %}
 {% from "_empty_state_row.html" import empty_state_row %}
@@ -33,7 +34,6 @@
             {% else %}
             {{ empty_state_row(6, "No accounts yet") }}
             {% endfor %}
-            <tr class="task-add-row"><td colspan="6"><a href="/settings/finance-accounts/new" data-modal>{{ icon('plus', 'icon-sm') }} New account</a></td></tr>
         </tbody>
     </table>
 </div>

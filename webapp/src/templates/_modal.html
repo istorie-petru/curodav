@@ -15,7 +15,11 @@
 
 {% macro modal_retire(retire) %}
 {% macro retire_item(r, as_menu) %}
-{% if r.action == 'archive' %}
+{% if r.action == 'status' %}
+<form method="post" action="{{ r.url }}" class="form-inline">{% for k, v in (r.fields or {}).items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+    <button type="submit" class="action-menu-item" role="menuitem">{{ icon(r.icon, 'icon-sm') }} {{ r.label }}</button>
+</form>
+{% elif r.action == 'archive' %}
 <form method="post" action="{{ r.restore_url if r.archived else r.url }}" class="form-inline"{% if r.confirm and not r.archived %} data-confirm-sheet="{{ r.confirm }}"{% endif %}{% if r.change %} data-cc-change="{{ r.change }}"{% endif %}>
     <button type="submit" class="{{ 'action-menu-item' if as_menu else 'icon-btn' }}"{% if as_menu %} role="menuitem"{% else %} title="{{ 'Restore' if r.archived else 'Archive' }}" aria-label="{{ 'Restore' if r.archived else 'Archive' }}"{% endif %}>{{ icon('rotate-ccw' if r.archived else 'archive', 'icon-sm') }}{% if as_menu %} {{ 'Restore' if r.archived else 'Archive' }}{% endif %}</button>
 </form>
@@ -31,7 +35,8 @@
 {{ retire_item(retire[0], false) }}
 {% elif retire %}
 <div class="action-menu modal-retire">
-    <button type="button" class="action-menu-trigger icon-btn" aria-label="Archive or delete" aria-haspopup="true" aria-expanded="false" title="Archive or delete">{{ icon('archive', 'icon-sm') }}</button>
+    {% set _mlabel = retire[0].menu_label or 'Archive or delete' %}
+    <button type="button" class="action-menu-trigger icon-btn" aria-label="{{ _mlabel }}" aria-haspopup="true" aria-expanded="false" title="{{ _mlabel }}">{{ icon(retire[0].menu_icon or 'archive', 'icon-sm') }}</button>
     <div class="action-menu-panel" role="menu"><div class="action-menu-section">
         {% for r in retire %}{{ retire_item(r, true) }}{% endfor %}
     </div></div>

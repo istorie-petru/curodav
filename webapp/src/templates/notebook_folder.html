@@ -1,3 +1,4 @@
+{% set page_add = ({'post': '/notebook/journal/week', 'fields': {'week': current_week}, 'label': "This week's note"} if kind == 'journal' else {'href': '/notebook/new' ~ (('?label=' ~ (name | urlencode) ~ ('&tag=' ~ (tag | urlencode) if tag else '')) if kind in ('label', 'project') else ''), 'label': 'New document'}) %}
 {% extends "base.html" %}
 {% from "_empty_state.html" import empty_state %}
 {% from "_journal_strip.html" import journal_strip %}
@@ -31,13 +32,8 @@
         {% include '_filter_dropdown.html' %}
         </div>
     </form>
-    {% if kind == 'journal' %}
-    <form method="post" action="/notebook/journal/week" class="form-inline"><input type="hidden" name="week" value="{{ current_week }}"><button type="submit" class="btn primary" data-fab title="This week's note">{{ icon('plus', 'icon-sm') }} Week</button></form>
-    {% else %}
-    <a href="/notebook/new{% if kind == 'label' %}?label={{ name | urlencode }}{% if tag %}&tag={{ tag | urlencode }}{% endif %}{% endif %}" data-modal class="btn primary" data-fab title="New document">{{ icon('plus', 'icon-sm') }} New</a>
-    {% endif %}
 {% endcall %}
-{% if journal_weeks %}{{ journal_strip(journal_weeks, '', true) }}{% endif %}
+{% if journal_weeks %}{{ journal_strip(journal_weeks, '') }}{% endif %}
 {% if agenda is not none %}
 <div class="sec-grid ov-grid">
     <div class="sec-col">

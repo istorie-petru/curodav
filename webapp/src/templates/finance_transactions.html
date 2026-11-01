@@ -1,3 +1,4 @@
+{% set page_add = {'href': '/finance/transactions/new', 'label': 'New transaction'} %}
 {% from "_empty_state.html" import empty_state %}
 {% from "_row_action_buttons.html" import row_action_buttons %}
 {% macro type_icon(kind) %}<span class="finance-type-icon is-{{ kind }}" title="{{ kind | capitalize }}">{{ icon({'income': 'trending-up', 'expense': 'trending-down', 'transfer': 'repeat'}[kind], 'icon-sm') }}</span> {% endmacro %}
@@ -30,7 +31,6 @@
         {% set filter_specs = [{'name': 'account', 'label': 'Account', 'items': account_items, 'selected': account}] %}
         {% include "_finance_filters.html" %}
     </form>
-    <a href="/finance/transactions/new" data-modal class="btn primary" data-fab title="New transaction">{{ icon('plus', 'icon-sm') }} New</a>
 {% endcall %}
 <div class="settings-group" id="finance-ledger" data-smart-region>
 {% if pending %}
@@ -58,7 +58,7 @@
 </div>
 {% endif %}
 {% if not has_accounts %}
-{% call empty_state('No accounts yet', icon_name='wallet') %}<a href="/settings/finance-accounts/new" data-modal class="btn primary">{{ icon('plus') }} New account</a>{% endcall %}
+{{ empty_state('No accounts yet', icon_name='wallet') }}
 {% endif %}
 {% for s in sections if has_accounts %}
 <div class="card table-scroll table-responsive finance-ledger-card">

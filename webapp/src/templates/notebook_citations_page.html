@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_empty_state.html" import empty_state %}
+{% from "_inputs.html" import search_input %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% block title %}Citations - Notebook{% endblock %}
+{% block main_class %}main-full-width notebook-main notebook-home-page{% endblock %}
+{% block content %}
+{% call page_header_narrow("Citations", "book-open") %}
+    <form method="get" action="/notebook/citations" class="form-inline notebook-glossary-search-form">
+        {{ search_input({'name': 'q', 'value': q, 'aria-label': 'Search the citations', 'autocomplete': 'off'}) }}
+    </form>
+    <a href="/library" class="icon-btn" title="Open the library" aria-label="Open the library">{{ icon('library', 'icon-sm') }}</a>
+{% endcall %}
+<div class="notebook-home">
+    {% if citations %}
+    <div class="card table-scroll table-responsive">
+        <table class="entity-table">
+            <thead><tr><th class="col-name">Title</th><th class="col-opt-2">Author</th><th class="col-opt-1">Keywords</th></tr></thead>
+            <tbody>
+            {% for c in citations %}
+            <tr><td class="col-name"><a href="/library/{{ c.uid }}" data-modal>{{ c.title }}</a></td><td class="col-opt-2">{{ c.display_authors }}</td><td class="col-opt-1">{{ c.keywords | join(', ') }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    {{ empty_state('No citations yet' if not q else 'No citations match', icon_name='book-open') }}
+    {% endif %}
+</div>
+{% endblock %}

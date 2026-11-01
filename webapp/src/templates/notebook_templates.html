@@ -1,3 +1,4 @@
+{% set page_add = {'post': '/notebook/templates', 'fields': {}, 'label': 'New template'} %}
 {% from "_empty_state_row.html" import empty_state_row %}
 {% from "_widget_items.html" import widget_pill %}
 {% extends "base.html" %}
@@ -6,9 +7,6 @@
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {# Same table look as the Browse page (_notebook_browse_list.html); features/notebook-templates.md. #}
 {% call page_header_narrow("Templates", "copy") %}
-    <form method="post" action="/notebook/templates" class="form-inline">
-        <button type="submit" class="btn primary" data-fab title="New template">{{ icon('plus', 'icon-sm') }} New</button>
-    </form>
 {% endcall %}
 <div class="notebook-browse-main">
     <div class="card table-scroll table-responsive">

@@ -73,11 +73,11 @@ def test_marking_from_a_menu_keeps_the_note_and_rejects_what_is_not_a_class(conn
     lecture = _classes(conn, sem, "lecture")[0]
     ua.set_status(conn, lecture["uid"], "missed", "sick")
     resp = university.attendance_save(lecture["uid"], status="made_up", note="", back="", keep_note="1", conn=conn)
-    assert resp.status_code == 303 and "view=attendance" in resp.headers["location"]
+    assert resp.status_code == 303 and "view=classes" in resp.headers["location"]
     assert ua.statuses_of(conn, [lecture["uid"]])[lecture["uid"]] == {"status": "made_up", "note": "sick"}
     with pytest.raises(up.PlanError):
         ua.set_status(conn, lecture["uid"], "late")
-    page = discipline_page("University", "Biology", _request(), view="attendance", conn=conn).body.decode()
+    page = discipline_page("University", "Biology", _request(), view="classes", conn=conn).body.decode()
     assert "Made up" in page and "sick" in page
 
 
@@ -115,7 +115,7 @@ def test_entry_conditions_are_worked_out_and_other_ones_are_ticked_by_hand(conn,
     exam = ue.standing(conn, sem["uid"], "Biology", date(2026, 10, 26))["ways"][0]
     assert [r["is_met"] for r in exam["condition_rows"]] == [True, True, True] and exam["eligible"] is True and exam["criteria"] == "Sources and dates"
     page = discipline_page("University", "Biology", _request(), view="exams", conn=conn).body.decode()
-    assert "Essay handed in" in page and "At least 5 to pass" in page and "Met" in page
+    assert "Essay handed in" in page and "at least 5 to pass" in page and "Met" in page
 
 
 def test_a_condition_needs_a_number_for_a_minimum_grade(conn, sem):
@@ -160,7 +160,7 @@ def test_the_semester_lists_render_across_disciplines(conn, sem, frozen_today):
                                               "conditions": [], "min_grade": "5", "criteria": ""})
     ua.set_status(conn, _classes(conn, sem, "lecture")[0]["uid"], "missed")
     from src import study_page
-    for view, expected in ((b"view=exams", "Next week"), (b"view=attendance", "Missed classes"), (b"view=work", "Nothing due")):
+    for view, expected in ((b"view=exams", "Next week"), (b"view=exams", "Homework and readings")):
         html = university._render_study(conn, _request("/groups/University", view), "University", {"name": "University", "icon": "", "color": ""}).body.decode()
         assert expected in html, view
     assert study_page.exams(conn, sem, date(2026, 10, 26))["groups"][0]["rows"][0]["title"] == "Final"

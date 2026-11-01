@@ -31,6 +31,27 @@
             {% set sref_prefix = 'mref' %}{% set sref = section_refs.get('main') %}
             {% include "_section_reference_row.html" %}
         </div>
+        <div class="field field-wide" data-repeatable-rows-scope>
+            <div class="field-label-row">
+                <label>Sections</label>
+                <button type="button" class="icon-btn" data-entry-section-add title="Add section" aria-label="Add section">{{ icon('plus', 'icon-sm') }}</button>
+            </div>
+            <div id="glossary-section-rows">{% for sec in sections %}{% set sec_id = 's' ~ loop.index %}{% set sec_n = loop.index %}{% include "_entry_section_row.html" %}{% endfor %}</div>
+            <template id="glossary-section-template">{% set sec = none %}{% set sec_id = '__S__' %}{% set sec_n = 0 %}{% include "_entry_section_row.html" %}</template>
+        </div>
+        {% for kg in kind_field_groups %}
+        {% set gi = loop.index0 %}
+        <div class="field field-wide entry-kind-fields" data-kind-fields="{{ kg.name }}"{% if kg.name != current_kind %} hidden{% endif %}>
+            {% for f in kg.fields %}
+            <div class="field field-wide">
+                <label>{{ f }}</label>
+                {{ textarea_input({'name': 'kfield:' ~ kg.name ~ ':' ~ f, 'rows': '3'}, field_values[f] if kg.name == current_kind and field_values else '') }}
+                {% set sref_prefix = 'fref_' ~ gi ~ '_' ~ loop.index0 %}{% set sref = section_refs.get('field:' ~ f) if kg.name == current_kind else none %}
+                {% include "_section_reference_row.html" %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
         {% set ms_form_id = 'glossary-term-form' %}
         {% set ms_name = 'wiki_uid' %}
         {% set ms_label = 'Wiki note' %}
@@ -53,27 +74,6 @@
             <button type="button" class="icon-btn" data-entry-ref-add title="Add reference" aria-label="Add reference">{{ icon('plus', 'icon-sm') }}</button>
         </div>
         {% endif %}
-        {% for kg in kind_field_groups %}
-        {% set gi = loop.index0 %}
-        <div class="field field-wide entry-kind-fields" data-kind-fields="{{ kg.name }}"{% if kg.name != current_kind %} hidden{% endif %}>
-            {% for f in kg.fields %}
-            <div class="field field-wide">
-                <label>{{ f }}</label>
-                {{ textarea_input({'name': 'kfield:' ~ kg.name ~ ':' ~ f, 'rows': '3'}, field_values[f] if kg.name == current_kind and field_values else '') }}
-                {% set sref_prefix = 'fref_' ~ gi ~ '_' ~ loop.index0 %}{% set sref = section_refs.get('field:' ~ f) if kg.name == current_kind else none %}
-                {% include "_section_reference_row.html" %}
-            </div>
-            {% endfor %}
-        </div>
-        {% endfor %}
-        <div class="field field-wide" data-repeatable-rows-scope>
-            <div class="field-label-row">
-                <label>Sections</label>
-                <button type="button" class="icon-btn" data-entry-section-add title="Add section" aria-label="Add section">{{ icon('plus', 'icon-sm') }}</button>
-            </div>
-            <div id="glossary-section-rows">{% for sec in sections %}{% set sec_id = 's' ~ loop.index %}{% set sec_n = loop.index %}{% include "_entry_section_row.html" %}{% endfor %}</div>
-            <template id="glossary-section-template">{% set sec = none %}{% set sec_id = '__S__' %}{% set sec_n = 0 %}{% include "_entry_section_row.html" %}</template>
-        </div>
     </div>
 </form>
 </div>

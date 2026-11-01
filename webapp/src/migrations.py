@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .migrations_citations import citation_editions
-from .migrations_media import cite_an_edition, editions_in_calibre, media_tracking, progress_log
+from .migrations_media import cite_an_edition, citation_series, editions_in_calibre, media_tracking, progress_log
 from . import migrations_university
 
 
@@ -558,6 +558,7 @@ MIGRATIONS: list[Migration] = [
     Migration(61, "Book and manga editions can live in a Calibre library", editions_in_calibre),
     Migration(62, "A note can cite one edition of a work", cite_an_edition),
     Migration(63, "A day by day log of media progress", progress_log),
+    Migration(64, "A work can belong to a series", citation_series),
     Migration(65, "University attendance: missed, excused, cancelled and made-up classes", migrations_university.attendance),
     Migration(66, "University grades of a way of evaluating and its components", migrations_university.grades),
     Migration(73, "Spaces choose how they appear in the sidebar", _space_sidebar),

@@ -4758,11 +4758,7 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .entry-card-links{display:flex; gap:var(--space-3);}
 .entry-section-body{white-space:pre-wrap;}
 .entry-mentions{margin:0; padding-left:var(--space-4);}
-.journal-strip{display:flex; flex-wrap:wrap; gap:var(--space-1); padding:var(--space-2) 0 var(--space-3);}
-.journal-day{display:inline-flex; align-items:center; justify-content:center; min-width:32px; height:32px; border-radius:var(--radius-control); border:1px solid transparent; background:transparent; color:var(--fg-tertiary); cursor:pointer;}
-.journal-day:hover{background:var(--row-hover); text-decoration:none;}
-.journal-day.has-note{background:var(--accent-neutral-subtle-strong); color:var(--fg-primary);}
-.journal-day.is-today{border-color:var(--fg-secondary);}
+.journal-jump{display:flex; flex-wrap:wrap; gap:var(--space-1); padding:var(--space-2) 0;}
 .task-list .contact-row-wrap{min-height:40px; gap:var(--space-3); padding-block:var(--space-1); border-bottom:none;}
 .task-row .task-status-select{flex:none; width:118px;}
 .task-row{flex-wrap:nowrap;}
@@ -4777,8 +4773,6 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 
 .task-list .contact-row.task-row-title{padding-block:0;}
 .task-list .section-row:not(:first-child){margin-top:var(--space-2);}
-.journal-strip.is-sticky{position:sticky; top:0; z-index:5; background:var(--bg-elevated);}
-.journal-day.is-active{outline:2px solid var(--fg-secondary); outline-offset:-2px;}
 .notebook-entry-group{margin-bottom:var(--space-3);}
 .notebook-entry-kind{margin-bottom:var(--space-1);}
 
@@ -5099,14 +5093,49 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .uni-hour{position:absolute; left:0; right:0; z-index:1; border-radius:6px;}
 .uni-hour:hover,.uni-hour:focus-visible{background:var(--accent-neutral-subtle);}
 .uni-timetable-note{margin:0; padding:var(--space-2) var(--page-inset); color:var(--fg-tertiary); font-size:var(--text-sm);}
-.uni-cards{--card-min:220px;}
 .uni-ways{--card-min:300px;}
 .uni-ways > .card{margin:0;}
-.uni-card{display:flex; align-items:center; gap:var(--space-3); min-height:72px; padding:var(--space-3) var(--space-4); text-decoration:none; color:var(--fg-primary); border:3px solid var(--blk); border-radius:var(--radius-card, 16px);}
-.uni-card:hover{background:var(--accent-neutral-subtle); text-decoration:none;}
-.uni-card-title{display:flex; flex-direction:column; min-width:0;}
-.uni-card-title b{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.uni-card-title span{color:var(--fg-secondary); font-size:var(--text-sm);}
+/* Widget card: the one small card of the University and Library pages. A quiet label, one big line, one small line, and optionally the
+   next items under it, a progress bar or a cover. Several sit in a .card-grid. */
+/* Widget card: the one small card of the University and Library pages. A quiet label, a medium title, a muted line, the next items
+   under it, a progress bar or a cover, and a small arrow when the card opens something. Cards in one row share one height. A card
+   with is-plain has no box (a list section); one with is-alert is the page's single gradient card, for something grave and urgent. */
+.wcard{position:relative; display:flex; flex-direction:column; gap:var(--space-2); min-width:0; padding:var(--space-4) var(--space-5); border:1px solid var(--separator); border-radius:18px; background:transparent; color:var(--fg-primary); text-decoration:none; transition:transform .22s ease, box-shadow .22s ease, background-color .22s ease, border-color .22s ease;}
+a.wcard:hover{background:var(--bg-elevated); transform:translateY(-3px); box-shadow:var(--elevation-2); text-decoration:none;}
+a.wcard:focus-visible{outline:3px solid var(--accent); outline-offset:3px;}
+.wcard-grid{--card-min:220px;}
+.card-grid > .wcard{align-self:stretch;}
+.wcard-label{display:flex; align-items:center; gap:var(--space-2); font-size:.68rem; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:var(--fg-tertiary);}
+.wcard-label .spacer{flex:1;}
+.wcard-big{font-size:1.25rem; line-height:1.2; font-weight:700; letter-spacing:-.015em; color:var(--fg-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.wcard-big.is-none{color:var(--fg-tertiary); font-weight:var(--font-weight-regular, 400);}
+.wcard-small{font-size:.85rem; line-height:1.5; color:var(--fg-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.wcard-small.is-wrapped{white-space:normal;}
+.wcard-arrow{margin-top:auto; align-self:flex-end; color:var(--fg-tertiary); line-height:0;}
+a.wcard:hover .wcard-arrow{color:var(--fg-primary);}
+.wcard-rows{display:flex; flex-direction:column; gap:var(--space-1);}
+.wcard-row{display:flex; align-items:center; gap:var(--space-2); min-height:44px; padding:var(--space-1) 0; min-width:0; color:var(--fg-primary); text-decoration:none;}
+a.wcard-row:hover{text-decoration:none; color:var(--fg-primary);}
+.wcard-row > .wcard-main{display:flex; flex-direction:column; flex:1; min-width:0;}
+.wcard-row > .wcard-main b{font-weight:var(--font-weight-regular, 400); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.wcard-row > .wcard-main small{color:var(--fg-secondary); font-size:var(--text-sm); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.wcard-when{flex:none; color:var(--fg-secondary); font-size:var(--text-sm); white-space:nowrap;}
+.wcard-row.is-past .wcard-main b, .wcard-row.is-past .wcard-when{color:var(--fg-tertiary);}
+.wcard-bar{height:4px; border-radius:2px; background:var(--control-bg); overflow:hidden; margin-top:auto;}
+.wcard-bar span{display:block; height:100%; background:var(--accent); border-radius:2px;}
+.wcard-head{display:flex; align-items:center; gap:var(--space-3);}
+.wcard-head .wcard-main{display:flex; flex-direction:column; min-width:0;}
+.wcard-actions{display:inline-flex; gap:var(--space-1); margin-left:auto;}
+.wcard > .uni-text{margin:0;}
+.wcard.is-plain{border:0; padding-left:0; padding-right:0; padding-top:var(--space-2); padding-bottom:var(--space-2);}
+.wcard.is-alert{border-color:transparent; color:#fff; overflow:hidden; background:linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 55%, #7c3aed) 100%); box-shadow:var(--elevation-2);}
+.wcard.is-alert::after{content:""; position:absolute; width:190px; height:190px; border-radius:50%; background:rgba(255,255,255,.12); right:-70px; top:-80px; pointer-events:none;}
+.wcard.is-alert > *{position:relative; z-index:1;}
+.wcard.is-alert .wcard-label, .wcard.is-alert .wcard-big, .wcard.is-alert .wcard-small, .wcard.is-alert .wcard-arrow{color:#fff;}
+.wcard.is-alert .wcard-label, .wcard.is-alert .wcard-small{opacity:.9;}
+a.wcard.is-alert:hover{background:linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 55%, #7c3aed) 100%); box-shadow:var(--elevation-3, var(--elevation-2));}
+.card-grid + .card-grid, .card-grid + .card, .card + .card-grid, .card-grid + .calendar-viewport, .calendar-viewport + .card-grid{margin-top:var(--space-4);}
+.exam-cards{--card-min:300px;}
 .uni-sheet-row{display:grid; grid-template-columns:minmax(120px,200px) 1fr; gap:var(--space-3); padding:var(--space-2) 0; border-top:1px solid var(--separator);}
 .uni-sheet-row:first-child{border-top:0;}
 .uni-sheet-row span{color:var(--fg-secondary);}
@@ -5154,10 +5183,8 @@ tr.uni-past td{color:var(--fg-secondary);}
 .input-with-action .icon-btn[aria-pressed=true]{color:var(--accent, currentColor); background:var(--bg-hover, transparent);}
 input.is-greyed{opacity:.5; background:var(--bg-hover, transparent);}
 
-.edition-source-row{display:grid; grid-template-columns:minmax(0,10rem) minmax(0,1fr); gap:var(--space-3); align-items:end;}
-.edition-source-slot{min-width:0; display:flex; flex-direction:column; gap:var(--space-1);}
+.edition-source-slot{min-width:0;}
 .edition-source-slot[hidden]{display:none;}
-@media (max-width:640px){.edition-source-row{grid-template-columns:minmax(0,1fr);}}
 
 /* Contacts and tasks lists (tags on rows, time sections) */
 .contact-row-tags{flex:none; display:flex; justify-content:flex-end; gap:var(--space-1); max-width:40%; overflow:hidden;}
@@ -5239,3 +5266,18 @@ input.is-greyed{opacity:.5; background:var(--bg-hover, transparent);}
 /* One font size in a modal (rules/modals-and-inputs.md, Field layout): title, shelves, values and buttons all at the body size. */
 #modal-dialog{font-size:var(--text-base);}
 #modal-dialog *:not(svg, use){font-size:inherit !important;}
+.uni-sheet-row{grid-template-columns:minmax(90px,150px) 1fr; padding:var(--space-1) 0;}
+.card-grid + .card-grid.exam-cards{margin-top:var(--space-3);}
+.uni-classes td{padding-top:var(--space-1); padding-bottom:var(--space-1);}
+.tab-add{color:var(--accent);}
+.tab-add:hover{color:var(--accent-hover, var(--accent));}
+.sidebar-add-form{display:contents;}
+.header-add.action-menu-trigger:hover{background:var(--accent); color:var(--accent-contrast, #fff); filter:brightness(1.08);}
+.header-add-menu{order:9;}
+.header-add-menu .header-add .icon{width:20px; height:20px;}
+/* A half-width field left alone at the end of a form takes the whole row. */
+.field-grid.fill-last > .field:last-child:nth-child(odd){grid-column:1 / -1;}
+/* New note: Title and Template share a row, Type and Tag the next, then the typed fields. */
+#notebook-new-form #notebook-new-fields{display:contents;}
+#notebook-new-form #notebook-new-fields > .field:not(:first-child){order:2;}
+#notebook-new-form .field-grid > .tag-field{order:1;}

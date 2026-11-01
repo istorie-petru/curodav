@@ -91,3 +91,9 @@ def progress_log(conn: sqlite3.Connection) -> None:
             progress INTEGER NOT NULL DEFAULT 0,
             PRIMARY KEY (citation_uid, day)
         )""")
+
+
+def citation_series(conn: sqlite3.Connection) -> None:
+    """A work can belong to a series; its volume number is the existing volume field."""
+    if "series" not in _columns(conn, "citations"):
+        conn.execute("ALTER TABLE citations ADD COLUMN series TEXT NOT NULL DEFAULT ''")

@@ -1,9 +1,17 @@
-{# The weeks of a year as a strip: filled when the week has a note, a ring on this week, the open note marked. #}
-{% macro journal_strip(weeks, active_week='', sticky=false) %}
-<form method="post" action="/notebook/journal/week" class="journal-strip{% if sticky %} is-sticky{% endif %}" aria-label="Weeks of the year">
-    {% for w in weeks %}
-    {% if w.uid %}<a class="journal-day has-note{% if w.is_current %} is-today{% endif %}{% if w.week == active_week %} is-active{% endif %}" href="/notebook/{{ w.uid }}" title="Week {{ w.nr }}">{{ w.nr }}</a>
-    {% else %}<button type="submit" name="week" value="{{ w.week }}" class="journal-day{% if w.is_current %} is-today{% endif %}" title="Write week {{ w.nr }}">{{ w.nr }}</button>{% endif %}
+{# Fast travel between journal weeks: the week before, this week and the week after the open one. Folders are the main way to get around. #}
+{% macro journal_strip(weeks, active_week='') %}
+{% set _ns = namespace(i=-1, now=-1) %}
+{% for w in weeks %}{% if w.week == active_week %}{% set _ns.i = loop.index0 %}{% endif %}{% if w.is_current %}{% set _ns.now = loop.index0 %}{% endif %}{% endfor %}
+{% set _picks = [] %}
+{% if _ns.i > 0 %}{% set _ = _picks.append(weeks[_ns.i - 1]) %}{% endif %}
+{% if _ns.now >= 0 and _ns.now != _ns.i and weeks[_ns.now] not in _picks %}{% set _ = _picks.append(weeks[_ns.now]) %}{% endif %}
+{% if _ns.i >= 0 and _ns.i < weeks|length - 1 and weeks[_ns.i + 1] not in _picks %}{% set _ = _picks.append(weeks[_ns.i + 1]) %}{% endif %}
+{% if _picks %}
+<form method="post" action="/notebook/journal/week" class="journal-jump" aria-label="Jump to another week">
+    {% for w in _picks %}
+    {% if w.uid %}<a class="btn ghost btn-sm" href="/notebook/{{ w.uid }}">{{ 'This week' if w.is_current else 'Week ' ~ w.nr }}</a>
+    {% else %}<button type="submit" name="week" value="{{ w.week }}" class="btn ghost btn-sm">{{ 'This week' if w.is_current else 'Week ' ~ w.nr }}</button>{% endif %}
     {% endfor %}
 </form>
+{% endif %}
 {% endmacro %}

@@ -212,3 +212,10 @@ def test_the_sidebar_new_modal_no_longer_offers_notes(conn):
     from src.routers import dashboard
     body = dashboard.quick_add_form(_request("/quick/add"), default_tab="note", conn=conn).body.decode()
     assert 'data-quick-add-tab="note"' not in body and 'id="notebook-new-form"' not in body
+
+
+def test_a_note_does_not_ask_for_an_author_unless_the_user_made_that_field(conn):
+    from src import notebook_fields
+
+    db.seed_builtin_notebook_fields(conn)
+    assert "author" not in [f["key"] for f in notebook_fields.schema_fields(db.list_notebook_field_config(conn))]

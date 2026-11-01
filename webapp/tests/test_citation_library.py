@@ -292,7 +292,7 @@ def test_the_window_renders_for_a_new_book_a_new_media_and_an_edited_book(conn):
     assert "Add media" in new and 'name="ed_source"' in new
     edit = notebook_router.edit_citation_modal(uid, _bare_request(), conn=conn).body.decode()
     assert "Edit book" in edit and 'data-library-editions' in edit and "paper.pdf" in edit
-    page = notebook_router.citations_library(_bare_request(), type=[], author=[], year_from="", year_to="", sort="title", conn=conn)
+    page = notebook_router.citations_library(_bare_request(), type=[], author=[], year_from="", year_to="", sort="title", view="all", conn=conn)
     assert "1 entry" in page.body.decode()
     assert "paper.pdf" in notebook_router.citation_view_modal(uid, _bare_request(), conn=conn).body.decode()
 

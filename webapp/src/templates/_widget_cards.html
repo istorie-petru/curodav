@@ -1,0 +1,19 @@
+{# Widget cards of the University and Library pages (style.css, .wcard). wcard_stat is a link or a plain card with a label, one big line and a small one;
+   wcard_row is one line of a card's list: the discipline's icon badge, a title with a small line under it, and a short date. #}
+{% from "_widget_items.html" import icon_pill %}
+{% macro wcard_stat(label, big, small='', href='', percent=none, modal=true, alert=false) -%}
+<{{ 'a' if href else 'section' }} class="wcard{% if alert %} is-alert{% endif %}"{% if href %} href="{{ href }}"{% if modal %} data-modal{% endif %}{% endif %}>
+    <div class="wcard-label">{{ label }}</div>
+    <div class="wcard-big{% if not big %} is-none{% endif %}">{{ big or 'None' }}</div>
+    {% if small %}<div class="wcard-small">{{ small }}</div>{% endif %}
+    {% if percent is not none %}<div class="wcard-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ percent }}"><span data-style="width:{{ percent }}%"></span></div>{% endif %}
+{% if href and percent is none %}<span class="wcard-arrow" aria-hidden="true">{{ icon('chevron-right', 'icon-sm') }}</span>{% endif %}
+</{{ 'a' if href else 'section' }}>
+{%- endmacro %}
+{% macro wcard_row(look, title, sub='', when='', href='', modal=true, icon_name='', past=false) -%}
+<{{ 'a' if href else 'div' }} class="wcard-row{% if past %} is-past{% endif %}"{% if href %} href="{{ href }}"{% if modal %} data-modal{% endif %}{% endif %}>
+    {{ icon_pill(look.color or 'gray', icon_name or look.icon or 'book-open') }}
+    <span class="wcard-main"><b>{{ title }}</b>{% if sub %}<small>{{ sub }}</small>{% endif %}</span>
+    {% if when %}<span class="wcard-when">{{ when }}</span>{% endif %}
+</{{ 'a' if href else 'div' }}>
+{%- endmacro %}

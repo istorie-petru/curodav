@@ -424,6 +424,7 @@ from .notebook import (
     set_notebook_glossary_terms,
     set_notebook_links,
     set_notebook_properties,
+    series_options,
     upsert_citation,
     upsert_glossary_term,
     upsert_notebook_document,
@@ -488,6 +489,8 @@ from .citation_library import (  # noqa: E402
 )
 
 from .media import (  # noqa: E402
+    advanced_rating,
+    set_advanced_rating,
     auto_covers,
     calibre_uuids,
     citation_ratings,

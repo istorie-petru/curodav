@@ -1,5 +1,6 @@
 {% from "_inputs.html" import search_input %}
-{% from "_quick_add_target.html" import quick_add_href, quick_add_title with context %}
+{% from "_quick_add_target.html" import quick_add_href, quick_add_title, add_control with context %}
+{% set _add = page_add if (page_add is defined and page_add) else {'href': quick_add_href(), 'label': quick_add_title()} %}
 {% set active_tab = 'library' if (request is defined and request.url.path.startswith('/library')) else active_tab %}
 <!DOCTYPE html>
 <html lang="en" data-terminology="{{ terminology(request) if request is defined else 'standard' }}">
@@ -159,6 +160,7 @@
         {% endfor %}
         {% endif %}
         <div class="spacer"></div>
+        {{ add_control({'href': quick_add_href(), 'label': quick_add_title()}, 'tab-btn tab-add') }}
         <!-- Universal command surface (1.2 side work) -- Ctrl-K/Cmd-K opens
              the same overlay from anywhere; this tab is the discoverable,
              clickable entry point plus a real /search fallback for no-JS
@@ -170,7 +172,7 @@
     <nav class="mobile-tabbar" role="navigation" aria-label="Main (mobile)">
         <button type="button" id="mobile-nav-toggle" class="mobile-tabbar-btn" aria-expanded="false" aria-controls="mobile-nav-drawer" aria-label="Open navigation menu">{{ icon('sidebar') }}<span>Menu</span></button>
         <a href="/" data-tab="dashboard" class="mobile-tabbar-btn {% if active_tab == 'dashboard' %}active{% endif %}">{{ icon('home') }}<span>Home</span></a>
-        <a href="{{ quick_add_href() }}" data-modal class="mobile-tabbar-btn" title="{{ quick_add_title() }}" aria-label="{{ quick_add_title() }}">{{ icon('plus') }}<span>Add</span></a>
+        {{ add_control({'href': quick_add_href(), 'label': quick_add_title()}, 'mobile-tabbar-btn') }}
         <a href="/settings" data-tab="settings" class="mobile-tabbar-btn {% if active_tab and (active_tab.startswith('settings') or active_tab in ('labels', 'published_lists', 'export')) %}active{% endif %}">{{ icon('settings') }}<span>Settings</span></a>
     </nav>
     <!-- Scrim behind the open drawer -- tap to close (static/

@@ -866,6 +866,12 @@ def task_detail(uid: str, request: Request, month: str | None = None, conn=Depen
         ctx["habit_look"] = habit_view.habit_look(task)
         ctx["habit_notes"] = habit_view.recent_notes(rows)
         return templates.TemplateResponse("habit_task_detail.html", ctx)
+    from .. import modules
+
+    if modules.is_enabled("university"):
+        from .. import university_context
+
+        ctx["university"] = university_context.for_task(conn, task)
     return templates.TemplateResponse("task_detail.html", ctx)
 
 

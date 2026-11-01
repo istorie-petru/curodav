@@ -124,10 +124,15 @@ class TestNotebookCitations:
         assert [c["uid"] for c in db.list_notebook_citations(conn, "d2")] == ["c1"]
 
 
+def _library(*args, **kwargs):
+    """The All view of the Library, which holds the table."""
+    return notebook_router.citations_library(*args, view="all", **kwargs)
+
+
 class TestCitationsLibraryRouter:
     def test_library_page_lists_citations(self, conn):
         _citation(conn, title="Thesis Notes")
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=[], author=[], year_from="", year_to="", sort="title", conn=conn
         )
         assert "Thesis Notes" in resp.body.decode()
@@ -336,7 +341,7 @@ class TestCitationsFiltering:
     def test_filter_by_type(self, conn):
         _citation(conn, uid="c1", type="book")
         _citation(conn, uid="c2", title="Second", type="webpage")
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=["webpage"], author=[], year_from="", year_to="", sort="title", conn=conn
         )
         assert [c["uid"] for c in resp.context["citations"]] == ["c2"]
@@ -344,7 +349,7 @@ class TestCitationsFiltering:
     def test_filter_by_author_matches_any_position_not_just_first(self, conn):
         _citation(conn, uid="c1", authors=[{"family": "Bloch", "given": "Marc"}, {"family": "Febvre", "given": "Lucien"}])
         _citation(conn, uid="c2", title="Second", authors=[{"family": "Other", "given": "Person"}])
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=[], author=["Febvre, Lucien"], year_from="", year_to="", sort="title", conn=conn
         )
         # 2026-10-03 direct decision: a secondary-author match is simply
@@ -353,7 +358,7 @@ class TestCitationsFiltering:
 
     def test_no_match_still_renders_a_distinct_empty_state(self, conn):
         _citation(conn, uid="c1", type="book")
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=["thesis"], author=[], year_from="", year_to="", sort="title", conn=conn
         )
         assert resp.context["citations"] == []
@@ -369,7 +374,7 @@ class TestCitationsYearRangeFiltering:
     def test_both_blank_applies_no_year_filter(self, conn):
         _citation(conn, uid="c1", year="1924")
         _citation(conn, uid="c2", title="Second", year="")
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=[], author=[], year_from="", year_to="", sort="title", conn=conn
         )
         assert {c["uid"] for c in resp.context["citations"]} == {"c1", "c2"}
@@ -378,7 +383,7 @@ class TestCitationsYearRangeFiltering:
         _citation(conn, uid="c1", year="1900")
         _citation(conn, uid="c2", title="Second", year="1950")
         _citation(conn, uid="c3", title="Third", year="2000")
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=[], author=[], year_from="1900", year_to="1950", sort="title", conn=conn
         )
         assert {c["uid"] for c in resp.context["citations"]} == {"c1", "c2"}
@@ -386,7 +391,7 @@ class TestCitationsYearRangeFiltering:
     def test_to_only_filters_everything_up_to_that_year_no_autocomplete_of_from(self, conn):
         _citation(conn, uid="c1", year="1900")
         _citation(conn, uid="c2", title="Second", year="2020")
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=[], author=[], year_from="", year_to="1950", sort="title", conn=conn
         )
         assert [c["uid"] for c in resp.context["citations"]] == ["c1"]
@@ -396,7 +401,7 @@ class TestCitationsYearRangeFiltering:
         _citation(conn, uid="c1", year="1900")
         _citation(conn, uid="c2", title="Second", year=str(current_year))
         _citation(conn, uid="c3", title="Third", year=str(current_year + 5))
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=[], author=[], year_from="1900", year_to="", sort="title", conn=conn
         )
         # c3 (in the future) is excluded even though it's >= From -- the
@@ -406,14 +411,14 @@ class TestCitationsYearRangeFiltering:
     def test_non_numeric_or_blank_years_never_match_an_active_range(self, conn):
         _citation(conn, uid="c1", year="1924")
         _citation(conn, uid="c2", title="Second", year="")
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=[], author=[], year_from="1900", year_to="2000", sort="title", conn=conn
         )
         assert [c["uid"] for c in resp.context["citations"]] == ["c1"]
 
     def test_active_filter_count_counts_year_range_as_one(self, conn):
         _citation(conn, uid="c1", type="book", year="1924")
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=["book"], author=[], year_from="1900", year_to="1950", sort="year", conn=conn
         )
         assert resp.context["active_filter_count"] == 3  # 1 type + 1 year-range + sort != title
@@ -422,7 +427,7 @@ class TestCitationsYearRangeFiltering:
         _citation(conn, uid="c1", year="-500")
         _citation(conn, uid="c2", title="Second", year="-100")
         _citation(conn, uid="c3", title="Third", year="1924")
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=[], author=[], year_from="-500", year_to="-100", sort="title", conn=conn
         )
         assert {c["uid"] for c in resp.context["citations"]} == {"c1", "c2"}
@@ -432,7 +437,7 @@ class TestCitationsSorting:
     def test_sort_by_type(self, conn):
         _citation(conn, uid="c1", title="B Title", type="webpage")
         _citation(conn, uid="c2", title="A Title", type="book")
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=[], author=[], year_from="", year_to="", sort="type", conn=conn
         )
         # "Book" sorts before "Web page" alphabetically by type label.
@@ -442,7 +447,7 @@ class TestCitationsSorting:
         _citation(conn, uid="c1", year="1924")
         _citation(conn, uid="c2", title="Second", year="2020")
         _citation(conn, uid="c3", title="Third", year="")
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=[], author=[], year_from="", year_to="", sort="year", conn=conn
         )
         assert [c["uid"] for c in resp.context["citations"]] == ["c2", "c1", "c3"]
@@ -451,7 +456,7 @@ class TestCitationsSorting:
         _citation(conn, uid="c1", authors=[{"family": "Zorn", "given": "Ada"}])
         _citation(conn, uid="c2", title="Second", authors=[{"family": "Adams", "given": "Bea"}])
         _citation(conn, uid="c3", title="Third", authors=[])
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=[], author=[], year_from="", year_to="", sort="author", conn=conn
         )
         assert [c["uid"] for c in resp.context["citations"]] == ["c2", "c1", "c3"]
@@ -459,7 +464,7 @@ class TestCitationsSorting:
     def test_default_sort_is_title_alphabetical(self, conn):
         _citation(conn, uid="c1", title="Zebra")
         _citation(conn, uid="c2", title="Apple")
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=[], author=[], year_from="", year_to="", sort="title", conn=conn
         )
         assert [c["uid"] for c in resp.context["citations"]] == ["c2", "c1"]
@@ -467,7 +472,7 @@ class TestCitationsSorting:
     def test_unknown_sort_falls_back_to_title(self, conn):
         _citation(conn, uid="c1", title="Zebra")
         _citation(conn, uid="c2", title="Apple")
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=[], author=[], year_from="", year_to="", sort="bogus", conn=conn
         )
         assert [c["uid"] for c in resp.context["citations"]] == ["c2", "c1"]
@@ -475,7 +480,7 @@ class TestCitationsSorting:
     def test_unknown_sort2_falls_back_to_title(self, conn):
         _citation(conn, uid="c1", title="Zebra")
         _citation(conn, uid="c2", title="Apple")
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=[], author=[], year_from="", year_to="", sort="type", sort2="bogus", conn=conn
         )
         # Both citations share a type ("book"), so Primary ties and
@@ -493,7 +498,7 @@ class TestCitationsSecondarySort:
         _citation(conn, uid="c1", title="Z Title", type="book", year="2020")
         _citation(conn, uid="c2", title="A Title", type="book", year="1900")
         _citation(conn, uid="c3", title="M Title", type="webpage", year="1950")
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=[], author=[], year_from="", year_to="", sort="type", sort2="year", conn=conn
         )
         # Primary: type (book < webpage alphabetically). Within "book",
@@ -504,7 +509,7 @@ class TestCitationsSecondarySort:
     def test_title_is_still_the_final_tiebreaker(self, conn):
         _citation(conn, uid="c1", title="Zebra", type="book")
         _citation(conn, uid="c2", title="Apple", type="book")
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=[], author=[], year_from="", year_to="", sort="type", sort2="type", conn=conn
         )
         # Primary and Secondary are both "type" (a no-op tie, both equal)
@@ -514,7 +519,7 @@ class TestCitationsSecondarySort:
     def test_default_sort2_is_title(self, conn):
         _citation(conn, uid="c1", title="Z Title", type="book")
         _citation(conn, uid="c2", title="A Title", type="book")
-        resp = notebook_router.citations_library(
+        resp = _library(
             _bare_request(), type=[], author=[], year_from="", year_to="", sort="type", conn=conn
         )
         assert [c["uid"] for c in resp.context["citations"]] == ["c2", "c1"]
@@ -595,3 +600,15 @@ def test_pages_under_library_highlight_the_library_tab_not_the_notebook():
         html = client.get("/library").text
     nav = [l for l in html.splitlines() if 'data-tab="library"' in l or 'data-tab="notebook"' in l]
     assert any("active" in l for l in nav if 'data-tab="library"' in l) and not any("active" in l for l in nav if 'data-tab="notebook"' in l)
+
+
+def test_the_notebook_citations_page_is_a_table_of_title_author_and_keywords_from_the_library(conn):
+    db.upsert_citation(conn, {"title": "Capital", "type": "book", "authors": [{"family": "Marx", "given": "Karl"}], "keywords": ["economy", "history"]})
+    page = notebook_router.citations_page(_bare_request(), q="", conn=conn).body.decode()
+    assert "Capital" in page and "Marx" in page and "economy, history" in page and "<th class=\"col-name\">Title</th>" in page
+    assert "No citations match" in notebook_router.citations_page(_bare_request(), q="zzzz", conn=conn).body.decode()
+
+
+def test_a_new_note_from_a_subfolder_takes_the_subfolder_as_its_tag(conn):
+    ctx = notebook_router.new_note_context(_bare_request(), conn, "Thesis", "", "Chapter 2")
+    assert ctx["labels_selected"] == ["Chapter 2"] and ctx["label"] == "Thesis"

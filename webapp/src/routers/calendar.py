@@ -1274,8 +1274,19 @@ def event_detail(uid: str, request: Request, occurrence_date: str | None = None,
             "occurrence_override": occurrence_override,
             "banner": db.banner_for_object(conn, "event", event) if event else None,
             "linked_tasks": db.links_for_event(conn, uid) if event else [],
+            "university": _university_context(conn, event),
         },
     )
+
+
+def _university_context(conn, event):
+    from .. import modules
+
+    if not event or not modules.is_enabled("university"):
+        return None
+    from .. import university_context
+
+    return university_context.for_event(conn, event)
 
 
 def _minute(value: str | None) -> datetime | None:

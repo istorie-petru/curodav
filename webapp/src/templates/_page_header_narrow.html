@@ -130,7 +130,25 @@
     <button type="button" id="notebook-sidebar-toggle" class="icon-btn header-icon" title="Collapse sidebar" aria-label="Collapse sidebar" aria-pressed="true">{{ icon('sidebar', 'icon-sm notebook-sidebar-toggle-icon') }}</button>
     {% endif %}
     {% if quick_add and not edit_mode %}
-    <a class="header-add" href="{{ quick_add_href() }}" data-modal title="{{ quick_add_title() }}" aria-label="{{ quick_add_title() }}">{{ icon('plus', 'icon-sm') }}</a>
+    {% set _hadd = page_add if (page_add is defined and page_add) else {'href': quick_add_href(), 'label': quick_add_title()} %}
+    {% if _hadd.get('items') %}
+    <div class="action-menu header-add-menu" aria-label="{{ _hadd.label }}">
+        <button type="button" class="action-menu-trigger header-add" aria-label="{{ _hadd.label }}" title="{{ _hadd.label }}" aria-haspopup="true" aria-expanded="false">{{ icon('plus', 'icon-sm') }}</button>
+        <div class="action-menu-panel" role="menu"><div class="action-menu-section">
+            {% for it in _hadd.get('items') %}
+            {% if it.form_action %}
+            <form class="form-inline" method="post" action="{{ it.form_action }}"><button type="submit" class="action-menu-item" role="menuitem">{{ icon(it.icon, 'icon-sm') }} {{ it.label }}</button></form>
+            {% else %}
+            <a class="action-menu-item" role="menuitem" href="{{ it.href }}" data-modal>{{ icon(it.icon, 'icon-sm') }} {{ it.label }}</a>
+            {% endif %}
+            {% endfor %}
+        </div></div>
+    </div>
+    {% elif _hadd.post %}
+    <form method="post" action="{{ _hadd.post }}" class="form-inline">{% for k, v in (_hadd.fields or {}).items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}<button type="submit" class="header-add" title="{{ _hadd.label }}" aria-label="{{ _hadd.label }}">{{ icon('plus', 'icon-sm') }}</button></form>
+    {% else %}
+    <a class="header-add" href="{{ _hadd.href }}" data-modal title="{{ _hadd.label }}" aria-label="{{ _hadd.label }}">{{ icon('plus', 'icon-sm') }}</a>
+    {% endif %}
     {% endif %}
 </div>
 <div class="page-header-rows"></div>

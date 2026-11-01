@@ -56,6 +56,17 @@ def set_status(conn: sqlite3.Connection, event_uid: str, status: str, note: str 
     conn.commit()
 
 
+def for_event(conn: sqlite3.Connection, event: dict[str, Any]) -> dict[str, Any] | None:
+    """The attendance of an event that is a class of the semester, for the calendar's event window; None for any other event."""
+    row = conn.execute("SELECT discipline_tag, kind FROM university_slots WHERE series_uid = ?", (event.get("series_uid"),)).fetchone() if event.get("series_uid") else None
+    if not row:
+        return None
+    mark = statuses_of(conn, [event["uid"]]).get(event["uid"]) or {"status": "", "note": ""}
+    status = mark["status"] or ("attended" if (event.get("start_at") or "") < clock.local_now().strftime("%Y-%m-%dT%H:%M") else "")
+    return {"discipline": row["discipline_tag"], "kind": up.SLOT_KINDS.get(row["kind"], "Class"), "status": status, "label": STATUSES.get(status, "Not held yet"),
+            "note": mark["note"], "choices": [(k, v) for k, v in STATUSES.items() if k != status]}
+
+
 def limits(conn: sqlite3.Connection, semester_uid: str, discipline: str) -> dict[str, int | None]:
     values = up.get_sheet(conn, semester_uid, discipline)["values"]
     out: dict[str, int | None] = {}

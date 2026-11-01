@@ -150,7 +150,7 @@ class TestSettingsNotebookPage:
         body = notebook_router.settings_notebook(_request(), conn=conn).body.decode()
         assert "No frontmatter fields defined yet" not in body
         assert 'href="/settings/notebook/new"' in body
-        assert "Title" in body and "Author" in body and "Type" in body
+        assert "Title" in body and "Type" in body and ">Author<" not in body
 
     def test_lists_existing_fields_as_rows_with_edit_buttons(self, conn):
         db.upsert_notebook_field_config(conn, {"key": "institution", "label": "Institution", "type": "text", "default_value": "UBB"})

@@ -1,4 +1,5 @@
 {% from "_inputs.html" import text_input, number_input %}
+{% from "_form_rows.html" import details_start, details_end %}
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
 {% from "_look_picker.html" import look_picker %}
@@ -10,6 +11,10 @@
     <input type="hidden" name="old" value="{{ d.name if d else '' }}">
     <div class="field-grid">
         <div class="field field-wide"><label>Name</label>{{ text_input({'name': 'name', 'value': (d.name if d else ''), 'required': true}) }}</div>
+        {% call look_picker('look-discipline', 'university-discipline-form', d.color if d else 'blue', d.icon if d else none, colors, icon_groups, default_icon='book-open', label='Look') %}
+        {% if d %}<a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ ('/settings/university/discipline/' ~ d.name ~ '/edit')|urlencode }}&amp;from_modal=1" data-modal class="look-side-btn" title="{{ 'Change banner' if banner else 'Add banner' }}" aria-label="{{ 'Change banner' if banner else 'Add banner' }}">{{ icon('upload') }}</a>{% endif %}
+        {% endcall %}
+        {{ details_start(open=(values.abbreviation or values.code or values.credits or values.type)) }}
         <div class="field"><label>Abbreviation</label>{{ text_input({'name': 'abbreviation', 'value': values.abbreviation | default('')}) }}</div>
         <div class="field"><label>Code</label>{{ text_input({'name': 'code', 'value': values.code | default('')}) }}</div>
         <div class="field"><label>Credits</label>{{ number_input({'name': 'credits', 'value': values.credits | default(''), 'min': 0, 'step': 'any'}) }}</div>
@@ -19,9 +24,7 @@
             {% set ms_selected = values.type | default('') %}{% set ms_wide = false %}
             {% include '_widget_list_multiselect.html' %}
         </div>
-        {% call look_picker('look-discipline', 'university-discipline-form', d.color if d else 'blue', d.icon if d else none, colors, icon_groups, default_icon='book-open', label='Look') %}
-        {% if d %}<a href="/banners/editor?scope={{ banner_scope|urlencode }}&amp;page_url={{ ('/settings/university/discipline/' ~ d.name ~ '/edit')|urlencode }}&amp;from_modal=1" data-modal class="look-side-btn" title="{{ 'Change banner' if banner else 'Add banner' }}" aria-label="{{ 'Change banner' if banner else 'Add banner' }}">{{ icon('upload') }}</a>{% endif %}
-        {% endcall %}
+        {{ details_end() }}
     </div>
 </form>
 </div>

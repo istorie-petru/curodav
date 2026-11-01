@@ -169,16 +169,14 @@ def format_value(value: float | None) -> str:
 
 
 def overall(manual: float | None, criteria: list[dict[str, Any]], values: dict[str, float]) -> float | None:
-    """The overall rating: the one set by hand, else the weighted mean of the criteria that have a value."""
-    if manual is not None:
-        return manual
+    """The overall rating: the weighted mean of the criteria that have a value (two and three stars make two and a half), else the one set by hand."""
     total = weight = 0.0
     for c in criteria:
         v = values.get(c["uid"])
         if v is not None and c.get("weight", 1) > 0:
             total += v * c["weight"]
             weight += c["weight"]
-    return round(total / weight, 4) if weight else None
+    return round(total / weight, 4) if weight else manual
 
 
 def criteria_for(criteria: list[dict[str, Any]], type_key: str) -> list[dict[str, Any]]:
@@ -202,28 +200,16 @@ _UNIT_WORDS = {"pages": ("p.", "pages"), "chapters": ("Ch.", "chapters"), "volum
 
 
 def progress_text(c: dict[str, Any], kind: Kind) -> str:
-    """Progress in the words of the kind: "p. 120 of 387 · 31%", "S1 · E10 of 28", "Ch. 45 of 120", or for a film the day it was watched."""
+    """Progress as an orientative percent ("31%"), or for a film the day it was watched."""
     done, total = c.get("progress") or 0, c.get("progress_total") or 0
     if kind.unit == "none":
         finished = c.get("finished_on") or ""
         return f"{VERBS[kind.verb][2]} {finished}" if c.get("status") == "finished" and finished else ""
-    if not done and not total:
-        return ""
-    prefix, word = _UNIT_WORDS.get(kind.unit, ("", kind.unit))
-    if kind.unit == "hours":
-        text = f"{done} h" + (f" of {total} h" if total else "")
-    elif kind.unit == "episodes":
-        text = (f"S{c['season']} · " if c.get("season") else "") + f"E{done}" + (f" of {total}" if total else "")
-    else:
-        text = f"{prefix} {done}" + (f" of {total}" if total else "")
-    if kind.unit == "pages" and total:
-        text += f" · {percent(done, total)}%"
-    return text
+    if total:
+        return f"{percent(done, total)}%"
+    return f"{done}%" if done else ""
 
 
 def step_words(delta: int, kind: Kind) -> str:
-    """One day of the progress log: "+12 pages", "+3 episodes", "-1 chapter"."""
-    word = _UNIT_WORDS.get(kind.unit, ("", "steps"))[1]
-    if abs(delta) == 1 and word.endswith("s"):
-        word = word[:-1]
-    return f"{'+' if delta > 0 else ''}{delta} {word}"
+    """One day of the progress log: "+10%", "-10%"."""
+    return f"{'+' if delta > 0 else ''}{delta}%"

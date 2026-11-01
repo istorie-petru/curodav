@@ -1,7 +1,14 @@
-{# The Library's two views: every work, or what is being read and watched now. #}
-{% macro library_views(current) %}
-<div class="segmented library-views" role="group" aria-label="Library view">
-    <a class="seg-btn{% if current == 'all' %} active{% endif %}" href="/library"{% if current == 'all' %} aria-current="page"{% endif %}>All</a>
-    <a class="seg-btn{% if current == 'now' %} active{% endif %}" href="/library/now"{% if current == 'now' %} aria-current="page"{% endif %}>Now</a>
-</div>
+{# The Library's header bar, shared by Now and All: the views, then search, filters, add by hand and add from the web. #}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_inputs.html" import search_input %}
+{% macro library_header() %}
+{% call page_header_narrow("Library", "library", views=views) %}
+    <form method="get" action="/library" class="form-inline notebook-glossary-search-form">
+        <input type="hidden" name="view" value="{{ view }}">
+        {% for k in ('type','author','status','source','tag','shelf') %}{% for v in request.query_params.getlist(k) %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}{% endfor %}
+        {% for k in ('year_from','year_to','sort','sort2') %}{% if request.query_params.get(k) %}<input type="hidden" name="{{ k }}" value="{{ request.query_params.get(k) }}">{% endif %}{% endfor %}
+        {{ search_input({'name': 'q', 'value': q, 'aria-label': 'Search the library', 'autocomplete': 'off'}) }}
+    </form>
+    <a href="/library/filters{% if current_query %}?{{ current_query }}{% endif %}" data-modal class="btn ghost" title="Filter and sort the library" aria-label="Filter and sort the library">{{ icon('filter', 'icon-sm') }}{% if active_filter_count %} {{ active_filter_count }}{% endif %}</a>
+{% endcall %}
 {% endmacro %}

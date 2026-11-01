@@ -20,6 +20,7 @@ from .core import get_app_meta, set_app_meta
 SCALE_KEY = "media_rating_scale"
 AUTO_COVERS_KEY = "media_auto_covers"
 TMDB_KEY = "media_tmdb_key"
+ADVANCED_RATING_KEY = "media_advanced_rating"
 
 
 def _now() -> str:
@@ -42,6 +43,15 @@ def auto_covers(conn: sqlite3.Connection) -> bool:
 
 def set_auto_covers(conn: sqlite3.Connection, on: bool) -> None:
     set_app_meta(conn, AUTO_COVERS_KEY, "1" if on else "0")
+
+
+def advanced_rating(conn: sqlite3.Connection) -> bool:
+    """Whether the library rates by criteria (Story, Art) instead of one rating."""
+    return get_app_meta(conn, ADVANCED_RATING_KEY) == "1"
+
+
+def set_advanced_rating(conn: sqlite3.Connection, on: bool) -> None:
+    set_app_meta(conn, ADVANCED_RATING_KEY, "1" if on else "0")
 
 
 def tmdb_key(conn: sqlite3.Connection) -> str:

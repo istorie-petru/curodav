@@ -1,9 +1,9 @@
-"""The study page: the page of the space that holds the University semester, with the views Overview, Disciplines, Exams, Attendance and Work.
+"""The study page: the page of the space that holds the University semester, with the views Overview, Disciplines and Examination.
 
-Overview follows the overview of any space: a summary line, the next things, the weekly timetable drawn with the calendar's own event
-blocks (odd weeks in the left half of a day, even weeks in the right half), and two columns of short lists. Exams, Attendance and Work
-are lists across every discipline of the semester. The timetable comes from the slots, so it is the same for any week; the lists read
-the dated classes, milestones and tasks.
+Overview is a row of widget cards (the next class, the next examination, what is due, the semester, the absences), the weekly timetable
+drawn with the calendar's own event blocks (odd weeks in the left half of a day, even weeks in the right half) and cards of short lists.
+Examination is every exam and every piece of work of the semester. The timetable comes from the slots, so it is the same for any week;
+the lists read the dated classes, milestones and tasks.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from . import university_plan as up
 from .deps import templates
 
 _OPEN = ("done", "archived")
-VIEWS = (("overview", "Overview"), ("disciplines", "Disciplines"), ("exams", "Exams"), ("attendance", "Attendance"), ("work", "Work"))
+VIEWS = (("overview", "Overview"), ("disciplines", "Disciplines"), ("exams", "Examination"))
 
 
 def _minutes(clock_text: str) -> int:
@@ -206,7 +206,11 @@ def cards(conn, semester: dict, group: str, today: date) -> list[dict]:
         line = (f"{coming[0]['title']} {when(coming[0]['date'], today)}" if coming
                 else "Over the absence limit" if attendance["over"] else "One absence left" if attendance["at_risk"]
                 else ("No " + " or ".join(missing) + " yet") if missing else "")
-        out.append({"name": name, "color": d.get("color") or "gray", "icon": d.get("icon") or "book-open", "line": line,
+        held = [c for c in attendance["classes"] if c["status"] != "cancelled"]
+        percent = round(100 * len([c for c in held if c["past"]]) / len(held)) if held else None
+        out.append({"name": name, "color": d.get("color") or "gray", "icon": d.get("icon") or "book-open", "line": line, "percent": percent,
+                    "classes": f"{len([c for c in held if c['past']])} of {len(held)} classes" if held else "",
+                    "urgent": bool(coming and coming[0]["days_left"] <= 14) or attendance["over"],
                     "url": f"/groups/{quote(group, safe='')}/disciplines/{quote(name, safe='')}"})
     return out
 
@@ -223,9 +227,25 @@ def overview(conn, semester: dict, group: str, today: date, now: datetime) -> di
             if k["limit"] is not None:
                 standing_rows.append({"look": a["discipline"], "label": k["label"], "left": k["left"], "over": k["over"], "at_risk": k["at_risk"]})
     missed = sorted([{**c, "look": a["discipline"]} for a in attendance for c in a["missed"]], key=lambda c: c["date"], reverse=True)[:5]
-    return {"summary": summary(conn, semester, today), "next_classes": next_classes(conn, semester, now), "exams_soon": coming[:5],
-            "exams_this_fortnight": len([r for r in coming if r["days_left"] <= 14]), "due": due[:6], "over": len([s for s in standing_rows if s["over"]]),
+    over = len([s for s in standing_rows if s["over"]])
+    tight = sorted([s for s in standing_rows if s["left"] is not None], key=lambda s: s["left"])
+    return {"summary": summary(conn, semester, today), "next_classes": next_classes(conn, semester, now), "exams_soon": coming[:5], "tight": tight[:1], "today": today,
+            "exams_this_fortnight": len([r for r in coming if r["days_left"] <= 14]), "due": due[:6], "over": over,
             "absences": standing_rows, "missed": missed, "disciplines": list(looks.values()), "schedule": schedule(conn, semester, group)}
+
+
+def _page_add(semester: dict | None, view: str, disciplines: list[dict]) -> dict:
+    """The header bar's add button of the study page: what can be added on the view that is open."""
+    if not semester:
+        return {"href": "/settings/university/semester", "label": "Set up a semester"}
+    if view == "disciplines":
+        return {"href": "/settings/university/discipline/new", "label": "New discipline"}
+    items = [{"href": "/settings/university/slot/new", "icon": "clock", "label": "New weekly class"},
+             {"href": "/settings/university/discipline/new", "icon": "book-open", "label": "New discipline"}]
+    if view == "exams":
+        items += [{"href": f"/settings/university/evaluation/new?discipline={quote(d['name'], safe='')}", "icon": "file-check", "label": f"Examination: {d['name']}"}
+                  for d in disciplines]
+    return {"label": "Add", "items": items}
 
 
 def render(conn, request: Request, name: str, label: dict):
@@ -240,12 +260,8 @@ def render(conn, request: Request, name: str, label: dict):
         if view == "disciplines":
             ctx["cards"] = cards(conn, semester, name, today)
         elif view == "exams":
-            ctx["exams"] = exams(conn, semester, today)
-        elif view == "attendance":
-            data = ua.semester_attendance(conn, semester, today)
-            ctx.update(attendance=data, missed=sorted([{**c, "look": a["discipline"]} for a in data for c in a["missed"]], key=lambda c: c["date"], reverse=True))
-        elif view == "work":
-            ctx["work"] = work(conn, semester, today)
+            ctx.update(exams=exams(conn, semester, today), work=work(conn, semester, today), today=today, disciplines=list(_looks(conn, semester).values()))
         else:
             ctx.update(overview(conn, semester, name, today, clock.local_now()))
+    ctx["page_add"] = _page_add(semester, view, ctx.get("disciplines") or [])
     return templates.TemplateResponse("study_page.html", ctx)

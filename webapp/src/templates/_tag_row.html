@@ -6,7 +6,7 @@
 {% set _pick = tag_picker(request, tag_type, tag_uid | default(''), (tag_old | default([])) + (tag_prefill | default([]))) %}
 {% set _sel = _pick.selected %}
 <input type="hidden" name="item_tags_field" value="1"{% if ms_form_id | default('') %} form="{{ ms_form_id }}"{% endif %}>
-<div class="field">
+<div class="field tag-field">
     {% set ms_name = 'item_tags' %}
     {% set ms_icon = 'tag' %}
     {% set ms_label = 'Tag' if _single else 'Tags' %}

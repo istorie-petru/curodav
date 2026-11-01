@@ -1,3 +1,4 @@
+{% set page_add = {'href': '/settings/api-access/new', 'label': 'New token'} %}
 {% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
 {% block title %}API access - Settings{% endblock %}
@@ -46,8 +47,7 @@
 </table>
 {% endmacro %}
 <div class="card table-scroll table-responsive">
-    <div class="table-toolbar"><h2>Tokens</h2><span class="spacer"></span>
-        <a href="/settings/api-access/new" data-modal class="btn ghost btn-sm btn-icon-only" title="New token" aria-label="New token">{{ icon('plus', 'icon-sm') }}</a></div>
+    <div class="table-toolbar"><h2>Tokens</h2></div>
     {% if personal %}{{ token_table(personal, 'token') }}{% else %}{{ empty_state('No tokens', icon_name='key', size='compact') }}{% endif %}
 </div>
 <div class="card table-scroll table-responsive">

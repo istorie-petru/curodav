@@ -81,6 +81,13 @@ def _sort_name(a: dict[str, str]) -> str:
     return f"{family}, {given}" if family and given else (family or given)
 
 
+def _number(value: Any) -> float:
+    try:
+        return float(str(value).replace(",", ".")) if str(value or "").strip() else 1.0
+    except ValueError:
+        return 1.0
+
+
 def meta_for(conn: sqlite3.Connection, c: dict[str, Any], edition: dict[str, Any]) -> cl.BookMeta:
     """What Calibre holds for one edition of the entry `c` (as stored, not read up from editions)."""
     authors = [a for a in (c.get("authors") or []) if _display_name(a)]
@@ -89,7 +96,7 @@ def meta_for(conn: sqlite3.Connection, c: dict[str, Any], edition: dict[str, Any
     return cl.BookMeta(title=title, authors=[_display_name(a) for a in authors], author_sorts=[_sort_name(a) for a in authors],
                        pubdate=edition.get("year") or c.get("year") or "", publisher=edition.get("publisher") or "", isbn=edition.get("isbn") or "",
                        doi=edition.get("doi") or "", tags=list(c.get("keywords") or []), comments=c.get("summary") or "",
-                       rating=round(overall / 10) if overall else 0)
+                       rating=round(overall / 10) if overall else 0, series=c.get("series") or "", series_index=_number(c.get("volume")))
 
 
 def _jpeg(webp_path: Path | None) -> bytes | None:
@@ -320,6 +327,9 @@ def _pull_book(conn: sqlite3.Connection, e: dict[str, Any], book: dict[str, Any]
     if [_display_name(a) for a in authors] != [_display_name(a) for a in c["authors"]] and book["authors"] != ["Unknown"]:
         row["authors"] = authors
     row["keywords"] = book["tags"]
+    row["series"] = book["series"]
+    if book["series"]:
+        row["volume"] = f"{book['series_index']:g}"
     row["summary"] = _plain(book["comments"])
     overall = db.overall_ratings(conn, [c]).get(c["uid"])
     if book["rating"] != (round(overall / 10) if overall else 0) and not db.citation_ratings(conn, c["uid"]):

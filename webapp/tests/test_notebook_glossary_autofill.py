@@ -84,5 +84,12 @@ def test_detection_by_word_lookup_matches_words_phrases_and_aliases(tmp_path):
         text = "Under <b>feudalism</b> the divine right of kings, not divine rights; villeinage; unfealty"
         content = {"blocks": [{"type": "paragraph", "data": {"text": text}}]}
         assert sorted(nb._detect_glossary_term_uids(conn, content)) == ["a", "b", "d"]
-        content["blocks"][0]["data"]["text"] = "divine rights only, and right divine"
+        content["blocks"][0]["data"]["text"] = "divine rights only"
+        assert nb._detect_glossary_term_uids(conn, content) == ["b"]
+        content["blocks"][0]["data"]["text"] = "right divine, divine rightful, unfealty"
+        assert nb._detect_glossary_term_uids(conn, content) == []
+        db.upsert_glossary_term(conn, {"uid": "m", "term": "magazin", "definition": "", "aliases": []})
+        content["blocks"][0]["data"]["text"] = "magazinul, magazine, magazinelor"
+        assert nb._detect_glossary_term_uids(conn, content) == ["m"]
+        content["blocks"][0]["data"]["text"] = "inmagazinat si magazinare"
         assert nb._detect_glossary_term_uids(conn, content) == []

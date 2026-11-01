@@ -13,8 +13,8 @@ RESERVED_KEYS = {"title", "note_type"}
 
 
 def schema_fields(fields: list[dict]) -> list[dict]:
-    """The fields that become typed inputs in the modal (title and type have their own columns)."""
-    return [f for f in fields if f["key"] not in RESERVED_KEYS]
+    """The fields that become typed inputs in the modal (title and type have their own columns; a note has no author of its own)."""
+    return [f for f in fields if f["key"] not in RESERVED_KEYS and not (f["key"] == "author" and f.get("builtin"))]
 
 
 def input_name(field: dict) -> str:

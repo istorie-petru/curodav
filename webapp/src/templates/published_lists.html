@@ -1,12 +1,10 @@
+{% set page_add = {'href': '/published-lists/new', 'label': 'New list'} %}
 {% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
 {% block title %}Published Lists{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% call page_header_narrow("Published Lists", "share-2") %}
-<a href="/published-lists/new" class="btn primary" data-modal>
-    {{ icon('plus', 'icon-sm') }} New List
-</a>
 {% endcall %}
 
 <div class="published-lists-page">

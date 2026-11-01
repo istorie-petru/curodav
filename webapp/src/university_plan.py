@@ -773,40 +773,26 @@ def composed_text(conn: sqlite3.Connection, event_uid: str) -> str:
     return "\n".join(lines)
 
 
-def _own_text(conn: sqlite3.Connection, event_uid: str) -> set[str]:
-    """The text the module itself wrote into this class."""
-    text = composed_text(conn, event_uid)
-    return {text} if text else set()
-
-
 def _write_description(conn: sqlite3.Connection, event_uid: str, text: str) -> None:
     event = db.get_event(conn, event_uid)
     db.upsert_event(conn, {**event, "description": text, "updated_at": _now()})
 
 
 def assign_topic(conn: sqlite3.Connection, topic_uid: str, event_uid: str, *, force: bool = False) -> str:
-    """Writes a topic into a class description. Returns "written", or "conflict" when typed text is there and `force` is not set."""
+    """Places a topic on a class. The class description is left to the user; the window of the class shows the topic. Returns "written"."""
     topic = conn.execute("SELECT * FROM university_topics WHERE uid = ?", (topic_uid,)).fetchone()
     event = db.get_event(conn, event_uid)
     if not topic or not event:
         raise PlanError("The topic or the class no longer exists")
-    current = (event.get("description") or "").strip()
-    if current and current not in _own_text(conn, event_uid) and not force:
-        return "conflict"
     conn.execute("DELETE FROM university_topic_classes WHERE event_uid = ? AND topic_uid IN (SELECT uid FROM university_topics WHERE kind != 'competence')", (event_uid,))
     conn.execute("INSERT OR IGNORE INTO university_topic_classes (topic_uid, event_uid) VALUES (?, ?)", (topic_uid, event_uid))
     conn.commit()
-    _write_description(conn, event_uid, composed_text(conn, event_uid))
     return "written"
 
 
 def unassign_topic(conn: sqlite3.Connection, event_uid: str) -> None:
-    event = db.get_event(conn, event_uid)
-    was_ours = bool(event) and (event.get("description") or "").strip() in _own_text(conn, event_uid)
     conn.execute("DELETE FROM university_topic_classes WHERE event_uid = ?", (event_uid,))
     conn.commit()
-    if was_ours:
-        _write_description(conn, event_uid, "")
 
 
 def class_events(conn: sqlite3.Connection, semester_uid: str, discipline: str, kind: str | None = None) -> list[dict[str, Any]]:
@@ -823,13 +809,8 @@ def plan_assign_in_order(conn: sqlite3.Connection, semester_uid: str, discipline
     pairs, blocked, left_over = [], [], 0
     for kind in ("lecture", "seminar", "lab"):
         topics = [t for t in list_topics(conn, semester_uid, discipline, kind) if not t["events"]]
-        free = []
-        for c in class_events(conn, semester_uid, discipline, kind):
-            text = (c.get("description") or "").strip()
-            if not text:
-                free.append(c)
-            elif text not in _own_text(conn, c["uid"]):
-                blocked.append(c["start_at"][:10])
+        placed = {r["event_uid"] for r in conn.execute("SELECT event_uid FROM university_topic_classes")}
+        free = [c for c in class_events(conn, semester_uid, discipline, kind) if c["uid"] not in placed]
         pairs += [(t["uid"], c["uid"], t["number"], t["title"], c["start_at"][:10]) for t, c in zip(topics, free)]
         left_over += max(0, len(topics) - len(free))
     return {"pairs": pairs, "blocked": blocked, "left_over": left_over}
@@ -1036,7 +1017,7 @@ def open_class_note(conn: sqlite3.Connection, event_uid: str) -> str:
     classes = class_events(conn, slot["semester_uid"], tag, "lecture")
     number = next((i + 1 for i, c in enumerate(classes) if c["uid"] == event_uid), len(classes) + 1)
     day = event["start_at"][:10]
-    topic = (event.get("description") or "").strip()
+    topic = composed_text(conn, event_uid).split("\nCompetences:")[0].strip() or (event.get("description") or "").strip()
     template = db.get_notebook_document(conn, ensure_lecture_template(conn))
     uid, now = str(uuid.uuid4()), _now()
     values = {"discipline": tag, "date": day, "topic": topic, "lecture number": str(number)}
@@ -1182,7 +1163,7 @@ def list_classes(conn: sqlite3.Connection, semester_uid: str, discipline: str, t
         kind = kinds.get(e.get("series_uid"), "other")
         counts[kind] = counts.get(kind, 0) + 1
         out.append({"uid": e["uid"], "date": e["start_at"][:10], "start": e["start_at"][11:16], "end": (e.get("end_at") or "")[11:16], "kind": kind,
-                    "kind_label": SLOT_KINDS.get(kind, "Class"), "number": counts[kind], "room": e.get("location") or "", "content": (e.get("description") or "").strip(),
+                    "kind_label": SLOT_KINDS.get(kind, "Class"), "number": counts[kind], "room": e.get("location") or "", "content": (composed_text(conn, e["uid"]) or (e.get("description") or "")).strip(),
                     "free_text": class_free_text(conn, e["uid"], e.get("description") or ""), "topic_uid": topic_of.get(e["uid"]), "competence_uids": competences_of.get(e["uid"], []), "note_uid": notes.get(e["uid"]), "past": e["start_at"][:10] < today})
     return out
 
@@ -1197,9 +1178,7 @@ def save_class_content(conn: sqlite3.Connection, event_uid: str, topic_uid: str,
         if uid and conn.execute("SELECT 1 FROM university_topics WHERE uid = ?", (uid,)).fetchone():
             conn.execute("INSERT OR IGNORE INTO university_topic_classes (topic_uid, event_uid) VALUES (?, ?)", (uid, event_uid))
     conn.commit()
-    composed = composed_text(conn, event_uid)
-    text = (text or "").strip()
-    _write_description(conn, event_uid, f"{composed}\n\n{text}" if composed and text else (composed or text))
+    _write_description(conn, event_uid, (text or "").strip())
 
 
 def _class_event(conn: sqlite3.Connection, event_uid: str) -> dict[str, Any]:
@@ -1248,8 +1227,7 @@ SHEET_SECTIONS = (
         ("year", "Year of study", "select", ("1", "2", "3", "4", "5", "6")),
         ("type", "Type", "select", ("Compulsory", "Optional", "Facultative")), ("language", "Language of teaching", "text", ()))),
     ("teaching", "Teaching", (
-        ("hours_lecture", "Lecture hours per week", "number", ()), ("hours_seminar", "Seminar hours per week", "number", ()),
-        ("hours_lab", "Lab hours per week", "number", ()), ("absences_lecture", "Lecture absences allowed", "number", ()),
+        ("absences_lecture", "Lecture absences allowed", "number", ()),
         ("absences_seminar", "Seminar absences allowed", "number", ()), ("absences_lab", "Lab absences allowed", "number", ()))),
     ("content", "Content", (
         ("objectives", "Objectives", "long", ()), ("prerequisites", "Prerequisites", "long", ()), ("summary", "Summary", "long", ()))),
@@ -1368,9 +1346,15 @@ def credits_planned(conn: sqlite3.Connection, semester_uid: str) -> float:
 
 
 def abbreviations(conn: sqlite3.Connection, semester_uid: str) -> dict[str, str]:
-    """The short name of each discipline that has one."""
-    return {r["discipline_tag"]: r["value"] for r in conn.execute(
+    """The short name of each discipline: the one set on its sheet, else the initials of a long name."""
+    out = {r["discipline_tag"]: r["value"] for r in conn.execute(
         "SELECT discipline_tag, value FROM university_sheet WHERE semester_uid = ? AND key = 'abbreviation' AND value != ''", (semester_uid,))}
+    for r in conn.execute("SELECT DISTINCT discipline_tag FROM university_slots WHERE semester_uid = ?", (semester_uid,)):
+        name = r["discipline_tag"]
+        words = name.split()
+        if name not in out and len(name) > 10 and len(words) > 1:
+            out[name] = "".join(w[0] for w in words if w[0].isalpha())[:4].upper()
+    return out
 
 
 def export_file(conn: sqlite3.Connection, semester: dict[str, Any], what: str) -> tuple[str, str]:

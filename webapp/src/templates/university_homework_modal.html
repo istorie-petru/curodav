@@ -12,13 +12,15 @@
     <input type="hidden" name="task_uid" value="{{ item.task_uid if item else '' }}">
     <div class="field-grid">
         <div class="field field-wide"><label>Title</label>{{ text_input({'name': 'title', 'value': (item.title if item else ''), 'required': true}) }}</div>
-        <div class="field"><label>Due date</label>{{ date_field('due', item.due if item else '', label='Due date') }}</div>
+        <div class="field"><label>Due date</label>{{ date_field('due', item.due if item else due, label='Due date') }}</div>
+        {% if not item %}<input type="hidden" name="status" value="active"><input type="hidden" name="back" value="overview">{% else %}
         <div class="field">
             {% set ms_mode = 'single' %}{% set ms_form_id = 'university-homework-form' %}{% set ms_name = 'status' %}{% set ms_label = 'Status' %}
             {% set ms_items = [{'uid': 'active', 'name': 'Active'}, {'uid': 'in_progress', 'name': 'In progress'}, {'uid': 'waiting', 'name': 'Waiting'}, {'uid': 'done', 'name': 'Done'}] %}
             {% set ms_selected = item.status if item else 'active' %}{% set ms_wide = false %}
             {% include '_widget_list_multiselect.html' %}
         </div>
+        {% endif %}
     </div>
 </form>
 </div>

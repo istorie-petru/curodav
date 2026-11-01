@@ -346,6 +346,18 @@ def templates_page(request: Request, conn=Depends(get_db)):
     )
 
 
+@router.get("/citations")
+def citations_page(request: Request, q: str = "", conn=Depends(get_db)):
+    """The citations of the notebook: the same works the Library holds, as a plain table of title, author and keywords."""
+    items = db.page_citations(conn, q=q, limit=500)["items"]
+    for c in items:
+        c["display_authors"] = db.format_citation_authors(c.get("authors") or [])
+    return templates.TemplateResponse(
+        "notebook_citations_page.html",
+        {"request": request, "active_tab": "notebook", "crumbs": _NOTEBOOK_HOME_CRUMB, "citations": items, "q": q},
+    )
+
+
 @router.post("/templates")
 def create_template(x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     now = clock.now().isoformat()
@@ -942,7 +954,8 @@ def settings_notebook(request: Request, conn=Depends(get_db)):
             "citation_format": db.get_citation_format(conn),
             "journal_template": db.get_journal_template(conn),
             "entry_kinds": db.list_entry_kinds(conn),
-            "fields": [{**f, "templates": db.list_templates_using_field(conn, f["key"])} for f in db.list_notebook_field_config(conn)],
+            "fields": [{**f, "templates": db.list_templates_using_field(conn, f["key"])} for f in db.list_notebook_field_config(conn)
+                       if not (f["key"] == "author" and f.get("builtin"))],
             "journal_templates": [{"uid": "", "name": "None"}] + [
                 {"uid": t["uid"], "name": t["title"] or "Untitled"} for t in db.list_notebook_documents(conn, scope="templates")],
             "citation_styles": [{"uid": k, "name": v} for k, v in citation_formats.STYLES.items()],
@@ -1153,11 +1166,11 @@ citations_router = APIRouter(prefix="/library", tags=["notebook-citations"])
 legacy_citations_router = APIRouter(tags=["notebook-citations"])
 
 
-@legacy_citations_router.get("/notebook/citations{rest:path}")
+@legacy_citations_router.get("/notebook/citations/{rest:path}")
 def legacy_citations(rest: str, request: Request):
-    """The library used to live under the Notebook; old links still arrive."""
+    """The library used to live under the Notebook; old links to one of its pages still arrive. The bare address is the Notebook's own citations table."""
     query = request.url.query
-    return RedirectResponse(url=f"/library{rest}" + (f"?{query}" if query else ""), status_code=307)
+    return RedirectResponse(url=f"/library/{rest}" + (f"?{query}" if query else ""), status_code=307)
 
 _CITATIONS_CRUMB = [{"url": "/", "name": "Home"}]
 
@@ -1263,10 +1276,12 @@ def citations_library(
     status: list[str] = Query([]),
     tag: list[str] = Query([]),
     shelf: list[str] = Query([]),
+    view: str = "",
     conn=Depends(get_db),
 ):
     source = source if isinstance(source, list) else []
     media_books.pull(conn)
+    view = media_router.view_of(view, bool(type or author or year_from or year_to or source or status or tag or shelf or q or sort != "title" or sort2 != "title"))
     sort = sort if sort in _CITATION_SORT_KEYS else "title"
     sort2 = sort2 if sort2 in _CITATION_SORT_KEYS else "title"
     type_labels = dict(db.CITATION_TYPES)
@@ -1274,8 +1289,13 @@ def citations_library(
     status = status if isinstance(status, list) else []
     tag = tag if isinstance(tag, list) else []
     shelf = shelf if isinstance(shelf, list) else []
-    page = db.page_citations(conn, q=q, types=type, authors=author, year_lo=year_lo, year_hi=year_hi, sources=source, statuses=status,
-                             tags=tag, shelves=shelf, sort=sort, sort2=sort2, after=after)
+    filters = dict(q=q, types=type, authors=author, year_lo=year_lo, year_hi=year_hi, sources=source, tags=tag, shelves=shelf, sort=sort, sort2=sort2)
+    now = {}
+    if view == "now":
+        now = media_router.now_sections(conn, filters, status, recent_first="sort" not in request.query_params)
+        page = {"items": [], "total": sum(len(v) for v in now.values()), "next": ""}
+    else:
+        page = db.page_citations(conn, statuses=status, after=after, **filters)
     citations = page["items"]
     sources = db.sources_for(conn, citations)
     media_router.decorate(conn, citations)
@@ -1291,6 +1311,10 @@ def citations_library(
             "active_tab": "library",
             "crumbs": _CITATIONS_CRUMB,
             "citations": citations,
+            "view": view,
+            "views": media_router.views_of(request, view),
+            "now": now,
+            "recent_days": media_router.RECENT_DAYS,
             **media_router.list_controls(request, conn, type, sort),
             "total": page["total"],
             "next_href": "/library?" + urlencode([*params, ("after", page["next"])]) if page["next"] else "",
@@ -1362,6 +1386,7 @@ def citations_filters_modal(
             "sort_items": [{"uid": k, "name": v} for k, v in CITATION_SORT_OPTIONS],
             "selected_sort": sort,
             "selected_sort2": sort2,
+            "view": media_router.asked_view(request),
             "apply_href": "/library" + (f"?{current_query}" if current_query else ""),
         },
     )
@@ -1476,9 +1501,9 @@ def edit_citation_modal(uid: str, request: Request, edition: str = "", conn=Depe
     )
 
 
-_TRACKING_FORM_FIELDS = ("progress", "progress_total", "season", "repeats", "started_on", "finished_on", "summary")
+_TRACKING_FORM_FIELDS = ("summary",)
 _CITATION_FORM_KEYS = ("type", "title", "year", "container_title", "doi", "url", "status", "score", "keywords", "crit_uid", "crit_value", "item_tags", "item_tags_field")
-_CITATION_TEXT_FIELDS = ("subtitle", "edition", "volume", "issue", "pages", "publisher", "place", "isbn", "issn", "accessed", "institution", "degree", "editors", "note")
+_CITATION_TEXT_FIELDS = ("subtitle", "edition", "series", "volume", "issue", "pages", "publisher", "place", "isbn", "issn", "accessed", "institution", "degree", "editors", "note")
 _EDITION_DETAILS = ("edition", "publisher", "place", "isbn", "doi", "url")
 
 
@@ -1513,6 +1538,9 @@ def _write_edition(conn, citation_uid: str, edition_uid: str, edition: dict, sou
     has_file = file is not None and bool(getattr(file, "filename", ""))
     source = source if source in ("none", "link", "local") else "none"
     details = {k: _s(v) for k, v in edition.items()}
+    if edition_uid:
+        stored = db.get_edition(conn, edition_uid) or {}
+        details = {**{k: stored.get(k) or "" for k in ("place", "doi")}, **details}
     if source != "link":
         details["url"] = ""
     if not edition_uid and not (any(details.values()) or (source == "local" and has_file)):
@@ -1546,8 +1574,6 @@ def _write_citation(conn, uid: str, values: dict, author_family, author_given, a
     if edition_form and edition_form.get("source") == "local" and _has_upload(edition_form.get("file")) and not db.kind_of(conn, row["type"]).uploads:
         return validation_response({"field": "file", "message": "Only books and manga keep files. Give this entry a link instead"}, x_requested_with, "/library")
     saved = db.upsert_citation(conn, row)
-    if "progress" in row:
-        db.log_progress(conn, saved, clock.now().date().isoformat(), (existing or {}).get("progress") or 0, media.parse_count(row["progress"]))
     _write_criteria(conn, saved, values.get("crit_uid"), values.get("crit_value"))
     if values.get("item_tags_field") == "1" and isinstance(values.get("item_tags"), list):
         tag_store.record(conn, "media", saved, values["item_tags"])
@@ -1576,7 +1602,7 @@ def _edition_form(edition_uid, ed_edition, ed_year, ed_publisher, ed_place, ed_i
     if not isinstance(ed_source, str) and not isinstance(edition_uid, str):
         return None
     return {"uid": _s(edition_uid), "source": _s(ed_source), "file": file, "delete": _s(delete_edition),
-            "details": {"edition": ed_edition, "year": ed_year, "publisher": ed_publisher, "place": ed_place, "isbn": ed_isbn, "doi": ed_doi, "url": ed_url}}
+            "details": {k: v for k, v in {"edition": ed_edition, "year": ed_year, "publisher": ed_publisher, "place": ed_place, "isbn": ed_isbn, "doi": ed_doi, "url": ed_url}.items() if v is not None}}
 
 
 @citations_router.post("")
@@ -1591,6 +1617,7 @@ def create_citation(
     url: str | None = Form(None),
     subtitle: str | None = Form(None),
     edition: str | None = Form(None),
+    series: str | None = Form(None),
     volume: str | None = Form(None),
     issue: str | None = Form(None),
     pages: str | None = Form(None),
@@ -1605,12 +1632,6 @@ def create_citation(
     note: str | None = Form(None),
     status: str | None = Form(None),
     score: str | None = Form(None),
-    progress: str | None = Form(None),
-    progress_total: str | None = Form(None),
-    season: str | None = Form(None),
-    repeats: str | None = Form(None),
-    started_on: str | None = Form(None),
-    finished_on: str | None = Form(None),
     summary: str | None = Form(None),
     crit_uid: list[str] = Form([]),
     crit_value: list[str] = Form([]),
@@ -1618,8 +1639,8 @@ def create_citation(
     item_tags_field: str = Form(""),
     keywords: str | None = Form(None),
     edition_uid: str | None = Form(None),
-    ed_edition: str = Form(""), ed_year: str = Form(""), ed_publisher: str = Form(""), ed_place: str = Form(""),
-    ed_isbn: str = Form(""), ed_doi: str = Form(""), ed_url: str = Form(""), ed_source: str | None = Form(None),
+    ed_edition: str = Form(""), ed_year: str = Form(""), ed_publisher: str = Form(""), ed_place: str | None = Form(None),
+    ed_isbn: str = Form(""), ed_doi: str | None = Form(None), ed_url: str = Form(""), ed_source: str | None = Form(None),
     file: UploadFile | None = File(None),
     delete_edition: str = Form(""),
     allow_duplicate: str = Form(""),
@@ -1647,6 +1668,7 @@ def update_citation(
     url: str | None = Form(None),
     subtitle: str | None = Form(None),
     edition: str | None = Form(None),
+    series: str | None = Form(None),
     volume: str | None = Form(None),
     issue: str | None = Form(None),
     pages: str | None = Form(None),
@@ -1661,12 +1683,6 @@ def update_citation(
     note: str | None = Form(None),
     status: str | None = Form(None),
     score: str | None = Form(None),
-    progress: str | None = Form(None),
-    progress_total: str | None = Form(None),
-    season: str | None = Form(None),
-    repeats: str | None = Form(None),
-    started_on: str | None = Form(None),
-    finished_on: str | None = Form(None),
     summary: str | None = Form(None),
     crit_uid: list[str] = Form([]),
     crit_value: list[str] = Form([]),
@@ -1674,8 +1690,8 @@ def update_citation(
     item_tags_field: str = Form(""),
     keywords: str | None = Form(None),
     edition_uid: str | None = Form(None),
-    ed_edition: str = Form(""), ed_year: str = Form(""), ed_publisher: str = Form(""), ed_place: str = Form(""),
-    ed_isbn: str = Form(""), ed_doi: str = Form(""), ed_url: str = Form(""), ed_source: str | None = Form(None),
+    ed_edition: str = Form(""), ed_year: str = Form(""), ed_publisher: str = Form(""), ed_place: str | None = Form(None),
+    ed_isbn: str = Form(""), ed_doi: str | None = Form(None), ed_url: str = Form(""), ed_source: str | None = Form(None),
     file: UploadFile | None = File(None),
     delete_edition: str = Form(""),
     allow_duplicate: str = Form(""),

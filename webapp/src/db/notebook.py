@@ -1060,7 +1060,7 @@ def get_citation(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
     return c
 
 
-CITATION_EXTRA_FIELDS = ("subtitle", "edition", "volume", "issue", "pages", "publisher", "place", "isbn", "issn",
+CITATION_EXTRA_FIELDS = ("subtitle", "edition", "series", "volume", "issue", "pages", "publisher", "place", "isbn", "issn",
                          "accessed", "institution", "degree", "editors", "note")
 _CITATION_BASE_FIELDS = ("type", "title", "authors_json", "year", "container_title", "doi", "url")
 CITATION_STATUSES = media.status_options("read")
@@ -1705,6 +1705,7 @@ def _detect_glossary_term_uids(conn: sqlite3.Connection, content: dict[str, Any]
     # Looking names up in the set of the note's words is about 45 times faster than one regular expression per
     # entry; only names with spaces or punctuation fall back to a phrase search, and only when every word of
     # the name is in the note at all.
+    text = text.lower()
     words = set(re.findall(r"\w+", text))
     detected = []
     for row in conn.execute("SELECT uid, term, aliases_json FROM glossary_terms").fetchall():
@@ -1717,12 +1718,22 @@ def _detect_glossary_term_uids(conn: sqlite3.Connection, content: dict[str, Any]
             if not n:
                 continue
             tokens = re.findall(r"\w+", n)
-            if not tokens or not all(t in words for t in tokens):
+            if not tokens:
                 continue
-            if re.fullmatch(r"\w+", n) or re.search(r"\b" + re.escape(n) + r"\b", text):
+            if re.fullmatch(r"\w+", n):
+                if any(n + ending in words for ending in _INFLECTIONS):
+                    detected.append(row["uid"])
+                    break
+            elif all(t in words or any(t + e in words for e in _INFLECTIONS) for t in tokens) and re.search(_INFLECTED_PHRASE.format(re.escape(n)), text):
                 detected.append(row["uid"])
                 break
     return detected
+
+
+# A name matches a word that starts with it and ends with an ordinary inflection (magazin: magazine, magazinul, magazinelor), never a longer
+# word built on it (magazinare) or one that merely contains it (inmagazinat), so no entry needs a list of its forms.
+_INFLECTIONS = ("", "e", "i", "a", "ă", "s", "es", "ed", "ing", "ul", "le", "ii", "ei", "ile", "ele", "lor", "uri", "ului", "ilor", "elor", "urile", "urilor")
+_INFLECTED_PHRASE = r"\b{}(?:" + "|".join(e for e in _INFLECTIONS if e) + r")?\b"
 
 
 def autofill_notebook_glossary_terms(conn: sqlite3.Connection, notebook_uid: str) -> dict[str, Any]:
@@ -1920,3 +1931,8 @@ def list_notebook_content_rows(conn: sqlite3.Connection) -> list[dict[str, Any]]
     """uid, title and raw content of every note (templates excluded), by title, for find and replace."""
     rows = conn.execute("SELECT uid, title, content_json FROM notebook_documents WHERE is_template = 0 ORDER BY title COLLATE NOCASE")
     return [dict(r) for r in rows]
+
+
+def series_options(conn: sqlite3.Connection) -> list[str]:
+    """Every series a work belongs to, for the Series dropdown."""
+    return [r[0] for r in conn.execute("SELECT DISTINCT series FROM citations WHERE series != '' ORDER BY series COLLATE NOCASE")]

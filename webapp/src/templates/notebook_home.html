@@ -1,3 +1,4 @@
+{% set page_add = {'href': '/notebook/new', 'label': 'New document'} %}
 {% extends "base.html" %}
 {% from "_empty_state.html" import empty_state %}
 {% from "_folder_icon.html" import folder_icon %}
@@ -8,7 +9,6 @@
 {% block content %}
 {% call page_header_narrow("Notebook", "notebook") %}
     <a href="/notebook/find" data-modal class="icon-btn" title="Search contents" aria-label="Search contents">{{ icon('search', 'icon-sm') }}</a>
-    <a href="/notebook/new" data-modal class="btn primary" data-fab title="New document">{{ icon('plus', 'icon-sm') }} New</a>
 {% endcall %}
 {% macro tile(href, name, count_text, icon_name, color) %}
 <a class="folder-tile" href="{{ href }}">
@@ -55,12 +55,12 @@
     </div>
     {% endif %}
     {% if not folders.projects and not folders.labels %}
-    {% call empty_state('No documents yet', icon_name='notebook') %}<a href="/notebook/new" data-modal class="btn primary">{{ icon('plus') }} New document</a>{% endcall %}
+    {{ empty_state('No documents yet', icon_name='notebook') }}
     {% endif %}
     {% call section_row('') %}Library{% endcall %}
     <div class="folder-grid">
         {{ tile('/notebook/glossary', 'Entries', glossary_count ~ ' entr' ~ ('ies' if glossary_count != 1 else 'y'), 'tag', 'teal') }}
-        {{ tile('/library', 'Citations', citation_count ~ ' citation' ~ ('s' if citation_count != 1 else ''), 'book-open', 'slate') }}
+        {{ tile('/notebook/citations', 'Citations', citation_count ~ ' citation' ~ ('s' if citation_count != 1 else ''), 'book-open', 'slate') }}
         {{ tile('/notebook/journal', 'Journal', journal_count ~ ' week' ~ ('s' if journal_count != 1 else ''), 'calendar', 'amber') }}
         {{ tile('/notebook/templates', 'Templates', template_count ~ ' template' ~ ('s' if template_count != 1 else ''), 'copy', 'sand') }}
     </div>

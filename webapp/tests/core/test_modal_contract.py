@@ -16,7 +16,6 @@ EXEMPT_PAGES = {
     "_widget_edit_modal.html",
     "banner_editor.html",
     "dashboard_customize.html",
-    "media_now.html",
     "notebook_citations_filters_modal.html",
     "notebook_citations_list.html",
     "settings_appearance.html",

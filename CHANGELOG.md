@@ -6,6 +6,15 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [5.0.1]
+
+- Cards: the University and Library pages use one widget card (a quiet label, a title, a muted line, an arrow that opens something), equal height in a row, with one gradient card at most per page for something urgent. List sections and the course sheet are plain, without boxes.
+- University: the space has Overview, Disciplines and Examination (exams and work merged); the Attendance view is gone. A discipline has Overview, Course sheet, Classes (contents and attendance together), Bibliography and Examination. Windows show only the essential inputs, with the rest under Details; an evaluation starts with a name, a weight and the exam date; weekly hours left the course sheet and long names get initials on the timetable.
+- Class and exam windows: attendance replaces the delete button as a menu (missed, excused, cancelled, made up, delete); a class shows what it covers and the next class, an exam shows its way of evaluating and every step. Class contents are no longer written into the event description. The header add button on a discipline is a menu for the view that is open, and a new homework asks only for a title and a due date.
+- Library: Now (the default) and All are views in the header bar and share search and filters; Now is a grid of covers. Tracking is the status alone. Rating is one rating, or one per criterion when Advanced rating is on in Settings (the overall is their mean). The book window shows title, author, type, status and rating, with everything else, including a file or link, under Details. A work can belong to a series (migration 64).
+- Add: the sidebar has one Add button above Settings that opens the find-or-add window; each page's own add button sits in its header, and the add buttons inside pages and empty states are gone.
+- Notebook: Citations is a table of title, author and keywords from the Library; entries match inflected words (magazin matches magazine and magazinul, not magazinare); the entry window lists short text and sections first and references last; the journal offers a jump to the week before, this week and the week after; a new note from a subfolder takes the subfolder as its tag; a note no longer asks for an author.
+
 ## [5.0.0]
 
 - Library: books, manga, films, series, anime and your own kinds in one place, with status, ratings (one rating, or one per criterion), covers, Find details from public services, tags and shelves, and a Now page of what is being read and watched (migrations 60 to 63).

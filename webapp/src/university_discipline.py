@@ -1,5 +1,5 @@
-"""The page of one discipline, under the page of the space that holds the semester: an overview and the views Course sheet, Contents,
-Attendance, Bibliography and Examination. Pages show; small windows (a slot, a topic list, a way of evaluating, a reading, a class) edit."""
+"""The page of one discipline, under the page of the space that holds the semester: an overview and the views Course sheet, Classes (the contents
+and the attendance of every class), Bibliography and Examination. Pages show; small windows (a slot, a topic list, a way of evaluating, a reading, a class) edit."""
 
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ from .university import _enabled
 
 router = APIRouter(prefix="/groups/{group}/disciplines", tags=["university"], dependencies=[Depends(_enabled)])
 
-VIEWS = (("overview", "Overview"), ("sheet", "Course sheet"), ("contents", "Contents"), ("attendance", "Attendance"), ("bibliography", "Bibliography"),
-         ("exams", "Examination"))
+VIEWS = (("overview", "Overview"), ("sheet", "Course sheet"), ("classes", "Classes"), ("bibliography", "Bibliography"), ("exams", "Examination"))
+OLD_VIEWS = {"contents": "classes", "attendance": "classes"}
 
 
 def _views(group: str, name: str, active: str) -> list[dict]:
@@ -60,8 +60,9 @@ def build(conn, semester: dict, discipline: dict, view: str, today) -> dict:
                 pending.append({"icon": "check-square", "title": h["title"], "when": when(h["due"], today) if h["due"] else "No date", "tone": "gray", "detail": "",
                                 "url": f"/settings/university/homework/{h['task_uid']}/edit", "sort": h["due"] or "9999"})
         pending.sort(key=lambda p: p["sort"])
+        soon_exam = next((p for p, m in ((p, m) for p in pending for m in milestones if p["title"] == m["title"] and p["sort"] == m["date"]) if m["days_left"] is not None and 0 <= m["days_left"] <= 14), None)
         attendance = ua.discipline_attendance(conn, uid, name, today)
-        ctx.update(slots=slots, upcoming=upcoming, pending=pending, topics_done=len([t for t in topics if t["events"]]), topics_total=len(topics),
+        ctx.update(soon_exam=soon_exam, slots=slots, upcoming=upcoming, pending=pending, topics_done=len([t for t in topics if t["events"]]), topics_total=len(topics),
                    read_done=len([r for r in readings if r["status"] == "done"]), read_total=len(readings), classes_total=len(classes),
                    classes_left=len([c for c in classes if c["date"] >= iso]), absences=attendance["kinds"])
     elif view == "sheet":
@@ -79,20 +80,17 @@ def build(conn, semester: dict, discipline: dict, view: str, today) -> dict:
                                       or sec["key"] == "identification")
         ctx.update(sheet=sheet, groups=groups, can_place=bool(topics and classes),
                    sheet_empty=not up.sheet_filled(sheet) and not any(g["rows"] for g in groups))
-    elif view == "contents":
+    elif view == "classes":
         every = {t["uid"]: f"{t['number']}. {t['title']}" for t in up.list_topics(conn, uid, name) + up.list_topics(conn, uid, name, "competence")}
-        for c in classes:
+        data = ua.discipline_attendance(conn, uid, name, today)
+        rows = data["classes"]
+        for c in rows:
             c["topic_name"] = every.get(c["topic_uid"], "")
             c["competence_names"] = [every[u] for u in c["competence_uids"] if u in every]
-        nxt = next((c for c in classes if not c["past"]), None)
+        nxt = next((c for c in rows if not c["past"]), None)
         if nxt:
             nxt["is_next"] = True
-        ctx.update(classes=classes, can_place=bool(topics and classes))
-    elif view == "attendance":
-        data = ua.discipline_attendance(conn, uid, name, today)
-        iso = today.isoformat()
-        shown = [c for c in data["classes"] if c["past"]] + [c for c in data["classes"] if not c["past"]][:3]
-        ctx.update(attendance=data, shown=sorted(shown, key=lambda c: (c["date"], c["start"]), reverse=True), today_iso=iso)
+        ctx.update(classes=rows, attendance=data, can_place=bool(topics and classes))
     elif view == "bibliography":
         ctx.update(readings=readings)
     elif view == "exams":
@@ -101,6 +99,7 @@ def build(conn, semester: dict, discipline: dict, view: str, today) -> dict:
             w["tone"] = ue.EVALUATION_TONES.get(w["form"], "orange")
             for m in w["milestones"]:
                 m["days_left"] = (date.fromisoformat(m["date"]) - today).days if m["date"] else None
+            w["soon"] = any(m["days_left"] is not None and 0 <= m["days_left"] <= 14 for m in w["milestones"])
         ctx.update(others=up.list_other_items(conn, uid, name), standing=standing)
     return ctx
 
@@ -113,6 +112,7 @@ def discipline_page(group: str, name: str, request: Request, view: str = "overvi
     found = next((d for d in up.disciplines(conn, semester) if d["name"].lower() == name.lower()), None)
     if not found:
         raise HTTPException(404, "No such discipline")
+    view = OLD_VIEWS.get(view, view)
     view = view if view in dict(VIEWS) else "overview"
     from . import university
     from .routers import dashboard as dashboard_router

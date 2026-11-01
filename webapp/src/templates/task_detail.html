@@ -56,6 +56,9 @@
         {% endif %}
     </div>
 {% endcall %}
+{% if university and university.kind == 'exam' %}
+{% include "_university_exam.html" %}
+{% endif %}
 {% if task.description %}
 {% call detail_section('Description') %}<p class="detail-text">{{ task.description }}</p>{% endcall %}
 {% endif %}

@@ -253,35 +253,33 @@ def test_a_pasted_syllabus_is_stored_and_kept_across_edits(conn, sem):
     assert up.syllabus_text(conn, sem["uid"], "Biology") == "1. Cells **\n2. Membranes"
 
 
-def test_assigning_a_topic_writes_the_description_but_never_over_typed_text(conn, sem):
+def test_assigning_a_topic_places_it_on_the_class_and_leaves_the_description_to_the_user(conn, sem):
     _bio(conn, sem)
     series = up.save_slot(conn, sem, "Biology", LECTURE)
     up.save_syllabus(conn, sem["uid"], "Biology", "1. Cells\n2. Membranes")
     t1, t2 = up.list_topics(conn, sem["uid"], "Biology")
     c1, c2 = up.series_members(conn, series)[:2]
-    assert up.assign_topic(conn, t1["uid"], c1["uid"]) == "written" and db.get_event(conn, c1["uid"])["description"] == "1. Cells"
-    assert up.assign_topic(conn, t2["uid"], c1["uid"]) == "written"  # its own earlier text may be replaced
+    assert up.assign_topic(conn, t1["uid"], c1["uid"]) == "written" and db.get_event(conn, c1["uid"])["description"] == ""
+    assert up.class_links(conn, c1["uid"])["topics"][0]["title"] == "Cells"
+    assert up.assign_topic(conn, t2["uid"], c1["uid"]) == "written" and up.class_links(conn, c1["uid"])["topics"][0]["title"] == "Membranes"
     db.upsert_event(conn, {**db.get_event(conn, c2["uid"]), "description": "Bring a pen"})
-    assert up.assign_topic(conn, t1["uid"], c2["uid"]) == "conflict" and db.get_event(conn, c2["uid"])["description"] == "Bring a pen"
-    assert up.assign_topic(conn, t1["uid"], c2["uid"], force=True) == "written"
+    assert up.assign_topic(conn, t1["uid"], c2["uid"]) == "written" and db.get_event(conn, c2["uid"])["description"] == "Bring a pen"
     up.unassign_topic(conn, c2["uid"])
-    assert db.get_event(conn, c2["uid"])["description"] == ""
+    assert db.get_event(conn, c2["uid"])["description"] == "Bring a pen" and up.class_links(conn, c2["uid"])["topics"] == []
 
 
-def test_assigning_in_order_skips_classes_with_typed_text_and_names_them(conn, sem):
+def test_assigning_in_order_places_a_topic_on_every_class_that_has_none(conn, sem):
     _bio(conn, sem)
     series = up.save_slot(conn, sem, "Biology", LECTURE)
     up.save_syllabus(conn, sem["uid"], "Biology", "1. A\n2. B\n3. C")
     members = up.series_members(conn, series)
     db.upsert_event(conn, {**members[0], "description": "Exam briefing"})
     plan = up.plan_assign_in_order(conn, sem["uid"], "Biology")
-    assert plan["blocked"] == ["2026-10-05"] and [p[2] for p in plan["pairs"]] == [1, 2, 3] and plan["pairs"][0][4] == "2026-10-12"
+    assert plan["blocked"] == [] and [p[2] for p in plan["pairs"]] == [1, 2, 3] and plan["pairs"][0][4] == "2026-10-05"
     assert up.apply_assign_in_order(conn, sem["uid"], "Biology") == 3
-    assert db.get_event(conn, members[1]["uid"])["description"] == "1. A" and db.get_event(conn, members[0]["uid"])["description"] == "Exam briefing"
+    assert up.class_links(conn, members[1]["uid"])["topics"][0]["title"] == "B" and db.get_event(conn, members[0]["uid"])["description"] == "Exam briefing"
     assert up.plan_assign_in_order(conn, sem["uid"], "Biology")["pairs"] == []
 
-
-# ---- exams and readings ----
 
 def _evaluation(conn, sem, ways):
     return ue.save_evaluation(conn, sem["uid"], "Biology", ways)
@@ -429,7 +427,7 @@ def test_class_content_is_a_topic_free_text_or_nothing(conn, sem):
     uid = up.series_members(conn, series)[0]["uid"]
     db.upsert_event(conn, {**db.get_event(conn, uid), "description": "Typed before"})
     up.save_class_content(conn, uid, up.list_topics(conn, sem["uid"], "Biology")[0]["uid"], "")
-    assert db.get_event(conn, uid)["description"] == "1. Cells"
+    assert db.get_event(conn, uid)["description"] == "" and up.class_links(conn, uid)["topics"][0]["title"] == "Cells"
     up.save_class_content(conn, uid, "", "Guest talk")
     assert db.get_event(conn, uid)["description"] == "Guest talk" and up.list_topics(conn, sem["uid"], "Biology")[0]["events"] == []
     up.save_class_content(conn, uid, "", "")

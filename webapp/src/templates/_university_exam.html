@@ -1,0 +1,13 @@
+{# The way of evaluating behind an exam or one of its steps, in the event and task windows (university_context.for_event / for_task). #}
+{% call detail_section('Examination') %}
+<div class="detail-meta-grid">
+    <div class="detail-meta-item"><span class="detail-meta-label">{{ university.discipline }}</span><span class="detail-meta-value">{{ university.way }}{% if university.form %}, {{ university.form|lower }}{% endif %}</span></div>
+    {% if university.elimination %}<div class="detail-meta-item"><span class="detail-meta-label">Weight</span><span class="detail-meta-value">Elimination</span></div>
+    {% elif university.weight is not none %}<div class="detail-meta-item"><span class="detail-meta-label">Weight</span><span class="detail-meta-value">{{ '%g'|format(university.weight) }}% of the grade</span></div>{% endif %}
+    {% if university.min_grade is not none %}<div class="detail-meta-item"><span class="detail-meta-label">Minimum</span><span class="detail-meta-value">{{ '%g'|format(university.min_grade) }} to pass</span></div>{% endif %}
+    {% if university.grade is not none %}<div class="detail-meta-item"><span class="detail-meta-label">Grade</span><span class="detail-meta-value">{{ '%g'|format(university.grade) }}</span></div>{% endif %}
+    {% if university.criteria %}<div class="detail-meta-item detail-meta-wide"><span class="detail-meta-label">Criteria</span><span class="detail-meta-value">{{ university.criteria }}</span></div>{% endif %}
+    {% for st in university.steps %}<div class="detail-meta-item detail-meta-wide"><span class="detail-meta-label">{% if st.url %}<a href="{{ st.url }}" data-modal>{{ st.title }}</a>{% else %}{{ st.title }}{% endif %}</span><span class="detail-meta-value">{% if st.date %}{{ st.date|relative_date }}{% if st.start %} {{ st.start }}{% endif %}{% else %}No date{% endif %}{% if st.done %}, done{% endif %}</span></div>{% endfor %}
+    {% for c in university.conditions %}<div class="detail-meta-item detail-meta-wide"><span class="detail-meta-label">{{ c.label }}</span><span class="detail-meta-value">{{ 'Met' if c.state else ('Not met' if c.state is sameas false else 'Not known yet') }}</span></div>{% endfor %}
+</div>
+{% endcall %}

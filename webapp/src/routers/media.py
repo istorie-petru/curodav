@@ -1,4 +1,4 @@
-"""Media in the library: the reading and watching now page, progress steps, covers, automatic details and the Library settings.
+"""Media in the library: the reading and watching now page, covers, automatic details and the Library settings.
 
 Feature document: curodav-notes/documentation/features/media.md
 """
@@ -11,7 +11,7 @@ from datetime import timedelta
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, Response
 
 from .. import clock, db, media, media_books, media_exchange, media_metadata
 from .. import tags as tag_store
@@ -22,6 +22,7 @@ settings_router = APIRouter(prefix="/settings/library", tags=["media"])
 
 SETTINGS = "/settings/library"
 RECENT_DAYS = 30
+NOW_LIMIT = 60
 _CROPPED_COVER_MAX = 6 * 1024 * 1024
 
 
@@ -39,28 +40,56 @@ def decorate(conn, items: list[dict]) -> list[dict]:
         kind = media.kind_for(c.get("type") or "", custom)
         c["kind"] = kind
         c["status_label"] = media.status_label(c.get("status") or "", kind.verb) if c.get("status") else ""
-        c["percent"] = media.percent(c.get("progress") or 0, c.get("progress_total") or 0)
         c["overall"] = overall.get(c["uid"])
         c["stars"] = media.stars(c["overall"], scale)
         c["cover"] = db.cover_url(c)
         c["display_authors"] = db.format_citation_authors(c.get("authors") or [])
-        c["unit_label"] = media.UNITS.get(kind.unit, "").lower()
-        c["progress_text"] = media.progress_text(c, kind)
     return items
 
 
-@router.get("/now")
-def now_page(request: Request, conn=Depends(get_db)):
-    media_books.pull(conn)
+FILTER_KEYS = ("type", "author", "status", "source", "tag", "shelf", "year_from", "year_to", "q", "sort", "sort2")
+
+
+def asked_view(request: Request) -> str:
+    return view_of(request.query_params.get("view", ""), any(request.query_params.getlist(k) for k in FILTER_KEYS))
+
+
+def view_of(asked: str, filtered: bool) -> str:
+    """The Library opens on Now. A link that already carries filters (a tag, a shelf) with no view asked for lands on All."""
+    return asked if asked in ("now", "all") else ("all" if filtered else "now")
+
+
+def views_of(request: Request, current: str) -> list[dict]:
+    """The Library's views for the header bar; both keep the filters that are set."""
+    from urllib.parse import urlencode as _enc
+
+    kept = [(k, v) for k, v in request.query_params.multi_items() if k not in ("view", "after")]
+    return [{"key": key, "label": label, "active": key == current,
+             "url": "/library?" + _enc([("view", key), *kept]) if (kept or key == "all") else "/library"} for key, label in (("now", "Now"), ("all", "All"))]
+
+
+def now_sections(conn, filters: dict, statuses: list[str], recent_first: bool) -> dict[str, list[dict]]:
+    """What is being read and watched, on hold, up next and finished lately, narrowed by the Library's filters."""
     since = (clock.now().date() - timedelta(days=RECENT_DAYS)).isoformat()
-    sections = {k: decorate(conn, v) for k, v in db.now_sections(conn, since).items()}
-    reading = [c for c in sections["current"] if c["kind"].verb != "watch"]
-    watching = [c for c in sections["current"] if c["kind"].verb == "watch"]
-    return templates.TemplateResponse("media_now.html", {
-        "request": request, "active_tab": "library", "crumbs": [{"url": "/library", "name": "Library"}],
-        "reading": reading, "watching": watching, "paused": sections["paused"], "planned": sections["planned"],
-        "finished": sections["finished"], "recent_days": RECENT_DAYS,
-    })
+    out = {}
+    for key, status in (("current", "current"), ("paused", "paused"), ("planned", "planned"), ("finished", "finished")):
+        if statuses and status not in statuses:
+            out[key] = []
+            continue
+        items = db.page_citations(conn, statuses=[status], limit=NOW_LIMIT, **filters)["items"]
+        if status == "finished":
+            items = [c for c in items if (c.get("finished_on") or "") >= since]
+        if recent_first:
+            items.sort(key=lambda c: (c.get("finished_on") or "", c.get("updated_at") or "") if status == "finished" else (c.get("updated_at") or ""), reverse=True)
+        out[key] = decorate(conn, items)
+    reading = [c for c in out["current"] if c["kind"].verb != "watch"]
+    watching = [c for c in out["current"] if c["kind"].verb == "watch"]
+    return {"reading": reading, "watching": watching, "paused": out["paused"], "planned": out["planned"], "finished": out["finished"]}
+
+
+@router.get("/now")
+def now_page():
+    return RedirectResponse("/library?view=now", status_code=303)
 
 
 @router.get("/lookup/cover")
@@ -70,22 +99,6 @@ def lookup_cover(u: str = ""):
     if data is None:
         raise HTTPException(404)
     return Response(data, media_type="image/webp", headers={"Cache-Control": "private, max-age=3600"})
-
-
-@router.post("/{uid}/progress")
-def step_progress(uid: str, step: int = Form(1), x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
-    """One more (or one fewer) page, chapter or episode; starting marks it current and reaching the total finishes it."""
-    c = db.get_citation_raw(conn, uid)
-    if c is None:
-        raise HTTPException(404)
-    step = max(-1000, min(1000, step))
-    changed = media.advance(c, step, _today())
-    db.set_tracking(conn, uid, changed)
-    db.log_progress(conn, uid, _today(), c["progress"] or 0, changed["progress"])
-    c.update(changed)
-    kind = db.kind_of(conn, c["type"])
-    return respond(x_requested_with, "/library/now", progress=c["progress"], total=c["progress_total"], status=c["status"], text=media.progress_text(c, kind),
-                   status_label=media.status_label(c["status"], kind.verb), percent=media.percent(c["progress"], c["progress_total"]))
 
 
 @router.get("/{uid}/cover")
@@ -190,8 +203,6 @@ def apply_lookup(choice: str = Form(""), uid: str = Form(""), kind: str = Form("
     ids = db.external_ids(current or {})
     ids[found.get("provider") or "source"] = found.get("id") or ""
     tracking = {"external_json": json.dumps(ids)}
-    if found.get("provider") == "tvmaze" and found.get("id") and (bool(replace) or not (current or {}).get("progress_total")):
-        tracking["progress_total"] = media_metadata.tvmaze_episode_count(found["id"])
     db.set_tracking(conn, saved, tracking)
     if (found.get("publisher") or found.get("isbn")) and db.kind_of(conn, row["type"]).uploads:
         editions = db.list_editions(conn, saved)
@@ -217,7 +228,7 @@ def library_settings(request: Request, conn=Depends(get_db)):
         k["unit_label"] = media.UNITS[k["unit"]]
     return templates.TemplateResponse("settings_library.html", {
         "request": request, "criteria": criteria, "kinds": kinds, "scale": db.rating_scale(conn),
-        "scales": [{"uid": k, "name": v[0]} for k, v in media.SCALES.items()], "auto_covers": db.auto_covers(conn),
+        "scales": [{"uid": k, "name": v[0]} for k, v in media.SCALES.items()], "auto_covers": db.auto_covers(conn), "advanced_rating": db.advanced_rating(conn),
         "has_tmdb_key": bool(db.tmdb_key(conn)), **_book_library_state(conn), "sources": _sources(conn),
     })
 
@@ -274,6 +285,12 @@ def move_book_files(x_requested_with: str | None = Header(default=None), conn=De
     moved, problems = media_books.move_legacy_files(conn)
     note = f"{moved} files moved into the library" + (f"; {len(problems)} could not be moved: {'; '.join(problems[:3])}" if problems else "")
     return respond(x_requested_with, f"{SETTINGS}?{urlencode({'note': note})}", moved=moved, problems=problems)
+
+
+@settings_router.post("/rating")
+def save_rating_mode(advanced: str = Form(""), x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    db.set_advanced_rating(conn, bool(advanced))
+    return respond(x_requested_with, SETTINGS)
 
 
 @settings_router.post("")
@@ -371,9 +388,8 @@ def form_context(conn, c: dict | None) -> dict:
         "criteria": criteria,
         "edition_types": " ".join(k for k, kind in kinds.items() if not kind.screen and not kind.custom),
         "link_types": " ".join(k for k, kind in kinds.items() if kind.screen or kind.custom),
-        "progress_types": " ".join(k for k, kind in kinds.items() if kind.unit != "none"),
-        "season_types": " ".join(k for k, kind in kinds.items() if kind.unit == "episodes"),
-        "unit_labels": {k: media.UNITS[kind.unit] for k, kind in kinds.items()},
+        "series_items": [{"uid": n, "name": n} for n in db.series_options(conn)],
+        "advanced_rating": db.advanced_rating(conn),
         "upload_accept": media_books.ACCEPT if media_books.library(conn) else "application/pdf",
     }
 
@@ -395,8 +411,7 @@ def view_context(conn, c: dict) -> dict:
     values = db.citation_ratings(conn, c["uid"])
     ratings = [{"name": cr["name"], "value": media.stars(values.get(cr["uid"]), scale)}
                for cr in media.criteria_for(db.list_rating_criteria(conn), c.get("type") or "") if values.get(cr["uid"]) is not None]
-    history = [{"day": h["day"], "words": media.step_words(h["delta"], item["kind"])} for h in db.progress_log(conn, c["uid"])]
-    return {"m": item, "ratings": ratings, "history": history, "lookup_url": f"/library/lookup?uid={c['uid']}"}
+    return {"m": item, "ratings": ratings, "lookup_url": f"/library/lookup?uid={c['uid']}"}
 
 
 _EXPORTS = {

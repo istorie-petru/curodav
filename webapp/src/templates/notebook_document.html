@@ -42,7 +42,7 @@
     <a href="/notebook/{{ document.uid }}/properties" data-modal class="icon-btn" title="Edit document properties" aria-label="Edit document properties">{{ icon('edit', 'icon-sm') }}</a>
 {% endcall %}
 
-{% if journal_weeks %}{% from "_journal_strip.html" import journal_strip %}{{ journal_strip(journal_weeks, document.journal_week, true) }}{% endif %}
+{% if journal_weeks %}{% from "_journal_strip.html" import journal_strip %}{{ journal_strip(journal_weeks, document.journal_week) }}{% endif %}
 {% if sidebar_layout == 'sidebar' %}
 <div class="notebook-page-layout main-shell-body">
     <div class="notebook-page-main">

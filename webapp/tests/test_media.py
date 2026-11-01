@@ -71,10 +71,11 @@ def test_changing_the_scale_keeps_ratings_meaningful():
     assert media.to_scale(stored, "points10") == 8
 
 
-def test_overall_is_the_weighted_mean_of_criteria_unless_set_by_hand():
+def test_overall_is_the_weighted_mean_of_criteria_else_the_one_set_by_hand():
     criteria = [{"uid": "story", "weight": 2}, {"uid": "art", "weight": 1}]
     assert media.overall(None, criteria, {"story": 90, "art": 60}) == 80
-    assert media.overall(50, criteria, {"story": 90}) == 50
+    assert media.overall(50, criteria, {"story": 90}) == 90 and media.overall(50, criteria, {}) == 50
+    assert media.overall(None, [{"uid": "v", "weight": 1}, {"uid": "a", "weight": 1}], {"v": 40, "a": 60}) == 50
     assert media.overall(None, criteria, {}) is None
 
 
@@ -104,12 +105,12 @@ def test_the_window_saves_tracking_and_criteria_ratings(conn):
     story = db.save_rating_criterion(conn, "Story", "2", ["anime"])
     db.set_rating_scale(conn, "points10")
     resp = notebook_router.create_citation(title="Frieren", type="anime", year="", container_title="", author_family=[], author_given=[],
-                                           status="current", progress="3", progress_total="28", season="1", score="",
+                                           status="current", score="", series="Frieren saga", volume="2",
                                            crit_uid=[story], crit_value=["9"], x_requested_with="fetch", conn=conn)
     uid = json.loads(resp.body)["uid"]
     c = db.get_citation(conn, uid)
-    assert (c["progress"], c["progress_total"], c["season"], c["status"]) == (3, 28, 1, "current")
-    assert c["started_on"]
+    assert (c["progress"], c["progress_total"], c["season"], c["status"]) == (0, 0, 0, "current")
+    assert c["started_on"] and (c["series"], c["volume"]) == ("Frieren saga", "2")
     assert db.citation_ratings(conn, uid) == {story: 90.0}
     assert db.overall_ratings(conn, [c])[uid] == 90.0
 
@@ -248,17 +249,10 @@ def test_the_now_page_splits_reading_and_watching(conn, monkeypatch):
     db.upsert_citation(conn, {"title": "Dune", "type": "book", "status": "current"})
     db.upsert_citation(conn, {"title": "Frieren", "type": "anime", "status": "current"})
     db.upsert_citation(conn, {"title": "Next", "type": "film", "status": "planned"})
-    monkeypatch.setattr(media_router.templates, "TemplateResponse", lambda name, ctx: ctx)
-    ctx = media_router.now_page(object(), conn=conn)
+    ctx = media_router.now_sections(conn, {}, [], True)
     assert [c["title"] for c in ctx["reading"]] == ["Dune"]
     assert [c["title"] for c in ctx["watching"]] == ["Frieren"]
     assert [c["title"] for c in ctx["planned"]] == ["Next"]
-
-
-def test_the_step_button_answers_with_the_new_progress(conn):
-    uid = db.upsert_citation(conn, {"title": "Frieren", "type": "anime", "progress_total": 2})
-    body = json.loads(media_router.step_progress(uid, step=2, x_requested_with="fetch", conn=conn).body)
-    assert (body["progress"], body["status"], body["status_label"], body["percent"]) == (2, "finished", "Watched", 100)
 
 
 def test_the_library_can_be_filtered_by_status_and_sorted_by_rating(conn):
@@ -287,25 +281,14 @@ def test_the_sources_table_names_each_kinds_service_store_and_export(conn):
 
 
 @pytest.mark.parametrize("type_key,row,text", [
-    ("book", {"progress": 120, "progress_total": 387}, "p. 120 of 387 · 31%"),
-    ("tv", {"progress": 10, "progress_total": 28, "season": 1}, "S1 · E10 of 28"),
-    ("manga", {"progress": 45, "progress_total": 0}, "Ch. 45"),
+    ("book", {"progress": 120, "progress_total": 387}, "31%"),
+    ("tv", {"progress": 10, "progress_total": 28, "season": 1}, "36%"),
+    ("manga", {"progress": 45, "progress_total": 100}, "45%"),
     ("film", {"status": "finished", "finished_on": "2026-03-01"}, "Watched 2026-03-01"),
     ("film", {"status": "planned"}, ""),
 ])
 def test_progress_is_worded_for_each_kind(type_key, row, text):
     assert media.progress_text(row, media.kind_for(type_key)) == text
-
-
-def test_each_day_of_progress_is_logged_once_with_its_total_move(conn, monkeypatch):
-    uid = db.upsert_citation(conn, {"title": "Frieren", "type": "anime", "progress_total": 28})
-    monkeypatch.setattr(media_router, "_today", lambda: "2026-10-30")
-    for _ in range(3):
-        media_router.step_progress(uid, step=1, x_requested_with="fetch", conn=conn)
-    monkeypatch.setattr(media_router, "_today", lambda: "2026-10-31")
-    media_router.step_progress(uid, step=1, x_requested_with="fetch", conn=conn)
-    assert db.progress_log(conn, uid) == [{"day": "2026-10-31", "delta": 1, "progress": 4}, {"day": "2026-10-30", "delta": 3, "progress": 3}]
-    assert media.step_words(3, media.kind_for("anime")) == "+3 episodes" and media.step_words(1, media.kind_for("book")) == "+1 page"
 
 
 def test_an_entry_carries_curodav_tags_and_the_library_filters_by_tag_and_shelf(conn):
