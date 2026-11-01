@@ -18,6 +18,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from .. import media
 from .core import _HTML_TAG_RE, _WIKILINK_TARGET_RE, _collect_block_text, get_app_meta, set_app_meta
 from .labels import _attach_tags, _attach_tags_bulk, list_project_labels, set_object_labels
 
@@ -969,12 +970,16 @@ def detach_notebook_glossary_term(conn: sqlite3.Connection, notebook_uid: str, t
 # or freeform text" treatment as `note_type`.
 CITATION_TYPES = [
     ("book", "Book"),
+    ("manga", "Manga"),
     ("article-journal", "Journal article"),
     ("chapter", "Book chapter"),
     ("webpage", "Web page"),
     ("thesis", "Thesis"),
     ("report", "Report"),
     ("conference-paper", "Conference paper"),
+    ("film", "Film"),
+    ("tv", "TV series"),
+    ("anime", "Anime"),
     ("other", "Other"),
 ]
 
@@ -1058,7 +1063,9 @@ def get_citation(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
 CITATION_EXTRA_FIELDS = ("subtitle", "edition", "volume", "issue", "pages", "publisher", "place", "isbn", "issn",
                          "accessed", "institution", "degree", "editors", "note")
 _CITATION_BASE_FIELDS = ("type", "title", "authors_json", "year", "container_title", "doi", "url")
-CITATION_STATUSES = [("", "No status"), ("to_read", "To read"), ("reading", "Reading"), ("read", "Read"), ("dropped", "Dropped")]
+CITATION_STATUSES = media.status_options("read")
+_TRACKING_COUNTS = ("progress", "progress_total", "season", "repeats")
+_TRACKING_TEXT = ("started_on", "finished_on", "summary")
 
 
 def upsert_citation(conn: sqlite3.Connection, row: dict[str, Any]) -> str:
@@ -1078,9 +1085,13 @@ def upsert_citation(conn: sqlite3.Connection, row: dict[str, Any]) -> str:
     keywords = row["keywords"] if "keywords" in row else (json.loads(existing["keywords_json"]) if existing else [])
     values["keywords_json"] = json.dumps([k.strip() for k in keywords if k.strip()])
     status = row["status"] if "status" in row else (existing["status"] if existing else "")
-    values["status"] = status if status in dict(CITATION_STATUSES) else ""
-    rating = row["rating"] if "rating" in row else (existing["rating"] if existing else 0)
-    values["rating"] = int(rating) if str(rating).isdigit() and 0 <= int(rating) <= 5 else 0
+    values["status"] = media.normal_status(status)
+    for name in _TRACKING_COUNTS:
+        values[name] = media.parse_count(row[name] if name in row else (existing[name] if existing else 0))
+    for name in _TRACKING_TEXT:
+        values[name] = ((row[name] if name in row else (existing[name] if existing else "")) or "").strip()
+    score = row["score"] if "score" in row else (existing["score"] if existing else None)
+    values["score"] = float(score) if isinstance(score, (int, float)) and 0 < score <= 100 else None
     for name in CITATION_EXTRA_FIELDS:
         values[name] = row[name] if name in row else (existing[name] if existing else "")
         values[name] = (values[name] or "").strip()
@@ -1113,8 +1124,10 @@ def set_citation_format(conn: sqlite3.Connection, style: str) -> None:
 
 def delete_citation(conn: sqlite3.Connection, uid: str) -> None:
     from .citation_library import delete_citation_editions
+    from .media import delete_citation_media
 
     delete_citation_editions(conn, uid)
+    delete_citation_media(conn, uid)
     conn.execute("DELETE FROM citations WHERE uid = ?", (uid,))
     conn.execute("DELETE FROM notebook_citations WHERE citation_uid = ?", (uid,))
     conn.execute("DELETE FROM glossary_term_references WHERE ref_type = 'citation' AND ref_uid = ?", (uid,))
@@ -1123,41 +1136,50 @@ def delete_citation(conn: sqlite3.Connection, uid: str) -> None:
 
 
 def list_notebook_citations(conn: sqlite3.Connection, notebook_uid: str) -> list[dict[str, Any]]:
-    """This document's attached citations, in the document's own order
-    (not library order) -- the one query both the sidebar bibliography
-    panel and the bottom read-only bibliography section use."""
+    """This document's attached citations in the document's own order, each with the details of the edition it cites
+    (or of the work's first editions). `ref` is the picker value: the work's uid, or `uid@edition`."""
+    from .citation_library import with_edition
+
     rows = conn.execute(
-        "SELECT c.* FROM citations c JOIN notebook_citations nc ON nc.citation_uid = c.uid "
+        "SELECT nc.citation_uid, nc.edition_uid FROM notebook_citations nc JOIN citations c ON c.uid = nc.citation_uid "
         "WHERE nc.notebook_uid = ? ORDER BY nc.position ASC, nc.created_at ASC",
         (notebook_uid,),
     ).fetchall()
-    return [_attach_citation_authors(dict(r)) for r in rows]
+    out = []
+    for r in rows:
+        c = with_edition(conn, get_citation(conn, r[0]), r[1])
+        if c:
+            out.append(c)
+    return out
 
 
 def set_notebook_citations(conn: sqlite3.Connection, notebook_uid: str, citation_uids: list[str]) -> None:
-    """Replaces a document's whole attached-citation list -- same
-    "delete, then re-insert in the given order" convention as
-    set_notebook_properties, so the attach modal's checkbox order (whatever
-    order the library lists them in) becomes the stored position."""
+    """Replaces a document's whole attached-citation list in the given order; `uid@edition` cites that edition."""
     now = datetime.now(timezone.utc).isoformat()
     conn.execute("DELETE FROM notebook_citations WHERE notebook_uid = ?", (notebook_uid,))
-    for position, citation_uid in enumerate(dict.fromkeys(citation_uids)):
+    seen = set()
+    for position, ref in enumerate(dict.fromkeys(citation_uids)):
+        citation_uid, _, edition_uid = ref.partition("@")
+        if citation_uid in seen:
+            continue
+        seen.add(citation_uid)
         conn.execute(
-            "INSERT INTO notebook_citations (notebook_uid, citation_uid, position, created_at) VALUES (?, ?, ?, ?)",
-            (notebook_uid, citation_uid, position, now),
+            "INSERT INTO notebook_citations (notebook_uid, citation_uid, edition_uid, position, created_at) VALUES (?, ?, ?, ?, ?)",
+            (notebook_uid, citation_uid, edition_uid, position, now),
         )
     conn.commit()
 
 
-def attach_notebook_citation(conn: sqlite3.Connection, notebook_uid: str, citation_uid: str, position: float = 0, created_at: str | None = None) -> None:
+def attach_notebook_citation(conn: sqlite3.Connection, notebook_uid: str, citation_uid: str, position: float = 0, created_at: str | None = None,
+                             edition_uid: str = "") -> None:
     """Idempotent single-row attach -- used by export.py's backup restore,
     where notebook_citations rows are restored independently of (and after)
     both the document and citation pools, unlike set_notebook_citations'
     whole-list-replace shape which would need every row collected first."""
     conn.execute(
-        "INSERT OR REPLACE INTO notebook_citations (notebook_uid, citation_uid, position, created_at) "
-        "VALUES (?, ?, ?, ?)",
-        (notebook_uid, citation_uid, position, created_at or datetime.now(timezone.utc).isoformat()),
+        "INSERT OR REPLACE INTO notebook_citations (notebook_uid, citation_uid, edition_uid, position, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (notebook_uid, citation_uid, edition_uid or "", position, created_at or datetime.now(timezone.utc).isoformat()),
     )
     conn.commit()
 

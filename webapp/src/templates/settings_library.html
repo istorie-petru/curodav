@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% from "_inputs.html" import switch_input, password_input, text_input, upload_input %}
+{% from "_empty_state.html" import empty_state %}
+{% block title %}Library - Settings{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% call page_header_narrow("Library", "library") %}{% endcall %}
+{% include "_flash.html" %}
+<div id="modal-target">
+<div class="settings-group">
+<div class="card table-scroll table-responsive">
+    <div class="uni-card-head"><h2>Sources</h2></div>
+    <table class="entity-table">
+        <thead><tr><th class="col-name">Kind</th><th class="col-opt-2">Details from</th><th class="col-opt-2">Stored in</th><th class="col-opt-1">Exports as</th><th class="col-opt-1">Entries</th></tr></thead>
+        <tbody>
+        {% for s in sources %}
+        <tr>
+            <td class="col-name">{{ icon(s.icon, 'icon-sm') }} {{ s.name }}</td>
+            <td class="col-opt-2">{{ s.details }}</td>
+            <td class="col-opt-2">{{ s.stored }}</td>
+            <td class="col-opt-1">{{ s.exports }}</td>
+            <td class="col-opt-1">{{ s.count }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+<div class="card">
+    <form class="settings-field-row" method="post" action="/settings/library" id="library-settings-form">
+        <span class="settings-field-label">Rating scale
+            <span class="settings-field-hint">Ratings are kept exactly, so the scale can change at any time</span>
+        </span>
+        <span class="spacer"></span>
+        {% set ms_name = 'scale' %}{% set ms_mode = 'single' %}{% set ms_label = 'Rating scale' %}
+        {% set ms_items = scales %}{% set ms_selected = scale %}{% set ms_autosubmit = true %}{% set ms_bare = true %}{% set ms_form_id = 'library-settings-form' %}
+        {% include "_widget_list_multiselect.html" %}
+        <input type="hidden" name="auto_covers" value="{{ '1' if auto_covers else '' }}">
+    </form>
+    <form class="settings-field-row" method="post" action="/settings/library" id="library-covers-form">
+        <input type="hidden" name="scale" value="{{ scale }}">
+        <label class="settings-field-label" for="library-auto-covers">Covers from Find details</label>
+        <span class="spacer"></span>
+        {{ switch_input({'name': 'auto_covers', 'value': '1', 'id': 'library-auto-covers', 'checked': auto_covers, 'data-change-submit': true}) }}
+    </form>
+    <form class="settings-field-row" method="post" action="/settings/library" id="library-tmdb-form">
+        <input type="hidden" name="scale" value="{{ scale }}">
+        <input type="hidden" name="auto_covers" value="{{ '1' if auto_covers else '' }}">
+        <span class="settings-field-label">TMDB key for films
+            <span class="settings-field-hint">{% if has_tmdb_key %}Films are found on TMDB{% else %}A free key from themoviedb.org, under Settings, API. Until then films are found through the iTunes search{% endif %}</span>
+        </span>
+        <span class="spacer"></span>
+        {{ password_input({'name': 'tmdb_key', 'autocomplete': 'off', 'aria-label': 'TMDB key', 'placeholder': ('Saved' if has_tmdb_key else 'API key')}) }}
+        <button type="submit" class="btn ghost" title="Save the key" aria-label="Save the key">{{ icon('check', 'icon-sm') }}</button>
+        {% if has_tmdb_key %}<button type="submit" name="clear_tmdb_key" value="1" class="icon-btn danger" title="Remove the key" aria-label="Remove the key">{{ icon('trash', 'icon-sm') }}</button>{% endif %}
+    </form>
+</div>
+<div class="card">
+    <form class="settings-field-row" method="post" action="/settings/library/books" id="library-books-form">
+        <span class="settings-field-label">Book library folder
+            <span class="settings-field-hint">{% if calibre_ready %}Books and manga live here as a Calibre library, {{ calibre_linked }} in Curodav{% else %}A Calibre library folder, or an empty one to start a new library. Books and manga keep their files here{% endif %}</span>
+        </span>
+        <span class="spacer"></span>
+        {{ text_input({'name': 'path', 'value': calibre_path, 'aria-label': 'Book library folder', 'autocomplete': 'off', 'placeholder': '/srv/curodav-library'}) }}
+        <button type="submit" class="btn ghost" title="Use this folder" aria-label="Use this folder">{{ icon('check', 'icon-sm') }}</button>
+    </form>
+    {% if calibre_ready and calibre_new %}
+    <form class="settings-field-row" method="post" action="/settings/library/books/import" data-confirm-sheet="Add {{ calibre_new }} books from the Calibre library to Curodav? Their files stay where they are.">
+        <span class="settings-field-label">{{ calibre_new }} books in the library are not in Curodav yet</span>
+        <span class="spacer"></span>
+        <button type="submit" class="btn ghost">{{ icon('download', 'icon-sm') }} Add them</button>
+    </form>
+    {% endif %}
+    {% if calibre_ready and legacy_files %}
+    <form class="settings-field-row" method="post" action="/settings/library/books/move-files" data-confirm-sheet="Move {{ legacy_files }} stored book files into the Calibre library? Each old copy is removed once the library holds it.">
+        <span class="settings-field-label">{{ legacy_files }} book files are still in Curodav's own store</span>
+        <span class="spacer"></span>
+        <button type="submit" class="btn ghost">{{ icon('folder-input', 'icon-sm') }} Move them</button>
+    </form>
+    {% endif %}
+</div>
+<div class="card">
+    <div class="settings-field-row">
+        <span class="settings-field-label">Export a list
+            <span class="settings-field-hint">Anime and manga as MyAnimeList XML (AniList reads it too), films for Letterboxd, everything as JSON</span>
+        </span>
+        <span class="spacer"></span>
+        <a class="btn ghost" href="/settings/library/export/anime" download>Anime</a>
+        <a class="btn ghost" href="/settings/library/export/manga" download>Manga</a>
+        <a class="btn ghost" href="/settings/library/export/films" download>Films</a>
+        <a class="btn ghost" href="/settings/library/export/all" download>JSON</a>
+    </div>
+    <form class="settings-field-row" method="post" action="/settings/library/import" enctype="multipart/form-data" id="library-import-form">
+        <span class="settings-field-label">Import a list
+            <span class="settings-field-hint">An entry with the same title is updated, the rest are added</span>
+        </span>
+        <span class="spacer"></span>
+        {{ upload_input('file', accept='.xml,.csv,.json', form='library-import-form', label='Choose a file') }}
+        <button type="submit" class="btn ghost" title="Import" aria-label="Import">{{ icon('upload', 'icon-sm') }}</button>
+    </form>
+</div>
+<div class="card table-scroll table-responsive">
+    <div class="uni-card-head"><h2>Rating criteria</h2>
+        <a href="/settings/library/criteria/new" data-modal class="icon-btn" title="Add criterion" aria-label="Add criterion">{{ icon('plus', 'icon-sm') }}</a></div>
+    {% if criteria %}
+    <table class="entity-table">
+        <thead><tr><th class="col-name">Criterion</th><th class="col-opt-1">Weight</th><th class="col-opt-2">Kinds</th><th class="col-actions">Actions</th></tr></thead>
+        <tbody>
+        {% for cr in criteria %}
+        <tr>
+            <td class="col-name">{{ cr.name }}</td>
+            <td class="col-opt-1">{{ cr.weight|round(1)|string|replace('.0', '') }}</td>
+            <td class="col-opt-2">{{ cr.kind_names }}</td>
+            <td class="col-actions"><a href="/settings/library/criteria/{{ cr.uid }}/edit" data-modal class="icon-btn" title="Edit criterion" aria-label="Edit criterion">{{ icon('edit', 'icon-sm') }}</a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    {% call empty_state('No criteria yet', 'star', 'With criteria such as Story or Art, the overall rating is their weighted mean unless it is set by hand.') %}
+    <a href="/settings/library/criteria/new" data-modal class="btn primary">{{ icon('plus') }} Add a criterion</a>
+    {% endcall %}
+    {% endif %}
+</div>
+<div class="card table-scroll table-responsive">
+    <div class="uni-card-head"><h2>Your kinds</h2>
+        <a href="/settings/library/kinds/new" data-modal class="icon-btn" title="Add kind" aria-label="Add kind">{{ icon('plus', 'icon-sm') }}</a></div>
+    {% if kinds %}
+    <table class="entity-table">
+        <thead><tr><th class="col-name">Kind</th><th class="col-opt-1">Status</th><th class="col-opt-1">Progress</th><th class="col-opt-1">Entries</th><th class="col-actions">Actions</th></tr></thead>
+        <tbody>
+        {% for k in kinds %}
+        <tr>
+            <td class="col-name">{{ icon(k.icon, 'icon-sm') }} {{ k.name }}</td>
+            <td class="col-opt-1">{{ k.verb_label }}</td>
+            <td class="col-opt-1">{{ k.unit_label }}</td>
+            <td class="col-opt-1">{{ k.uses }}</td>
+            <td class="col-actions"><a href="/settings/library/kinds/{{ k.uid }}/edit" data-modal class="icon-btn" title="Edit kind" aria-label="Edit kind">{{ icon('edit', 'icon-sm') }}</a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    {% call empty_state('No kinds of your own', 'folder', 'Books, manga, articles, films, TV series and anime are built in. Add others such as games or podcasts.') %}
+    <a href="/settings/library/kinds/new" data-modal class="btn primary">{{ icon('plus') }} Add a kind</a>
+    {% endcall %}
+    {% endif %}
+</div>
+</div>
+</div>
+{% endblock %}

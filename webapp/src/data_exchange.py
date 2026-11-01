@@ -184,7 +184,7 @@ def notebook_citation_rows(conn) -> list[dict[str, Any]]:
     many documents (not a one-document-owns-it relationship like
     properties/tags)."""
     rows = conn.execute(
-        "SELECT notebook_uid, citation_uid, position, created_at FROM notebook_citations"
+        "SELECT notebook_uid, citation_uid, edition_uid, position, created_at FROM notebook_citations"
     ).fetchall()
     return [dict(r) for r in rows]
 

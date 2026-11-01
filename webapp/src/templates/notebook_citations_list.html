@@ -6,16 +6,24 @@
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_action_menu.html" import action_menu with context %}
+{% from "_label_pill.html" import tag_pill with context %}
 {% call page_header_narrow("Library", "library") %}
     <form method="get" action="/library" class="form-inline notebook-glossary-search-form">
-        {% for k in ('type','author') %}{% for v in request.query_params.getlist(k) %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}{% endfor %}
+        {% for k in ('type','author','status','source','tag','shelf') %}{% for v in request.query_params.getlist(k) %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}{% endfor %}
         {% for k in ('year_from','year_to','sort','sort2') %}{% if request.query_params.get(k) %}<input type="hidden" name="{{ k }}" value="{{ request.query_params.get(k) }}">{% endif %}{% endfor %}
         {{ search_input({'name': 'q', 'value': q, 'aria-label': 'Search the library', 'autocomplete': 'off'}) }}
     </form>
-    <a href="/library/filters{% if current_query %}?{{ current_query }}{% endif %}" data-modal class="btn ghost" title="Filter and sort the library">{{ icon('filter', 'icon-sm') }} Filters{% if active_filter_count %} ({{ active_filter_count }}){% endif %}</a>
-    <a href="/library/new?kind=media" data-modal class="btn ghost" title="Add media">{{ icon('plus', 'icon-sm') }} Add media</a>
-    <a href="/library/new" data-modal class="btn primary" title="Add book">{{ icon('plus', 'icon-sm') }} Add book</a>
+    <a href="/library/filters{% if current_query %}?{{ current_query }}{% endif %}" data-modal class="btn ghost" title="Filter and sort the library" aria-label="Filter and sort the library">{{ icon('filter', 'icon-sm') }}{% if active_filter_count %} {{ active_filter_count }}{% endif %}</a>
+    <a href="/library/new?kind=media" data-modal class="btn ghost" title="Add by hand" aria-label="Add by hand">{{ icon('edit', 'icon-sm') }}</a>
+    <a href="/library/lookup" data-modal class="btn primary" title="Add from the web" aria-label="Add from the web">{{ icon('plus', 'icon-sm') }}</a>
 {% endcall %}
+{% from "_library_views.html" import library_views %}
+{{ library_views('all') }}
+{% if kind_chips|length > 2 or kind_chips|selectattr('removable')|list %}
+<nav class="library-kinds" aria-label="Kinds">
+    {% for k in kind_chips %}<a href="{{ k.href }}" class="library-kind{% if k.active %} is-active{% endif %}"{% if k.active %} aria-current="true"{% endif %}>{% if k.icon %}{{ icon(k.icon, 'icon-sm') }} {% endif %}{{ k.label }} {% if k.removable %}<span class="sr-only">remove this filter</span>{{ icon('x', 'icon-sm') }}{% else %}<span class="library-kind-count">{{ k.count }}</span>{% endif %}</a>{% endfor %}
+</nav>
+{% endif %}
 <div id="modal-target">
 <div class="settings-group">
 {% if (active_filter_count or q) and not citations %}
@@ -27,23 +35,41 @@
 {% call empty_state('Nothing in the library matches the current filters', size='compact') %}<a href="/library">Clear filters</a>{% endcall %}
 {% else %}
 {% if citations %}
-<div class="card contact-list notebook-folder-list" id="citations-list">
-    {% for c in citations %}
-    <div class="contact-row-wrap" data-uid="{{ c.uid }}">
-        <a class="contact-row" href="/library/{{ c.uid }}" data-modal>
-            <span class="notebook-row-icon">{{ icon('book-open', 'icon-sm') }}</span>
-            <span class="contact-row-main">
-                <span class="contact-row-name">{{ c.title }}</span>
-                <span class="contact-row-sub">{{ c.display_authors or 'No author' }}{% if c.year %} · {{ c.year }}{% endif %}</span>
-            </span>
-            <span class="notebook-row-edited">{% if c.source.files %}{{ icon('file', 'icon-sm') }}{% if c.source.missing %} File missing · {% endif %}{% elif c.source.url %}{{ icon('link', 'icon-sm') }}{% endif %}{% if c.source.editions > 1 %} {{ c.source.editions }} editions ·{% endif %} {{ c.type_label }}</span>
-        </a>
-        {{ action_menu([
-            {'label': 'Edit', 'icon': 'edit', 'href': '/library/' ~ c.uid ~ '/edit', 'modal': true},
-            {'label': 'Delete citation', 'icon': 'trash', 'danger': true, 'form_action': '/library/' ~ c.uid ~ '/delete', 'confirm': 'Delete "' ~ c.title ~ '"? Any note or reading using it loses it, and its editions and their stored PDFs are deleted too.'},
-        ], aria_label='More actions for ' ~ c.title) }}
-    </div>
-    {% endfor %}
+{% macro sort_head(key, label, cls) %}<th class="{{ cls }}"><a href="{{ sort_hrefs[key] }}" class="library-sort{% if sort == key %} is-active{% endif %}"{% if sort == key %} aria-sort="{{ 'descending' if key in ('year', 'rating') else 'ascending' }}"{% endif %}>{{ label }}</a></th>{% endmacro %}
+<div class="card table-scroll table-responsive" id="citations-list">
+    <table class="entity-table library-table">
+        <thead><tr>
+            <th class="library-cover-col"><span class="sr-only">Cover</span></th>
+            {{ sort_head('title', 'Title', 'col-name') }}
+            {{ sort_head('type', 'Kind', 'col-opt-1') }}
+            <th class="col-opt-2">Status</th>
+            <th class="col-opt-1">Progress</th>
+            {{ sort_head('rating', 'Rating', 'col-opt-2') }}
+            {{ sort_head('year', 'Year', 'col-opt-1') }}
+            <th class="col-actions-narrow"><span class="sr-only">Actions</span></th>
+        </tr></thead>
+        <tbody>
+        {% for c in citations %}
+        <tr data-uid="{{ c.uid }}">
+            <td class="library-cover-col"><a href="/library/{{ c.uid }}" data-modal tabindex="-1" aria-hidden="true"><span class="media-row-cover">{% if c.cover %}<img src="{{ c.cover }}" alt="" loading="lazy">{% else %}{{ icon(c.kind.icon, 'icon-sm') }}{% endif %}</span></a></td>
+            <td class="col-name"><a href="/library/{{ c.uid }}" data-modal class="library-title">{{ c.title }}</a>
+                {% if c.tag_items %}<span class="library-tags">{% for t in c.tag_items[:3] %}{{ tag_pill(t, '/library?tag=' ~ (t.name | urlencode)) }}{% endfor %}</span>{% endif %}
+                <span class="library-sub">{{ c.display_authors }}{% if c.source.files %} · {{ icon('file', 'icon-sm') }}{% if c.source.missing %} File missing{% endif %}{% elif c.source.url %} · {{ icon('link', 'icon-sm') }}{% endif %}{% if c.source.editions > 1 %} · {{ c.source.editions }} editions{% endif %}</span>
+                {% set _status = '' if (c.kind.unit == 'none' and c.progress_text) else c.status_label %}
+                <span class="library-sub library-phone">{{ _status }}{% if c.progress_text %}{% if _status %} · {% endif %}{{ c.progress_text }}{% endif %}{% if c.stars %} · {{ c.stars }}{% endif %}</span></td>
+            <td class="col-opt-1">{{ c.kind.name if (c.kind.custom or c.type in ('book', 'manga', 'film', 'tv', 'anime')) else c.type_label }}</td>
+            <td class="col-opt-2">{{ c.status_label }}</td>
+            <td class="col-opt-1 library-progress">{% if c.progress_text %}{{ c.progress_text }}{% if c.progress_total and c.kind.unit != 'none' %}<span class="media-progress" aria-hidden="true"><span class="media-progress-bar" data-style="width:{{ c.percent }}%"></span></span>{% endif %}{% endif %}</td>
+            <td class="col-opt-2">{{ c.stars }}</td>
+            <td class="col-opt-1">{{ c.year }}</td>
+            <td class="col-actions-narrow">{{ action_menu([
+                {'label': 'Edit', 'icon': 'edit', 'href': '/library/' ~ c.uid ~ '/edit', 'modal': true},
+                {'label': 'Delete', 'icon': 'trash', 'danger': true, 'form_action': '/library/' ~ c.uid ~ '/delete', 'confirm': 'Delete "' ~ c.title ~ '"? Any note or reading using it loses it, and its editions and their stored files are deleted too.'},
+            ], aria_label='More actions for ' ~ c.title) }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
 </div>
 <p class="muted" id="citations-count">{{ total }} {{ 'entry' if total == 1 else 'entries' }}{% if next_href %} · <a href="{{ next_href }}">Next page</a>{% endif %}</p>
 {% else %}

@@ -89,8 +89,12 @@ API_PATHS = {"/mcp", "/oauth/register", "/oauth/token", "/.well-known/oauth-prot
 API_PREFIX = "/api/v1/"
 
 
+# The OPDS catalogue signs e-book readers in with HTTP Basic itself (routers/opds.py) and never reads the session cookie.
+OPDS_PREFIX = "/opds"
+
+
 def is_api_path(path: str) -> bool:
-    return path in API_PATHS or path.startswith(API_PREFIX)
+    return path in API_PATHS or path.startswith(API_PREFIX) or path == OPDS_PREFIX or path.startswith(OPDS_PREFIX + "/")
 
 
 def auth_enabled(settings, conn=None) -> bool:

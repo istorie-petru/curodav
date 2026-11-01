@@ -138,7 +138,7 @@ def _page_common(conn, name: str) -> dict:
         many items carry the label, for the one combined "Nothing tagged X
         yet" empty state.
     """
-    return {"label_usage_count": db.label_usage_count(conn, name)}
+    return {"label_usage_count": db.label_usage_count(conn, name), "library_count": db.page_citations(conn, shelves=[name], limit=1)["total"]}
 
 
 def _dashboard_page(conn, request: Request, name: str, label: dict):

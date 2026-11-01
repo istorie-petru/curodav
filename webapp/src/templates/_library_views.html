@@ -1,0 +1,7 @@
+{# The Library's two views: every work, or what is being read and watched now. #}
+{% macro library_views(current) %}
+<div class="segmented library-views" role="group" aria-label="Library view">
+    <a class="seg-btn{% if current == 'all' %} active{% endif %}" href="/library"{% if current == 'all' %} aria-current="page"{% endif %}>All</a>
+    <a class="seg-btn{% if current == 'now' %} active{% endif %}" href="/library/now"{% if current == 'now' %} aria-current="page"{% endif %}>Now</a>
+</div>
+{% endmacro %}

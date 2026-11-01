@@ -13,6 +13,9 @@
 #                                                     # --reconfigure re-prompts for DOMAIN_APP/TUNNEL_NAME/RADICALE_USER
 #                                                     # and rotates the Radicale password; without it, a re-run of
 #                                                     # 'install --dav' reuses whatever was set last time, no re-prompting
+#   sudo curodav-ctl install --library [--path=/srv/curodav-library]
+#                                                     # the Calibre-compatible book library folder, outside the app's
+#                                                     # own folder so 'remove' and 'revert' never touch the books
 #   sudo curodav-ctl password-reset                  # reset the login with the recovery token, then restart
 #   sudo curodav-ctl token [--new]                   # print the recovery token, or replace it
 #       curodav-ctl status                            # just the reachability/consistency checks below, no deploy
@@ -881,6 +884,7 @@ cmd_remove() {
   fi
 
   rm -rf "$BASE_DIR"
+  [ -d "$LIBRARY_DEFAULT" ] && log "The book library in ${LIBRARY_DEFAULT} was kept."
   log "Removed ${APP_NAME}. ${INSTALLED_CTL} was left in place -- 'rm ${INSTALLED_CTL}' if you want it gone too."
 }
 
@@ -919,6 +923,46 @@ cmd_flairs() {
   echo "    No restart needed -- read fresh on every page render."
 }
 
+LIBRARY_DEFAULT="/srv/${APP_NAME}-library"
+
+# The book library: an existing Calibre library is used as it is, an empty
+# folder becomes one on the app's first visit to the Library. Safe to re-run.
+cmd_library() {
+  require_root
+  local path="$LIBRARY_DEFAULT"
+  for arg in "$@"; do
+    case "$arg" in
+      --path=*) path="${arg#--path=}" ;;
+      *) echo "Usage: curodav-ctl install --library [--path=/srv/${APP_NAME}-library]" >&2; exit 2 ;;
+    esac
+  done
+  case "$path" in
+    /*) ;;
+    *) err "Give the full path of the library folder."; exit 2 ;;
+  esac
+  case "$path/" in
+    "${BASE_DIR}/"*) err "Keep the library outside ${BASE_DIR}, which 'remove' deletes."; exit 2 ;;
+  esac
+  if [ ! -f "$ENV_FILE" ]; then
+    err "${ENV_FILE} not found -- run 'curodav-ctl install' first."
+    exit 1
+  fi
+  if [ -e "$path" ] && [ ! -f "$path/metadata.db" ] && [ -n "$(ls -A "$path" 2>/dev/null)" ]; then
+    err "${path} holds other files and no Calibre library; choose an empty folder or a Calibre library."
+    exit 1
+  fi
+  install -d -m 0750 -o "$APP_USER" -g "$APP_USER" "$path"
+  if [ -f "$path/metadata.db" ]; then
+    log "Using the Calibre library in ${path}; giving ${APP_USER} write access to it..."
+    chown -R "$APP_USER":"$APP_USER" "$path"
+  fi
+  set_env_var CC_LIBRARY_PATH "$path"
+  if systemctl list-unit-files 2>/dev/null | grep -q "^${APP_NAME}\.service"; then
+    systemctl restart "${APP_NAME}.service"
+  fi
+  log "Book library: ${path}. Open Settings, Library to see it; 'remove' leaves this folder alone."
+}
+
 cmd_password_reset() {
   require_root
   if [ ! -f "$ENV_FILE" ] || [ ! -d "$CURRENT_LINK" ]; then
@@ -955,6 +999,10 @@ case "${1:-}" in
     DAV_ONLY=0
     RECONFIGURE=0
     PROXY_MODE="cloudflare"
+    if [ "${2:-}" = "--library" ]; then
+      cmd_library "${@:3}"
+      exit 0
+    fi
     if [ "${2:-}" = "--dav" ]; then
       DAV_ONLY=1
       for arg in "${@:3}"; do
@@ -969,7 +1017,7 @@ case "${1:-}" in
         esac
       done
     elif [ -n "${2:-}" ]; then
-      echo "Usage: curodav-ctl install [--dav [--proxy=cloudflare|manual] [--reconfigure]]" >&2
+      echo "Usage: curodav-ctl install [--dav [--proxy=cloudflare|manual] [--reconfigure] | --library [--path=DIR]]" >&2
       exit 2
     fi
     cmd_install
@@ -992,7 +1040,7 @@ case "${1:-}" in
   password-reset)  cmd_password_reset ;;
   token)  cmd_token "${2:-}" ;;
   *)
-    echo "Usage: curodav-ctl {install [--dav [--proxy=cloudflare|manual] [--reconfigure]]|update|status|revert [--yes] [--keep-data]|remove|flairs|password-reset|token [--new]}" >&2
+    echo "Usage: curodav-ctl {install [--dav [--proxy=cloudflare|manual] [--reconfigure] | --library [--path=DIR]]|update|status|revert [--yes] [--keep-data]|remove|flairs|password-reset|token [--new]}" >&2
     exit 2
     ;;
 esac

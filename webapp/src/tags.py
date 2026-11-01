@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS object_tags (
 );
 CREATE INDEX IF NOT EXISTS idx_object_tags_tag ON object_tags(tag_name, object_type);
 """
-OBJECT_TYPES = ("task", "event", "note", "contact", "transaction", "scheduled")
+OBJECT_TYPES = ("task", "event", "note", "contact", "transaction", "scheduled", "media")
 LABEL_OBJECT_TYPES = ("task", "event", "contact", "notebook")  # object_labels spells notes "notebook"
 FINANCE_LABEL, FINANCE_GROUP = "Finance", "Personal"
 

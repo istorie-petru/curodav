@@ -150,6 +150,22 @@ def test_mcp_unknown_method_and_tool_are_protocol_errors(conn):
     assert _rpc(conn, "tools/call", {"name": "delete_everything"})["error"]["code"] == mcp_server.INVALID_PARAMS
 
 
+def test_media_now_groups_entries_by_status_with_progress_and_rating(conn, frozen_today):
+    from datetime import date
+
+    from src.db import media as media_db
+
+    frozen_today(date(2026, 10, 30))
+    db.upsert_citation(conn, {"uid": "m1", "type": "anime", "title": "Frieren"})
+    media_db.set_tracking(conn, "m1", {"status": "current", "progress": 12, "progress_total": 28, "score": 80})
+    db.upsert_citation(conn, {"uid": "m2", "type": "book", "title": "Old book"})
+    media_db.set_tracking(conn, "m2", {"status": "finished", "finished_on": "2026-01-01"})
+    now = api_service.media_now(conn, finished_days=30)
+    current = now["current"][0]["media"]
+    assert current["status_label"] == "Watching" and current["progress"] == 12 and current["rating"] == 4.0
+    assert now["finished"] == []
+
+
 def test_university_overview_and_exams_follow_the_current_semester(conn, monkeypatch, frozen_today):
     from datetime import date
 

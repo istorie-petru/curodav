@@ -1,31 +1,80 @@
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
 {% from "_detail_section.html" import detail_section %}
+{% from "_label_pill.html" import tag_pill with context %}
 {% block title %}{{ c.title }}{% endblock %}
 {% block content %}
-{% call modal(kind="view", title=((c.title)), size="medium", back=(return_to), back_name='Back', retire=[{'action': 'delete', 'url': '/library/' ~ c.uid ~ '/delete', 'mode': 'confirm', 'label': delete_label, 'redirect': none, 'change': none}], edit_url='/library/' ~ c.uid ~ '/edit') %}
-{% call detail_section('Citation') %}
+{% set _extra %}<a href="{{ lookup_url }}" data-modal class="btn ghost">{{ icon('search', 'icon-sm') }} Find details</a>{% endset %}
+{% call modal(kind="view", title=c.title, size="medium", back=(return_to), back_name='Back', extra_html=_extra,
+              retire=[{'action': 'delete', 'url': '/library/' ~ c.uid ~ '/delete', 'mode': 'confirm', 'label': delete_label, 'redirect': none, 'change': none}], edit_url='/library/' ~ c.uid ~ '/edit') %}
+<div class="media-view-head">
+    <a href="/library/{{ c.uid }}/cover/modal" data-modal class="media-cover-button" title="Change the cover" aria-label="Change the cover">
+        {% if m.cover %}<img class="media-cover-img" src="{{ m.cover }}" alt="">{% else %}<span class="media-cover-empty">{{ icon(m.kind.icon) }}</span>{% endif %}
+    </a>
+    <div class="media-view-facts">
+        <span class="media-view-by">{{ authors or m.kind.name }}{% if c.year %} · {{ c.year }}{% endif %}</span>
+        <span class="media-view-kind">{{ icon(m.kind.icon, 'icon-sm') }} {{ m.kind.name if (m.kind.custom or c.type in ('book', 'manga', 'film', 'tv', 'anime')) else type_label }}{% if m.status_label %} · {{ m.status_label }}{% endif %}</span>
+        {% if m.progress_text %}<span class="media-view-progress">{{ m.progress_text }}</span>
+        {% if c.progress_total and m.kind.unit != 'none' %}<span class="media-progress" aria-hidden="true"><span class="media-progress-bar" data-style="width:{{ m.percent }}%"></span></span>{% endif %}{% endif %}
+        {% if m.stars %}<span class="media-view-stars">{{ m.stars }}</span>{% endif %}
+        {% if m.tag_items %}<span class="media-view-tags">{% for t in m.tag_items %}{{ tag_pill(t, '/library?tag=' ~ (t.name | urlencode)) }} {% endfor %}</span>{% endif %}
+    </div>
+</div>
+{% if ratings or c.started_on or c.finished_on or c.subtitle or c.keywords or c.summary %}
+{% call detail_section('About') %}
     <div class="detail-meta-grid">
+        {% for r in ratings %}
         <div class="detail-meta-item">
-            <span class="detail-meta-label">Type</span>
-            <span class="detail-meta-value">{{ type_label }}</span>
+            <span class="detail-meta-label">{{ r.name }}</span>
+            <span class="detail-meta-value">{{ r.value }}</span>
         </div>
+        {% endfor %}
+        {% if c.started_on %}
         <div class="detail-meta-item">
-            <span class="detail-meta-label">Year</span>
-            <span class="detail-meta-value">{{ c.year or 'None' }}</span>
+            <span class="detail-meta-label">Started</span>
+            <span class="detail-meta-value">{{ c.started_on|short_day }}</span>
         </div>
-        <div class="detail-meta-item detail-meta-wide">
-            <span class="detail-meta-label">{{ 'Authors' if c.authors|length > 1 else 'Author' }}</span>
-            <span class="detail-meta-value">{{ authors or 'None' }}</span>
+        {% endif %}
+        {% if c.finished_on %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Finished</span>
+            <span class="detail-meta-value">{{ c.finished_on|short_day }}{% if c.repeats %} · {{ c.repeats }} more {{ 'time' if c.repeats == 1 else 'times' }}{% endif %}</span>
         </div>
+        {% endif %}
         {% if c.subtitle %}
         <div class="detail-meta-item detail-meta-wide">
             <span class="detail-meta-label">Subtitle</span>
             <span class="detail-meta-value">{{ c.subtitle }}</span>
         </div>
         {% endif %}
+        {% if c.keywords %}
+        <div class="detail-meta-item detail-meta-wide">
+            <span class="detail-meta-label">Keywords</span>
+            <span class="detail-meta-value">{{ c.keywords | join(', ') }}</span>
+        </div>
+        {% endif %}
+        {% if c.summary %}
+        <div class="detail-meta-item detail-meta-wide">
+            <span class="detail-meta-label">Summary</span>
+            <span class="detail-meta-value media-summary">{{ c.summary }}</span>
+        </div>
+        {% endif %}
     </div>
 {% endcall %}
+{% endif %}
+{% if history %}
+{% call detail_section('Day by day', count=history|length) %}
+    <div class="detail-meta-grid">
+        {% for h in history %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">{{ h.day|short_day }}</span>
+            <span class="detail-meta-value">{{ h.words }}</span>
+        </div>
+        {% endfor %}
+    </div>
+{% endcall %}
+{% endif %}
+{% if not m.kind.screen and not m.kind.custom %}
 {% call detail_section('Editions', count=editions|length) %}
     {% for e in editions %}
     <div>{{ e.display }}{% if e.isbn %} <span class="detail-meta-label">ISBN {{ e.isbn }}</span>{% endif %}
@@ -36,6 +85,7 @@
     <span class="detail-meta-label">{{ 'No editions, link only' if c.url else 'Metadata only, no file or link' }}</span>
     {% endfor %}
 {% endcall %}
+{% endif %}
 {% if rows %}
 {% call detail_section('Details') %}
     <div class="detail-meta-grid">

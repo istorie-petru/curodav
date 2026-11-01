@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import text_input %}
+{% block title %}{{ 'Edit criterion' if criterion else 'Add criterion' }}{% endblock %}
+{% block content %}
+{% call modal(kind="form", title=('Edit criterion' if criterion else 'Add criterion'), size="small", form='criterion-form', creating=(not criterion),
+              retire=([{'action': 'delete', 'url': '/settings/library/criteria/' ~ criterion.uid ~ '/delete', 'mode': 'confirm', 'label': 'Delete "' ~ criterion.name ~ '" and every rating given for it?'}] if criterion else none)) %}
+<form method="post" action="/settings/library/criteria" id="criterion-form">
+    <input type="hidden" name="uid" value="{{ criterion.uid if criterion else '' }}">
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label>Name</label>
+            {{ text_input({'name': 'name', 'value': (criterion.name if criterion else ''), 'required': true, 'autofocus': true, 'maxlength': 60}) }}
+        </div>
+        {% set ms_mode = 'single' %}{% set ms_form_id = 'criterion-form' %}{% set ms_name = 'weight' %}{% set ms_label = 'Weight' %}{% set ms_remote = '' %}
+        {% set ms_items = weights %}{% set ms_selected = ((criterion.weight|round(1)|string|replace('.0', '')) if criterion else '1') %}{% set ms_wide = false %}
+        {% include "_widget_list_multiselect.html" %}
+        {% set ms_mode = 'select' %}{% set ms_name = 'kinds' %}{% set ms_label = 'Kinds' %}{% set ms_placeholder = 'All kinds' %}
+        {% set ms_items = kind_items %}{% set ms_selected = (criterion.kinds if criterion else []) %}{% set ms_wide = false %}
+        {% include "_widget_list_multiselect.html" %}
+    </div>
+</form>
+{% endcall %}
+{% endblock %}

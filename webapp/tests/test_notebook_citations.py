@@ -288,7 +288,7 @@ class TestBackupRoundTrip:
         payload = export_router.build_backup_payload(conn)
         assert payload["citations"][0]["title"] == "Backed Up Work"
         assert payload["notebook_citations"] == [
-            {"notebook_uid": "d1", "citation_uid": "c1", "position": 0, "created_at": payload["notebook_citations"][0]["created_at"]}
+            {"notebook_uid": "d1", "citation_uid": "c1", "edition_uid": "", "position": 0, "created_at": payload["notebook_citations"][0]["created_at"]}
         ]
 
         with db.connect(tmp_path / "restored.sqlite") as fresh:

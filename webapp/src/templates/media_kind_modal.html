@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import text_input %}
+{% block title %}{{ 'Edit kind' if kind else 'Add kind' }}{% endblock %}
+{% block content %}
+{% call modal(kind="form", title=('Edit kind' if kind else 'Add kind'), size="small", form='kind-form', creating=(not kind),
+              retire=([{'action': 'delete', 'url': '/settings/library/kinds/' ~ kind.uid ~ '/delete', 'mode': 'confirm', 'label': ('Delete "' ~ kind.name ~ '"?' ~ ((' Its ' ~ uses ~ ' ' ~ ('entry becomes' if uses == 1 else 'entries become') ~ ' Other.') if uses else ''))}] if kind else none)) %}
+<form method="post" action="/settings/library/kinds" id="kind-form">
+    <input type="hidden" name="uid" value="{{ kind.uid if kind else '' }}">
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label>Name</label>
+            {{ text_input({'name': 'name', 'value': (kind.name if kind else ''), 'required': true, 'autofocus': true, 'maxlength': 60}) }}
+        </div>
+        {% set ms_mode = 'single' %}{% set ms_form_id = 'kind-form' %}{% set ms_name = 'verb' %}{% set ms_label = 'Status words' %}{% set ms_remote = '' %}
+        {% set ms_items = verbs %}{% set ms_selected = (kind.verb if kind else 'read') %}{% set ms_wide = false %}
+        {% include "_widget_list_multiselect.html" %}
+        {% set ms_name = 'unit' %}{% set ms_label = 'Progress in' %}{% set ms_items = units %}{% set ms_selected = (kind.unit if kind else 'none') %}
+        {% include "_widget_list_multiselect.html" %}
+        {% set ms_name = 'icon' %}{% set ms_label = 'Icon' %}{% set ms_items = icons %}{% set ms_selected = (kind.icon if kind else 'folder') %}{% set ms_wide = true %}
+        {% include "_widget_list_multiselect.html" %}
+    </div>
+</form>
+{% endcall %}
+{% endblock %}

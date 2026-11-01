@@ -785,7 +785,7 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
         db.upsert_citation(conn, row)
     for row in payload.get("notebook_citations", []):
         db.attach_notebook_citation(
-            conn, row["notebook_uid"], row["citation_uid"], row.get("position", 0), row.get("created_at")
+            conn, row["notebook_uid"], row["citation_uid"], row.get("position", 0), row.get("created_at"), row.get("edition_uid", "")
         )
     for row in payload.get("glossary_terms", []):
         db.upsert_glossary_term(conn, row)

@@ -22,7 +22,9 @@
       alwaysSubmit: true, // banner_editor.html's upload form always auto-submitted on file selection, even before this editor existed
     },
   };
+  KIND_CONFIG.cover = { maxOutput: 900, ratio: 2 / 3, ratioLabel: "Cover (2:3)", outputName: "cover", alwaysSubmit: true };
   const KINDS = [
+    { selector: ".cover-upload-input", kind: "cover" },
     { selector: ".avatar-upload-input", kind: "avatar" },
     { selector: ".banner-upload-input", kind: "banner" },
   ];

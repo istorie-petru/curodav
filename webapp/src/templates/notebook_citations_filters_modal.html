@@ -22,6 +22,15 @@
         <div class="field field-wide">
             {% set ms_mode = 'select' %}
             {% set ms_form_id = 'citations-filters-form' %}
+            {% set ms_name = 'status' %}
+            {% set ms_label = 'Status' %}
+            {% set ms_items = status_items %}
+            {% set ms_selected = selected_statuses %}{% set ms_remote = '' %}
+            {% include "_widget_list_multiselect.html" %}
+        </div>
+        <div class="field field-wide">
+            {% set ms_mode = 'select' %}
+            {% set ms_form_id = 'citations-filters-form' %}
             {% set ms_name = 'source' %}
             {% set ms_label = 'Source' %}
             {% set ms_items = [{'uid': 'file', 'name': 'Has a PDF'}, {'uid': 'url', 'name': 'Has a link'}, {'uid': 'none', 'name': 'Metadata only'}] %}

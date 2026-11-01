@@ -229,11 +229,11 @@ def _save(conn, uid="", title="Capital", **form):
 
 
 def test_the_window_saves_the_book_and_a_new_edition_with_a_local_file(conn):
-    resp = _save(conn, status="reading", rating="4", keywords="economics, history ,", edition_uid="", ed_source="local", ed_year="1976",
+    resp = _save(conn, status="current", score="4", keywords="economics, history ,", edition_uid="", ed_source="local", ed_year="1976",
                  ed_publisher="Penguin", ed_isbn="978-0", file=_Upload(b"%PDF-1.4"))
     uid = json.loads(resp.body)["uid"]
     c = db.get_citation(conn, uid)
-    assert (c["status"], c["rating"], c["keywords"]) == ("reading", 4, ["economics", "history"])
+    assert (c["status"], c["score"], c["keywords"]) == ("current", 80.0, ["economics", "history"])
     [edition] = db.list_editions(conn, uid)
     assert (edition["source"], edition["file_state"], edition["publisher"]) == ("local", "ok", "Penguin")
     assert c["publisher"] == "Penguin" and c["year"] == "1867"
@@ -263,10 +263,10 @@ def test_an_edition_can_be_deleted_from_the_window(conn):
 
 
 def test_saving_the_book_alone_keeps_stored_keywords_and_details(conn):
-    uid = db.upsert_citation(conn, {"title": "Capital", "keywords": ["a"], "status": "read", "rating": 5, "publisher": "Old"})
+    uid = db.upsert_citation(conn, {"title": "Capital", "keywords": ["a"], "status": "finished", "score": 90.0, "publisher": "Old"})
     db.upsert_citation(conn, {"uid": uid, "title": "Capital again"})
     c = db.get_citation(conn, uid)
-    assert (c["keywords"], c["status"], c["rating"], c["publisher"]) == (["a"], "read", 5, "Old")
+    assert (c["keywords"], c["status"], c["score"], c["publisher"]) == (["a"], "finished", 90.0, "Old")
 
 
 def test_editions_migration_moves_the_work_level_details_into_a_first_edition(conn):
@@ -305,3 +305,16 @@ def test_delete_confirmation_names_what_still_uses_the_entry(conn):
     assert "1 notes" in label
     db.delete_citation(conn, uid)
     assert db.list_notebook_citations(conn, "d1") == []
+
+
+def test_a_note_can_cite_one_edition_of_a_work(conn):
+    uid = db.upsert_citation(conn, {"title": "Capital", "authors": [{"family": "Marx", "given": "Karl"}], "year": "1867"})
+    first = db.save_edition(conn, uid, {"year": "1976", "publisher": "Penguin"})
+    second = db.save_edition(conn, uid, {"year": "1990", "publisher": "Vintage"})
+    note_uid = "note-1"
+    db.set_notebook_citations(conn, note_uid, [f"{uid}@{second}"])
+    [cited] = db.list_notebook_citations(conn, note_uid)
+    assert (cited["publisher"], cited["year"], cited["ref"]) == ("Vintage", "1990", f"{uid}@{second}")
+    options = [i["uid"] for i in db.picker_items(conn, [], "Capital", editions=True)]
+    assert options == [uid, f"{uid}@{first}", f"{uid}@{second}"]
+    assert [i["uid"] for i in db.picker_items(conn, [], "Capital")] == [uid]

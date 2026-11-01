@@ -257,7 +257,7 @@ def create_app() -> FastAPI:
 
     app.mount("/static", _VersionedStaticFiles(directory=_BASE_DIR / "static"), name="static")
 
-    from .routers import auth, banners, calendar, contacts, dashboard, defaults, export, finance, flairs as flairs_router, habits, label_pages, labels, notebook, perf as perf_router, projects, public_lists, published_lists, push, pwa, quick_capture, search, secretariat_page, settings, spaces, sync_api, tasks, taxonomy, timeline
+    from .routers import auth, banners, calendar, contacts, dashboard, defaults, export, finance, flairs as flairs_router, habits, label_pages, labels, media as media_router, notebook, opds as opds_router, perf as perf_router, projects, public_lists, published_lists, push, pwa, quick_capture, search, secretariat_page, settings, spaces, sync_api, tasks, taxonomy, timeline
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error_page(request: Request, exc: StarletteHTTPException):
@@ -329,6 +329,9 @@ def create_app() -> FastAPI:
     app.include_router(spaces.router)
     app.include_router(projects.router)
     app.include_router(habits.router)
+    app.include_router(opds_router.router)
+    app.include_router(media_router.router)
+    app.include_router(media_router.settings_router)
     app.include_router(notebook.legacy_citations_router)
     app.include_router(notebook.citations_router)
     app.include_router(notebook.glossary_router)

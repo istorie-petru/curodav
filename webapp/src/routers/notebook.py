@@ -28,8 +28,9 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 
 from .. import tags as tag_store
-from .. import app_defaults, citation_formats, clock, db, icon_font, note_versions, notebook_fields, notebook_find, notebook_mentions
+from .. import app_defaults, citation_formats, clock, db, icon_font, media, media_books, note_versions, notebook_fields, notebook_find, notebook_mentions
 from ..deps import get_db, respond, templates, validation_response, wants_json
+from . import media as media_router
 from .labels import COLORS, icon_groups_for
 
 router = APIRouter(prefix="/notebook", tags=["notebook"])
@@ -781,8 +782,8 @@ def document_bibliography_modal(uid: str, request: Request, conn=Depends(get_db)
         {
             "request": request,
             "document": document,
-            "attached_uids": [c["uid"] for c in attached],
-            "citation_items": db.picker_items(conn, [c["uid"] for c in attached]),
+            "attached_uids": [c["ref"] for c in attached],
+            "citation_items": db.picker_items(conn, [c["ref"] for c in attached], editions=True),
         },
     )
 
@@ -1202,7 +1203,7 @@ def _citation_delete_label(conn, c: dict | None) -> str:
 def _citation_edit_context(request: Request, c: dict | None, form_action: str, return_to: str = "", conn=None, kind: str = "", selected_edition: str = "") -> dict:
     editions = db.list_editions(conn, c["uid"]) if (conn and c) else []
     stored = db.get_citation_raw(conn, c["uid"]) if (conn and c) else None
-    noun = db.book_noun(c) if c else ("Media" if kind == "media" else "Book")
+    noun = media_router.noun(conn, c["type"] if c else (kind or "book"))
     return {
         "delete_label": _citation_delete_label(conn, c) if conn else "",
         "editions": editions,
@@ -1212,11 +1213,12 @@ def _citation_edit_context(request: Request, c: dict | None, form_action: str, r
         "crumbs": _CITATIONS_CRUMB,
         "c": stored or c,
         "noun": noun,
-        "default_type": "webpage" if (not c and kind == "media") else "book",
+        "default_type": kind if kind in dict(db.CITATION_TYPES) or kind.startswith("custom:") else ("webpage" if kind == "media" else "book"),
         "form_action": form_action,
         "citation_types": db.CITATION_TYPES,
         "statuses": db.CITATION_STATUSES,
         "return_to": _safe_return_to(return_to),
+        **(media_router.form_context(conn, stored or c) if conn else {}),
     }
 
 
@@ -1225,6 +1227,7 @@ CITATION_SORT_OPTIONS = [
     ("type", "Type"),
     ("year", "Year (newest first)"),
     ("author", "Author"),
+    ("rating", "Rating (best first)"),
 ]
 _CITATION_SORT_KEYS = frozenset(k for k, _ in CITATION_SORT_OPTIONS)
 
@@ -1257,18 +1260,26 @@ def citations_library(
     q: str = "",
     after: str = "",
     source: list[str] = Query([]),
+    status: list[str] = Query([]),
+    tag: list[str] = Query([]),
+    shelf: list[str] = Query([]),
     conn=Depends(get_db),
 ):
     source = source if isinstance(source, list) else []
+    media_books.pull(conn)
     sort = sort if sort in _CITATION_SORT_KEYS else "title"
     sort2 = sort2 if sort2 in _CITATION_SORT_KEYS else "title"
     type_labels = dict(db.CITATION_TYPES)
     year_lo, year_hi = _resolve_citation_year_range(year_from, year_to)
-    page = db.page_citations(conn, q=q, types=type, authors=author, year_lo=year_lo, year_hi=year_hi, sources=source, sort=sort, sort2=sort2, after=after)
+    status = status if isinstance(status, list) else []
+    tag = tag if isinstance(tag, list) else []
+    shelf = shelf if isinstance(shelf, list) else []
+    page = db.page_citations(conn, q=q, types=type, authors=author, year_lo=year_lo, year_hi=year_hi, sources=source, statuses=status,
+                             tags=tag, shelves=shelf, sort=sort, sort2=sort2, after=after)
     citations = page["items"]
     sources = db.sources_for(conn, citations)
+    media_router.decorate(conn, citations)
     for c in citations:
-        c["display_authors"] = db.format_citation_authors(c["authors"])
         c["type_label"] = type_labels.get(c["type"], c["type"])
         c["source"] = sources[c["uid"]]
     params = [(k, v) for k, v in request.query_params.multi_items() if k != "after"]
@@ -1277,14 +1288,15 @@ def citations_library(
         {
             "request": request,
             "q": q,
-            "active_tab": "notebook",
+            "active_tab": "library",
             "crumbs": _CITATIONS_CRUMB,
             "citations": citations,
+            **media_router.list_controls(request, conn, type, sort),
             "total": page["total"],
             "next_href": "/library?" + urlencode([*params, ("after", page["next"])]) if page["next"] else "",
             "current_query": request.url.query,
             "active_filter_count": (
-                len(type) + len(author) + len(source) + (1 if (year_from or year_to) else 0)
+                len(type) + len(author) + len(source) + len(status) + len(tag) + len(shelf) + (1 if (year_from or year_to) else 0)
                 + (1 if (sort != "title" or sort2 != "title") else 0)
             ),
         },
@@ -1297,6 +1309,7 @@ def citations_filters_modal(
     type: list[str] = Query([]),
     author: list[str] = Query([]),
     source: list[str] = Query([]),
+    status: list[str] = Query([]),
     year_from: str = "",
     year_to: str = "",
     sort: str = "title",
@@ -1337,7 +1350,9 @@ def citations_filters_modal(
         "notebook_citations_filters_modal.html",
         {
             "request": request,
-            "type_items": [{"uid": k, "name": v} for k, v in db.CITATION_TYPES],
+            "type_items": [{"uid": k, "name": v} for k, v in db.type_options(conn, db.CITATION_TYPES)],
+            "status_items": [{"uid": k, "name": v} for k, v in media.NEUTRAL_STATUSES],
+            "selected_statuses": status if isinstance(status, list) else [],
             "selected_types": type,
             "author_items": db.author_options(conn, "", author),
             "selected_authors": author,
@@ -1390,6 +1405,12 @@ def citation_options(q: str = "", selected: list[str] = Query([]), conn=Depends(
     return JSONResponse(db.picker_items(conn, selected, q))
 
 
+@citations_router.get("/edition-options")
+def citation_edition_options(q: str = "", selected: list[str] = Query([]), conn=Depends(get_db)):
+    """The same options, with each edition of a work that has several offered on its own (`uid@edition`)."""
+    return JSONResponse(db.picker_items(conn, selected, q, editions=True))
+
+
 @citations_router.get("/author-options")
 def citation_author_options(q: str = "", selected: list[str] = Query([]), conn=Depends(get_db)):
     return JSONResponse(db.author_options(conn, q, selected))
@@ -1400,7 +1421,10 @@ async def citation_footnote(request: Request, conn=Depends(get_db)):
     """The text of a generated endnote in the chosen citation format."""
     payload = await request.json()
     kind = payload.get("kind") or "page_citation"
-    pick = lambda key: db.get_citation(conn, payload.get(key) or "")
+    def pick(key):
+        uid, _, edition = (payload.get(key) or "").partition("@")
+        return db.with_edition(conn, db.get_citation(conn, uid), edition)
+
     citation = pick("citation") or pick("original")
     if kind != "ibidem" and citation is None:
         return JSONResponse({"error": "citation not found"}, status_code=404)
@@ -1412,7 +1436,7 @@ async def citation_footnote(request: Request, conn=Depends(get_db)):
 def new_citation_modal(request: Request, return_to: str = "", kind: str = "", conn=Depends(get_db)):
     return templates.TemplateResponse(
         "citation_edit_modal.html",
-        _citation_edit_context(request, None, "/library", return_to, kind=kind),
+        _citation_edit_context(request, None, "/library", return_to, conn=conn, kind=kind),
     )
 
 
@@ -1429,7 +1453,7 @@ def citation_view_modal(uid: str, request: Request, return_to: str = "", conn=De
             "request": request, "active_tab": "notebook", "c": c, "type_label": type_label, "rows": rows,
             "authors": db.format_citation_authors(c["authors"]), "entries": db.list_entries_citing(conn, uid),
             "editions": db.list_editions(conn, uid), "delete_label": _citation_delete_label(conn, c),
-            "return_to": _safe_return_to(return_to),
+            "return_to": _safe_return_to(return_to), **media_router.view_context(conn, c),
         },
     )
 
@@ -1452,6 +1476,8 @@ def edit_citation_modal(uid: str, request: Request, edition: str = "", conn=Depe
     )
 
 
+_TRACKING_FORM_FIELDS = ("progress", "progress_total", "season", "repeats", "started_on", "finished_on", "summary")
+_CITATION_FORM_KEYS = ("type", "title", "year", "container_title", "doi", "url", "status", "score", "keywords", "crit_uid", "crit_value", "item_tags", "item_tags_field")
 _CITATION_TEXT_FIELDS = ("subtitle", "edition", "volume", "issue", "pages", "publisher", "place", "isbn", "issn", "accessed", "institution", "degree", "editors", "note")
 _EDITION_DETAILS = ("edition", "publisher", "place", "isbn", "doi", "url")
 
@@ -1461,7 +1487,7 @@ def _citation_row_from_form(uid: str, values: dict, author_family: list[str], au
     row = {"type": values["type"], "title": values["title"], "year": values["year"].strip(),
            "container_title": values["container_title"].strip(),
            "authors": _citation_authors_from_form(author_family, author_given)}
-    for k in ("doi", "url", *_CITATION_TEXT_FIELDS, "status", "rating"):
+    for k in ("doi", "url", *_CITATION_TEXT_FIELDS, "status", *_TRACKING_FORM_FIELDS):
         if isinstance(values.get(k), str):
             row[k] = values[k].strip()
     if isinstance(values.get("keywords"), str):
@@ -1480,8 +1506,10 @@ def _write_edition(conn, citation_uid: str, edition_uid: str, edition: dict, sou
     """Applies the edition half of the window: the selected edition is changed or deleted, or a new one made when it holds anything.
     Returns a structured error for a bad file."""
     if edition_uid and delete:
+        media_books.delete_edition(conn, edition_uid)
         db.delete_edition(conn, edition_uid)
         return None
+    in_calibre = media_books.uses_calibre(conn, (db.get_citation_raw(conn, citation_uid) or {}).get("type") or "")
     has_file = file is not None and bool(getattr(file, "filename", ""))
     source = source if source in ("none", "link", "local") else "none"
     details = {k: _s(v) for k, v in edition.items()}
@@ -1492,8 +1520,9 @@ def _write_edition(conn, citation_uid: str, edition_uid: str, edition: dict, sou
     uid = db.save_edition(conn, citation_uid, details, edition_uid)
     if source != "local":
         db.clear_edition_file(conn, uid)
+        media_books.remove_files(conn, uid)
     elif has_file:
-        error = db.set_edition_file(conn, uid, file.file.read(), file.filename)
+        error = media_books.store_file(conn, uid, file.file.read(), file.filename) if in_calibre else db.set_edition_file(conn, uid, file.file.read(), file.filename)
         if error:
             return {"field": "file", "message": error}
     return None
@@ -1507,12 +1536,40 @@ def _write_citation(conn, uid: str, values: dict, author_family, author_given, a
         error = _duplicate_error(conn, probe, uid)
         if error:
             return validation_response(error, x_requested_with, "/library")
+    existing = db.get_citation_raw(conn, uid) if uid else None
+    if isinstance(values.get("score"), str):
+        row["score"] = media.from_scale(values["score"], db.rating_scale(conn))
+    if "status" in row:
+        row["status"] = media.normal_status(row["status"])
+        if row["status"] != ((existing or {}).get("status") or ""):
+            row = {**media.on_status_change({**(existing or {}), **{k: v for k, v in row.items() if k != "status"}}, row["status"], clock.now().date().isoformat()), **row}
+    if edition_form and edition_form.get("source") == "local" and _has_upload(edition_form.get("file")) and not db.kind_of(conn, row["type"]).uploads:
+        return validation_response({"field": "file", "message": "Only books and manga keep files. Give this entry a link instead"}, x_requested_with, "/library")
     saved = db.upsert_citation(conn, row)
+    if "progress" in row:
+        db.log_progress(conn, saved, clock.now().date().isoformat(), (existing or {}).get("progress") or 0, media.parse_count(row["progress"]))
+    _write_criteria(conn, saved, values.get("crit_uid"), values.get("crit_value"))
+    if values.get("item_tags_field") == "1" and isinstance(values.get("item_tags"), list):
+        tag_store.record(conn, "media", saved, values["item_tags"])
     if edition_form:
         error = _write_edition(conn, saved, edition_form["uid"], edition_form["details"], edition_form["source"], edition_form["file"], edition_form["delete"])
         if error:
             return validation_response(error, x_requested_with, "/library")
+    media_books.push(conn, saved)
     return respond(x_requested_with, "/library", uid=saved)
+
+
+def _has_upload(file) -> bool:
+    return file is not None and bool(getattr(file, "filename", ""))
+
+
+def _write_criteria(conn, citation_uid: str, uids, values) -> None:
+    """The criteria ratings of the window, in the chosen scale; a blank one is cleared."""
+    if not isinstance(uids, list) or not isinstance(values, list):
+        return
+    scale = db.rating_scale(conn)
+    known = {c["uid"] for c in db.list_rating_criteria(conn)}
+    db.set_citation_ratings(conn, citation_uid, {u: media.from_scale(v, scale) for u, v in zip(uids, values) if u in known})
 
 
 def _edition_form(edition_uid, ed_edition, ed_year, ed_publisher, ed_place, ed_isbn, ed_doi, ed_url, ed_source, file, delete_edition):
@@ -1547,7 +1604,18 @@ def create_citation(
     editors: str | None = Form(None),
     note: str | None = Form(None),
     status: str | None = Form(None),
-    rating: str | None = Form(None),
+    score: str | None = Form(None),
+    progress: str | None = Form(None),
+    progress_total: str | None = Form(None),
+    season: str | None = Form(None),
+    repeats: str | None = Form(None),
+    started_on: str | None = Form(None),
+    finished_on: str | None = Form(None),
+    summary: str | None = Form(None),
+    crit_uid: list[str] = Form([]),
+    crit_value: list[str] = Form([]),
+    item_tags: list[str] = Form([]),
+    item_tags_field: str = Form(""),
     keywords: str | None = Form(None),
     edition_uid: str | None = Form(None),
     ed_edition: str = Form(""), ed_year: str = Form(""), ed_publisher: str = Form(""), ed_place: str = Form(""),
@@ -1561,7 +1629,7 @@ def create_citation(
     title = title.strip()
     if not title:
         return RedirectResponse(url="/library", status_code=303)
-    values = {k: v for k, v in locals().items() if k in ("type", "title", "year", "container_title", "doi", "url", "status", "rating", "keywords", *_CITATION_TEXT_FIELDS)}
+    values = {k: v for k, v in locals().items() if k in (*_CITATION_FORM_KEYS, *_TRACKING_FORM_FIELDS, *_CITATION_TEXT_FIELDS)}
     edition_form = _edition_form(edition_uid, ed_edition, ed_year, ed_publisher, ed_place, ed_isbn, ed_doi, ed_url, ed_source, file, delete_edition)
     return _write_citation(conn, "", values, author_family, author_given, _s(allow_duplicate), x_requested_with, edition_form)
 
@@ -1592,7 +1660,18 @@ def update_citation(
     editors: str | None = Form(None),
     note: str | None = Form(None),
     status: str | None = Form(None),
-    rating: str | None = Form(None),
+    score: str | None = Form(None),
+    progress: str | None = Form(None),
+    progress_total: str | None = Form(None),
+    season: str | None = Form(None),
+    repeats: str | None = Form(None),
+    started_on: str | None = Form(None),
+    finished_on: str | None = Form(None),
+    summary: str | None = Form(None),
+    crit_uid: list[str] = Form([]),
+    crit_value: list[str] = Form([]),
+    item_tags: list[str] = Form([]),
+    item_tags_field: str = Form(""),
     keywords: str | None = Form(None),
     edition_uid: str | None = Form(None),
     ed_edition: str = Form(""), ed_year: str = Form(""), ed_publisher: str = Form(""), ed_place: str = Form(""),
@@ -1609,13 +1688,16 @@ def update_citation(
             return JSONResponse({"error": "citation not found"}, status_code=404)
         return RedirectResponse(url="/library", status_code=303)
     title = title.strip() or existing["title"]
-    values = {k: v for k, v in locals().items() if k in ("type", "title", "year", "container_title", "doi", "url", "status", "rating", "keywords", *_CITATION_TEXT_FIELDS)}
+    values = {k: v for k, v in locals().items() if k in (*_CITATION_FORM_KEYS, *_TRACKING_FORM_FIELDS, *_CITATION_TEXT_FIELDS)}
     edition_form = _edition_form(edition_uid, ed_edition, ed_year, ed_publisher, ed_place, ed_isbn, ed_doi, ed_url, ed_source, file, delete_edition)
     return _write_citation(conn, uid, values, author_family, author_given, _s(allow_duplicate), x_requested_with, edition_form)
 
 
 @citations_router.get("/editions/{euid}/file")
-def edition_file(euid: str, conn=Depends(get_db)):
+def edition_file(euid: str, format: str = "", conn=Depends(get_db)):
+    found = media_books.file_for(conn, euid, format)
+    if found:
+        return FileResponse(found[0], media_type=found[2], filename=found[1], content_disposition_type="inline")
     path = db.edition_file_path(conn, euid)
     if path is None:
         raise HTTPException(404, "This edition has no PDF on disk")
@@ -1625,6 +1707,7 @@ def edition_file(euid: str, conn=Depends(get_db)):
 
 @citations_router.post("/{uid}/delete")
 def delete_citation(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    media_books.delete_work(conn, uid)
     db.delete_citation(conn, uid)
     return respond(x_requested_with, "/library")
 

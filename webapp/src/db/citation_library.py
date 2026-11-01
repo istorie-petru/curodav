@@ -29,6 +29,7 @@ SORT_EXPRESSIONS = {
     "title": "title COLLATE NOCASE",
     "type": "type",
     "year": f"coalesce(-({_YEAR}), 99999999)",
+    "rating": "coalesce(-score, 1)",
     "author": f"CASE WHEN {_FIRST_FAMILY} IS NULL THEN char(1114111) ELSE lower({_FIRST_FAMILY}) END",
 }
 
@@ -52,7 +53,9 @@ def decode_cursor(cursor: str) -> list[Any] | None:
 
 
 def page_citations(conn: sqlite3.Connection, *, q: str = "", types: list[str] | None = None, authors: list[str] | None = None,
-                   year_lo: int | None = None, year_hi: int | None = None, sources: list[str] | None = None, sort: str = "title", sort2: str = "title",
+                   year_lo: int | None = None, year_hi: int | None = None, sources: list[str] | None = None, statuses: list[str] | None = None,
+                   tags: list[str] | None = None, shelves: list[str] | None = None,
+                   sort: str = "title", sort2: str = "title",
                    after: str = "", limit: int = PAGE_SIZE) -> dict[str, Any]:
     """One keyset page (never OFFSET): rows ordered by (sort, sort2, title, uid), the cursor of the next page or "", and the match count."""
     where, args = ["1 = 1"], []
@@ -66,6 +69,16 @@ def page_citations(conn: sqlite3.Connection, *, q: str = "", types: list[str] | 
     if authors:
         where.append(f"EXISTS (SELECT 1 FROM json_each(authors_json) WHERE ({_AUTHOR_KEY}) IN ({','.join('?' for _ in authors)}))")
         args += authors
+    if tags:
+        where.append(f"EXISTS (SELECT 1 FROM object_tags t WHERE t.object_type = 'media' AND t.object_id = citations.uid AND t.tag_name IN ({','.join('?' for _ in tags)}) COLLATE NOCASE)")
+        args += tags
+    if shelves:
+        where.append("EXISTS (SELECT 1 FROM object_tags t JOIN label_tags lt ON lt.name = t.tag_name WHERE t.object_type = 'media' AND t.object_id = citations.uid "
+                     f"AND lt.label_name IN ({','.join('?' for _ in shelves)}) COLLATE NOCASE)")
+        args += shelves
+    if statuses:
+        where.append(f"status IN ({','.join('?' for _ in statuses)})")
+        args += ["" if s == "none" else s for s in statuses]
     if year_lo is not None:
         where.append(f"({_YEAR}) >= ?")
         args.append(year_lo)
@@ -73,7 +86,7 @@ def page_citations(conn: sqlite3.Connection, *, q: str = "", types: list[str] | 
         where.append(f"({_YEAR}) <= ?")
         args.append(year_hi)
     if sources:
-        has_file = "EXISTS (SELECT 1 FROM citation_editions e WHERE e.citation_uid = citations.uid AND e.file_name != '')"
+        has_file = "EXISTS (SELECT 1 FROM citation_editions e WHERE e.citation_uid = citations.uid AND (e.file_name != '' OR e.calibre_formats != ''))"
         clauses = {"file": has_file, "url": "url != ''", "none": f"url = '' AND NOT {has_file}"}
         where.append("(" + " OR ".join(f"({clauses[k]})" for k in sources if k in clauses) + ")") if any(k in clauses for k in sources) else None
     total = conn.execute(f"SELECT count(*) FROM citations WHERE {' AND '.join(where)}", args).fetchone()[0]
@@ -164,7 +177,9 @@ def get_edition(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
 def _edition_state(conn: sqlite3.Connection, e: dict[str, Any]) -> dict[str, Any]:
     """Adds `file_state` (none, ok, or missing: recorded but gone from the disk), `source` (none, link or local) and `display`."""
     e["file_state"] = ("ok" if (files_dir(conn) / e["file_name"]).is_file() else "missing") if e["file_name"] else "none"
-    e["source"] = "local" if e["file_name"] else ("link" if e["url"] else "none")
+    if e.get("calibre_formats"):
+        e["file_state"], e["file_label"] = "ok", e["calibre_formats"].replace(",", ", ")
+    e["source"] = "local" if (e["file_name"] or e.get("calibre_formats")) else ("link" if e["url"] else "none")
     e["display"] = " · ".join(x for x in (f"{e['edition']} ed." if e["edition"] else "", e["publisher"], e["year"]) if x) or "Edition"
     return e
 
@@ -229,26 +244,60 @@ def sources_for(conn: sqlite3.Connection, items: list[dict[str, Any]]) -> dict[s
     uids = [c["uid"] for c in items]
     stats = {u: {"editions": 0, "files": 0, "missing": 0} for u in uids}
     if uids:
-        rows = conn.execute(f"SELECT citation_uid, file_name FROM citation_editions WHERE citation_uid IN ({','.join('?' for _ in uids)})", uids).fetchall()
+        rows = conn.execute(f"SELECT citation_uid, file_name, calibre_formats FROM citation_editions WHERE citation_uid IN ({','.join('?' for _ in uids)})", uids).fetchall()
         folder = files_dir(conn)
         for row in rows:
             st = stats[row["citation_uid"]]
             st["editions"] += 1
-            if row["file_name"]:
+            if row["calibre_formats"]:
+                st["files"] += 1
+            elif row["file_name"]:
                 st["files"] += 1
                 st["missing"] += 0 if (folder / row["file_name"]).is_file() else 1
     return {c["uid"]: {**stats[c["uid"]], "url": bool(c.get("url"))} for c in items}
 
 
-def picker_items(conn: sqlite3.Connection, selected: list[str], q: str = "", limit: int = 30) -> list[dict[str, str]]:
-    """Options for a server-searched dropdown: the selected entries first, then the best matches, never the whole library."""
+def with_edition(conn: sqlite3.Connection, c: dict[str, Any] | None, edition_uid: str) -> dict[str, Any] | None:
+    """The work as cited through one of its editions: that edition's year, publisher, place, edition, ISBN, DOI and link
+    replace the work's. `ref` is the work's uid, or `uid@edition` when an edition is cited."""
+    if c is None:
+        return None
+    c = dict(c)
+    e = get_edition(conn, edition_uid) if edition_uid else None
+    if e and e["citation_uid"] == c["uid"]:
+        for field in ("year", "publisher", "place", "edition", "isbn", "doi", "url"):
+            if e[field]:
+                c[field] = e[field]
+        c["edition_uid"], c["edition_display"], c["ref"] = e["uid"], e["display"], f"{c['uid']}@{e['uid']}"
+    else:
+        c["edition_uid"], c["edition_display"], c["ref"] = "", "", c["uid"]
+    return c
+
+
+def picker_items(conn: sqlite3.Connection, selected: list[str], q: str = "", limit: int = 30, editions: bool = False) -> list[dict[str, str]]:
+    """Options for a server-searched dropdown: the selected entries first, then the best matches, never the whole library.
+    With `editions`, a work with several editions also offers each one (`uid@edition`)."""
     from .notebook import format_citation_display, get_citation
 
-    items = [{"uid": u, "name": format_citation_display(c)} for u in selected if (c := get_citation(conn, u))]
+    def label(c: dict[str, Any]) -> str:
+        return format_citation_display(c) + (f" [{c['edition_display']}]" if c.get("edition_display") else "")
+
+    items = []
+    for ref in selected:
+        uid, _, edition = ref.partition("@")
+        c = with_edition(conn, get_citation(conn, uid), edition)
+        if c:
+            items.append({"uid": c["ref"], "name": label(c)})
     taken = {i["uid"] for i in items}
     for c in page_citations(conn, q=q, limit=limit)["items"]:
-        if c["uid"] not in taken:
-            items.append({"uid": c["uid"], "name": format_citation_display(c)})
+        refs = [with_edition(conn, c, "")]
+        if editions:
+            eds = list_editions(conn, c["uid"])
+            if len(eds) > 1:
+                refs += [with_edition(conn, c, e["uid"]) for e in eds]
+        for r in refs:
+            if r["ref"] not in taken:
+                items.append({"uid": r["ref"], "name": label(r)})
     return items
 
 
@@ -263,9 +312,9 @@ def author_options(conn: sqlite3.Connection, q: str = "", selected: list[str] | 
     return items
 
 
-MEDIA_TYPES = frozenset({"webpage", "article-journal", "conference-paper", "other"})
+BOOK_TYPES = frozenset({"book", "chapter", "thesis", "report"})
 
 
 def book_noun(c: dict[str, Any] | None) -> str:
-    """"Media" for web pages, articles and the like, "Book" for the rest; the word the library's windows use for an entry."""
-    return "Media" if c and c.get("type") in MEDIA_TYPES else "Book"
+    """"Book" for books, chapters, theses and reports, "Media" for everything else; the word the library's windows use for an entry."""
+    return "Book" if c and c.get("type") in BOOK_TYPES else "Media"

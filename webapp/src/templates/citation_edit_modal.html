@@ -1,9 +1,10 @@
-{% from "_inputs.html" import text_input, textarea_input, switch_input, upload_input %}
+{% from "_inputs.html" import text_input, number_input, textarea_input, switch_input, upload_input %}
+{% from "_date_time_fields.html" import date_field %}
 {% from "_form_rows.html" import details_start, details_end %}
 {% extends "base.html" %}
 {% from "_modal.html" import modal, split_start, split_side, split_end %}
 {% from "_citation_author_row.html" import citation_author_row %}
-{# The book window: the work on the left, the edition being edited in the side pane. Kind-specific rows carry
+{# The book or media window: the work on the left; tracking and, for books and the like, the edition being edited in the side pane. Kind-specific rows carry
    data-cite-types and are shown by static/citation_fields.js. #}
 {% set _sel = (editions | selectattr('uid', 'equalto', selected_edition) | list | first) if (c and selected_edition) else none %}
 {% macro single(name, label, items, selected, wide=false) %}
@@ -14,7 +15,8 @@
 {% block title %}{{ ("Edit " if c else "Add ") ~ noun|lower }}{% endblock %}
 {% block content %}
 {% call modal(kind="form", title=(("Edit " if c else "Add ") ~ noun|lower), size="medium", back=(return_to or (crumbs[-1].url if crumbs else '')), back_name=('Back' if return_to else (crumbs[-1].name if crumbs else '')), retire=([({'action': 'delete', 'url': '/library/' ~ c.uid ~ '/delete', 'mode': 'confirm', 'label': delete_label, 'redirect': none, 'change': none} if (c) else none)] | select | list), form='citation-form', creating=(not c), save_icon='check-square') %}
-<form method="post" id="citation-form" action="{{ form_action }}" enctype="multipart/form-data">
+<form method="post" id="citation-form" action="{{ form_action }}" enctype="multipart/form-data"
+      data-status-verbs='{{ status_verbs | tojson }}' data-verb-labels='{{ verb_labels | tojson }}' data-unit-labels='{{ unit_labels | tojson }}'>
 {{ split_start('library-work', noun) }}
         <div class="card">
             <div class="field-grid">
@@ -26,12 +28,14 @@
                     <label>Subtitle</label>
                     {{ text_input({'name': 'subtitle', 'value': (c.subtitle if c else '')}) }}
                 </div>
+                {% set tag_type = 'media' %}{% set tag_uid = (c.uid if c else '') %}{% set tag_old = [] %}{% set ms_form_id = 'citation-form' %}
+                {% include "_tag_row.html" %}
                 {% set main_author = (c.authors[0] if c and c.authors else {}) %}
-                <div class="field">
+                <div class="field field-wide">
                     <label>Author: last name</label>
                     {{ text_input({'name': 'author_family', 'value': main_author.get('family', '')}) }}
                 </div>
-                <div class="field">
+                <div class="field field-wide">
                     <label>Author: first name</label>
                     {{ text_input({'name': 'author_given', 'value': main_author.get('given', '')}) }}
                 </div>
@@ -50,14 +54,11 @@
                     </template>
                 </div>
                 {% set _types = [] %}{% for t_key, t_label in citation_types %}{% set _ = _types.append({'uid': t_key, 'name': t_label}) %}{% endfor %}
-                {{ single('type', 'Type', _types, (c.type if c else default_type)) }}
-                <div class="field">
+                {{ single('type', 'Type', _types, (c.type if c else default_type), wide=true) }}
+                <div class="field field-wide">
                     <label>Original year</label>
                     {{ text_input({'name': 'year', 'value': (c.year if c else '')}) }}
                 </div>
-                {% set _statuses = [] %}{% for s_key, s_label in statuses %}{% set _ = _statuses.append({'uid': s_key, 'name': s_label}) %}{% endfor %}
-                {{ single('status', 'Status', _statuses, (c.status if c else '')) }}
-                {{ single('rating', 'Rating', [{'uid': '0', 'name': 'No rating'}, {'uid': '1', 'name': '1 star'}, {'uid': '2', 'name': '2 stars'}, {'uid': '3', 'name': '3 stars'}, {'uid': '4', 'name': '4 stars'}, {'uid': '5', 'name': '5 stars'}], ((c.rating|string) if c else '0')) }}
                 <div class="field field-wide">
                     <label>Keywords</label>
                     {{ text_input({'name': 'keywords', 'value': (c.keywords | join(', ') if c else ''), 'autocomplete': 'off'}) }}
@@ -69,15 +70,23 @@
                 </div>
                 {% endmacro %}
                 {{ cfield('container_title', 'Container', 'chapter article-journal webpage conference-paper', true, 'article-journal:Journal;chapter:Book title;webpage:Website;conference-paper:Proceedings') }}
+                <div class="field field-wide" data-cite-types="{{ link_types }}">
+                    <label>Link</label>
+                    {{ text_input({'name': 'url', 'value': (c.url if c else '')}, 'url') }}
+                </div>
                 {{ details_start() }}
                 {{ cfield('editors', 'Editors', 'chapter conference-paper', true) }}
-                {{ cfield('volume', 'Volume', 'book chapter article-journal') }}
+                {{ cfield('volume', 'Volume', 'book manga chapter article-journal') }}
                 {{ cfield('issue', 'Issue', 'article-journal') }}
                 {{ cfield('pages', 'Pages', 'chapter article-journal conference-paper') }}
                 {{ cfield('institution', 'Institution', 'thesis report') }}
                 {{ cfield('degree', 'Degree', 'thesis') }}
                 {{ cfield('issn', 'ISSN', 'article-journal') }}
                 {{ cfield('accessed', 'Accessed', 'webpage') }}
+                <div class="field field-wide">
+                    <label>Summary</label>
+                    {{ textarea_input({'name': 'summary', 'rows': 3}, (c.summary if c else '')) }}
+                </div>
                 <div class="field field-wide">
                     <label>Note</label>
                     {{ textarea_input({'name': 'note', 'rows': 3}, (c.note if c else '')) }}
@@ -89,8 +98,62 @@
                 {{ details_end() }}
             </div>
         </div>
-{% set _side_attrs %}data-library-editions data-editions='{{ edition_data | tojson }}'{% endset %}
-{{ split_side('Edition', attrs=_side_attrs) }}
+{{ split_side('Tracking') }}
+        <div class="card">
+            <div class="field-grid">
+                {% set _statuses = [] %}{% for s_key, s_label in statuses %}{% set _ = _statuses.append({'uid': s_key, 'name': s_label}) %}{% endfor %}
+                {{ single('status', 'Status', _statuses, (c.status if c else '')) }}
+                <div class="field" data-cite-types="{{ progress_types }}">
+                    <label data-unit-label>Progress</label>
+                    {{ number_input({'name': 'progress', 'value': ((c.progress or '') if c else ''), 'min': 0, 'inputmode': 'numeric'}) }}
+                </div>
+                <div class="field" data-cite-types="{{ progress_types }}">
+                    <label>Total</label>
+                    {{ number_input({'name': 'progress_total', 'value': ((c.progress_total or '') if c else ''), 'min': 0, 'inputmode': 'numeric'}) }}
+                </div>
+                <div class="field" data-cite-types="{{ season_types }}">
+                    <label>Season</label>
+                    {{ number_input({'name': 'season', 'value': ((c.season or '') if c else ''), 'min': 0, 'inputmode': 'numeric'}) }}
+                </div>
+                {% if score_choices %}
+                {{ single('score', 'Rating', score_choices, score_value) }}
+                {% else %}
+                <div class="field">
+                    <label>Rating</label>
+                    {{ number_input({'name': 'score', 'value': score_value, 'min': 0, 'max': scale_top, 'inputmode': 'numeric'}) }}
+                </div>
+                {% endif %}
+                {% for cr in criteria %}
+                <div class="field" data-cite-types="{{ cr.types }}">
+                    <input type="hidden" name="crit_uid" value="{{ cr.uid }}">
+                    {% if score_choices %}
+                    {% set ms_mode = 'single' %}{% set ms_form_id = 'citation-form' %}{% set ms_name = 'crit_value' %}{% set ms_label = cr.name %}{% set ms_remote = '' %}
+                    {% set ms_items = score_choices %}{% set ms_selected = cr.value %}{% set ms_bare = true %}
+                    <label>{{ cr.name }}</label>
+                    {% include "_widget_list_multiselect.html" %}
+                    {% set ms_bare = false %}
+                    {% else %}
+                    <label>{{ cr.name }}</label>
+                    {{ number_input({'name': 'crit_value', 'value': cr.value, 'min': 0, 'max': scale_top, 'inputmode': 'numeric'}) }}
+                    {% endif %}
+                </div>
+                {% endfor %}
+                <div class="field">
+                    <label>Started</label>
+                    {{ date_field('started_on', (c.started_on if c else ''), label='Started') }}
+                </div>
+                <div class="field">
+                    <label>Finished</label>
+                    {{ date_field('finished_on', (c.finished_on if c else ''), label='Finished') }}
+                </div>
+                <div class="field">
+                    <label>Times again</label>
+                    {{ number_input({'name': 'repeats', 'value': ((c.repeats or '') if c else ''), 'min': 0, 'inputmode': 'numeric'}) }}
+                </div>
+            </div>
+        </div>
+        <div data-library-editions data-cite-types="{{ edition_types }}" data-editions='{{ edition_data | tojson }}'>
+        <h2 class="modal-split-title">Edition</h2>
         <div class="card">
             <div class="field-grid">
                 {% set _eds = [] %}{% for e in editions %}{% set _ = _eds.append({'uid': e.uid, 'name': e.display}) %}{% endfor %}
@@ -110,7 +173,7 @@
                     </div>
                     <div class="edition-source-slot" data-edition-file{% if not _sel or _sel.source != 'local' %} hidden{% endif %}>
                         <label>File</label>
-                        {{ upload_input('file', accept='application/pdf', form='citation-form', label='Choose a file',
+                        {{ upload_input('file', accept=upload_accept, form='citation-form', label='Choose a file',
                                         current=(_sel.file_label if _sel and _sel.source == 'local' and _sel.file_state == 'ok' else none),
                                         current_url=(('/library/editions/' ~ _sel.uid ~ '/file') if _sel and _sel.source == 'local' and _sel.file_state == 'ok' else none),
                                         attrs={'class': 'edition-file-input'}) }}
@@ -121,6 +184,7 @@
                     {{ switch_input({'name': 'delete_edition', 'value': '1', 'id': 'citation-delete-edition'}) }}
                 </div>
             </div>
+        </div>
         </div>
 {{ split_end() }}
 </form>

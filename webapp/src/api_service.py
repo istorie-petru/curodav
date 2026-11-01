@@ -13,7 +13,8 @@ from datetime import timedelta
 from typing import Any
 from urllib.parse import quote
 
-from . import clock, db, search_index, tags
+from . import clock, db, media, search_index, tags
+from .db import media as media_db
 from .db.citation_library import decode_cursor, encode_cursor, list_editions, page_citations
 from .notebook_markdown import blocks_to_markdown
 
@@ -140,17 +141,45 @@ def _citation_out(c: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _with_tracking(conn: sqlite3.Connection, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Citations with their media side: kind, status, progress and the overall rating in the user's scale."""
+    kinds, scale = media_db.media_kinds_by_uid(conn), media_db.rating_scale(conn)
+    overall = media_db.overall_ratings(conn, items)
+    out = []
+    for c in items:
+        kind = media.kind_for(c.get("type") or "", kinds)
+        status = media.normal_status(c.get("status") or "")
+        out.append(_citation_out(c) | {"media": {
+            "kind": kind.name, "verb": kind.verb, "unit": kind.unit, "status": status or None,
+            "status_label": media.status_label(status, kind.verb) if status else None,
+            "progress": c.get("progress") or 0, "progress_total": c.get("progress_total") or 0, "season": c.get("season") or 0,
+            "repeats": c.get("repeats") or 0, "started_on": c.get("started_on") or None, "finished_on": c.get("finished_on") or None,
+            "rating": media.to_scale(overall.get(c["uid"]), scale), "rating_scale": media.SCALES.get(scale, media.SCALES[media.DEFAULT_SCALE])[0]}})
+    return out
+
+
 def list_citations(conn: sqlite3.Connection, *, q: str = "", types: list[str] | None = None, cursor: str = "",
                    limit: int | None = None) -> dict[str, Any]:
     page = page_citations(conn, q=q, types=types or None, after=cursor, limit=_limit(limit))
-    return {"items": [_citation_out(c) for c in page["items"]], "next": page["next"], "total": page["total"]}
+    return {"items": _with_tracking(conn, page["items"]), "next": page["next"], "total": page["total"]}
+
+
+def media_now(conn: sqlite3.Connection, *, finished_days: int = 60) -> dict[str, Any]:
+    """What is being read or watched now, on hold, planned next, and finished in the last `finished_days` days."""
+    since = (clock.today() - timedelta(days=max(0, finished_days))).isoformat()
+    sections = media_db.now_sections(conn, since)
+    return {name: _with_tracking(conn, rows) for name, rows in sections.items()}
 
 
 def get_citation(conn: sqlite3.Connection, uid: str) -> dict[str, Any]:
     c = db.get_citation(conn, uid)
     if c is None:
         raise NotFound(uid)
-    out = _citation_out(c)
+    out = _with_tracking(conn, [c])[0]
+    criteria = {r["uid"]: r["name"] for r in media_db.list_rating_criteria(conn)}
+    scale = media_db.rating_scale(conn)
+    out["media"]["criteria"] = {criteria[k]: media.to_scale(v, scale) for k, v in media_db.citation_ratings(conn, uid).items() if k in criteria}
+    out["media"]["summary"] = c.get("summary") or ""
     out["editions"] = [{k: e.get(k) for k in ("uid", "year", "publisher", "place", "edition", "isbn", "doi", "url", "file_label")}
                        for e in list_editions(conn, uid)]
     out["notes"] = [{"uid": r["uid"], "title": r["title"]} for r in conn.execute(

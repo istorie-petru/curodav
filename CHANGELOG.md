@@ -6,6 +6,15 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [5.0.0]
+
+- Library: books, manga, films, series, anime and your own kinds in one place, with status, ratings (one rating, or one per criterion), covers, Find details from public services, tags and shelves, and a Now page of what is being read and watched (migrations 60 to 63).
+- Books and manga live in a Calibre library you choose: editions are Calibre books, uploads are formats, and changes made in Calibre or Calibre-Web are read back. An OPDS catalogue serves the books to e-book readers, signed in with HTTP Basic over HTTPS or locally.
+- Media lists in open formats: MyAnimeList XML for anime and manga, Letterboxd CSV for films, JSON for everything, and import of the same.
+- A note can cite one edition of a work; the bibliography reads publisher and year from it.
+- API and MCP read what is being watched and read, with tracking and ratings on citations.
+- `curodav-ctl install --library` sets up the book library folder; the TMDB key is kept with the secrets, outside the database.
+
 ## [4.9.0]
 
 - University: a setup page with a click-to-add timetable, Exams, Attendance and Work views, attendance (missed, excused, cancelled and made-up classes), entry conditions and grades per way of evaluating, quick disciplines and defaults (migrations 65 and 66).

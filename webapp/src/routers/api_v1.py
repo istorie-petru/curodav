@@ -120,6 +120,13 @@ def organisation(request: Request, conn=Depends(get_db), token=Depends(require_r
     return api_service.list_organisation(conn)
 
 
+@router.get("/media/now")
+def media_now(request: Request, finished_days: Annotated[int, Query(ge=0, le=3650)] = 60, conn=Depends(get_db),
+              token=Depends(require_read)):
+    _log(conn, token, request)
+    return api_service.media_now(conn, finished_days=finished_days)
+
+
 @router.get("/university")
 def university_overview(request: Request, semester_uid: str = "", conn=Depends(get_db), token=Depends(require_read)):
     _log(conn, token, request)

@@ -19,6 +19,29 @@
         });
       }
     });
+    relabel(form, type);
+  }
+
+  // Status words follow the kind (To watch, Watching, Watched), and the progress row names its unit.
+  function relabel(form, type) {
+    var verbs = JSON.parse(form.dataset.statusVerbs || "{}");
+    var labels = JSON.parse(form.dataset.verbLabels || "{}")[verbs[type] || "read"];
+    var keys = ["planned", "current", "paused", "finished", "dropped"];
+    if (labels) {
+      document.querySelectorAll('input[name="status"][form="citation-form"]').forEach(function (radio) {
+        var i = keys.indexOf(radio.value);
+        var span = radio.parentNode.querySelector("span");
+        if (i >= 0 && span) span.textContent = labels[i];
+        if (radio.checked) {
+          var summary = radio.closest("[data-ms]").querySelector(".ms-summary");
+          if (summary && span) summary.textContent = span.textContent;
+        }
+      });
+    }
+    var unit = JSON.parse(form.dataset.unitLabels || "{}")[type];
+    form.querySelectorAll("[data-unit-label]").forEach(function (label) {
+      label.textContent = unit && unit !== "None" ? unit : "Progress";
+    });
   }
 
   document.addEventListener("change", function (e) {

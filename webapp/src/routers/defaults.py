@@ -45,6 +45,7 @@ LINKS = [
     {"group": "Set elsewhere", "label": "Week start, time format, time zone, currency", "hint": "General", "href": "/settings/general"},
     {"group": "Set elsewhere", "label": "Morning reminder and notification types", "hint": "Notifications", "href": "/settings/notifications"},
     {"group": "Set elsewhere", "label": "Journal template, citation format, entry types", "hint": "Notebook", "href": "/settings/notebook"},
+    {"group": "Set elsewhere", "label": "Rating scale and criteria, media kinds, film source", "hint": "Library", "href": "/settings/library"},
 ]
 
 

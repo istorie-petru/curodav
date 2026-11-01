@@ -234,8 +234,9 @@ def test_nothing_can_be_approved_on_an_install_without_a_login(tmp_path, monkeyp
 
 
 
-def test_university_routes_answer_with_a_token(app_client):
+def test_media_and_university_routes_answer_with_a_token(app_client):
     _uid, secret = _personal_token(app_client)
+    assert set(app_client.get("/api/v1/media/now", headers=_bearer(secret)).json()) == {"current", "paused", "planned", "finished"}
     assert app_client.get("/api/v1/university", headers=_bearer(secret)).json()["semester"] is None
     assert app_client.get("/api/v1/university/disciplines/Biology", headers=_bearer(secret)).status_code == 404
 

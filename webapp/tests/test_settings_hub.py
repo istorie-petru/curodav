@@ -139,6 +139,7 @@ class TestSettingsHub:
             "/settings/groups",
             "/settings/tags",
             "/settings/notebook",  # 2026-10-02
+            "/settings/library",
             "/settings/finance-accounts",
             "/settings/calendar",
             "/settings/data-maintenance",
