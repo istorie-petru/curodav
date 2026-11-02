@@ -144,6 +144,8 @@ def test_classes_and_exams_can_be_edited_elsewhere_and_a_new_title_applies_every
     assert db.get_event(conn, cls["uid"])["description"] == "x"
     assert {db.get_event(conn, m["uid"])["title"] for m in members} == {"Renamed"}
     assert db.get_event(conn, members[1]["uid"])["description"] == ""
+    refused = call(tasks_router.update_task, exam_uid, title="Final exam", description="bring ID", due_at="2030-05-05")
+    assert refused.status_code in (303, 422) and db.get_task(conn, exam_uid)["due_at"] != "2030-05-05"
     call(tasks_router.update_task, exam_uid, title="Final exam", description="bring ID")
     assert db.get_task(conn, exam_uid)["description"] == "bring ID"
     assert db.get_task(conn, exam_uid)["title"] == "Final exam" and db.get_event(conn, exam["event_uid"])["title"] == "Final exam"
@@ -331,7 +333,7 @@ def test_the_examination_page_lists_every_way_with_its_milestones_and_dates(conn
         assert w in page, w
     assert "/evaluation/" not in page.split("<main")[1].split("</main>")[0]
     sheet = _html(discipline_page("University", "Biology", _request(), view="sheet", conn=conn))
-    assert "Exam" in sheet and "evaluation/new?discipline=Biology" in sheet and "/evaluation/" in sheet
+    assert "Exam" in sheet and "evaluation/new?discipline=Biology" in sheet and "/evaluation/" in sheet and 'aria-label="Edit Project"' in sheet
 
 
 def test_the_way_window_saves_a_way_with_components_events_and_tasks_apart_and_toasts_a_warning(conn, sem):

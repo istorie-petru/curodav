@@ -6,6 +6,11 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [5.0.8]
+
+- Course sheet: the sections (Identification, Teaching, Content, Examination) are stacked in one column, and each way of evaluating has an edit button of its own.
+- An exam's deadline task can no longer be moved from the task form; the date of an exam is changed on the course sheet.
+
 ## [5.0.7]
 
 - Fix: a discipline page no longer crashes when the timetable slots have teachers (a missing import in the course sheet code), and a test now renders every view of such a discipline.

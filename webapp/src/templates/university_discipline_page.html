@@ -64,7 +64,7 @@
 {% elif view == 'sheet' %}
 {% set ident = sheet.sections | selectattr('key', 'equalto', 'identification') | first %}
 {% set summary_sec = sheet.sections | selectattr('key', 'equalto', 'content') | first %}
-<div class="card-grid wcard-grid exam-cards">
+<div class="uni-sheet-col">
 <section class="wcard is-plain">
     <div class="wcard-label">Identification<span class="spacer"></span>{{ edit_btn('/settings/university/sheet/' ~ enc ~ '?section=identification', 'Edit the identification') }}</div>
     <div class="uni-sheet">
@@ -94,7 +94,7 @@
     <div class="wcard-label">Examination<span class="spacer"></span>{{ add_btn('/settings/university/evaluation/new?discipline=' ~ enc, 'Add a way of evaluating') }}</div>
     <div class="uni-sheet">
         {% for w in ways %}
-        <div class="uni-sheet-row"><span><a href="/settings/university/evaluation/{{ w.id }}/edit?discipline={{ enc }}" data-modal>{{ w.name }}</a></span>
+        <div class="uni-sheet-row"><span>{{ w.name }} {{ edit_btn('/settings/university/evaluation/' ~ w.id ~ '/edit?discipline=' ~ enc, 'Edit ' ~ w.name) }}</span>
             <div><p>{% if w.elimination %}Elimination{% elif w.weight is not none %}{{ '%g'|format(w.weight) }}% of the grade{% endif %}{% if w.form %}, {{ w.form|lower }}{% endif %}{% if w.min_grade is not none %}, at least {{ '%g'|format(w.min_grade) }} to pass{% endif %}</p>
                 {% for sub in w.subs %}<p class="text-muted">{{ sub.name }}{% if sub.weight is not none %}, {{ '%g'|format(sub.weight) }}%{% endif %}</p>{% endfor %}
                 {% for m in w.milestones %}<p class="text-muted">{{ m.title }}, {{ (m.date|short_day) if m.date else 'no date' }}</p>{% endfor %}

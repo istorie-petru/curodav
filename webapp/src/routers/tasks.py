@@ -972,6 +972,8 @@ def update_task(
         exclude_sunday = ""
     existing = db.get_task(conn, uid) or {}
     managed = bool(existing) and university_plan.is_locked(conn, "task", uid)  # an exam: a new title is applied everywhere
+    if managed and isinstance(due_at, str) and due_at and due_at != (existing.get("due_at") or ""):
+        return validation_response({"field": "due_at", "message": "Change the deadline of an exam on the course sheet"}, x_requested_with, f"/tasks/{uid}/edit")
     # `isinstance`, not `is None` -- a direct (non-HTTP) router call in a
     # test that omits `status` entirely gets FastAPI's raw `Form(None)`
     # marker object here, not a literal `None` (same guard shape

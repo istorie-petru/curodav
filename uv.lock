@@ -462,7 +462,7 @@ wheels = [
 
 [[package]]
 name = "curodav"
-version = "5.0.7"
+version = "5.0.8"
 source = { virtual = "." }
 
 [[package]]

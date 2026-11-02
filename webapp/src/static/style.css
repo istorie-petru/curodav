@@ -5339,3 +5339,5 @@ input.is-greyed{opacity:.5; background:var(--bg-hover, transparent);}
 .api-visit-time{display:inline-block; min-width:3.2em; color:var(--fg-tertiary); font-variant-numeric:tabular-nums;}
 .api-visit-where{color:var(--fg-tertiary);}
 .uni-month{margin:var(--space-4) 0 var(--space-1); font-size:var(--text-base); font-weight:var(--font-weight-bold); color:var(--fg-secondary);}
+
+.uni-sheet-col{display:flex; flex-direction:column; gap:var(--space-4); max-width:760px; margin-bottom:var(--space-4);}
