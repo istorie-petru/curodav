@@ -514,6 +514,18 @@ def _note_versions(conn: sqlite3.Connection) -> None:
     note_versions.ensure_schema(conn)
 
 
+def _api_changes(conn: sqlite3.Connection) -> None:
+    from . import api_history
+
+    api_history.ensure_schema(conn)
+
+
+def _activity_target(conn: sqlite3.Connection) -> None:
+    from . import access_tokens
+
+    access_tokens.add_activity_target(conn)
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "notebook documents get an is_template flag", _note_templates),
     Migration(2, "frontmatter fields lose the required column", _field_config_without_required, destructive=True),
@@ -561,11 +573,14 @@ MIGRATIONS: list[Migration] = [
     Migration(64, "A work can belong to a series", citation_series),
     Migration(65, "University attendance: missed, excused, cancelled and made-up classes", migrations_university.attendance),
     Migration(66, "University grades of a way of evaluating and its components", migrations_university.grades),
+    Migration(67, "University teachers come from the timetable", migrations_university.sheet_teachers_to_slots),
     Migration(73, "Spaces choose how they appear in the sidebar", _space_sidebar),
     Migration(74, "Spaces list shelves or tags in the sidebar", _space_sidebar_kind),
     Migration(78, "Full-text search over notes, entries, tasks, events and contacts", _search_index),
     Migration(79, "API tokens, OAuth clients and codes, API activity", _access_tokens),
     Migration(80, "Earlier versions of notes changed through the API", _note_versions),
+    Migration(81, "Undoable history of changes made through the API", _api_changes),
+    Migration(82, "API activity says where each call went", _activity_target),
 ]
 
 

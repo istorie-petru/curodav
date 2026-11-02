@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_empty_state.html" import empty_state %}
+{% block title %}Backup{% endblock %}
+{% block content %}
+{% set label = (backup.label ~ ', ' ~ (backup.at.strftime('%Y-%m-%d') | short_day) ~ ' ' ~ backup.time) if backup else 'Backup' %}
+{% call modal(kind="view", title=label, size="medium") %}
+<div class="card table-scroll table-responsive">
+    <h2>Compared with now</h2>
+    <table class="entity-table">
+        <thead><tr><th class="col-name">Area</th><th>Then</th><th>Now</th><th class="col-opt-1">Last change then</th></tr></thead>
+        <tbody>
+        {% for a in diff.areas %}
+        <tr><td class="col-name">{{ a.area }}</td><td>{{ a.then }}</td><td>{{ a.now }}</td><td class="col-opt-1">{{ a.then_latest or 'None' }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+<div class="card table-scroll table-responsive">
+    <h2>Notes that differ</h2>
+    {% if diff.notes %}
+    <table class="entity-table">
+        <tbody>
+        {% for n in diff.notes %}
+        <tr><td class="col-name">{{ n.title }} <span class="text-muted">{{ n.state }}</span></td>
+            <td class="col-actions"><form class="form-inline" method="post" action="/settings/backups/{{ backup.name }}/note"
+                  data-confirm-sheet="Bring back {{ n.title }} as it was in this backup? Undo it under API access, Changes." data-confirm-label="Restore">
+                <input type="hidden" name="uid" value="{{ n.uid }}">
+                <button type="submit" class="btn ghost btn-sm">Restore only this</button></form></td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}{{ empty_state('No note differs', size='compact') }}{% endif %}
+</div>
+{% if diff.disciplines %}
+<div class="card table-scroll table-responsive">
+    <h2>Disciplines that differ</h2>
+    <table class="entity-table">
+        <tbody>
+        {% for d in diff.disciplines %}
+        <tr><td class="col-name">{{ d.name }} <span class="text-muted">{{ d.semester }}</span></td>
+            <td class="col-actions"><form class="form-inline" method="post" action="/settings/backups/{{ backup.name }}/discipline"
+                  data-confirm-sheet="Bring back {{ d.name }} as it was in this backup, with its timetable, evaluation, topics, readings and attendance?" data-confirm-label="Restore">
+                <input type="hidden" name="semester_uid" value="{{ d.semester_uid }}"><input type="hidden" name="discipline" value="{{ d.name }}">
+                <button type="submit" class="btn ghost btn-sm">Restore only this</button></form></td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+<div class="card">
+    <form class="settings-field-row" method="post" action="/settings/backups/{{ backup.name }}/restore"
+          data-confirm-sheet="Replace everything with this backup? What is there now is kept as a backup first." data-confirm-typed="RESTORE" data-confirm-label="Restore">
+        <span class="settings-field-label">Everything</span>
+        <span class="spacer"></span>
+        <button type="submit" class="btn danger btn-sm">Restore everything</button>
+    </form>
+</div>
+{% endcall %}
+{% endblock %}

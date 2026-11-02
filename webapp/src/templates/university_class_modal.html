@@ -1,11 +1,9 @@
-{% from "_inputs.html" import textarea_input, text_input %}
-{% from "_form_rows.html" import details_start, details_end %}
+{% from "_inputs.html" import textarea_input %}
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
-{% from "_date_time_fields.html" import date_field, time_field with context %}
 {% block title %}Edit class{% endblock %}
 {% block content %}
-{% set _retire = [{'action': 'delete', 'url': '/university/class/' ~ event.uid ~ '/delete', 'mode': 'confirm', 'label': 'Delete this class? The other classes of the slot stay.', 'redirect': none, 'change': none}] %}
+{% set _retire = ([{'action': 'delete', 'url': '/university/class/' ~ event.uid ~ '/delete', 'mode': 'confirm', 'label': 'Delete this class?', 'redirect': none, 'change': none}] if deletable else none) %}
 {% call modal(kind="form", title=discipline ~ ' ' ~ (kind|lower) ~ ', ' ~ (event.start_at|dtf_date), size="medium", form='university-class-form', retire=_retire) %}
 <div class="card">
 <form method="post" id="university-class-form" action="/university/class/{{ event.uid }}/content">
@@ -16,19 +14,7 @@
             {% set ms_selected = topic_uid %}{% set ms_wide = true %}
             {% include '_widget_list_multiselect.html' %}
         </div>
-        <div class="field field-wide">
-            {% set ms_mode = 'select' %}{% set ms_form_id = 'university-class-form' %}{% set ms_name = 'competences' %}{% set ms_label = 'Competences' %}
-            {% set ms_items = [] %}{% for c in competences %}{% set _ = ms_items.append({'uid': c.uid, 'name': c.number ~ '. ' ~ c.title}) %}{% endfor %}
-            {% set ms_selected = competence_uids %}{% set ms_wide = true %}
-            {% include '_widget_list_multiselect.html' %}
-        </div>
         <div class="field field-wide"><label>What else was covered</label>{{ textarea_input({'name': 'text', 'rows': 3}, text) }}</div>
-        {{ details_start() }}
-        <div class="field"><label>Date</label>{{ date_field('day', event.start_at[:10], label='Date', required=true) }}</div>
-        <div class="field"><label>Room</label>{{ text_input({"name": "room", "value": (event.location or "")}) }}</div>
-        <div class="field"><label>Start time</label>{{ time_field('start', event.start_at[11:16], required=true, label='Start time') }}</div>
-        <div class="field"><label>End time</label>{{ time_field('end', (event.end_at or '')[11:16], required=true, label='End time') }}</div>
-        {{ details_end() }}
     </div>
 </form>
 </div>

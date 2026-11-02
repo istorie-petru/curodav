@@ -34,7 +34,7 @@ SETTINGS_GROUPS = [
     {"name": "Preferences", "icon": "sun", "items": [("General", "/settings/general"), ("Defaults", "/settings/defaults"), ("Appearance", "/settings/appearance")]},
     {"name": "Organise", "icon": "tag", "items": [("Shelves", "/settings/labels"), ("Tags", "/settings/tags"), ("Spaces", "/settings/groups")]},
     {"name": "Modules", "icon": "file-text", "items": [("Notebook", "/settings/notebook"), ("Library", "/settings/library"), ("Finance", "/settings/finance-accounts"), ("Calendar", "/settings/calendar")]},
-    {"name": "System", "icon": "database", "items": [("Data", "/settings/data-maintenance"), ("Published lists", "/published-lists"), ("Logs", "/settings/logs"), ("API access", "/settings/api-access")]},
+    {"name": "System", "icon": "database", "items": [("Data", "/settings/data-maintenance"), ("Published lists", "/published-lists"), ("Backups", "/settings/backups"), ("Logs", "/settings/logs"), ("API access", "/settings/api-access")]},
 ]
 
 

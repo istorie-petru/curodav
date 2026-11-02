@@ -5331,3 +5331,23 @@ input.is-greyed{opacity:.5; background:var(--bg-hover, transparent);}
 .uni-timeline .nbtl-item.is-now .nbtl-title{color:var(--fg-tertiary); font-size:var(--text-sm); text-transform:uppercase; letter-spacing:.12em;}
 .uni-timeline .nbtl-item.is-now .nbtl-bullet{background:transparent; border:2px solid var(--fg-tertiary);}
 .uni-timetable .time-grid-body{box-sizing:content-box;}
+/* API access, Recent activity: one log card per visit (who and when) that opens to its calls, one short line each. */
+.api-visit > summary{list-style:none; cursor:pointer;}
+.api-visit > summary::-webkit-details-marker{display:none;}
+.api-visit-calls{list-style:none; margin:0 0 var(--space-2); padding:0; display:flex; flex-direction:column; gap:2px; font-size:var(--text-sm); color:var(--fg-secondary);}
+.api-visit-calls li{line-height:1.5; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.api-visit-time{display:inline-block; min-width:3.2em; color:var(--fg-tertiary); font-variant-numeric:tabular-nums;}
+.api-visit-where{color:var(--fg-tertiary);}
+/* Discipline cards: tall, in the discipline's own colour. */
+.disc-cards{--card-min:230px;}
+.wcard.is-hue{min-height:190px; border-color:transparent; color:#fff; background:linear-gradient(150deg, var(--hue) 0%, color-mix(in srgb, var(--hue) 55%, #000) 100%);}
+a.wcard.is-hue:hover{background:linear-gradient(150deg, var(--hue) 0%, color-mix(in srgb, var(--hue) 55%, #000) 100%); box-shadow:var(--elevation-2);}
+.wcard.is-hue .wcard-big, .wcard.is-hue .wcard-small, .wcard.is-hue .wcard-label, .wcard.is-hue .wcard-arrow{color:#fff;}
+.wcard.is-hue .wcard-label{opacity:.8;}
+.wcard.is-hue .wcard-icon{display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:10px; background:rgba(255,255,255,.2);}
+.disc-card-lines{display:flex; flex-direction:column; gap:var(--space-2); margin-top:var(--space-3);}
+.uni-month{margin:var(--space-4) 0 var(--space-1); font-size:var(--text-base); font-weight:var(--font-weight-bold); color:var(--fg-secondary);}
+/* The next-class card shows the class, or its time after a tap. */
+.wcard-flip{cursor:pointer;}
+.wcard-flip .flip-b, .wcard-flip:has(input:checked) .flip-a{display:none;}
+.wcard-flip:has(input:checked) .flip-b{display:block;}

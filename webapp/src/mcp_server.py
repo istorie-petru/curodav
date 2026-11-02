@@ -14,7 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any
 
-from . import access_tokens, api_library, api_service, api_university, api_write, note_versions
+from . import access_tokens, api_history, api_library, api_service, api_university, api_write, note_versions
 from .university_plan import SHEET_FIELDS
 
 PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26")
@@ -279,7 +279,11 @@ def call_tool(conn: sqlite3.Connection, name: str, args: Any, token: dict[str, A
     if problem:
         return {"content": [{"type": "text", "text": problem}], "isError": True}
     try:
-        data = tool.run(conn, args or {}, token or {})
+        if tool.scope.startswith("write"):
+            data = api_history.run_tracked(conn, name, args or {}, lambda: tool.run(conn, args or {}, token or {}), source="mcp",
+                                           token_uid=(token or {}).get("uid", ""))
+        else:
+            data = tool.run(conn, args or {}, token or {})
     except api_service.NotFound as exc:
         return {"content": [{"type": "text", "text": f"Nothing found with uid {exc.args[0]}."}], "isError": True}
     except api_write.EditError as exc:

@@ -110,7 +110,7 @@ def test_mcp_over_http_initializes_and_calls_a_tool(app_client):
     assert note.json()["result"]["structuredContent"]["results"][0]["uid"] == "n1"
     assert app_client.post("/mcp", headers=_bearer(secret), json={"jsonrpc": "2.0", "method": "notifications/initialized"}).status_code == 202
     with _conn(app_client) as conn:
-        assert access_tokens.recent_activity(conn)[0]["action"] == "tool search"
+        assert access_tokens.recent_activity(conn)[0]["action"] == "Search" and access_tokens.recent_activity(conn)[0]["target"] == "“categorical”"
 
 
 def test_mcp_refuses_another_site_and_bad_json(app_client):

@@ -78,7 +78,8 @@ CREATE TABLE IF NOT EXISTS api_activity (
     at TEXT NOT NULL,
     token_uid TEXT NOT NULL,
     surface TEXT NOT NULL,
-    action TEXT NOT NULL
+    action TEXT NOT NULL,
+    target TEXT NOT NULL DEFAULT ''
 );
 """
 
@@ -212,16 +213,16 @@ def check_token(conn: sqlite3.Connection, secret: str | None, scope: str | None 
     return dict(row)
 
 
-def log_activity(conn: sqlite3.Connection, token_uid: str, surface: str, action: str) -> None:
-    conn.execute("INSERT INTO api_activity (at, token_uid, surface, action) VALUES (?, ?, ?, ?)",
-                 (_iso(_now()), token_uid, surface, action[:200]))
+def log_activity(conn: sqlite3.Connection, token_uid: str, surface: str, action: str, target: str = "") -> None:
+    conn.execute("INSERT INTO api_activity (at, token_uid, surface, action, target) VALUES (?, ?, ?, ?, ?)",
+                 (_iso(_now()), token_uid, surface, action[:200], target[:200]))
     conn.execute("DELETE FROM api_activity WHERE id <= (SELECT max(id) FROM api_activity) - ?", (ACTIVITY_KEEP,))
     conn.commit()
 
 
 def recent_activity(conn: sqlite3.Connection, limit: int = 50) -> list[dict[str, Any]]:
     rows = conn.execute(
-        "SELECT a.at, a.surface, a.action, coalesce(t.name, '') AS token_name FROM api_activity a "
+        "SELECT a.at, a.surface, a.action, a.target, a.token_uid, coalesce(t.name, '') AS token_name FROM api_activity a "
         "LEFT JOIN api_tokens t ON t.uid = a.token_uid ORDER BY a.id DESC LIMIT ?", (limit,)).fetchall()
     return [dict(r) for r in rows]
 
@@ -362,3 +363,8 @@ def authorization_server_metadata(base: str) -> dict[str, Any]:
             "registration_endpoint": f"{base}/oauth/register", "scopes_supported": list(SCOPES),
             "response_types_supported": ["code"], "grant_types_supported": ["authorization_code", "refresh_token"],
             "code_challenge_methods_supported": ["S256"], "token_endpoint_auth_methods_supported": ["none"]}
+
+
+def add_activity_target(conn: sqlite3.Connection) -> None:
+    if "target" not in {r[1] for r in conn.execute("PRAGMA table_info(api_activity)")}:
+        conn.execute("ALTER TABLE api_activity ADD COLUMN target TEXT NOT NULL DEFAULT ''")

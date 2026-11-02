@@ -73,3 +73,29 @@ def test_changing_a_token_saves_and_says_so(client):
     with _conn(client) as conn:
         assert access_tokens.check_token(conn, secret, "write:notes") is not None
         assert access_tokens.check_token(conn, secret, "read:calendar") is None
+
+
+def test_a_change_is_listed_and_undone_from_settings(client):
+    from src import mcp_server
+
+    with _conn(client) as conn:
+        result = mcp_server.handle(conn, {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+            "name": "create_note", "arguments": {"title": "From the assistant"}}}, {"uid": "t", "scopes": "write:notes"})
+        uid = result["result"]["structuredContent"]["uid"]
+        change = conn.execute("SELECT uid FROM api_changes").fetchone()[0]
+    assert "Created note From the assistant" in client.get("/settings/api-access").text
+    done = client.post(f"/settings/api-access/changes/{change}/undo", headers={"Origin": "http://testserver"})
+    assert done.headers["location"].endswith("note=Undone")
+    with _conn(client) as conn:
+        assert db.get_notebook_document(conn, uid) is None
+    assert "undone" in client.get("/settings/api-access").text
+
+
+def test_the_backups_page_lists_the_start_backup_and_opens_it(client):
+    from src import auto_backups
+
+    settings = client.app.state.settings
+    name = auto_backups.make(settings.db_path, settings.backup_dir, "morning").name
+    assert "Morning" in client.get("/settings/backups").text
+    window = client.get(f"/settings/backups/{name}").text
+    assert "Compared with now" in window and "Restore everything" in window

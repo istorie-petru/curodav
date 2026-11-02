@@ -73,12 +73,12 @@ def test_marking_from_a_menu_keeps_the_note_and_rejects_what_is_not_a_class(conn
     lecture = _classes(conn, sem, "lecture")[0]
     ua.set_status(conn, lecture["uid"], "missed", "sick")
     resp = university.attendance_save(lecture["uid"], status="made_up", note="", back="", keep_note="1", conn=conn)
-    assert resp.status_code == 303 and "view=classes" in resp.headers["location"]
+    assert resp.status_code == 303 and resp.headers["location"] == "/groups/University/disciplines/Biology"
     assert ua.statuses_of(conn, [lecture["uid"]])[lecture["uid"]] == {"status": "made_up", "note": "sick"}
     with pytest.raises(up.PlanError):
         ua.set_status(conn, lecture["uid"], "late")
     page = discipline_page("University", "Biology", _request(), view="classes", conn=conn).body.decode()
-    assert "Made up" in page and "sick" in page
+    assert "Made up" in page
 
 
 def _ways(conn, sem):
@@ -143,9 +143,9 @@ def test_a_discipline_typed_on_the_timetable_is_made_with_a_free_colour_and_an_a
     assert [t["name"] for t in made["teachers"]] == ["Popescu Ion"] and up.auto_abbreviation("Biology") == "BIOL"
 
 
-def test_an_empty_hour_on_the_settings_timetable_opens_a_class_at_that_hour(conn, sem):
+def test_the_timetable_is_no_longer_edited_on_the_settings_page_and_a_new_slot_can_start_at_an_hour(conn, sem):
     html = university.university_settings(_request(), conn=conn).body.decode()
-    assert "/settings/university/slot/new?weekday=1&amp;start=10:00" in html or "/settings/university/slot/new?weekday=1&start=10:00" in html
+    assert "uni-hour" not in html
     form = university.slot_new(_request(), discipline="", weekday="1", start="10:00", conn=conn).body.decode()
     assert "Tuesday" in form and "11:50" in form and "Discipline" in form
     with pytest.raises(HTTPException):

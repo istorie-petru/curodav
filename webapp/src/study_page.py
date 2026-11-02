@@ -208,30 +208,37 @@ def timeline(exam_rows: list[dict], work_rows: list[dict], today: date) -> list[
     items.sort(key=lambda i: (not i["day"], i["day"], i["title"]))
     for i in items:
         i["past"] = bool(i["day"]) and i["day"] < iso
+        i["month"] = date.fromisoformat(i["day"]).strftime("%B %Y") if i["day"] else "No date"
     at = next((n for n, i in enumerate(items) if not i["past"]), len(items))
-    items.insert(at, {"now": True, "day": iso, "title": "Today", "sub": "", "url": "", "color": "gray", "past": False, "grade": None})
+    items.insert(at, {"now": True, "day": iso, "title": "Today", "sub": "", "url": "", "color": "gray", "past": False, "grade": None, "month": date.fromisoformat(iso).strftime("%B %Y")})
     return items
 
 
 def cards(conn, semester: dict, group: str, today: date) -> list[dict]:
-    """One card per discipline: its name and icon, and one line only when something needs saying: an exam is coming, absences run out,
-    or the contents or the evaluation are not set up yet."""
+    """One tall card per discipline in its own colour, sorted by colour and then by name, with the one exam and the one task or homework that
+    are coming up next."""
+    from .routers.labels import COLORS
+
     uid = semester["uid"]
+    order = {c["key"] if isinstance(c, dict) else c: i for i, c in enumerate(COLORS)}
     out = []
     for d in up.disciplines(conn, semester):
         name = d["name"]
-        coming = [e for e in ue.list_milestones(conn, uid, name, today) if e["days_left"] is not None and 0 <= e["days_left"] <= 30]
+        coming = [e for e in ue.list_milestones(conn, uid, name, today) if e["days_left"] is not None and e["days_left"] >= 0]
+        homework = sorted([h for h in up.list_homework(conn, uid, name) if h["status"] not in _OPEN and h["due"] and h["due"] >= today.isoformat()], key=lambda h: h["due"])
+        readings = sorted([r for r in up.list_readings(conn, uid) if r["discipline"].lower() == name.lower() and r["status"] not in _OPEN and r["due"] and r["due"] >= today.isoformat()],
+                          key=lambda r: r["due"])
+        task = (homework[:1] + readings[:1] or [None])
+        task = min([t for t in task if t], key=lambda t: t["due"], default=None)
         attendance = ua.discipline_attendance(conn, uid, name, today)
-        missing = [label for label, ok in (("contents", bool(up.list_topics(conn, uid, name))), ("evaluation", bool(ue.get_evaluation(conn, uid, name, with_milestones=False)))) if not ok]
-        line = (f"{coming[0]['title']} {when(coming[0]['date'], today)}" if coming
-                else "Over the absence limit" if attendance["over"] else "One absence left" if attendance["at_risk"]
-                else ("No " + " or ".join(missing) + " yet") if missing else "")
         held = [c for c in attendance["classes"] if c["status"] != "cancelled"]
-        percent = round(100 * len([c for c in held if c["past"]]) / len(held)) if held else None
-        out.append({"name": name, "color": d.get("color") or "gray", "icon": d.get("icon") or "book-open", "line": line, "percent": percent,
+        color = d.get("color") or "gray"
+        out.append({"name": name, "color": color, "icon": d.get("icon") or "book-open",
+                    "exam": {"title": coming[0]["title"], "when": when(coming[0]["date"], today)} if coming else None,
+                    "task": {"title": task["title"], "when": when(task["due"], today)} if task else None,
                     "classes": f"{len([c for c in held if c['past']])} of {len(held)} classes" if held else "",
-                    "urgent": bool(coming and coming[0]["days_left"] <= 14) or attendance["over"],
                     "url": f"/groups/{quote(group, safe='')}/disciplines/{quote(name, safe='')}"})
+    out.sort(key=lambda c: (order.get(c["color"], 99), c["name"].lower()))
     return out
 
 

@@ -1441,6 +1441,13 @@ def update_event(
     tags = dashboard_router._with_project(conn, tags, project, project_field)
     existing = db.get_event(conn, uid) or {}
     managed = bool(existing) and university_plan.is_locked(conn, "event", uid)  # a class or exam: a new title is applied everywhere
+    if _is_exam(conn, existing) and not occurrence_date and (start_at != existing.get("start_at") or (end_at or "") != (existing.get("end_at") or "")):
+        return validation_response({"field": "start_at", "message": "Change the date of an exam on the course sheet"}, x_requested_with, f"/events/{uid}/edit")
+    if _is_class(conn, existing) and not occurrence_date and (start_at != existing.get("start_at") or (end_at or "") != (existing.get("end_at") or "")):
+        from .. import university_attendance
+
+        university_attendance.move_class(conn, uid, start_at, end_at or start_at)
+        return respond(x_requested_with, "/calendar", ok=True)
     # 1.4 (§ Task & calendar semantics): "changing the title of a
     # work-allocation event changes the associated task rather than
     # creating an independent event with a conflicting name." A
@@ -1611,6 +1618,20 @@ def restore_occurrence(uid: str, occurrence_date: str = Form(...), x_requested_w
     return respond(x_requested_with, f"/events/{uid}?occurrence_date={occurrence_date}", ok=True)
 
 
+def _is_exam(conn, event) -> bool:
+    """An event that belongs to a way of evaluating of the course sheet; its date is changed there."""
+    from .. import modules
+
+    return bool(event) and modules.is_enabled("university") and university_plan.is_locked(conn, "event", event["uid"]) and not university_plan.is_class(conn, event)
+
+
+def _is_class(conn, event) -> bool:
+    """An event that is a class of a University slot: moving it cancels it and makes up a new one."""
+    from .. import modules
+
+    return bool(event) and modules.is_enabled("university") and university_plan.is_class(conn, event)
+
+
 @events_router.post("/events/{uid}/reschedule")
 async def reschedule_event(uid: str, request: Request, conn=Depends(get_db)):
     """JSON endpoint for the Week/Day grid's drag-to-move / drag-to-resize
@@ -1625,6 +1646,14 @@ async def reschedule_event(uid: str, request: Request, conn=Depends(get_db)):
     existing = db.get_event(conn, uid)
     if existing is None:
         return JSONResponse({"error": "not found"}, status_code=404)
+    if _is_exam(conn, existing) and (payload["start_at"] != existing.get("start_at") or (payload.get("end_at") or "") != (existing.get("end_at") or "")):
+        return JSONResponse({"error": "The date of an exam is changed on the course sheet"}, status_code=409)
+    if _is_class(conn, existing) and (payload["start_at"] != existing.get("start_at") or (payload.get("end_at") or "") != (existing.get("end_at") or "")):
+        from .. import university_attendance
+
+        new_uid = university_attendance.move_class(conn, uid, payload["start_at"], payload.get("end_at") or payload["start_at"])
+        moved = db.get_event(conn, new_uid) or {}
+        return JSONResponse({"ok": True, "reload": True, "uid": new_uid, "start_at": moved.get("start_at"), "end_at": moved.get("end_at"), "all_day": False})
     row = dict(existing)
     row["start_at"] = payload["start_at"]
     row["end_at"] = payload.get("end_at")

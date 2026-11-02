@@ -36,7 +36,7 @@ def test_a_course_sheet_document_can_be_filled_in_full(conn):
     _semester(conn)
     assert _call(conn, "university_save_discipline", name="Istoria Arheologiei")["structuredContent"]["discipline"] == "Istoria Arheologiei"
     _call(conn, "university_set_course_sheet", discipline="istoria arheologiei",
-          fields={"code": "IA101", "credits": "5", "absences_seminar": "2", "objectives": "Know the field"},
+          fields={"code": "IA101", "credits": "5", "absences_seminar": "2", "summary": "Know the field"},
           extra=[{"section": "content", "label": "Bibliography notes", "value": "See the library"}])
     _call(conn, "university_set_teachers", discipline="Istoria Arheologiei", lecture=["Dr Popescu"], seminar=["Ana Ionescu"])
     _call(conn, "university_save_class_slot", discipline="Istoria Arheologiei", weekday="Monday", start="10:00", end="12:00",

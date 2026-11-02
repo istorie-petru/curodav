@@ -33,18 +33,7 @@
         {% else %}<div class="field"><label>{{ f.label }}</label>{{ text_input({'name': 'f_' ~ f.key, 'value': f.value}) }}</div>
         {% endif %}
         {% endfor %}
-        {% if sec.key == 'teaching' %}
-        <div class="field field-wide">
-            {% set ms_name = 'lecture_teachers' %}{% set ms_icon = 'address-book' %}{% set ms_label = 'Lecture teachers' %}{% set ms_form_id = 'university-sheet-form' %}
-            {% set ms_items = contact_items(request) %}{% set ms_selected = lecture %}{% set ms_mode = 'select' %}{% set ms_allow_new = true %}{% set ms_pill = false %}{% set ms_wide = true %}
-            {% include "_widget_list_multiselect.html" %}
-        </div>
-        <div class="field field-wide">
-            {% set ms_name = 'seminar_teachers' %}{% set ms_icon = 'address-book' %}{% set ms_label = 'Seminar and lab teachers' %}{% set ms_form_id = 'university-sheet-form' %}
-            {% set ms_items = contact_items(request) %}{% set ms_selected = seminar %}{% set ms_mode = 'select' %}{% set ms_allow_new = true %}{% set ms_pill = false %}{% set ms_wide = true %}
-            {% include "_widget_list_multiselect.html" %}
-        </div>
-        {% endif %}
+        {% if sec.key == 'identification' %}
         <div class="field field-wide">
             <label>{{ {'evaluation': 'More ways to evaluate', 'teaching': 'More teaching activities', 'identification': 'Your own fields', 'content': 'Your own fields'}[sec.key] }}</label>
             <div class="rows-head {{ 'is-three' if sec.key == 'evaluation' else 'is-pair' }}"><span>{{ {'evaluation': 'Component', 'teaching': 'Activity'}.get(sec.key, 'Field') }}</span>
@@ -55,6 +44,7 @@
             <template id="university-custom-template">{{ custom_row({'label': '', 'value': '', 'form': '', 'weight': ''}) }}</template>
             <button type="button" class="btn ghost rows-add" data-rows-add="university-custom-rows">{{ icon('plus', 'icon-sm') }} Add</button>
         </div>
+        {% endif %}
     </div>
 </form>
 </div>

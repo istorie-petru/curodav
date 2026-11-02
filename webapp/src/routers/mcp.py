@@ -10,7 +10,7 @@ import json
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
 
-from .. import access_tokens, mcp_server
+from .. import access_tokens, api_activity, mcp_server
 from ..api_auth import require_read
 from ..deps import get_db
 
@@ -40,8 +40,9 @@ def mcp_post(request: Request, body: bytes = Depends(_raw_body), conn=Depends(ge
         return JSONResponse({"jsonrpc": "2.0", "id": None, "error": {"code": mcp_server.PARSE_ERROR, "message": "Parse error"}},
                             status_code=400)
     if isinstance(message, dict) and message.get("method") == "tools/call":
-        name = (message.get("params") or {}).get("name") if isinstance(message.get("params"), dict) else None
-        access_tokens.log_activity(conn, token["uid"], "mcp", f"tool {name}")
+        params = message.get("params") if isinstance(message.get("params"), dict) else {}
+        what, where = api_activity.describe_tool(conn, params.get("name") or "", params.get("arguments"))
+        access_tokens.log_activity(conn, token["uid"], "mcp", what, where)
     reply = mcp_server.handle(conn, message, token)
     if reply is None:
         return Response(status_code=202)

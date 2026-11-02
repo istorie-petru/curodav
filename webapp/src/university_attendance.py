@@ -114,3 +114,13 @@ def semester_attendance(conn: sqlite3.Connection, semester: dict[str, Any], toda
         if data["kinds"]:
             out.append({"discipline": d, **data})
     return out
+
+
+def move_class(conn: sqlite3.Connection, event_uid: str, start_at: str, end_at: str) -> str:
+    """A class moved to another day or hour is cancelled where it was and given back as a made-up class at the new time. Returns the new class's uid."""
+    event, slot = _class(conn, event_uid)
+    semester = up.get_semester(conn, slot["semester_uid"])
+    set_status(conn, event_uid, "cancelled", "Moved")
+    new = up.add_class(conn, semester, slot["discipline_tag"], slot["kind"], start_at[:10], start_at[11:16], (end_at or start_at)[11:16], event.get("location") or "")
+    set_status(conn, new, "made_up", "")
+    return new

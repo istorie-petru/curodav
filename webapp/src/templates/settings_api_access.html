@@ -61,17 +61,54 @@
     <h2>Connected apps</h2>
     {% if apps %}{{ token_table(apps, 'app') }}{% else %}{{ empty_state('No connected apps', icon_name='link', size='compact') }}{% endif %}
 </div>
-<div class="card table-scroll table-responsive">
-    <h2>Recent activity</h2>
-    {% if activity %}
+<div class="card table-scroll table-responsive" id="api-changes">
+    <h2>Changes</h2>
+    {% if changes %}
     <table class="entity-table">
-        <thead><tr><th class="col-opt-1">When</th><th class="col-name">Who</th><th class="col-opt-2">What</th></tr></thead>
+        <thead><tr><th class="col-opt-1">When</th><th class="col-name">What</th><th class="col-opt-2">Who</th><th class="col-actions">Actions</th></tr></thead>
         <tbody>
-        {% for a in activity %}
-        <tr><td class="col-opt-1">{{ a.at|short_day }}</td><td class="col-name">{{ a.token_name }}</td><td class="col-opt-2">{{ a.surface|upper }} {{ a.action }}</td></tr>
+        {% for c in changes %}
+        <tr>
+            <td class="col-opt-1">{{ c.when|short_day }} {{ c.when|fmt_time }}</td>
+            <td class="col-name">{{ c.summary }}{% if c.undone_at %} <span class="text-muted">undone</span>{% endif %}</td>
+            <td class="col-opt-2">{{ c.token_name or 'You' }}</td>
+            <td class="col-actions">{% if not c.undone_at %}
+                <form class="form-inline" method="post" action="/settings/api-access/changes/{{ c.uid }}/undo"
+                      data-confirm-sheet="{{ 'Undo it anyway? The later changes to the same thing are replaced too.' if conflict == c.uid else 'Undo: ' ~ c.summary ~ '?' }}">
+                    {% if conflict == c.uid %}<input type="hidden" name="force" value="1">{% endif %}
+                    <button type="submit" class="icon-btn{% if conflict == c.uid %} danger{% endif %}" title="{{ 'Undo anyway' if conflict == c.uid else 'Undo' }}"
+                            aria-label="{{ 'Undo anyway' if conflict == c.uid else 'Undo' }}">{{ icon('rotate-ccw', 'icon-sm') }}</button>
+                </form>{% endif %}
+            </td>
+        </tr>
         {% endfor %}
         </tbody>
     </table>
+    {% else %}
+    {{ empty_state('No changes in the last 7 days', icon_name='rotate-ccw', size='compact') }}
+    {% endif %}
+</div>
+<div class="card log-view" id="api-activity">
+    <h2>Recent activity</h2>
+    {% if visits %}
+    <div class="log-lines">
+        {% for v in visits %}
+        <details class="log-card api-visit">
+            <summary class="log-card-head">
+                <span class="log-card-toggle">
+                    <span class="log-card-title">{{ v.who }}</span>
+                    <span class="log-card-meta"><span>{{ v.start_local|short_day }}</span><span>{{ v.start_local|fmt_time }}{% if v.last_local != v.start_local %}–{{ v.last_local|fmt_time }}{% endif %}</span></span>
+                </span>
+                <span class="log-card-count cell-tag">{{ v.calls|length }}</span>
+            </summary>
+            <ul class="api-visit-calls">
+                {% for c in v.calls %}
+                <li><span class="api-visit-time">{{ c.time }}</span> {{ c.action }}{% if c.target %} <span class="api-visit-where">· {{ c.target }}</span>{% endif %}</li>
+                {% endfor %}
+            </ul>
+        </details>
+        {% endfor %}
+    </div>
     {% else %}
     {{ empty_state('Nothing yet', icon_name='list', size='compact') }}
     {% endif %}

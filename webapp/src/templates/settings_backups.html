@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Backups - Settings{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("Backups", "archive") }}
+{% include "_flash.html" %}
+<div class="card-grid wcard-grid backup-days">
+    {% for d in days %}
+    <div class="wcard">
+        <div class="wcard-label">{{ 'Today' if loop.first else d.day|short_day }}</div>
+        <div class="wcard-rows">
+            {% for b in d.backups %}
+            <a href="/settings/backups/{{ b.name }}" data-modal class="wcard-row">
+                <span class="wcard-main"><span>{{ b.time }} {{ b.label }}</span><span class="wcard-small">{{ b.size_label }}</span></span>
+            </a>
+            {% else %}
+            <span class="wcard-small">None</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

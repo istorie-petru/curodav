@@ -12,12 +12,15 @@
 
 {% elif view == 'disciplines' %}
 {% if cards %}
-<div class="card-grid wcard-grid">
+<div class="card-grid wcard-grid disc-cards">
     {% for c in cards %}
-    <a class="wcard" href="{{ c.url }}">
-        <div class="wcard-head">{{ icon_pill(c.color, c.icon) }}<span class="wcard-main"><span class="wcard-big">{{ c.name }}</span>{% if c.classes %}<span class="wcard-small">{{ c.classes }}</span>{% endif %}</span></div>
-        {% if c.line %}<div class="wcard-small">{{ c.line }}</div>{% endif %}
-        {% if c.percent is not none %}<div class="wcard-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ c.percent }}"><span data-style="width:{{ c.percent }}%"></span></div>{% endif %}
+    <a class="wcard is-hue" href="{{ c.url }}" data-style="--hue:var(--cal-accent-{{ c.color }})">
+        <div class="wcard-head"><span class="wcard-icon">{{ icon(c.icon) }}</span><span class="wcard-main"><span class="wcard-big">{{ c.name }}</span>{% if c.classes %}<span class="wcard-small">{{ c.classes }}</span>{% endif %}</span></div>
+        <div class="disc-card-lines">
+            {% if c.exam %}<div><span class="wcard-label">Exam</span><div class="wcard-small">{{ c.exam.title }}, {{ c.exam.when }}</div></div>{% endif %}
+            {% if c.task %}<div><span class="wcard-label">Due</span><div class="wcard-small">{{ c.task.title }}, {{ c.task.when }}</div></div>{% endif %}
+        </div>
+        <span class="wcard-arrow" aria-hidden="true">{{ icon('chevron-right', 'icon-sm') }}</span>
     </a>
     {% endfor %}
 </div>
@@ -26,20 +29,10 @@
 {% endif %}
 
 {% elif view == 'exams' %}
-{% set first = (exams.groups[0].rows[0] if exams.groups else none) %}
-<div class="card-grid wcard-grid">
-    {{ wcard_stat('Next examination', first.title if first else '', (first.look.name ~ ', ' ~ (first.date|relative_date)) if first else '', (first.item_url or first.url) if first else '') }}
-    {% set w = work[0] if work else none %}
-    {{ wcard_stat('Next due', w.title if w else '', (w.look.name ~ (', ' ~ (w.due|relative_date) if w.due else '')) if w else '', w.url if w else '') }}
-    {{ wcard_stat('Examinations', (exams.count ~ ' in all') if exams.count else '', ((exams.groups|map(attribute='rows')|map('length')|sum) ~ ' still to come') if exams.count else '') }}
-    {% for f in exams.finals if f.final is not none or f.so_far is not none %}
-    {{ wcard_stat(f.look.name, ('%g'|format(f.final)) if f.final is not none else (('%g'|format(f.so_far) ~ ' so far') if f.so_far is not none else ''), 'Final grade' ~ (', not passed' if f.passed is sameas false else '') if f.final is not none else 'Grade so far') }}
-    {% endfor %}
-</div>
-
 {% if timeline|length > 1 %}
 <div class="nbtl has-dates uni-timeline">
     {% for it in timeline %}
+    {% if loop.first or it.month != timeline[loop.index0 - 1].month %}<h2 class="uni-month">{{ it.month }}</h2>{% endif %}
     {% if it.now %}
     <div class="nbtl-item is-now"><span class="nbtl-date"></span><span class="nbtl-bullet"></span><span class="nbtl-text"><span class="nbtl-title">Today</span></span></div>
     {% else %}
@@ -55,18 +48,13 @@
 {% endif %}
 
 {% else %}
-{% set s = summary %}
 {% set nc = next_classes[0] if next_classes else none %}
 {% set ne = exams_soon[0] if exams_soon else none %}
 {% set nd = due[0] if due else none %}
-{% set tt = tight[0] if tight else none %}
 <div class="card-grid wcard-grid">
     {{ wcard_stat('Next class', (nc.discipline ~ ' ' ~ nc.kind_label|lower) if nc else '', ((nc.event.start_at[:10]|relative_date) ~ ', ' ~ (nc.event.start_at|fmt_time)) if nc else '', ('/events/' ~ nc.event.uid) if nc else '') }}
     {{ wcard_stat('Next examination', ne.title if ne else '', (ne.look.name ~ ', ' ~ (ne.date|relative_date)) if ne else '', (ne.item_url or ne.url) if ne else '') }}
     {{ wcard_stat('Next due', nd.title if nd else '', (nd.look.name ~ (', ' ~ (nd.due|relative_date) if nd.due else '')) if nd else '', nd.url if nd else '') }}
-    {{ wcard_stat('Semester', ('Week ' ~ s.week ~ ' of ' ~ s.weeks) if s.week else (s.left|capitalize if s.left else ''),
-                  ((s.parity ~ ' week, ' ~ s.left) if s.week else '') ~ ((' · ' ~ ('%g'|format(s.credits)) ~ (' of ' ~ ('%g'|format(s.credits_target)) if s.credits_target else '') ~ ' credits') if s.credits else ''), percent=s.percent) }}
-    {{ wcard_stat('Absences', (over ~ ' over the limit') if over else (((tt.look.name ~ ' ' ~ tt.label|lower ~ ': ' ~ tt.left ~ ' left')) if tt else ''), ('Exams in the next two weeks: ' ~ exams_this_fortnight) if exams_this_fortnight else '', ('/groups/' ~ enc ~ '/disciplines/' ~ (tt.look.name|urlencode) ~ '?view=classes') if tt else '', modal=false) }}
 </div>
 
 {% if schedule.empty %}
@@ -74,15 +62,5 @@
 {% else %}
 {% include "_university_timetable.html" %}
 {% endif %}
-
-<div class="card-grid wcard-grid exam-cards">
-    <section class="wcard is-plain"><div class="wcard-label">Examinations<span class="spacer"></span>{{ exams_soon|length }}</div>
-        <div class="wcard-rows">{% for m in exams_soon %}{{ wcard_row(m.look, m.title, m.look.name, m.date|relative_date, m.item_url or m.url, icon_name='file-check') }}{% else %}{{ empty_state('No exams coming', size='compact') }}{% endfor %}</div></section>
-    <section class="wcard is-plain"><div class="wcard-label">Due<span class="spacer"></span>{{ due|length }}</div>
-        <div class="wcard-rows">{% for w in due %}{{ wcard_row(w.look, w.title, w.look.name, (('Overdue, ' if w.overdue else '') ~ (w.due|relative_date)) if w.due else '', w.url, icon_name='check-square') }}{% else %}{{ empty_state('Nothing due', size='compact') }}{% endfor %}</div></section>
-    <section class="wcard is-plain"><div class="wcard-label">Absences</div>
-        <div class="wcard-rows">{% for a in absences %}{{ wcard_row(a.look, a.look.name ~ ' ' ~ a.label|lower, '', ('Over by ' ~ (0 - a.left)) if a.over else (a.left ~ ' left'), '/groups/' ~ enc ~ '/disciplines/' ~ (a.look.name|urlencode) ~ '?view=classes', modal=false) }}{% else %}{{ empty_state('No absence limits set', size='compact') }}{% endfor %}
-        {% for c in missed %}{{ wcard_row(c.look, c.look.name ~ ' ' ~ c.kind_label|lower ~ ' ' ~ c.number, 'Missed', c.date|relative_date, '/university/class/' ~ c.uid ~ '/attendance?back=semester') }}{% endfor %}</div></section>
-</div>
 {% endif %}
 {% endblock %}

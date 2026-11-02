@@ -96,7 +96,7 @@ def university_settings(request: Request, conn=Depends(get_db)):
         _group.set(up.attach_group(conn, semester))
         ctx.update(disciplines=up.disciplines(conn, semester), url_for_discipline=url_for_discipline, group=_group.get(),
                    calendar=semester.get("holiday_calendar") or "", credits_planned=up.credits_planned(conn, semester["uid"]),
-                   schedule=study_page.schedule(conn, semester, _group.get(), editing=True), defaults=up.defaults(conn),
+                   defaults=up.defaults(conn),
                    reminder_items=[{"uid": k, "name": n} for k, n in up.REMINDER_CHOICES],
                    length_items=[{"uid": k, "name": n} for k, n in up.LENGTH_CHOICES], grade_items=[{"uid": k, "name": k} for k in up.GRADE_CHOICES])
     return templates.TemplateResponse("settings_university.html", ctx)
@@ -230,9 +230,7 @@ async def sheet_save(name: str, request: Request, conn=Depends(get_db)):
         new_name = str(form.get("name") or "").strip()
         if key == "identification" and new_name and new_name != d["name"]:
             saved = up.save_discipline(conn, semester, old=d["name"], name=new_name, color=d.get("color") or "gray", icon=d.get("icon") or "", teacher_names=None, colors=_colors())
-        up.save_sheet(conn, semester["uid"], saved, values, custom, only_section=key)
-        if key == "teaching":
-            up.set_teachers(conn, semester["uid"], saved, [str(x) for x in form.getlist("lecture_teachers")], [str(x) for x in form.getlist("seminar_teachers")])
+        up.save_sheet(conn, semester["uid"], saved, values, custom if key == "identification" else None, only_section=key)
     except (up.PlanError, tags.ManagedLabelError) as exc:
         _bad(exc)
     return _note(url_for_discipline(saved, "sheet"))
@@ -360,18 +358,41 @@ def _slot_context(request: Request, conn, semester: dict, d: dict | None, slot: 
             "disciplines": up.disciplines(conn, semester), "teachers": teachers}
 
 
+@router.get("/class/new")
+def class_new(request: Request, discipline: str, day: str = "", conn=Depends(get_db)):
+    """A class on a date of its own: a make-up class or an extra one, with the date and the kind, from the usual hours of that kind."""
+    semester = _semester(conn)
+    d = _discipline(conn, semester, discipline)
+    slots = up.list_slots(conn, semester["uid"], d["name"])
+    usual = {s["kind"]: (s["start"], s["end"]) for s in reversed(slots)}
+    return templates.TemplateResponse("university_new_class_modal.html", {
+        "request": request, "d": d, "day": day or clock.today().isoformat(), "kinds": up.SLOT_KINDS, "usual": usual,
+        "start": usual.get("lecture", ("10:00", "12:00"))[0], "end": usual.get("lecture", ("10:00", "12:00"))[1]})
+
+
+@router.post("/class")
+def class_create(discipline: str = Form(...), day: str = Form(""), kind: str = Form("lecture"), start: str = Form(""), end: str = Form(""), conn=Depends(get_db)):
+    semester = _semester(conn)
+    d = _discipline(conn, semester, discipline)
+    try:
+        up.add_class(conn, semester, d["name"], kind, day, start, end)
+    except up.PlanError as exc:
+        _bad(exc)
+    return _note(url_for_discipline(d["name"]))
+
+
 @router.get("/slot/new")
-def slot_new(request: Request, discipline: str = "", weekday: str = "", start: str = "", conn=Depends(get_db)):
+def slot_new(request: Request, discipline: str = "", weekday: str = "", start: str = "", kind: str = "", conn=Depends(get_db)):
     """A weekly class: of a discipline (from its page), or of any discipline with the day and hour picked on the timetable."""
     semester = _semester(conn)
     d = _discipline(conn, semester, discipline) if discipline else None
     slot = None
-    if weekday or start:
+    if weekday or start or kind:
         length = int(up.defaults(conn)["class_length"])
         begin = start if len(start) == 5 and start[2] == ":" and start.replace(":", "").isdigit() else "08:00"
         minutes = min(int(begin[:2]) * 60 + int(begin[3:]) + length, 23 * 60 + 59)
         slot = {"weekday": int(weekday) if weekday.isdigit() and int(weekday) < 7 else 0, "start": begin, "end": f"{minutes // 60:02d}:{minutes % 60:02d}",
-                "kind": "lecture", "weeks": "all", "room": "", "teachers": [t["uid"] for t in d["teachers"]] if d else [], "count": 0}
+                "kind": kind if kind in up.SLOT_KINDS else "lecture", "weeks": "all", "room": "", "teachers": [t["uid"] for t in d["teachers"]] if d else [], "count": 0}
     return templates.TemplateResponse("university_slot_modal.html", _slot_context(request, conn, semester, d, slot))
 
 
@@ -399,19 +420,25 @@ def slot_save(discipline: str = Form(""), discipline_new: str = Form(""), series
         slot = _slot_from(weekday, start, end, room, kind, weeks, up.tag_teachers(conn, discipline, teachers))
         plan = up.plan_slot(conn, semester, discipline, slot, series_uid or None)
         up.save_slot(conn, semester, discipline, slot, series_uid or None)
+        up.sync_teachers(conn, semester["uid"], discipline)
     except (up.PlanError, tags.ManagedLabelError) as exc:
         _bad(exc)
     notes = ["Past classes were not moved"] if plan["past"] else []
     if plan["lost"]:
         notes.append(f"The contents of {len(plan['lost'])} classes were lost: they no longer exist")
-    return _note(HOME if back == "settings" else url_for_discipline(discipline), "; ".join(notes))
+    return _note(HOME if back == "settings" else url_for_discipline(discipline, "sheet"), "; ".join(notes))
 
 
 @router.post("/slot/{series_uid}/delete")
 def slot_delete(series_uid: str, discipline: str = "", conn=Depends(get_db)):
     _semester(conn)
-    removed = up.delete_slot(conn, up.current_semester(conn)["uid"], series_uid)
-    return _note(url_for_discipline(discipline) if discipline else HOME, f"{removed} classes removed")
+    semester = up.current_semester(conn)
+    slot = next((x for x in up.list_slots(conn, semester["uid"], history=True) if x["series_uid"] == series_uid), None)
+    discipline = discipline or (slot["discipline"] if slot else "")
+    removed = up.delete_slot(conn, semester["uid"], series_uid)
+    if discipline:
+        up.sync_teachers(conn, semester["uid"], discipline)
+    return _note(url_for_discipline(discipline, "sheet") if discipline else HOME, f"{removed} classes removed")
 
 
 # ---------------------------------------------------------------- planned contents and competences
@@ -453,7 +480,7 @@ def syllabus_assign(name: str, conn=Depends(get_db)):
         parts.append(f"{len(plan['blocked'])} classes with their own text were skipped")
     if plan["left_over"]:
         parts.append(f"{plan['left_over']} topics found no free class")
-    return _note(url_for_discipline(d["name"], "classes"), "; ".join(parts) if placed or plan["blocked"] or plan["left_over"] else "Nothing to place")
+    return _note(url_for_discipline(d["name"]), "; ".join(parts) if placed or plan["blocked"] or plan["left_over"] else "Nothing to place")
 
 
 # ---------------------------------------------------------------- bibliography (readings are references to library books)
@@ -574,9 +601,8 @@ def class_content_form(event_uid: str, request: Request, conn=Depends(get_db)):
     topics = [t for t in up.list_topics(conn, semester["uid"], tag) if t["kind"] == kind] or up.list_topics(conn, semester["uid"], tag)
     return templates.TemplateResponse("university_class_modal.html", {
         "request": request, "event": event, "discipline": tag, "kind": up.SLOT_KINDS.get(kind, "Class"), "topics": topics,
-        "competences": up.list_topics(conn, semester["uid"], tag, "competence"), "topic_uid": links["topics"][0]["uid"] if links["topics"] else "",
-        "competence_uids": [c["uid"] for c in links["competences"]], "text": up.class_free_text(conn, event_uid, event.get("description") or ""),
-        "note_uid": up.class_note(conn, event_uid)})
+        "topic_uid": links["topics"][0]["uid"] if links["topics"] else "", "text": up.class_free_text(conn, event_uid, event.get("description") or ""),
+        "note_uid": up.class_note(conn, event_uid), "deletable": slot["weeks"] == "once"})
 
 
 @notes_router.post("/class/{event_uid}/content")
@@ -585,12 +611,12 @@ def class_content_save(event_uid: str, topic_uid: str = Form(""), competences: l
     _semester(conn)
     event = db.get_event(conn, event_uid)
     try:
-        if day or start or end:
+        if day or start or end:  # kept for the API; the window no longer sends these, the timetable is edited on the course sheet
             up.save_class_schedule(conn, event_uid, day, start, end, room or "")
         up.save_class_content(conn, event_uid, topic_uid, text, competences)
     except up.PlanError as exc:
         _bad(exc)
-    return _note(url_for_discipline(_class_discipline(conn, event), "classes") if event else HOME)
+    return _note(url_for_discipline(_class_discipline(conn, event)) if event else HOME)
 
 
 @notes_router.post("/class/{event_uid}/delete")
@@ -602,7 +628,7 @@ def class_delete(event_uid: str, conn=Depends(get_db)):
         up.delete_class(conn, event_uid)
     except up.PlanError as exc:
         _bad(exc)
-    return _note(url_for_discipline(discipline, "classes") if discipline else HOME)
+    return _note(url_for_discipline(discipline) if discipline else HOME)
 
 
 @notes_router.get("/class/{event_uid}/attendance")
@@ -633,7 +659,7 @@ def attendance_save(event_uid: str, status: str = Form(...), note: str = Form(""
         return RedirectResponse("/calendar", status_code=303)
     if back == "semester":
         return _note(f"/groups/{quote(up.semester_group(conn, semester), safe='')}")
-    return _note(url_for_discipline(discipline, "classes") if discipline else HOME)
+    return _note(url_for_discipline(discipline) if discipline else HOME)
 
 
 def _class_discipline(conn, event) -> str:

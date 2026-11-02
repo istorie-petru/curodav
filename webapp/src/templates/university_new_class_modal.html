@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_date_time_fields.html" import date_field, time_field with context %}
+{% block title %}New class{% endblock %}
+{% block content %}
+{% call modal(kind="form", title='New class on a date', size="small", form='university-new-class-form', creating=true) %}
+<div class="card">
+<form method="post" id="university-new-class-form" action="/settings/university/class">
+    <input type="hidden" name="discipline" value="{{ d.name }}">
+    <div class="field-grid">
+        <div class="field"><label>Date</label>{{ date_field('day', day, label='Date', required=true) }}</div>
+        <div class="field">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'university-new-class-form' %}{% set ms_name = 'kind' %}{% set ms_label = 'Kind' %}
+            {% set ms_items = [] %}{% for k, n in kinds.items() %}{% set _ = ms_items.append({'uid': k, 'name': n}) %}{% endfor %}
+            {% set ms_selected = 'lecture' %}{% set ms_wide = false %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+        <div class="field"><label>Start time</label>{{ time_field('start', start, required=true, label='Start time') }}</div>
+        <div class="field"><label>End time</label>{{ time_field('end', end, required=true, label='End time') }}</div>
+    </div>
+</form>
+</div>
+{% endcall %}
+{% endblock %}

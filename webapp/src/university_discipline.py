@@ -18,8 +18,8 @@ from .university import _enabled
 
 router = APIRouter(prefix="/groups/{group}/disciplines", tags=["university"], dependencies=[Depends(_enabled)])
 
-VIEWS = (("overview", "Overview"), ("sheet", "Course sheet"), ("classes", "Classes"), ("bibliography", "Bibliography"), ("exams", "Examination"))
-OLD_VIEWS = {"contents": "classes", "attendance": "classes"}
+VIEWS = (("overview", "Overview"), ("sheet", "Course sheet"), ("bibliography", "Bibliography"), ("exams", "Examination"))
+OLD_VIEWS = {"contents": "overview", "attendance": "overview", "classes": "overview"}
 
 
 def _views(group: str, name: str, active: str) -> list[dict]:
@@ -62,7 +62,14 @@ def build(conn, semester: dict, discipline: dict, view: str, today) -> dict:
         pending.sort(key=lambda p: p["sort"])
         soon_exam = next((p for p, m in ((p, m) for p in pending for m in milestones if p["title"] == m["title"] and p["sort"] == m["date"]) if m["days_left"] is not None and 0 <= m["days_left"] <= 14), None)
         attendance = ua.discipline_attendance(conn, uid, name, today)
-        ctx.update(soon_exam=soon_exam, slots=slots, upcoming=upcoming, pending=pending, topics_done=len([t for t in topics if t["events"]]), topics_total=len(topics),
+        data = ua.discipline_attendance(conn, uid, name, today)
+        rows = data["classes"]
+        topic_names = {t["uid"]: f"{t['number']}. {t['title']}" for t in topics}
+        nxt = next((c for c in rows if not c["past"] and c["status"] != "cancelled"), None)
+        for c in rows:
+            c["topic_name"] = topic_names.get(c["topic_uid"], "")
+            c["is_next"] = c is nxt
+        ctx.update(next_class=({"uid": nxt["uid"], "name": nxt["topic_name"] or f"{nxt['kind_label']} {nxt['number']}", "date": nxt["date"], "start": nxt["start"]} if nxt else None), class_rows=rows, soon_exam=soon_exam, slots=slots, upcoming=upcoming, pending=pending, topics_done=len([t for t in topics if t["events"]]), topics_total=len(topics),
                    read_done=len([r for r in readings if r["status"] == "done"]), read_total=len(readings), classes_total=len(classes),
                    classes_left=len([c for c in classes if c["date"] >= iso]), absences=attendance["kinds"])
     elif view == "sheet":
@@ -78,19 +85,19 @@ def build(conn, semester: dict, discipline: dict, view: str, today) -> dict:
             sec["shown"] = [f for f in sec["fields"] if f["value"]]
             sec["has_content"] = bool(sec["shown"] or sec["custom"] or (sec["key"] == "teaching" and (sheet["lecture_teachers"] or sheet["seminar_teachers"]))
                                       or sec["key"] == "identification")
-        ctx.update(sheet=sheet, groups=groups, can_place=bool(topics and classes),
-                   sheet_empty=not up.sheet_filled(sheet) and not any(g["rows"] for g in groups))
-    elif view == "classes":
-        every = {t["uid"]: f"{t['number']}. {t['title']}" for t in up.list_topics(conn, uid, name) + up.list_topics(conn, uid, name, "competence")}
-        data = ua.discipline_attendance(conn, uid, name, today)
-        rows = data["classes"]
-        for c in rows:
-            c["topic_name"] = every.get(c["topic_uid"], "")
-            c["competence_names"] = [every[u] for u in c["competence_uids"] if u in every]
-        nxt = next((c for c in rows if not c["past"]), None)
-        if nxt:
-            nxt["is_next"] = True
-        ctx.update(classes=rows, attendance=data, can_place=bool(topics and classes))
+        names = {c["uid"]: c.get("full_name") or "" for c in (db.get_contact(conn, u) or {"uid": u} for u in {u for s in up.list_slots(conn, uid, name) for u in s["teachers"]})}
+        teaching = []
+        for kind in ("lecture", "seminar", "lab"):
+            kind_slots = [s for s in up.list_slots(conn, uid, name) if s["kind"] == kind]
+            for s in kind_slots:
+                s["weekday_name"] = up.WEEKDAYS[s["weekday"]]
+                s["teacher_names"] = ", ".join(names.get(u, "") for u in s["teachers"] if names.get(u))
+                minutes = (int(s["end"][:2]) * 60 + int(s["end"][3:])) - (int(s["start"][:2]) * 60 + int(s["start"][3:]))
+                s["hours"] = f"{minutes / 60 * (1 if s['weeks'] == 'all' else 0.5):g}"
+            teaching.append({"kind": kind, "label": up.SLOT_KINDS[kind], "slots": kind_slots, "absences": sheet["values"].get(f"absences_{kind}", ""),
+                             "hours": f"{sum(float(s['hours']) for s in kind_slots):g}" if kind_slots else ""})
+        ways = ue.standing(conn, uid, name, today)["ways"]
+        ctx.update(sheet=sheet, groups=[g for g in groups if g["kind"] != "competence"], can_place=bool(topics and classes), teaching=teaching, ways=ways)
     elif view == "bibliography":
         ctx.update(readings=readings)
     elif view == "exams":

@@ -13,7 +13,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 
-from .. import access_tokens, api_service, api_write, note_versions
+from .. import access_tokens, api_activity, api_history, api_service, api_write, note_versions
 from ..api_auth import require, require_read
 from ..deps import get_db
 
@@ -23,7 +23,8 @@ Limit = Annotated[int, Query(ge=1, le=api_service.MAX_LIMIT)]
 
 
 def _log(conn, token: dict[str, Any], request: Request) -> None:
-    access_tokens.log_activity(conn, token["uid"], "api", f"GET {request.url.path}")
+    what, where = api_activity.describe_request(conn, "GET", request.url.path, request.query_params.get("q", ""))
+    access_tokens.log_activity(conn, token["uid"], "api", what, where)
 
 
 def _found(read, *args, **kwargs):
@@ -161,10 +162,11 @@ def _edit(run, *args, **kwargs):
 def edit_note(request: Request, response: Response, uid: str, body: Annotated[dict[str, Any], Body()],
               if_match: Annotated[str, Header()] = "", conn=Depends(get_db), token=Depends(require("write:notes"))):
     """Body: {"ops": [...], "summary": "..."}; the revision comes from If-Match (or "revision" in the body)."""
-    access_tokens.log_activity(conn, token["uid"], "api", f"PATCH {request.url.path}")
+    access_tokens.log_activity(conn, token["uid"], "api", *api_activity.describe_request(conn, "PATCH", request.url.path))
     revision = if_match.strip().strip('"') or str(body.get("revision") or "")
-    result = _edit(api_write.edit_note, conn, uid, revision, body.get("ops"), source="api", token_uid=token["uid"],
-                   summary=str(body.get("summary") or ""))
+    result = _edit(api_history.run_tracked, conn, "edit_note", {"uid": uid}, lambda: api_write.edit_note(
+        conn, uid, revision, body.get("ops"), source="api", token_uid=token["uid"], summary=str(body.get("summary") or "")),
+        source="api", token_uid=token["uid"])
     response.headers["ETag"] = f'"{result["revision"]}"'
     return result
 
@@ -177,5 +179,6 @@ def list_note_versions(request: Request, uid: str, conn=Depends(get_db), token=D
 
 @router.post("/note-versions/{version_uid}/restore")
 def restore_note_version(request: Request, version_uid: str, conn=Depends(get_db), token=Depends(require("write:notes"))):
-    access_tokens.log_activity(conn, token["uid"], "api", f"POST {request.url.path}")
-    return _edit(api_write.restore_version, conn, version_uid, source="api", token_uid=token["uid"])
+    access_tokens.log_activity(conn, token["uid"], "api", *api_activity.describe_request(conn, "POST", request.url.path))
+    return _edit(api_history.run_tracked, conn, "restore_note_version", {"version_uid": version_uid},
+                 lambda: api_write.restore_version(conn, version_uid, source="api", token_uid=token["uid"]), source="api", token_uid=token["uid"])

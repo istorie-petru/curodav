@@ -502,9 +502,32 @@ def list_slots(conn: sqlite3.Connection, semester_uid: str, discipline: str | No
                     "room": first.get("location") or "", "count": len(members), "first": first["start_at"][:10], "last": members[-1]["start_at"][:10],
                     "teachers": [c["uid"] for c in db.list_object_contacts(conn, "event", first["uid"])]})
     if not history:
-        out = [s for s in out if not _superseded(s, out)]
+        out = [s for s in out if s["weeks"] != "once" and not _superseded(s, out)]
     out.sort(key=lambda s: (s["weekday"], s["start"]))
     return out
+
+
+def add_class(conn: sqlite3.Connection, semester: dict[str, Any], discipline: str, kind: str, day: str, start: str, end: str, room: str = "") -> str:
+    """One class on a date of its own (a make-up class, or an extra one). It is a slot of one occurrence, kept out of the weekly timetable.
+    Returns the uid of the new class."""
+    when = _date(day, "Date")
+    if not when:
+        raise PlanError("A class needs a date")
+    slot = _validate_slot({"weekday": when.weekday(), "start": start, "end": end, "weeks": "all", "kind": kind, "room": room})
+    now = _now()
+    row = {"uid": str(uuid.uuid4()), "title": _class_title(discipline, slot["kind"]), "description": "", "start_at": f"{when.isoformat()}T{slot['start']}",
+           "end_at": f"{when.isoformat()}T{slot['end']}", "all_day": 0, "location": slot["room"], "status": "active", "tags": _labels(conn, discipline),
+           "reminders": app_defaults.class_reminders(conn), "holiday_calendar": None, "created_at": now, "updated_at": now}
+    db.upsert_event(conn, row)
+    _tag_item(conn, "event", row["uid"], discipline)
+    event_series.create_series(conn, row, slot_rule(slot["weekday"], "all", when))
+    series = (db.get_event(conn, row["uid"]) or {}).get("series_uid")
+    if not series:
+        raise PlanError("The class could not be created")
+    conn.execute("INSERT INTO university_slots (series_uid, semester_uid, discipline_tag, kind, weeks) VALUES (?, ?, ?, ?, 'once')",
+                 (series, semester["uid"], discipline, slot["kind"]))
+    conn.commit()
+    return row["uid"]
 
 
 def _superseded(slot: dict[str, Any], slots: list[dict[str, Any]]) -> bool:
@@ -1029,6 +1052,11 @@ def open_class_note(conn: sqlite3.Connection, event_uid: str) -> str:
     return uid
 
 
+def is_class(conn: sqlite3.Connection, event: dict[str, Any] | None) -> bool:
+    """An event that is a class of a slot of the semester."""
+    return bool(event and event.get("series_uid") and conn.execute("SELECT 1 FROM university_slots WHERE series_uid = ?", (event["series_uid"],)).fetchone())
+
+
 def is_locked(conn: sqlite3.Connection, kind: str, uid: str) -> bool:
     """A class or an exam (its event or its task) keeps its title and description: only the module edits them."""
     if not uid or not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'university_slots'").fetchone():
@@ -1230,7 +1258,7 @@ SHEET_SECTIONS = (
         ("absences_lecture", "Lecture absences allowed", "number", ()),
         ("absences_seminar", "Seminar absences allowed", "number", ()), ("absences_lab", "Lab absences allowed", "number", ()))),
     ("content", "Content", (
-        ("objectives", "Objectives", "long", ()), ("prerequisites", "Prerequisites", "long", ()), ("summary", "Summary", "long", ()))),
+        ("summary", "Summary", "long", ()),)),
 )
 SHEET_FIELDS = tuple((key, label) for _, _, fields in SHEET_SECTIONS for key, label, _, _ in fields)
 SHEET_SECTION_KEYS = tuple(k for k, _, _ in SHEET_SECTIONS)
@@ -1332,6 +1360,16 @@ def set_teachers(conn: sqlite3.Connection, semester_uid: str, discipline: str, l
             _tag_item(conn, "contact", uid, discipline, False)
     for uid in everyone:
         _tag_item(conn, "contact", uid, discipline)
+
+
+def sync_teachers(conn: sqlite3.Connection, semester_uid: str, discipline: str) -> None:
+    """The teachers of a discipline are the ones named on its timetable: the lecture teachers and the seminar and lab teachers of the slots, each
+    carrying the discipline's tag. There is no other place to enter them."""
+    lecture: list[str] = []
+    other: list[str] = []
+    for slot in list_slots(conn, semester_uid, discipline):
+        (lecture if slot["kind"] == "lecture" else other).extend(slot["teachers"])
+    set_teachers(conn, semester_uid, discipline, list(dict.fromkeys(lecture)), list(dict.fromkeys(other)))
 
 
 def credits_planned(conn: sqlite3.Connection, semester_uid: str) -> float:

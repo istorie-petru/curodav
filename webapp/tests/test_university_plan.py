@@ -458,3 +458,36 @@ def test_a_semester_can_be_moved_to_another_shelf(conn):
     up.save_semester(conn, uid=uid, name="First Semester", shelf_name="Old uni", start_date="", end_date="", class_end_date="")
     assert up.get_semester(conn, uid)["shelf_name"] == "Old uni"
     assert tags.managed_by(conn, "Old uni") == up.MODULE_KEY and not tags.managed_by(conn, "First Semester")
+
+
+def test_a_class_on_a_date_of_its_own_stays_out_of_the_weekly_timetable_and_a_moved_class_is_made_up(conn, sem):
+    from src import university_attendance as ua
+
+    series = up.save_slot(conn, sem, "Biology", LECTURE)
+    first = up.series_members(conn, series)[0]
+    extra = up.add_class(conn, sem, "Biology", "seminar", "2026-10-21", "14:00", "16:00", "B2")
+    assert len(up.list_slots(conn, sem["uid"], "Biology")) == 1
+    rows = up.list_classes(conn, sem["uid"], "Biology", today=date(2026, 10, 1))
+    assert extra in [r["uid"] for r in rows] and [r["kind"] for r in rows if r["uid"] == extra] == ["seminar"]
+    moved = ua.move_class(conn, first["uid"], "2026-10-07T16:00", "2026-10-07T18:00")
+    assert ua.statuses_of(conn, [first["uid"], moved]) == {first["uid"]: {"status": "cancelled", "note": "Moved"}, moved: {"status": "made_up", "note": ""}}
+    assert db.get_event(conn, first["uid"])["status"] == "archived" and db.get_event(conn, moved)["start_at"] == "2026-10-07T16:00"
+
+
+def test_the_teachers_of_a_discipline_are_the_ones_named_on_its_timetable_and_old_sheet_teachers_move_to_it(conn, sem):
+    from src import migrations_university
+
+    _bio(conn, sem, teachers="")
+    for uid, name in (("c1", "Dr Ionescu"), ("c2", "Dr Popa")):
+        db.upsert_contact(conn, {"uid": uid, "full_name": name, "created_at": "2026-10-01", "updated_at": "2026-10-01"})
+    lecture = up.save_slot(conn, sem, "Biology", dict(LECTURE, teachers=["c1"]))
+    seminar = up.save_slot(conn, sem, "Biology", dict(LECTURE, weekday=2, kind="seminar", teachers=["c2"]))
+    up.sync_teachers(conn, sem["uid"], "Biology")
+    sheet = up.get_sheet(conn, sem["uid"], "Biology")
+    assert [t["uid"] for t in sheet["lecture_teachers"]] == ["c1"] and [t["uid"] for t in sheet["seminar_teachers"]] == ["c2"]
+    for m in up.series_members(conn, lecture):
+        db.set_object_contacts(conn, "event", m["uid"], [])
+    up.set_teachers(conn, sem["uid"], "Biology", ["c1"], [])
+    migrations_university.sheet_teachers_to_slots(conn)
+    assert [c["uid"] for c in db.list_object_contacts(conn, "event", up.series_members(conn, lecture)[0]["uid"])] == ["c1"]
+    assert [c["uid"] for c in db.list_object_contacts(conn, "event", up.series_members(conn, seminar)[0]["uid"])] == ["c2"]

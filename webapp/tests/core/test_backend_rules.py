@@ -106,7 +106,7 @@ SRC = Path(__file__).resolve().parents[2] / "src"
 # fixed code-side list or from an allow-listed sync field set, never a request value. New files must not be added here
 # without the same review.
 F_STRING_SQL_FILES = {
-    "db/citation_library.py", "db/contacts.py", "db/core.py", "db/events.py", "db/labels.py", "db/notebook.py", "db/pages.py", "db/sync.py", "db/tasks.py", "api_service.py", "finance.py", "migrations.py", "migrations_citations.py", "migrations_media.py", "db/media.py", "calibre_library.py", "offline_sync.py", "search_index.py", "secret_store.py",
+    "db/citation_library.py", "db/contacts.py", "db/core.py", "db/events.py", "db/labels.py", "db/notebook.py", "db/pages.py", "db/sync.py", "db/tasks.py", "api_activity.py", "api_history.py", "auto_backups.py", "api_service.py", "finance.py", "migrations.py", "migrations_citations.py", "migrations_media.py", "db/media.py", "calibre_library.py", "offline_sync.py", "search_index.py", "secret_store.py",
     "study_page.py", "tags.py", "university_plan.py",
 }
 

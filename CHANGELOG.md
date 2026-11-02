@@ -6,6 +6,15 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [5.0.6]
+
+- University group pages: the Overview keeps the next class, examination and due card with the timetable; the Disciplines view is tall cards in each discipline's colour, sorted by colour then name, with the next exam and the next task; the Examination timeline has a header per month.
+- University discipline page: Overview, Course sheet, Bibliography and Examination. The next class card flips between the lecture and its time, the timetable is a card, and the classes table moved to the Overview with quick attendance for any class, in advance too, and a way to clear a mark. A class on a date of its own can be added (a make-up or extra class). Moving a class in the calendar cancels it and makes up a new class; exams cannot be moved outside the course sheet. Classes no longer carry competences, only planned content and what else was covered; the attendance note is gone.
+- Course sheet: the one place to edit the timetable (weekly lectures, seminars and labs), the absences allowed, the summary and the ways of evaluating. Teachers come from the timetable and are tagged from it; the earlier sheet teachers move to the timetable in migration 67. Objectives and prerequisites are no longer asked for; the timetable editor left Settings. Edit buttons of an exam or class open the course sheet or its window instead of the plain event form.
+- Undo history: every change a connected app makes through the API or MCP is saved as a snapshot (notes, library entries, semesters and whole disciplines), and Settings > API access has an Undo for each, which first checks that nothing has been changed since (migration 81).
+- Automatic backups: the data is backed up at 10:00, 18:00 and when the server starts, and kept for a week. Settings > Backups shows them on a timeline, compares one with the data now, and restores everything (after typing a confirmation) or only one note or discipline.
+- Recent activity (API access): one log-style card per visit, with who and when, opening to a short line per call with what and where (migration 82).
+
 ## [5.0.5]
 
 - University: the Examination page is a timeline of every exam, deadline, homework and reading in date order, with today marked and the undated last. The weekly timetable is one general week at the height it needs, with solid class blocks and no scrolling, and the cards are smaller.

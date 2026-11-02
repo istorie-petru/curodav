@@ -1,17 +1,19 @@
-{% set _e = enc %}{% set _syl = '/settings/university/syllabus/' ~ enc ~ '?kind=' %}{% set _sheet = '/settings/university/sheet/' ~ enc ~ '?section=' %}
+{% set _sheet = '/settings/university/sheet/' ~ enc ~ '?section=' %}
 {% set _homework = {'href': '/settings/university/homework/new?discipline=' ~ enc, 'icon': 'check-square', 'label': 'New homework'} %}
-{% set _slot = {'href': '/settings/university/slot/new?discipline=' ~ enc, 'icon': 'clock', 'label': 'New weekly class'} %}
-{% set page_add = ({'label': 'Add', 'items': [_homework, _slot]} if view == 'overview' else
-   {'label': 'Add to the course sheet', 'items': [{'href': _sheet ~ 'identification', 'icon': 'file-text', 'label': 'Identification'}, {'href': _sheet ~ 'teaching', 'icon': 'users', 'label': 'Teaching'}, {'href': _sheet ~ 'content', 'icon': 'book-open', 'label': 'Content'}, {'href': _syl ~ 'lecture', 'icon': 'book-open', 'label': 'Lectures'}, {'href': _syl ~ 'seminar', 'icon': 'users', 'label': 'Seminars'}, {'href': _syl ~ 'lab', 'icon': 'flask-conical', 'label': 'Labs'}, {'href': _syl ~ 'competence', 'icon': 'target', 'label': 'Competences'}]} if view == 'sheet' else
-   {'label': 'Add to the classes', 'items': [_slot, {'href': _syl ~ 'lecture', 'icon': 'book-open', 'label': 'Plan the lectures'}, {'href': _syl ~ 'seminar', 'icon': 'users', 'label': 'Plan the seminars'}, {'href': _syl ~ 'lab', 'icon': 'flask-conical', 'label': 'Plan the labs'}, {'href': _syl ~ 'competence', 'icon': 'target', 'label': 'Edit the competences'}] + ([{'form_action': '/settings/university/syllabus/' ~ enc ~ '/assign', 'icon': 'list-checks', 'label': 'Apply the plan to the classes'}] if can_place else [])} if view == 'classes' else
+{% set _class = {'href': '/settings/university/class/new?discipline=' ~ enc, 'icon': 'calendar-plus', 'label': 'New class on a date'} %}
+{% set _syl = '/settings/university/syllabus/' ~ enc ~ '?kind=' %}
+{% set _slot = '/settings/university/slot/new?discipline=' ~ enc ~ '&kind=' %}
+{% set page_add = ({'label': 'Add', 'items': [_homework, _class]} if view == 'overview' else
+   {'label': 'Add to the course sheet', 'items': [{'href': _slot ~ 'lecture', 'icon': 'clock', 'label': 'New weekly lecture'}, {'href': _slot ~ 'seminar', 'icon': 'clock', 'label': 'New weekly seminar'}, {'href': _slot ~ 'lab', 'icon': 'clock', 'label': 'New weekly lab'}, {'href': '/settings/university/evaluation/new?discipline=' ~ enc, 'icon': 'file-check', 'label': 'New way of evaluating'}, {'href': _syl ~ 'lecture', 'icon': 'book-open', 'label': 'Plan the lectures'}, {'href': _syl ~ 'seminar', 'icon': 'users', 'label': 'Plan the seminars'}, {'href': _syl ~ 'lab', 'icon': 'flask-conical', 'label': 'Plan the labs'}, {'href': _sheet ~ 'identification', 'icon': 'file-text', 'label': 'Edit the identification'}, {'href': _sheet ~ 'teaching', 'icon': 'users', 'label': 'Edit the absences allowed'}, {'href': _sheet ~ 'content', 'icon': 'book-open', 'label': 'Edit the summary'}]} if view == 'sheet' else
    {'href': '/settings/university/reading/new?discipline=' ~ enc, 'label': 'New reference'} if view == 'bibliography' else
-   {'label': 'Add', 'items': [{'href': '/settings/university/evaluation/new?discipline=' ~ enc, 'icon': 'file-check', 'label': 'New way of evaluating'}, _homework]}) %}
+   {'href': '/settings/university/homework/new?discipline=' ~ enc, 'label': 'New homework'}) %}
 {% extends "base.html" %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_empty_state.html" import empty_state %}
 {% from "_widget_items.html" import icon_pill %}
 {% from "_widget_cards.html" import wcard_stat, wcard_row %}
 {% from "_rows_pick.html" import importance_pill %}
+{% from "_inputs.html" import checkbox_input %}
 {% from "_action_menu.html" import action_menu %}
 {% block title %}{{ d.name }}{% endblock %}
 {% macro edit_btn(url, label) %}<a href="{{ url }}" data-modal class="icon-btn" title="{{ label }}" aria-label="{{ label }}">{{ icon('edit', 'icon-sm') }}</a>{% endmacro %}
@@ -23,86 +25,92 @@
 {% endcall %}
 {% include "_flash.html" %}
 {% if view == 'overview' %}
-{% set nc = upcoming[0] if upcoming else none %}
+{% set nc = next_class %}
 {% set ex = soon_exam %}
-{% set np = (pending | rejectattr('title', 'equalto', ex.title if ex else '') | list | first) if pending else none %}
-{% set tight = (absences | selectattr('limit') | sort(attribute='left') | list)[:1] %}
 <div class="card-grid wcard-grid">
     {% if ex %}{{ wcard_stat('Next examination', ex.title, ex.when|capitalize ~ (', ' ~ ex.detail if ex.detail else ''), ex.url, alert=true) }}{% endif %}
-    {{ wcard_stat('Next class', (nc.topic or nc.free_text or (nc.kind_label ~ ' ' ~ nc.number)) if nc else '', ((nc.date|relative_date) ~ ', ' ~ nc.start) if nc else '', ('/university/class/' ~ nc.uid ~ '/content') if nc else '') }}
-    {{ wcard_stat('Next pending', np.title if np else '', (np.when ~ (', ' ~ np.detail if np.detail else '')) if np else '', np.url if np else '') }}
-    {{ wcard_stat('Classes', (classes_left ~ ' left') if classes_total else '', ('of ' ~ classes_total) ~ ((' · ' ~ topics_done ~ ' of ' ~ topics_total ~ ' topics placed') if topics_total else '') ~ ((' · ' ~ read_done ~ ' of ' ~ read_total ~ ' read') if read_total else ''), percent=(100 * (classes_total - classes_left) // classes_total) if classes_total else none) }}
-    {% if tight %}{% set k = tight[0] %}{{ wcard_stat('Absences', (k.label ~ ': ' ~ k.missed ~ ' of ' ~ k.limit), 'Over the limit' if k.over else (k.left ~ ' left'), '?view=classes', modal=false, percent=(100 * k.missed // k.limit) if k.limit else none) }}{% endif %}
-</div>
-<div class="card-grid wcard-grid exam-cards">
-    <section class="wcard is-plain"><div class="wcard-label">Next classes</div>
-        <div class="wcard-rows">{% for c in upcoming %}
-            <div class="wcard-row">{{ icon_pill(d.color, 'calendar') }}
-                <a class="wcard-main" href="/university/class/{{ c.uid }}/content" data-modal><b>{{ c.topic or c.free_text or (c.kind_label ~ ' ' ~ c.number) }}</b>{% if c.topic or c.free_text %}<small>{{ c.kind_label }} {{ c.number }}</small>{% endif %}</a>
-                <span class="wcard-when">{{ c.date|relative_date }} {{ c.start }}</span>
-                {{ action_menu([{'href': '/university/class/' ~ c.uid ~ '/content', 'icon': 'edit', 'label': 'Change the topic', 'modal': true},
-                                {'href': '/events/' ~ c.uid ~ '/edit', 'icon': 'calendar-clock', 'label': 'Reschedule', 'modal': true},
-                                {'form_action': '/university/class/' ~ c.uid ~ '/attendance', 'fields': {'status': 'cancelled', 'keep_note': '1'}, 'icon': 'calendar-x', 'label': 'Cancelled', 'danger': true}], 'Class actions') }}</div>
-        {% else %}{{ empty_state('No class coming up', size='compact') }}{% endfor %}</div></section>
-    <section class="wcard is-plain"><div class="wcard-label">Timetable</div>
+    {% if nc %}
+    <label class="wcard wcard-flip" title="Tap to switch between the class and its time">
+        {{ checkbox_input({'class': 'sr-only', 'aria-label': 'Show the time of the next class'}) }}
+        <span class="wcard-label">Next class</span>
+        <span class="wcard-big flip-a">{{ nc.name }}</span>
+        <span class="wcard-big flip-b">{{ nc.date|relative_date }}, {{ nc.start }}</span>
+    </label>
+    {% else %}{{ wcard_stat('Next class', '', '') }}{% endif %}
+    <section class="wcard">
+        <div class="wcard-label">Timetable<span class="spacer"></span>{{ edit_btn('/groups/' ~ group|urlencode ~ '/disciplines/' ~ enc ~ '?view=sheet', 'Edit the timetable on the course sheet') }}</div>
         <div class="wcard-rows">{% for s in slots %}
-            {{ wcard_row(d, s.weekday_name ~ ' ' ~ s.start ~ ' to ' ~ s.end, s.kind_label ~ ((', ' ~ s.weeks ~ ' weeks') if s.weeks != 'all' else '') ~ ((', ' ~ s.room) if s.room else '') ~ ((', ' ~ s.teacher_names) if s.teacher_names else ''), '', '/settings/university/slot/' ~ s.series_uid ~ '/edit', icon_name='clock') }}
-        {% else %}{{ empty_state('No timetable yet', size='compact') }}{% endfor %}</div></section>
-    <section class="wcard is-plain"><div class="wcard-label">Pending<span class="spacer"></span>{{ pending|length }}</div>
-        <div class="wcard-rows">{% for p in pending %}{{ wcard_row(d, p.title, p.detail, p.when|capitalize, p.url, icon_name=p.icon) }}{% else %}{{ empty_state('Nothing pending', size='compact') }}{% endfor %}</div></section>
+            {{ wcard_row(d, s.weekday_name ~ ' ' ~ s.start ~ ' to ' ~ s.end, s.kind_label ~ ((', ' ~ s.weeks ~ ' weeks') if s.weeks != 'all' else '') ~ ((', ' ~ s.room) if s.room else '') ~ ((', ' ~ s.teacher_names) if s.teacher_names else ''), '', '', icon_name='clock') }}
+        {% else %}{{ empty_state('No timetable yet', size='compact') }}{% endfor %}</div>
+    </section>
 </div>
+{% if class_rows %}
+<div class="card table-scroll table-responsive">
+    <table class="entity-table uni-classes"><thead><tr><th>Date</th><th>Class</th><th>Covered</th><th class="col-opt-1">Attendance</th><th class="col-actions">Actions</th></tr></thead><tbody>
+    {% for c in class_rows %}<tr class="{{ 'uni-past' if c.past }}"><td class="uni-nowrap">{{ c.date|short_day }}, {{ c.start }}</td><td class="uni-nowrap">{{ c.kind_label }} {{ c.number }}{% if c.is_next %} <span class="text-muted">next</span>{% endif %}</td>
+        <td>{% if c.topic_name %}{{ c.topic_name }}{% endif %}{% if c.free_text %}{% if c.topic_name %}<br>{% endif %}<small>{{ c.free_text }}</small>{% endif %}{% if not c.topic_name and not c.free_text %}<span class="text-muted">Nothing yet</span>{% endif %}</td>
+        <td class="col-opt-1 uni-nowrap">{% if c.past or c.status %}{{ c.status_label }}{% endif %}</td>
+        <td class="col-actions">{% set _items = [{'href': '/university/class/' ~ c.uid ~ '/content', 'icon': 'edit', 'label': 'Edit what it covers', 'modal': true}] %}
+            {% if c.note_uid %}{% set _ = _items.append({'href': '/notebook/' ~ c.note_uid, 'icon': 'file-text', 'label': 'Open the note'}) %}{% else %}{% set _ = _items.append({'form_action': '/university/class/' ~ c.uid ~ '/note', 'icon': 'file-plus', 'label': 'Make a note'}) %}{% endif %}
+            {% for key, label in [('attended', 'Attended'), ('missed', 'Missed'), ('excused', 'Excused'), ('made_up', 'Made up'), ('cancelled', 'Cancelled')] if key != c.status %}{% set _ = _items.append({'form_action': '/university/class/' ~ c.uid ~ '/attendance', 'fields': {'status': key}, 'icon': {'attended': 'check', 'missed': 'x', 'excused': 'file-check', 'made_up': 'rotate-ccw', 'cancelled': 'calendar-x'}[key], 'label': label}) %}{% endfor %}
+            {% if c.status and not (c.past and c.status == 'attended') %}{% set _ = _items.append({'form_action': '/university/class/' ~ c.uid ~ '/attendance', 'fields': {'status': 'attended'}, 'icon': 'eraser', 'label': 'Clear the mark'}) %}{% endif %}
+            {{ action_menu(_items, 'Class actions') }}</td></tr>{% endfor %}
+    </tbody></table>
+</div>
+{% else %}
+{{ empty_state('No classes yet', 'calendar') }}
+{% endif %}
 
 {% elif view == 'sheet' %}
-{% if sheet_empty %}
-<div class="card">{{ empty_state('The course sheet is empty', 'file-text') }}</div>
-{% else %}
+{% set ident = sheet.sections | selectattr('key', 'equalto', 'identification') | first %}
+{% set summary_sec = sheet.sections | selectattr('key', 'equalto', 'content') | first %}
 <div class="card-grid wcard-grid exam-cards">
-{% for sec in sheet.sections if sec.has_content %}
 <section class="wcard is-plain">
-    <div class="wcard-label">{{ sec.label }}<span class="spacer"></span>{{ edit_btn('/settings/university/sheet/' ~ enc ~ '?section=' ~ sec.key, 'Edit ' ~ sec.label|lower) }}</div>
+    <div class="wcard-label">Identification<span class="spacer"></span>{{ edit_btn('/settings/university/sheet/' ~ enc ~ '?section=identification', 'Edit the identification') }}</div>
     <div class="uni-sheet">
-        {% if sec.key == 'identification' %}<div class="uni-sheet-row"><span>Name</span><p>{{ d.name }}</p></div>{% endif %}
-        {% for f in sec.shown %}<div class="uni-sheet-row"><span>{{ f.label }}</span><p>{{ f.value }}</p></div>{% endfor %}
-        {% if sec.key == 'teaching' %}
-        {% if sheet.lecture_teachers %}<div class="uni-sheet-row"><span>Lecture teachers</span><p>{{ sheet.lecture_teachers | map(attribute='name') | join(', ') }}</p></div>{% endif %}
-        {% if sheet.seminar_teachers %}<div class="uni-sheet-row"><span>Seminar and lab teachers</span><p>{{ sheet.seminar_teachers | map(attribute='name') | join(', ') }}</p></div>{% endif %}
-        {% endif %}
-        {% for c in sec.custom %}<div class="uni-sheet-row"><span>{{ c.label }}</span><p>{% if sec.key == 'teaching' %}{{ c.value }} hours per week{% else %}{{ c.value }}{% endif %}</p></div>{% endfor %}
+        <div class="uni-sheet-row"><span>Name</span><p>{{ d.name }}</p></div>
+        {% for f in ident.shown %}<div class="uni-sheet-row"><span>{{ f.label }}</span><p>{{ f.value }}</p></div>{% endfor %}
+        {% for c in ident.custom %}<div class="uni-sheet-row"><span>{{ c.label }}</span><p>{{ c.value }}</p></div>{% endfor %}
     </div>
 </section>
-{% endfor %}
+<section class="wcard is-plain">
+    <div class="wcard-label">Teaching<span class="spacer"></span>{{ edit_btn('/settings/university/sheet/' ~ enc ~ '?section=teaching', 'Edit the absences allowed') }}</div>
+    {% for k in teaching %}
+    <div class="uni-sheet">
+        <div class="uni-sheet-row"><span>{{ k.label }}{% if k.hours %} <small class="text-muted">{{ k.hours }} h</small>{% endif %}</span>
+            <div>{% for s in k.slots %}<p><a href="/settings/university/slot/{{ s.series_uid }}/edit" data-modal>{{ s.weekday_name }} {{ s.start }} to {{ s.end }}{% if s.weeks != 'all' %}, {{ s.weeks }} weeks{% endif %}{% if s.room %}, {{ s.room }}{% endif %}{% if s.teacher_names %}, {{ s.teacher_names }}{% endif %}</a></p>
+                {% else %}<p class="text-muted"><a href="/settings/university/slot/new?discipline={{ enc }}&amp;kind={{ k.kind }}" data-modal>Add a {{ k.label|lower }}</a></p>{% endfor %}
+                {% if k.absences %}<p class="text-muted">{{ k.absences }} absences allowed</p>{% endif %}</div></div>
+    </div>
+    {% endfor %}
+</section>
+<section class="wcard is-plain">
+    <div class="wcard-label">Content<span class="spacer"></span>{{ edit_btn('/settings/university/sheet/' ~ enc ~ '?section=content', 'Edit the summary') }}</div>
+    <div class="uni-sheet">
+        {% for f in summary_sec.shown %}<div class="uni-sheet-row"><span>{{ f.label }}</span><p>{{ f.value }}</p></div>{% else %}<p class="text-muted">No summary yet</p>{% endfor %}
+    </div>
+</section>
+<section class="wcard is-plain">
+    <div class="wcard-label">Examination<span class="spacer"></span>{{ add_btn('/settings/university/evaluation/new?discipline=' ~ enc, 'Add a way of evaluating') }}</div>
+    <div class="uni-sheet">
+        {% for w in ways %}
+        <div class="uni-sheet-row"><span><a href="/settings/university/evaluation/{{ w.id }}/edit?discipline={{ enc }}" data-modal>{{ w.name }}</a></span>
+            <div><p>{% if w.elimination %}Elimination{% elif w.weight is not none %}{{ '%g'|format(w.weight) }}% of the grade{% endif %}{% if w.form %}, {{ w.form|lower }}{% endif %}{% if w.min_grade is not none %}, at least {{ '%g'|format(w.min_grade) }} to pass{% endif %}</p>
+                {% for sub in w.subs %}<p class="text-muted">{{ sub.name }}{% if sub.weight is not none %}, {{ '%g'|format(sub.weight) }}%{% endif %}</p>{% endfor %}
+                {% for m in w.milestones %}<p class="text-muted">{{ m.title }}, {{ (m.date|short_day) if m.date else 'no date' }}</p>{% endfor %}
+                {% for c in w.condition_rows %}<p class="text-muted">{{ c.label }}</p>{% endfor %}</div></div>
+        {% else %}<p class="text-muted">No way of evaluating yet</p>{% endfor %}
+    </div>
+</section>
 </div>
 {% for g in groups if g.rows %}
 <div class="card table-scroll table-responsive">
-    <div class="card-title widget-header"><h2>{{ 'Competences' if g.kind == 'competence' else 'Planned contents: ' ~ g.label|lower }}</h2>{{ edit_btn('/settings/university/syllabus/' ~ enc ~ '?kind=' ~ g.kind, 'Edit ' ~ g.label|lower) }}</div>
-    <table class="entity-table"><thead><tr><th>No.</th><th>{{ 'Competence' if g.kind == 'competence' else 'Topic' }}</th>{% if g.kind != 'competence' %}<th>Importance</th>{% endif %}<th>Applied on</th></tr></thead><tbody>
-    {% for t in g.rows %}<tr><td>{{ t.number }}</td><td>{{ t.title }}</td>{% if g.kind != 'competence' %}<td>{{ importance_pill(t.importance) }}</td>{% endif %}<td>{% for dt in t.dates %}{{ dt|short_date }}{{ ', ' if not loop.last }}{% else %}Not applied{% endfor %}</td></tr>{% endfor %}
+    <div class="card-title widget-header"><h2>Planned contents: {{ g.label|lower }}</h2>{{ edit_btn('/settings/university/syllabus/' ~ enc ~ '?kind=' ~ g.kind, 'Edit ' ~ g.label|lower) }}</div>
+    <table class="entity-table"><thead><tr><th>No.</th><th>Topic</th><th>Importance</th><th>Applied on</th></tr></thead><tbody>
+    {% for t in g.rows %}<tr><td>{{ t.number }}</td><td>{{ t.title }}</td><td>{{ importance_pill(t.importance) }}</td><td>{% for dt in t.dates %}{{ dt|short_date }}{{ ', ' if not loop.last }}{% else %}Not applied{% endfor %}</td></tr>{% endfor %}
     </tbody></table>
 </div>
 {% endfor %}
-{% endif %}
-
-{% elif view == 'classes' %}
-<div class="card-grid wcard-grid">
-    {% for k in attendance.kinds %}
-    {{ wcard_stat(k.label ~ 's', (k.missed ~ ' of ' ~ k.limit ~ ' absences') if k.limit is not none else (k.missed ~ ' missed'), ('Over the limit' if k.over else (k.left ~ ' left')) ~ ', ' ~ k.held ~ ' of ' ~ k.total ~ ' held' if k.limit is not none else k.held ~ ' of ' ~ k.total ~ ' held', '/settings/university/sheet/' ~ enc ~ '?section=teaching', percent=(100 * k.held // k.total) if k.total else none) }}
-    {% endfor %}
-</div>
-<div class="card table-scroll table-responsive">
-    <div class="card-title widget-header"><h2>Classes</h2><div class="spacer"></div>
-        </div>
-    {% if classes %}
-    <table class="entity-table uni-classes"><thead><tr><th>Date</th><th>Class</th><th>Covered</th><th class="col-opt-1">Attendance</th><th class="col-actions">Actions</th></tr></thead><tbody>
-    {% for c in classes %}<tr class="{{ 'uni-past' if c.past }}"><td class="uni-nowrap">{{ c.date|short_day }}, {{ c.start }}</td><td class="uni-nowrap">{{ c.kind_label }} {{ c.number }}{% if c.is_next %} <span class="text-muted">next</span>{% endif %}</td>
-        <td>{% if c.topic_name %}{{ c.topic_name }}{% endif %}{% if c.competence_names %}<br><small>{{ c.competence_names | join('; ') }}</small>{% endif %}{% if c.free_text %}<br><small>{{ c.free_text }}</small>{% endif %}{% if not c.topic_name and not c.competence_names and not c.free_text %}<span class="text-muted">Nothing yet</span>{% endif %}</td>
-        <td class="col-opt-1 uni-nowrap">{% if c.past or c.status == 'cancelled' %}{{ c.status_label }}{% if c.note %} <span class="text-muted">{{ c.note }}</span>{% endif %}{% endif %}</td>
-        <td class="col-actions">{% set _items = [{'href': '/university/class/' ~ c.uid ~ '/content', 'icon': 'edit', 'label': 'Edit the contents', 'modal': true}] %}
-            {% if c.note_uid %}{% set _ = _items.append({'href': '/notebook/' ~ c.note_uid, 'icon': 'file-text', 'label': 'Open the note'}) %}{% else %}{% set _ = _items.append({'form_action': '/university/class/' ~ c.uid ~ '/note', 'icon': 'file-plus', 'label': 'Make a note'}) %}{% endif %}
-            {% for key, label in [('attended', 'Attended'), ('missed', 'Missed'), ('excused', 'Excused'), ('made_up', 'Made up'), ('cancelled', 'Cancelled')] if key != c.status %}{% set _ = _items.append({'form_action': '/university/class/' ~ c.uid ~ '/attendance', 'fields': {'status': key, 'keep_note': '1'}, 'icon': {'attended': 'check', 'missed': 'x', 'excused': 'file-check', 'made_up': 'rotate-ccw', 'cancelled': 'calendar-x'}[key], 'label': label}) %}{% endfor %}
-            {% set _ = _items.append({'href': '/university/class/' ~ c.uid ~ '/attendance', 'icon': 'message-square', 'label': 'Add an attendance note', 'modal': true}) %}{{ action_menu(_items, 'Class actions') }}</td></tr>{% endfor %}
-    </tbody></table>
-    {% else %}{{ empty_state('No classes yet', 'calendar') }}{% endif %}
-</div>
 
 {% elif view == 'bibliography' %}
 <div class="card-grid wcard-grid exam-cards">
@@ -126,7 +134,7 @@
 <div class="card-grid wcard-grid exam-cards">
     {% for w in st.ways %}
     <section class="wcard">
-        <div class="wcard-label">{{ w.form or 'Evaluation' }}<span class="spacer"></span>{{ edit_btn('/settings/university/evaluation/' ~ w.id ~ '/edit?discipline=' ~ enc, 'Edit') }}</div>
+        <div class="wcard-label">{{ w.form or 'Evaluation' }}</div>
         <div class="wcard-big">{{ w.name }}</div>
         <div class="wcard-small">{% if w.elimination %}Elimination{% elif w.weight is not none %}{{ '%g'|format(w.weight) }}% of the grade{% endif %}{% if w.min_grade is not none %}{{ ', ' if (w.elimination or w.weight is not none) }}at least {{ '%g'|format(w.min_grade) }} to pass{% endif %}{% if w.grade is not none %}. Grade {{ '%g'|format(w.grade) }}{% if w.passed is sameas false %}, not passed{% endif %}{% endif %}</div>
         {% if w.criteria %}<p class="uni-text">{{ w.criteria }}</p>{% endif %}

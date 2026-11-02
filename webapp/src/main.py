@@ -195,6 +195,9 @@ async def lifespan(app: FastAPI):
         logger.warning("Background Radicale sync not started (no bridge); restart to retry")
     _reminder_thread, reminder_stop = reminders.start_scheduler(settings.db_path)
     perf_stop = perf.start_flusher(settings.db_path)
+    from . import auto_backups
+
+    backup_stop = auto_backups.start_scheduler(settings.db_path, settings.backup_dir)
 
     total_ms = (time.perf_counter() - boot) * 1000
     breakdown = ", ".join(f"{name} {round(seconds * 1000)} ms" for name, seconds in steps.items())
@@ -209,6 +212,7 @@ async def lifespan(app: FastAPI):
         stop_event.set()
     reminder_stop.set()
     perf_stop.set()
+    backup_stop.set()
 
 
 def create_app() -> FastAPI:
@@ -282,9 +286,10 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(auth.router)
-    from .routers import settings_api_access
+    from .routers import settings_api_access, settings_backups
 
     app.include_router(settings_api_access.router)
+    app.include_router(settings_backups.router)
     from .routers import api_v1, mcp as mcp_router, oauth
 
     app.include_router(oauth.router)

@@ -266,9 +266,11 @@ document.addEventListener("submit", (event) => {
   if (!message || form.dataset.confirmed) return;
   event.preventDefault();
   const submitter = event.submitter || form.querySelector('button[type="submit"], button:not([type])');
+  const typed = form.getAttribute("data-confirm-typed");
   window.ccConfirmSheet({
     anchor: submitter || form,
     message,
+    ...(typed ? { typedConfirm: { matchValue: typed }, confirmLabel: form.getAttribute("data-confirm-label") || undefined } : {}),
     onConfirm: () => {
       form.dataset.confirmed = "1";
       form.requestSubmit ? form.requestSubmit(submitter) : form.submit();
