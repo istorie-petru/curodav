@@ -1,5 +1,5 @@
-"""The page of one discipline, under the page of the space that holds the semester: an overview and the views Course sheet, Classes (the contents
-and the attendance of every class), Bibliography and Examination. Pages show; small windows (a slot, a topic list, a way of evaluating, a reading, a class) edit."""
+"""The page of one discipline, under the page of the space that holds the semester: an overview (with the classes table) and the views Course sheet,
+Bibliography and Examination. Pages show; small windows (a slot, a topic list, a way of evaluating, a reading, a class) edit."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from . import clock
+from . import clock, db
 from . import university_attendance as ua
 from . import university_evaluation as ue
 from . import university_plan as up

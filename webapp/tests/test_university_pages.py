@@ -726,3 +726,13 @@ def test_the_window_of_a_class_holds_its_attendance_menu_and_what_it_covers_and_
     exam = ue.list_milestones(conn, sem["uid"])[0]
     assert "Final" in cal.event_detail(exam["event_uid"], _request("/events/x"), conn=conn).body.decode() and "60% of the grade" in cal.event_detail(exam["event_uid"], _request("/events/x"), conn=conn).body.decode()
     assert "60% of the grade" in tasks_router.task_detail(task_uid, _request(f"/tasks/{task_uid}"), conn=conn).body.decode()
+
+
+def test_a_discipline_page_renders_when_the_timetable_slots_have_teachers(conn, sem):
+    db.upsert_contact(conn, {"uid": "t1", "full_name": "Dr Timetable", "created_at": "2026-10-01", "updated_at": "2026-10-01"})
+    up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "room": "A2", "kind": "lecture", "weeks": "all", "teachers": ["t1"]})
+    up.sync_teachers(conn, sem["uid"], "Biology")
+    for view in ("overview", "sheet", "bibliography", "exams"):
+        page = _html(discipline_page("University", "Biology", _request(), view=view, conn=conn))
+        assert "Biology" in page, view
+    assert "Dr Timetable" in _html(discipline_page("University", "Biology", _request(), view="sheet", conn=conn))

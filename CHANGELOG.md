@@ -6,6 +6,11 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [5.0.7]
+
+- Fix: a discipline page no longer crashes when the timetable slots have teachers (a missing import in the course sheet code), and a test now renders every view of such a discipline.
+- Cards: the University and Library cards use the app's own tile look, a soft filled surface with no border, the app's card corner radius and the filled card's lift on hover; the exam card and the discipline-coloured cards are the filled style with white text.
+
 ## [5.0.6]
 
 - University group pages: the Overview keeps the next class, examination and due card with the timetable; the Disciplines view is tall cards in each discipline's colour, sorted by colour then name, with the next exam and the next task; the Examination timeline has a header per month.
