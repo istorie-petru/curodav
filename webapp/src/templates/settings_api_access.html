@@ -10,7 +10,11 @@
 <div class="card" id="api-fresh-token">
     <h2>New token</h2>
     <p>Copy it now; it is not shown again.</p>
-    <p><code class="api-secret">{{ fresh_secret }}</code></p>
+    <div class="settings-field-row">
+        <code class="api-secret">{{ fresh_secret }}</code>
+        <span class="spacer"></span>
+        <button type="button" class="btn primary btn-sm" data-copy="{{ fresh_secret }}">{{ icon('clipboard', 'icon-sm') }} Copy</button>
+    </div>
 </div>
 {% endif %}
 <div class="card">
@@ -19,11 +23,13 @@
         <span class="settings-field-label">MCP address</span>
         <span class="spacer"></span>
         <code>{{ base }}/mcp</code>
+        <button type="button" class="icon-btn" data-copy="{{ base }}/mcp" title="Copy" aria-label="Copy the MCP address">{{ icon('clipboard', 'icon-sm') }}</button>
     </div>
     <div class="settings-field-row">
         <span class="settings-field-label">REST API</span>
         <span class="spacer"></span>
         <code>{{ base }}/api/v1</code>
+        <button type="button" class="icon-btn" data-copy="{{ base }}/api/v1" title="Copy" aria-label="Copy the REST API address">{{ icon('clipboard', 'icon-sm') }}</button>
     </div>
 </div>
 {% macro token_table(rows, noun) %}

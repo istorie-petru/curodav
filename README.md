@@ -183,6 +183,12 @@ For the `curodav-ctl` install:
 | Check that everything is healthy | `curodav-ctl status` |
 | See the logs | `sudo journalctl -u curodav -f` |
 
+`sudo curodav-update` also replaces the installed `curodav-ctl` script and the
+`curodav-update` shortcut with the copies from the new release, so the
+installer needs no separate update. The new script takes over from the next
+run, so after a release that changes `curodav-ctl` itself, run
+`sudo curodav-update` once more to be sure the new one did the work.
+
 For Docker: `git pull && docker compose up -d --build` updates it, and
 `docker compose logs -f app` shows the logs.
 

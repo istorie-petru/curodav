@@ -172,7 +172,7 @@ def exams(conn, semester: dict, today: date) -> dict:
     undated = [r for r in rows if not r["date"]]
     past = sorted([r for r in rows if r["date"] and r["days_left"] < 0], key=lambda r: r["date"], reverse=True)
     finals = [{"look": looks[n], "final": st["final"], "so_far": st["so_far"], "passed": st["passed"]} for n, st in standing.items() if st["ways"]]
-    return {"groups": groups, "undated": undated, "past": past, "finals": finals, "count": len(rows)}
+    return {"groups": groups, "undated": undated, "past": past, "finals": finals, "count": len(rows), "rows": rows}
 
 
 def work(conn, semester: dict, today: date) -> list[dict]:
@@ -191,6 +191,26 @@ def work(conn, semester: dict, today: date) -> list[dict]:
     for x in out:
         x["overdue"] = bool(x["due"]) and x["due"] < today.isoformat()
     return out
+
+
+def timeline(exam_rows: list[dict], work_rows: list[dict], today: date) -> list[dict]:
+    """Every exam, deadline, homework and reading of the semester in the order of its date, with a marker where today falls and the undated at the end."""
+    items = []
+    for m in exam_rows:
+        extra = [m["look"]["name"]] + ([f"{m['weight']:g}%"] if m.get("weight") is not None else []) + ([m["start"]] if m.get("start") else []) \
+            + (["can sit"] if m.get("eligible") is True else (["conditions not met"] if m.get("eligible") is False else []))
+        items.append({"day": m["date"] or "", "title": m["title"], "sub": " · ".join(extra), "url": m["item_url"] or m["url"], "color": m["look"].get("color") or "gray",
+                      "grade": m.get("grade")})
+    for w in work_rows:
+        items.append({"day": w["due"] or "", "title": w["title"], "sub": f"{w['look']['name']} · {w['kind'].lower()}", "url": w["url"],
+                      "color": w["look"].get("color") or "gray", "grade": None})
+    iso = today.isoformat()
+    items.sort(key=lambda i: (not i["day"], i["day"], i["title"]))
+    for i in items:
+        i["past"] = bool(i["day"]) and i["day"] < iso
+    at = next((n for n, i in enumerate(items) if not i["past"]), len(items))
+    items.insert(at, {"now": True, "day": iso, "title": "Today", "sub": "", "url": "", "color": "gray", "past": False, "grade": None})
+    return items
 
 
 def cards(conn, semester: dict, group: str, today: date) -> list[dict]:
@@ -261,6 +281,7 @@ def render(conn, request: Request, name: str, label: dict):
             ctx["cards"] = cards(conn, semester, name, today)
         elif view == "exams":
             ctx.update(exams=exams(conn, semester, today), work=work(conn, semester, today), today=today, disciplines=list(_looks(conn, semester).values()))
+            ctx["timeline"] = timeline(ctx["exams"]["rows"], ctx["work"], today)
         else:
             ctx.update(overview(conn, semester, name, today, clock.local_now()))
     ctx["page_add"] = _page_add(semester, view, ctx.get("disciplines") or [])

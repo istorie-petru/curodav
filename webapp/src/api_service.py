@@ -19,9 +19,9 @@ from .db.citation_library import decode_cursor, encode_cursor, list_editions, pa
 from .notebook_markdown import blocks_to_markdown
 
 MAX_LIMIT = 100
-SEARCH_KINDS = ("note", "entry", "citation", "task", "event", "contact")
+SEARCH_KINDS = ("note", "entry", "citation", "task", "event")
 KIND_SCOPES = {"note": "read:notes", "entry": "read:notes", "citation": "read:notes", "task": "read:calendar",
-               "event": "read:calendar", "contact": "read:calendar"}
+               "event": "read:calendar"}
 
 
 def kinds_for(token: dict[str, Any] | None, kinds: list[str] | None = None) -> list[str]:

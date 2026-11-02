@@ -104,9 +104,9 @@ _LIST_ROWS = {
     "contact": lambda bridge, path: bridge.list_contact_rows(path),
 }
 _SAVE_ROW = {
-    "task": lambda bridge, row: bridge.save_task_row(row),
-    "event": lambda bridge, row: bridge.save_event_row(row),
-    "contact": lambda bridge, row: bridge.save_contact_row(row),
+    "task": lambda bridge, row, exists: bridge.save_task_row(row, known_exists=exists),
+    "event": lambda bridge, row, exists: bridge.save_event_row(row, known_exists=exists),
+    "contact": lambda bridge, row, exists: bridge.save_contact_row(row),
 }
 _DELETE = {
     "task": lambda bridge, uid, path: bridge.delete_task(uid, path),
@@ -173,7 +173,7 @@ def materialize(conn: sqlite3.Connection, bridge: Any, list_row: dict[str, Any])
         key = (collection_path, object_id)
         if object_id in existing_uids and _PUSHED.get(key) == digest:
             continue
-        _SAVE_ROW[entity_type](bridge, push_row)
+        _SAVE_ROW[entity_type](bridge, push_row, object_id in existing_uids)
         _PUSHED[key] = digest
         if object_id in existing_uids:
             updated += 1

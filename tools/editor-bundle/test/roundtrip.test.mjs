@@ -6,7 +6,7 @@ const dom = new JSDOM("<!doctype html><body><div id='m'></div></body>", { preten
 for (const key of ["window", "document", "navigator", "Node", "HTMLElement", "Element", "DOMParser", "MutationObserver", "getComputedStyle", "Range", "Selection"]) {
   Object.defineProperty(globalThis, key, { value: dom.window[key], configurable: true, writable: true });
 }
-const { create, lossy } = await import("../src/index.js");
+const { create, lossy, forceConvert } = await import("../src/index.js");
 
 const sample = [
   { type: "header", data: { text: "Title", level: 2 } },
@@ -83,4 +83,23 @@ test("an empty table, a timeline date with an ampersand and a plain highlight do
   assert.equal(lossy(dated), false);
   assert.equal(roundTrip(dated)[0].data.items[0].date, "1 & 2");
   assert.equal(roundTrip([{ type: "paragraph", data: { text: "<mark>m</mark>" } }])[0].data.text, "<mark>m</mark>");
+});
+
+test("forcing a conversion keeps the text, drops what cannot be held and leaves a note the editor opens", () => {
+  const old = [
+    { type: "header", data: { text: "Six", level: 6 } },
+    { type: "paragraph", data: { text: "a <span style=\"color:red\">red</span> <font color=\"blue\">word</font> and <b>bold</b>" } },
+    { type: "html", data: { html: "<p>raw</p>" } },
+    { type: "warning", data: { title: "x", message: "y" } },
+    { type: "timeline", data: { items: [{ title: "t", description: "d", date: "<i>1</i> & 2" }] } },
+  ];
+  assert.equal(lossy(old), true);
+  const result = forceConvert(old);
+  assert.equal(lossy(result.blocks), false);
+  assert.deepEqual(result.dropped, ["html", "warning"]);
+  assert.equal(result.blocks[0].data.level, 5);
+  assert.equal(result.blocks[1].data.text, "a red word and <b>bold</b>");
+  assert.equal(result.blocks[2].data.items[0].date, "1 & 2");
+  assert.equal(roundTrip(result.blocks).length, 3);
+  assert.deepEqual(forceConvert(sample).dropped, []);
 });

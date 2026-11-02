@@ -37,33 +37,22 @@
     {% endfor %}
 </div>
 
-{% if exams.count %}
-<div class="card-grid wcard-grid exam-cards">
-    {% for g in exams.groups %}
-    <section class="wcard is-plain"><div class="wcard-label">{{ g.label }}</div>
-        <div class="wcard-rows">{% for m in g.rows %}
-            {{ wcard_row(m.look, m.title, m.look.name ~ (' · ' ~ ('%g'|format(m.weight) ~ '%') if m.weight is not none else '') ~ (' · can sit' if m.eligible is sameas true else (' · conditions not met' if m.eligible is sameas false else '')), (m.date|short_day) ~ ((', ' ~ m.start) if m.start else ''), m.item_url or m.url, icon_name='file-check') }}
-        {% endfor %}</div></section>
+{% if timeline|length > 1 %}
+<div class="nbtl has-dates uni-timeline">
+    {% for it in timeline %}
+    {% if it.now %}
+    <div class="nbtl-item is-now"><span class="nbtl-date"></span><span class="nbtl-bullet"></span><span class="nbtl-text"><span class="nbtl-title">Today</span></span></div>
+    {% else %}
+    <a class="nbtl-item{{ ' is-past' if it.past }}" href="{{ it.url }}" data-modal data-style="--nbtl-fg:var(--cal-accent-{{ it.color }}); --nbtl-line:color-mix(in srgb, var(--cal-accent-{{ it.color }}) 45%, transparent)">
+        <span class="nbtl-date">{{ (it.day|short_day) if it.day else 'No date' }}</span><span class="nbtl-bullet"></span>
+        <span class="nbtl-text"><span class="nbtl-title">{{ it.title }}{% if it.grade is not none %} · {{ '%g'|format(it.grade) }}{% endif %}</span><span class="nbtl-desc">{{ it.sub }}</span></span>
+    </a>
+    {% endif %}
     {% endfor %}
-    {% if exams.undated %}
-    <section class="wcard is-plain"><div class="wcard-label">No date yet</div>
-        <div class="wcard-rows">{% for m in exams.undated %}{{ wcard_row(m.look, m.title, m.look.name, '', m.url, icon_name='file-check') }}{% endfor %}</div></section>
-    {% endif %}
-    {% if exams.past %}
-    <section class="wcard is-plain"><div class="wcard-label">Past</div>
-        <div class="wcard-rows">{% for m in exams.past %}{{ wcard_row(m.look, m.title, m.look.name, (('%g'|format(m.grade)) if m.grade is not none else (m.date|short_day)), m.url, icon_name='file-check', past=true) }}{% endfor %}</div></section>
-    {% endif %}
 </div>
+{% else %}
+{{ empty_state('No examinations yet', 'file-check') }}
 {% endif %}
-
-<div class="card-grid wcard-grid exam-cards">
-    <section class="wcard is-plain"><div class="wcard-label">Homework and readings</div>
-        <div class="wcard-rows">
-        {% for w in work %}
-        {{ wcard_row(w.look, w.title, w.look.name ~ ' · ' ~ w.kind|lower, ('Overdue, ' if w.overdue else '') ~ (w.due|relative_date) if w.due else 'No date', w.url, icon_name='check-square') }}
-        {% else %}{{ empty_state('Nothing due', size='compact') }}{% endfor %}
-        </div></section>
-</div>
 
 {% else %}
 {% set s = summary %}

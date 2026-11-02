@@ -25,11 +25,13 @@ from . import clock
 # (edit notes) are still understood.
 SCOPES = {
     "read:notes": "Read notes, entries and the library",
-    "read:calendar": "Read tasks, events and contacts",
+    "read:calendar": "Read tasks and events",
     "read:university": "Read university",
     "write:notes": "Edit notes",
+    "write:library": "Edit the library",
     "write:university": "Edit university",
 }
+_IMPLIED_READ = {"write:notes": "read:notes", "write:library": "read:notes", "write:university": "read:university"}
 READ_SCOPES = ("read:notes", "read:calendar", "read:university")
 DEFAULT_SCOPES = " ".join(READ_SCOPES)
 _LEGACY = {"read": READ_SCOPES, "write": ("write:notes",)}
@@ -116,7 +118,7 @@ def normal_scopes(text: str | None, default: str = DEFAULT_SCOPES) -> str:
     for word in (text or "").split():
         for scope in _LEGACY.get(word, (word,)):
             if scope in SCOPES:
-                asked |= {scope, scope.replace("write:", "read:")}
+                asked |= {scope, _IMPLIED_READ.get(scope, scope)}
     return " ".join(s for s in SCOPES if s in asked) or default
 
 
@@ -126,18 +128,20 @@ def scope_rows(scopes: str) -> list[dict[str, Any]]:
     return [{"key": key, "label": label, "on": key in held} for key, label in SCOPES.items()]
 
 
+_SHORT = {"read:notes": "notes", "read:calendar": "calendar", "read:university": "university",
+          "write:notes": "notes", "write:library": "library", "write:university": "university"}
+
+
 def describe(scopes: str) -> str:
-    """A short summary for the token table: what may be read and what may be edited."""
+    """A short summary for the token table, such as "Reads notes, university; edits university"."""
     held = normal_scopes(scopes, "").split()
     if not held:
         return "Nothing"
-    reads = [SCOPES[s].removeprefix("Read ") for s in held if s.startswith("read:")]
-    edits = [SCOPES[s].removeprefix("Edit ") for s in held if s.startswith("write:")]
-    parts = []
-    if reads:
-        parts.append("Reads " + ", ".join(reads))
+    reads = [_SHORT[s] for s in held if s.startswith("read:")]
+    edits = [_SHORT[s] for s in held if s.startswith("write:")]
+    parts = ["Reads " + ", ".join(reads)] if reads else []
     if edits:
-        parts.append("edits " + " and ".join(edits))
+        parts.append("edits " + ", ".join(edits))
     return "; ".join(parts)
 
 

@@ -243,27 +243,9 @@
 }
 .nb-multi-grip:hover { color: var(--fg-primary); background: var(--accent-neutral-hover); }
 
-/* Timeline block (notebook_timeline.js): a vertical line with a bullet per entry; title and description start on the bullet's row. */
-.nbtl{position:relative; padding:var(--space-1) 0;}
-.nbtl-item{position:relative; display:flex; align-items:baseline; gap:var(--space-3); padding:2px 0 var(--space-2);}
-/* The line hangs from each bullet (an absolutely placed child keeps the bullet's own x), so it stays between the circles whatever the date column holds. */
-.nbtl-bullet{flex:none; width:12px; height:12px; border-radius:50%; background:var(--nbtl-fg, var(--fg-tertiary)); align-self:flex-start; margin-top:.45em;}
-.nbtl-bullet::after{content:""; position:absolute; top:calc(.45em + 14px); bottom:-1px; margin-left:5px; width:2px; background:var(--nbtl-line, var(--border));}
-.nbtl-item:last-child .nbtl-bullet::after{display:none;}
-.nbtl.has-dates .nbtl-date{width:96px; min-width:96px; text-align:right;}
-.nbtl[data-color]{--nbtl-line:color-mix(in srgb, var(--nbtl-fg) 45%, transparent);}
-.nbtl-swatch-dot{width:12px; height:12px; border-radius:50%; background:var(--nbtl-fg, var(--fg-tertiary));}
-.nbtl-text{flex:1; min-width:0; overflow-wrap:anywhere; display:flex; flex-direction:column;}
-.nbtl-title, .nbtl-desc{display:block;}
-.nbtl-title, .nbtl-desc, .nbtl-date{outline:none;}
-.nbtl-title{color:var(--fg-primary);}
-.nbtl-desc{color:var(--fg-secondary);}
-.nbtl-date{flex:none; min-width:88px; color:var(--fg-tertiary); font-size:var(--text-sm);}
-.nbtl-title:empty::before, .nbtl-desc:empty::before, .nbtl-date:empty::before{content:attr(data-placeholder); color:var(--fg-tertiary);}
 
 /* Air around the larger blocks, so they do not sit tight against the text above and below. */
 .ce-block .cdx-nb-quote, .ce-block .cdx-nb-callout, .ce-block .cdx-nb-code, .ce-block .nbtl{margin-block:var(--space-4);}
-.nbtl{padding-block:var(--space-1);}
 .nbtl[data-color="blue"], .nbtl-swatch[data-color="blue"]{--nbtl-fg:var(--tag-blue-fg);}
 .nbtl[data-color="green"], .nbtl-swatch[data-color="green"]{--nbtl-fg:var(--tag-green-fg);}
 .nbtl[data-color="yellow"], .nbtl-swatch[data-color="yellow"]{--nbtl-fg:var(--tag-yellow-fg);}

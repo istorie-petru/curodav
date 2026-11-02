@@ -1303,3 +1303,27 @@ document.addEventListener("submit", (event) => {
   document.addEventListener("cc-region-swapped", initActionMenus);
   window.CCActionMenu = { close: closeMenu, init: initActionMenus };
 })();
+
+// A button with data-copy puts its value on the clipboard. The fallback covers a plain-HTTP address, where the
+// clipboard API is not available.
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest && e.target.closest("[data-copy]");
+  if (!btn) return;
+  const text = btn.getAttribute("data-copy") || "";
+  const done = () => window.ccToast && window.ccToast({ message: "Copied" });
+  const fallback = () => {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    area.remove();
+    if (ok) done();
+    else if (window.ccToast) window.ccToast({ message: "Could not copy; select the text and copy it by hand.", variant: "error" });
+  };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fallback);
+  else fallback();
+});

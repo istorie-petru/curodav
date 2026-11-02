@@ -151,10 +151,16 @@ class CalDavBridge:
                 rows.append(row)
         return rows
 
-    def save_event_row(self, row: dict[str, Any]) -> dict[str, Any]:
+    def save_event_row(self, row: dict[str, Any], known_exists: bool | None = None) -> dict[str, Any]:
+        """`known_exists` set (the caller just listed the collection) skips the
+        lookup and PUTs straight to the object URL."""
         calendar_path = row.get("calendar_path") or "calendar"
         cal = self._event_calendar(calendar_path)
         ics = event_row_to_ical(row).decode()
+        if known_exists is not None:
+            obj = caldav.Event(self.client, url=self._object_url(cal, row["uid"]), parent=cal, data=ics)
+            obj.save()
+            return self._event_obj_to_row(obj, calendar_path)
         try:
             obj = self._get_by_uid_direct(cal, row["uid"], caldav.Event)
             obj.data = ics
@@ -228,10 +234,15 @@ class CalDavBridge:
                 rows.append(row)
         return rows
 
-    def save_task_row(self, row: dict[str, Any]) -> dict[str, Any]:
+    def save_task_row(self, row: dict[str, Any], known_exists: bool | None = None) -> dict[str, Any]:
+        """See save_event_row's `known_exists`."""
         list_path = row.get("list_path") or "tasks"
         cal = self._task_calendar(list_path)
         ics = task_row_to_ical(row).decode()
+        if known_exists is not None:
+            obj = caldav.Todo(self.client, url=self._object_url(cal, row["uid"]), parent=cal, data=ics)
+            obj.save()
+            return self._task_obj_to_row(obj, list_path)
         try:
             obj = self._get_by_uid_direct(cal, row["uid"], caldav.Todo)
             obj.data = ics

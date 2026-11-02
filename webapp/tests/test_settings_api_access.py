@@ -49,7 +49,7 @@ def _secret(page: str) -> str:
 
 def test_the_new_token_window_starts_with_the_three_read_switches_on(client):
     page = client.get("/settings/api-access/new").text
-    assert page.count('role="switch"') == 5 and page.count(" checked") == 3
+    assert page.count('role="switch"') == 6 and page.count(" checked") == 3
 
 
 def test_a_token_gets_exactly_the_switches_that_were_on(client):

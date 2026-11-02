@@ -11,7 +11,7 @@ import Table from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
 import TableHeader from "@tiptap/extension-table-header";
 import TableCell from "@tiptap/extension-table-cell";
-import { blocksToHtml, docToBlocks, lossy, unsupportedBlocks } from "./convert.js";
+import { blocksToHtml, docToBlocks, forceConvert, lossy, unsupportedBlocks } from "./convert.js";
 import { BlockExtensions } from "./nodes.js";
 import { KeyExtensions } from "./keys.js";
 import { TableControls } from "./tablecontrols.js";
@@ -77,5 +77,5 @@ function create(mount, blocks, onChange) {
   return { editor, readOnly, reasons: readOnly ? unsupportedBlocks(blocks) : [], blocks: () => docToBlocks(editor.state.doc, editor.schema) };
 }
 
-window.CurodavEditor = { create, blocksToHtml, docToBlocks, lossy, extensions };
-export { create, blocksToHtml, docToBlocks, lossy, unsupportedBlocks, extensions };
+window.CurodavEditor = { create, blocksToHtml, docToBlocks, forceConvert, lossy, extensions };
+export { create, blocksToHtml, docToBlocks, forceConvert, lossy, unsupportedBlocks, extensions };

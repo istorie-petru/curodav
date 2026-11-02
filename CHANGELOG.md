@@ -6,6 +6,16 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [5.0.5]
+
+- University: the Examination page is a timeline of every exam, deadline, homework and reading in date order, with today marked and the undated last. The weekly timetable is one general week at the height it needs, with solid class blocks and no scrolling, and the cards are smaller.
+- Notebook editor: a note the new editor cannot hold (raw HTML, unknown blocks, heading level 6, styled text) shows a banner with a Convert to the new editor button. It strips the markup that cannot be held, lowers level 6 headings to 5, removes blocks that cannot be held (and says which before it does) and keeps the earlier version in the note's history.
+- Switches: a switch toggles when clicked anywhere on it, not only on the thumb.
+- API access: tokens, addresses and connection details have Copy buttons.
+- MCP library: a connected assistant can list library entries and their tracking, and create a single note, rename it, tag it and set its properties. Contacts are no longer part of the API.
+- Radicale sync: the per-item lookup is skipped when the collection was just listed.
+- README: the Everyday commands section says that updating also refreshes the curodav-ctl script itself.
+
 ## [5.0.4]
 
 - API access: a token holds five separate permissions (read notes, entries and the library; read tasks, events and contacts; read university; edit notes; edit university), each a switch in the token window. A token's permissions can be changed after it is made, from the edit button in its row, and the table shows what each one may do. An app connecting through the sign-in page gets the same switches, and nothing is granted when they are all off. A request outside a token's permissions gets 403, and MCP lists only the tools a token may use.

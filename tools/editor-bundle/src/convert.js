@@ -67,6 +67,79 @@ function blockIsSupported(raw) {
   }
 }
 
+// Strips the markup the new editor cannot hold (colors by style, fonts, stray spans) and keeps the text.
+function cleanInline(markup) {
+  const box = document.createElement("div");
+  box.innerHTML = String(markup || "");
+  const walk = (node) => {
+    Array.from(node.childNodes).forEach((child) => {
+      if (child.nodeType !== 1) return;
+      walk(child);
+      const tag = child.tagName.toLowerCase();
+      const keep = SUPPORTED_INLINE.has(tag) || (tag === "span" && child.classList.contains("cdx-wikilink")) || tag === "svg" || tag === "use" || tag === "path";
+      if (!keep) child.replaceWith(...Array.from(child.childNodes));
+    });
+  };
+  walk(box);
+  return box.innerHTML;
+}
+
+// Rewrites a note so the new editor can hold all of it: unsupported markup is stripped and blocks that cannot be held
+// are removed. `dropped` names the removed blocks, `cleaned` counts the blocks whose markup was simplified.
+export function forceConvert(blocks) {
+  const kept = [];
+  const dropped = [];
+  let cleaned = 0;
+  (blocks || []).forEach((raw) => {
+    const block = normalizeBlock(raw);
+    const data = { ...(block.data || {}) };
+    const before = JSON.stringify(data);
+    const clean = (value) => cleanInline(value);
+    switch (block.type) {
+      case "paragraph":
+        data.text = clean(data.text);
+        break;
+      case "header":
+        data.text = clean(data.text);
+        data.level = Math.min(5, Math.max(1, Number(data.level) || 2));
+        break;
+      case "quote":
+        data.text = clean(data.text);
+        if (data.caption) data.caption = clean(data.caption);
+        break;
+      case "callout":
+        data.title = clean(data.title);
+        data.message = clean(data.message);
+        if (!CALLOUT_TYPES.includes(data.type || "note")) data.type = "note";
+        break;
+      case "timeline":
+        data.items = (data.items || []).map((item) => ({ ...item, title: clean(item.title), description: clean(item.description), date: String(item.date || "").replace(/<[^>]*>/g, "") }));
+        break;
+      case "list": {
+        const items = (list) => (list || []).map((item) => ({ ...item, content: clean(item.content), items: items(item.items) }));
+        data.items = items(data.items);
+        break;
+      }
+      case "table":
+        data.content = (data.content || []).map((row) => row.map((cell) => clean(typeof cell === "string" ? cell : "")));
+        break;
+      case "delimiter":
+        if (!["stars", "dots", "line"].includes(data.style || "stars")) data.style = "stars";
+        break;
+      default:
+        break;
+    }
+    const candidate = { ...block, data };
+    if (!blockIsSupported(candidate)) {
+      dropped.push(block.type);
+      return;
+    }
+    if (JSON.stringify(data) !== before) cleaned += 1;
+    kept.push(candidate);
+  });
+  return { blocks: kept, dropped, cleaned };
+}
+
 export function lossy(blocks) {
   return (blocks || []).some((block) => !blockIsSupported(block));
 }

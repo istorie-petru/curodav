@@ -12,7 +12,7 @@
             <div class="time-col">
                 {% for c in d.cells %}<a class="uni-hour" href="{{ c.url }}" data-modal aria-label="{{ c.label }}" title="{{ c.label }}" data-style="top:{{ c.top }}px; height:{{ schedule.cell_height }}px"></a>{% endfor %}
                 {% for b in d.blocks %}
-                <a class="week-event is-translucent uni-class cal-{{ b.color }}" href="{{ b.url }}"{% if b.modal %} data-modal{% endif %}
+                <a class="week-event uni-class cal-{{ b.color }}" href="{{ b.url }}"{% if b.modal %} data-modal{% endif %}
                    title="{{ b.discipline }}, {{ b.kind_label|lower }} {{ b.start }} to {{ b.end }}{% if b.room %}, {{ b.room }}{% endif %}{% if b.weeks != 'all' %}, {{ b.weeks }} weeks{% endif %}"
                    data-style="top:{{ b.top }}px; height:{{ b.height }}px; left:{{ b.left }}%; width:{{ b.width }}%;">
                     <span class="we-name">{{ b.short }}</span><span class="we-room">{{ b.start }}{% if b.room %} {{ b.room }}{% endif %}</span>

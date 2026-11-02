@@ -496,7 +496,7 @@ def test_the_schedule_is_the_timetable_with_odd_weeks_left_even_weeks_right_and_
     assert (monday["left"], monday["width"]) == (0.0, 100.0) and monday["top"] == 96.0 and monday["height"] == 96.0
     assert (wednesday["odd"]["left"], wednesday["odd"]["width"]) == (0.0, 50.0) and (wednesday["even"]["left"], wednesday["even"]["width"]) == (50.0, 50.0)
     html = _study(conn)
-    assert "week-event is-translucent" in html and "Left half odd weeks, right half even weeks" in html and 'title="Previous week"' not in html
+    assert "week-event uni-class" in html and "is-translucent" not in html and "Left half odd weeks, right half even weeks" in html and 'title="Previous week"' not in html
 
 
 def test_overlapping_classes_of_one_kind_share_their_half(conn, sem):

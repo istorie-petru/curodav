@@ -160,7 +160,7 @@ def test_the_semester_lists_render_across_disciplines(conn, sem, frozen_today):
                                               "conditions": [], "min_grade": "5", "criteria": ""})
     ua.set_status(conn, _classes(conn, sem, "lecture")[0]["uid"], "missed")
     from src import study_page
-    for view, expected in ((b"view=exams", "Next week"), (b"view=exams", "Homework and readings")):
+    for view, expected in ((b"view=exams", "nbtl-item"), (b"view=exams", "Final")):
         html = university._render_study(conn, _request("/groups/University", view), "University", {"name": "University", "icon": "", "color": ""}).body.decode()
         assert expected in html, view
     assert study_page.exams(conn, sem, date(2026, 10, 26))["groups"][0]["rows"][0]["title"] == "Final"

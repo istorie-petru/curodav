@@ -59,7 +59,7 @@ class FakeBridge:
     def list_event_rows(self, calendar_path):
         return list(self.event_collections.get(calendar_path, {}).values())
 
-    def save_event_row(self, row):
+    def save_event_row(self, row, known_exists=None):
         path = row.get("calendar_path") or "calendar"
         self.event_collections.setdefault(path, {})[row["uid"]] = dict(row)
         return row
@@ -75,7 +75,7 @@ class FakeBridge:
     def list_task_rows(self, list_path):
         return list(self.task_collections.get(list_path, {}).values())
 
-    def save_task_row(self, row):
+    def save_task_row(self, row, known_exists=None):
         path = row.get("list_path") or "tasks"
         self.task_collections.setdefault(path, {})[row["uid"]] = dict(row)
         return row
@@ -827,7 +827,7 @@ def test_materialize_skips_unchanged_members(tmp_path):
         bridge = FakeBridge()
         saves = []
         orig = bridge.save_task_row
-        bridge.save_task_row = lambda row: (saves.append(row["uid"]), orig(row))[1]
+        bridge.save_task_row = lambda row, known_exists=None: (saves.append(row["uid"]), orig(row))[1]
         lst = {"entity_type": "task", "radicale_collection_path": "published-x", "label_filter": {"any": ["U"]}}
         pl.materialize(conn, bridge, lst)
         pl.materialize(conn, bridge, lst)

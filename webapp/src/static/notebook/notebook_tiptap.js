@@ -282,12 +282,38 @@
         var banner = document.createElement("div");
         banner.className = "nb-readonly-banner";
         banner.setAttribute("role", "status");
-        var what = handle.reasons.length ? "It holds " + handle.reasons.join(" and ") + " blocks the new editor cannot hold yet" : "It holds content the new editor cannot hold yet";
+        var what = handle.reasons.length ? "It holds " + handle.reasons.join(", ") + " blocks the new editor cannot hold yet" : "It holds content the new editor cannot hold yet";
         banner.append(what + ", so it is read-only here and nothing is changed. ");
         var link = document.createElement("a");
         link.href = "?editor=legacy";
         link.textContent = "Open it in the old editor to edit";
-        banner.append(link, ".");
+        banner.append(link, ". ");
+        var convert = document.createElement("button");
+        convert.type = "button";
+        convert.className = "btn ghost btn-sm";
+        convert.textContent = "Convert to the new editor";
+        convert.addEventListener("click", function () {
+          var result = window.CurodavEditor.forceConvert(blocks);
+          var parts = [];
+          if (result.dropped.length) parts.push("These blocks are removed: " + result.dropped.join(", ") + ".");
+          if (result.cleaned) parts.push(result.cleaned + " block" + (result.cleaned === 1 ? " loses" : "s lose") + " formatting the new editor cannot hold.");
+          if (!parts.length) parts.push("Nothing is removed.");
+          window.ccConfirmSheet({
+            message: "Convert this note to the new editor? " + parts.join(" ") + " The earlier version stays in the note's history.",
+            confirmLabel: "Convert",
+            onConfirm: function () {
+              var body = JSON.stringify({ time: Date.now(), blocks: result.blocks, version: "tiptap" });
+              window.NotebookSave.put(contentUrl, body, false)
+                .then(function (resp) {
+                  if (resp) window.location.reload();
+                })
+                .catch(function () {
+                  window.ccToast({ message: "Could not convert this note.", variant: "error" });
+                });
+            },
+          });
+        });
+        banner.append(convert);
         mount.parentNode.insertBefore(banner, mount);
       }
       document.addEventListener("visibilitychange", function () {
