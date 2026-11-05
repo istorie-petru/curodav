@@ -980,6 +980,7 @@ CITATION_TYPES = [
     ("film", "Film"),
     ("tv", "TV series"),
     ("anime", "Anime"),
+    ("game", "Game"),
     ("other", "Other"),
 ]
 

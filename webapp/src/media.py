@@ -40,6 +40,7 @@ BUILTIN = {
     "film": Kind("film", "Film", "film", "watch", "none", screen=True),
     "tv": Kind("tv", "TV series", "tv", "watch", "episodes", screen=True),
     "anime": Kind("anime", "Anime", "monitor", "watch", "episodes", screen=True),
+    "game": Kind("game", "Game", "gamepad-2", "play", "hours", screen=True),
 }
 # The remaining citation types keep their old meaning: read, link only.
 _READ_TYPES = {"chapter": "Book chapter", "webpage": "Web page", "thesis": "Thesis", "report": "Report",

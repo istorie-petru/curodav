@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% block title %}Attach to a way of evaluating{% endblock %}
+{% block content %}
+{% call modal(kind="form", title='Attach: ' ~ title, size="small", form='university-attach-form') %}
+<div class="card">
+<form method="post" id="university-attach-form" action="/settings/university/attach">
+    <input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="uid" value="{{ uid }}"><input type="hidden" name="back" value="{{ back }}">
+    <div class="field-grid">
+        {% set ms_mode = 'single' %}{% set ms_form_id = 'university-attach-form' %}{% set ms_name = 'way' %}{% set ms_label = 'Way of evaluating' %}
+        {% set ms_items = items %}{% set ms_selected = items[0].uid if items else '' %}{% set ms_wide = true %}{% set ms_remote = '' %}
+        {% include '_widget_list_multiselect.html' %}
+    </div>
+</form>
+</div>
+{% endcall %}
+{% endblock %}

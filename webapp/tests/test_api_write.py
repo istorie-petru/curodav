@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from src import api_write, db, note_versions
+from src import api_write, db, log, note_versions
 
 BLOCKS = [
     {"id": "h1", "type": "header", "data": {"text": "Duty", "level": 2}},
@@ -119,18 +119,31 @@ def _web_client(tmp_path, monkeypatch):
     return client
 
 
-def test_the_editor_save_is_refused_after_a_change_made_elsewhere(tmp_path, monkeypatch):
+def test_the_editor_save_always_goes_through_and_keeps_what_it_replaces(tmp_path, monkeypatch):
     client = _web_client(tmp_path, monkeypatch)
-    loaded = client.get("/notebook/n1/content")
-    tag = loaded.headers["etag"]
-    saved = client.put("/notebook/n1/content", headers={"If-Match": tag}, json={"blocks": BLOCKS[:2]})
-    assert saved.status_code == 200 and saved.headers["etag"] != tag
+    saved = client.put("/notebook/n1/content", json={"blocks": BLOCKS[:2]})
+    assert saved.status_code == 200
     with db.connect(client.app.state.settings.db_path, reuse_schema=True) as c:
         api_write.edit_note(c, "n1", saved.json()["revision"], [{"op": "append", "markdown": "From Claude"}], source="mcp")
-    stale = client.put("/notebook/n1/content", headers={"If-Match": saved.headers["etag"]}, json={"blocks": BLOCKS[:1]})
-    assert stale.status_code == 409
+    later = client.put("/notebook/n1/content", headers={"If-Match": '"stale"'}, json={"blocks": BLOCKS[:1]})
+    assert later.status_code == 200
     with db.connect(client.app.state.settings.db_path, reuse_schema=True) as c:
-        assert db.get_notebook_document_content(c, "n1")["blocks"][-1]["data"]["text"] == "From Claude"
+        assert len(db.get_notebook_document_content(c, "n1")["blocks"]) == 1
+        kept = [note_versions.get_version(c, v["uid"]) for v in note_versions.list_versions(c, "n1")]
+        assert any("From Claude" in (v["content_json"] or "") for v in kept)
+    client.__exit__(None, None, None)
+
+
+def test_the_editor_save_leaves_a_log_line_and_so_does_a_refused_one(tmp_path, monkeypatch):
+    client = _web_client(tmp_path, monkeypatch)
+    before = log.entries("all")[-1]["id"] if log.entries("all") else 0
+    client.put("/notebook/n1/content", json={"blocks": BLOCKS[:2]})
+    assert client.put("/notebook/missing/content", json={"blocks": []}).status_code == 404
+    client.post("/notebook/n1/content/report", json={"what": "save failed: network"})
+    lines = [(e["level"], e["message"]) for e in log.entries("all", after=before)]
+    assert any(level == "info" and "n1 saved (2 blocks)" in m for level, m in lines)
+    assert any(level == "warning" and "not found" in m for level, m in lines)
+    assert any(level == "warning" and "save failed: network" in m for level, m in lines)
     client.__exit__(None, None, None)
 
 

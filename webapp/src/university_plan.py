@@ -338,11 +338,9 @@ _SMALL_WORDS = {"a", "an", "and", "of", "the", "in", "to", "for", "si", "și", "
 
 
 def auto_abbreviation(name: str) -> str:
-    """A short name for the timetable: the initials of a name of several words ("Istoria Arheologiei" is IA), else its first four letters."""
-    words = [w for w in name.replace("-", " ").split() if w.lower() not in _SMALL_WORDS] or name.split()
-    if len(words) > 1:
-        return "".join(w[0] for w in words if w[0].isalnum()).upper()[:5]
-    return name.strip()[:4].upper()
+    """The short name a discipline starts with: the first word of its title ("Istoria Arheologiei" is "Istoria"). It is generated once and then editable."""
+    words = name.replace("-", " ").split()
+    return words[0] if words else name.strip()
 
 
 def quick_discipline(conn: sqlite3.Connection, semester: dict[str, Any], name: str, colors) -> str:
@@ -607,6 +605,17 @@ def _edit_following(conn: sqlite3.Connection, semester: dict[str, Any], discipli
 
 def save_slot(conn: sqlite3.Connection, semester: dict[str, Any], discipline: str, slot: dict[str, Any], series_uid: str | None = None,
               today: date | None = None) -> str:
+    """Creates a slot's series, or edits the existing one from today on (the whole series when no class is past yet). Attendance marks and made-up
+    classes of a rebuilt series are put back on the new events."""
+    from . import university_attendance
+
+    new_series = _save_slot(conn, semester, discipline, slot, series_uid, today)
+    university_attendance.reattach(conn, semester["uid"], discipline)
+    return new_series
+
+
+def _save_slot(conn: sqlite3.Connection, semester: dict[str, Any], discipline: str, slot: dict[str, Any], series_uid: str | None = None,
+               today: date | None = None) -> str:
     """Creates a slot's series, or edits the existing one from today on (the whole series when no class is past yet)."""
     today = today or clock.today()
     plan = plan_slot(conn, semester, discipline, slot, series_uid, today)
@@ -618,9 +627,11 @@ def save_slot(conn: sqlite3.Connection, semester: dict[str, Any], discipline: st
     if series_uid and (plan["past"] or plan["rebuilds"]):
         return _edit_following(conn, semester, discipline, slot, series_uid, old_members, plan, today.isoformat())
     if series_uid and not plan["rebuilds"]:
+        moved = {r["event_uid"] for r in conn.execute("SELECT event_uid FROM university_attendance WHERE moved_start != ''")}
         for m in old_members:
             day = m["start_at"][:10]
-            db.upsert_event(conn, {**m, "title": title, "location": slot["room"], "start_at": f"{day}T{slot['start']}", "end_at": f"{day}T{slot['end']}", "updated_at": _now()})
+            at = {} if m["uid"] in moved else {"start_at": f"{day}T{slot['start']}", "end_at": f"{day}T{slot['end']}"}  # a made-up class keeps its new time
+            db.upsert_event(conn, {**m, "title": title, "location": slot["room"], **at, "updated_at": _now()})
             db.set_object_contacts(conn, "event", m["uid"], slot["teachers"])
         conn.execute("UPDATE university_slots SET kind = ? WHERE series_uid = ?", (slot["kind"], series_uid))
         conn.commit()
@@ -853,34 +864,42 @@ READING_CATEGORIES = {"obligatory": "Obligatory", "recommended": "Recommended", 
 
 def save_reading(conn: sqlite3.Connection, semester: dict[str, Any], discipline: str, *, task_uid: str | None, title: str = "", author: str = "",
                  due: str = "", status: str = "", citation_id: str = "", locator: str = "", category: str = "", notes: str = "") -> str:
-    """A reading is a task that points at a book of the library, with the page or chapter, a category and notes. A reading with no
-    library book keeps the title and author it was typed with (older readings and imported files)."""
+    """A reference of the bibliography points at an entry of the library, with the page or chapter, a category and notes. It makes no task.
+    With no `citation_id`, a title (and author) makes a new library entry on the spot. The returned id is kept in the `task_uid` column, which
+    only older references still use for a task (`due` and `status` are read for those and ignored for new ones)."""
     citation = db.get_citation(conn, citation_id) if citation_id else None
     if citation_id and not citation:
         raise PlanError("That book is not in the library")
-    if citation:
-        title = citation["title"]
-        author = db.format_citation_authors(citation["authors"])
     title = title.strip()
-    if not title:
-        raise PlanError("A reading needs a book")
+    if not citation:
+        if not title:
+            raise PlanError("A reference needs a book")
+        citation_id = _new_library_entry(conn, title, author)
     locator = (locator or "").strip()
     category = category if category in READING_CATEGORIES else "recommended"
-    d = _date(due, "Due date")
     existing = conn.execute("SELECT 1 FROM university_readings WHERE task_uid = ?", (task_uid,)).fetchone() if task_uid else None
     task_uid = task_uid if existing else str(uuid.uuid4())
     old = db.get_task(conn, task_uid) if existing else None
-    now = _now()
-    db.upsert_task(conn, {**(old or {}), "uid": task_uid, "title": f"{title}, {locator}" if locator else title, "description": (notes or "").strip(), "due_at": d.isoformat() if d else None,
-                          "status": status if status in ("active", "in_progress", "waiting", "done", "archived") else ((old or {}).get("status") or "active"),
-                          "tags": _labels(conn, discipline), "created_at": (old or {}).get("created_at") or now, "updated_at": now})
-    _tag_item(conn, "task", task_uid, discipline)
+    if old:
+        db.upsert_task(conn, {**old, "title": f"{(citation or {}).get('title') or title}, {locator}" if locator else ((citation or {}).get("title") or title),
+                              "description": (notes or "").strip(), "updated_at": _now()})
     conn.execute("INSERT INTO university_readings (task_uid, semester_uid, discipline_tag, author, citation_id, locator, category, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
                  "ON CONFLICT(task_uid) DO UPDATE SET discipline_tag = excluded.discipline_tag, author = excluded.author, citation_id = excluded.citation_id, "
                  "locator = excluded.locator, category = excluded.category, notes = excluded.notes",
-                 (task_uid, semester["uid"], discipline, author.strip(), citation_id or None, locator, category, (notes or "").strip()))
+                 (task_uid, semester["uid"], discipline, "", citation_id, locator, category, (notes or "").strip()))
     conn.commit()
     return task_uid
+
+
+def _new_library_entry(conn: sqlite3.Connection, title: str, author: str) -> str:
+    """The library entry for a reference typed by hand: the book the library already has under that title, else a new one with the author."""
+    from . import api_library
+
+    row = {"type": "book", "title": title, "authors": api_library._authors([a.strip() for a in (author or "").split(";") if a.strip()])}
+    twin = db.find_duplicate(conn, row, "")
+    if twin:
+        return twin["uid"]
+    return api_library.save_entry(conn, entry={"type": "book", "title": title, "authors": [a.strip() for a in (author or "").split(";") if a.strip()]})["uid"]
 
 
 def list_readings(conn: sqlite3.Connection, semester_uid: str, discipline: str | None = None) -> list[dict[str, Any]]:
@@ -892,14 +911,15 @@ def list_readings(conn: sqlite3.Connection, semester_uid: str, discipline: str |
     out = []
     for r in conn.execute(sql, args).fetchall():
         task = db.get_task(conn, r["task_uid"])
-        if not task:
-            continue
         citation = db.get_citation(conn, r["citation_id"]) if r["citation_id"] else None
+        if not task and not citation:
+            continue
         title = citation["title"] if citation else task["title"]
-        out.append({"task_uid": r["task_uid"], "discipline": r["discipline_tag"], "title": title, "author": r["author"] or "", "locator": r["locator"] or "",
+        author = db.format_citation_authors(citation["authors"]) if citation else (r["author"] or "")
+        out.append({"task_uid": r["task_uid"], "discipline": r["discipline_tag"], "title": title, "author": author, "locator": r["locator"] or "",
                     "category": r["category"] or "recommended", "category_label": READING_CATEGORIES.get(r["category"] or "recommended", "Recommended"),
-                    "notes": r["notes"] or "", "due": (task.get("due_at") or "")[:10], "status": task["status"], "citation_id": r["citation_id"] or ""})
-    out.sort(key=lambda x: (list(READING_CATEGORIES).index(x["category"]) if x["category"] in READING_CATEGORIES else 9, x["due"] or "9999", x["title"]))
+                    "notes": r["notes"] or "", "due": (task.get("due_at") or "")[:10] if task else "", "status": task["status"] if task else "", "citation_id": r["citation_id"] or ""})
+    out.sort(key=lambda x: (list(READING_CATEGORIES).index(x["category"]) if x["category"] in READING_CATEGORIES else 9, x["title"]))
     return out
 
 
@@ -1256,8 +1276,10 @@ SHEET_SECTIONS = (
         ("type", "Type", "select", ("Compulsory", "Optional", "Facultative")), ("language", "Language of teaching", "text", ()))),
     ("teaching", "Teaching", (
         ("absences_lecture", "Lecture absences allowed", "number", ()),
-        ("absences_seminar", "Seminar absences allowed", "number", ()), ("absences_lab", "Lab absences allowed", "number", ()))),
-    ("content", "Content", (
+        ("absences_seminar", "Seminar absences allowed", "number", ()), ("absences_lab", "Lab absences allowed", "number", ()),
+        ("absences_pct_lecture", "Lecture absences allowed, percent", "number", ()), ("absences_pct_seminar", "Seminar absences allowed, percent", "number", ()),
+        ("absences_pct_lab", "Lab absences allowed, percent", "number", ()), ("passing", "Passing grade", "number", ()))),
+    ("content", "Other notes", (
         ("summary", "Summary", "long", ()),)),
 )
 SHEET_FIELDS = tuple((key, label) for _, _, fields in SHEET_SECTIONS for key, label, _, _ in fields)
@@ -1324,7 +1346,7 @@ def save_sheet(conn: sqlite3.Connection, semester_uid: str, discipline: str, val
     label is dropped. None leaves them as they are."""
     for i, (key, label) in enumerate(SHEET_FIELDS):
         if key in values:
-            if key in ("credits",) or key.startswith(("hours_", "absences_")):
+            if key in ("credits", "passing") or key.startswith(("hours_", "absences_")):
                 try:
                     float(str(values[key]).replace(",", ".") or 0)
                 except ValueError:
@@ -1384,15 +1406,36 @@ def credits_planned(conn: sqlite3.Connection, semester_uid: str) -> float:
 
 
 def abbreviations(conn: sqlite3.Connection, semester_uid: str) -> dict[str, str]:
-    """The short name of each discipline: the one set on its sheet, else the initials of a long name."""
+    """The short name of each discipline: the one set on its sheet, else the first word of its title. The app shows this name everywhere."""
     out = {r["discipline_tag"]: r["value"] for r in conn.execute(
         "SELECT discipline_tag, value FROM university_sheet WHERE semester_uid = ? AND key = 'abbreviation' AND value != ''", (semester_uid,))}
-    for r in conn.execute("SELECT DISTINCT discipline_tag FROM university_slots WHERE semester_uid = ?", (semester_uid,)):
-        name = r["discipline_tag"]
-        words = name.split()
-        if name not in out and len(name) > 10 and len(words) > 1:
-            out[name] = "".join(w[0] for w in words if w[0].isalpha())[:4].upper()
+    for r in conn.execute("SELECT discipline_tag FROM university_slots WHERE semester_uid = ? UNION SELECT discipline_tag FROM university_sheet WHERE semester_uid = ? "
+                          "UNION SELECT discipline_tag FROM university_milestones WHERE semester_uid = ?", (semester_uid,) * 3):
+        out.setdefault(r["discipline_tag"], auto_abbreviation(r["discipline_tag"]))
     return out
+
+
+def short_name(conn: sqlite3.Connection, semester_uid: str, discipline: str) -> str:
+    return abbreviations(conn, semester_uid).get(discipline) or auto_abbreviation(discipline)
+
+
+# The class kinds a course has (lectures, seminars, labs) are chosen on the course sheet; a kind that already has a timetable slot is always on.
+def course_kinds(conn: sqlite3.Connection, semester_uid: str, discipline: str) -> list[str]:
+    import json
+    row = _sheet_rows(conn, semester_uid, discipline).get("kinds")
+    try:
+        chosen = json.loads(row["value"]) if row else []
+    except ValueError:
+        chosen = []
+    used = {s["kind"] for s in list_slots(conn, semester_uid, discipline)}
+    return [k for k in ("lecture", "seminar", "lab") if k in chosen or k in used]
+
+
+def set_course_kinds(conn: sqlite3.Connection, semester_uid: str, discipline: str, kinds: list[str]) -> None:
+    import json
+    wanted = [k for k in ("lecture", "seminar", "lab") if k in kinds]
+    _put_sheet(conn, semester_uid, discipline, "kinds", "Taught as", json.dumps(wanted), 60)
+    conn.commit()
 
 
 def export_file(conn: sqlite3.Connection, semester: dict[str, Any], what: str) -> tuple[str, str]:

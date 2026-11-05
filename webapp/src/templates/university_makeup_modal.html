@@ -1,0 +1,20 @@
+{% from "_inputs.html" import text_input %}
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_date_time_fields.html" import date_field, time_field with context %}
+{% block title %}Make up a class{% endblock %}
+{% block content %}
+{# The class keeps its place in the timetable; it moves to the new day and hours and is marked made up. Marking it anything else brings it back. #}
+{% call modal(kind="form", title='Make up: ' ~ discipline ~ ', ' ~ (event.start_at[:10]|short_day), size="small", form='university-makeup-form') %}
+<div class="card">
+<form method="post" id="university-makeup-form" action="/university/class/{{ event.uid }}/makeup">
+    <div class="field-grid">
+        <div class="field field-wide"><label>New date</label>{{ date_field('day', event.start_at[:10], label='New date', required=true) }}</div>
+        <div class="field"><label>Start time</label>{{ time_field('start', event.start_at[11:16], required=true, label='Start time') }}</div>
+        <div class="field"><label>End time</label>{{ time_field('end', (event.end_at or event.start_at)[11:16], required=true, label='End time') }}</div>
+        <div class="field field-wide"><label>Note</label>{{ text_input({'name': 'note', 'value': note, 'maxlength': 200}) }}</div>
+    </div>
+</form>
+</div>
+{% endcall %}
+{% endblock %}

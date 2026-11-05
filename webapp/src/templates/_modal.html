@@ -19,6 +19,8 @@
 <form method="post" action="{{ r.url }}" class="form-inline">{% for k, v in (r.fields or {}).items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
     <button type="submit" class="action-menu-item" role="menuitem">{{ icon(r.icon, 'icon-sm') }} {{ r.label }}</button>
 </form>
+{% elif r.action == 'open' %}
+<a href="{{ r.url }}" class="action-menu-item" role="menuitem" data-modal>{{ icon(r.icon, 'icon-sm') }} {{ r.label }}</a>
 {% elif r.action == 'archive' %}
 <form method="post" action="{{ r.restore_url if r.archived else r.url }}" class="form-inline"{% if r.confirm and not r.archived %} data-confirm-sheet="{{ r.confirm }}"{% endif %}{% if r.change %} data-cc-change="{{ r.change }}"{% endif %}>
     <button type="submit" class="{{ 'action-menu-item' if as_menu else 'icon-btn' }}"{% if as_menu %} role="menuitem"{% else %} title="{{ 'Restore' if r.archived else 'Archive' }}" aria-label="{{ 'Restore' if r.archived else 'Archive' }}"{% endif %}>{{ icon('rotate-ccw' if r.archived else 'archive', 'icon-sm') }}{% if as_menu %} {{ 'Restore' if r.archived else 'Archive' }}{% endif %}</button>

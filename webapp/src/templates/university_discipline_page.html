@@ -1,167 +1,87 @@
-{% set _sheet = '/settings/university/sheet/' ~ enc ~ '?section=' %}
-{% set _homework = {'href': '/settings/university/homework/new?discipline=' ~ enc, 'icon': 'check-square', 'label': 'New homework'} %}
-{% set _class = {'href': '/settings/university/class/new?discipline=' ~ enc, 'icon': 'calendar-plus', 'label': 'New class on a date'} %}
-{% set _syl = '/settings/university/syllabus/' ~ enc ~ '?kind=' %}
-{% set _slot = '/settings/university/slot/new?discipline=' ~ enc ~ '&kind=' %}
-{% set page_add = ({'label': 'Add', 'items': [_homework, _class]} if view == 'overview' else
-   {'label': 'Add to the course sheet', 'items': [{'href': _slot ~ 'lecture', 'icon': 'clock', 'label': 'New weekly lecture'}, {'href': _slot ~ 'seminar', 'icon': 'clock', 'label': 'New weekly seminar'}, {'href': _slot ~ 'lab', 'icon': 'clock', 'label': 'New weekly lab'}, {'href': '/settings/university/evaluation/new?discipline=' ~ enc, 'icon': 'file-check', 'label': 'New way of evaluating'}, {'href': _syl ~ 'lecture', 'icon': 'book-open', 'label': 'Plan the lectures'}, {'href': _syl ~ 'seminar', 'icon': 'users', 'label': 'Plan the seminars'}, {'href': _syl ~ 'lab', 'icon': 'flask-conical', 'label': 'Plan the labs'}, {'href': _sheet ~ 'identification', 'icon': 'file-text', 'label': 'Edit the identification'}, {'href': _sheet ~ 'teaching', 'icon': 'users', 'label': 'Edit the absences allowed'}, {'href': _sheet ~ 'content', 'icon': 'book-open', 'label': 'Edit the summary'}]} if view == 'sheet' else
-   {'href': '/settings/university/reading/new?discipline=' ~ enc, 'label': 'New reference'} if view == 'bibliography' else
-   {'href': '/settings/university/homework/new?discipline=' ~ enc, 'label': 'New homework'}) %}
 {% extends "base.html" %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
-{% from "_empty_state.html" import empty_state %}
-{% from "_widget_items.html" import icon_pill %}
-{% from "_widget_cards.html" import wcard_stat, wcard_row %}
-{% from "_rows_pick.html" import importance_pill %}
-{% from "_inputs.html" import checkbox_input %}
 {% from "_action_menu.html" import action_menu %}
 {% block title %}{{ d.name }}{% endblock %}
+{# The course sheet: sections of three-column lines (what, its value, its actions on the far right). The last line of a section adds to it. #}
 {% macro edit_btn(url, label) %}<a href="{{ url }}" data-modal class="icon-btn" title="{{ label }}" aria-label="{{ label }}">{{ icon('edit', 'icon-sm') }}</a>{% endmacro %}
-{% macro add_btn(url, label) %}<a href="{{ url }}" data-modal class="icon-btn" title="{{ label }}" aria-label="{{ label }}">{{ icon('plus', 'icon-sm') }}</a>{% endmacro %}
-{% macro status_text(s) %}{{ {'active': 'To do', 'in_progress': 'In progress', 'waiting': 'Waiting', 'done': 'Done', 'archived': 'Dropped'}.get(s, s) }}{% endmacro %}
+{% macro line(label, edit=none, edit_label='Edit', items=none) %}
+<div class="uni-line">
+    <span class="uni-line-label">{{ label }}</span>
+    <div class="uni-line-value">{{ caller() }}</div>
+    <div class="uni-line-actions">{% if edit %}{{ edit_btn(edit, edit_label) }}{% endif %}{% if items %}{{ action_menu(items, 'Actions for ' ~ label) }}{% endif %}</div>
+</div>
+{% endmacro %}
+{% macro add_line(url, label) %}
+<a class="uni-line uni-line-add" href="{{ url }}" data-modal><span class="uni-line-label"></span><span class="uni-line-value">{{ label }}</span><span class="uni-line-actions"><span class="icon-btn" aria-hidden="true">{{ icon('plus', 'icon-sm') }}</span></span></a>
+{% endmacro %}
+{% macro g(v) %}{{ '%g'|format(v) }}{% endmacro %}
 {% block content %}
-{% call page_header_narrow(d.name, d.icon or 'book-open', icon_color=d.color, views=views, banner=banner, banner_image_scope=banner_image_scope) %}
+{% call page_header_narrow(d.name, d.icon or 'book-open', icon_color=d.color, banner=banner, banner_image_scope=banner_image_scope) %}
     {{ edit_btn('/settings/university/discipline/' ~ enc ~ '/edit', 'Edit the discipline') }}
 {% endcall %}
 {% include "_flash.html" %}
-{% if view == 'overview' %}
-{% set nc = next_class %}
-{% set ex = soon_exam %}
-<div class="card-grid wcard-grid">
-    {% if ex %}{{ wcard_stat('Next examination', ex.title, ex.when|capitalize ~ (', ' ~ ex.detail if ex.detail else ''), ex.url, alert=true) }}{% endif %}
-    {% if nc %}
-    <label class="wcard wcard-flip" title="Tap to switch between the class and its time">
-        {{ checkbox_input({'class': 'sr-only', 'aria-label': 'Show the time of the next class'}) }}
-        <span class="wcard-label">Next class</span>
-        <span class="wcard-big flip-a">{{ nc.name }}</span>
-        <span class="wcard-big flip-b">{{ nc.date|relative_date }}, {{ nc.start }}</span>
-    </label>
-    {% else %}{{ wcard_stat('Next class', '', '') }}{% endif %}
-    <section class="wcard">
-        <div class="wcard-label">Timetable<span class="spacer"></span>{{ edit_btn('/groups/' ~ group|urlencode ~ '/disciplines/' ~ enc ~ '?view=sheet', 'Edit the timetable on the course sheet') }}</div>
-        <div class="wcard-rows">{% for s in slots %}
-            {{ wcard_row(d, s.weekday_name ~ ' ' ~ s.start ~ ' to ' ~ s.end, s.kind_label ~ ((', ' ~ s.weeks ~ ' weeks') if s.weeks != 'all' else '') ~ ((', ' ~ s.room) if s.room else '') ~ ((', ' ~ s.teacher_names) if s.teacher_names else ''), '', '', icon_name='clock') }}
-        {% else %}{{ empty_state('No timetable yet', size='compact') }}{% endfor %}</div>
-    </section>
-</div>
-{% if class_rows %}
-<div class="card table-scroll table-responsive">
-    <table class="entity-table uni-classes"><thead><tr><th>Date</th><th>Class</th><th>Covered</th><th class="col-opt-1">Attendance</th><th class="col-actions">Actions</th></tr></thead><tbody>
-    {% for c in class_rows %}<tr class="{{ 'uni-past' if c.past }}"><td class="uni-nowrap">{{ c.date|short_day }}, {{ c.start }}</td><td class="uni-nowrap">{{ c.kind_label }} {{ c.number }}{% if c.is_next %} <span class="text-muted">next</span>{% endif %}</td>
-        <td>{% if c.topic_name %}{{ c.topic_name }}{% endif %}{% if c.free_text %}{% if c.topic_name %}<br>{% endif %}<small>{{ c.free_text }}</small>{% endif %}{% if not c.topic_name and not c.free_text %}<span class="text-muted">Nothing yet</span>{% endif %}</td>
-        <td class="col-opt-1 uni-nowrap">{% if c.past or c.status %}{{ c.status_label }}{% endif %}</td>
-        <td class="col-actions">{% set _items = [{'href': '/university/class/' ~ c.uid ~ '/content', 'icon': 'edit', 'label': 'Edit what it covers', 'modal': true}] %}
-            {% if c.note_uid %}{% set _ = _items.append({'href': '/notebook/' ~ c.note_uid, 'icon': 'file-text', 'label': 'Open the note'}) %}{% else %}{% set _ = _items.append({'form_action': '/university/class/' ~ c.uid ~ '/note', 'icon': 'file-plus', 'label': 'Make a note'}) %}{% endif %}
-            {% for key, label in [('attended', 'Attended'), ('missed', 'Missed'), ('excused', 'Excused'), ('made_up', 'Made up'), ('cancelled', 'Cancelled')] if key != c.status %}{% set _ = _items.append({'form_action': '/university/class/' ~ c.uid ~ '/attendance', 'fields': {'status': key}, 'icon': {'attended': 'check', 'missed': 'x', 'excused': 'file-check', 'made_up': 'rotate-ccw', 'cancelled': 'calendar-x'}[key], 'label': label}) %}{% endfor %}
-            {% if c.status and not (c.past and c.status == 'attended') %}{% set _ = _items.append({'form_action': '/university/class/' ~ c.uid ~ '/attendance', 'fields': {'status': 'attended'}, 'icon': 'eraser', 'label': 'Clear the mark'}) %}{% endif %}
-            {{ action_menu(_items, 'Class actions') }}</td></tr>{% endfor %}
-    </tbody></table>
-</div>
-{% else %}
-{{ empty_state('No classes yet', 'calendar') }}
-{% endif %}
-
-{% elif view == 'sheet' %}
-{% set ident = sheet.sections | selectattr('key', 'equalto', 'identification') | first %}
-{% set summary_sec = sheet.sections | selectattr('key', 'equalto', 'content') | first %}
-<div class="uni-sheet-col">
-<section class="wcard is-plain">
-    <div class="wcard-label">Identification<span class="spacer"></span>{{ edit_btn('/settings/university/sheet/' ~ enc ~ '?section=identification', 'Edit the identification') }}</div>
-    <div class="uni-sheet">
-        <div class="uni-sheet-row"><span>Name</span><p>{{ d.name }}</p></div>
-        {% for f in ident.shown %}<div class="uni-sheet-row"><span>{{ f.label }}</span><p>{{ f.value }}</p></div>{% endfor %}
-        {% for c in ident.custom %}<div class="uni-sheet-row"><span>{{ c.label }}</span><p>{{ c.value }}</p></div>{% endfor %}
-    </div>
-</section>
-<section class="wcard is-plain">
-    <div class="wcard-label">Teaching<span class="spacer"></span>{{ edit_btn('/settings/university/sheet/' ~ enc ~ '?section=teaching', 'Edit the absences allowed') }}</div>
-    {% for k in teaching %}
-    <div class="uni-sheet">
-        <div class="uni-sheet-row"><span>{{ k.label }}{% if k.hours %} <small class="text-muted">{{ k.hours }} h</small>{% endif %}</span>
-            <div>{% for s in k.slots %}<p><a href="/settings/university/slot/{{ s.series_uid }}/edit" data-modal>{{ s.weekday_name }} {{ s.start }} to {{ s.end }}{% if s.weeks != 'all' %}, {{ s.weeks }} weeks{% endif %}{% if s.room %}, {{ s.room }}{% endif %}{% if s.teacher_names %}, {{ s.teacher_names }}{% endif %}</a></p>
-                {% else %}<p class="text-muted"><a href="/settings/university/slot/new?discipline={{ enc }}&amp;kind={{ k.kind }}" data-modal>Add a {{ k.label|lower }}</a></p>{% endfor %}
-                {% if k.absences %}<p class="text-muted">{{ k.absences }} absences allowed</p>{% endif %}</div></div>
-    </div>
-    {% endfor %}
-</section>
-<section class="wcard is-plain">
-    <div class="wcard-label">Content<span class="spacer"></span>{{ edit_btn('/settings/university/sheet/' ~ enc ~ '?section=content', 'Edit the summary') }}</div>
-    <div class="uni-sheet">
-        {% for f in summary_sec.shown %}<div class="uni-sheet-row"><span>{{ f.label }}</span><p>{{ f.value }}</p></div>{% else %}<p class="text-muted">No summary yet</p>{% endfor %}
-    </div>
-</section>
-<section class="wcard is-plain">
-    <div class="wcard-label">Examination<span class="spacer"></span>{{ add_btn('/settings/university/evaluation/new?discipline=' ~ enc, 'Add a way of evaluating') }}</div>
-    <div class="uni-sheet">
-        {% for w in ways %}
-        <div class="uni-sheet-row"><span>{{ w.name }} {{ edit_btn('/settings/university/evaluation/' ~ w.id ~ '/edit?discipline=' ~ enc, 'Edit ' ~ w.name) }}</span>
-            <div><p>{% if w.elimination %}Elimination{% elif w.weight is not none %}{{ '%g'|format(w.weight) }}% of the grade{% endif %}{% if w.form %}, {{ w.form|lower }}{% endif %}{% if w.min_grade is not none %}, at least {{ '%g'|format(w.min_grade) }} to pass{% endif %}</p>
-                {% for sub in w.subs %}<p class="text-muted">{{ sub.name }}{% if sub.weight is not none %}, {{ '%g'|format(sub.weight) }}%{% endif %}</p>{% endfor %}
-                {% for m in w.milestones %}<p class="text-muted">{{ m.title }}, {{ (m.date|short_day) if m.date else 'no date' }}</p>{% endfor %}
-                {% for c in w.condition_rows %}<p class="text-muted">{{ c.label }}</p>{% endfor %}</div></div>
-        {% else %}<p class="text-muted">No way of evaluating yet</p>{% endfor %}
-    </div>
-</section>
-</div>
-{% for g in groups if g.rows %}
-<div class="card table-scroll table-responsive">
-    <div class="card-title widget-header"><h2>Planned contents: {{ g.label|lower }}</h2>{{ edit_btn('/settings/university/syllabus/' ~ enc ~ '?kind=' ~ g.kind, 'Edit ' ~ g.label|lower) }}</div>
-    <table class="entity-table"><thead><tr><th>No.</th><th>Topic</th><th>Importance</th><th>Applied on</th></tr></thead><tbody>
-    {% for t in g.rows %}<tr><td>{{ t.number }}</td><td>{{ t.title }}</td><td>{{ importance_pill(t.importance) }}</td><td>{% for dt in t.dates %}{{ dt|short_date }}{{ ', ' if not loop.last }}{% else %}Not applied{% endfor %}</td></tr>{% endfor %}
-    </tbody></table>
-</div>
-{% endfor %}
-
-{% elif view == 'bibliography' %}
-<div class="card-grid wcard-grid exam-cards">
-<section class="wcard is-plain"><div class="wcard-label">Bibliography<span class="spacer"></span><a href="/library" class="icon-btn" title="Open the library" aria-label="Open the library">{{ icon('library', 'icon-sm') }}</a></div>
-    <div class="wcard-rows">
-    {% for r in readings %}{{ wcard_row(d, r.title, ((r.author ~ ', ') if r.author else '') ~ r.category_label ~ ((', ' ~ r.locator) if r.locator else ''), (status_text(r.status) ~ ((', ' ~ (r.due|relative_date)) if r.due else '')), '/settings/university/reading/' ~ r.task_uid ~ '/edit', icon_name='book-open', past=(r.status == 'done')) }}
-    {% else %}{{ empty_state('No references yet', 'library', size='compact') }}{% endfor %}
-    </div></section>
-</div>
-
-{% elif view == 'exams' %}
+{% set sheet_url = '/settings/university/sheet/' ~ enc ~ '?section=' %}
 {% set st = standing %}
-<div class="card-grid wcard-grid">
-    {% if st.final is not none %}{{ wcard_stat('Final grade', '%g'|format(st.final), 'Not passed' if st.passed is sameas false else 'Passing grade ' ~ ('%g'|format(st.passing)), '/settings/university/grades?discipline=' ~ enc) }}
-    {% else %}{{ wcard_stat('Grade so far', ('%g'|format(st.so_far)) if st.so_far is not none else '', (st.graded ~ ' of ' ~ st.weighted ~ ' graded, passing ' ~ ('%g'|format(st.passing))) if st.so_far is not none else 'Passing grade ' ~ ('%g'|format(st.passing)), '/settings/university/grades?discipline=' ~ enc if st.ways else '') }}{% endif %}
-    {% for w in st.warnings %}<section class="wcard"><div class="wcard-label">Warning</div><div class="wcard-small is-wrapped">{{ w }}</div></section>{% endfor %}
-</div>
-{% if not st.ways %}
-<div class="card">{{ empty_state('No evaluation yet', 'file-check') }}</div>
-{% endif %}
-<div class="card-grid wcard-grid exam-cards">
-    {% for w in st.ways %}
-    <section class="wcard">
-        <div class="wcard-label">{{ w.form or 'Evaluation' }}</div>
-        <div class="wcard-big">{{ w.name }}</div>
-        <div class="wcard-small">{% if w.elimination %}Elimination{% elif w.weight is not none %}{{ '%g'|format(w.weight) }}% of the grade{% endif %}{% if w.min_grade is not none %}{{ ', ' if (w.elimination or w.weight is not none) }}at least {{ '%g'|format(w.min_grade) }} to pass{% endif %}{% if w.grade is not none %}. Grade {{ '%g'|format(w.grade) }}{% if w.passed is sameas false %}, not passed{% endif %}{% endif %}</div>
-        {% if w.criteria %}<p class="uni-text">{{ w.criteria }}</p>{% endif %}
-        <div class="wcard-rows">
-        {% for sub in w.subs %}{{ wcard_row(d, sub.name, '', (('%g'|format(sub.weight) ~ '%') if sub.weight is not none else '') ~ ((' · ' ~ '%g'|format(sub.grade)) if sub.grade is not none else ''), icon_name='list') }}{% endfor %}
-        {% for m in w.milestones %}
-        {{ wcard_row(d, m.title, '', ((m.date|short_day) ~ ((', ' ~ m.start) if m.day and m.start else '')) if m.date else 'No date', (('/events/' ~ m.event_uid) if m.event_uid else ('/tasks/' ~ m.task_uid)) if (m.event_uid or m.task_uid) else '', icon_name='calendar' if m.event_uid else 'check-square', past=(m.status == 'done')) }}
-        {% endfor %}
-        {% for c in w.condition_rows %}
-        <div class="wcard-row">{{ icon_pill('green' if c.is_met else ('red' if c.is_met is sameas false else 'gray'), 'check-circle' if c.is_met else ('x-circle' if c.is_met is sameas false else 'circle')) }}
-            <span class="wcard-main"><b>{{ c.label }}</b><small>{{ 'Met' if c.is_met else ('Not met' if c.is_met is sameas false else 'Not known yet') }}</small></span>
-            {% if c.kind == 'other' %}<form class="form-inline" method="post" action="/settings/university/evaluation/{{ w.id }}/condition/{{ c.id }}"><input type="hidden" name="discipline" value="{{ d.name }}"><input type="hidden" name="met" value="{{ '' if c.met else '1' }}">
-                <button type="submit" class="btn ghost btn-sm">{{ 'Undo' if c.met else 'Met' }}</button></form>{% endif %}</div>
-        {% endfor %}
-        </div>
-        {% if w.notes %}<p class="uni-text text-muted">{{ w.notes }}</p>{% endif %}
-    </section>
+<div class="uni-course">
+<section class="uni-sec">
+    {% call line('Short name', sheet_url ~ 'identification', 'Edit the title and short name') %}{{ short }}{% endcall %}
+    {% call line('Taught as', sheet_url ~ 'identification', 'Edit what the course has') %}{% if kinds %}{{ kinds|map(attribute='label')|join(', ') }}{% else %}<span class="text-muted">Nothing chosen yet</span>{% endif %}{% endcall %}
+</section>
+
+<section class="uni-sec">
+    <h2 class="uni-sec-title">Timetable</h2>
+    {% for s in slots %}
+    {% call line(s.kind_label, items=[
+        {'href': '/settings/university/slot/' ~ s.series_uid ~ '/edit', 'icon': 'edit', 'label': 'Edit', 'modal': true},
+        {'form_action': '/settings/university/slot/' ~ s.series_uid ~ '/delete?discipline=' ~ enc, 'icon': 'trash', 'label': 'Delete', 'danger': true, 'confirm': 'Delete all classes of this slot?'}]) %}
+        {{ s.weekday_name }} {{ s.start }} to {{ s.end }}{% if s.weeks != 'all' %}, {{ s.weeks }} weeks{% endif %}{% if s.room %}, {{ s.room }}{% endif %}{% if s.teacher_names %}<small class="uni-line-sub">{{ s.teacher_names }}</small>{% endif %}
+    {% endcall %}
     {% endfor %}
-    <section class="wcard is-plain"><div class="wcard-label">Other tasks and events</div>
-        <div class="wcard-rows">
-        {% for o in others %}
-        <div class="wcard-row">{{ icon_pill(d.color, 'calendar' if o.kind == 'event' else 'check-square') }}
-            <a class="wcard-main" href="{{ ('/settings/university/homework/' ~ o.uid ~ '/edit') if o.kind == 'task' else ('/events/' ~ o.uid) }}" data-modal><b>{{ o.title }}</b>{% if o.kind == 'task' %}<small>{{ status_text(o.status) }}</small>{% endif %}</a>
-            <span class="wcard-when">{{ o.when|short_date if o.when else '' }}</span>
-            <form class="form-inline" method="post" action="{{ ('/settings/university/homework/' ~ o.uid ~ '/delete') if o.kind == 'task' else ('/settings/university/event/' ~ o.uid ~ '/delete') }}?discipline={{ enc }}"><button type="submit" class="icon-btn" title="Delete" aria-label="Delete">{{ icon('trash', 'icon-sm') }}</button></form></div>
-        {% else %}{{ empty_state('No other tasks or events', size='compact') }}{% endfor %}
-        </div></section>
+    {{ add_line('/settings/university/slot/new?discipline=' ~ enc, 'Add a class to the timetable') }}
+</section>
+
+<section class="uni-sec">
+    <h2 class="uni-sec-title">Examination</h2>
+    {% call line('Attendance', '/settings/university/attendance/' ~ enc, 'Edit the absences allowed') %}
+        {% for a in attendance %}<span class="uni-line-row{{ ' is-over' if a.over }}">{{ a.label }}s:
+            {% if a.limit is not none %}{{ a.missed }} missed of {{ a.limit }} allowed{% if a.percent is not none and a.number is none %} ({{ g(a.percent) }}%){% endif %}{% else %}{{ a.missed }} missed, no limit set{% endif %}</span>
+        {% else %}<span class="text-muted">Choose what the course has first</span>{% endfor %}
+    {% endcall %}
+    {% call line('Grade', '/settings/university/grades?discipline=' ~ enc, 'Edit the grades') %}
+        {% if st.final is not none %}<b>{{ g(st.final) }}</b>{% if st.passed is sameas false %} <span class="text-muted">not passed</span>{% endif %}
+        {% elif st.so_far is not none %}{{ g(st.so_far) }} <span class="text-muted">so far, {{ st.graded }} of {{ st.weighted }} graded</span>
+        {% else %}<span class="text-muted">No grades yet</span>{% endif %}
+        <small class="uni-line-sub">Passing grade {{ g(passing) }}</small>
+        {% for w in st.warnings %}<small class="uni-line-sub is-warning">{{ w }}</small>{% endfor %}
+    {% endcall %}
+    {% for w in st.ways %}
+    {% call line(w.name, '/settings/university/evaluation/' ~ w.id ~ '/edit?discipline=' ~ enc, 'Edit ' ~ w.name, items=[{'href': '/settings/university/milestone/new?discipline=' ~ enc ~ '&way=' ~ w.id, 'icon': 'plus', 'label': 'Add an event or task', 'modal': true}, {'href': '/settings/university/grades?discipline=' ~ enc, 'icon': 'award', 'label': 'Grades', 'modal': true}]) %}
+        <span class="uni-line-row">{% if w.elimination %}Elimination{% elif w.weight is not none %}{{ g(w.weight) }}% of the grade{% else %}No weight{% endif %}{% if w.form %}, {{ w.form|lower }}{% endif %}</span>
+        {% if w.elimination %}<small class="uni-line-sub">{% if w.passed %}Passed{% else %}Failed{% endif %}</small>
+        {% elif w.grade is not none %}<small class="uni-line-sub">Grade {{ g(w.grade) }}, at least {{ g(w.minimum) }} to pass{% if w.passed is sameas false %}: not passed{% endif %}</small>{% endif %}
+        {% for sub in w.subs %}<small class="uni-line-sub">{{ sub.name }}{% if sub.weight is not none %}, {{ g(sub.weight) }}%{% endif %}{% if sub.grade is not none %}, {{ g(sub.grade) }}{% endif %}</small>{% endfor %}
+        {% for m in w.milestones %}<small class="uni-line-sub"><a href="/settings/university/milestone/{{ m.uid }}/edit" data-modal>{{ m.title }}</a>, {{ (m.date|short_day) if m.date else 'no date' }}</small>{% endfor %}
+        {% for n in w.linked_notes %}<small class="uni-line-sub">{{ icon('file-text', 'icon-sm') }} <a href="/notebook/{{ n.uid }}">{{ n.title or 'Untitled' }}</a></small>{% endfor %}
+    {% endcall %}
+    {% endfor %}
+    {{ add_line('/settings/university/evaluation/new?discipline=' ~ enc, 'Add a way of evaluating') }}
+</section>
+
+<section class="uni-sec">
+    <h2 class="uni-sec-title">Bibliography</h2>
+    {% for r in readings %}
+    {% call line(r.category_label, items=[
+        {'href': '/settings/university/reading/' ~ r.task_uid ~ '/edit', 'icon': 'edit', 'label': 'Edit', 'modal': true},
+        {'form_action': '/settings/university/reading/' ~ r.task_uid ~ '/delete?discipline=' ~ enc, 'icon': 'trash', 'label': 'Remove from the course', 'danger': true}]) %}
+        {% if r.citation_id %}<a href="/library/{{ r.citation_id }}" data-modal>{{ r.title }}</a>{% else %}{{ r.title }}{% endif %}{% if r.author %}<small class="uni-line-sub">{{ r.author }}{% if r.locator %}, {{ r.locator }}{% endif %}</small>{% elif r.locator %}<small class="uni-line-sub">{{ r.locator }}</small>{% endif %}
+    {% endcall %}
+    {% endfor %}
+    {{ add_line('/settings/university/reading/new?discipline=' ~ enc, 'Add a book') }}
+</section>
+
+<section class="uni-sec">
+    <h2 class="uni-sec-title">Other notes</h2>
+    {% call line('Summary', sheet_url ~ 'content', 'Edit the other notes') %}{% if notes_text %}<span class="uni-line-text">{{ notes_text }}</span>{% else %}<span class="text-muted">Whatever did not make the cut but is good to know without searching for the file</span>{% endif %}{% endcall %}
+</section>
 </div>
-{% endif %}
 {% endblock %}

@@ -14,6 +14,22 @@
   var failedSaves = 0;
   var handle = null;
   var endnotes = null;
+  var draftKey = "nb-draft:" + mount.getAttribute("data-uid");
+  var draftTimer = null;
+
+  // The text as it is being written is kept in this browser and stored on the server at the moments below; what
+  // the server does not have yet survives a closed tab or a lost connection and is sent when the page next opens.
+  function readDraft() {
+    try { return JSON.parse(localStorage.getItem(draftKey)); } catch (e) { return null; }
+  }
+  function writeDraft() {
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({ blocks: handle.blocks(), at: Date.now() }));
+    } catch (e) {}
+  }
+  function clearDraft() {
+    try { localStorage.removeItem(draftKey); } catch (e) {}
+  }
 
   function measure(name, since) {
     if (window.ccPerf) window.ccPerf.add(name, performance.now() - since);
@@ -28,43 +44,65 @@
     }, wait);
   }
 
+  var again = false;
+
+  // Resolves when the request has finished, either way, so a caller can wait for it before the page goes away.
   function save(leaving) {
+    // One request at a time; whatever was typed meanwhile goes out right after, as one save.
+    if (inFlight && !leaving) {
+      again = true;
+      return Promise.resolve();
+    }
     var blocks = handle.blocks();
     var text = JSON.stringify(blocks);
     if (text === lastSaved) {
       failedSaves = 0;
-      return;
+      return Promise.resolve();
     }
     var body = JSON.stringify({ time: Date.now(), blocks: blocks, version: "tiptap" });
-    // A keep-alive request is capped at 64 KB, so a larger note cannot be sent safely while the page closes.
+    // A keep-alive request is capped at 64 KB. Every save that fits is sent with it, so a page that closes
+    // while the request is on its way does not cancel it.
     bigBody = body.length >= 60000;
     var started = performance.now();
     inFlight = true;
-    window.NotebookSave.put(contentUrl, body, !!leaving && !bigBody)
+    return window.NotebookSave.put(contentUrl, body, !bigBody)
       .then(function (resp) {
         inFlight = false;
         if (!resp) return;
         measure("editor save", started);
         lastSaved = text;
         failedSaves = 0;
+        if (JSON.stringify(handle.blocks()) === text) clearDraft();
         document.dispatchEvent(new CustomEvent("notebook-saved"));
+        if (again) {
+          again = false;
+          return save(false);
+        }
       })
       .catch(function () {
         inFlight = false;
-        if (failedSaves++ === 0) window.ccToast({ message: "Could not save this document. Your last changes are not stored yet. Trying again.", variant: "error" });
+        again = false;
+        if (failedSaves++ === 0) window.ccToast({ message: "Could not reach the server. Your changes are kept in this browser and will be sent when the connection returns.", variant: "error" });
         scheduleRetry();
       });
   }
 
+  // Everything typed so far goes to the browser copy and to the server now.
   function saveNow() {
-    if (!saveTimer) return;
-    clearTimeout(saveTimer);
-    saveTimer = null;
-    save(true);
+    if (draftTimer) {
+      clearTimeout(draftTimer);
+      draftTimer = null;
+      writeDraft();
+    }
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    return save(true);
   }
 
   function unsaved() {
-    return !!(saveTimer || retryTimer || inFlight) || failedSaves > 0;
+    return !!(saveTimer || retryTimer || inFlight || again || draftTimer) || failedSaves > 0;
   }
 
   window.addEventListener("online", function () {
@@ -75,15 +113,32 @@
     }
   });
 
-  // Leaving with changes that may not arrive (a failed or slow save, or a note too large for a closing request) asks first.
+  // Closing or reloading with changes that cannot be sent in time (the server is out of reach, or the note is too
+  // large for a closing request) asks first; otherwise the save simply goes out as the page leaves.
   window.addEventListener("beforeunload", function (e) {
     if (!handle || handle.readOnly || !unsaved()) return;
     saveNow();
-    if (bigBody || inFlight || failedSaves > 0 || retryTimer) {
+    if (bigBody || failedSaves > 0 || retryTimer) {
       e.preventDefault();
       e.returnValue = "";
     }
   });
+
+  // A click on a link inside the app waits for the save to finish, so the next page already has the new text.
+  document.addEventListener(
+    "click",
+    function (e) {
+      if (!handle || handle.readOnly || !unsaved() || e.defaultPrevented || e.button !== 0) return;
+      if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      var link = e.target.closest && e.target.closest("a[href]");
+      if (!link || link.target || link.hasAttribute("data-modal") || link.hasAttribute("download")) return;
+      if (link.origin !== window.location.origin || link.getAttribute("href").charAt(0) === "#") return;
+      e.preventDefault();
+      var go = function () { window.location.href = link.href; };
+      Promise.race([saveNow(), new Promise(function (r) { setTimeout(r, 2000); })]).then(go, go);
+    },
+    true
+  );
 
   mount.addEventListener(
     "keydown",
@@ -243,22 +298,38 @@
     };
   }
 
+  // A note that failed to load stays closed: an empty editor would autosave over the real content.
   window.NotebookSave.load(contentUrl)
     .catch(function () {
-      return { blocks: [] };
+      window.ccToast({ message: "Could not open this document. Reload the page to try again.", variant: "error", persistent: true });
+      return null;
     })
     .then(function (initial) {
+      if (!initial) return;
       var blocks = initial.blocks || [];
+      var serverText = JSON.stringify(blocks);
+      var draft = readDraft();
+      var restored = false;
+      if (draft && Array.isArray(draft.blocks) && JSON.stringify(draft.blocks) !== serverText) {
+        // Text that never reached the server is the newest thing written: it is restored and sent.
+        blocks = draft.blocks;
+        restored = true;
+      } else if (draft) {
+        clearDraft();
+      }
       handle = window.CurodavEditor.create(mount, blocks, function () {
         var changed = performance.now();
+        if (draftTimer) clearTimeout(draftTimer);
+        draftTimer = setTimeout(writeDraft, 300);
         if (saveTimer) clearTimeout(saveTimer);
         saveTimer = setTimeout(function () {
           saveTimer = null;
           save(false);
-        }, 1500);
+        }, 600);
         measure("editor change", changed);
       });
-      lastSaved = JSON.stringify(handle.blocks());
+      lastSaved = restored ? serverText : JSON.stringify(handle.blocks());
+      if (restored) saveTimer = setTimeout(function () { saveTimer = null; save(false); }, 500);
       window.notebookEditor = {
         save: function () {
           return Promise.resolve({ time: Date.now(), blocks: handle.blocks(), version: "tiptap" });
@@ -320,5 +391,9 @@
         if (document.visibilityState === "hidden") saveNow();
       });
       window.addEventListener("pagehide", saveNow);
+      // Leaving the editor (a click elsewhere on the page) is a natural moment to store what was typed.
+      mount.addEventListener("focusout", function (e) {
+        if (!mount.contains(e.relatedTarget)) saveNow();
+      });
     });
 })();

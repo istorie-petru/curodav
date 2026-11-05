@@ -21,6 +21,8 @@ router = APIRouter(prefix="/library", tags=["media"])
 settings_router = APIRouter(prefix="/settings/library", tags=["media"])
 
 SETTINGS = "/settings/library"
+DATA_SETTINGS = "/settings/data-maintenance"
+WIKI_URL = "https://github.com/istorie-petru/curodav/wiki/Library-and-Media"
 RECENT_DAYS = 30
 NOW_LIMIT = 60
 _CROPPED_COVER_MAX = 6 * 1024 * 1024
@@ -47,27 +49,6 @@ def decorate(conn, items: list[dict]) -> list[dict]:
     return items
 
 
-FILTER_KEYS = ("type", "author", "status", "source", "tag", "shelf", "year_from", "year_to", "q", "sort", "sort2")
-
-
-def asked_view(request: Request) -> str:
-    return view_of(request.query_params.get("view", ""), any(request.query_params.getlist(k) for k in FILTER_KEYS))
-
-
-def view_of(asked: str, filtered: bool) -> str:
-    """The Library opens on Now. A link that already carries filters (a tag, a shelf) with no view asked for lands on All."""
-    return asked if asked in ("now", "all") else ("all" if filtered else "now")
-
-
-def views_of(request: Request, current: str) -> list[dict]:
-    """The Library's views for the header bar; both keep the filters that are set."""
-    from urllib.parse import urlencode as _enc
-
-    kept = [(k, v) for k, v in request.query_params.multi_items() if k not in ("view", "after")]
-    return [{"key": key, "label": label, "active": key == current,
-             "url": "/library?" + _enc([("view", key), *kept]) if (kept or key == "all") else "/library"} for key, label in (("now", "Now"), ("all", "All"))]
-
-
 def now_sections(conn, filters: dict, statuses: list[str], recent_first: bool) -> dict[str, list[dict]]:
     """What is being read and watched, on hold, up next and finished lately, narrowed by the Library's filters."""
     since = (clock.now().date() - timedelta(days=RECENT_DAYS)).isoformat()
@@ -89,7 +70,7 @@ def now_sections(conn, filters: dict, statuses: list[str], recent_first: bool) -
 
 @router.get("/now")
 def now_page():
-    return RedirectResponse("/library?view=now", status_code=303)
+    return RedirectResponse("/library", status_code=303)
 
 
 @router.get("/lookup/cover")
@@ -144,73 +125,39 @@ def remove_cover(uid: str, x_requested_with: str | None = Header(default=None), 
     return respond(x_requested_with, f"/library/{uid}")
 
 
-def _lookup_kinds(conn) -> list[dict[str, str]]:
-    return [{"uid": k, "name": kind.name} for k, kind in media.BUILTIN.items()]
+@router.get("/lookup/results")
+def lookup_results(kind: str = "book", q: str = "", conn=Depends(get_db)):
+    """The Find details pane of the entry window: candidates from the kind's source, as JSON the window fills its fields from."""
+    try:
+        results = media_metadata.search(kind, q, db.tmdb_key(conn), db.sources_off(conn))
+    except media_metadata.LookupError_:
+        return {"results": [], "source": _provider_name(conn, kind), "error": f"{_provider_name(conn, kind)} could not be reached. Try again in a moment."}
+    return {"results": results, "source": _provider_name(conn, kind), "error": ""}
 
 
-@router.get("/lookup")
-def lookup_modal(request: Request, kind: str = "book", q: str = "", uid: str = "", conn=Depends(get_db)):
-    """Find details: search a public service for the entry and fill it in. Without `uid` the chosen result becomes a new entry."""
-    c = db.get_citation(conn, uid) if uid else None
-    kind = (c["type"] if c else kind) or "book"
-    q = q or (c["title"] if c else "")
-    results, error = [], ""
-    if q:
-        try:
-            results = media_metadata.search(kind, q, db.tmdb_key(conn))
-        except media_metadata.LookupError_:
-            error = f"{media_metadata.PROVIDERS[media_metadata.provider_for(kind, db.tmdb_key(conn))]} could not be reached. Try again in a moment."
-    return templates.TemplateResponse("media_lookup_modal.html", {
-        "request": request, "c": c, "kind": kind, "q": q, "results": results, "error": error, "kinds": _lookup_kinds(conn),
-        "provider": media_metadata.PROVIDERS[media_metadata.provider_for(kind, db.tmdb_key(conn))],
-        "payloads": [json.dumps(r) for r in results],
-    })
+def _provider_name(conn, kind: str) -> str:
+    return media_metadata.PROVIDERS.get(media_metadata.provider_for(kind, db.tmdb_key(conn), db.sources_off(conn)), "No source")
 
 
-def _apply_cover(conn, uid: str, found: dict, replace: bool) -> None:
-    c = db.get_citation_raw(conn, uid) or {}
-    if found.get("cover_url") and db.auto_covers(conn) and (replace or not c.get("cover_fetched")):
+def apply_found(conn, uid: str, found: dict) -> None:
+    """What the entry window carries beyond its fields: the source's ids, the total, and the cover (an uploaded one, a removal, or the chosen result's)."""
+    current = db.get_citation_raw(conn, uid) or {}
+    if found.get("provider") or found.get("id"):
+        ids = db.external_ids(current)
+        ids[found.get("provider") or "source"] = found.get("id") or ""
+        db.set_tracking(conn, uid, {"external_json": json.dumps(ids)})
+    if found.get("total") and not current.get("progress_total"):
+        db.set_tracking(conn, uid, {"progress_total": media.parse_count(found["total"])})
+    if found.get("cover_bytes"):
+        webp = media_metadata.to_webp(found["cover_bytes"]) if len(found["cover_bytes"]) <= _CROPPED_COVER_MAX else None
+        if webp:
+            db.set_cover(conn, uid, webp, "custom")
+    elif found.get("cover_remove"):
+        db.clear_cover(conn, uid, "custom")
+    elif found.get("cover_url") and db.auto_covers(conn):
         data = media_metadata.download_cover(found["cover_url"])
         if data:
             db.set_cover(conn, uid, data, "fetched")
-
-
-@router.post("/lookup")
-def apply_lookup(choice: str = Form(""), uid: str = Form(""), kind: str = Form("book"), replace: str = Form(""),
-                 x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
-    try:
-        found = json.loads(choice) if choice else None
-    except ValueError:
-        found = None
-    if not isinstance(found, dict) or not found.get("title"):
-        return validation_response({"field": "choice", "message": "Choose one of the results first"}, x_requested_with, "/library")
-    current = db.get_citation_raw(conn, uid) if uid else None
-    if uid and current is None:
-        raise HTTPException(404)
-    row = media_metadata.merge(current or {}, found, bool(replace))
-    if current is None:
-        type_key = found.get("type") or kind
-        row.update({"type": type_key if type_key in dict(db.CITATION_TYPES) else "book", "authors": found.get("authors") or []})
-        row.setdefault("title", found["title"])
-    else:
-        row["uid"] = uid
-        for key in ("type", "title", "year", "container_title"):
-            row.setdefault(key, current.get(key) or "")
-        row.setdefault("authors", current.get("authors") or [])
-    if found.get("doi"):
-        row["doi"] = found["doi"]
-    saved = db.upsert_citation(conn, row)
-    ids = db.external_ids(current or {})
-    ids[found.get("provider") or "source"] = found.get("id") or ""
-    tracking = {"external_json": json.dumps(ids)}
-    db.set_tracking(conn, saved, tracking)
-    if (found.get("publisher") or found.get("isbn")) and db.kind_of(conn, row["type"]).uploads:
-        editions = db.list_editions(conn, saved)
-        if not editions:
-            db.save_edition(conn, saved, {"publisher": found.get("publisher", ""), "isbn": found.get("isbn", ""), "year": found.get("year", "")})
-    _apply_cover(conn, saved, found, bool(replace))
-    media_books.push(conn, saved)
-    return respond(x_requested_with, f"/library/{saved}", uid=saved)
 
 
 # Settings > Library
@@ -221,39 +168,50 @@ def library_settings(request: Request, conn=Depends(get_db)):
     names = dict(db.type_options(conn, db.CITATION_TYPES))
     for c in criteria:
         c["kind_names"] = ", ".join(names.get(k, k) for k in c["kinds"]) or "All kinds"
-    kinds = db.list_media_kinds(conn)
-    for k in kinds:
-        k["uses"] = db.media_kind_usage(conn, k["uid"])
-        k["verb_label"] = media.VERBS[k["verb"]][1]
-        k["unit_label"] = media.UNITS[k["unit"]]
     return templates.TemplateResponse("settings_library.html", {
-        "request": request, "criteria": criteria, "kinds": kinds, "scale": db.rating_scale(conn),
+        "request": request, "criteria": criteria, "scale": db.rating_scale(conn),
         "scales": [{"uid": k, "name": v[0]} for k, v in media.SCALES.items()], "auto_covers": db.auto_covers(conn), "advanced_rating": db.advanced_rating(conn),
-        "has_tmdb_key": bool(db.tmdb_key(conn)), **_book_library_state(conn), "sources": _sources(conn),
+        **_book_library_state(conn), "sources": _sources(conn), "wiki_url": WIKI_URL,
     })
 
 
-_EXPORT_NAMES = {"anime": "MyAnimeList XML", "manga": "MyAnimeList XML", "film": "Letterboxd CSV"}
-
-
 def _sources(conn) -> list[dict]:
-    """One row per kind: where its details come from, where it is stored and what it exports as."""
-    key = db.tmdb_key(conn)
-    calibre = media_books.library_path(conn) if media_books.library(conn) else None
-    counts = db.count_by_type(conn)
+    """One row per lookup source: what it is used for and whether it works right now."""
+    key, off = db.tmdb_key(conn), db.sources_off(conn)
     rows = []
-    for type_key, name in db.type_options(conn, db.CITATION_TYPES):
-        kind = db.kind_of(conn, type_key)
-        if kind.custom or type_key in ("webpage", "other"):
-            details = "By hand"
-        elif type_key == "film" and not key:
-            details = "iTunes, TMDB once its key is saved"
+    for source, info in media_metadata.SOURCES.items():
+        if source in off:
+            status = "Off"
+        elif info["keyed"] and not key:
+            status = "Needs a key"
         else:
-            details = media_metadata.PROVIDERS[media_metadata.provider_for(type_key, key)]
-        stored = f"Calibre library, {calibre}" if kind.uploads and calibre else ("Curodav, PDF store" if kind.uploads else "Curodav")
-        rows.append({"name": name, "icon": kind.icon, "details": details, "stored": stored,
-                     "exports": ", ".join(x for x in (_EXPORT_NAMES.get(type_key), "JSON") if x), "count": counts.get(type_key, 0)})
+            status = "On"
+        rows.append({"key": source, "name": media_metadata.PROVIDERS[source], "used_for": info["used_for"], "status": status})
     return rows
+
+
+@settings_router.get("/sources/{source}/edit")
+def source_modal(source: str, request: Request, conn=Depends(get_db)):
+    if source not in media_metadata.SOURCES:
+        raise HTTPException(404)
+    return templates.TemplateResponse("media_source_modal.html", {
+        "request": request, "source": source, "name": media_metadata.PROVIDERS[source], "info": media_metadata.SOURCES[source],
+        "on": source not in db.sources_off(conn), "has_key": bool(db.tmdb_key(conn)) if source == "tmdb" else False,
+    })
+
+
+@settings_router.post("/sources/{source}")
+def save_source(source: str, on: str = Form(""), api_key: str = Form(""), clear_key: str = Form(""),
+                x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    if source not in media_metadata.SOURCES:
+        raise HTTPException(404)
+    db.set_source_off(conn, source, not on)
+    if media_metadata.SOURCES[source]["keyed"]:
+        if clear_key:
+            db.set_tmdb_key(conn, "")
+        elif api_key.strip():
+            db.set_tmdb_key(conn, api_key)
+    return respond(x_requested_with, SETTINGS)
 
 
 def _book_library_state(conn) -> dict:
@@ -294,14 +252,10 @@ def save_rating_mode(advanced: str = Form(""), x_requested_with: str | None = He
 
 
 @settings_router.post("")
-def save_library_settings(scale: str = Form(media.DEFAULT_SCALE), auto_covers: str = Form(""), tmdb_key: str | None = Form(None),
-                          clear_tmdb_key: str = Form(""), x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+def save_library_settings(scale: str = Form(media.DEFAULT_SCALE), auto_covers: str = Form(""),
+                          x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     db.set_rating_scale(conn, scale)
     db.set_auto_covers(conn, bool(auto_covers))
-    if clear_tmdb_key:
-        db.set_tmdb_key(conn, "")
-    elif tmdb_key and tmdb_key.strip():
-        db.set_tmdb_key(conn, tmdb_key)
     return respond(x_requested_with, SETTINGS)
 
 
@@ -334,35 +288,6 @@ def save_criterion(name: str = Form(...), weight: str = Form("1"), kinds: list[s
 def delete_criterion(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     db.delete_rating_criterion(conn, uid)
     return respond(x_requested_with, SETTINGS)
-
-
-@settings_router.get("/kinds/new")
-@settings_router.get("/kinds/{uid}/edit")
-def kind_modal(request: Request, uid: str = "", conn=Depends(get_db)):
-    kind = db.media_kinds_by_uid(conn).get(uid) if uid else None
-    uses = db.media_kind_usage(conn, uid) if kind else 0
-    return templates.TemplateResponse("media_kind_modal.html", {
-        "request": request, "kind": kind, "uses": uses,
-        "verbs": [{"uid": k, "name": v[1]} for k, v in media.VERBS.items()],
-        "units": [{"uid": k, "name": v} for k, v in media.UNITS.items()],
-        "icons": [{"uid": i, "name": i.replace("-", " ").capitalize(), "data": {"icon": i}} for i in media.ICONS],
-    })
-
-
-@settings_router.post("/kinds")
-def save_kind(name: str = Form(...), icon: str = Form("folder"), verb: str = Form("read"), unit: str = Form("none"), uid: str = Form(""),
-              x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
-    if not name.strip():
-        return validation_response({"field": "name", "message": "The kind needs a name"}, x_requested_with, SETTINGS)
-    db.save_media_kind(conn, {"name": name, "icon": icon, "verb": verb, "unit": unit}, uid)
-    return respond(x_requested_with, SETTINGS)
-
-
-@settings_router.post("/kinds/{uid}/delete")
-def delete_kind(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
-    db.delete_media_kind(conn, uid)
-    return respond(x_requested_with, SETTINGS)
-
 
 
 def form_context(conn, c: dict | None) -> dict:
@@ -411,7 +336,7 @@ def view_context(conn, c: dict) -> dict:
     values = db.citation_ratings(conn, c["uid"])
     ratings = [{"name": cr["name"], "value": media.stars(values.get(cr["uid"]), scale)}
                for cr in media.criteria_for(db.list_rating_criteria(conn), c.get("type") or "") if values.get(cr["uid"]) is not None]
-    return {"m": item, "ratings": ratings, "lookup_url": f"/library/lookup?uid={c['uid']}"}
+    return {"m": item, "ratings": ratings, "edit_url": f"/library/{c['uid']}/edit"}
 
 
 _EXPORTS = {
@@ -434,12 +359,12 @@ def export_media(what: str, conn=Depends(get_db)):
 async def import_media(file: UploadFile | None = File(None), x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     data = await file.read(20 * 1024 * 1024 + 1) if file is not None and file.filename else b""
     if not data or len(data) > 20 * 1024 * 1024:
-        return validation_response({"field": "file", "message": "Choose a MyAnimeList XML, Letterboxd CSV or Curodav JSON file up to 20 MB"}, x_requested_with, SETTINGS)
+        return validation_response({"field": "file", "message": "Choose a MyAnimeList XML, Letterboxd CSV or Curodav JSON file up to 20 MB"}, x_requested_with, DATA_SETTINGS)
     try:
         added, updated = media_exchange.import_file(conn, data, file.filename)
     except (ValueError, UnicodeDecodeError, ET.ParseError) as exc:
-        return validation_response({"field": "file", "message": f"That file could not be read: {exc}"}, x_requested_with, SETTINGS)
-    return respond(x_requested_with, f"{SETTINGS}?{urlencode({'note': f'{added} added, {updated} updated'})}", added=added, updated=updated)
+        return validation_response({"field": "file", "message": f"That file could not be read: {exc}"}, x_requested_with, DATA_SETTINGS)
+    return respond(x_requested_with, f"{DATA_SETTINGS}?{urlencode({'note': f'{added} added, {updated} updated'})}", added=added, updated=updated)
 
 
 def list_controls(request: Request, conn, types: list[str], sort: str) -> dict:

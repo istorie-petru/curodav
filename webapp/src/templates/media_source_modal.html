@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import switch_input, password_input %}
+{% block title %}{{ name }}{% endblock %}
+{% block content %}
+{% call modal(kind="form", title=name, size="small", form='source-form') %}
+<form method="post" action="/settings/library/sources/{{ source }}" id="source-form">
+    <div class="field-grid">
+        <div class="field field-wide">
+            <span class="settings-field-hint">{{ info.used_for }}</span>
+        </div>
+        <div class="field field-wide">
+            <label for="source-on">Use this source</label>
+            {{ switch_input({'name': 'on', 'value': '1', 'id': 'source-on', 'checked': on}) }}
+        </div>
+        {% if info.keyed %}
+        <div class="field field-wide">
+            <label for="source-key">API key</label>
+            {{ password_input({'name': 'api_key', 'id': 'source-key', 'autocomplete': 'off', 'placeholder': ('Saved' if has_key else 'A free key from themoviedb.org, under Settings, API')}) }}
+        </div>
+        {% if has_key %}
+        <div class="field field-wide">
+            <label for="source-clear">Remove the saved key</label>
+            {{ switch_input({'name': 'clear_key', 'value': '1', 'id': 'source-clear'}) }}
+        </div>
+        {% endif %}
+        {% endif %}
+    </div>
+</form>
+{% endcall %}
+{% endblock %}

@@ -10,24 +10,6 @@
 {% if not semester %}
 <div class="card">{{ empty_state('No semester set up', 'graduation-cap') }}</div>
 
-{% elif view == 'disciplines' %}
-{% if cards %}
-<div class="card-grid wcard-grid disc-cards">
-    {% for c in cards %}
-    <a class="wcard is-hue" href="{{ c.url }}" data-style="--hue:var(--cal-accent-{{ c.color }})">
-        <div class="wcard-head"><span class="wcard-icon">{{ icon(c.icon) }}</span><span class="wcard-main"><span class="wcard-big">{{ c.name }}</span>{% if c.classes %}<span class="wcard-small">{{ c.classes }}</span>{% endif %}</span></div>
-        <div class="disc-card-lines">
-            {% if c.exam %}<div><span class="wcard-label">Exam</span><div class="wcard-small">{{ c.exam.title }}, {{ c.exam.when }}</div></div>{% endif %}
-            {% if c.task %}<div><span class="wcard-label">Due</span><div class="wcard-small">{{ c.task.title }}, {{ c.task.when }}</div></div>{% endif %}
-        </div>
-        <span class="wcard-arrow" aria-hidden="true">{{ icon('chevron-right', 'icon-sm') }}</span>
-    </a>
-    {% endfor %}
-</div>
-{% else %}
-<div class="card">{{ empty_state('No disciplines yet', 'book-open') }}</div>
-{% endif %}
-
 {% elif view == 'exams' %}
 {% if timeline|length > 1 %}
 <div class="nbtl has-dates uni-timeline">
@@ -36,15 +18,20 @@
     {% if it.now %}
     <div class="nbtl-item is-now"><span class="nbtl-date"></span><span class="nbtl-bullet"></span><span class="nbtl-text"><span class="nbtl-title">Today</span></span></div>
     {% else %}
-    <a class="nbtl-item{{ ' is-past' if it.past }}" href="{{ it.url }}" data-modal data-style="--nbtl-fg:var(--cal-accent-{{ it.color }}); --nbtl-line:color-mix(in srgb, var(--cal-accent-{{ it.color }}) 45%, transparent)">
+    <div class="nbtl-item{{ ' is-past' if it.past }}" data-style="--nbtl-fg:var(--cal-accent-{{ it.color }}); --nbtl-line:color-mix(in srgb, var(--cal-accent-{{ it.color }}) 45%, transparent)">
         <span class="nbtl-date">{{ (it.day|short_day) if it.day else 'No date' }}</span><span class="nbtl-bullet"></span>
         <span class="nbtl-text"><span class="nbtl-title">{{ it.title }}{% if it.grade is not none %} · {{ '%g'|format(it.grade) }}{% endif %}</span><span class="nbtl-desc">{{ it.sub }}</span></span>
-    </a>
+        <span class="nbtl-actions">
+            <a class="icon-btn" href="{{ it.url }}" data-modal title="Open it" aria-label="Open {{ it.title }}">{{ icon('external-link', 'icon-sm') }}</a>
+            {% if it.way_url %}<a class="icon-btn" href="{{ it.way_url }}" data-modal title="Its way of evaluating" aria-label="Way of evaluating of {{ it.title }}">{{ icon('file-check', 'icon-sm') }}</a>
+            <a class="icon-btn" href="{{ it.grades_url }}" data-modal title="Grades" aria-label="Grades of {{ it.title }}">{{ icon('award', 'icon-sm') }}</a>{% endif %}
+        </span>
+    </div>
     {% endif %}
     {% endfor %}
 </div>
 {% else %}
-{{ empty_state('No examinations yet', 'file-check') }}
+{{ empty_state('Nothing on the timeline yet', 'file-check') }}
 {% endif %}
 
 {% else %}
@@ -61,6 +48,12 @@
 <div class="card">{{ empty_state('No timetable yet', 'clock') }}</div>
 {% else %}
 {% include "_university_timetable.html" %}
+{% endif %}
+{% if unscheduled %}
+<div class="card uni-unscheduled">
+    <div class="card-title widget-header"><h2>No timetable yet</h2></div>
+    <div class="uni-unscheduled-list">{% for u in unscheduled %}<a class="cell-tag cal-{{ u.color }}" href="{{ u.url }}">{{ icon(u.icon, 'icon-sm') }} {{ u.short }}</a>{% endfor %}</div>
+</div>
 {% endif %}
 {% endif %}
 {% endblock %}

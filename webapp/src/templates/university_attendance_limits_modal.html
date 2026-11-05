@@ -1,0 +1,21 @@
+{% from "_inputs.html" import number_input %}
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% block title %}Absences allowed{% endblock %}
+{% block content %}
+{# A line per class kind the course has. Either a share of that kind's classes, or a fixed number of absences, which wins when both are set. #}
+{% call modal(kind="form", title='Absences allowed: ' ~ d.name, size="small", form='university-absences-form') %}
+<div class="card">
+<form method="post" id="university-absences-form" action="/settings/university/attendance/{{ d.name|urlencode }}">
+    <div class="uni-table">
+        <span class="uni-table-head"></span><span class="uni-table-head">% of classes</span><span class="uni-table-head">Or a number</span>
+        {% for r in rows %}
+        <b>{{ r.label }}s</b>
+        {{ number_input({'name': 'pct_' ~ r.kind, 'value': ('%g'|format(r.percent)) if r.percent is not none else '', 'min': 0, 'max': 100, 'step': 'any', 'aria-label': r.label ~ 's, percent of the classes'}) }}
+        {{ number_input({'name': 'num_' ~ r.kind, 'value': r.number if r.number is not none else '', 'min': 0, 'step': 1, 'aria-label': r.label ~ 's, number of absences'}) }}
+        {% endfor %}
+    </div>
+</form>
+</div>
+{% endcall %}
+{% endblock %}

@@ -112,7 +112,7 @@ TOOLS = [
           "upcoming": {"type": "boolean", "description": "Only those today or later."}}, (),
          lambda c, a, _t: api_service.list_exams(c, **a)),
     Tool("get_discipline", "Read a discipline",
-         "One discipline: course sheet, planned topics, timetable, ways of evaluating with grades and conditions, exams, readings "
+         "One discipline: course sheet, timetable, ways of evaluating with grades and conditions, exams, readings "
          "and attendance per class, with the ids the university edit tools take.",
          {"name": _s("Discipline name."), "semester_uid": _s("A semester uid; the current one when left out.")}, ("name",),
          lambda c, a, _t: api_service.get_discipline(c, a["name"], semester_uid=a.get("semester_uid", ""))),
@@ -218,11 +218,6 @@ TOOLS = [
          {"discipline": _s("Discipline name."), "way": {"type": "object", "description": "The way of evaluating."}, "semester_uid": _SEM},
          ("discipline", "way"),
          lambda c, a, _t: api_university.save_evaluation_way(c, **a), scope="write:university"),
-    Tool("university_set_topics", "Set the planned topics",
-         "Replaces the planned topics of one kind of class, in order; topics that keep their number and title keep their classes.",
-         {"discipline": _s("Discipline name."), "topics": {"type": "array", "items": {"type": "string"}, "description": "Titles in order."},
-          "kind": _s("lecture, seminar, lab or competence."), "semester_uid": _SEM}, ("discipline", "topics"),
-         lambda c, a, _t: api_university.set_topics(c, **a), scope="write:university"),
     Tool("university_save_reading", "Save a reading",
          "Adds a reading to a discipline, or changes the one with task_uid: a library entry (citation_uid) or a title and author, "
          "with pages or chapter in locator. category is obligatory, recommended or auxiliary.",

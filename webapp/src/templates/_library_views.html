@@ -1,13 +1,12 @@
-{# The Library's header bar, shared by Now and All: the views, then search, filters, add by hand and add from the web. #}
+{# The Library's header bar, one search box that takes words and key:value terms, then the filters. #}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_inputs.html" import search_input %}
 {% macro library_header() %}
-{% call page_header_narrow("Library", "library", views=views) %}
+{% call page_header_narrow("Library", "library") %}
     <form method="get" action="/library" class="form-inline notebook-glossary-search-form">
-        <input type="hidden" name="view" value="{{ view }}">
         {% for k in ('type','author','status','source','tag','shelf') %}{% for v in request.query_params.getlist(k) %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}{% endfor %}
         {% for k in ('year_from','year_to','sort','sort2') %}{% if request.query_params.get(k) %}<input type="hidden" name="{{ k }}" value="{{ request.query_params.get(k) }}">{% endif %}{% endfor %}
-        {{ search_input({'name': 'q', 'value': q, 'aria-label': 'Search the library', 'autocomplete': 'off'}) }}
+        {{ search_input({'name': 'q', 'value': q, 'aria-label': 'Search the library', 'placeholder': 'Search, or type:film status:current year:2000-2010', 'title': 'Words, plus type:, status:, year:, author:, tag:, shelf:, source: (file, link or none)', 'autocomplete': 'off', 'class': 'library-search'}) }}
     </form>
     <a href="/library/filters{% if current_query %}?{{ current_query }}{% endif %}" data-modal class="btn ghost" title="Filter and sort the library" aria-label="Filter and sort the library">{{ icon('filter', 'icon-sm') }}{% if active_filter_count %} {{ active_filter_count }}{% endif %}</a>
 {% endcall %}

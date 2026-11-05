@@ -1,4 +1,4 @@
-{% set page_add = {'href': '/library/lookup', 'label': 'Add to the library'} %}
+{% set page_add = {'href': '/library/new', 'label': 'Add to the library'} %}
 {% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
 {% block title %}Library{% endblock %}
@@ -16,10 +16,9 @@
 </nav>
 {% endif %}
 <div id="modal-target">
-{% if view == 'now' %}
+{% if not searching %}
 {% if not total %}
-<div class="card">{% if active_filter_count or q %}{% call empty_state('Nothing in progress matches the current filters', size='compact') %}<a href="/library?view=now">Clear filters</a>{% endcall %}
-    {% else %}{{ empty_state('Nothing in progress', 'bookmark') }}{% endif %}</div>
+<div class="card">{{ empty_state('Nothing in progress' if library_total else 'Nothing in the library yet', 'bookmark') }}</div>
 {% else %}
 <div class="card-grid wcard-grid media-stats">
     {{ wcard_stat('Reading now', now.reading|length|string if now.reading else '', now.reading[0].title if now.reading else '') }}
@@ -33,15 +32,16 @@
 {{ media_section('Up next', now.planned) }}
 {{ media_section('Finished in the last ' ~ recent_days ~ ' days', now.finished) }}
 {% endif %}
+{% if library_total %}<p class="muted library-hint">{{ library_total }} {{ 'entry' if library_total == 1 else 'entries' }} in the library. Search above, or pick a kind, to list them.</p>{% endif %}
 {% else %}
 <div class="settings-group">
-{% if (active_filter_count or q) and not citations %}
+{% if not citations %}
 {# Two distinct empty states (same "no documents at all" vs. "filters
    narrowed it to nothing" rule notebook_list.html's Browse page already
    follows) -- this one skips the table/empty_state_row below entirely
    rather than showing "Nothing in the library yet" underneath a filter that's
    plainly hiding real citations. #}
-{% call empty_state('Nothing in the library matches the current filters', size='compact') %}<a href="/library?view=all">Clear filters</a>{% endcall %}
+{% call empty_state('Nothing in the library matches the current filters', size='compact') %}<a href="/library">Clear search</a>{% endcall %}
 {% else %}
 {% if citations %}
 {% macro sort_head(key, label, cls) %}<th class="{{ cls }}"><a href="{{ sort_hrefs[key] }}" class="library-sort{% if sort == key %} is-active{% endif %}"{% if sort == key %} aria-sort="{{ 'descending' if key in ('year', 'rating') else 'ascending' }}"{% endif %}>{{ label }}</a></th>{% endmacro %}
@@ -61,11 +61,11 @@
         <tr data-uid="{{ c.uid }}">
             <td class="library-cover-col"><a href="/library/{{ c.uid }}" data-modal tabindex="-1" aria-hidden="true"><span class="media-row-cover">{% if c.cover %}<img src="{{ c.cover }}" alt="" loading="lazy">{% else %}{{ icon(c.kind.icon, 'icon-sm') }}{% endif %}</span></a></td>
             <td class="col-name"><a href="/library/{{ c.uid }}" data-modal class="library-title">{{ c.title }}</a>
-                {% if c.tag_items %}<span class="library-tags">{% for t in c.tag_items[:3] %}{{ tag_pill(t, '/library?view=all&tag=' ~ (t.name | urlencode)) }}{% endfor %}</span>{% endif %}
+                {% if c.tag_items %}<span class="library-tags">{% for t in c.tag_items[:3] %}{{ tag_pill(t, '/library?tag=' ~ (t.name | urlencode)) }}{% endfor %}</span>{% endif %}
                 <span class="library-sub">{{ c.display_authors }}{% if c.source.files %} · {{ icon('file', 'icon-sm') }}{% if c.source.missing %} File missing{% endif %}{% elif c.source.url %} · {{ icon('link', 'icon-sm') }}{% endif %}{% if c.source.editions > 1 %} · {{ c.source.editions }} editions{% endif %}</span>
                 <span class="library-sub library-phone">{{ c.status_label }}{% if c.stars %} · {{ c.stars }}{% endif %}</span></td>
             <td class="col-opt-1">{{ c.kind.name if (c.kind.custom or c.type in ('book', 'manga', 'film', 'tv', 'anime')) else c.type_label }}</td>
-            <td class="col-opt-2">{{ c.status_label }}</td>
+            <td class="col-opt-2">{% if c.status_label %}<span class="library-kind library-status">{{ c.status_label }}</span>{% endif %}</td>
             <td class="col-opt-2">{{ c.stars }}</td>
             <td class="col-opt-1">{{ c.year }}</td>
             <td class="col-actions-narrow">{{ action_menu([

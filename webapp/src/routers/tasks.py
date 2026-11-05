@@ -872,6 +872,7 @@ def task_detail(uid: str, request: Request, month: str | None = None, conn=Depen
         from .. import university_context
 
         ctx["university"] = university_context.for_task(conn, task)
+        ctx["university_attach"] = ctx["university"] is None and university_context.can_attach(conn)
     return templates.TemplateResponse("task_detail.html", ctx)
 
 

@@ -962,3 +962,33 @@ def respond(
     if wants_json(x_requested_with):
         return JSONResponse({"ok": True, **payload}, status_code=status_code)
     return RedirectResponse(url=redirect_url, status_code=303)
+
+
+def _discipline_href(request: Request, tag: dict) -> str:
+    """The page of a University discipline for a tag of the semester's shelf, else "" (the tag then links where it always did)."""
+    label, name = (tag.get("label") or ""), (tag.get("name") or "")
+    if not label or not name:
+        return ""
+    cache = getattr(request.state, "_cc_discipline_hrefs", None)
+    if cache is None:
+        cache = {}
+        request.state._cc_discipline_hrefs = cache
+    if label not in cache:
+        cache[label] = ""
+        try:
+            from urllib.parse import quote
+
+            with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
+                row = conn.execute("SELECT s.shelf_name, l.label_group FROM university_semesters s JOIN label_config l ON l.name = s.shelf_name COLLATE NOCASE "
+                                   "WHERE s.shelf_name = ? COLLATE NOCASE", (label,)).fetchone()
+                if row and row["label_group"]:
+                    cache[label] = f"/groups/{quote(row['label_group'], safe='')}/disciplines/"
+        except Exception:
+            pass
+    if not cache[label]:
+        return ""
+    from urllib.parse import quote
+    return cache[label] + quote(name, safe="")
+
+
+templates.env.globals["discipline_href"] = _discipline_href

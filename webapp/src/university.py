@@ -46,9 +46,8 @@ _group: ContextVar[str] = ContextVar("university_group", default="")
 
 
 def url_for_discipline(name: str, view: str = "") -> str:
-    """The page of a discipline, under the page of the space that holds the semester."""
-    base = f"/groups/{quote(_group.get(), safe='')}/disciplines/{quote(name, safe='')}"
-    return base + (f"?view={view}" if view else "")
+    """The page of a discipline (its course sheet), under the page of the space that holds the semester. `view` is kept for older callers."""
+    return f"/groups/{quote(_group.get(), safe='')}/disciplines/{quote(name, safe='')}"
 
 
 def _note(url: str, message: str = "") -> RedirectResponse:
@@ -182,7 +181,10 @@ def discipline_save(old: str = Form(""), name: str = Form(""), color: str = Form
     semester = _semester(conn)
     try:
         saved = up.save_discipline(conn, semester, old=old, name=name, color=color, icon=icon, teacher_names=None, colors=_colors())
-        up.save_sheet(conn, semester["uid"], saved, {"abbreviation": abbreviation, "code": code, "credits": credits, "type": type})
+        values = {"code": code, "credits": credits, "type": type} if (code or credits or type) else {}
+        if abbreviation or not old:
+            values["abbreviation"] = abbreviation.strip() or up.auto_abbreviation(saved)
+        up.save_sheet(conn, semester["uid"], saved, values)
     except (up.PlanError, tags.ManagedLabelError) as exc:
         _bad(exc)
     return _note(url_for_discipline(saved))
@@ -205,14 +207,14 @@ def _section(key: str) -> tuple:
 
 @router.get("/sheet/{name}")
 def sheet_form(name: str, request: Request, section: str = "identification", conn=Depends(get_db)):
-    """One section of the course sheet in its own window."""
+    """The title and short name with what the course has, or the other notes, in a window of their own."""
     semester = _semester(conn)
     d = _discipline(conn, semester, name)
-    key, label, _ = _section(section)
+    key = "content" if section == "content" else "identification"
     sheet = up.get_sheet(conn, semester["uid"], d["name"])
     return templates.TemplateResponse("university_sheet_modal.html", {
-        "request": request, "d": d, "sheet": sheet, "sec": next(s for s in sheet["sections"] if s["key"] == key),
-        "lecture": [t["uid"] for t in sheet["lecture_teachers"]], "seminar": [t["uid"] for t in sheet["seminar_teachers"]]})
+        "request": request, "d": d, "sec": next(s for s in sheet["sections"] if s["key"] == key), "short": up.short_name(conn, semester["uid"], d["name"]),
+        "kinds": up.course_kinds(conn, semester["uid"], d["name"]), "notes_text": sheet["values"].get("summary", "")})
 
 
 @router.post("/sheet/{name}")
@@ -220,20 +222,46 @@ async def sheet_save(name: str, request: Request, conn=Depends(get_db)):
     semester = _semester(conn)
     d = _discipline(conn, semester, name)
     form = await request.form()
-    key, _, fields = _section(str(form.get("section") or "identification"))
-    values = {k: str(form.get(f"f_{k}") or "") for k, _, _, _ in fields}
-    labels, firsts, seconds = ([str(x) for x in form.getlist(n)] for n in ("custom_label", "custom_a", "custom_b"))
-    firsts, seconds = (firsts + [""] * len(labels))[:len(labels)], (seconds + [""] * len(labels))[:len(labels)]
-    custom = [(key, lab, up.encode_custom(key, a, b)) for lab, a, b in zip(labels, firsts, seconds)]
+    key = "content" if str(form.get("section")) == "content" else "identification"
     saved = d["name"]
     try:
-        new_name = str(form.get("name") or "").strip()
-        if key == "identification" and new_name and new_name != d["name"]:
-            saved = up.save_discipline(conn, semester, old=d["name"], name=new_name, color=d.get("color") or "gray", icon=d.get("icon") or "", teacher_names=None, colors=_colors())
-        up.save_sheet(conn, semester["uid"], saved, values, custom if key == "identification" else None, only_section=key)
+        if key == "identification":
+            new_name = str(form.get("name") or "").strip()
+            if new_name and new_name != d["name"]:
+                saved = up.save_discipline(conn, semester, old=d["name"], name=new_name, color=d.get("color") or "gray", icon=d.get("icon") or "", teacher_names=None, colors=_colors())
+            up.save_sheet(conn, semester["uid"], saved, {"abbreviation": str(form.get("f_abbreviation") or "").strip() or up.auto_abbreviation(saved)})
+            up.set_course_kinds(conn, semester["uid"], saved, [str(k) for k in form.getlist("kinds")])
+        else:
+            up.save_sheet(conn, semester["uid"], saved, {"summary": str(form.get("f_summary") or "")})
     except (up.PlanError, tags.ManagedLabelError) as exc:
         _bad(exc)
-    return _note(url_for_discipline(saved, "sheet"))
+    return _note(url_for_discipline(saved))
+
+
+@router.get("/attendance/{name}")
+def attendance_limits_form(name: str, request: Request, conn=Depends(get_db)):
+    """The absences each class kind of the course allows: a percent of its classes, or a number that replaces the percent."""
+    semester = _semester(conn)
+    d = _discipline(conn, semester, name)
+    settings = ua.settings(conn, semester["uid"], d["name"])
+    rows = [{"kind": k, "label": up.SLOT_KINDS[k], **settings[k]} for k in up.course_kinds(conn, semester["uid"], d["name"])]
+    return templates.TemplateResponse("university_attendance_limits_modal.html", {"request": request, "d": d, "rows": rows})
+
+
+@router.post("/attendance/{name}")
+async def attendance_limits_save(name: str, request: Request, conn=Depends(get_db)):
+    semester = _semester(conn)
+    d = _discipline(conn, semester, name)
+    form = await request.form()
+    values = {}
+    for kind in up.course_kinds(conn, semester["uid"], d["name"]):
+        values[f"absences_pct_{kind}"] = str(form.get(f"pct_{kind}") or "")
+        values[f"absences_{kind}"] = str(form.get(f"num_{kind}") or "")
+    try:
+        up.save_sheet(conn, semester["uid"], d["name"], values)
+    except up.PlanError as exc:
+        _bad(exc)
+    return _note(url_for_discipline(d["name"]))
 
 
 # ---------------------------------------------------------------- evaluation
@@ -253,7 +281,9 @@ def _way_context(request: Request, conn, semester: dict, d: dict, way: dict | No
             c["pick"] = "other" if c["kind"] == "other" else f"{c['kind']}:{c['target']}"
             if not any(o["value"] == c["pick"] for o in options):
                 options.append({"value": c["pick"], "html": "A removed part"})
-    return {"request": request, "d": d, "way": way, "forms": ue.EVALUATION_FORMS, "events": events, "tasks": tasks, "condition_options": options}
+    notes = conn.execute("SELECT uid, title FROM notebook_documents WHERE is_template = 0 ORDER BY title COLLATE NOCASE").fetchall()
+    return {"request": request, "d": d, "way": way, "forms": ue.EVALUATION_FORMS, "events": events, "tasks": tasks, "condition_options": options,
+            "form_items": ue.FORM_ITEMS, "note_items": [{"uid": n["uid"], "name": n["title"] or "Untitled"} for n in notes]}
 
 
 @router.get("/evaluation/new")
@@ -290,9 +320,13 @@ async def way_save(request: Request, conn=Depends(get_db)):
         entry.update(due=form.getlist("tk_due")[i])
         entry.setdefault("title", form.getlist("tk_title")[i])
     subs = [{"id": i, "name": n, "weight": w} for i, n, w in zip(form.getlist("sub_id"), form.getlist("sub_name"), form.getlist("sub_weight"))]
-    way = {"id": str(form.get("way_id") or ""), "name": str(form.get("name") or ""), "form": str(form.get("form") or ""), "weight": str(form.get("weight") or ""),
-           "elimination": bool(form.get("elimination")), "notes": str(form.get("notes") or ""), "subs": subs, "milestones": list(milestones.values()),
-           "criteria": str(form.get("criteria") or ""), "min_grade": str(form.get("min_grade") or ""), "conditions": _conditions_from(form)}
+    way_id = str(form.get("way_id") or "")
+    old = next((w for w in ue.get_evaluation(conn, semester["uid"], d["name"], with_milestones=False) if w["id"] == way_id), None) or {}
+    # The window no longer edits the minimum grade, criteria, conditions or text notes; an older way keeps what it had.
+    way = {"id": way_id, "name": str(form.get("name") or ""), "form": str(form.get("form") or ""), "weight": str(form.get("weight") or ""),
+           "elimination": bool(form.get("elimination")), "notes": old.get("notes", ""), "subs": subs, "milestones": list(milestones.values()),
+           "criteria": old.get("criteria", ""), "min_grade": "" if old.get("min_grade") is None else f"{old['min_grade']:g}", "conditions": old.get("conditions", []),
+           "note_uids": [str(u) for u in form.getlist("note_uids")]}
     try:
         warnings = ue.save_way(conn, semester["uid"], d["name"], way)
     except up.PlanError as exc:
@@ -321,9 +355,10 @@ def condition_tick(way_id: str, condition_id: str, discipline: str = Form(...), 
 def grades_form(request: Request, discipline: str, conn=Depends(get_db)):
     semester = _semester(conn)
     d = _discipline(conn, semester, discipline)
+    standing = ue.standing(conn, semester["uid"], d["name"])
     return templates.TemplateResponse("university_grades_modal.html", {
-        "request": request, "d": d, "ways": ue.get_evaluation(conn, semester["uid"], d["name"], with_milestones=False),
-        "grades": ue.get_grades(conn, semester["uid"], d["name"])})
+        "request": request, "d": d, "ways": standing["ways"], "grades": ue.get_grades(conn, semester["uid"], d["name"]),
+        "passing": standing["passing"], "computed": standing["final"] if standing["final"] is not None else standing["so_far"]})
 
 
 @router.post("/grades")
@@ -332,10 +367,71 @@ async def grades_save(request: Request, conn=Depends(get_db)):
     form = await request.form()
     d = _discipline(conn, semester, str(form.get("discipline") or ""))
     try:
+        up.save_sheet(conn, semester["uid"], d["name"], {"passing": str(form.get("passing") or "")})
+        ue.set_minimums(conn, semester["uid"], d["name"], {k[4:]: str(v) for k, v in form.items() if k.startswith("min_")})
         ue.set_grades(conn, semester["uid"], d["name"], {k[6:]: str(v) for k, v in form.items() if k.startswith("grade_")})
     except up.PlanError as exc:
         _bad(exc)
-    return _note(url_for_discipline(d["name"], "exams"))
+    return _note(url_for_discipline(d["name"]))
+
+
+@router.get("/milestone/new")
+def milestone_new(request: Request, discipline: str, way: str, conn=Depends(get_db)):
+    semester = _semester(conn)
+    d = _discipline(conn, semester, discipline)
+    return templates.TemplateResponse("university_milestone_modal.html", {"request": request, "d": d, "way_id": way, "m": None, "description": ""})
+
+
+@router.get("/milestone/{uid}/edit")
+def milestone_edit(uid: str, request: Request, conn=Depends(get_db)):
+    semester = _semester(conn)
+    m = next((x for x in ue.list_milestones(conn, semester["uid"]) if x["uid"] == uid), None)
+    if not m:
+        raise HTTPException(404, "No such item")
+    d = _discipline(conn, semester, m["discipline"])
+    item = (db.get_event(conn, m["event_uid"]) if m["event_uid"] else None) or (db.get_task(conn, m["task_uid"]) if m["task_uid"] else None) or {}
+    return templates.TemplateResponse("university_milestone_modal.html", {"request": request, "d": d, "way_id": m["way_id"], "m": m, "description": item.get("description") or ""})
+
+
+@router.post("/milestone")
+def milestone_save(discipline: str = Form(...), way_id: str = Form(...), uid: str = Form(""), title: str = Form(""), day: str = Form(""), start: str = Form(""),
+                   end: str = Form(""), due: str = Form(""), description: str = Form(""), conn=Depends(get_db)):
+    semester = _semester(conn)
+    d = _discipline(conn, semester, discipline)
+    try:
+        ue.save_item(conn, semester["uid"], d["name"], way_id, {"uid": uid, "title": title, "day": day, "start": start, "end": end, "due": due, "description": description})
+    except up.PlanError as exc:
+        _bad(exc)
+    return _note(url_for_discipline(d["name"]))
+
+
+@router.post("/milestone/{uid}/delete")
+def milestone_delete(uid: str, discipline: str = "", conn=Depends(get_db)):
+    semester = _semester(conn)
+    ue.delete_milestone(conn, uid)
+    return _note(url_for_discipline(discipline) if discipline else HOME)
+
+
+@router.get("/attach")
+def attach_form(request: Request, kind: str, uid: str, back: str = "", conn=Depends(get_db)):
+    """An event or task that already exists, attached to one of the ways of evaluating of the semester's disciplines."""
+    semester = _semester(conn)
+    item = db.get_event(conn, uid) if kind == "event" else db.get_task(conn, uid)
+    if kind not in ("event", "task") or not item:
+        raise HTTPException(404, "Nothing to attach")
+    items = [{"uid": f"{d['name']}\t{w['id']}", "name": f"{d['name']}: {w['name']}"} for d in up.disciplines(conn, semester) for w in ue.get_evaluation(conn, semester["uid"], d["name"], with_milestones=False)]
+    return templates.TemplateResponse("university_attach_modal.html", {"request": request, "kind": kind, "uid": uid, "title": item["title"], "items": items, "back": back})
+
+
+@router.post("/attach")
+def attach_save(kind: str = Form(...), uid: str = Form(...), way: str = Form(""), back: str = Form(""), conn=Depends(get_db)):
+    semester = _semester(conn)
+    discipline, _, way_id = way.partition("\t")
+    try:
+        ue.attach_item(conn, semester["uid"], _discipline(conn, semester, discipline)["name"], way_id, kind, uid)
+    except up.PlanError as exc:
+        _bad(exc)
+    return RedirectResponse(back or url_for_discipline(discipline), status_code=303)
 
 
 @router.post("/evaluation/{way_id}/delete")
@@ -441,48 +537,6 @@ def slot_delete(series_uid: str, discipline: str = "", conn=Depends(get_db)):
     return _note(url_for_discipline(discipline, "sheet") if discipline else HOME, f"{removed} classes removed")
 
 
-# ---------------------------------------------------------------- planned contents and competences
-
-def _kind(kind: str) -> str:
-    return kind if kind in up.TOPIC_KINDS else "lecture"
-
-
-@router.get("/syllabus/{name}")
-def syllabus_form(name: str, request: Request, kind: str = "lecture", conn=Depends(get_db)):
-    semester = _semester(conn)
-    d = _discipline(conn, semester, name)
-    kind = _kind(kind)
-    rows = up.list_topics(conn, semester["uid"], d["name"], kind)
-    return templates.TemplateResponse("university_syllabus_modal.html", {
-        "request": request, "d": d, "kind": kind, "kind_label": up.TOPIC_KINDS[kind], "rows": rows, "next_number": (max([r["number"] for r in rows] or [0]) + 1)})
-
-
-@router.post("/syllabus/{name}")
-async def syllabus_save(name: str, request: Request, conn=Depends(get_db)):
-    semester = _semester(conn)
-    d = _discipline(conn, semester, name)
-    form = await request.form()
-    kind = _kind(str(form.get("kind") or "lecture"))
-    rows = list(zip(form.getlist("number"), form.getlist("title"), form.getlist("importance") or [""] * len(form.getlist("title"))))
-    up.save_topic_rows(conn, semester["uid"], d["name"], rows, kind)
-    return _note(url_for_discipline(d["name"], "sheet"))
-
-
-@router.post("/syllabus/{name}/assign")
-def syllabus_assign(name: str, conn=Depends(get_db)):
-    """Places the topics nobody uses yet, in order, on the lecture classes that have no text of their own."""
-    semester = _semester(conn)
-    d = _discipline(conn, semester, name)
-    plan = up.plan_assign_in_order(conn, semester["uid"], d["name"])
-    placed = up.apply_assign_in_order(conn, semester["uid"], d["name"])
-    parts = [f"{placed} topics placed on classes"]
-    if plan["blocked"]:
-        parts.append(f"{len(plan['blocked'])} classes with their own text were skipped")
-    if plan["left_over"]:
-        parts.append(f"{plan['left_over']} topics found no free class")
-    return _note(url_for_discipline(d["name"]), "; ".join(parts) if placed or plan["blocked"] or plan["left_over"] else "Nothing to place")
-
-
 # ---------------------------------------------------------------- bibliography (readings are references to library books)
 
 def _reading_form_context(request: Request, conn, d: dict, reading: dict | None) -> dict:
@@ -507,20 +561,20 @@ def reading_edit(task_uid: str, request: Request, conn=Depends(get_db)):
 
 @router.post("/reading")
 def reading_save(discipline: str = Form(...), task_uid: str = Form(""), citation_id: str = Form(""), locator: str = Form(""), category: str = Form("recommended"),
-                 notes: str = Form(""), due: str = Form(""), status: str = Form("active"), title: str = Form(""), author: str = Form(""), conn=Depends(get_db)):
+                 notes: str = Form(""), title: str = Form(""), author: str = Form(""), conn=Depends(get_db)):
     try:
-        up.save_reading(conn, _semester(conn), discipline, task_uid=task_uid or None, title=title, author=author, due=due, status=status,
+        up.save_reading(conn, _semester(conn), discipline, task_uid=task_uid or None, title=title, author=author,
                         citation_id=citation_id, locator=locator, category=category, notes=notes)
     except up.PlanError as exc:
         _bad(exc)
-    return _note(url_for_discipline(discipline, "bibliography"))
+    return _note(url_for_discipline(discipline))
 
 
 @router.post("/reading/{task_uid}/delete")
 def reading_delete(task_uid: str, discipline: str = "", conn=Depends(get_db)):
     _semester(conn)
     up.delete_reading(conn, task_uid)
-    return _note(url_for_discipline(discipline, "bibliography") if discipline else HOME)
+    return _note(url_for_discipline(discipline) if discipline else HOME)
 
 
 # ---------------------------------------------------------------- homework
@@ -588,47 +642,25 @@ def class_note(event_uid: str, conn=Depends(get_db)):
     return RedirectResponse(f"/notebook/{uid}", status_code=303)
 
 
-@notes_router.get("/class/{event_uid}/content")
-def class_content_form(event_uid: str, request: Request, conn=Depends(get_db)):
-    semester = _semester(conn)
+@notes_router.get("/class/{event_uid}/makeup")
+def makeup_form(event_uid: str, request: Request, conn=Depends(get_db)):
+    """A missed class made up another day: the same class moves to the date and hours picked here."""
+    _semester(conn)
     event = db.get_event(conn, event_uid)
-    slot = conn.execute("SELECT * FROM university_slots WHERE series_uid = ?", (event.get("series_uid") if event else None,)).fetchone()
-    if not event or not slot:
+    if not event or not _class_discipline(conn, event):
         raise HTTPException(404, "No such class")
-    tag = slot["discipline_tag"]
-    links = up.class_links(conn, event_uid)
-    kind = slot["kind"]
-    topics = [t for t in up.list_topics(conn, semester["uid"], tag) if t["kind"] == kind] or up.list_topics(conn, semester["uid"], tag)
-    return templates.TemplateResponse("university_class_modal.html", {
-        "request": request, "event": event, "discipline": tag, "kind": up.SLOT_KINDS.get(kind, "Class"), "topics": topics,
-        "topic_uid": links["topics"][0]["uid"] if links["topics"] else "", "text": up.class_free_text(conn, event_uid, event.get("description") or ""),
-        "note_uid": up.class_note(conn, event_uid), "deletable": slot["weeks"] == "once"})
+    mark = ua.statuses_of(conn, [event_uid]).get(event_uid) or {"status": "", "note": ""}
+    return templates.TemplateResponse("university_makeup_modal.html", {"request": request, "event": event, "discipline": _class_discipline(conn, event), "note": mark["note"]})
 
 
-@notes_router.post("/class/{event_uid}/content")
-def class_content_save(event_uid: str, topic_uid: str = Form(""), competences: list[str] = Form(default=[]), text: str = Form(""),
-                       day: str = Form(""), start: str = Form(""), end: str = Form(""), room: str = Form(""), conn=Depends(get_db)):
+@notes_router.post("/class/{event_uid}/makeup")
+def makeup_save(event_uid: str, day: str = Form(...), start: str = Form(...), end: str = Form(...), note: str = Form(""), back: str = Form("calendar"), conn=Depends(get_db)):
     _semester(conn)
-    event = db.get_event(conn, event_uid)
     try:
-        if day or start or end:  # kept for the API; the window no longer sends these, the timetable is edited on the course sheet
-            up.save_class_schedule(conn, event_uid, day, start, end, room or "")
-        up.save_class_content(conn, event_uid, topic_uid, text, competences)
+        ua.make_up(conn, event_uid, f"{day}T{start}", f"{day}T{end}", note)
     except up.PlanError as exc:
         _bad(exc)
-    return _note(url_for_discipline(_class_discipline(conn, event)) if event else HOME)
-
-
-@notes_router.post("/class/{event_uid}/delete")
-def class_delete(event_uid: str, conn=Depends(get_db)):
-    _semester(conn)
-    event = db.get_event(conn, event_uid)
-    discipline = _class_discipline(conn, event)
-    try:
-        up.delete_class(conn, event_uid)
-    except up.PlanError as exc:
-        _bad(exc)
-    return _note(url_for_discipline(discipline) if discipline else HOME)
+    return RedirectResponse("/calendar" if back == "calendar" else HOME, status_code=303)
 
 
 @notes_router.get("/class/{event_uid}/attendance")

@@ -38,22 +38,82 @@ def statuses_of(conn: sqlite3.Connection, event_uids: list[str]) -> dict[str, di
     return {r["event_uid"]: {"status": r["status"], "note": r["note"]} for r in rows}
 
 
+def _mark(conn: sqlite3.Connection, event_uid: str) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM university_attendance WHERE event_uid = ?", (event_uid,)).fetchone()
+
+
 def set_status(conn: sqlite3.Connection, event_uid: str, status: str, note: str = "") -> None:
-    """Marks one class. Attended with no note removes the row; cancelling archives the event and any other status brings it back."""
+    """Marks one class. Attended with no note removes the row. A class is never deleted or cancelled from the calendar: a missed or excused one stays
+    where it was (the calendar draws it faded) and a made-up one is moved with `make_up`. Any other mark on a class that was moved puts it back at its
+    own time. Cancelled is only kept for marks made before this change; it still archives the event."""
     if status not in STATUSES:
-        raise up.PlanError("Pick attended, missed, excused, cancelled or made up")
+        raise up.PlanError("Pick attended, missed, excused or made up")
     event, slot = _class(conn, event_uid)
     note = (note or "").strip()
+    old = _mark(conn, event_uid)
+    if old and old["moved_start"] and status != "made_up":
+        event = _put_back(conn, event, old)
+    if status == "made_up" and not (old and old["moved_start"]):
+        raise up.PlanError("Pick the new date of a made-up class")
     if status == "attended" and not note:
         conn.execute("DELETE FROM university_attendance WHERE event_uid = ?", (event_uid,))
     else:
-        conn.execute("INSERT INTO university_attendance (event_uid, semester_uid, discipline_tag, status, note, updated_at) VALUES (?, ?, ?, ?, ?, ?) "
-                     "ON CONFLICT(event_uid) DO UPDATE SET status = excluded.status, note = excluded.note, updated_at = excluded.updated_at",
-                     (event_uid, slot["semester_uid"], slot["discipline_tag"], status, note, up._now()))
+        origin = (old["original_start"], old["original_end"]) if old and old["original_start"] else (event["start_at"], event.get("end_at") or "")
+        moved = (old["moved_start"], old["moved_end"]) if old and status == "made_up" else ("", "")
+        conn.execute("INSERT INTO university_attendance (event_uid, semester_uid, discipline_tag, status, note, updated_at, kind, original_start, original_end, moved_start, moved_end) "
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(event_uid) DO UPDATE SET status = excluded.status, note = excluded.note, updated_at = excluded.updated_at, "
+                     "kind = excluded.kind, original_start = excluded.original_start, original_end = excluded.original_end, moved_start = excluded.moved_start, moved_end = excluded.moved_end",
+                     (event_uid, slot["semester_uid"], slot["discipline_tag"], status, note, up._now(), slot["kind"], *origin, *moved))
     wanted = "archived" if status == "cancelled" else "active"
     if (event.get("status") or "active") != wanted:
         db.upsert_event(conn, {**event, "status": wanted, "updated_at": up._now()})
     conn.commit()
+
+
+def _put_back(conn: sqlite3.Connection, event: dict[str, Any], mark: sqlite3.Row) -> dict[str, Any]:
+    event = {**event, "start_at": mark["original_start"], "end_at": mark["original_end"] or mark["original_start"], "updated_at": up._now()}
+    db.upsert_event(conn, event)
+    conn.execute("UPDATE university_attendance SET moved_start = '', moved_end = '' WHERE event_uid = ?", (event["uid"],))
+    return event
+
+
+def make_up(conn: sqlite3.Connection, event_uid: str, start_at: str, end_at: str, note: str = "") -> None:
+    """A missed class made up another day: the same occurrence is moved to the new time and marked made up. Its own time is kept, so marking it
+    anything else (or `set_status` attended) puts it back. Moving it again keeps the first time."""
+    event, slot = _class(conn, event_uid)
+    end_at = end_at or start_at
+    if end_at <= start_at:
+        raise up.PlanError("The class ends before it starts")
+    old = _mark(conn, event_uid)
+    origin = (old["original_start"], old["original_end"]) if old and old["original_start"] else (event["start_at"], event.get("end_at") or "")
+    db.upsert_event(conn, {**event, "start_at": start_at, "end_at": end_at, "status": "active", "updated_at": up._now()})
+    conn.execute("INSERT INTO university_attendance (event_uid, semester_uid, discipline_tag, status, note, updated_at, kind, original_start, original_end, moved_start, moved_end) "
+                 "VALUES (?, ?, ?, 'made_up', ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(event_uid) DO UPDATE SET status = 'made_up', note = excluded.note, updated_at = excluded.updated_at, "
+                 "kind = excluded.kind, original_start = excluded.original_start, original_end = excluded.original_end, moved_start = excluded.moved_start, moved_end = excluded.moved_end",
+                 (event_uid, slot["semester_uid"], slot["discipline_tag"], (note or (old["note"] if old else "")).strip(), up._now(), slot["kind"], *origin, start_at, end_at))
+    conn.commit()
+
+
+def reattach(conn: sqlite3.Connection, semester_uid: str, discipline: str) -> int:
+    """After a timetable edit rebuilt a discipline's class events, puts every mark whose event is gone on the new event of the same kind that starts on
+    the day the mark was made for, and moves that event again if the mark was a made-up class. Returns how many marks were repaired. Safe to repeat."""
+    fixed = 0
+    rows = conn.execute("SELECT * FROM university_attendance WHERE semester_uid = ? AND discipline_tag = ? COLLATE NOCASE AND original_start != ''", (semester_uid, discipline)).fetchall()
+    for r in rows:
+        if db.get_event(conn, r["event_uid"]):
+            continue
+        day = r["original_start"][:10]
+        target = next((e for e in up.class_events(conn, semester_uid, discipline, r["kind"] or None) if e["start_at"][:10] == day and not _mark(conn, e["uid"])), None)
+        if not target:
+            continue
+        conn.execute("UPDATE university_attendance SET event_uid = ? WHERE event_uid = ?", (target["uid"], r["event_uid"]))
+        if r["moved_start"]:
+            db.upsert_event(conn, {**target, "start_at": r["moved_start"], "end_at": r["moved_end"] or r["moved_start"], "updated_at": up._now()})
+        elif r["status"] == "cancelled":
+            db.upsert_event(conn, {**target, "status": "archived", "updated_at": up._now()})
+        fixed += 1
+    conn.commit()
+    return fixed
 
 
 def for_event(conn: sqlite3.Connection, event: dict[str, Any]) -> dict[str, Any] | None:
@@ -62,18 +122,39 @@ def for_event(conn: sqlite3.Connection, event: dict[str, Any]) -> dict[str, Any]
     if not row:
         return None
     mark = statuses_of(conn, [event["uid"]]).get(event["uid"]) or {"status": "", "note": ""}
+    stored = _mark(conn, event["uid"])
+    mark = {**mark, "moved_start": stored["moved_start"] if stored else ""}
     status = mark["status"] or ("attended" if (event.get("start_at") or "") < clock.local_now().strftime("%Y-%m-%dT%H:%M") else "")
     return {"discipline": row["discipline_tag"], "kind": up.SLOT_KINDS.get(row["kind"], "Class"), "status": status, "label": STATUSES.get(status, "Not held yet"),
-            "note": mark["note"], "choices": [(k, v) for k, v in STATUSES.items() if k != status]}
+            "note": mark["note"], "choices": [(k, v) for k, v in STATUSES.items() if k not in (status, "cancelled")], "moved": bool(mark.get("moved_start"))}
 
 
-def limits(conn: sqlite3.Connection, semester_uid: str, discipline: str) -> dict[str, int | None]:
+def _number(value: Any) -> float | None:
+    try:
+        return float(str(value or "").replace(",", ".")) if str(value or "").strip() else None
+    except ValueError:
+        return None
+
+
+def settings(conn: sqlite3.Connection, semester_uid: str, discipline: str) -> dict[str, dict[str, Any]]:
+    """Per class kind, what the course sheet says about absences: a percent of the classes that may be missed, and a number that overrides it."""
     values = up.get_sheet(conn, semester_uid, discipline)["values"]
+    out = {}
+    for kind in KINDS:
+        number, pct = _number(values.get(LIMIT_KEYS[kind])), _number(values.get(f"absences_pct_{kind}"))
+        out[kind] = {"number": None if number is None else int(number), "percent": pct}
+    return out
+
+
+def limits(conn: sqlite3.Connection, semester_uid: str, discipline: str, totals: dict[str, int] | None = None) -> dict[str, int | None]:
+    """The absences each class kind allows: the number set by hand, else the percent of the kind's classes rounded down, else no limit."""
     out: dict[str, int | None] = {}
-    for kind, key in LIMIT_KEYS.items():
-        try:
-            out[kind] = int(float(str(values.get(key) or "").replace(",", "."))) if str(values.get(key) or "").strip() else None
-        except ValueError:
+    for kind, s in settings(conn, semester_uid, discipline).items():
+        if s["number"] is not None:
+            out[kind] = s["number"]
+        elif s["percent"] is not None and totals is not None:
+            out[kind] = int(s["percent"] / 100 * totals.get(kind, 0))
+        else:
             out[kind] = None
     return out
 
@@ -90,7 +171,7 @@ def discipline_attendance(conn: sqlite3.Connection, semester_uid: str, disciplin
     classes = up.list_classes(conn, semester_uid, discipline, today)
     marks = statuses_of(conn, [c["uid"] for c in classes])
     rows = [_row(c, marks.get(c["uid"])) for c in classes]
-    caps = limits(conn, semester_uid, discipline)
+    caps = limits(conn, semester_uid, discipline, {k: len([r for r in rows if r["kind"] == k and r["status"] != "cancelled"]) for k in KINDS})
     kinds = []
     for kind in KINDS:
         of_kind = [r for r in rows if r["kind"] == kind]
@@ -117,10 +198,6 @@ def semester_attendance(conn: sqlite3.Connection, semester: dict[str, Any], toda
 
 
 def move_class(conn: sqlite3.Connection, event_uid: str, start_at: str, end_at: str) -> str:
-    """A class moved to another day or hour is cancelled where it was and given back as a made-up class at the new time. Returns the new class's uid."""
-    event, slot = _class(conn, event_uid)
-    semester = up.get_semester(conn, slot["semester_uid"])
-    set_status(conn, event_uid, "cancelled", "Moved")
-    new = up.add_class(conn, semester, slot["discipline_tag"], slot["kind"], start_at[:10], start_at[11:16], (end_at or start_at)[11:16], event.get("location") or "")
-    set_status(conn, new, "made_up", "")
-    return new
+    """A class dragged or edited to another time is made up: the same occurrence moves and is marked made up. Returns its uid."""
+    make_up(conn, event_uid, start_at, end_at)
+    return event_uid

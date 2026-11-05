@@ -58,6 +58,8 @@
 {% endcall %}
 {% if university and university.kind == 'exam' %}
 {% include "_university_exam.html" %}
+{% elif university_attach %}
+{% call detail_section('Examination') %}<a class="btn ghost" href="/settings/university/attach?kind=task&amp;uid={{ task.uid }}" data-modal>{{ icon('file-check', 'icon-sm') }} Attach to a way of evaluating</a>{% endcall %}
 {% endif %}
 {% if task.description %}
 {% call detail_section('Description') %}<p class="detail-text">{{ task.description }}</p>{% endcall %}

@@ -1,17 +1,35 @@
-{% from "_inputs.html" import number_input %}
+{% from "_inputs.html" import number_input, text_input %}
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
 {% block title %}Grades{% endblock %}
 {% block content %}
-{% macro grade_field(id, label) %}<div class="field"><label>{{ label }}</label>{{ number_input({'name': 'grade_' ~ id, 'value': ('%g'|format(grades[id])) if id in grades else '', 'min': 0, 'step': 'any'}) }}</div>{% endmacro %}
+{# One table: the course first (its passing grade and the grade worked out from the weights, even when not everything is graded), then each way of
+   evaluating with the lowest grade that passes it and the grade got. An elimination way is only passed or failed, and is failed until passed. #}
+{% macro grade_cell(id, label) %}{{ number_input({'name': 'grade_' ~ id, 'value': ('%g'|format(grades[id])) if id in grades else '', 'min': 0, 'step': 'any', 'aria-label': label ~ ', grade'}) }}{% endmacro %}
 {% call modal(kind="form", title='Grades: ' ~ d.name, size="medium", form='university-grades-form') %}
 <div class="card">
 <form method="post" id="university-grades-form" action="/settings/university/grades">
     <input type="hidden" name="discipline" value="{{ d.name }}">
-    <div class="field-grid">
+    <div class="uni-table">
+        <span class="uni-table-head"></span><span class="uni-table-head">Passing grade</span><span class="uni-table-head">Grade</span>
+        <b>The whole course</b>
+        {{ number_input({'name': 'passing', 'value': '%g'|format(passing), 'min': 0, 'step': 'any', 'aria-label': 'Passing grade of the course'}) }}
+        {{ number_input({'value': ('%g'|format(computed)) if computed is not none else '', 'readonly': true, 'class': 'is-greyed', 'aria-label': 'Grade of the course, worked out'}) }}
         {% for w in ways %}
-        {{ grade_field(w.id, w.name) }}
-        {% for s in w.subs %}{{ grade_field(s.id, w.name ~ ', ' ~ s.name) }}{% endfor %}
+        <span>{{ w.name }}{% if w.weight is not none %} <span class="text-muted">{{ '%g'|format(w.weight) }}%</span>{% endif %}</span>
+        {% if w.elimination %}
+        <span class="text-muted">Passed</span>
+        <div>
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'university-grades-form' %}{% set ms_name = 'grade_' ~ w.id %}{% set ms_label = w.name ~ ', result' %}
+            {% set ms_items = [{'uid': '0', 'name': 'Failed'}, {'uid': '1', 'name': 'Passed'}] %}
+            {% set ms_selected = ('1' if grades[w.id] else '0') if w.id in grades else '0' %}{% set ms_wide = false %}{% set ms_remote = '' %}{% set ms_bare = true %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+        {% else %}
+        {{ number_input({'name': 'min_' ~ w.id, 'value': ('%g'|format(w.min_grade)) if w.min_grade is not none else '', 'min': 0, 'step': 'any', 'placeholder': '%g'|format(passing), 'aria-label': 'Passing grade of ' ~ w.name}) }}
+        {{ grade_cell(w.id, w.name) }}
+        {% for s in w.subs %}<span class="uni-table-sub">{{ s.name }}</span><span></span>{{ grade_cell(s.id, s.name) }}{% endfor %}
+        {% endif %}
         {% endfor %}
     </div>
 </form>

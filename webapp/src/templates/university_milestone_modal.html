@@ -1,0 +1,24 @@
+{% from "_inputs.html" import text_input, textarea_input %}
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_date_time_fields.html" import date_field, time_field with context %}
+{% block title %}{{ 'Edit item' if m else 'New item' }}{% endblock %}
+{% block content %}
+{# One event or task of a way of evaluating, on its own: a title, the day and hours of the event and/or the deadline of the task, and a description. #}
+{% set _retire = [{'action': 'delete', 'url': '/settings/university/milestone/' ~ m.uid ~ '/delete?discipline=' ~ (d.name|urlencode), 'mode': 'confirm', 'label': 'Delete this item with its event and task?', 'redirect': none, 'change': none}] if m else none %}
+{% call modal(kind="form", title=('Edit ' ~ (m.title if m else 'item')) if m else 'New event or task', size="medium", form='university-milestone-form', creating=(not m), retire=_retire) %}
+<div class="card">
+<form method="post" id="university-milestone-form" action="/settings/university/milestone">
+    <input type="hidden" name="discipline" value="{{ d.name }}"><input type="hidden" name="way_id" value="{{ way_id }}"><input type="hidden" name="uid" value="{{ m.uid if m else '' }}">
+    <div class="field-grid">
+        <div class="field field-wide"><label>Title</label>{{ text_input({'name': 'title', 'value': (m.raw_title if m else '')}) }}</div>
+        <div class="field"><label>Date</label>{{ date_field('day', m.day if m else '', label='Date', short=true) }}</div>
+        <div class="field"><label>Deadline</label>{{ date_field('due', m.due if m else '', label='Deadline', short=true) }}</div>
+        <div class="field"><label>Start time</label>{{ time_field('start', m.start if m else '', label='Start time') }}</div>
+        <div class="field"><label>End time</label>{{ time_field('end', m.end if m else '', label='End time') }}</div>
+        <div class="field field-wide"><label>Description</label>{{ textarea_input({'name': 'description', 'rows': 4}, description) }}</div>
+    </div>
+</form>
+</div>
+{% endcall %}
+{% endblock %}

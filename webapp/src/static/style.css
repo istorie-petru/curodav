@@ -5308,7 +5308,7 @@ input.is-greyed{opacity:.5; background:var(--bg-hover, transparent);}
 .nbtl-item{position:relative; display:flex; align-items:baseline; gap:var(--space-3); padding:2px 0 var(--space-2);}
 /* The line hangs from each bullet (an absolutely placed child keeps the bullet's own x), so it stays between the circles whatever the date column holds. */
 .nbtl-bullet{flex:none; width:12px; height:12px; border-radius:50%; background:var(--nbtl-fg, var(--fg-tertiary)); align-self:flex-start; margin-top:.45em;}
-.nbtl-bullet::after{content:""; position:absolute; top:calc(.45em + 14px); bottom:-1px; margin-left:5px; width:2px; background:var(--nbtl-line, var(--border));}
+.nbtl-bullet::after{content:""; position:absolute; top:calc(.45em + 14px); bottom:calc(-.45em - 1px); margin-left:5px; width:2px; background:var(--nbtl-line, var(--border));}
 .nbtl-item:last-child .nbtl-bullet::after{display:none;}
 .nbtl.has-dates .nbtl-date{width:96px; min-width:96px; text-align:right;}
 .nbtl[data-color]{--nbtl-line:color-mix(in srgb, var(--nbtl-fg) 45%, transparent);}
@@ -5339,5 +5339,38 @@ input.is-greyed{opacity:.5; background:var(--bg-hover, transparent);}
 .api-visit-time{display:inline-block; min-width:3.2em; color:var(--fg-tertiary); font-variant-numeric:tabular-nums;}
 .api-visit-where{color:var(--fg-tertiary);}
 .uni-month{margin:var(--space-4) 0 var(--space-1); font-size:var(--text-base); font-weight:var(--font-weight-bold); color:var(--fg-secondary);}
-
 .uni-sheet-col{display:flex; flex-direction:column; gap:var(--space-4); max-width:760px; margin-bottom:var(--space-4);}
+/* University: the course sheet is sections of three-column lines (what, value, actions on the far right); the sections flow into one, two or three columns. */
+.uni-course{column-width:34rem; column-gap:var(--space-4); margin-bottom:var(--space-4);}
+.uni-course > .uni-sec{break-inside:avoid; margin-bottom:var(--space-4);}
+.uni-sec{background:var(--bg-card, transparent); border:1px solid var(--border); border-radius:var(--radius-lg, 12px); padding:var(--space-2) var(--space-3);}
+.uni-sec-title{margin:var(--space-2) 0 var(--space-1); font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-secondary); text-transform:uppercase; letter-spacing:.08em;}
+.uni-line{display:grid; grid-template-columns:minmax(4.5rem, 7rem) 1fr auto; gap:var(--space-3); align-items:start; padding:var(--space-2) 0; border-top:1px solid var(--separator); color:inherit; text-decoration:none;}
+.uni-sec > .uni-line:first-child, .uni-sec-title + .uni-line{border-top:0;}
+.uni-line-label{color:var(--fg-secondary);}
+.uni-line-value{min-width:0; overflow-wrap:anywhere;}
+.uni-line-actions{display:inline-flex; gap:var(--space-1); justify-content:flex-end; min-width:2rem;}
+.uni-line-sub, .uni-line-row{display:block;}
+.uni-line-sub{color:var(--fg-secondary); font-size:var(--text-sm);}
+.uni-line-sub.is-warning, .uni-line-row.is-over{color:var(--danger, #c0392b);}
+.uni-line-text{white-space:pre-wrap;}
+.uni-line-add{color:var(--fg-tertiary);}
+.uni-line-add:hover{color:var(--fg-primary);}
+@media (max-width:520px){.uni-line{grid-template-columns:1fr auto;}.uni-line-label{grid-column:1 / -1; font-size:var(--text-sm);}}
+.uni-grade-head{margin-top:var(--space-2);}
+.uni-unscheduled{margin-top:var(--space-4);}
+.uni-unscheduled-list{display:flex; flex-wrap:wrap; gap:var(--space-2); padding:var(--space-2) var(--page-inset) var(--space-3);}
+/* Timeline: the line joins the circles of one month and stops at the last one; the next month starts a new line. */
+.uni-timeline .nbtl-item:has(+ .uni-month) .nbtl-bullet::after{display:none;}
+.uni-month{margin:var(--space-4) 0 var(--space-1); padding:0;}
+.nbtl-actions{display:inline-flex; gap:var(--space-1); flex:none;}
+/* A University class that was missed or excused stays on the calendar, faded, so it is still there to be made up. */
+.time-event.is-skipped, .month-event-item.is-skipped{opacity:.4;}
+.time-event.is-skipped .te-name{text-decoration:line-through;}
+/* Grades and absences windows: one header row, then one row per item with its inputs in columns. */
+.uni-table{display:grid; grid-template-columns:minmax(0,1fr) 9rem 9rem; gap:var(--space-2) var(--space-3); align-items:center;}
+.uni-table > .uni-table-head{color:var(--fg-secondary); font-size:var(--text-sm); text-transform:uppercase; letter-spacing:.04em;}
+.uni-table > .uni-table-sub{padding-left:var(--space-3); color:var(--fg-secondary);}
+.uni-table .field{margin:0;}
+.uni-table input{width:100%;}
+.uni-table-note{color:var(--fg-tertiary); font-size:var(--text-sm);}

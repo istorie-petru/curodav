@@ -50,20 +50,18 @@ def test_the_page_lists_the_semester_and_its_disciplines(conn, sem):
 
 def test_the_forms_and_the_discipline_view_render(conn, sem):
     series = up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "room": "A2", "kind": "lecture", "weeks": "all"})
-    up.save_syllabus(conn, sem["uid"], "Biology", "1. Cells")
     add_exam(conn, sem, title="Final", day="2027-01-20", start="09:00", end="11:00", weight="60")
-    up.save_reading(conn, sem, "Biology", task_uid=None, title="Cell Biology", author="Alberts", due="", status="")
-    for view, expected in (("overview", "Monday"), ("sheet", "Not applied"), ("classes", "Lecture 1"), ("bibliography", "Cell Biology"), ("exams", "Final")):
-        page = _html(discipline_page("University", "Biology", _request("/groups/University/disciplines/Biology"), view=view, conn=conn))
-        assert expected in page, view
+    up.save_reading(conn, sem, "Biology", task_uid=None, title="Cell Biology", author="Alberts")
+    page = _html(discipline_page("University", "Biology", _request("/groups/University/disciplines/Biology"), conn=conn))
+    for expected in ("Monday", "Final", "Cell Biology", "Timetable", "Attendance", "Other notes"):
+        assert expected in page, expected
     reading = up.list_readings(conn, sem["uid"])[0]
     for html in (_html(university.semester_form(_request(), conn=conn)), _html(university.discipline_new(_request(), conn=conn)), _html(university.homework_new(_request(), 'Biology', conn=conn)),
-                 _html(university.class_content_form(up.series_members(conn, series)[0]['uid'], _request(), conn=conn)),
+                 _html(university.attendance_limits_form("Biology", _request(), conn=conn)), _html(university.grades_form(_request(), "Biology", conn=conn)),
                  _html(university.discipline_edit("Biology", _request(), conn=conn)),
                  _html(university.slot_new(_request(), "Biology", conn=conn)), _html(university.slot_edit(series, _request(), conn=conn)),
-                 _html(university.syllabus_form("Biology", _request(), kind="lecture", conn=conn)), _html(university.way_new(_request(), "Biology", conn=conn)), _html(university.reading_new(_request(), "Biology", conn=conn)),
-                 _html(university.reading_edit(reading["task_uid"], _request(), conn=conn)), _html(university.sheet_form('Biology', _request(), conn=conn)),
-                 _html(university.syllabus_form('Biology', _request(), kind='competence', conn=conn))):
+                 _html(university.way_new(_request(), "Biology", conn=conn)), _html(university.reading_new(_request(), "Biology", conn=conn)),
+                 _html(university.reading_edit(reading["task_uid"], _request(), conn=conn)), _html(university.sheet_form('Biology', _request(), conn=conn))):
         assert 'id="modal-target"' in html
 
 
@@ -88,7 +86,7 @@ def test_export_and_import_round_trip_through_the_versioned_file(conn, sem):
     up.save_slot(conn, sem, "Biology", {"weekday": 2, "start": "08:00", "end": "10:00", "room": "B1", "kind": "seminar", "weeks": "even"})
     up.save_syllabus(conn, sem["uid"], "Biology", "1. Cells **\n2. Membranes")
     add_exam(conn, sem, title="Final", day="2027-01-20", start="09:00", end="11:00", weight="60")
-    up.save_reading(conn, sem, "Biology", task_uid=None, title="Cell Biology", author="Alberts", due="", status="")
+    up.save_reading(conn, sem, "Biology", task_uid=None, title="Cell Biology", author="Alberts")
     name, text = up.export_file(conn, sem, "discipline:Biology")
     assert name == "biology.curodav-university.json"
     kind, data = study_format.load(text)
@@ -159,25 +157,14 @@ def test_the_shelf_page_goes_to_the_space_and_the_space_shows_the_study_page(con
     resp = label_pages.label_page("Autumn 2026", _request("/labels/Autumn 2026"), conn=conn)
     assert resp.status_code == 303 and resp.headers["location"] == "/groups/University"
     html = _html(label_pages.group_page("University", _request("/groups/University"), conn=conn))
-    assert "wcard" in html and "view=exams" in html and "view=attendance" not in html and "view=work" not in html and "view=agenda" not in html and "view=board" not in html
+    assert "wcard" in html and "view=exams" in html and "view=disciplines" not in html and "view=attendance" not in html and "view=work" not in html and "view=agenda" not in html and "view=board" not in html
 
 
 def test_a_missing_discipline_or_group_is_not_found(conn, sem):
     for group, name in (("University", "Nope"), ("Nope", "Biology")):
         with pytest.raises(HTTPException) as exc:
-            discipline_page(group, name, _request(), view="overview", conn=conn)
+            discipline_page(group, name, _request(), conn=conn)
         assert exc.value.status_code == 404
-
-
-def test_homework_and_class_contents_save_through_the_pages(conn, sem):
-    series = up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "kind": "lecture", "weeks": "all"})
-    university.homework_save("Biology", "", "Lab report", "2026-11-05", "active", conn=conn)
-    assert up.list_homework(conn, sem["uid"], "Biology")[0]["title"] == "Lab report"
-    uid = up.series_members(conn, series)[0]["uid"]
-    university.class_content_save(uid, topic_uid="", competences=[], text="Guest talk", day="", start="", end="", room="", conn=conn)
-    assert db.get_event(conn, uid)["description"] == "Guest talk"
-    assert "Guest talk" in _html(discipline_page("University", "Biology", _request(), view="classes", conn=conn))
-
 
 
 def test_a_slot_saves_straight_away_and_says_so_only_when_text_was_lost(conn, sem):
@@ -210,45 +197,6 @@ def test_a_new_semester_gets_its_own_shelf_in_the_university_space_and_the_menu_
     assert "Spring 2027" in _html(university.semester_form(_request(), new="1", conn=conn)) or True
 
 
-def test_topics_are_placed_in_order_with_a_toast_and_competences_ride_along(conn, sem):
-    series = up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "kind": "lecture", "weeks": "all"})
-    up.save_syllabus(conn, sem["uid"], "Biology", "1. Cells\n2. Membranes")
-    up.save_syllabus(conn, sem["uid"], "Biology", "1. Analyse\n2. Report", "competence")
-    resp = university.syllabus_assign("Biology", conn=conn)
-    assert "2%20topics%20placed" in resp.headers["location"]
-    first = up.series_members(conn, series)[0]
-    comp = [c["uid"] for c in up.list_topics(conn, sem["uid"], "Biology", "competence")]
-    university.class_content_save(first["uid"], up.list_topics(conn, sem["uid"], "Biology", "lecture")[0]["uid"], comp, "Bring slides", day="", start="", end="", room="", conn=conn)
-    text = db.get_event(conn, first["uid"])["description"]
-    assert text == "Bring slides" and up.composed_text(conn, first["uid"]) == "1. Cells\nCompetences: 1. Analyse; 2. Report"
-    assert up.class_free_text(conn, first["uid"], text) == "Bring slides"
-    row = up.list_classes(conn, sem["uid"], "Biology")[0]
-    assert row["competence_uids"] == comp and row["free_text"] == "Bring slides"
-    assert len(up.list_topics(conn, sem["uid"], "Biology")) == 2 and len(up.list_topics(conn, sem["uid"], "Biology", "competence")) == 2
-
-
-def test_the_course_sheet_has_sections_with_fixed_and_own_fields_and_two_kinds_of_teachers(conn, sem):
-    up.save_sheet(conn, sem["uid"], "Biology", {"abbreviation": "BIO", "code": "BIO101", "credits": "5", "hours_lecture": "2", "evaluation": "Exam"},
-                  [("teaching", "Lab coat", "Required"), ("identification", "Faculty", "Sciences"), ("teaching", "", "dropped")])
-    up.set_teachers(conn, sem["uid"], "Biology", ["Dr Lecturer"], ["Dr Seminar", "Dr Lab"])
-    sheet = up.get_sheet(conn, sem["uid"], "Biology")
-    assert [s["key"] for s in sheet["sections"]] == ["identification", "teaching", "content"]
-    assert sheet["values"]["abbreviation"] == "BIO" and sheet["values"]["credits"] == "5"
-    def brief(key):
-        return [(c["label"], c["value"]) for s in sheet["sections"] if s["key"] == key for c in s["custom"]]
-    assert brief("teaching") == [("Lab coat", "Required")] and brief("identification") == [("Faculty", "Sciences")]
-    assert [t["name"] for t in sheet["lecture_teachers"]] == ["Dr Lecturer"] and [t["name"] for t in sheet["seminar_teachers"]] == ["Dr Seminar", "Dr Lab"]
-    assert {t["name"] for t in up.teachers(conn, "Biology")} == {"Dr Lecturer", "Dr Seminar", "Dr Lab"}
-    assert up.abbreviations(conn, sem["uid"]) == {"Biology": "BIO"} and up.credits_planned(conn, sem["uid"]) == 5.0
-    page = _html(discipline_page("University", "Biology", _request(), view="sheet", conn=conn))
-    assert "Identification" in page and "BIO101" in page and "Teaching" in page and "Examination" in page and "Faculty" in page
-    up.save_sheet(conn, sem["uid"], "Biology", {"code": "BIO102"}, [])
-    assert all(not s["custom"] for s in up.get_sheet(conn, sem["uid"], "Biology")["sections"])
-    up.save_sheet(conn, sem["uid"], "Biology", {"code": "BIO103"})  # None keeps the fields of the user's own
-    with pytest.raises(up.PlanError, match="must be a number"):
-        up.save_sheet(conn, sem["uid"], "Biology", {"credits": "five"})
-
-
 def test_topic_rows_keep_a_renamed_topic_and_its_classes_and_continue_the_numbering(conn, sem):
     series = up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "kind": "lecture", "weeks": "all"})
     up.save_topic_rows(conn, sem["uid"], "Biology", [("1", "Cells", "2"), ("", "Membranes", ""), ("", "  ", "1")])
@@ -275,10 +223,10 @@ def test_a_reading_points_at_a_library_book_with_a_page_and_a_category(conn, sem
     book = db.upsert_citation(conn, {"uid": "b1", "type": "book", "title": "Cell Biology", "authors": [{"family": "Alberts", "given": "Bruce"}], "year": "2015"}) if False else None
     from src.routers.notebook import db as _db  # noqa: F401
     uid = db.upsert_citation(conn, {"type": "book", "title": "Cell Biology", "authors": [{"family": "Alberts", "given": "Bruce"}], "year": "2015"})
-    t = up.save_reading(conn, sem, "Biology", task_uid=None, citation_id=uid, locator="ch. 3", category="obligatory", notes="Read twice", due="", status="")
+    t = up.save_reading(conn, sem, "Biology", task_uid=None, citation_id=uid, locator="ch. 3", category="obligatory", notes="Read twice")
     r = up.list_readings(conn, sem["uid"], "Biology")[0]
     assert (r["title"], r["author"], r["locator"], r["category"], r["notes"]) == ("Cell Biology", "Alberts, B.", "ch. 3", "obligatory", "Read twice")
-    assert db.get_task(conn, t)["title"] == "Cell Biology, ch. 3" and "Obligatory" in _html(discipline_page("University", "Biology", _request(), view="bibliography", conn=conn))
+    assert db.get_task(conn, t) is None and "Obligatory" in _html(discipline_page("University", "Biology", _request(), conn=conn))
     with pytest.raises(up.PlanError, match="not in the library"):
         up.save_reading(conn, sem, "Biology", task_uid=None, citation_id="nope")
     assert "Cell Biology" in _html(university.reading_new(_request(), "Biology", conn=conn))
@@ -325,17 +273,6 @@ def test_the_ids_of_ways_survive_an_edit_and_their_milestones_stay(conn, sem):
     assert ue.list_milestones(conn, sem["uid"])[0]["weight"] == 60.0
 
 
-def test_the_examination_page_lists_every_way_with_its_milestones_and_dates(conn, sem):
-    ue.save_evaluation(conn, sem["uid"], "Biology", _components() + [{"id": "", "name": "Homework", "weight": "", "subs": [], "milestones": [{"title": "Hand in", "due": "2027-01-05"}]}])
-    add_exam(conn, sem, title="Final", day="2027-01-20", weight="10")
-    page = _html(discipline_page("University", "Biology", _request(), view="exams", conn=conn))
-    for w in ("Theory", "Project", "Hand in", "Final"):
-        assert w in page, w
-    assert "/evaluation/" not in page.split("<main")[1].split("</main>")[0]
-    sheet = _html(discipline_page("University", "Biology", _request(), view="sheet", conn=conn))
-    assert "Exam" in sheet and "evaluation/new?discipline=Biology" in sheet and "/evaluation/" in sheet and 'aria-label="Edit Project"' in sheet
-
-
 def test_the_way_window_saves_a_way_with_components_events_and_tasks_apart_and_toasts_a_warning(conn, sem):
     import asyncio
 
@@ -377,55 +314,6 @@ def test_editing_a_way_keeps_its_place_and_the_other_ways_and_deleting_one_remov
     assert [w["name"] for w in ue.get_evaluation(conn, sem["uid"], "Biology")] == ["Written exam"] and db.get_task(conn, second["milestones"][0]["task_uid"]) is None and notes
 
 
-def test_the_course_sheet_is_where_the_timetable_the_teaching_and_the_examination_are_kept(conn, sem):
-    empty = _html(discipline_page("University", "Biology", _request(), view="sheet", conn=conn))
-    assert "Add a lecture" in empty and "No way of evaluating yet" in empty and "No summary yet" in empty
-    up.save_sheet(conn, sem["uid"], "Biology", {"code": "BIO1"})
-    up.save_topic_rows(conn, sem["uid"], "Biology", [("1", "Cells", "1")])
-    page = _html(discipline_page("University", "Biology", _request(), view="sheet", conn=conn))
-    assert "BIO1" in page and "Cells" in page
-    assert "header-add-menu" in page and "kind=seminar" in page and "section=content" in page
-    assert "Planned contents: seminars" not in page
-
-
-def test_each_section_of_the_sheet_has_its_own_window_and_teachers_come_from_the_timetable(conn, sem):
-    for section, expected in (("identification", 'name="f_abbreviation"'), ("teaching", 'name="f_absences_lecture"'), ("content", 'name="f_summary"')):
-        html = _html(university.sheet_form("Biology", _request(), section=section, conn=conn))
-        assert expected in html and 'name="lecture_teachers"' not in html and 'name="f_objectives"' not in html
-    assert 'name="lecture_teachers"' not in _html(university.discipline_new(_request(), conn=conn))
-    import asyncio
-
-    class FakeForm(dict):
-        def getlist(self, key):
-            value = self.get(key, [])
-            return value if isinstance(value, list) else [value]
-
-    class FakeRequest:
-        async def form(self):
-            return FakeForm({"section": "teaching", "f_absences_lecture": "2"})
-
-    resp = asyncio.run(university.sheet_save("Biology", FakeRequest(), conn=conn))
-    assert resp.status_code == 303
-    sheet = up.get_sheet(conn, sem["uid"], "Biology")
-    assert sheet["values"]["absences_lecture"] == "2"
-
-
-def test_importance_is_a_drop_down_of_star_pills(conn, sem):
-    html = _html(university.syllabus_form("Biology", _request(), kind="lecture", conn=conn))
-    assert 'data-rows-pick="3"' in html and "pill-red" in html and 'name="importance"' in html and 'type="number"' not in html.split('name="importance"')[1][:80]
-
-
-
-
-
-
-def test_the_classes_page_marks_the_next_class_and_folds_the_covered_text_into_one_column(conn, sem, frozen_today):
-    frozen_today(date(2026, 10, 7))
-    up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "kind": "lecture", "weeks": "all"})
-    page = _html(discipline_page("University", "Biology", _request(), view="classes", conn=conn))
-    assert page.count(">next<") == 1 and "<th>Covered</th>" in page and "Competences</th>" not in page
-
-
 def test_a_new_discipline_window_follows_the_redirect_to_the_discipline_page_and_an_edit_does_not(conn, sem):
     assert "data-follow-redirect" in _html(university.discipline_new(_request(), conn=conn))
     assert "data-follow-redirect" not in _html(university.discipline_edit("Biology", _request(), conn=conn))
@@ -459,7 +347,7 @@ def test_the_university_pages_no_longer_carry_import_or_export_buttons(conn, sem
     def main_of(html):
         return html.split("<main")[1].split("</main>")[0].lower()
 
-    for page in (_html(university.university_settings(_request(), conn=conn)), _html(discipline_page("University", "Biology", _request(), view="overview", conn=conn))):
+    for page in (_html(university.university_settings(_request(), conn=conn)), _html(discipline_page("University", "Biology", _request(), conn=conn))):
         assert "import" not in main_of(page) and "export" not in main_of(page)
 
 
@@ -472,9 +360,9 @@ def test_the_discipline_window_has_no_evaluation_menu_and_a_full_width_look_with
 
 
 def test_a_banner_given_to_a_discipline_shows_on_its_page(conn, sem):
-    assert "detail-banner" not in _html(discipline_page("University", "Biology", _request(), view="overview", conn=conn))
+    assert "detail-banner" not in _html(discipline_page("University", "Biology", _request(), conn=conn))
     db.set_page_banner(conn, university.banner_scope("Biology"), {"kind": "remote", "image_url": "https://example.com/bio.jpg", "alt": "Biology banner"})
-    page = _html(discipline_page("University", "Biology", _request(), view="overview", conn=conn))
+    page = _html(discipline_page("University", "Biology", _request(), conn=conn))
     assert "https://example.com/bio.jpg" in page or "/banners/image?scope=discipline" in page
     assert "Change banner" in _html(university.discipline_edit("Biology", _request(), conn=conn))
 
@@ -516,13 +404,12 @@ def test_the_overview_shows_the_week_the_exams_coming_and_what_is_due(conn, sem,
     for title, due in (("Lab 3", "2026-11-09"), ("Lab 1", "2026-10-27")):
         up.save_homework(conn, sem, "Biology", task_uid=None, title=title, due=due, status="")
     up.save_homework(conn, sem, "Biology", task_uid=None, title="Done one", due="2026-10-26", status="done")
-    up.save_reading(conn, sem, "Biology", task_uid=None, title="Chapter B", due="2026-10-30")
     from src import study_page
 
     data = study_page.overview(conn, sem, "University", date(2026, 10, 26), datetime(2026, 10, 26, 8, 0))
     assert data["summary"]["week"] == 4 and data["summary"]["parity"] == "even" and data["summary"]["left"] == "16 weeks left"
     assert [m["title"] for m in data["exams_soon"]] == ["Final", "Later"] and data["exams_this_fortnight"] == 1
-    assert [w["title"] for w in data["due"]] == ["Lab 1", "Chapter B", "Lab 3"]
+    assert [w["title"] for w in data["due"]] == ["Lab 1", "Lab 3"]
     html = _study(conn)
     assert "Next examination" in html and "Final" in html and "Lab 1" in html and "Done one" not in html and "Week 4 of" not in html and "Absences" not in html
 
@@ -544,60 +431,6 @@ def test_the_dates_are_as_short_as_they_can_be():
         "overdue", "today", "tomorrow", "in 14 days", "10 Nov", "1 Feb 2027", "No date"]
 
 
-def test_the_disciplines_view_is_a_tall_coloured_card_per_discipline_with_its_next_exam_and_task(conn, sem, frozen_today):
-    frozen_today(date(2026, 10, 7))
-    page = _study(conn, b"view=disciplines")
-    assert "is-hue" in page and "/groups/University/disciplines/Biology" in page and "Exam<" not in page
-    ue.save_evaluation(conn, sem["uid"], "Biology", [{"id": "", "name": "Exam", "weight": "100", "subs": [], "milestones": [{"title": "Final", "day": "2026-10-09", "start": "09:00"}]}])
-    up.save_homework(conn, sem, "Biology", task_uid=None, title="Lab 1", due="2026-10-08", status="")
-    page = _study(conn, b"view=disciplines")
-    assert "Final, in 2 days" in page and "Lab 1, tomorrow" in page
-
-
-def test_the_space_page_has_its_three_views_and_no_header_menu(conn, sem):
-    from src.routers import label_pages
-
-    page = _study(conn)
-    for view in ("view=disciplines", "view=exams"):
-        assert view in page
-    assert "view=attendance" not in page and "view=work" not in page
-    assert 'aria-label="University settings"' not in page and "view=agenda" not in page and 'aria-label="Semester"' not in page
-    for view in (b"view=agenda", b"view=board"):
-        assert "wcard" in _html(label_pages.group_page("University", _request("/groups/University", view), conn=conn))
-
-
-def test_the_discipline_overview_has_no_setup_card(conn, sem):
-    assert "uni-setup" not in _html(discipline_page("University", "Biology", _request(), view="overview", conn=conn))
-
-
-def test_the_discipline_overview_has_the_next_class_the_timetable_and_the_classes_table(conn, sem, frozen_today):
-    frozen_today(date(2026, 10, 6))
-    up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "room": "A2", "kind": "lecture", "weeks": "all"})
-    up.save_topic_rows(conn, sem["uid"], "Biology", [("1", "Cells", "0"), ("2", "Membranes", "0"), ("3", "Transport", "0")])
-    up.apply_assign_in_order(conn, sem["uid"], "Biology")
-    page = _html(discipline_page("University", "Biology", _request(), view="overview", conn=conn))
-    main = page.split("<main")[1].split("</main>")[0]
-    assert "wcard-flip" in main and "2. Membranes" in main and "Timetable" in main and "Monday 10:00 to 12:00" in main
-    assert "Next classes" not in main and "Pending" not in main and "Reschedule" not in main and "Absences" not in main
-    assert "Make a note" in main and 'name="status" value="missed"' in main and "Edit what it covers" in main and "Add an attendance note" not in main
-    assert "view=classes" not in page
-
-
-def test_pending_exams_homework_and_undated_evaluations_are_listed_by_date(conn, sem, frozen_today):
-    from src import university_discipline as ud
-
-    frozen_today(date(2026, 10, 26))
-    ue.save_evaluation(conn, sem["uid"], "Biology", [
-        {"id": "", "name": "Exam", "weight": "60", "subs": [], "milestones": [{"title": "Exam", "day": "2026-11-03", "start": "09:00"}]},
-        {"id": "", "name": "Project", "weight": "40", "subs": [], "milestones": [{"title": "Project", "day": ""}]}])
-    up.save_homework(conn, sem, "Biology", task_uid=None, title="Lab 1", due="2026-10-27", status="")
-    up.save_homework(conn, sem, "Biology", task_uid=None, title="Old", due="2026-10-01", status="done")
-    found = next(d for d in up.disciplines(conn, sem) if d["name"] == "Biology")
-    ctx = ud.build(conn, sem, found, "overview", date(2026, 10, 26))
-    assert [p["title"] for p in ctx["pending"]] == ["Lab 1", "Exam", "Project"] and ctx["soon_exam"]["title"] == "Exam"
-    assert "Exam" in _html(discipline_page("University", "Biology", _request(), view="overview", conn=conn))
-
-
 def test_a_cancelled_class_no_longer_counts_as_a_place_for_its_topic(conn, sem):
     series = up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "kind": "lecture", "weeks": "all"})
     up.save_topic_rows(conn, sem["uid"], "Biology", [("1", "Cells", "0")])
@@ -610,14 +443,12 @@ def test_a_cancelled_class_no_longer_counts_as_a_place_for_its_topic(conn, sem):
 def test_other_items_are_the_tasks_and_events_made_by_hand_and_an_event_can_be_deleted_from_the_page(conn, sem):
     up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "kind": "lecture", "weeks": "all"})
     add_exam(conn, sem, title="Final")
-    up.save_reading(conn, sem, "Biology", task_uid=None, title="Cell Biology", author="", due="", status="")
+    up.save_reading(conn, sem, "Biology", task_uid=None, title="Cell Biology", author="")
     up.save_homework(conn, sem, "Biology", task_uid=None, title="Lab report", due="2026-11-05", status="")
     db.upsert_event(conn, {"uid": "trip", "title": "Field trip", "description": "", "all_day": 0, "status": "active", "start_at": "2026-11-10T08:00", "end_at": "2026-11-10T18:00",
                            "tags": ["Biology"]})
     up._tag_item(conn, "event", "trip", "Biology")
     assert [(i["kind"], i["title"]) for i in up.list_other_items(conn, sem["uid"], "Biology")] == [("task", "Lab report"), ("event", "Field trip")]
-    page = _html(discipline_page("University", "Biology", _request(), view="exams", conn=conn))
-    assert "Other tasks and events" in page and "Field trip" in page and "/event/trip/delete" in page and "wcard" in page
     university.other_event_delete("trip", discipline="Biology", conn=conn)
     assert db.get_event(conn, "trip") is None
     university.other_event_delete(ue.list_milestones(conn, sem["uid"])[0]["event_uid"], discipline="Biology", conn=conn)
@@ -638,7 +469,7 @@ def test_the_sidebar_lists_the_disciplines_under_the_university_space_and_highli
     request.scope["app"] = App
     group = next(g for g in deps._sidebar_groups(request) if g["name"] == "University")
     assert [(c["name"], c["path"]) for c in group["children"]] == [("Biology", "/groups/University/disciplines/Biology")]
-    html = _html(discipline_page("University", "Biology", request, view="overview", conn=conn))
+    html = _html(discipline_page("University", "Biology", request, conn=conn))
     assert 'href="/groups/University/disciplines/Biology" class="tab-btn tab-btn-child active"' in html and "has-active-child" in html
 
 
@@ -665,27 +496,6 @@ def test_a_way_can_be_an_elimination_round_with_notes(conn, sem):
     assert ue.evaluation_warnings([quiz, final]) == []
     ue.save_way(conn, sem["uid"], "Biology", {"id": final["id"], "name": "Final", "form": "Exam", "weight": "100", "subs": [], "milestones": []})
     assert next(w for w in ue.get_evaluation(conn, sem["uid"], "Biology") if w["name"] == "Quiz")["stored_weight"] == 30
-
-
-def test_one_class_can_be_moved_and_deleted_from_the_contents_page(conn, sem):
-    series = up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "kind": "lecture", "weeks": "all", "room": "A"})
-    first, second, third = up.series_members(conn, series)[:3]
-    university.class_content_save(second["uid"], topic_uid="", competences=[], text="Moved", day="2026-10-14", start="14:00", end="15:30", room="B2", conn=conn)
-    moved = db.get_event(conn, second["uid"])
-    assert moved["start_at"] == "2026-10-14T14:00" and moved["end_at"] == "2026-10-14T15:30" and moved["location"] == "B2" and moved["description"] == "Moved"
-    assert up.list_slots(conn, sem["uid"], "Biology")[0]["start"] == "10:00"
-    count = len(up.list_classes(conn, sem["uid"], "Biology"))
-    university.class_delete(third["uid"], conn=conn)
-    assert db.get_event(conn, third["uid"]) is None and len(up.list_classes(conn, sem["uid"], "Biology")) == count - 1
-    assert [m["uid"] for m in up.series_members(conn, series)] == [first["uid"], second["uid"]]  # the rule of the earlier classes ends before the deleted one
-    assert event_series.get_series(conn, series)["rule"].endswith("UNTIL=2026-10-18")
-    visible = up.list_slots(conn, sem["uid"], "Biology")
-    assert len(visible) == 1 and visible[0]["first"] == "2026-10-26" and visible[0]["series_uid"] != series
-    assert [c["date"] for c in up.list_classes(conn, sem["uid"], "Biology")][:3] == ["2026-10-05", "2026-10-14", "2026-10-26"]
-    with pytest.raises(up.PlanError):
-        up.save_class_schedule(conn, first["uid"], "2026-10-05", "12:00", "10:00", "")
-    with pytest.raises(up.PlanError):
-        up.delete_class(conn, "no-such-class")
 
 
 def test_editing_a_timetable_slot_keeps_every_class_in_the_contents(conn, sem):
@@ -717,13 +527,9 @@ def test_the_window_of_a_class_holds_its_attendance_menu_and_what_it_covers_and_
     from src.routers import calendar as cal, tasks as tasks_router
 
     series = up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "kind": "lecture", "weeks": "all"})
-    up.save_syllabus(conn, sem["uid"], "Biology", "1. Cells\n2. Membranes")
-    first, second = up.series_members(conn, series)[:2]
-    up.assign_topic(conn, up.list_topics(conn, sem["uid"], "Biology")[0]["uid"], first["uid"])
-    up.assign_topic(conn, up.list_topics(conn, sem["uid"], "Biology")[1]["uid"], second["uid"])
+    first = up.series_members(conn, series)[0]
     body = cal.event_detail(first["uid"], _request(f"/events/{first['uid']}"), conn=conn).body.decode()
-    assert "Attendance or delete" in body and 'name="status" value="missed"' in body and "/delete" in body
-    assert "1. Cells" in body and "2. Membranes" in body and "Description" not in body
+    assert 'name="status" value="missed"' in body and "/makeup" in body and "/delete" not in body and 'value="cancelled"' not in body
     task_uid = add_exam(conn, sem, title="Final", day="2027-01-20", start="09:00", end="11:00", weight="60")
     exam = ue.list_milestones(conn, sem["uid"])[0]
     assert "Final" in cal.event_detail(exam["event_uid"], _request("/events/x"), conn=conn).body.decode() and "60% of the grade" in cal.event_detail(exam["event_uid"], _request("/events/x"), conn=conn).body.decode()
@@ -734,7 +540,4 @@ def test_a_discipline_page_renders_when_the_timetable_slots_have_teachers(conn, 
     db.upsert_contact(conn, {"uid": "t1", "full_name": "Dr Timetable", "created_at": "2026-10-01", "updated_at": "2026-10-01"})
     up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "room": "A2", "kind": "lecture", "weeks": "all", "teachers": ["t1"]})
     up.sync_teachers(conn, sem["uid"], "Biology")
-    for view in ("overview", "sheet", "bibliography", "exams"):
-        page = _html(discipline_page("University", "Biology", _request(), view=view, conn=conn))
-        assert "Biology" in page, view
-    assert "Dr Timetable" in _html(discipline_page("University", "Biology", _request(), view="sheet", conn=conn))
+    assert "Dr Timetable" in _html(discipline_page("University", "Biology", _request(), conn=conn))

@@ -57,3 +57,9 @@ def for_task(conn: sqlite3.Connection, task: dict[str, Any]) -> dict[str, Any] |
     """A step of a way of evaluating, or None."""
     row = _milestone_of(conn, "task_uid", task["uid"])
     return _exam(conn, row) if row else None
+
+
+def can_attach(conn: sqlite3.Connection) -> bool:
+    """Whether the current semester has a way of evaluating an event or task could be attached to (for a plain event or task whose window offers it)."""
+    semester = up.current_semester(conn)
+    return bool(semester and conn.execute("SELECT 1 FROM university_sheet WHERE semester_uid = ? AND key LIKE 'eval:%' LIMIT 1", (semester["uid"],)).fetchone())

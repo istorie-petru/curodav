@@ -28,12 +28,14 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 
 from .. import tags as tag_store
-from .. import app_defaults, citation_formats, clock, db, icon_font, media, media_books, note_versions, notebook_fields, notebook_find, notebook_mentions
+from .. import app_defaults, citation_formats, clock, db, icon_font, library_query, media, media_books, note_versions, notebook_fields, notebook_find, notebook_mentions
 from ..deps import get_db, respond, templates, validation_response, wants_json
+from ..log import get_logger
 from . import media as media_router
 from .labels import COLORS, icon_groups_for
 
 router = APIRouter(prefix="/notebook", tags=["notebook"])
+logger = get_logger(__name__)
 
 BROWSE_PAGE_SIZE = 30
 
@@ -880,16 +882,15 @@ def update_document_glossary(
 # own API is JS-object in/out, and there's no HTML fragment that can
 # represent live rich-block-editor state, so this pair talks raw JSON
 # instead of this app's normal server-rendered-fragment convention.
-# The ETag is the note's revision; a save that names an older one in If-Match is refused, so an editor left open
-# never overwrites a change made elsewhere (features/api-and-mcp.md).
+# The editor's save always wins and never asks for a revision, so typing is never refused or interrupted. What it
+# replaces is kept in the note's history first (note_versions), including a change made through the API or MCP.
 @router.get("/{uid}/content")
 def get_document_content(uid: str, conn=Depends(get_db)):
     db.migrate_document_images(conn, uid)
     content = db.get_notebook_document_content(conn, uid)
     if content is None:
         return JSONResponse({"error": "document not found"}, status_code=404)
-    doc = db.get_notebook_document(conn, uid)
-    return JSONResponse(content, headers={"ETag": f'"{doc.get("updated_at") or ""}"'})
+    return JSONResponse(content)
 
 
 @router.put("/{uid}/content")
@@ -897,15 +898,27 @@ async def put_document_content(uid: str, request: Request, conn=Depends(get_db))
     content = await request.json()
     doc = db.get_notebook_document(conn, uid)
     if doc is None:
+        logger.warning("Note save refused, note %s not found", uid)
         return JSONResponse({"error": "document not found"}, status_code=404)
-    asked = request.headers.get("if-match", "").strip().strip('"')
-    if asked and asked != (doc.get("updated_at") or ""):
-        return JSONResponse({"error": "conflict", "message": "The note changed since it was opened."}, status_code=409)
     note_versions.save_before_web_save(conn, uid)
     if not db.set_notebook_document_content(conn, uid, content):
+        logger.warning("Note save failed, note %s vanished during the save", uid)
         return JSONResponse({"error": "document not found"}, status_code=404)
-    revision = (db.get_notebook_document(conn, uid) or {}).get("updated_at") or ""
-    return JSONResponse({"ok": True, "revision": revision}, headers={"ETag": f'"{revision}"'})
+    saved = db.get_notebook_document(conn, uid) or {}
+    logger.info("Note %s saved (%d blocks)", uid, len(content.get("blocks") or []))
+    return JSONResponse({"ok": True, "revision": saved.get("updated_at") or ""})
+
+
+@router.post("/{uid}/content/report")
+async def report_editor_problem(uid: str, request: Request):
+    """The editor tells the server when a load or save fails in the browser, so the log shows what the user saw."""
+    try:
+        data = await request.json()
+    except ValueError:
+        data = {}
+    what = re.sub(r"[^\w .,:;()/-]", "", str(data.get("what", "")))[:120] if isinstance(data, dict) else ""
+    logger.warning("Editor problem in note %s: %s", uid, what or "unspecified")
+    return JSONResponse({"ok": True})
 
 
 field_settings_router = APIRouter(prefix="/settings/notebook", tags=["notebook-field-settings"])
@@ -1231,6 +1244,7 @@ def _citation_edit_context(request: Request, c: dict | None, form_action: str, r
         "citation_types": db.CITATION_TYPES,
         "statuses": db.CITATION_STATUSES,
         "return_to": _safe_return_to(return_to),
+        "cover_src": db.cover_url(stored) if stored else "",
         **(media_router.form_context(conn, stored or c) if conn else {}),
     }
 
@@ -1281,7 +1295,6 @@ def citations_library(
 ):
     source = source if isinstance(source, list) else []
     media_books.pull(conn)
-    view = media_router.view_of(view, bool(type or author or year_from or year_to or source or status or tag or shelf or q or sort != "title" or sort2 != "title"))
     sort = sort if sort in _CITATION_SORT_KEYS else "title"
     sort2 = sort2 if sort2 in _CITATION_SORT_KEYS else "title"
     type_labels = dict(db.CITATION_TYPES)
@@ -1289,10 +1302,19 @@ def citations_library(
     status = status if isinstance(status, list) else []
     tag = tag if isinstance(tag, list) else []
     shelf = shelf if isinstance(shelf, list) else []
-    filters = dict(q=q, types=type, authors=author, year_lo=year_lo, year_hi=year_hi, sources=source, tags=tag, shelves=shelf, sort=sort, sort2=sort2)
+    terms = library_query.parse(q, dict(db.type_options(conn, db.CITATION_TYPES)))
+    type = [*type, *terms["types"]]
+    status = [*status, *terms["statuses"]]
+    tag = [*tag, *terms["tags"]]
+    shelf = [*shelf, *terms["shelves"]]
+    source = [*source, *terms["sources"]]
+    year_lo = terms["year_lo"] if terms["year_lo"] is not None else year_lo
+    year_hi = terms["year_hi"] if terms["year_hi"] is not None else year_hi
+    filters = dict(q=terms["text"], types=type, authors=author, year_lo=year_lo, year_hi=year_hi, sources=source, tags=tag, shelves=shelf, sort=sort, sort2=sort2)
+    searching = bool(view == "all" or q.strip() or type or author or year_lo is not None or year_hi is not None or source or status or tag or shelf or sort != "title" or sort2 != "title")
     now = {}
-    if view == "now":
-        now = media_router.now_sections(conn, filters, status, recent_first="sort" not in request.query_params)
+    if not searching:
+        now = media_router.now_sections(conn, filters, status, recent_first=True)
         page = {"items": [], "total": sum(len(v) for v in now.values()), "next": ""}
     else:
         page = db.page_citations(conn, statuses=status, after=after, **filters)
@@ -1311,8 +1333,8 @@ def citations_library(
             "active_tab": "library",
             "crumbs": _CITATIONS_CRUMB,
             "citations": citations,
-            "view": view,
-            "views": media_router.views_of(request, view),
+            "searching": searching,
+            "library_total": sum(db.count_by_type(conn).values()),
             "now": now,
             "recent_days": media_router.RECENT_DAYS,
             **media_router.list_controls(request, conn, type, sort),
@@ -1386,7 +1408,6 @@ def citations_filters_modal(
             "sort_items": [{"uid": k, "name": v} for k, v in CITATION_SORT_OPTIONS],
             "selected_sort": sort,
             "selected_sort2": sort2,
-            "view": media_router.asked_view(request),
             "apply_href": "/library" + (f"?{current_query}" if current_query else ""),
         },
     )
@@ -1556,7 +1577,7 @@ def _write_edition(conn, citation_uid: str, edition_uid: str, edition: dict, sou
     return None
 
 
-def _write_citation(conn, uid: str, values: dict, author_family, author_given, allow_duplicate, x_requested_with, edition_form=None):
+def _write_citation(conn, uid: str, values: dict, author_family, author_given, allow_duplicate, x_requested_with, edition_form=None, found=None):
     row = _citation_row_from_form(uid, values, author_family, author_given)
     edition_form = edition_form or {}
     if not allow_duplicate:
@@ -1581,8 +1602,16 @@ def _write_citation(conn, uid: str, values: dict, author_family, author_given, a
         error = _write_edition(conn, saved, edition_form["uid"], edition_form["details"], edition_form["source"], edition_form["file"], edition_form["delete"])
         if error:
             return validation_response(error, x_requested_with, "/library")
+    if found:
+        media_router.apply_found(conn, saved, found)
     media_books.push(conn, saved)
     return respond(x_requested_with, "/library", uid=saved)
+
+
+def _found_from_form(provider: str, ident: str, cover_url: str, total: str, cover_file, cover_remove: str) -> dict:
+    """The Find details choice and the cover controls of the entry window."""
+    return {"provider": _s(provider).strip(), "id": _s(ident).strip(), "cover_url": _s(cover_url).strip(), "total": _s(total).strip(),
+            "cover_bytes": cover_file.file.read(media_router._CROPPED_COVER_MAX + 1) if _has_upload(cover_file) else b"", "cover_remove": bool(_s(cover_remove))}
 
 
 def _has_upload(file) -> bool:
@@ -1644,6 +1673,8 @@ def create_citation(
     file: UploadFile | None = File(None),
     delete_edition: str = Form(""),
     allow_duplicate: str = Form(""),
+    found_provider: str = Form(""), found_id: str = Form(""), found_cover_url: str = Form(""), found_total: str = Form(""),
+    cover_file: UploadFile | None = File(None), cover_remove: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -1652,7 +1683,8 @@ def create_citation(
         return RedirectResponse(url="/library", status_code=303)
     values = {k: v for k, v in locals().items() if k in (*_CITATION_FORM_KEYS, *_TRACKING_FORM_FIELDS, *_CITATION_TEXT_FIELDS)}
     edition_form = _edition_form(edition_uid, ed_edition, ed_year, ed_publisher, ed_place, ed_isbn, ed_doi, ed_url, ed_source, file, delete_edition)
-    return _write_citation(conn, "", values, author_family, author_given, _s(allow_duplicate), x_requested_with, edition_form)
+    found = _found_from_form(found_provider, found_id, found_cover_url, found_total, cover_file, cover_remove)
+    return _write_citation(conn, "", values, author_family, author_given, _s(allow_duplicate), x_requested_with, edition_form, found)
 
 
 @citations_router.post("/{uid}/update")
@@ -1695,6 +1727,8 @@ def update_citation(
     file: UploadFile | None = File(None),
     delete_edition: str = Form(""),
     allow_duplicate: str = Form(""),
+    found_provider: str = Form(""), found_id: str = Form(""), found_cover_url: str = Form(""), found_total: str = Form(""),
+    cover_file: UploadFile | None = File(None), cover_remove: str = Form(""),
     x_requested_with: str | None = Header(default=None),
     conn=Depends(get_db),
 ):
@@ -1706,7 +1740,8 @@ def update_citation(
     title = title.strip() or existing["title"]
     values = {k: v for k, v in locals().items() if k in (*_CITATION_FORM_KEYS, *_TRACKING_FORM_FIELDS, *_CITATION_TEXT_FIELDS)}
     edition_form = _edition_form(edition_uid, ed_edition, ed_year, ed_publisher, ed_place, ed_isbn, ed_doi, ed_url, ed_source, file, delete_edition)
-    return _write_citation(conn, uid, values, author_family, author_given, _s(allow_duplicate), x_requested_with, edition_form)
+    found = _found_from_form(found_provider, found_id, found_cover_url, found_total, cover_file, cover_remove)
+    return _write_citation(conn, uid, values, author_family, author_given, _s(allow_duplicate), x_requested_with, edition_form, found)
 
 
 @citations_router.get("/editions/{euid}/file")

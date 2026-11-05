@@ -24,7 +24,7 @@ WHAT = {
     "set_note_properties": "Note properties", "library_entry_types": "Library types", "library_save_entry": "Save library entry",
     "library_set_tracking": "Track library entry", "university_save_semester": "Save semester", "university_save_discipline": "Save discipline",
     "university_set_course_sheet": "Course sheet", "university_set_teachers": "Teachers", "university_save_class_slot": "Timetable",
-    "university_save_evaluation": "Evaluation", "university_set_topics": "Topics", "university_save_reading": "Reading",
+    "university_save_evaluation": "Evaluation", "university_save_reading": "Reading",
     "university_save_homework": "Homework",
 }
 

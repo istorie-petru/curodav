@@ -25,6 +25,15 @@ COVER_HOSTS = ("covers.openlibrary.org", "s4.anilist.co", "static.tvmaze.com", "
 COVER_HOST_SUFFIXES = (".mzstatic.com",)
 USER_AGENT = "Curodav library (self-hosted)"
 PROVIDERS = {"openlibrary": "Open Library", "crossref": "Crossref", "anilist": "AniList", "tvmaze": "TVmaze", "tmdb": "TMDB", "itunes": "iTunes"}
+# The sources Settings lists: what each one is used for and whether it asks for a key.
+SOURCES = {
+    "openlibrary": {"used_for": "Books and web pages", "keyed": False},
+    "crossref": {"used_for": "Articles and DOIs", "keyed": False},
+    "anilist": {"used_for": "Anime and manga", "keyed": False},
+    "tvmaze": {"used_for": "TV series", "keyed": False},
+    "tmdb": {"used_for": "Films", "keyed": True},
+    "itunes": {"used_for": "Films without a TMDB key", "keyed": False},
+}
 
 
 class LookupError_(Exception):
@@ -151,7 +160,7 @@ def _tmdb(q: str, key: str) -> list[dict[str, Any]]:
     return [_candidate(provider="tmdb", id=str(m.get("id", "")), type="film", title=m.get("title", ""),
                        subtitle=m.get("original_title") if m.get("original_title") != m.get("title") else "", year=(m.get("release_date") or "")[:4],
                        summary=m.get("overview", ""), url=f"https://www.themoviedb.org/movie/{m.get('id')}",
-                       cover_url=f"https://image.tmdb.org/t/p/w500{m['poster_path']}" if m.get("poster_path") else "")
+                       cover_url=f"https://image.tmdb.org/t/p/w780{m['poster_path']}" if m.get("poster_path") else "")
             for m in data.get("results", [])[:8]]
 
 
@@ -160,7 +169,7 @@ def _itunes(q: str) -> list[dict[str, Any]]:
     return [_candidate(provider="itunes", id=str(m.get("trackId", "")), type="film", title=m.get("trackName", ""),
                        authors=[split_name(m["artistName"])] if m.get("artistName") else [], year=(m.get("releaseDate") or "")[:4],
                        summary=m.get("longDescription", ""), url=m.get("trackViewUrl", ""),
-                       cover_url=(m.get("artworkUrl100") or "").replace("100x100bb", "600x600bb"))
+                       cover_url=(m.get("artworkUrl100") or "").replace("100x100bb", "1200x1200bb"))
             for m in data.get("results", [])[:8]]
 
 
@@ -168,32 +177,37 @@ _ISBN = re.compile(r"^(97[89])?\d{9}[\dXx]$")
 _DOI = re.compile(r"^10\.\d{4,9}/\S+$")
 
 
-def search(kind: str, q: str, tmdb_key: str = "") -> list[dict[str, Any]]:
+def search(kind: str, q: str, tmdb_key: str = "", off: frozenset[str] = frozenset()) -> list[dict[str, Any]]:
     """Candidates for an entry of `kind` matching `q` (a title, an ISBN or a DOI). Raises LookupError_ when the service fails."""
     q = " ".join((q or "").split())[:200]
-    if not q:
+    if not q or kind == "game":
         return []
     bare = q.replace("-", "").replace(" ", "")
     if _DOI.match(q.removeprefix("https://doi.org/")):
-        return _crossref("", q.removeprefix("https://doi.org/"))
+        return [] if "crossref" in off else _crossref("", q.removeprefix("https://doi.org/"))
+    if provider_for(kind, tmdb_key, off) in ("", *off):
+        return []
     if kind in ("manga", "anime"):
         return _anilist(q, kind)
     if kind == "tv":
         return _tvmaze(q)
     if kind == "film":
-        return _tmdb(q, tmdb_key) if tmdb_key else _itunes(q)
+        return _tmdb(q, tmdb_key) if provider_for(kind, tmdb_key, off) == "tmdb" else _itunes(q)
     if kind in ("article-journal", "conference-paper", "report"):
         return _crossref(q)
     return _openlibrary(q, bare if _ISBN.match(bare) else "")
 
 
-def provider_for(kind: str, tmdb_key: str = "") -> str:
+def provider_for(kind: str, tmdb_key: str = "", off: frozenset[str] = frozenset()) -> str:
+    """The source that answers for a kind; "" when the kind has none (games) or its source is switched off."""
+    if kind == "game":
+        return ""
     if kind in ("manga", "anime"):
         return "anilist"
     if kind == "tv":
         return "tvmaze"
     if kind == "film":
-        return "tmdb" if tmdb_key else "itunes"
+        return "tmdb" if tmdb_key and "tmdb" not in off else ("itunes" if "itunes" not in off else "")
     if kind in ("article-journal", "conference-paper", "report"):
         return "crossref"
     return "openlibrary"
@@ -205,7 +219,7 @@ def cover_allowed(url: str) -> bool:
     return parts.scheme == "https" and (host in COVER_HOSTS or host.endswith(COVER_HOST_SUFFIXES))
 
 
-def to_webp(data: bytes, max_width: int = 600, max_height: int = 900) -> bytes | None:
+def to_webp(data: bytes, max_width: int = 900, max_height: int = 1350) -> bytes | None:
     """Any image Pillow reads, shrunk to fit and saved as WebP; None for bytes that are not an image."""
     from PIL import Image, UnidentifiedImageError
 
@@ -216,7 +230,7 @@ def to_webp(data: bytes, max_width: int = 600, max_height: int = 900) -> bytes |
             img = img.convert("RGB") if img.mode not in ("RGB", "RGBA") else img
             img.thumbnail((max_width, max_height))
             out = io.BytesIO()
-            img.save(out, "WEBP", quality=84)
+            img.save(out, "WEBP", quality=90)
             return out.getvalue()
     except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
         return None
@@ -233,7 +247,7 @@ def download_cover(url: str, thumbnail: bool = False) -> bytes | None:
         return None
     if len(data) > MAX_COVER_BYTES:
         return None
-    return to_webp(data, 120, 180) if thumbnail else to_webp(data)
+    return to_webp(data, 240, 360) if thumbnail else to_webp(data)
 
 
 FILLABLE = ("title", "subtitle", "year", "container_title", "volume", "issue", "pages", "summary", "url")

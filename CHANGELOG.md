@@ -6,6 +6,12 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [5.0.9]
+
+- Library: one page that lists entries only when searching, with key:value search; Find details and cover editing live inside the entry window, with sharper covers. Settings: editable sources, help for the book library, a Games kind, and no custom kinds.
+- Note editor: saves can no longer be refused or freeze after a title, tag or property change. Text is kept in the browser as it is typed and sent to the server within 0.6 s, saves run one at a time, and the last typed text is sent when the page changes or closes. What a save replaces is kept in the note's history, saves and load failures are logged, and a note that fails to load is never opened empty.
+- University: the course sheet is one roomier page; attendance shows a percent; grades and absences have their own windows with tables; the bibliography is backed by the library; timeline actions and the month line were reworked. Classes are never deleted, made-up classes can be moved, attendance survives timetable edits, and the items of a way of evaluating are edited and attached on their own. Eliminatory ways count as failed until passed; topics leave the API and MCP.
+
 ## [5.0.8]
 
 - Course sheet: the sections (Identification, Teaching, Content, Examination) are stacked in one column, and each way of evaluating has an edit button of its own.

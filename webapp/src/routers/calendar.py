@@ -210,8 +210,26 @@ def _annotate_calendar_colors(conn, events: list[dict]) -> list[dict]:
         list (matches _apply_event_label_filter's sibling functions' style
         of returning a list rather than annotating in place silently).
     """
-    return db.annotate_item_colors(conn, events, key="calendar_color")
+    events = db.annotate_item_colors(conn, events, key="calendar_color")
+    _annotate_skipped_classes(conn, events)
     return events
+
+
+def _annotate_skipped_classes(conn, events: list[dict]) -> None:
+    """Marks the University classes that were missed, excused or cancelled (`skipped`), which every calendar view draws faded."""
+    from .. import modules
+
+    if not events or not modules.is_enabled("university"):
+        return
+    try:
+        from .. import university_attendance
+
+        marks = university_attendance.statuses_of(conn, [e["uid"] for e in events if e.get("series_uid")])
+    except Exception:
+        return
+    for e in events:
+        if (marks.get(e["uid"]) or {}).get("status") in ("missed", "excused", "cancelled"):
+            e["skipped"] = True
 
 
 def _apply_task_label_filter(tasks: list[dict], label: str | None, conn=None) -> list[dict]:
@@ -1275,8 +1293,19 @@ def event_detail(uid: str, request: Request, occurrence_date: str | None = None,
             "banner": db.banner_for_object(conn, "event", event) if event else None,
             "linked_tasks": db.links_for_event(conn, uid) if event else [],
             "university": _university_context(conn, event),
+            "university_attach": _university_attachable(conn, event),
         },
     )
+
+
+def _university_attachable(conn, event) -> bool:
+    """A plain event the University module could attach to a way of evaluating (not a class, not already part of one)."""
+    from .. import modules, university_context
+
+    if not event or not modules.is_enabled("university") or _university_context(conn, event):
+        return False
+
+    return university_context.can_attach(conn)
 
 
 def _university_context(conn, event):
@@ -1510,8 +1539,17 @@ def update_event(
     return respond(x_requested_with, "/calendar", ok=True)
 
 
+def _class_delete_refused(conn, uid: str):
+    """A University class is never deleted from the calendar: it is marked missed, excused or made up instead (the timetable on the course sheet adds and removes classes)."""
+    if _is_class(conn, db.get_event(conn, uid)):
+        return JSONResponse({"error": "A class is not deleted here: mark it missed, excused or made up, or change the timetable on the course sheet"}, status_code=409)
+    return None
+
+
 @events_router.post("/events/{uid}/delete")
 def delete_event(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    if (refused := _class_delete_refused(conn, uid)):
+        return refused
     event = db.get_event(conn, uid)
     if event and event.get("series_uid"):
         event_series.delete_scope(conn, uid, "this")  # one occurrence; the series row goes with its last one
@@ -1589,12 +1627,16 @@ def move_following(
 @events_router.post("/events/{uid}/delete-following")
 def delete_following(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     """Deletes this occurrence and every later one of its series."""
+    if (refused := _class_delete_refused(conn, uid)):
+        return refused
     event_series.delete_scope(conn, uid, "following")
     return respond(x_requested_with, "/calendar", ok=True)
 
 
 @events_router.post("/events/{uid}/delete-series")
 def delete_series(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    if (refused := _class_delete_refused(conn, uid)):
+        return refused
     event_series.delete_scope(conn, uid, "all")
     return respond(x_requested_with, "/calendar", ok=True)
 

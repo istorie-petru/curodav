@@ -20,6 +20,7 @@ from .core import get_app_meta, set_app_meta
 SCALE_KEY = "media_rating_scale"
 AUTO_COVERS_KEY = "media_auto_covers"
 TMDB_KEY = "media_tmdb_key"
+SOURCE_OFF_PREFIX = "media_source_off_"
 ADVANCED_RATING_KEY = "media_advanced_rating"
 
 
@@ -59,6 +60,21 @@ def tmdb_key(conn: sqlite3.Connection) -> str:
     from .. import secret_store
 
     return secret_store.get(conn, TMDB_KEY) or ""
+
+
+def sources_off(conn: sqlite3.Connection) -> frozenset[str]:
+    """The lookup sources switched off in Settings, Library."""
+    return frozenset(k for k in media_metadata_keys() if get_app_meta(conn, SOURCE_OFF_PREFIX + k) == "1")
+
+
+def media_metadata_keys() -> list[str]:
+    from .. import media_metadata
+
+    return list(media_metadata.SOURCES)
+
+
+def set_source_off(conn: sqlite3.Connection, key: str, off: bool) -> None:
+    set_app_meta(conn, SOURCE_OFF_PREFIX + key, "1" if off else "0")
 
 
 def set_tmdb_key(conn: sqlite3.Connection, key: str) -> None:

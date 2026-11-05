@@ -14,8 +14,8 @@
 {% set _a = university.attendance %}
 {% set _icons = {'attended': 'check', 'missed': 'x', 'excused': 'file-check', 'made_up': 'rotate-ccw', 'cancelled': 'calendar-x'} %}
 {% set _retire = [] %}
-{% for key, label in _a.choices %}{% set _ = _retire.append({'action': 'status', 'url': '/university/class/' ~ event.uid ~ '/attendance', 'fields': {'status': key, 'keep_note': '1', 'back': 'calendar'}, 'icon': _icons[key], 'label': label if key != 'cancelled' else 'Cancelled', 'menu_icon': 'trash', 'menu_label': 'Attendance or delete'}) %}{% endfor %}
-{% set _ = _retire.append(_delete) %}
+{% for key, label in _a.choices %}{% if key == 'made_up' %}{% set _ = _retire.append({'action': 'open', 'url': '/university/class/' ~ event.uid ~ '/makeup', 'icon': _icons[key], 'label': 'Make up on another day', 'menu_icon': 'check', 'menu_label': 'Attendance'}) %}{% else %}{% set _ = _retire.append({'action': 'status', 'url': '/university/class/' ~ event.uid ~ '/attendance', 'fields': {'status': key, 'keep_note': '1', 'back': 'calendar'}, 'icon': _icons[key], 'label': label, 'menu_icon': 'check', 'menu_label': 'Attendance'}) %}{% endif %}{% endfor %}
+{% if _a.moved %}{% set _ = _retire.append({'action': 'status', 'url': '/university/class/' ~ event.uid ~ '/attendance', 'fields': {'status': 'attended', 'keep_note': '1', 'back': 'calendar'}, 'icon': 'rotate-ccw', 'label': 'Put back at its own time', 'menu_icon': 'check', 'menu_label': 'Attendance'}) %}{% endif %}
 {% endif %}
 {% set _cover %}{{ detail_cover('var(--cal-accent-' ~ event.calendar_color ~ ')', banner, icon('calendar')) }}{% endset %}
 {% call modal(kind="view", title=((event.title)), size="small", retire=_retire, edit_url=(university.edit_url if (university and university.edit_url) else ('/events/' ~ event.uid ~ '/edit' ~ ('?occurrence_date=' ~ occurrence_date if occurrence_date and event.recurrence else ''))), cover_html=_cover) %}
@@ -99,6 +99,8 @@
 {% endcall %}
 {% elif university and university.kind == 'exam' %}
 {% include "_university_exam.html" %}
+{% elif university_attach %}
+{% call detail_section('Examination') %}<a class="btn ghost" href="/settings/university/attach?kind=event&amp;uid={{ event.uid }}" data-modal>{{ icon('file-check', 'icon-sm') }} Attach to a way of evaluating</a>{% endcall %}
 {% endif %}
 {% if linked_tasks %}
 {% call detail_section('Linked tasks', linked_tasks|length) %}{{ linked_tasks_view(linked_tasks) }}{% endcall %}

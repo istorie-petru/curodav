@@ -1,4 +1,4 @@
-"""The University edits shared by the REST API and the MCP server, so a course sheet or syllabus can be filled from a document.
+"""The University edits shared by the REST API and the MCP server, so a course sheet can be filled from a document.
 
 Feature document: curodav-notes/documentation/features/api-and-mcp.md
 
@@ -153,17 +153,6 @@ def save_evaluation_way(conn: sqlite3.Connection, *, discipline: str, way: dict[
     warnings = _run(ue.save_way, conn, semester["uid"], name, item)
     return {"discipline": name, "warnings": warnings,
             "evaluation": api_service.get_discipline(conn, name, semester_uid=semester["uid"])["evaluation"]}
-
-
-def set_topics(conn: sqlite3.Connection, *, discipline: str, topics: list[str], kind: str = "lecture", semester_uid: str = "") -> dict[str, Any]:
-    """Replaces the planned topics of one class kind, in order; a topic that keeps its number and title keeps its classes."""
-    semester, up = _semester(conn, semester_uid), _plan()
-    name = _discipline(conn, semester, discipline)
-    if kind not in up.TOPIC_KINDS:
-        raise EditError("invalid", f"kind must be one of {', '.join(up.TOPIC_KINDS)}")
-    rows = [(i + 1, str(t), 0) for i, t in enumerate(topics or [])]
-    count = _run(up.save_topic_rows, conn, semester["uid"], name, rows, kind)
-    return {"discipline": name, "kind": kind, "topics": count}
 
 
 def save_reading(conn: sqlite3.Connection, *, discipline: str, title: str = "", author: str = "", citation_uid: str = "",

@@ -1,6 +1,4 @@
 {% from "_inputs.html" import text_input, number_input, textarea_input %}
-{% from "_rows_pick.html" import rows_pick %}
-{% from "_form_rows.html" import details_start, details_end %}
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
 {% from "_date_time_fields.html" import date_field, time_field with context %}
@@ -24,13 +22,6 @@
     <div class="field"><label>End time</label>{{ time_field('ev_end', m.end, label='End time') }}</div>
 </div>
 {% endmacro %}
-{% macro condition_row(c) %}
-<div class="ms-block is-sub" data-row><input type="hidden" name="cond_id" value="{{ c.id }}"><input type="hidden" name="cond_met" value="{{ '1' if c.met else '' }}">
-    <div class="field"><label>Condition</label>{{ rows_pick('cond_pick', c.pick, condition_options, 'Condition') }}</div>
-    <div class="field"><label>Value</label>{{ text_input({'name': 'cond_value', 'value': c.value}) }}</div>
-    <button type="button" class="icon-btn" data-rows-remove title="Remove" aria-label="Remove">{{ icon('trash', 'icon-sm') }}</button>
-</div>
-{% endmacro %}
 {% macro task_row(m) %}
 <div class="ms-block is-task" data-row><input type="hidden" name="tk_uid" value="{{ m.uid }}">
     <div class="field"><label>Title</label>{{ text_input({'name': 'tk_title', 'value': m.raw_title}) }}</div>
@@ -41,34 +32,25 @@
 {% set _retire = [{'action': 'delete', 'url': '/settings/university/evaluation/' ~ way.id ~ '/delete?discipline=' ~ (d.name|urlencode), 'mode': 'confirm', 'label': 'Delete this way of evaluating with its events and tasks?', 'redirect': none, 'change': none}] if way else none %}
 {% call modal(kind="form", title=(('Edit ' ~ way.name) if way else 'New way of evaluating'), size="large", form='university-evaluation-form', creating=(not way), retire=_retire) %}
 <div class="card">
-<form method="post" id="university-evaluation-form" action="/settings/university/evaluation">
+<form method="post" id="university-evaluation-form" action="/settings/university/evaluation" data-form-items="{{ form_items|tojson|forceescape }}">
     <input type="hidden" name="discipline" value="{{ d.name }}"><input type="hidden" name="way_id" value="{{ way.id if way else '' }}">
     <div class="field-grid">
-        <div class="field field-wide"><label>Name</label>{{ text_input({'name': 'name', 'value': (way.name if way else ''), 'required': true}) }}</div>
+        <div class="field field-wide"><label>Title</label>{{ text_input({'name': 'name', 'value': (way.name if way else ''), 'required': true}) }}</div>
+        <div class="field">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'university-evaluation-form' %}{% set ms_name = 'form' %}{% set ms_label = 'Type' %}
+            {% set ms_items = [{'uid': '', 'name': 'Not set'}] %}{% for o in forms %}{% set _ = ms_items.append({'uid': o, 'name': o}) %}{% endfor %}
+            {% set ms_selected = way.form if way else '' %}{% set ms_wide = false %}{% set ms_remote = '' %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
         <div class="field"><label>Weight (%)</label>
             <div class="input-with-action">{{ number_input({'name': 'weight', 'value': ('%g'|format(way.stored_weight)) if way and way.stored_weight is not none else '', 'min': 0, 'max': 100, 'step': 'any', 'readonly': true if way and way.elimination else none, 'class': 'is-greyed' if way and way.elimination else none}) }}
                 <input type="hidden" name="elimination" value="{{ '1' if way and way.elimination else '' }}">
-                <button type="button" class="icon-btn" data-flag-toggle="elimination" data-flag-target="weight" aria-pressed="{{ 'true' if way and way.elimination else 'false' }}" title="Elimination round: it does not count toward the grade" aria-label="Elimination round">{{ icon('x-circle', 'icon-sm') }}</button></div></div>
+                <button type="button" class="icon-btn" data-flag-toggle="elimination" data-flag-target="weight" aria-pressed="{{ 'true' if way and way.elimination else 'false' }}" title="Eliminatory: passed or failed, it does not count toward the grade" aria-label="Eliminatory">{{ icon('x-circle', 'icon-sm') }}</button></div></div>
         <div class="field field-wide">
             <div class="field-label-row"><label>Events</label>
                 <button type="button" class="icon-btn" data-rows-add="university-event-rows" title="Add an event" aria-label="Add an event">{{ icon('plus', 'icon-sm') }}</button></div>
             <div class="rows-host" id="university-event-rows" data-rows-host data-rows-template="university-event-template">{% for m in events %}{{ event_row(m) }}{% endfor %}</div>
             <template id="university-event-template">{{ event_row({'uid': '', 'raw_title': '', 'day': '', 'start': '', 'end_day': '', 'end': '', 'location': ''}) }}</template>
-        </div>
-        {{ details_start(open=(way and (way.notes or way.criteria or way.subs or way.conditions or way.min_grade is not none or way.form))) }}
-        <div class="field">
-            {% set ms_mode = 'single' %}{% set ms_form_id = 'university-evaluation-form' %}{% set ms_name = 'form' %}{% set ms_label = 'Type' %}
-            {% set ms_items = [{'uid': '', 'name': 'Not set'}] %}{% for o in forms %}{% set _ = ms_items.append({'uid': o, 'name': o}) %}{% endfor %}
-            {% set ms_selected = way.form if way else '' %}{% set ms_wide = false %}
-            {% include '_widget_list_multiselect.html' %}
-        </div>
-        <div class="field"><label>Minimum grade</label>{{ number_input({'name': 'min_grade', 'value': ('%g'|format(way.min_grade)) if way and way.min_grade is not none else '', 'min': 0, 'step': 'any'}) }}</div>
-        <div class="field field-wide"><label>Criteria</label>{{ textarea_input({'name': 'criteria', 'rows': 2}, way.criteria if way else '') }}</div>
-        <div class="field field-wide">
-            <div class="field-label-row"><label>Components</label>
-                <button type="button" class="icon-btn" data-rows-add="university-sub-rows" title="Add a component" aria-label="Add a component">{{ icon('plus', 'icon-sm') }}</button></div>
-            <div class="rows-host" id="university-sub-rows" data-rows-host data-rows-template="university-sub-template">{% if way %}{% for s in way.subs %}{{ sub_row(s) }}{% endfor %}{% endif %}</div>
-            <template id="university-sub-template">{{ sub_row({'id': '', 'name': '', 'weight': none}) }}</template>
         </div>
         <div class="field field-wide">
             <div class="field-label-row"><label>Tasks</label>
@@ -77,13 +59,17 @@
             <template id="university-task-template">{{ task_row({'uid': '', 'raw_title': '', 'due': ''}) }}</template>
         </div>
         <div class="field field-wide">
-            <div class="field-label-row"><label>Conditions</label>
-                <button type="button" class="icon-btn" data-rows-add="university-condition-rows" title="Add a condition" aria-label="Add a condition">{{ icon('plus', 'icon-sm') }}</button></div>
-            <div class="rows-host" id="university-condition-rows" data-rows-host data-rows-template="university-condition-template">{% if way %}{% for c in way.conditions %}{{ condition_row(c) }}{% endfor %}{% endif %}</div>
-            <template id="university-condition-template">{{ condition_row({'id': '', 'pick': 'other', 'value': '', 'met': false}) }}</template>
+            <div class="field-label-row"><label>Components</label>
+                <button type="button" class="icon-btn" data-rows-add="university-sub-rows" title="Add a component" aria-label="Add a component">{{ icon('plus', 'icon-sm') }}</button></div>
+            <div class="rows-host" id="university-sub-rows" data-rows-host data-rows-template="university-sub-template">{% if way %}{% for s in way.subs %}{{ sub_row(s) }}{% endfor %}{% endif %}</div>
+            <template id="university-sub-template">{{ sub_row({'id': '', 'name': '', 'weight': none}) }}</template>
         </div>
-        <div class="field field-wide"><label>Notes</label>{{ text_input({'name': 'notes', 'value': (way.notes if way else ''), 'maxlength': 200}) }}</div>
-        {{ details_end() }}
+        <div class="field field-wide">
+            {% set ms_mode = 'select' %}{% set ms_form_id = 'university-evaluation-form' %}{% set ms_name = 'note_uids' %}{% set ms_label = 'Notes' %}
+            {% set ms_items = note_items %}{% set ms_selected = way.note_uids if way else [] %}{% set ms_wide = true %}{% set ms_remote = '' %}{% set ms_bare = true %}
+            <label>Notes</label>
+            {% include '_widget_list_multiselect.html' %}
+        </div>
     </div>
 </form>
 </div>

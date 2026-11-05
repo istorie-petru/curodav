@@ -349,14 +349,16 @@ def test_milestone_input_is_checked(conn, sem):
         _evaluation(conn, sem, [{"id": "", "name": "X", "weight": "lots", "subs": []}])
 
 
-def test_a_reading_is_a_task_with_the_usual_statuses(conn, sem):
+def test_a_reference_points_at_a_library_entry_and_makes_no_task(conn, sem):
     _bio(conn, sem)
-    uid = up.save_reading(conn, sem, "Biology", task_uid=None, title="Cell Biology", author="Alberts", due="2026-11-02", status="")
+    uid = up.save_reading(conn, sem, "Biology", task_uid=None, title="Cell Biology", author="Alberts", locator="ch. 2", category="obligatory")
     r = up.list_readings(conn, sem["uid"])[0]
-    assert (r["title"], r["author"], r["due"], r["status"]) == ("Cell Biology", "Alberts", "2026-11-02", "active")
-    up.save_reading(conn, sem, "Biology", task_uid=uid, title="Cell Biology", author="Alberts", due="2026-11-02", status="done")
-    assert up.list_readings(conn, sem["uid"])[0]["status"] == "done" and db.get_task(conn, uid)["status"] == "done"
+    assert (r["title"], r["author"], r["locator"], r["status"]) == ("Cell Biology", "Alberts", "ch. 2", "") and r["citation_id"]
+    assert db.get_task(conn, uid) is None and db.get_citation(conn, r["citation_id"])["title"] == "Cell Biology"
+    again = up.save_reading(conn, sem, "Biology", task_uid=None, title="Cell Biology", author="Alberts")
+    assert len(up.list_readings(conn, sem["uid"])) == 2 and up.list_readings(conn, sem["uid"])[0]["citation_id"] == up.list_readings(conn, sem["uid"])[1]["citation_id"]
     up.delete_reading(conn, uid)
+    up.delete_reading(conn, again)
     assert up.list_readings(conn, sem["uid"]) == []
 
 
@@ -470,8 +472,7 @@ def test_a_class_on_a_date_of_its_own_stays_out_of_the_weekly_timetable_and_a_mo
     rows = up.list_classes(conn, sem["uid"], "Biology", today=date(2026, 10, 1))
     assert extra in [r["uid"] for r in rows] and [r["kind"] for r in rows if r["uid"] == extra] == ["seminar"]
     moved = ua.move_class(conn, first["uid"], "2026-10-07T16:00", "2026-10-07T18:00")
-    assert ua.statuses_of(conn, [first["uid"], moved]) == {first["uid"]: {"status": "cancelled", "note": "Moved"}, moved: {"status": "made_up", "note": ""}}
-    assert db.get_event(conn, first["uid"])["status"] == "archived" and db.get_event(conn, moved)["start_at"] == "2026-10-07T16:00"
+    assert moved == first["uid"] and ua.statuses_of(conn, [moved])[moved]["status"] == "made_up" and db.get_event(conn, moved)["start_at"] == "2026-10-07T16:00"
 
 
 def test_the_teachers_of_a_discipline_are_the_ones_named_on_its_timetable_and_old_sheet_teachers_move_to_it(conn, sem):

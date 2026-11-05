@@ -210,39 +210,28 @@ def test_the_service_is_chosen_by_kind_and_an_isbn_or_doi(monkeypatch):
     assert asked[4].startswith("https://api.themoviedb.org/3/search/movie")
 
 
-def test_finding_details_makes_a_new_entry_with_its_cover(conn, monkeypatch):
+def test_a_chosen_result_saves_its_ids_total_and_cover_with_the_entry(conn, monkeypatch):
     _fake_service(monkeypatch, {"https://covers.openlibrary.org/": _png()})
-    found = media_metadata._candidate(provider="openlibrary", id="/works/1", type="book", title="The Dispossessed",
-                                      authors=[{"family": "Le Guin", "given": "Ursula K."}], year="1974", publisher="Harper", total=387,
-                                      cover_url="https://covers.openlibrary.org/b/id/1-L.jpg")
-    resp = media_router.apply_lookup(choice=json.dumps(found), uid="", kind="book", replace="", x_requested_with="fetch", conn=conn)
-    uid = json.loads(resp.body)["uid"]
+    uid = db.upsert_citation(conn, {"title": "The Dispossessed", "type": "book"})
+    media_router.apply_found(conn, uid, {"provider": "openlibrary", "id": "/works/1", "total": "387", "cover_url": "https://covers.openlibrary.org/b/id/1-L.jpg"})
     c = db.get_citation(conn, uid)
-    assert (c["title"], c["year"], c["progress_total"], c["publisher"]) == ("The Dispossessed", "1974", 387, "Harper")
+    assert c["progress_total"] == 387 and db.external_ids(c) == {"openlibrary": "/works/1"}
     assert db.cover_path(conn, uid) is not None
-    assert db.external_ids(c) == {"openlibrary": "/works/1"}
 
 
-def test_finding_details_fills_only_blank_fields_unless_replacing(conn, monkeypatch):
+def test_an_uploaded_cover_wins_and_remove_clears_it(conn, monkeypatch):
     _fake_service(monkeypatch, {})
-    uid = db.upsert_citation(conn, {"title": "My title", "type": "anime"})
-    found = media_metadata._candidate(provider="anilist", id="1", type="anime", title="Frieren", year="2023", total=28, summary="Elves.")
-    media_router.apply_lookup(choice=json.dumps(found), uid=uid, kind="anime", replace="", x_requested_with="fetch", conn=conn)
-    c = db.get_citation(conn, uid)
-    assert (c["title"], c["year"], c["progress_total"], c["summary"]) == ("My title", "2023", 28, "Elves.")
-    media_router.apply_lookup(choice=json.dumps(found), uid=uid, kind="anime", replace="1", x_requested_with="fetch", conn=conn)
-    assert db.get_citation(conn, uid)["title"] == "Frieren"
+    uid = db.upsert_citation(conn, {"title": "A"})
+    media_router.apply_found(conn, uid, {"cover_bytes": _png()})
+    assert db.get_citation_raw(conn, uid)["cover_custom"]
+    media_router.apply_found(conn, uid, {"cover_remove": True})
+    assert not db.get_citation_raw(conn, uid)["cover_custom"]
 
 
 def test_a_service_that_cannot_be_reached_is_reported_not_raised(conn, monkeypatch):
     _fake_service(monkeypatch, {})
-
-    class _Req:
-        pass
-
-    monkeypatch.setattr(media_router.templates, "TemplateResponse", lambda name, ctx: ctx)
-    ctx = media_router.lookup_modal(_Req(), kind="book", q="Dune", uid="", conn=conn)
-    assert ctx["results"] == [] and "could not be reached" in ctx["error"]
+    out = media_router.lookup_results(kind="book", q="Dune", conn=conn)
+    assert out["results"] == [] and "could not be reached" in out["error"]
 
 
 def test_the_now_page_splits_reading_and_watching(conn, monkeypatch):
@@ -272,12 +261,31 @@ def test_the_tmdb_key_is_kept_out_of_the_database(conn):
     assert db.tmdb_key(conn) == ""
 
 
-def test_the_sources_table_names_each_kinds_service_store_and_export(conn):
+def test_the_sources_table_lists_each_service_with_its_state(conn):
     rows = {r["name"]: r for r in media_router._sources(conn)}
-    assert (rows["Anime"]["details"], rows["Anime"]["stored"], rows["Anime"]["exports"]) == ("AniList", "Curodav", "MyAnimeList XML, JSON")
-    assert rows["Film"]["details"] == "iTunes, TMDB once its key is saved"
+    assert rows["AniList"]["status"] == "On" and rows["TMDB"]["status"] == "Needs a key"
     db.set_tmdb_key(conn, "k")
-    assert media_router._sources(conn)[[r["name"] for r in media_router._sources(conn)].index("Film")]["details"] == "TMDB"
+    db.set_source_off(conn, "tvmaze", True)
+    rows = {r["name"]: r for r in media_router._sources(conn)}
+    assert rows["TMDB"]["status"] == "On" and rows["TVmaze"]["status"] == "Off"
+
+
+def test_a_switched_off_source_answers_nothing_and_films_fall_back(conn):
+    from src import media_metadata
+
+    assert media_metadata.provider_for("tv", "", frozenset({"tvmaze"})) == "tvmaze"
+    assert media_metadata.search("tv", "x", "", frozenset({"tvmaze"})) == []
+    assert media_metadata.provider_for("film", "k", frozenset({"tmdb"})) == "itunes"
+    assert media_metadata.provider_for("film", "", frozenset({"itunes"})) == ""
+
+
+def test_games_are_a_built_in_kind_with_no_source_and_the_old_kind_pages_are_gone(conn):
+    from src import media_metadata
+
+    kind = media.kind_for("game")
+    assert (kind.name, kind.verb, kind.custom) == ("Game", "play", False)
+    assert "game" in dict(db.CITATION_TYPES) and media_metadata.search("game", "zelda") == []
+    assert not any("/kinds" in getattr(r, "path", "") for r in media_router.settings_router.routes)
 
 
 @pytest.mark.parametrize("type_key,row,text", [

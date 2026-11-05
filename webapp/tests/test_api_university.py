@@ -43,18 +43,17 @@ def test_a_course_sheet_document_can_be_filled_in_full(conn):
           kind="lecture", room="A2")
     _call(conn, "university_save_evaluation", discipline="Istoria Arheologiei",
           way={"name": "Final exam", "weight": "70", "exams": [{"title": "Written exam", "day": "2027-01-20", "start": "09:00", "end": "11:00"}]})
-    _call(conn, "university_set_topics", discipline="Istoria Arheologiei", topics=["Introduction", "Methods"])
     _call(conn, "university_save_reading", discipline="Istoria Arheologiei", title="Manual", author="Renfrew", locator="pp. 1-40",
           category="obligatory")
     _call(conn, "university_save_homework", discipline="Istoria Arheologiei", title="Essay", due="2026-11-10")
 
     d = api_service.get_discipline(conn, "Istoria Arheologiei")
     assert d["course_sheet"]["code"] == "IA101" and d["course_sheet"]["credits"] == "5"
-    assert d["course_sheet"]["abbreviation"] == "IA"
+    assert d["course_sheet"]["abbreviation"] == "Istoria"
     assert d["teachers"] and set(d["teachers"]) == {"Dr Popescu", "Ana Ionescu"}
     assert d["timetable"][0]["weekday"] == "Monday" and d["timetable"][0]["room"] == "A2"
     assert d["evaluation"][0]["name"] == "Final exam" and d["exams"][0]["date"] == "2027-01-20"
-    assert d["topics"]["lecture"] == ["Introduction", "Methods"]
+    assert "topics" not in d
     assert d["readings"][0]["title"].startswith("Manual")
     sem = up.current_semester(conn)
     assert up.get_sheet(conn, sem["uid"], "Istoria Arheologiei")["sections"][2]["custom"][0]["label"] == "Bibliography notes"
@@ -68,7 +67,6 @@ def test_the_windows_rules_refuse_bad_input(conn):
         _call(conn, "university_set_course_sheet", discipline="Biology", fields={"grade_of_teacher": "10"}),
         _call(conn, "university_save_class_slot", discipline="Biology", weekday="Funday", start="10:00", end="12:00"),
         _call(conn, "university_save_class_slot", discipline="Biology", weekday="Monday", start="12:00", end="10:00"),
-        _call(conn, "university_set_topics", discipline="Chemistry", topics=["x"]),
     ]
     assert all(r["isError"] for r in bad)
 
@@ -78,9 +76,9 @@ def test_an_evaluation_way_keeps_its_place_when_changed(conn):
     _call(conn, "university_save_discipline", name="Biology")
     _call(conn, "university_save_evaluation", discipline="Biology", way={"name": "Lab work", "weight": "30"})
     _call(conn, "university_save_evaluation", discipline="Biology", way={"name": "Exam", "weight": "70"})
-    lab = api_service.get_discipline(conn, "Biology")["evaluation"][0]
+    lab = next(w for w in api_service.get_discipline(conn, "Biology")["evaluation"] if w["name"] == "Lab work")
     _call(conn, "university_save_evaluation", discipline="Biology", way={"id": lab["id"], "name": "Lab reports", "weight": "40"})
-    assert [(w["name"], w["weight"]) for w in api_service.get_discipline(conn, "Biology")["evaluation"]] == [("Lab reports", 40.0), ("Exam", 70.0)]
+    assert [(w["name"], w["weight"]) for w in api_service.get_discipline(conn, "Biology")["evaluation"]] == [("Exam", 70.0), ("Lab reports", 40.0)]
 
 
 def test_university_edits_need_their_own_permission(conn):

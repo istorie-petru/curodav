@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Data & Maintenance - Settings{% endblock %}
+{% from "_inputs.html" import upload_input %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {{ page_header_narrow("Data & Maintenance", "database") }}
@@ -68,6 +69,24 @@
             <span class="spacer"></span>
             <a class="btn ghost" href="/export/import-modal" data-modal>{{ icon('upload', 'icon-sm') }} Import</a>
         </div>
+        <div class="settings-field-row">
+            <span class="settings-field-label">Library lists
+                <span class="settings-field-hint">Anime and manga as MyAnimeList XML (AniList reads it too), films for Letterboxd, everything as JSON</span>
+            </span>
+            <span class="spacer"></span>
+            <a class="btn ghost" href="/settings/library/export/anime" download>Anime</a>
+            <a class="btn ghost" href="/settings/library/export/manga" download>Manga</a>
+            <a class="btn ghost" href="/settings/library/export/films" download>Films</a>
+            <a class="btn ghost" href="/settings/library/export/all" download>JSON</a>
+        </div>
+        <form class="settings-field-row" method="post" action="/settings/library/import" enctype="multipart/form-data" id="library-import-form">
+            <span class="settings-field-label">Import a library list
+                <span class="settings-field-hint">A MyAnimeList or AniList export, a Letterboxd CSV or a Curodav JSON file. An entry with the same title is updated, the rest are added</span>
+            </span>
+            <span class="spacer"></span>
+            {{ upload_input('file', accept='.xml,.csv,.json', form='library-import-form', label='Choose a file') }}
+            <button type="submit" class="btn ghost" title="Import" aria-label="Import">{{ icon('upload', 'icon-sm') }}</button>
+        </form>
     </div>
 </div>
 

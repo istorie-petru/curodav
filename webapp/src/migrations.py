@@ -574,6 +574,8 @@ MIGRATIONS: list[Migration] = [
     Migration(65, "University attendance: missed, excused, cancelled and made-up classes", migrations_university.attendance),
     Migration(66, "University grades of a way of evaluating and its components", migrations_university.grades),
     Migration(67, "University teachers come from the timetable", migrations_university.sheet_teachers_to_slots),
+    Migration(68, "University: planned contents are taken off the classes", migrations_university.revert_class_contents, destructive=True),
+    Migration(69, "University attendance remembers its occurrence and where a made-up class moved", migrations_university.attendance_origin),
     Migration(73, "Spaces choose how they appear in the sidebar", _space_sidebar),
     Migration(74, "Spaces list shelves or tags in the sidebar", _space_sidebar_kind),
     Migration(78, "Full-text search over notes, entries, tasks, events and contacts", _search_index),

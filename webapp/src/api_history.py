@@ -323,7 +323,7 @@ _LABELS = {
     "library_set_tracking": "Changed tracking of", "university_save_semester": "Saved semester", "university_save_discipline": "Saved discipline",
     "university_set_course_sheet": "Filled the course sheet of", "university_set_teachers": "Set the teachers of",
     "university_save_class_slot": "Changed the timetable of", "university_save_evaluation": "Changed the evaluation of",
-    "university_set_topics": "Set the topics of", "university_save_reading": "Saved a reading of", "university_save_homework": "Saved homework of",
+    "university_save_reading": "Saved a reading of", "university_save_homework": "Saved homework of",
 }
 
 

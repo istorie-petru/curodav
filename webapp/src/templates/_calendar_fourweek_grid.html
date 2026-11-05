@@ -24,7 +24,7 @@
         <div class="month-day-bottom month-bars-offset-{{ week.lane_count }}">
             {% for item in day.rows %}
                 {% if item.kind == "event" %}
-                    <a class="month-task-item month-event-item" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ item.event.title }}" {% if not item.event.recurrence %}data-uid="{{ item.event.uid }}" data-start="{{ item.event.start_at }}" data-end="{{ item.event.end_at or '' }}" data-all-day="0"{% endif %}>
+                    <a class="month-task-item month-event-item{% if item.event.skipped %} is-skipped{% endif %}" href="/events/{{ item.event.uid }}{% if item.event.recurrence %}?occurrence_date={{ item.event.occurrence_date | urlencode }}{% endif %}" data-modal title="{{ item.event.title }}" {% if not item.event.recurrence %}data-uid="{{ item.event.uid }}" data-start="{{ item.event.start_at }}" data-end="{{ item.event.end_at or '' }}" data-all-day="0"{% endif %}>
                         <span class="color-dot cal-{{ item.event.calendar_color }}"></span>
                         {% if item.event.start_at %}<span class="month-item-time">{{ item.event.start_at | fmt_time }}</span>{% endif %}
                         <span class="month-item-title">{{ item.event.title }}</span>

@@ -1,8 +1,8 @@
-"""The study page: the page of the space that holds the University semester, with the views Overview, Disciplines and Examination.
+"""The study page: the page of the space that holds the University semester, with the views Overview and Timeline.
 
 Overview is a row of widget cards (the next class, the next examination, what is due, the semester, the absences), the weekly timetable
 drawn with the calendar's own event blocks (odd weeks in the left half of a day, even weeks in the right half) and cards of short lists.
-Examination is every exam and every piece of work of the semester. The timetable comes from the slots, so it is the same for any week;
+Timeline is every exam and every piece of work of the semester, each with a way to its event or task, its way of evaluating and its grades. The timetable comes from the slots, so it is the same for any week;
 the lists read the dated classes, milestones and tasks.
 """
 
@@ -20,7 +20,7 @@ from . import university_plan as up
 from .deps import templates
 
 _OPEN = ("done", "archived")
-VIEWS = (("overview", "Overview"), ("disciplines", "Disciplines"), ("exams", "Examination"))
+VIEWS = (("overview", "Overview"), ("exams", "Timeline"))
 
 
 def _minutes(clock_text: str) -> int:
@@ -160,6 +160,7 @@ def exams(conn, semester: dict, today: date) -> dict:
         way = ways.get((next((n for n in looks if n.lower() == m["discipline"].lower()), m["discipline"]), m["way_id"]), {})
         rows.append({**m, "look": looks.get(m["discipline"]) or {"name": m["discipline"], "color": "gray", "icon": ""}, "short": short(m["discipline"]),
                      "eligible": way.get("eligible"), "grade": way.get("grade"), "url": f"/settings/university/evaluation/{m['way_id']}/edit?discipline={quote(m['discipline'], safe='')}",
+                     "grades_url": f"/settings/university/grades?discipline={quote(m['discipline'], safe='')}",
                      "item_url": f"/events/{m['event_uid']}" if m["event_uid"] else (f"/tasks/{m['task_uid']}" if m["task_uid"] else "")})
     monday = up._monday(today)
     groups: list[dict] = []
@@ -176,17 +177,13 @@ def exams(conn, semester: dict, today: date) -> dict:
 
 
 def work(conn, semester: dict, today: date) -> list[dict]:
-    """Homework and readings of every discipline that are still open, dated first and soonest first."""
+    """Homework of every discipline that is still open, dated first and soonest first."""
     looks = _looks(conn, semester)
     out = []
     for name, d in looks.items():
         for h in up.list_homework(conn, semester["uid"], name):
             if h["status"] not in _OPEN:
                 out.append({"kind": "Homework", "title": h["title"], "due": h["due"], "status": h["status"], "look": d, "url": f"/settings/university/homework/{h['task_uid']}/edit"})
-    for r in up.list_readings(conn, semester["uid"]):
-        if r["status"] not in _OPEN:
-            d = next((v for k, v in looks.items() if k.lower() == r["discipline"].lower()), {"name": r["discipline"], "color": "gray", "icon": ""})
-            out.append({"kind": "Reading", "title": r["title"], "due": r["due"], "status": r["status"], "look": d, "url": f"/settings/university/reading/{r['task_uid']}/edit"})
     out.sort(key=lambda x: (not x["due"], x["due"] or "", x["title"]))
     for x in out:
         x["overdue"] = bool(x["due"]) and x["due"] < today.isoformat()
@@ -200,46 +197,18 @@ def timeline(exam_rows: list[dict], work_rows: list[dict], today: date) -> list[
         extra = [m["look"]["name"]] + ([f"{m['weight']:g}%"] if m.get("weight") is not None else []) + ([m["start"]] if m.get("start") else []) \
             + (["can sit"] if m.get("eligible") is True else (["conditions not met"] if m.get("eligible") is False else []))
         items.append({"day": m["date"] or "", "title": m["title"], "sub": " · ".join(extra), "url": m["item_url"] or m["url"], "color": m["look"].get("color") or "gray",
-                      "grade": m.get("grade")})
+                      "grade": m.get("grade"), "way_url": m["url"], "grades_url": m["grades_url"]})
     for w in work_rows:
         items.append({"day": w["due"] or "", "title": w["title"], "sub": f"{w['look']['name']} · {w['kind'].lower()}", "url": w["url"],
-                      "color": w["look"].get("color") or "gray", "grade": None})
+                      "color": w["look"].get("color") or "gray", "grade": None, "way_url": "", "grades_url": ""})
     iso = today.isoformat()
     items.sort(key=lambda i: (not i["day"], i["day"], i["title"]))
     for i in items:
         i["past"] = bool(i["day"]) and i["day"] < iso
         i["month"] = date.fromisoformat(i["day"]).strftime("%B %Y") if i["day"] else "No date"
     at = next((n for n, i in enumerate(items) if not i["past"]), len(items))
-    items.insert(at, {"now": True, "day": iso, "title": "Today", "sub": "", "url": "", "color": "gray", "past": False, "grade": None, "month": date.fromisoformat(iso).strftime("%B %Y")})
+    items.insert(at, {"now": True, "day": iso, "title": "Today", "sub": "", "url": "", "color": "gray", "past": False, "grade": None, "way_url": "", "grades_url": "", "month": date.fromisoformat(iso).strftime("%B %Y")})
     return items
-
-
-def cards(conn, semester: dict, group: str, today: date) -> list[dict]:
-    """One tall card per discipline in its own colour, sorted by colour and then by name, with the one exam and the one task or homework that
-    are coming up next."""
-    from .routers.labels import COLORS
-
-    uid = semester["uid"]
-    order = {c["key"] if isinstance(c, dict) else c: i for i, c in enumerate(COLORS)}
-    out = []
-    for d in up.disciplines(conn, semester):
-        name = d["name"]
-        coming = [e for e in ue.list_milestones(conn, uid, name, today) if e["days_left"] is not None and e["days_left"] >= 0]
-        homework = sorted([h for h in up.list_homework(conn, uid, name) if h["status"] not in _OPEN and h["due"] and h["due"] >= today.isoformat()], key=lambda h: h["due"])
-        readings = sorted([r for r in up.list_readings(conn, uid) if r["discipline"].lower() == name.lower() and r["status"] not in _OPEN and r["due"] and r["due"] >= today.isoformat()],
-                          key=lambda r: r["due"])
-        task = (homework[:1] + readings[:1] or [None])
-        task = min([t for t in task if t], key=lambda t: t["due"], default=None)
-        attendance = ua.discipline_attendance(conn, uid, name, today)
-        held = [c for c in attendance["classes"] if c["status"] != "cancelled"]
-        color = d.get("color") or "gray"
-        out.append({"name": name, "color": color, "icon": d.get("icon") or "book-open",
-                    "exam": {"title": coming[0]["title"], "when": when(coming[0]["date"], today)} if coming else None,
-                    "task": {"title": task["title"], "when": when(task["due"], today)} if task else None,
-                    "classes": f"{len([c for c in held if c['past']])} of {len(held)} classes" if held else "",
-                    "url": f"/groups/{quote(group, safe='')}/disciplines/{quote(name, safe='')}"})
-    out.sort(key=lambda c: (order.get(c["color"], 99), c["name"].lower()))
-    return out
 
 
 def overview(conn, semester: dict, group: str, today: date, now: datetime) -> dict:
@@ -258,15 +227,15 @@ def overview(conn, semester: dict, group: str, today: date, now: datetime) -> di
     tight = sorted([s for s in standing_rows if s["left"] is not None], key=lambda s: s["left"])
     return {"summary": summary(conn, semester, today), "next_classes": next_classes(conn, semester, now), "exams_soon": coming[:5], "tight": tight[:1], "today": today,
             "exams_this_fortnight": len([r for r in coming if r["days_left"] <= 14]), "due": due[:6], "over": over,
-            "absences": standing_rows, "missed": missed, "disciplines": list(looks.values()), "schedule": schedule(conn, semester, group)}
+            "absences": standing_rows, "missed": missed, "disciplines": list(looks.values()), "schedule": schedule(conn, semester, group),
+            "unscheduled": [{"name": d["name"], "color": d.get("color") or "gray", "icon": d.get("icon") or "book-open", "short": up.short_name(conn, semester["uid"], d["name"]),
+                             "url": f"/groups/{quote(group, safe='')}/disciplines/{quote(d['name'], safe='')}"} for d in looks.values() if not d.get("slots")]}
 
 
 def _page_add(semester: dict | None, view: str, disciplines: list[dict]) -> dict:
     """The header bar's add button of the study page: what can be added on the view that is open."""
     if not semester:
         return {"href": "/settings/university/semester", "label": "Set up a semester"}
-    if view == "disciplines":
-        return {"href": "/settings/university/discipline/new", "label": "New discipline"}
     items = [{"href": "/settings/university/slot/new", "icon": "clock", "label": "New weekly class"},
              {"href": "/settings/university/discipline/new", "icon": "book-open", "label": "New discipline"}]
     if view == "exams":
@@ -284,9 +253,7 @@ def render(conn, request: Request, name: str, label: dict):
     ctx = {"request": request, "label": label, "name": name, "enc": quote(name, safe=""), "semester": semester, "view": view,
            "views": [{"key": k, "label": text, "url": base if k == "overview" else f"{base}?view={k}", "active": k == view} for k, text in VIEWS]}
     if semester:
-        if view == "disciplines":
-            ctx["cards"] = cards(conn, semester, name, today)
-        elif view == "exams":
+        if view == "exams":
             ctx.update(exams=exams(conn, semester, today), work=work(conn, semester, today), today=today, disciplines=list(_looks(conn, semester).values()))
             ctx["timeline"] = timeline(ctx["exams"]["rows"], ctx["work"], today)
         else:

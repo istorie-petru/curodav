@@ -369,7 +369,6 @@ def get_discipline(conn: sqlite3.Connection, name: str, *, semester_uid: str = "
     return {
         "name": found["name"], "semester": _semester_out(semester), "teachers": [t["name"] for t in found["teachers"] if t["name"]],
         "course_sheet": up.get_sheet(conn, sid, found["name"])["values"],
-        "topics": {kind: [t["title"] for t in up.list_topics(conn, sid, found["name"], kind)] for kind in up.TOPIC_KINDS},
         "timetable": [{"series_uid": s["series_uid"], "kind": s["kind"], "weekday": _WEEKDAYS[s["weekday"]], "start": s["start"], "end": s["end"], "room": s["room"],
                        "weeks": s["weeks"], "first": s["first"], "last": s["last"]} for s in up.list_slots(conn, sid, found["name"])],
         "evaluation": [{"id": w["id"], "name": w["name"], "weight": w["weight"], "min_grade": w["min_grade"], "grade": w["grade"], "passed": w["passed"],

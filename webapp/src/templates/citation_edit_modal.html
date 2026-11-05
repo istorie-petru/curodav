@@ -1,4 +1,4 @@
-{% from "_inputs.html" import text_input, number_input, textarea_input, switch_input, upload_input %}
+{% from "_inputs.html" import text_input, number_input, textarea_input, switch_input, upload_input, search_input %}
 {% from "_form_rows.html" import details_start, details_end %}
 {% extends "base.html" %}
 {% from "_modal.html" import modal, split_start, split_side, split_end %}
@@ -136,7 +136,35 @@
                 {{ details_end() }}
             </div>
         </div>
-{{ split_side('Status') }}
+{{ split_side('Details') }}
+        <div class="card" data-find>
+            <div class="field-grid">
+                <div class="field field-wide">
+                    <label>Find details</label>
+                    {{ search_input({'aria-label': 'Title, ISBN or DOI', 'autocomplete': 'off', 'data-find-q': true}) }}
+                </div>
+            </div>
+            <div class="media-lookup-results" data-find-results role="listbox" aria-label="Results"></div>
+            <input type="hidden" name="found_provider" value="">
+            <input type="hidden" name="found_id" value="">
+            <input type="hidden" name="found_cover_url" value="">
+            <input type="hidden" name="found_total" value="">
+        </div>
+        <div class="card media-cover-card">
+            <div class="media-cover-edit">
+                <span class="media-cover-preview" data-cover-preview>{% if c and c.cover_custom or c and c.cover_fetched %}<img src="{{ cover_src }}" alt="">{% else %}<span class="media-cover-empty">{{ icon('image') }}</span>{% endif %}</span>
+                <div class="field-grid media-cover-fields">
+                    <div class="field field-wide">
+                        <label>Cover</label>
+                        {{ upload_input('cover_file', accept='image/*', form='citation-form', label='Choose an image') }}
+                    </div>
+                    <div class="field field-wide switch-row">
+                        <label for="citation-cover-remove">Remove the cover</label>
+                        {{ switch_input({'name': 'cover_remove', 'value': '1', 'id': 'citation-cover-remove'}) }}
+                    </div>
+                </div>
+            </div>
+        </div>
         <div class="card">
             <div class="field-grid">
                 {% set _statuses = [] %}{% for s_key, s_label in statuses %}{% set _ = _statuses.append({'uid': s_key, 'name': s_label}) %}{% endfor %}

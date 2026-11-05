@@ -4,8 +4,8 @@
 {% from "_label_pill.html" import tag_pill with context %}
 {% block title %}{{ c.title }}{% endblock %}
 {% block content %}
-{% set _extra %}<a href="{{ lookup_url }}" data-modal class="btn ghost">{{ icon('search', 'icon-sm') }} Find details</a>{% endset %}
-{% call modal(kind="view", title=c.title, size="medium", back=(return_to), back_name='Back', extra_html=_extra,
+
+{% call modal(kind="view", title=c.title, size="medium", back=(return_to), back_name='Back',
               retire=[{'action': 'delete', 'url': '/library/' ~ c.uid ~ '/delete', 'mode': 'confirm', 'label': delete_label, 'redirect': none, 'change': none}], edit_url='/library/' ~ c.uid ~ '/edit') %}
 <div class="media-view-head">
     <a href="/library/{{ c.uid }}/cover/modal" data-modal class="media-cover-button" title="Change the cover" aria-label="Change the cover">
@@ -15,7 +15,7 @@
         <span class="media-view-by">{{ authors or m.kind.name }}{% if c.year %} · {{ c.year }}{% endif %}</span>
         <span class="media-view-kind">{{ icon(m.kind.icon, 'icon-sm') }} {{ m.kind.name if (m.kind.custom or c.type in ('book', 'manga', 'film', 'tv', 'anime')) else type_label }}{% if m.status_label %} · {{ m.status_label }}{% endif %}</span>
         {% if m.stars %}<span class="media-view-stars">{{ m.stars }}</span>{% endif %}
-        {% if m.tag_items %}<span class="media-view-tags">{% for t in m.tag_items %}{{ tag_pill(t, '/library?view=all&tag=' ~ (t.name | urlencode)) }} {% endfor %}</span>{% endif %}
+        {% if m.tag_items %}<span class="media-view-tags">{% for t in m.tag_items %}{{ tag_pill(t, '/library?tag=' ~ (t.name | urlencode)) }} {% endfor %}</span>{% endif %}
     </div>
 </div>
 {% if ratings or c.subtitle or c.keywords or c.summary %}

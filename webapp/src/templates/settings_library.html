@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_inputs.html" import switch_input, password_input, text_input, upload_input %}
+{% from "_inputs.html" import switch_input, text_input %}
 {% from "_empty_state.html" import empty_state %}
 {% block title %}Library - Settings{% endblock %}
 {% block content %}
@@ -11,15 +11,14 @@
 <div class="card table-scroll table-responsive">
     <div class="uni-card-head"><h2>Sources</h2></div>
     <table class="entity-table">
-        <thead><tr><th class="col-name">Kind</th><th class="col-opt-2">Details from</th><th class="col-opt-2">Stored in</th><th class="col-opt-1">Exports as</th><th class="col-opt-1">Entries</th></tr></thead>
+        <thead><tr><th class="col-name">Source</th><th class="col-opt-2">Used for</th><th class="col-opt-1">Status</th><th class="col-actions-narrow"><span class="sr-only">Actions</span></th></tr></thead>
         <tbody>
         {% for s in sources %}
         <tr>
-            <td class="col-name">{{ icon(s.icon, 'icon-sm') }} {{ s.name }}</td>
-            <td class="col-opt-2">{{ s.details }}</td>
-            <td class="col-opt-2">{{ s.stored }}</td>
-            <td class="col-opt-1">{{ s.exports }}</td>
-            <td class="col-opt-1">{{ s.count }}</td>
+            <td class="col-name">{{ s.name }}</td>
+            <td class="col-opt-2">{{ s.used_for }}</td>
+            <td class="col-opt-1">{{ s.status }}</td>
+            <td class="col-actions-narrow"><a href="/settings/library/sources/{{ s.key }}/edit" data-modal class="icon-btn" title="Edit {{ s.name }}" aria-label="Edit {{ s.name }}">{{ icon('edit', 'icon-sm') }}</a></td>
         </tr>
         {% endfor %}
         </tbody>
@@ -47,22 +46,13 @@
         <span class="spacer"></span>
         {{ switch_input({'name': 'advanced', 'value': '1', 'id': 'library-advanced-rating', 'checked': advanced_rating, 'data-change-submit': true}) }}
     </form>
-    <form class="settings-field-row" method="post" action="/settings/library" id="library-tmdb-form">
-        <input type="hidden" name="scale" value="{{ scale }}">
-        <input type="hidden" name="auto_covers" value="{{ '1' if auto_covers else '' }}">
-        <span class="settings-field-label">TMDB key for films
-            <span class="settings-field-hint">{% if has_tmdb_key %}Films are found on TMDB{% else %}A free key from themoviedb.org, under Settings, API. Until then films are found through the iTunes search{% endif %}</span>
-        </span>
-        <span class="spacer"></span>
-        {{ password_input({'name': 'tmdb_key', 'autocomplete': 'off', 'aria-label': 'TMDB key', 'placeholder': ('Saved' if has_tmdb_key else 'API key')}) }}
-        <button type="submit" class="btn ghost" title="Save the key" aria-label="Save the key">{{ icon('check', 'icon-sm') }}</button>
-        {% if has_tmdb_key %}<button type="submit" name="clear_tmdb_key" value="1" class="icon-btn danger" title="Remove the key" aria-label="Remove the key">{{ icon('trash', 'icon-sm') }}</button>{% endif %}
-    </form>
 </div>
 <div class="card">
+    <div class="uni-card-head"><h2>Book library</h2></div>
+    <p class="settings-field-hint">Curodav looks for a library folder at <code>/srv/curodav-library</code>, or at the folder chosen here. A Calibre library, or any other folder laid out the same way, is found and used as it is, and an empty folder becomes a new library. It is for books and articles (PDF, EPUB, MOBI and the like), not for video or audio files such as MP4 or MP3. <a href="{{ wiki_url }}#books-manga-and-calibre" target="_blank" rel="noopener">How the folder must be laid out</a></p>
     <form class="settings-field-row" method="post" action="/settings/library/books" id="library-books-form">
-        <span class="settings-field-label">Book library folder
-            <span class="settings-field-hint">{% if calibre_ready %}Books and manga live here as a Calibre library, {{ calibre_linked }} in Curodav{% else %}A Calibre library folder, or an empty one to start a new library. Books and manga keep their files here{% endif %}</span>
+        <span class="settings-field-label">Library folder
+            <span class="settings-field-hint">{% if calibre_ready %}In use, {{ calibre_linked }} in Curodav{% else %}Not found yet{% endif %}</span>
         </span>
         <span class="spacer"></span>
         {{ text_input({'name': 'path', 'value': calibre_path, 'aria-label': 'Book library folder', 'autocomplete': 'off', 'placeholder': '/srv/curodav-library'}) }}
@@ -82,26 +72,6 @@
         <button type="submit" class="btn ghost">{{ icon('folder-input', 'icon-sm') }} Move them</button>
     </form>
     {% endif %}
-</div>
-<div class="card">
-    <div class="settings-field-row">
-        <span class="settings-field-label">Export a list
-            <span class="settings-field-hint">Anime and manga as MyAnimeList XML (AniList reads it too), films for Letterboxd, everything as JSON</span>
-        </span>
-        <span class="spacer"></span>
-        <a class="btn ghost" href="/settings/library/export/anime" download>Anime</a>
-        <a class="btn ghost" href="/settings/library/export/manga" download>Manga</a>
-        <a class="btn ghost" href="/settings/library/export/films" download>Films</a>
-        <a class="btn ghost" href="/settings/library/export/all" download>JSON</a>
-    </div>
-    <form class="settings-field-row" method="post" action="/settings/library/import" enctype="multipart/form-data" id="library-import-form">
-        <span class="settings-field-label">Import a list
-            <span class="settings-field-hint">An entry with the same title is updated, the rest are added</span>
-        </span>
-        <span class="spacer"></span>
-        {{ upload_input('file', accept='.xml,.csv,.json', form='library-import-form', label='Choose a file') }}
-        <button type="submit" class="btn ghost" title="Import" aria-label="Import">{{ icon('upload', 'icon-sm') }}</button>
-    </form>
 </div>
 {% if advanced_rating %}
 <div class="card table-scroll table-responsive">
@@ -128,30 +98,6 @@
     {% endif %}
 </div>
 {% endif %}
-<div class="card table-scroll table-responsive">
-    <div class="uni-card-head"><h2>Your kinds</h2>
-        <a href="/settings/library/kinds/new" data-modal class="icon-btn" title="Add kind" aria-label="Add kind">{{ icon('plus', 'icon-sm') }}</a></div>
-    {% if kinds %}
-    <table class="entity-table">
-        <thead><tr><th class="col-name">Kind</th><th class="col-opt-1">Status</th><th class="col-opt-1">Progress</th><th class="col-opt-1">Entries</th><th class="col-actions">Actions</th></tr></thead>
-        <tbody>
-        {% for k in kinds %}
-        <tr>
-            <td class="col-name">{{ icon(k.icon, 'icon-sm') }} {{ k.name }}</td>
-            <td class="col-opt-1">{{ k.verb_label }}</td>
-            <td class="col-opt-1">{{ k.unit_label }}</td>
-            <td class="col-opt-1">{{ k.uses }}</td>
-            <td class="col-actions"><a href="/settings/library/kinds/{{ k.uid }}/edit" data-modal class="icon-btn" title="Edit kind" aria-label="Edit kind">{{ icon('edit', 'icon-sm') }}</a></td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    {% call empty_state('No kinds of your own', 'folder', 'Books, manga, articles, films, TV series and anime are built in. Add others such as games or podcasts.') %}
-    <a href="/settings/library/kinds/new" data-modal class="btn primary">{{ icon('plus') }} Add a kind</a>
-    {% endcall %}
-    {% endif %}
-</div>
 </div>
 </div>
 {% endblock %}

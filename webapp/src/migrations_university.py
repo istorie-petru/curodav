@@ -58,3 +58,52 @@ def sheet_teachers_to_slots(conn: sqlite3.Connection) -> None:
         for m in members:
             db.set_object_contacts(conn, "event", m["uid"], uids)
     conn.commit()
+
+
+def revert_class_contents(conn: sqlite3.Connection) -> None:
+    """Planned contents are no longer placed on classes: every placement is removed and, where an older version had written the topic into the
+    class description, that text is taken out again. Attendance is untouched. The topic rows stay (unused) so nothing typed is lost."""
+    from . import db
+
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'university_topic_classes'").fetchone():
+        return
+    for r in conn.execute("SELECT DISTINCT event_uid FROM university_topic_classes").fetchall():
+        event = db.get_event(conn, r["event_uid"])
+        if not event:
+            continue
+        lines = [f"{t['number']}. {t['title']}" for t in conn.execute(
+            "SELECT t.number, t.title FROM university_topic_classes c JOIN university_topics t ON t.uid = c.topic_uid WHERE c.event_uid = ? AND t.kind != 'competence' ORDER BY t.number",
+            (r["event_uid"],))]
+        comp = [f"{t['number']}. {t['title']}" for t in conn.execute(
+            "SELECT t.number, t.title FROM university_topic_classes c JOIN university_topics t ON t.uid = c.topic_uid WHERE c.event_uid = ? AND t.kind = 'competence' ORDER BY t.number",
+            (r["event_uid"],))]
+        composed = "\n".join(lines + (["Competences: " + "; ".join(comp)] if comp else []))
+        text = (event.get("description") or "").strip()
+        if composed and text.startswith(composed):
+            db.upsert_event(conn, {**event, "description": text[len(composed):].strip()})
+    conn.execute("DELETE FROM university_topic_classes")
+    conn.commit()
+
+
+def attendance_origin(conn: sqlite3.Connection) -> None:
+    """An attendance row remembers which occurrence it is about, not only the event it was made on: the class kind and the occurrence's own start and end
+    (`original_*`), and where a made-up class was moved to (`moved_*`). When a timetable edit rebuilds a slot's events, `university_attendance.reattach`
+    uses them to put each mark, and each move, back on the new event of the same day. Rows written before this get their origin from their event; a
+    legacy made-up row (an extra class made by the old move) has no origin and stays as it was. Safe to run twice."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(university_attendance)")}
+    if "kind" not in cols:
+        conn.execute("ALTER TABLE university_attendance ADD COLUMN kind TEXT NOT NULL DEFAULT ''")
+    if "original_start" not in cols:
+        conn.execute("ALTER TABLE university_attendance ADD COLUMN original_start TEXT NOT NULL DEFAULT ''")
+    if "original_end" not in cols:
+        conn.execute("ALTER TABLE university_attendance ADD COLUMN original_end TEXT NOT NULL DEFAULT ''")
+    if "moved_start" not in cols:
+        conn.execute("ALTER TABLE university_attendance ADD COLUMN moved_start TEXT NOT NULL DEFAULT ''")
+    if "moved_end" not in cols:
+        conn.execute("ALTER TABLE university_attendance ADD COLUMN moved_end TEXT NOT NULL DEFAULT ''")
+    for r in conn.execute("SELECT a.event_uid, a.status, e.start_at, e.end_at, s.kind, s.weeks FROM university_attendance a JOIN events e ON e.uid = a.event_uid "
+                          "JOIN university_slots s ON s.series_uid = e.series_uid WHERE a.original_start = ''").fetchall():
+        legacy_extra = r["status"] == "made_up" and r["weeks"] == "once"
+        conn.execute("UPDATE university_attendance SET kind = ?, original_start = ?, original_end = ? WHERE event_uid = ?",
+                     (r["kind"], "" if legacy_extra else r["start_at"], "" if legacy_extra else (r["end_at"] or ""), r["event_uid"]))
+    conn.commit()

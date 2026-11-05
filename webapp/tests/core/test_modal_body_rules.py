@@ -28,7 +28,7 @@ START = [
     "/settings/university/discipline/new", "/settings/university/evaluation/new?discipline=Biology",
     "/settings/university/slot/new?discipline=Biology", "/settings/university/reading/new?discipline=Biology",
     "/settings/university/homework/new?discipline=Biology", "/settings/university/sheet/Biology",
-    "/settings/university/syllabus/Biology", "/settings/profile-photo/upload",
+    "/settings/university/attendance/Biology", "/settings/university/grades?discipline=Biology", "/settings/profile-photo/upload",
 ]
 # Pages that also open as a modal keep their own layout (modals-and-inputs.md, Modal kinds).
 PAGES = (r"/settings(/[a-z-]+)?$", r"/taxonomy", r"/dashboard/customize", r"/library$", r"/library/filters", r"/banners/editor")

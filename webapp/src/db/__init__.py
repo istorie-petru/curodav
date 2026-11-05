@@ -521,8 +521,10 @@ from .media import (  # noqa: E402
     set_cover,
     set_edition_calibre,
     set_rating_scale,
+    set_source_off,
     set_tmdb_key,
     set_tracking,
+    sources_off,
     tmdb_key,
     type_options,
 )
