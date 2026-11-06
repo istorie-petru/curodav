@@ -529,7 +529,7 @@ def test_the_window_of_a_class_holds_its_attendance_menu_and_what_it_covers_and_
     series = up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "kind": "lecture", "weeks": "all"})
     first = up.series_members(conn, series)[0]
     body = cal.event_detail(first["uid"], _request(f"/events/{first['uid']}"), conn=conn).body.decode()
-    assert 'name="status" value="missed"' in body and "/makeup" in body and "/delete" not in body and 'value="cancelled"' not in body
+    assert 'name="status" value="missed"' in body and "/makeup" in body and "/delete" not in body and 'value="cancelled"' in body and "Cancel class" in body and 'value="marked_present"' in body
     task_uid = add_exam(conn, sem, title="Final", day="2027-01-20", start="09:00", end="11:00", weight="60")
     exam = ue.list_milestones(conn, sem["uid"])[0]
     assert "Final" in cal.event_detail(exam["event_uid"], _request("/events/x"), conn=conn).body.decode() and "60% of the grade" in cal.event_detail(exam["event_uid"], _request("/events/x"), conn=conn).body.decode()

@@ -1,8 +1,8 @@
-"""University attendance: whether each class was attended, missed, excused, cancelled or made up, and how many absences a discipline still allows.
+"""University attendance: whether each class was attended, missed, excused, marked present, cancelled or made up, and how many absences a discipline still allows.
 
 A past class with no row in `university_attendance` was attended, so nothing has to be marked after an ordinary week. A cancelled class
-keeps its event with the status `archived` (CANCELLED on the phone), so it leaves the calendar's count without being deleted. Excused,
-cancelled and made-up classes are not absences. The limit is "at most N absences" per class kind, on the Teaching section of the course
+keeps its event with the status `archived` (CANCELLED on the phone), so it leaves the calendar's count without being deleted. Excused, marked present (missed in fact, but the teacher wrote
+the student present), cancelled and made-up classes are not absences. The limit is "at most N absences" per class kind, on the Teaching section of the course
 sheet; no number means no limit. Feature notes: curodav-notes/documentation/features/university-module.md.
 """
 
@@ -16,8 +16,8 @@ from typing import Any
 from . import clock, db
 from . import university_plan as up
 
-STATUSES = {"attended": "Attended", "missed": "Missed", "excused": "Excused", "cancelled": "Cancelled", "made_up": "Made up"}
-TONES = {"attended": "green", "missed": "red", "excused": "orange", "cancelled": "gray", "made_up": "blue"}
+STATUSES = {"attended": "Attended", "missed": "Missed", "excused": "Excused", "marked_present": "Marked present", "cancelled": "Cancelled", "made_up": "Made up"}
+TONES = {"attended": "green", "missed": "red", "excused": "orange", "marked_present": "teal", "cancelled": "gray", "made_up": "blue"}
 KINDS = ("lecture", "seminar", "lab")
 LIMIT_KEYS = {kind: f"absences_{kind}" for kind in KINDS}
 
@@ -43,11 +43,11 @@ def _mark(conn: sqlite3.Connection, event_uid: str) -> sqlite3.Row | None:
 
 
 def set_status(conn: sqlite3.Connection, event_uid: str, status: str, note: str = "") -> None:
-    """Marks one class. Attended with no note removes the row. A class is never deleted or cancelled from the calendar: a missed or excused one stays
+    """Marks one class. Attended with no note removes the row. A class is never deleted or cancelled from the calendar: a missed, excused or marked-present one stays
     where it was (the calendar draws it faded) and a made-up one is moved with `make_up`. Any other mark on a class that was moved puts it back at its
-    own time. Cancelled is only kept for marks made before this change; it still archives the event."""
+    own time. Cancelled archives the event (CANCELLED on the phone) and the calendar still draws it faded."""
     if status not in STATUSES:
-        raise up.PlanError("Pick attended, missed, excused or made up")
+        raise up.PlanError("Pick attended, missed, excused, marked present, cancelled or made up")
     event, slot = _class(conn, event_uid)
     note = (note or "").strip()
     old = _mark(conn, event_uid)
@@ -126,7 +126,7 @@ def for_event(conn: sqlite3.Connection, event: dict[str, Any]) -> dict[str, Any]
     mark = {**mark, "moved_start": stored["moved_start"] if stored else ""}
     status = mark["status"] or ("attended" if (event.get("start_at") or "") < clock.local_now().strftime("%Y-%m-%dT%H:%M") else "")
     return {"discipline": row["discipline_tag"], "kind": up.SLOT_KINDS.get(row["kind"], "Class"), "status": status, "label": STATUSES.get(status, "Not held yet"),
-            "note": mark["note"], "choices": [(k, v) for k, v in STATUSES.items() if k not in (status, "cancelled")], "moved": bool(mark.get("moved_start"))}
+            "note": mark["note"], "choices": [(k, v) for k, v in STATUSES.items() if k != status], "moved": bool(mark.get("moved_start"))}
 
 
 def _number(value: Any) -> float | None:

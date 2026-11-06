@@ -6,6 +6,10 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [5.0.10]
+
+- University attendance: a new state, Marked present, for a class that was missed but written as present by the teacher; it is not an absence. The attendance menu of a class offers Cancel class again (the class stays on the calendar, faded). Both states reach the API and MCP through the class status.
+
 ## [5.0.9]
 
 - Library: one page that lists entries only when searching, with key:value search; Find details and cover editing live inside the entry window, with sharper covers. Settings: editable sources, help for the book library, a Games kind, and no custom kinds.

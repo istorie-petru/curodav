@@ -162,3 +162,12 @@ def test_the_semester_lists_render_across_disciplines(conn, sem, frozen_today):
         html = university._render_study(conn, _request("/groups/University", view), "University", {"name": "University", "icon": "", "color": ""}).body.decode()
         assert expected in html, view
     assert study_page.exams(conn, sem, date(2026, 10, 26))["groups"][0]["rows"][0]["title"] == "Final"
+
+
+def test_a_class_marked_present_after_being_missed_does_not_count_as_an_absence(conn, sem):
+    lecture = _classes(conn, sem, "lecture")[0]
+    ua.set_status(conn, lecture["uid"], "marked_present")
+    assert ua.statuses_of(conn, [lecture["uid"]])[lecture["uid"]]["status"] == "marked_present"
+    data = ua.discipline_attendance(conn, sem["uid"], "Biology", date(2026, 10, 26))
+    assert next(k for k in data["kinds"] if k["kind"] == "lecture")["missed"] == 0 and not data["missed"]
+    assert db.get_event(conn, lecture["uid"])["status"] == "active"

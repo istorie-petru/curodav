@@ -12,9 +12,9 @@
 {% set _retire = [_delete] %}
 {% if university and university.kind == 'class' %}
 {% set _a = university.attendance %}
-{% set _icons = {'attended': 'check', 'missed': 'x', 'excused': 'file-check', 'made_up': 'rotate-ccw', 'cancelled': 'calendar-x'} %}
+{% set _icons = {'attended': 'check', 'missed': 'x', 'excused': 'file-check', 'marked_present': 'user-check', 'made_up': 'rotate-ccw', 'cancelled': 'calendar-x'} %}
 {% set _retire = [] %}
-{% for key, label in _a.choices %}{% if key == 'made_up' %}{% set _ = _retire.append({'action': 'open', 'url': '/university/class/' ~ event.uid ~ '/makeup', 'icon': _icons[key], 'label': 'Make up on another day', 'menu_icon': 'check', 'menu_label': 'Attendance'}) %}{% else %}{% set _ = _retire.append({'action': 'status', 'url': '/university/class/' ~ event.uid ~ '/attendance', 'fields': {'status': key, 'keep_note': '1', 'back': 'calendar'}, 'icon': _icons[key], 'label': label, 'menu_icon': 'check', 'menu_label': 'Attendance'}) %}{% endif %}{% endfor %}
+{% for key, label in _a.choices %}{% if key == 'made_up' %}{% set _ = _retire.append({'action': 'open', 'url': '/university/class/' ~ event.uid ~ '/makeup', 'icon': _icons[key], 'label': 'Make up on another day', 'menu_icon': 'check', 'menu_label': 'Attendance'}) %}{% else %}{% set _ = _retire.append({'action': 'status', 'url': '/university/class/' ~ event.uid ~ '/attendance', 'fields': {'status': key, 'keep_note': '1', 'back': 'calendar'}, 'icon': _icons[key], 'label': ('Cancel class' if key == 'cancelled' else label), 'menu_icon': 'check', 'menu_label': 'Attendance'}) %}{% endif %}{% endfor %}
 {% if _a.moved %}{% set _ = _retire.append({'action': 'status', 'url': '/university/class/' ~ event.uid ~ '/attendance', 'fields': {'status': 'attended', 'keep_note': '1', 'back': 'calendar'}, 'icon': 'rotate-ccw', 'label': 'Put back at its own time', 'menu_icon': 'check', 'menu_label': 'Attendance'}) %}{% endif %}
 {% endif %}
 {% set _cover %}{{ detail_cover('var(--cal-accent-' ~ event.calendar_color ~ ')', banner, icon('calendar')) }}{% endset %}
