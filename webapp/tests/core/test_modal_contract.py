@@ -120,3 +120,11 @@ def test_a_form_says_create_for_a_new_object_and_save_for_an_existing_one():
     assert "Create" in _footer(_render("form", "form='f', creating=true")) and "Save" not in _footer(_render("form", "form='f', creating=true"))
     assert "Save" in _footer(_render("form", "form='f'"))
     assert "Merge" in _footer(_render("pick", "form='f', save_label='Merge'"))
+
+
+def test_delete_is_a_labelled_button_and_splits_when_it_has_options():
+    plain = _footer(_render("view", "retire=[{'action': 'delete', 'url': '/d', 'mode': 'confirm', 'label': 'x'}]"))
+    assert "Delete</span>" in plain and "btn-split" not in plain
+    options = "[{'label': 'This event', 'url': '/d1'}, {'label': 'All events', 'url': '/d2'}]"
+    split = _footer(_render("view", "retire=[{'action': 'delete', 'url': '/s', 'mode': 'link', 'label': 'x', 'options': " + options + "}]"))
+    assert "btn-split-danger" in split and "This event" in split and "All events" in split

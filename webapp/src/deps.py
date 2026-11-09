@@ -992,3 +992,27 @@ def _discipline_href(request: Request, tag: dict) -> str:
 
 
 templates.env.globals["discipline_href"] = _discipline_href
+
+
+def _university_menu(request: Request, kind: str, uid: str) -> list:
+    """Menu entries opening the way of evaluating and the grading, for an exam event or task; [] otherwise."""
+    from . import modules, university_context
+    if not uid or not modules.is_enabled("university"):
+        return []
+    try:
+        with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
+            return university_context.menu_for(conn, kind, uid)
+    except Exception:
+        return []
+
+
+templates.env.globals["university_menu"] = _university_menu
+
+
+def _view_today() -> str:
+    """Today as an ISO date, for the view windows that gray out past items."""
+    from . import clock
+    return clock.today().isoformat()
+
+
+templates.env.globals["view_today"] = _view_today

@@ -766,6 +766,20 @@ def remove_contact_photo(
     return respond(x_requested_with, f"/contacts/{uid}")
 
 
+@router.post("/{uid}/update-field")
+async def update_contact_field(uid: str, request: Request, conn=Depends(get_db)):
+    """In-place edit from the view window: the notes of a contact."""
+    payload = await request.json()
+    field, value = payload.get("field"), payload.get("value")
+    if field != "notes":
+        return JSONResponse({"error": f"field '{field}' is not inline-editable"}, status_code=400)
+    contact = db.get_contact(conn, uid)
+    if contact is None:
+        return JSONResponse({"error": "contact not found"}, status_code=404)
+    db.set_contact_notes(conn, uid, value.strip()[:20000] if isinstance(value, str) else "", clock.now().isoformat())
+    return JSONResponse({"ok": True})
+
+
 @router.post("/{uid}/delete")
 def delete_contact(
     uid: str,

@@ -189,3 +189,23 @@ test("the slash menu adds blocks from an empty line and filters as you type", ()
   mid.commands.insertContent("/q");
   assert.equal(document.querySelector(".nbslash"), null);
 });
+
+test("Backspace in an empty paragraph after a list removes it and puts the caret at the end of the list", () => {
+  const e = open([list("one", "two"), P(""), timeline(["First", ""])]);
+  caret(e, "", "start");
+  assert.equal(press(e, "Backspace"), true);
+  assert.deepEqual(kinds(e), ["bulletList", "timeline"]);
+  assert.equal(e.getJSON().content[0].content.length, 2);
+  const { $from } = e.state.selection;
+  assert.equal($from.parent.textContent, "two");
+  assert.equal($from.parentOffset, 3);
+});
+
+test("Delete in an empty paragraph before a list removes it and puts the caret at the start of the list", () => {
+  const e = open([P(""), list("one", "two")]);
+  caret(e, "", "start");
+  assert.equal(press(e, "Delete"), true);
+  assert.deepEqual(kinds(e), ["bulletList"]);
+  assert.equal(e.state.selection.$from.parent.textContent, "one");
+  assert.equal(e.state.selection.$from.parentOffset, 0);
+});

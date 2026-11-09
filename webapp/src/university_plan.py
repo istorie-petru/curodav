@@ -1089,6 +1089,12 @@ def is_locked(conn: sqlite3.Connection, kind: str, uid: str) -> bool:
     return bool(conn.execute("SELECT 1 FROM university_milestones WHERE task_uid = ?", (uid,)).fetchone())
 
 
+def set_exam_location(conn: sqlite3.Connection, event_uid: str, location: str) -> None:
+    """An exam event edited in its normal form: the course sheet keeps the new place instead of writing the old one back."""
+    conn.execute("UPDATE university_milestones SET location = ? WHERE event_uid = ?", (location, event_uid))
+    conn.commit()
+
+
 def _slot_chain(conn: sqlite3.Connection, series_uid: str) -> set[str]:
     """The series of one slot: the one given and every half it was split into or continues."""
     chain, todo = set(), [series_uid]

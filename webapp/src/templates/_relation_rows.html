@@ -1,27 +1,12 @@
-{# View-modal Relations rows: tasks and events; the occurrences of a repeating event are one row per series. #}
+{# View-modal Relations: the tasks and events a contact is involved in, as compact rows; a repeating event is one row per series. #}
+{% from "_view_rows.html" import vi_link %}
 {% macro relation_rows(items) -%}
-<ul class="relation-list">
-    {% for t in items.tasks %}
-    <li class="relation-row"><span class="relation-icon">{{ icon('check-square', 'icon-sm') }}</span><a class="relation-title" href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a></li>
-    {% endfor %}
+{% set _today = view_today() %}
+<div class="vi-links">
+    {% for t in items.tasks %}{{ vi_link('check-square', t.title, '/tasks/' ~ t.uid, '', t.status in ('done', 'archived')) }}{% endfor %}
     {% for e in items.events %}
-    {% if e.series %}
-    <li class="relation-row relation-series{% if e.is_past %} is-past{% endif %}">
-        <span class="relation-icon">{{ icon('repeat', 'icon-sm') }}</span>
-        <div class="relation-main">
-            <a class="relation-title" href="/events/{{ e.uid }}" data-modal>{{ e.title }}</a>
-            <span class="relation-meta">{{ e.rule | recurrence_text or 'Repeats' }}{% if e.is_past %} · ended {{ e.start_at[:10] | holiday_date }}{% else %} · next {{ e.start_at[:10] | holiday_date }}{% endif %}</span>
-            {% if e.remaining %}
-            <details class="relation-more">
-                <summary>{{ e.remaining }} more</summary>
-                <ul>{% for o in e.more %}<li><a href="/events/{{ o.uid }}" data-modal>{{ o.start_at[:10] | holiday_date }}</a></li>{% endfor %}{% if e.remaining > e.more | length %}<li class="relation-meta">and {{ e.remaining - (e.more | length) }} later</li>{% endif %}</ul>
-            </details>
-            {% endif %}
-        </div>
-    </li>
-    {% else %}
-    <li class="relation-row"><span class="relation-icon">{{ icon('calendar', 'icon-sm') }}</span><a class="relation-title" href="/events/{{ e.uid }}" data-modal>{{ e.title }}</a>{% if e.start_at %}<span class="relation-meta">{{ e.start_at[:10] | holiday_date }}</span>{% endif %}</li>
-    {% endif %}
+    {% if e.series %}{{ vi_link('repeat', e.title, '/events/' ~ e.uid, (e.rule | recurrence_text or 'Repeats') ~ (' · ended ' if e.is_past else ' · next ') ~ (e.start_at[:10] | holiday_date), e.is_past) }}
+    {% else %}{{ vi_link('calendar', e.title, '/events/' ~ e.uid, (e.start_at | relative_date) if e.start_at else '', e.is_past or (e.start_at and e.start_at[:10] < _today)) }}{% endif %}
     {% endfor %}
-</ul>
+</div>
 {%- endmacro %}

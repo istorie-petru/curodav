@@ -868,7 +868,7 @@ def task_detail(uid: str, request: Request, month: str | None = None, conn=Depen
         return templates.TemplateResponse("habit_task_detail.html", ctx)
     from .. import modules
 
-    if modules.is_enabled("university"):
+    if task and modules.is_enabled("university"):
         from .. import university_context
 
         ctx["university"] = university_context.for_task(conn, task)
@@ -1050,7 +1050,7 @@ def _work_session_rows(uids, titles, hours, difficulties, starts, ends) -> list[
     return rows
 
 
-_UPDATABLE_FIELDS = {"status", "due_at", "title"}
+_UPDATABLE_FIELDS = {"status", "due_at", "title", "description"}
 
 
 @router.post("/{uid}/update-field")
@@ -1080,6 +1080,8 @@ async def update_field(uid: str, request: Request, conn=Depends(get_db)):
     elif field == "status":
         row["status"] = value
         row["progress"] = _progress_for_status(value)
+    elif field == "description":
+        row["description"] = value.strip() if isinstance(value, str) else ""
     else:  # title
         if not isinstance(value, str) or not value.strip():
             return JSONResponse({"error": "title cannot be blank"}, status_code=400)
@@ -1219,6 +1221,19 @@ def toggle_task_completion(
         )
     referer = request.headers.get("referer")
     return respond(x_requested_with, referer or f"/tasks/{uid}")
+
+
+@router.post("/{uid}/completion/today")
+def mark_habit_today_done(uid: str, request: Request, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    """Marks today as done for a habit and never toggles it back (the heatmap toggle does that). A habit with a daily amount
+    gets today's full target. The habit window's Done menu posts here."""
+    task = db.get_task(conn, uid)
+    if task is None or not task.get("is_habit"):
+        return JSONResponse({"error": "Not a habit."}, status_code=404)
+    amount = task.get("target_per_day")
+    value = float(amount) if amount and amount > 1 and task.get("habit_kind") != "avoid" else 1
+    db.upsert_task_completion(conn, uid, clock.today().isoformat(), clock.now().isoformat(), value)
+    return respond(x_requested_with, request.headers.get("referer") or f"/tasks/{uid}")
 
 
 @router.post("/{uid}/completions")

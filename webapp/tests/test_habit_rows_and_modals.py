@@ -163,7 +163,7 @@ class TestHabitTaskViewModal:
         _seed_task(conn, "p1", title="Plain recurring", recurrence="FREQ=DAILY")
         resp = tasks_router.task_detail("p1", _request("/tasks/p1"), conn=conn)
         body = resp.body.decode()
-        assert "detail-meta-label\">Status" in body
+        assert 'class="vi-k"' in body and "Status" in body
 
 
 class TestHabitWorkSessionsStatus:

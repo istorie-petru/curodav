@@ -1,20 +1,15 @@
-{# Read-only lists of the other side of a task and event link, each row opening the other item's modal. #}
+{# The other side of a task and event link as compact rows (templates/_view_rows.html), each opening the other item's window. #}
+{% from "_view_rows.html" import vi_link %}
 {% macro linked_events_view(links) %}
-<ul class="linked-list">
-    {% for l in links %}
-    <li class="linked-item"><a href="/events/{{ l.event.uid }}" data-modal>{{ l.event.title }}</a>
-        <span class="linked-meta">{{ l.event.start_at | relative_date }}</span>
-        <span class="cell-tag">{{ l.kind_label }}</span></li>
-    {% endfor %}
-</ul>
+{% set _today = view_today() %}
+<div class="vi-links">
+    {% for l in links %}{{ vi_link('calendar', l.event.title, '/events/' ~ l.event.uid, (l.event.start_at | relative_date) ~ ' · ' ~ l.kind_label, (l.event.start_at or '')[:10] < _today) }}{% endfor %}
+</div>
 {% endmacro %}
 
 {% macro linked_tasks_view(links) %}
-<ul class="linked-list">
-    {% for l in links %}
-    <li class="linked-item"><a href="/tasks/{{ l.task.uid }}" data-modal>{{ l.task.title }}</a>
-        {% if l.task.due_at %}<span class="linked-meta">Due {{ l.task.due_at | relative_date }}</span>{% endif %}
-        <span class="cell-tag">{{ l.kind_label }}</span></li>
-    {% endfor %}
-</ul>
+{% set _today = view_today() %}
+<div class="vi-links">
+    {% for l in links %}{{ vi_link('check-square', l.task.title, '/tasks/' ~ l.task.uid, ((('Due ' ~ (l.task.due_at | relative_date)) ~ ' · ') if l.task.due_at else '') ~ l.kind_label, l.task.status in ('done', 'archived') or (l.task.due_at and l.task.due_at[:10] < _today)) }}{% endfor %}
+</div>
 {% endmacro %}

@@ -373,6 +373,12 @@ def _backfill_contact_photo_version(conn: sqlite3.Connection, d: dict[str, Any])
     return d
 
 
+def set_contact_notes(conn: sqlite3.Connection, uid: str, notes: str, updated_at: str) -> None:
+    """Changes only the notes of a contact (the view window edits them in place)."""
+    conn.execute("UPDATE contacts SET notes = ?, updated_at = ? WHERE uid = ?", (notes, updated_at, uid))
+    conn.commit()
+
+
 def get_contact(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
     row = conn.execute("SELECT * FROM contacts WHERE uid = ?", (uid,)).fetchone()
     if not row:

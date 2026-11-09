@@ -1,6 +1,6 @@
 // Keyboard behaviour that is not specific to one block: lists, headings, code, tables, moving and duplicating blocks.
 import { Extension } from "@tiptap/core";
-import { TextSelection } from "@tiptap/pm/state";
+import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { TableMap } from "@tiptap/pm/tables";
 import { depthOf, exitAfter } from "./nodes.js";
 
@@ -41,9 +41,27 @@ export const ListKeys = Extension.create({
     };
   },
   addKeyboardShortcuts() {
+    // An empty paragraph beside a list is removed outright, and the caret goes to the end of the list above it (or the start
+    // of the list below it for Delete), instead of the paragraph being merged into the list as a new empty item.
+    const dropEmptyBesideList = (editor, direction) => {
+      const { $from, empty } = editor.state.selection;
+      if (!empty || $from.depth !== 1 || $from.parent.type.name !== "paragraph" || $from.parent.content.size) return false;
+      const index = $from.index(0);
+      const doc = editor.state.doc;
+      const neighbour = doc.maybeChild(index + direction);
+      if (!neighbour || !LISTS.includes(neighbour.type.name)) return false;
+      const from = $from.before(1);
+      return editor.commands.command(({ tr }) => {
+        tr.delete(from, $from.after(1));
+        tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(from, tr.doc.content.size)), direction));
+        return true;
+      });
+    };
     return {
+      Delete: ({ editor }) => dropEmptyBesideList(editor, 1),
       // Backspace at the start of an item (empty or not) takes it out of the list, or one level out when nested.
       Backspace: ({ editor }) => {
+        if (dropEmptyBesideList(editor, -1)) return true;
         const { $from, empty } = editor.state.selection;
         if (!empty || $from.parentOffset !== 0 || $from.depth < 2) return false;
         const item = $from.node($from.depth - 1).type.name;
@@ -177,4 +195,37 @@ function moveBlock(editor, direction) {
   });
 }
 
-export const KeyExtensions = [ListKeys, BlockKeys];
+// Clicking the empty space below the last block puts the caret in a paragraph there, adding one when the last block is
+// anything but an empty paragraph, so there is always a place to keep writing after a list, table or timeline.
+export const TrailingClick = Extension.create({
+  name: "trailingClick",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey("trailingClick"),
+        props: {
+          handleDOMEvents: {
+            mousedown(view, event) {
+              if (event.target !== view.dom || !view.editable) return false;
+              const rect = view.dom.getBoundingClientRect();
+              const last = view.dom.lastElementChild;
+              if (last && event.clientY < last.getBoundingClientRect().bottom) return false;
+              const { state } = view;
+              const tail = state.doc.lastChild;
+              const empty = tail && tail.type.name === "paragraph" && !tail.content.size;
+              let tr = state.tr;
+              if (!empty) tr = tr.insert(state.doc.content.size, state.schema.nodes.paragraph.create());
+              tr.setSelection(TextSelection.near(tr.doc.resolve(tr.doc.content.size), -1));
+              view.dispatch(tr);
+              view.focus();
+              event.preventDefault();
+              return rect.height >= 0;
+            },
+          },
+        },
+      }),
+    ];
+  },
+});
+
+export const KeyExtensions = [ListKeys, BlockKeys, TrailingClick];

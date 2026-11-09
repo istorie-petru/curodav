@@ -6,7 +6,7 @@
         {% endif %}{% endmacro %}
 {% block title %}{{ entry.term }}{% endblock %}
 {% block content %}
-{% call modal(kind="view", title=((entry.term)), size="medium", back=(return_to), back_name='Back', retire=[{'action': 'delete', 'url': '/notebook/glossary/' ~ entry.uid ~ '/delete', 'mode': 'confirm', 'label': 'Delete "' ~ entry.term ~ '"?', 'redirect': none, 'change': none}], edit_url='/notebook/glossary/' ~ entry.uid ~ '/edit') %}
+{% call modal(kind="view", title=((entry.term)), size="medium", back=(return_to), back_name='Back', retire=[{'action': 'delete', 'url': '/notebook/glossary/' ~ entry.uid ~ '/delete', 'mode': 'confirm', 'label': 'Delete "' ~ entry.term ~ '"?', 'redirect': none, 'change': none}], edit_url='/notebook/glossary/' ~ entry.uid ~ '/edit', done_menu=[]) %}
 {% call detail_section('Entry') %}
     <div class="detail-meta-grid">
         <div class="detail-meta-item">

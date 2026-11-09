@@ -6,6 +6,16 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [5.0.11]
+
+- View windows: task, event, class, exam, contact, habit, library entry, glossary entry, space and shelf windows read as one quiet table of 44px rows. Quick fields are edited in place with the app's own components and no frame: due date, status, description, location, notes. The editor closes after a save, on Escape or when you click away, and a saved value is kept when it is opened again.
+- The footer of a view window is one primary Done button whose arrow holds Edit fields and the actions of that object: Mark done, attendance marks, Way of evaluating, Grading, Attach to a way of evaluating, Call, Email, Mark today done. Delete is a labelled button; for a repeating event it splits into this event, this and the following, or all.
+- Exam items made by a way of evaluating open in the normal edit form, so their description, reminders and contacts can be edited; the date stays on the course sheet. Linked events and tasks are compact rows with the date on the right and past items gray. The contact window lists every phone, email, website, address and profile as a row and shows the nickname beside the name. The library entry puts its cover on the right.
+- Habits: a new Mark today done action that never toggles a day back.
+- Notebook editor: Backspace in an empty paragraph after a list removes it and goes to the end of the list; clicking below the last block adds a paragraph there; empty table rows no longer shift by a column; table actions are one Table menu (with a header column); timeline colour, Details (date, description) and entry controls were reworked.
+- Notebook browse: the folder readme is gone, the agenda and pinned notes are one block, and the subfolders of a shelf are rows above the notes with a folder icon.
+- Phones: the Add button of the bar and the sidebar opens the add window of the page you are on.
+
 ## [5.0.10]
 
 - University attendance: a new state, Marked present, for a class that was missed but written as present by the teacher; it is not an absence. The attendance menu of a class offers Cancel class again (the class stays on the calendar, faded). Both states reach the API and MCP through the class status.

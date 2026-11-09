@@ -1516,6 +1516,8 @@ def update_event(
 
     if managed and title != existing.get("title"):
         university_plan.rename_everywhere(conn, "event", uid, title)
+    if managed and _is_exam(conn, existing):  # the course sheet keeps its own copy of the place
+        university_plan.set_exam_location(conn, uid, _clean_field(location) or "")
     if work_task_uid:
         task = db.get_task(conn, work_task_uid)
         if task and task.get("title") != title:
@@ -1650,6 +1652,30 @@ def delete_scope_modal(uid: str, request: Request, occurrence_date: str = "", co
     return templates.TemplateResponse(
         "event_delete_scope_modal.html",
         {"request": request, "event": event, "occurrence_date": occurrence_date, "in_series": bool(event.get("series_uid"))})
+
+
+_EVENT_INLINE_FIELDS = {"location", "description"}
+
+
+@events_router.post("/events/{uid}/update-field")
+async def update_event_field(uid: str, request: Request, conn=Depends(get_db)):
+    """In-place edit from the view window: the location or the description of a single event. A repeating event is
+    edited in its form, where the scope (this, following, all) is asked."""
+    payload = await request.json()
+    field, value = payload.get("field"), payload.get("value")
+    if field not in _EVENT_INLINE_FIELDS:
+        return JSONResponse({"error": f"field '{field}' is not inline-editable"}, status_code=400)
+    event = db.get_event(conn, uid)
+    if event is None:
+        return JSONResponse({"error": "event not found"}, status_code=404)
+    if event.get("series_uid") or event.get("recurrence"):
+        return JSONResponse({"error": "Change a repeating event in its form"}, status_code=400)
+    text = value.strip() if isinstance(value, str) else ""
+    stored = (text or None) if field == "location" else text
+    db.upsert_event(conn, {**event, field: stored, "updated_at": clock.now().isoformat()})
+    if field == "location" and _is_exam(conn, event):
+        university_plan.set_exam_location(conn, uid, text)
+    return JSONResponse({"ok": True})
 
 
 @events_router.post("/events/{uid}/occurrences/restore")

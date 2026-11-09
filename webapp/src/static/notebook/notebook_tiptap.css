@@ -59,6 +59,8 @@ body:has(.nbtb) .notebook-page-main > #notebook-editor{padding:var(--space-4) va
 #notebook-editor .tiptap .nbtc-add-row{left:0; bottom:-26px;}
 
 #notebook-editor .tiptap .is-empty::before{content:attr(data-placeholder); float:left; height:0; pointer-events:none; color:var(--fg-tertiary);}
+/* An empty row or cell must not paint its hint: the pseudo-element would become an extra table cell and push the row over by one column. */
+#notebook-editor .tiptap tr.is-empty::before,#notebook-editor .tiptap td.is-empty::before,#notebook-editor .tiptap th.is-empty::before{content:none; display:none;}
 #notebook-editor .ProseMirror{position:relative; white-space:pre-wrap; white-space:break-spaces; word-wrap:break-word; font-variant-ligatures:none; font-feature-settings:"liga" 0;}
 #notebook-editor .ProseMirror pre{white-space:pre-wrap;}
 #notebook-editor .ProseMirror li{position:relative;}
@@ -137,7 +139,9 @@ body:has(.nbtb) .notebook-page-main > #notebook-editor{padding:var(--space-4) va
 .nbtb-context[hidden]{display:none;}
 .nbtb-break,.page-header-rows > .nbtb .nbtb-row > .nbtb-break{flex:0 0 100%; height:0; padding:0; margin:0;}
 .nbtb-break[hidden]{display:none;}
-.nbtb .icon-btn.nbtb-btn.nbtb-labeled{width:auto; padding:0 var(--space-2); gap:var(--space-1); font-size:var(--text-sm); font-weight:var(--font-weight-medium, 500);}
+.nbtb .icon-btn.nbtb-btn.nbtb-labeled{width:auto; padding:0 var(--space-2); gap:var(--space-1); display:inline-flex; align-items:center; font-size:var(--text-sm); font-weight:var(--font-weight-medium, 500); color:var(--fg-primary);}
+.nbtb .nbtb-labeled .nbtb-glyph{display:inline-flex; align-items:center; height:1em; line-height:1;}
+.nbtb .nbtb-labeled .nbtb-btn-text{line-height:1;}
 .nbtb-row[hidden]{display:none;}
 .nbtb-group{display:inline-flex; gap:2px; padding-right:var(--space-2); margin-right:var(--space-1); border-right:1px solid var(--border);}
 .nbtb-btn.is-active{background:var(--bg-secondary); color:var(--fg-primary);}
@@ -183,3 +187,11 @@ body:has(.nbtb) .notebook-page-main > #notebook-editor{padding:var(--space-4) va
 .nbslash-item{display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); padding:var(--space-1) var(--space-2); border-radius:var(--radius-md); color:var(--fg-primary); cursor:pointer;}
 .nbslash-item.is-active,.nbslash-item:hover{background:var(--bg-secondary);}
 .nbslash-hint{color:var(--fg-tertiary); font-size:var(--text-sm); font-family:var(--font-mono, ui-monospace, monospace);}
+
+.nbtb-dot.nb-color-swatch{width:14px; height:14px; min-width:14px; min-height:14px; margin:0; border:0; border-radius:50%; background:var(--nb-color-fg, transparent); box-shadow:inset 0 0 0 2px var(--nb-color-fg, var(--fg-tertiary)); flex:none; display:inline-block;}
+.nbtb-dot.is-none{background:transparent; box-shadow:inset 0 0 0 2px var(--fg-tertiary);}
+.nbtb-color-option input[type="radio"]{display:none;}
+.nbtb-color-option:has(input:checked){background:var(--bg-secondary);}
+.nbtb .nbtb-labeled-trigger{display:inline-flex; align-items:center; gap:var(--space-1);}
+.nbtb-menu-sep{height:1px; margin:var(--space-1) 0; background:var(--border);}
+.nbtb .nbtb-labeled .nbtb-glyph, .nbtb .nbtb-labeled-trigger > .nbtb-glyph{transform:translateY(1px);}

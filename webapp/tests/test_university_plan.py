@@ -492,3 +492,24 @@ def test_the_teachers_of_a_discipline_are_the_ones_named_on_its_timetable_and_ol
     migrations_university.sheet_teachers_to_slots(conn)
     assert [c["uid"] for c in db.list_object_contacts(conn, "event", up.series_members(conn, lecture)[0]["uid"])] == ["c1"]
     assert [c["uid"] for c in db.list_object_contacts(conn, "event", up.series_members(conn, seminar)[0]["uid"])] == ["c2"]
+
+
+def test_an_exam_item_opens_in_its_normal_form_and_offers_the_way_and_the_grading(conn, sem):
+    from src import university_context
+
+    _bio(conn, sem)
+    task_uid = add_exam(conn, sem, title="", day="2027-01-20", start="09:00", end="11:30", weight="60")
+    task = db.get_task(conn, task_uid)
+    ctx = university_context.for_task(conn, task)
+    assert ctx["edit_url"] == "" and "/settings/university/evaluation/" in ctx["way_url"] and "/settings/university/grades?discipline=Biology" in ctx["grades_url"]
+    assert [m["label"] for m in university_context.menu_for(conn, "task", task_uid)] == ["Open way of evaluating", "Open grading"]
+    assert university_context.menu_for(conn, "task", "nothing") == []
+
+
+def test_a_description_written_on_an_exam_item_survives_the_course_sheet(conn, sem):
+    _bio(conn, sem)
+    task_uid = add_exam(conn, sem, title="", day="2027-01-20", start="09:00", end="11:30", weight="60")
+    db.upsert_task(conn, {**db.get_task(conn, task_uid), "description": "Bring the lab notebook"})
+    ms = ue.list_milestones(conn, sem["uid"])[0]
+    ue.save_item(conn, sem["uid"], "Biology", ms["way_id"], {"uid": ms["uid"], "title": ms["raw_title"], "day": ms["day"], "start": ms["start"], "end": ms["end"], "due": ms["due"]})
+    assert db.get_task(conn, task_uid)["description"] == "Bring the lab notebook"

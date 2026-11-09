@@ -3,6 +3,9 @@
 {% from "_modal.html" import modal %}
 {% from "_task_work_allocations.html" import work_sessions_view, work_sessions_summary with context %}
 {% from "_detail_section.html" import detail_section %}
+{% from "_view_rows.html" import vi_rows, vi_row, vi_person %}
+{% from "_inputs.html" import textarea_input, radio_input %}
+{% from "_date_time_fields.html" import date_field with context %}
 {% from "_linked_items.html" import linked_events_view %}
 {% from "_label_pill.html" import label_pill, tag_pill with context %}
 {% from "_detail_cover.html" import detail_cover with context %}
@@ -10,60 +13,27 @@
 {% block content %}
 {% if task %}
 {% set _cover %}{{ detail_cover('var(--cal-accent-' ~ status_colors[task.status] ~ ')', banner, icon('check-square')) }}{% endset %}
-{% call modal(kind="view", title=((task.title)), size="medium", retire=[{'action': 'delete', 'url': '/tasks/' ~ task.uid ~ '/delete', 'mode': 'undo', 'label': task.title, 'redirect': '/tasks', 'change': 'task'}], edit_url=(university.edit_url if (university and university.edit_url) else ('/tasks/' ~ task.uid ~ '/edit')), cover_html=_cover) %}
-{% call detail_section('Details') %}
-    <div class="detail-meta-grid">
-        {% set _people = object_contacts(request, 'task', task.uid) %}
-        {% if task.start_at %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Start</span>
-            <span class="detail-meta-value">{{ task.start_at | relative_date }}</span>
-        </div>
-        {% endif %}
-        {% if task.due_at %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Due</span>
-            <span class="detail-meta-value">{{ task.due_at | relative_date }}</span>
-        </div>
-        {% endif %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Status</span>
-            <span class="detail-meta-value"><span class="cell-tag tag-{{ status_colors[task.status] }}">{{ status_labels[task.status] }}</span></span>
-        </div>
-        {% if task_list %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">List</span>
-            <span class="detail-meta-value"><span class="cell-tag cal-{{ task_list.color }}">{{ task_list.name }}</span></span>
-        </div>
-        {% endif %}
-        {% if task.tag_items %}
-        <div class="detail-meta-item detail-meta-wide">
-            <span class="detail-meta-label">Tags</span>
-            <span class="detail-meta-value">{% for tag in task.tag_items %}{{ tag_pill(tag) }} {% endfor %}</span>
-        </div>
-        {% endif %}
-        {% if _people %}
-        <div class="detail-meta-item detail-meta-wide">
-            <span class="detail-meta-label">Contacts</span>
-            <span class="detail-meta-value">{% for p in _people %}<a href="/contacts/{{ p.uid }}" data-modal>{{ p.full_name or 'Unnamed' }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
-        </div>
-        {% endif %}
-        {% if task.recurrence %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Recurrence</span>
-            <span class="detail-meta-value">{{ task.recurrence | recurrence_text }}</span>
-        </div>
-        {% endif %}
-    </div>
+{% set _retire = [{'action': 'delete', 'url': '/tasks/' ~ task.uid ~ '/delete', 'mode': 'undo', 'label': task.title, 'redirect': '/tasks', 'change': 'task'}] %}
+{% set _done_menu = ([{'label': 'Mark done', 'icon': 'check', 'form_action': '/tasks/' ~ task.uid ~ '/complete', 'change': 'task'}] if task.status not in ('done', 'archived') else []) + university_menu(request, 'task', task.uid) + ([{'label': 'Attach to a way of evaluating', 'icon': 'file-check', 'href': '/settings/university/attach?kind=task&uid=' ~ task.uid, 'modal': true}] if university_attach else []) %}
+{% call modal(kind="view", title=((task.title)), size="medium", retire=_retire, done_menu=_done_menu, edit_url=(university.edit_url if (university and university.edit_url) else ('/tasks/' ~ task.uid ~ '/edit')), cover_html=_cover) %}
+{% set _people = object_contacts(request, 'task', task.uid) %}
+{% set _url = '/tasks/' ~ task.uid ~ '/update-field' %}
+{% set _due_editor %}{{ date_field('due_at', task.due_at, label='Due date') }}{% endset %}
+{% set _status_editor %}<div class="multiselect widget-list-multiselect vi-status" data-ms data-ms-mode="single" data-ms-label="status"><button type="button" class="multiselect-trigger pill-select-trigger pill-{{ status_colors[task.status] }}" aria-label="Status" aria-haspopup="true" aria-expanded="false"><span class="ms-summary">{{ status_labels[task.status] }}</span><span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span></button><div class="multiselect-panel ms-panel">{% for s in statuses %}<label class="multiselect-option">{{ radio_input({'name': 'vi-status-' ~ task.uid, 'value': s, 'class': 'vi-status-radio', 'data-color': status_colors[s], 'checked': (true if (task.status == s) else false), 'autocomplete': 'off'}) }}<span class="pill-static pill-{{ status_colors[s] }}">{{ status_labels[s] }}</span></label>{% endfor %}</div></div>{% endset %}
+{% set _desc_editor %}{{ textarea_input({'name': 'description', 'rows': 4, 'aria-label': 'Description'}, task.description or '') }}{% endset %}
+{% call vi_rows() %}
+{% if task.start_at %}{% call vi_row('calendar', 'Start') %}{{ task.start_at | relative_date }}{% endcall %}{% endif %}
+{% call vi_row('calendar', 'Due', 'due_at', _url, _due_editor) %}<span class="vi-text">{% if task.due_at %}{{ task.due_at | relative_date }}{% else %}<span class="vi-empty">Add a due date</span>{% endif %}</span>{% endcall %}
+{% call vi_row('flag', 'Status', 'status', _url, _status_editor) %}<span class="cell-tag tag-{{ status_colors[task.status] }}">{{ status_labels[task.status] }}</span>{% endcall %}
+{% if task_list %}{% call vi_row('list', 'List') %}<span class="cell-tag cal-{{ task_list.color }}">{{ task_list.name }}</span>{% endcall %}{% endif %}
+{% if task.tag_items %}{% call vi_row('tag', 'Tags') %}{% for tag in task.tag_items %}{{ tag_pill(tag) }} {% endfor %}{% endcall %}{% endif %}
+{% if _people %}{% call vi_row('users', 'People') %}{% for p in _people %}<a href="/contacts/{{ p.uid }}" data-modal>{{ vi_person(p.full_name) }}</a>{% endfor %}{% endcall %}{% endif %}
+{% if task.recurrence %}{% call vi_row('repeat', 'Repeats') %}{{ task.recurrence | recurrence_text }}{% endcall %}{% endif %}
 {% endcall %}
 {% if university and university.kind == 'exam' %}
 {% include "_university_exam.html" %}
-{% elif university_attach %}
-{% call detail_section('Examination') %}<a class="btn ghost" href="/settings/university/attach?kind=task&amp;uid={{ task.uid }}" data-modal>{{ icon('file-check', 'icon-sm') }} Attach to a way of evaluating</a>{% endcall %}
 {% endif %}
-{% if task.description %}
-{% call detail_section('Description') %}<p class="detail-text">{{ task.description }}</p>{% endcall %}
-{% endif %}
+{% call detail_section('Description') %}<div class="vi-v vi-editable vi-desc" data-vi-field="description" data-vi-url="{{ _url }}" data-vi-empty="Add a description" tabindex="0" role="button" aria-label="Edit description"><span class="vi-display">{% if task.description %}<span class="detail-text">{{ task.description }}</span>{% else %}<span class="vi-empty">Add a description</span>{% endif %}</span><template class="vi-editor">{{ _desc_editor }}</template></div>{% endcall %}
 {% if linked_events %}
 {% call detail_section('Linked events', linked_events|length) %}{{ linked_events_view(linked_events) }}{% endcall %}
 {% endif %}

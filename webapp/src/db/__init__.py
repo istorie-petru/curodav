@@ -189,6 +189,7 @@ from .events import (
     upsert_holiday,
 )
 from .contacts import (
+    set_contact_notes,
     CONTACT_ADDRESS_TYPES,
     CONTACT_EMAIL_TYPES,
     CONTACT_PHONE_TYPES,

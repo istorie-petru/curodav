@@ -92,7 +92,7 @@ def _folder_context(conn, request: Request, kind: str, name: str, note_type: str
         "crumbs": [{"url": "/notebook", "name": "Notebook"}] + ([{"url": "/notebook/folder?" + urlencode({"kind": "label", "name": name}), "name": name}] if tag else []),
         "back_to": "/notebook/folder?" + urlencode({k: v for k, v in (("kind", kind), ("name", name), ("tag", tag)) if v}),
         "back_label": tag or name or "Unfiled",
-        "readme": db.get_folder_readme(conn, name) if kind in ("project", "label") and not tag else "",
+        "pinned_here": [d for d in db.list_notebook_folder_documents(conn, kind, name, "", "updated", "", 1000, 0, tag)[0] if d.get("pinned")] if kind in ("project", "label") else [],
         "agenda": _folder_agenda(conn, name) if kind in ("project", "label") and not tag else None,
     }
 
@@ -132,15 +132,6 @@ def folder_view(
         _folder_context(conn, request, kind.strip(), name.strip(), note_type.strip(), sort.strip(),
                         max(BROWSE_PAGE_SIZE, min(limit, 1000)), 0, tag.strip()),
     )
-
-
-@router.post("/folder/readme")
-def save_folder_readme(kind: str = Form("label"), name: str = Form(""), body: str = Form(""), conn=Depends(get_db)):
-    """Saves the quick-thoughts readme of a label or project folder."""
-    name = name.strip()
-    if kind in ("project", "label") and name:
-        db.set_folder_readme(conn, name, body[:20000])
-    return RedirectResponse(url="/notebook/folder?" + urlencode({"kind": kind, "name": name}), status_code=303)
 
 
 @router.get("/folder/rows")

@@ -160,6 +160,40 @@
       return shell;
     }
 
+    // A text button (an icon and a word) that opens a list of actions, for a group of related actions such as "Table".
+    function labelMenu(parent, glyph, text, items) {
+      var shell = menuShell(iconGlyph(glyph) + '<span class="nbtb-menu-text"></span><span class="filter-caret">' + iconGlyph("chevron-down") + "</span>", text, "nbtb-actions");
+      shell.trigger.classList.add("nbtb-labeled-trigger");
+      shell.trigger.querySelector(".nbtb-menu-text").textContent = text;
+      items.forEach(function (item) {
+        if (item === "-") { shell.panel.appendChild(el("div", "nbtb-menu-sep")); return; }
+        var radio = option(shell, item[0], item[1], item[1]);
+        radio.addEventListener("change", function () { radio.checked = false; setTimeout(item[2], 30); });
+      });
+      parent.appendChild(shell.wrap);
+      return shell;
+    }
+
+    // A text button that opens a list of switches (checkboxes), for choices that stay on or off.
+    function checkMenu(parent, glyph, text, items) {
+      var shell = menuShell(iconGlyph(glyph) + '<span class="nbtb-menu-text"></span><span class="filter-caret">' + iconGlyph("chevron-down") + "</span>", text, "nbtb-actions");
+      shell.trigger.classList.add("nbtb-labeled-trigger");
+      shell.trigger.querySelector(".nbtb-menu-text").textContent = text;
+      items.forEach(function (item) {
+        var row = el("label", "multiselect-option");
+        var box = el("input", null, { type: "checkbox" });
+        box.checked = !!item.checked;
+        row.appendChild(box);
+        var span = el("span");
+        span.textContent = item.label;
+        row.appendChild(span);
+        shell.panel.appendChild(row);
+        box.addEventListener("change", function () { setTimeout(item.run, 30); });
+      });
+      parent.appendChild(shell.wrap);
+      return shell;
+    }
+
     // An icon button for the controls of what the caret is in; `on` marks it as switched on.
     function ibtn(parent, name, label, run, on) {
       var b = button(parent, name, label, run);
@@ -167,10 +201,36 @@
       return b;
     }
 
-    // A color chosen from a list, with the current one shown on the button.
+    // A color chosen from a list: each choice shows its color as a dot, and so does the button.
     function colorMenu(parent, label, current, onPick, withNone) {
       var items = (withNone ? [["", "No color"]] : []).concat(COLORS.map(function (c) { return [c, c.charAt(0).toUpperCase() + c.slice(1)]; }));
-      dropdown(parent, label, items, onPick).set(current === undefined ? label : current);
+      var shell = menuShell('<span class="nbtb-dot nb-color-swatch"></span><span class="ms-summary"></span><span class="filter-caret">' + iconGlyph("chevron-down") + "</span>", label, "filter-dropdown");
+      shell.trigger.classList.add("filter-dropdown-trigger");
+      var summary = shell.trigger.querySelector(".ms-summary");
+      var dot = shell.trigger.querySelector(".nbtb-dot");
+      var radios = {};
+      function paint(value, text) {
+        summary.textContent = text;
+        if (value) dot.setAttribute("data-color", value); else dot.removeAttribute("data-color");
+        dot.classList.toggle("is-none", !value);
+      }
+      items.forEach(function (item) {
+        var row = el("label", "multiselect-option nbtb-color-option");
+        var radio = el("input", null, { type: "radio", name: shell.name, value: item[0] });
+        row.appendChild(radio);
+        var swatch = el("span", "nbtb-dot nb-color-swatch" + (item[0] ? "" : " is-none"));
+        if (item[0]) swatch.setAttribute("data-color", item[0]);
+        row.appendChild(swatch);
+        var span = el("span");
+        span.textContent = item[1];
+        row.appendChild(span);
+        shell.panel.appendChild(row);
+        radios[item[0]] = { radio: radio, label: item[1] };
+        radio.addEventListener("change", function () { paint(item[0], item[1]); onPick(item[0]); });
+      });
+      parent.appendChild(shell.wrap);
+      var hit = current === undefined ? null : radios[current];
+      if (hit) { hit.radio.checked = true; paint(current, hit.label); } else paint("", current === undefined ? label : (withNone ? "No color" : label));
     }
 
     var STYLES = [
@@ -425,38 +485,43 @@
           });
         }
         if (timeline) {
-          ibtn(rowTwo, timeline.attrs.showDates ? "calendar-off" : "calendar", timeline.attrs.showDates ? "Hide dates" : "Show dates", function () { chain().updateAttributes("timeline", { showDates: !timeline.attrs.showDates }).run(); });
           var itemDepth = 0;
           for (var td = editor.state.selection.$from.depth; td > 0; td--) if (editor.state.selection.$from.node(td).type.name === "timelineItem") { itemDepth = td; break; }
           var hasDescription = itemDepth && editor.state.selection.$from.node(itemDepth).childCount > 2;
+          var detailItems = [{ label: "Date", checked: !!timeline.attrs.showDates, run: function () { chain().updateAttributes("timeline", { showDates: !timeline.attrs.showDates }).run(); } }];
+          if (itemDepth) detailItems.push({ label: "Description", checked: !!hasDescription, run: function () { chain().timelineToggleDescription().run(); } });
+          checkMenu(rowTwo, "sliders-horizontal", "Details", detailItems);
           var items = group(rowTwo);
-          var addEntry = ibtn(items, "plus", "Add a new entry to the timeline", function () { chain().timelineAddItem().run(); });
+          var addEntry = button(items, "plus", "Add a new entry to the timeline", function () { chain().timelineAddItem().run(); });
           addEntry.classList.add("nbtb-labeled");
-          addEntry.appendChild(document.createTextNode("Entry"));
-          ibtn(items, "list-minus", "Delete this entry", function () { chain().timelineDeleteItem().run(); });
-          ibtn(items, "arrow-up", "Move this entry up", function () { chain().timelineMoveItem(-1).run(); });
-          ibtn(items, "arrow-down", "Move this entry down", function () { chain().timelineMoveItem(1).run(); });
-          if (itemDepth) ibtn(items, "align-left", hasDescription ? "Remove description" : "Add description", function () { chain().timelineToggleDescription().run(); }, hasDescription);
+          addEntry.innerHTML = iconGlyph("plus") + '<span class="nbtb-btn-text">Entry</span>';
+          button(items, "list-x", "Delete this entry", function () { chain().timelineDeleteItem().run(); });
+          button(items, "arrow-up", "Move this entry up", function () { chain().timelineMoveItem(-1).run(); });
+          button(items, "arrow-down", "Move this entry down", function () { chain().timelineMoveItem(1).run(); });
           ibtn(rowTwo, "trash-2", "Delete timeline", function () { chain().deleteNode("timeline").run(); });
         }
         return;
       }
       if (ancestor(["table"])) {
         show();
-        var rowsGroup = group(rowTwo);
-        ibtn(rowsGroup, "between-vertical-start", "Row above", function () { chain().addRowBefore().run(); });
-        ibtn(rowsGroup, "between-vertical-end", "Row below", function () { chain().addRowAfter().run(); });
-        ibtn(rowsGroup, "list-minus", "Delete row", function () { chain().deleteRow().run(); });
-        var colsGroup = group(rowTwo);
-        ibtn(colsGroup, "between-horizontal-start", "Column left", function () { chain().addColumnBefore().run(); });
-        ibtn(colsGroup, "between-horizontal-end", "Column right", function () { chain().addColumnAfter().run(); });
-        ibtn(colsGroup, "square-minus", "Delete column", function () { chain().deleteColumn().run(); });
+        labelMenu(rowTwo, "table", "Table", [
+          ["between-vertical-start", "Row above", function () { chain().addRowBefore().run(); }],
+          ["between-vertical-end", "Row below", function () { chain().addRowAfter().run(); }],
+          ["list-x", "Delete row", function () { chain().deleteRow().run(); }],
+          "-",
+          ["between-horizontal-start", "Column left", function () { chain().addColumnBefore().run(); }],
+          ["between-horizontal-end", "Column right", function () { chain().addColumnAfter().run(); }],
+          ["square-minus", "Delete column", function () { chain().deleteColumn().run(); }],
+          "-",
+          ["panel-top", "Header row", function () { chain().toggleHeaderRow().run(); }],
+          ["panel-left", "Header column", function () { chain().toggleHeaderColumn().run(); }],
+          "-",
+          ["trash-2", "Delete table", function () { chain().deleteTable().run(); }],
+        ]);
         var alignGroup = group(rowTwo);
         ibtn(alignGroup, "align-left", "Align column left", function () { chain().alignColumn("left").run(); });
         ibtn(alignGroup, "align-center", "Align column center", function () { chain().alignColumn("center").run(); });
         ibtn(alignGroup, "align-right", "Align column right", function () { chain().alignColumn("right").run(); });
-        ibtn(rowTwo, "panel-top", "Header row", function () { chain().toggleHeaderRow().run(); });
-        ibtn(rowTwo, "trash-2", "Delete table", function () { chain().deleteTable().run(); });
       }
     }
 

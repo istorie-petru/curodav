@@ -5085,6 +5085,8 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .btn-split .action-menu{display:flex;}
 .btn-split .btn-split-trigger{width:auto; min-width:36px; height:100%; border-radius:0 var(--radius-control) var(--radius-control) 0; border:0; border-left:1px solid rgba(255,255,255,.35); color:var(--fg-on-accent); padding:0 var(--space-2);}
 .btn-split .btn-split-trigger:hover{background:var(--accent-hover); color:var(--fg-on-accent);}
+.btn-split-danger .btn-split-trigger{color:inherit; border-left:1px solid var(--border);}
+.btn-split-danger .btn-split-trigger:hover{background:var(--tag-red-bg); color:inherit;}
 
 /* Label form: tag rows (name, look, remove) on one line */
 .label-tags-list{display:flex;flex-direction:column;gap:var(--space-2);margin-bottom:var(--space-2);}
@@ -5374,3 +5376,59 @@ input.is-greyed{opacity:.5; background:var(--bg-hover, transparent);}
 .uni-table .field{margin:0;}
 .uni-table input{width:100%;}
 .uni-table-note{color:var(--fg-tertiary); font-size:var(--text-sm);}
+
+/* View-modal rows (templates/_view_rows.html, static/view_inline.js): a quiet label and value table whose values edit in place. */
+.vi-rows{display:flex; flex-direction:column;}
+.vi-row{display:grid; grid-template-columns:120px 1fr; align-items:center; gap:var(--space-2); min-height:44px; border-bottom:1px solid var(--separator);}
+.vi-row:last-child{border-bottom:0;}
+.vi-k{display:flex; align-items:center; gap:var(--space-2); color:var(--fg-tertiary);}
+.vi-v{display:flex; align-items:center; flex-wrap:wrap; gap:6px; min-height:30px; margin:0 calc(var(--space-2) * -1); padding:5px var(--space-2); border-radius:var(--radius-md);}
+.vi-editable{cursor:text;}
+.vi-editable:hover, .vi-editable:focus-visible{background:rgba(127,127,127,.12);}
+.vi-editable .vi-pen{margin-left:auto; opacity:0; color:var(--fg-tertiary);}
+.vi-editable:hover .vi-pen, .vi-editable:focus-visible .vi-pen{opacity:1;}
+.vi-editable.is-editing{background:none; display:block; padding:0; margin:0;}
+.vi-editable.is-editing .vi-pen{display:none;}
+.vi-edit .field{margin:0; width:100%;}
+.vi-empty{color:var(--fg-tertiary);}
+.vi-desc{display:block; margin:0 calc(var(--space-2) * -1); padding:var(--space-2);}
+.vi-person{display:inline-flex; align-items:center; gap:var(--space-2);}
+.vi-person .avatar-circle{width:20px; height:20px; font-size:11px; flex:none;}
+.vi-edit{width:100%;}
+.vi-edit textarea, .vi-edit .dtf, .vi-edit .multiselect{width:100%;}
+.vi-edit .multiselect{width:auto;}
+.notebook-row-gap{flex:none; width:18px;}
+.notebook-folder-row .contact-row-name{font-weight:var(--font-weight-medium, 500);}
+
+/* The in-place editors blend into the window: no border, no focus shadow, the window's own background. Every kind of input an
+   editor can hold is listed, and the rules are !important because the form field rules are more specific. */
+.vi-edit input, .vi-edit textarea, .vi-edit select, .vi-edit .dtf, .vi-edit .dtf-input, .vi-edit .dtf-btn, .vi-edit .multiselect-trigger.filter-dropdown-trigger,
+.vi-edit input:focus, .vi-edit textarea:focus, .vi-edit select:focus, .vi-edit .dtf:focus-within, .vi-edit .dtf-input:focus, .vi-edit .dtf.is-open,
+.vi-edit input:hover, .vi-edit textarea:hover, .vi-edit .dtf:hover, .vi-edit .dtf-input:hover{border:0 !important; border-width:0 !important; background:transparent !important; box-shadow:none !important; outline:none !important;}
+.vi-edit textarea{resize:none; min-height:0; padding-left:0 !important; padding-right:0 !important;}
+.vi-edit .dtf-input, .vi-edit input.vi-input{padding-left:0 !important;}
+.vi-edit .field{background:transparent !important; border:0 !important; box-shadow:none !important;}
+.vi-rows + .detail-section, .vi-rows + .detail-section-head{margin-top:var(--space-4);}
+
+/* Linked items in a view window: compact rows, the date on the right, past items gray. */
+.vi-links{display:flex; flex-direction:column;}
+.vi-link{display:flex; align-items:center; gap:var(--space-2); min-height:44px; border-bottom:1px solid var(--separator); color:var(--fg-primary); text-decoration:none;}
+.vi-link:last-child{border-bottom:0;}
+.vi-link:hover{background:rgba(127,127,127,.12); margin:0 calc(var(--space-2) * -1); padding:0 var(--space-2); border-radius:var(--radius-md);}
+.vi-link .icon{color:var(--fg-tertiary); flex:none;}
+.vi-link-title{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.vi-link-when{flex:none; color:var(--fg-tertiary); font-size:var(--text-sm);}
+.vi-link.is-past{color:var(--fg-tertiary);}
+/* Every kind of control in an in-place editor, the status dropdown included, loses its frame. */
+.vi-edit .multiselect-trigger, .vi-edit .widget-list-multiselect .multiselect-trigger, .vi-edit .pill-select-trigger, .vi-edit .multiselect-trigger:focus, .vi-edit .multiselect-trigger:hover, .vi-edit .multiselect-trigger[aria-expanded="true"]{border:0 !important; box-shadow:none !important; outline:none !important; background:transparent !important;}
+.vi-edit .multiselect-trigger{padding-left:0 !important;}
+
+/* The older detail grids of the remaining view windows (citations, entries, spaces, shelves) read as the same quiet rows. */
+.modal-body .detail-meta-grid:not(.habit-stats-grid){display:flex; flex-direction:column; gap:0;}
+.modal-body .detail-meta-grid:not(.habit-stats-grid) > .detail-meta-item{display:grid; grid-template-columns:120px 1fr; align-items:center; gap:0 var(--space-2); min-height:44px; padding:var(--space-1) 0; border-bottom:1px solid var(--separator);}
+.modal-body .detail-meta-grid:not(.habit-stats-grid) > .detail-meta-item:last-child{border-bottom:0;}
+.modal-body .detail-meta-grid:not(.habit-stats-grid) > .detail-meta-item > :not(.detail-meta-label){grid-column:2;}
+.modal-body .detail-meta-grid:not(.habit-stats-grid) .detail-meta-value, .modal-body .detail-meta-grid:not(.habit-stats-grid) .detail-meta-value a{font-weight:var(--font-weight-regular);}
+.modal-body .detail-meta-grid:not(.habit-stats-grid) > .detail-meta-item > .cell-tag{justify-self:start;}
+.detail-alias{font-weight:var(--font-weight-regular); color:inherit; opacity:.85;}
+.detail-alias-dot{display:inline-block; margin:0 .5em; color:inherit; opacity:.7;}

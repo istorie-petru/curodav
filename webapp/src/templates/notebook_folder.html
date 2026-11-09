@@ -5,7 +5,6 @@
 {% from "_folder_icon.html" import folder_icon %}
 {% from "_bulk_actions_bar.html" import bulk_actions_bar, bulk_count %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
-{% from "_inputs.html" import textarea_input %}
 {% from "_widget_items.html" import widget_pill %}
 {% block title %}{{ folder_name }} - Notebook{% endblock %}
 {% block main_class %}main-full-width notebook-main notebook-folder-page{% endblock %}
@@ -35,44 +34,32 @@
     </form>
 {% endcall %}
 {% if agenda is not none %}
-<div class="sec-grid ov-grid">
-    <div class="sec-col">
-        <form method="post" action="/notebook/folder/readme" class="ov-section notebook-readme" id="notebook-readme">
-            <input type="hidden" name="kind" value="{{ kind }}">
-            <input type="hidden" name="name" value="{{ name }}">
-            <h2 class="ov-heading">Readme</h2>
-            {{ textarea_input({'name': 'body', 'rows': 5, 'maxlength': 20000, 'aria-label': 'Quick thoughts for ' ~ name}, readme) }}
-            <div><button type="submit" class="btn ghost">Save</button></div>
-        </form>
-    </div>
-    <div class="sec-col">
-        <section class="ov-section" id="notebook-agenda">
-            <h2 class="ov-heading">Agenda</h2>
-            {% if agenda.event %}
-            <div class="sec-row"><span class="sec-lead">{{ icon('calendar', 'icon-sm') }}</span><a class="sec-title" href="/events/{{ agenda.event.uid }}" data-modal>{{ agenda.event.title }}</a><span class="sec-pills">{{ widget_pill(agenda.event.start_at | relative_date, 'blue') }}</span></div>
-            {% endif %}
-            {% for t in agenda.tasks %}
-            <div class="sec-row"><span class="sec-lead">{{ icon('check-square', 'icon-sm') }}</span><a class="sec-title" href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a><span class="sec-pills">{{ widget_pill(t.start_at | relative_date, 'gray') }}</span></div>
-            {% endfor %}
-            {% if not agenda.event and not agenda.tasks %}{{ empty_state('Nothing planned', size='compact') }}{% endif %}
-        </section>
-    </div>
-</div>
-{% endif %}
-{% if subfolders %}
-<div class="folder-grid notebook-subfolders">
-    {% for f in subfolders %}
-    <a class="folder-tile" href="/notebook/folder?kind=label&name={{ name | urlencode }}&tag={{ f.name | urlencode }}">
-        {{ folder_icon(f.icon, f.color, 'lg') }}
-        <span class="folder-tile-name">{{ f.name }}</span>
-        <span class="folder-tile-count">{{ f.count }} note{{ 's' if f.count != 1 else '' }}</span>
-    </a>
+<section class="ov-section" id="notebook-agenda">
+    <h2 class="ov-heading">Agenda and pinned</h2>
+    {% if agenda.event %}
+    <div class="sec-row"><span class="sec-lead">{{ icon('calendar', 'icon-sm') }}</span><a class="sec-title" href="/events/{{ agenda.event.uid }}" data-modal>{{ agenda.event.title }}</a><span class="sec-pills">{{ widget_pill(agenda.event.start_at | relative_date, 'blue') }}</span></div>
+    {% endif %}
+    {% for t in agenda.tasks %}
+    <div class="sec-row"><span class="sec-lead">{{ icon('check-square', 'icon-sm') }}</span><a class="sec-title" href="/tasks/{{ t.uid }}" data-modal>{{ t.title }}</a><span class="sec-pills">{{ widget_pill(t.start_at | relative_date, 'gray') }}</span></div>
     {% endfor %}
-</div>
+    {% for d in pinned_here %}
+    <div class="sec-row"><span class="sec-lead">{{ icon('pin', 'icon-sm') }}</span><a class="sec-title" href="/notebook/{{ d.uid }}?back_to={{ back_to | urlencode }}&amp;back_label={{ back_label | urlencode }}">{{ d.title or 'Untitled' }}</a></div>
+    {% endfor %}
+    {% if not agenda.event and not agenda.tasks and not pinned_here %}{{ empty_state('Nothing planned or pinned', size='compact') }}{% endif %}
+</section>
 {% endif %}
 <div class="notebook-folder-body" id="notebook-folder-body" data-smart-region>
-    {% if documents %}
+    {% if documents or subfolders %}
     <div class="card contact-list notebook-folder-list" id="notebook-folder-list">
+        {% for f in subfolders %}
+        <div class="contact-row-wrap notebook-folder-row">
+            <span class="notebook-row-gap" aria-hidden="true"></span>
+            <a class="contact-row" href="/notebook/folder?kind=label&amp;name={{ name | urlencode }}&amp;tag={{ f.name | urlencode }}">
+                <span class="notebook-row-icon">{{ icon('folder', 'icon-sm cal-' ~ (f.color or 'gray')) }}</span>
+                <span class="contact-row-main"><span class="contact-row-name">{{ f.name }}</span><span class="contact-row-sub">{{ f.count }} note{{ 's' if f.count != 1 else '' }}</span></span>
+            </a>
+        </div>
+        {% endfor %}
         <div id="notebook-rows">{% include "_notebook_folder_rows.html" %}</div>
     </div>
     {% if has_more %}

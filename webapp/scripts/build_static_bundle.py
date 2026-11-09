@@ -18,7 +18,7 @@ BUNDLES = {
         "search_field", "modal", "habit_day", "page_header_bar",
     ],
     "bundle_c.js": [
-        "async_crud", "inline_edit", "tag_input", "recurrence_picker", "series_scope", "reminders_picker",
+        "async_crud", "inline_edit", "view_inline", "tag_input", "recurrence_picker", "series_scope", "reminders_picker",
         "date_time_fields", "stepper", "dashboard_widget_preview", "avatar_cropper", "upload_zone", "contact_draft",
         "contact_phone_email_rows", "entry_reference_pages", "citation_fields", "library_find", "library_editions", "entry_fields",
         "label_role_picker", "label_form_picker", "event_format_toggle", "repeatable_rows", "university_way",

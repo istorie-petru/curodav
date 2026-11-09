@@ -265,13 +265,13 @@ class TestRenderedMarkup:
         uid = _make_contact(conn, birthday="1990-05-17")
         resp = contacts_router.contact_detail(uid, _fake_request(f"/contacts/{uid}"), conn=conn)
         body = resp.body.decode()
-        assert "<span class=\"detail-meta-value\">May 17, 1990</span>" in body
+        assert "May 17, 1990" in body
 
     def test_detail_shows_formatted_yearless_birthday(self, conn):
         uid = _make_contact(conn, birthday="--05-17")
         resp = contacts_router.contact_detail(uid, _fake_request(f"/contacts/{uid}"), conn=conn)
         body = resp.body.decode()
-        assert "<span class=\"detail-meta-value\">May 17</span>" in body
+        assert "May 17" in body
 
     def test_detail_omits_birthday_row_when_absent(self, conn):
         uid = _make_contact(conn)

@@ -1,5 +1,7 @@
 {% from "_empty_state.html" import empty_state %}
 {% from "_detail_section.html" import detail_section %}
+{% from "_view_rows.html" import vi_rows, vi_row %}
+{% from "_inputs.html" import textarea_input %}
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
 {% from "_habit_heatmap.html" import heatmap %}
@@ -10,53 +12,21 @@
 {% block content %}
 {% if task %}
 {% set _cover %}{{ detail_cover('var(--cal-accent-' ~ (habit_look.color or status_colors[task.status]) ~ ')', none if habit_look.color else banner, icon(habit_look.icon or 'repeat')) }}{% endset %}
-{% call modal(kind="view", title=((task.title)), size="medium", retire=[{'action': 'delete', 'url': '/tasks/' ~ task.uid ~ '/delete', 'mode': 'undo', 'label': task.title, 'redirect': '/habits', 'change': 'task'}], edit_url='/tasks/' ~ task.uid ~ '/edit', cover_html=_cover) %}
-{% call detail_section('Details') %}
-    <div class="detail-meta-grid habit-stats-grid">
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">How often</span>
-            <span class="detail-meta-value">{{ habit_cadence_label(task) }}</span>
-        </div>
-        {% set _unit = habit_stats.unit if habit_stats else 'day' %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">{{ 'Clean streak' if task.habit_kind == 'avoid' else 'Streak' }}</span>
-            <span class="detail-meta-value">{{ current_streak }} {{ _unit }}{{ 's' if current_streak != 1 }}</span>
-        </div>
-        {% if habit_stats %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Best</span>
-            <span class="detail-meta-value">{{ habit_stats.longest }} {{ habit_stats.unit }}{{ 's' if habit_stats.longest != 1 }}</span>
-        </div>
-        {% if habit_stats.rate is not none %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">{{ 'Clean' if task.habit_kind == 'avoid' else 'Kept' }}</span>
-            <span class="detail-meta-value">{{ (habit_stats.rate * 100)|round|int }}%</span>
-        </div>
-        {% endif %}
-        {% if habit_stats.strength is not none %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label" title="Loop-style score: every kept day/week raises it, a miss dents it rather than resetting it">Strength</span>
-            <span class="detail-meta-value">{{ habit_stats.strength }}%</span>
-        </div>
-        {% endif %}
-        {% if habit_stats.period_target > 1 %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">This {{ habit_stats.unit }}</span>
-            <span class="detail-meta-value">{{ habit_stats.period_done }} / {{ habit_stats.period_target }}</span>
-        </div>
-        {% endif %}
-        {% endif %}
-        {% if task.tag_items %}
-        <div class="detail-meta-item detail-meta-wide">
-            <span class="detail-meta-label">Tags</span>
-            <span class="detail-meta-value">{% for tag in task.tag_items %}{{ tag_pill(tag) }} {% endfor %}</span>
-        </div>
-        {% endif %}
-    </div>
-{% endcall %}
-{% if task.description %}
-{% call detail_section('Description') %}<p class="detail-text">{{ task.description }}</p>{% endcall %}
+{% call modal(kind="view", title=((task.title)), size="medium", retire=[{'action': 'delete', 'url': '/tasks/' ~ task.uid ~ '/delete', 'mode': 'undo', 'label': task.title, 'redirect': '/habits', 'change': 'task'}], edit_url='/tasks/' ~ task.uid ~ '/edit', done_menu=[{'label': 'Mark today done', 'icon': 'check', 'form_action': '/tasks/' ~ task.uid ~ '/completion/today', 'change': 'task'}], cover_html=_cover) %}
+{% set _unit = habit_stats.unit if habit_stats else 'day' %}
+{% call vi_rows() %}
+{% call vi_row('repeat', 'How often') %}{{ habit_cadence_label(task) }}{% endcall %}
+{% call vi_row('flame', 'Clean streak' if task.habit_kind == 'avoid' else 'Streak') %}{{ current_streak }} {{ _unit }}{{ 's' if current_streak != 1 }}{% endcall %}
+{% if habit_stats %}
+{% call vi_row('trophy', 'Best') %}{{ habit_stats.longest }} {{ habit_stats.unit }}{{ 's' if habit_stats.longest != 1 }}{% endcall %}
+{% if habit_stats.rate is not none %}{% call vi_row('percent', 'Clean' if task.habit_kind == 'avoid' else 'Kept') %}{{ (habit_stats.rate * 100)|round|int }}%{% endcall %}{% endif %}
+{% if habit_stats.strength is not none %}{% call vi_row('activity', 'Strength') %}{{ habit_stats.strength }}%{% endcall %}{% endif %}
+{% if habit_stats.period_target > 1 %}{% call vi_row('target', 'This ' ~ habit_stats.unit) %}{{ habit_stats.period_done }} / {{ habit_stats.period_target }}{% endcall %}{% endif %}
 {% endif %}
+{% if task.tag_items %}{% call vi_row('tag', 'Tags') %}{% for tag in task.tag_items %}{{ tag_pill(tag) }} {% endfor %}{% endcall %}{% endif %}
+{% endcall %}
+{% set _desc_editor %}{{ textarea_input({'name': 'description', 'rows': 4, 'aria-label': 'Description'}, task.description or '') }}{% endset %}
+{% call detail_section('Description') %}<div class="vi-v vi-editable vi-desc" data-vi-field="description" data-vi-url="/tasks/{{ task.uid }}/update-field" data-vi-empty="Add a description" tabindex="0" role="button" aria-label="Edit description"><span class="vi-display">{% if task.description %}<span class="detail-text">{{ task.description }}</span>{% else %}<span class="vi-empty">Add a description</span>{% endif %}</span><template class="vi-editor">{{ _desc_editor }}</template></div>{% endcall %}
 
 {% set _keep = 'data-modal-keep-open data-cc-change="task" data-cc-action="checkin"' %}
 {% set _is_amount = task.target_per_day and task.target_per_day > 1 and task.habit_kind != 'avoid' %}

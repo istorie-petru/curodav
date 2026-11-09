@@ -27,6 +27,7 @@
     </div>
     {{ action_menu([
         {'label': 'Edit task', 'icon': 'edit', 'href': '/tasks/' ~ t.uid ~ '/edit', 'modal': true},
+    ] + university_menu(request, 'task', t.uid) + [
         {'label': 'Delete task', 'icon': 'trash', 'danger': true, 'form_action': '/tasks/' ~ t.uid ~ '/delete', 'undo': t.title, 'change': 'task'},
     ], aria_label='More actions for ' ~ t.title) }}
 </div>

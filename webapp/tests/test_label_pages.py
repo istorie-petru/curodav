@@ -336,7 +336,7 @@ class TestLabelPillLinks:
         assert [i["title"] for i in resp.context["agenda_items"]] == ["Deadline"]
         assert 'href="/groups/Uni"' in body
         # Open page leaves the modal; Edit swaps the form in.
-        assert '<a class="btn ghost" href="/labels/Essay">' in body
+        assert 'href="/labels/Essay"' in body and "Open page" in body
         assert 'href="/settings/labels/Essay/edit" data-modal' in body
 
     def test_preview_agenda_leads_with_at_most_two_habits(self, conn):

@@ -4,78 +4,33 @@
 {% from "_label_pill.html" import label_pill, tag_pill with context %}
 {% from "_detail_cover.html" import detail_cover with context %}
 {% from "_detail_section.html" import detail_section %}
+{% from "_inputs.html" import textarea_input %}
 {% block title %}{{ contact.full_name if contact else "Contact" }}{% endblock %}
 {% block content %}
 {% if contact %}
 {% set _cover %}{% set _badge %}<a href="/contacts/{{ contact.uid }}/photo/modal" data-modal class="avatar-upload" title="Change photo">{{ avatar(contact, 'avatar-large') }}<span class="avatar-upload-overlay" aria-hidden="true">{{ icon('camera', 'icon-sm') }}</span></a>{% endset %}
         {{ detail_cover('var(--cal-accent-' ~ stable_color(contact.uid) ~ ')', banner, _badge, avatar_mode=true) }}{% endset %}
-{% set _sub %}{% if contact.pseudonym %}<div class="detail-heading-sub">&ldquo;{{ contact.pseudonym }}&rdquo;</div>{% endif %}
-                {% set _work = [contact.role, contact.org] | select | join(' at ') %}
+{% set _alias %}{% if contact.pseudonym %}<span class="detail-alias"><span class="detail-alias-dot" aria-hidden="true">&middot;</span>&ldquo;{{ contact.pseudonym|e }}&rdquo;</span>{% endif %}{% endset %}
+{% set _sub %}                {% set _work = [contact.role, contact.org] | select | join(' at ') %}
                 {% if contact.title or _work %}
                 <div class="detail-heading-sub">{{ [contact.title, _work] | select | join(' · ') }}</div>
                 {% endif %}{% endset %}
-{% call modal(kind="view", title=((contact.full_name)), size="medium", retire=[{'action': 'delete', 'url': '/contacts/' ~ contact.uid ~ '/delete', 'mode': 'undo', 'label': contact.full_name, 'redirect': '/contacts', 'change': 'contact'}], edit_url='/contacts/' ~ contact.uid ~ '/edit', cover_html=_cover, subtitle_html=_sub) %}
-{% if contact.phones or contact.emails %}
-<div class="contact-quick-actions">
-    {% if contact.phones %}<a class="btn" href="tel:{{ contact.phones[0].value }}">{{ icon('phone', 'icon-sm') }} Call</a>{% endif %}
-    {% if contact.emails %}<a class="btn" href="mailto:{{ contact.emails[0].value }}">{{ icon('mail', 'icon-sm') }} Email</a>{% endif %}
-</div>
-{% endif %}
+{% set _done_menu = ([{'label': 'Call', 'icon': 'phone', 'href': 'tel:' ~ contact.phones[0].value}] if contact.phones else []) + ([{'label': 'Email', 'icon': 'mail', 'href': 'mailto:' ~ contact.emails[0].value}] if contact.emails else []) %}
+{% call modal(kind="view", title=((contact.full_name)), size="medium", retire=[{'action': 'delete', 'url': '/contacts/' ~ contact.uid ~ '/delete', 'mode': 'undo', 'label': contact.full_name, 'redirect': '/contacts', 'change': 'contact'}], edit_url='/contacts/' ~ contact.uid ~ '/edit', done_menu=_done_menu, cover_html=_cover, title_suffix=_alias, subtitle_html=_sub) %}
 
+{% from "_view_rows.html" import vi_rows, vi_row, vi_link %}
+{% set _t = namespace(any=false) %}
 {% call detail_section('Details') %}
-    <div class="detail-meta-grid">
-        {% for p in contact.phones %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Phone{% if p.type %} ({{ p.type }}){% endif %}</span>
-            <span class="detail-meta-value"><a href="tel:{{ p.value }}">{{ p.value }}</a></span>
-        </div>
-        {% endfor %}
-        {% for e in contact.emails %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Email{% if e.type %} ({{ e.type }}){% endif %}</span>
-            <span class="detail-meta-value"><a href="mailto:{{ e.value }}">{{ e.value }}</a></span>
-        </div>
-        {% endfor %}
-        {% for w in contact.websites %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Website{% if w.type %} ({{ w.type }}){% endif %}</span>
-            <span class="detail-meta-value"><a href="{{ w.url }}" target="_blank" rel="noopener">{{ icon('external-link', 'icon-sm') }} {{ w.url }}</a></span>
-        </div>
-        {% endfor %}
-        {% for a in contact.addresses %}
-        <div class="detail-meta-item detail-meta-wide">
-            <span class="detail-meta-label">Address{% if a.type %} ({{ a.type }}){% endif %}</span>
-            <span class="detail-meta-value detail-meta-multiline">{{ a | fmt_address }}</span>
-        </div>
-        {% endfor %}
-        {% for s in contact.social_profiles %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Social{% if s.type %} ({{ s.type }}){% endif %}</span>
-            <span class="detail-meta-value">
-                {% if s.value.startswith('http://') or s.value.startswith('https://') %}
-                <a href="{{ s.value }}" target="_blank" rel="noopener">{{ icon('external-link', 'icon-sm') }} {{ s.value }}</a>
-                {% else %}
-                {{ s.value }}
-                {% endif %}
-            </span>
-        </div>
-        {% endfor %}
-        {% if contact.birthday %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Birthday</span>
-            <span class="detail-meta-value">{{ contact.birthday | fmt_birthday }}</span>
-        </div>
-        {% endif %}
-        {% if contact.tag_items %}
-        <div class="detail-meta-item detail-meta-wide">
-            <span class="detail-meta-label">Tags</span>
-            <span class="detail-meta-value">{% for tag in contact.tag_items %}{{ tag_pill(tag) }} {% endfor %}</span>
-        </div>
-        {% endif %}
-    </div>
-    {% if not (contact.phones or contact.emails or contact.websites or contact.addresses or contact.social_profiles or contact.birthday or contact.tags or contact.notes) %}
-    {% call empty_state('No other details yet', size='compact') %}<a href="/contacts/{{ contact.uid }}/edit" data-modal>Add some</a>{% endcall %}
-    {% endif %}
+{% call vi_rows() %}
+{% for p in contact.phones %}{% set _t.any = true %}{% call vi_row('phone', 'Phone') %}<a href="tel:{{ p.value }}">{{ p.value }}</a>{% if p.type %} <span class="vi-empty">{{ p.type }}</span>{% endif %}{% endcall %}{% endfor %}
+{% for e in contact.emails %}{% set _t.any = true %}{% call vi_row('mail', 'Email') %}<a href="mailto:{{ e.value }}">{{ e.value }}</a>{% if e.type %} <span class="vi-empty">{{ e.type }}</span>{% endif %}{% endcall %}{% endfor %}
+{% for w in contact.websites %}{% set _t.any = true %}{% call vi_row('globe', 'Website') %}<a href="{{ w.url }}" target="_blank" rel="noopener">{{ w.url }}</a>{% if w.type %} <span class="vi-empty">{{ w.type }}</span>{% endif %}{% endcall %}{% endfor %}
+{% for a in contact.addresses %}{% set _t.any = true %}{% call vi_row('map-pin', 'Address') %}<span class="detail-meta-multiline">{{ a | fmt_address }}</span>{% if a.type %} <span class="vi-empty">{{ a.type }}</span>{% endif %}{% endcall %}{% endfor %}
+{% for s in contact.social_profiles %}{% set _t.any = true %}{% call vi_row('at-sign', 'Social') %}{% if s.value.startswith('http://') or s.value.startswith('https://') %}<a href="{{ s.value }}" target="_blank" rel="noopener">{{ s.value }}</a>{% else %}{{ s.value }}{% endif %}{% if s.type %} <span class="vi-empty">{{ s.type }}</span>{% endif %}{% endcall %}{% endfor %}
+{% if contact.birthday %}{% set _t.any = true %}{% call vi_row('cake', 'Birthday') %}{{ contact.birthday | fmt_birthday }}{% endcall %}{% endif %}
+{% if contact.tag_items %}{% set _t.any = true %}{% call vi_row('tag', 'Tags') %}{% for tag in contact.tag_items %}{{ tag_pill(tag) }} {% endfor %}{% endcall %}{% endif %}
+{% endcall %}
+{% if not _t.any %}{% call empty_state('No other details yet', size='compact') %}<a href="/contacts/{{ contact.uid }}/edit" data-modal>Add some</a>{% endcall %}{% endif %}
 {% endcall %}
 {% set _involved = contact_objects(request, contact.uid) %}
 {% if _involved.tasks or _involved.events %}
@@ -84,8 +39,9 @@
 {{ relation_rows(_involved) }}
 {% endcall %}
 {% endif %}
-{% if contact.notes %}
-{% call detail_section('Notes') %}<p class="detail-text">{{ contact.notes }}</p>{% endcall %}
+{% set _notes_editor %}{{ textarea_input({'name': 'notes', 'rows': 4, 'aria-label': 'Notes'}, contact.notes or '') }}{% endset %}
+{% if true %}
+{% call detail_section('Notes') %}<div class="vi-v vi-editable vi-desc" data-vi-field="notes" data-vi-url="/contacts/{{ contact.uid }}/update-field" data-vi-empty="Add notes" tabindex="0" role="button" aria-label="Edit notes"><span class="vi-display">{% if contact.notes %}<span class="detail-text">{{ contact.notes }}</span>{% else %}<span class="vi-empty">Add notes</span>{% endif %}</span><template class="vi-editor">{{ _notes_editor }}</template></div>{% endcall %}
 {% endif %}
 {% endcall %}
 {% else %}

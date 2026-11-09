@@ -95,3 +95,8 @@ button.media-lookup-row{width:100%; border:0; background:none; text-align:left; 
    display:flex; align-items:center; justify-content:center; color:var(--fg-tertiary);}
 .media-cover-preview img{width:100%; height:100%; object-fit:cover; display:block;}
 .media-cover-fields{flex:1; min-width:0;}
+
+/* Library item window: the rows on the left, the cover on the right; on a phone the cover goes first. */
+.media-view-top{display:grid; grid-template-columns:minmax(0, 1fr) 96px; gap:var(--space-4); align-items:start; margin-bottom:var(--space-4);}
+.media-view-top .media-cover-button{grid-column:2; grid-row:1;}
+@media (max-width:720px){.media-view-top{grid-template-columns:1fr;} .media-view-top .media-cover-button{grid-column:1; grid-row:1; width:72px; height:108px;} .media-view-top .vi-rows{grid-row:2;}}

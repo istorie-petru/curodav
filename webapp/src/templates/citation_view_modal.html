@@ -1,84 +1,40 @@
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
 {% from "_detail_section.html" import detail_section %}
+{% from "_view_rows.html" import vi_rows, vi_row, vi_link %}
 {% from "_label_pill.html" import tag_pill with context %}
 {% block title %}{{ c.title }}{% endblock %}
 {% block content %}
 
 {% call modal(kind="view", title=c.title, size="medium", back=(return_to), back_name='Back',
-              retire=[{'action': 'delete', 'url': '/library/' ~ c.uid ~ '/delete', 'mode': 'confirm', 'label': delete_label, 'redirect': none, 'change': none}], edit_url='/library/' ~ c.uid ~ '/edit') %}
-<div class="media-view-head">
+              retire=[{'action': 'delete', 'url': '/library/' ~ c.uid ~ '/delete', 'mode': 'confirm', 'label': delete_label, 'redirect': none, 'change': none}], edit_url='/library/' ~ c.uid ~ '/edit', done_menu=[]) %}
+<div class="media-view-top">
+    {% call vi_rows() %}
+    {% call vi_row('user', 'By') %}{{ authors or m.kind.name }}{% endcall %}
+    {% if c.year %}{% call vi_row('calendar', 'Year') %}{{ c.year }}{% endcall %}{% endif %}
+    {% call vi_row(m.kind.icon, 'Type') %}{{ m.kind.name if (m.kind.custom or c.type in ('book', 'manga', 'film', 'tv', 'anime')) else type_label }}{% if m.status_label %} <span class="vi-empty">{{ m.status_label }}</span>{% endif %}{% endcall %}
+    {% if m.stars %}{% call vi_row('star', 'Rating') %}<span class="media-view-stars">{{ m.stars }}</span>{% endcall %}{% endif %}
+    {% if m.tag_items %}{% call vi_row('tag', 'Tags') %}{% for t in m.tag_items %}{{ tag_pill(t, '/library?tag=' ~ (t.name | urlencode)) }} {% endfor %}{% endcall %}{% endif %}
+    {% for r in ratings %}{% call vi_row('award', r.name) %}{{ r.value }}{% endcall %}{% endfor %}
+    {% if c.subtitle %}{% call vi_row('text', 'Subtitle') %}{{ c.subtitle }}{% endcall %}{% endif %}
+    {% if c.keywords %}{% call vi_row('hash', 'Keywords') %}{{ c.keywords | join(', ') }}{% endcall %}{% endif %}
+    {% if c.summary %}{% call vi_row('align-left', 'Summary') %}<span class="media-summary">{{ c.summary }}</span>{% endcall %}{% endif %}
+    {% for label, value in rows %}{% call vi_row('info', label) %}{% if label == 'URL' %}<a href="{{ value }}" target="_blank" rel="noopener noreferrer">{{ value }}</a>{% else %}{{ value }}{% endif %}{% endcall %}{% endfor %}
+    {% endcall %}
     <a href="/library/{{ c.uid }}/cover/modal" data-modal class="media-cover-button" title="Change the cover" aria-label="Change the cover">
         {% if m.cover %}<img class="media-cover-img" src="{{ m.cover }}" alt="">{% else %}<span class="media-cover-empty">{{ icon(m.kind.icon) }}</span>{% endif %}
     </a>
-    <div class="media-view-facts">
-        <span class="media-view-by">{{ authors or m.kind.name }}{% if c.year %} · {{ c.year }}{% endif %}</span>
-        <span class="media-view-kind">{{ icon(m.kind.icon, 'icon-sm') }} {{ m.kind.name if (m.kind.custom or c.type in ('book', 'manga', 'film', 'tv', 'anime')) else type_label }}{% if m.status_label %} · {{ m.status_label }}{% endif %}</span>
-        {% if m.stars %}<span class="media-view-stars">{{ m.stars }}</span>{% endif %}
-        {% if m.tag_items %}<span class="media-view-tags">{% for t in m.tag_items %}{{ tag_pill(t, '/library?tag=' ~ (t.name | urlencode)) }} {% endfor %}</span>{% endif %}
-    </div>
 </div>
-{% if ratings or c.subtitle or c.keywords or c.summary %}
-{% call detail_section('About') %}
-    <div class="detail-meta-grid">
-        {% for r in ratings %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">{{ r.name }}</span>
-            <span class="detail-meta-value">{{ r.value }}</span>
-        </div>
-        {% endfor %}
-        {% if c.subtitle %}
-        <div class="detail-meta-item detail-meta-wide">
-            <span class="detail-meta-label">Subtitle</span>
-            <span class="detail-meta-value">{{ c.subtitle }}</span>
-        </div>
-        {% endif %}
-        {% if c.keywords %}
-        <div class="detail-meta-item detail-meta-wide">
-            <span class="detail-meta-label">Keywords</span>
-            <span class="detail-meta-value">{{ c.keywords | join(', ') }}</span>
-        </div>
-        {% endif %}
-        {% if c.summary %}
-        <div class="detail-meta-item detail-meta-wide">
-            <span class="detail-meta-label">Summary</span>
-            <span class="detail-meta-value media-summary">{{ c.summary }}</span>
-        </div>
-        {% endif %}
-    </div>
-{% endcall %}
-{% endif %}
 {% if editions %}
 {% call detail_section('Attached', count=editions|length) %}
-    {% for e in editions %}
-    <div>{{ e.display }}{% if e.isbn %} <span class="detail-meta-label">ISBN {{ e.isbn }}</span>{% endif %}
-        {% if e.file_state == 'ok' %} · <a href="/library/editions/{{ e.uid }}/file" target="_blank" rel="noopener">{{ e.file_label }}</a>
-        {% elif e.file_state == 'missing' %} · <span class="detail-meta-label">File missing, edit the edition to upload it again</span>{% endif %}
-        {% if e.url %} · <a href="{{ e.url }}" target="_blank" rel="noopener noreferrer">Link</a>{% endif %}</div>
-    {% else %}
-    <span class="detail-meta-label">{{ 'No editions, link only' if c.url else 'Metadata only, no file or link' }}</span>
-    {% endfor %}
+{% call vi_rows() %}
+{% for e in editions %}{% call vi_row('file', e.display) %}{% if e.isbn %}<span class="vi-empty">ISBN {{ e.isbn }}</span> {% endif %}{% if e.file_state == 'ok' %}<a href="/library/editions/{{ e.uid }}/file" target="_blank" rel="noopener">{{ e.file_label }}</a>{% elif e.file_state == 'missing' %}<span class="vi-empty">File missing, edit the edition to upload it again</span>{% endif %}{% if e.url %} <a href="{{ e.url }}" target="_blank" rel="noopener noreferrer">Link</a>{% endif %}{% endcall %}{% endfor %}
 {% endcall %}
-{% endif %}
-{% if rows %}
-{% call detail_section('Details') %}
-    <div class="detail-meta-grid">
-        {% for label, value in rows %}
-        <div class="detail-meta-item{% if label in ('Container', 'Editors', 'DOI', 'URL', 'Note') %} detail-meta-wide{% endif %}">
-            <span class="detail-meta-label">{{ label }}</span>
-            {% if label == 'URL' %}<a class="detail-meta-value" href="{{ value }}" target="_blank" rel="noopener noreferrer">{{ value }}</a>
-            {% else %}<span class="detail-meta-value">{{ value }}</span>{% endif %}
-        </div>
-        {% endfor %}
-    </div>
 {% endcall %}
 {% endif %}
 {% call detail_section('Cited by entries', count=entries|length) %}
-    {% if entries %}
-    <ul class="entry-mentions">{% for e in entries %}<li><a href="/notebook/glossary/{{ e.uid }}?return_to=/library/{{ c.uid }}" data-modal>{{ e.term }}</a>{% if e.pages %} <span class="detail-meta-label">{{ e.pages }}</span>{% endif %}</li>{% endfor %}</ul>
-    {% else %}
-    <span class="detail-meta-label">No entries yet</span>
-    {% endif %}
+    {% if entries %}<div class="vi-links">{% for e in entries %}{{ vi_link('tag', e.term, '/notebook/glossary/' ~ e.uid ~ '?return_to=/library/' ~ c.uid, e.pages or '') }}{% endfor %}</div>
+    {% else %}<span class="vi-empty">No entries yet</span>{% endif %}
 {% endcall %}
 {% endcall %}
 {% endblock %}

@@ -194,12 +194,14 @@ class TestBackToTheFolder:
 
 
 class TestFolderReadmeAndAgenda:
-    def test_a_label_folder_saves_and_shows_its_readme(self, conn):
-        _doc(conn, "a", tags=["Uni"])
-        notebook_router.save_folder_readme(kind="label", name="Uni", body="  Call the registrar  ", conn=conn)
-        assert db.get_folder_readme(conn, "Uni") == "Call the registrar"
+    def test_a_folder_has_no_readme_and_shows_its_pinned_notes_in_the_agenda(self, conn):
+        _doc(conn, "a", title="Syllabus", tags=["Uni"], pinned=1)
+        _doc(conn, "b", title="Loose note", tags=["Uni"])
         body = notebook_router.folder_view(_request("/notebook/folder"), kind="label", name="Uni", conn=conn).body.decode()
-        assert "Call the registrar" in body and 'id="notebook-readme"' in body
+        assert 'id="notebook-readme"' not in body and "/notebook/folder/readme" not in body
+        agenda = body[body.index('id="notebook-agenda"'):]
+        agenda = agenda[:agenda.index("</section>")]
+        assert "Agenda and pinned" in agenda and "Syllabus" in agenda and "Loose note" not in agenda
 
     def test_an_empty_readme_is_removed_and_other_labels_are_untouched(self, conn):
         db.set_folder_readme(conn, "Uni", "one")
@@ -254,6 +256,12 @@ class TestTagSubfolders:
         ctx = notebook_router._folder_context(conn, _request(), "label", "School", "", "created", 30, 0, "Lectures")
         assert {d["uid"] for d in ctx["documents"]} == {"a", "b"}
         assert ctx["folder_name"] == "Lectures" and ctx["subfolders"] == [] and ctx["agenda"] is None
+
+    def test_subfolders_are_listed_as_rows_above_the_notes(self, conn):
+        self._shelf(conn)
+        body = notebook_router.folder_view(_request("/notebook/folder"), kind="label", name="School", conn=conn).body.decode()
+        assert "notebook-folder-row" in body and 'class="folder-grid notebook-subfolders"' not in body
+        assert body.index("notebook-folder-row") < body.index('id="notebook-rows"')
 
     def test_the_shelf_folder_still_lists_every_note_of_the_shelf(self, conn):
         self._shelf(conn)

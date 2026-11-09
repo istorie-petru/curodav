@@ -1,5 +1,5 @@
-// Controls drawn on the table itself while the caret is in it: a grip above each column and beside each row (click to
-// select it), and plus buttons at the right and bottom edges that add a column or a row.
+// Controls drawn on the table itself while the caret is in it: plus buttons at the right and bottom edges that add a
+// column or a row. Cells, rows and columns are selected with the mouse or the arrow keys, so there are no grips.
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
@@ -44,14 +44,6 @@ export const TableControls = Extension.create({
             const map = TableMap.get(table);
             const widgets = [];
             const at = (row, col) => start + map.map[row * map.width + col];
-            for (let col = 0; col < map.width; col++) {
-              const pos = at(0, col);
-              widgets.push(Decoration.widget(pos + 1, () => button("nbtc-grip nbtc-col", "Select column", () => select("col", pos)), { side: -1, key: `c${col}-${pos}`, ignoreSelection: true }));
-            }
-            for (let row = 0; row < map.height; row++) {
-              const pos = at(row, 0);
-              widgets.push(Decoration.widget(pos + 1, () => button("nbtc-grip nbtc-row", "Select row", () => select("row", pos)), { side: -1, key: `r${row}-${pos}`, ignoreSelection: true }));
-            }
             const lastCol = at(0, map.width - 1);
             widgets.push(
               Decoration.widget(lastCol + 1, () => button("nbtc-add nbtc-add-col", "Add column", () => {

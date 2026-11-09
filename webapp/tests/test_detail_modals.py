@@ -32,6 +32,7 @@ three contexts in a single stroke):
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 
 import pytest
@@ -208,13 +209,13 @@ class TestDetailCardAndMetaGrid:
         _seed_event(conn, "e1")
         body = calendar_router.event_detail("e1", _request("/events/e1"), conn=conn).body.decode()
         assert 'class="detail-section"' in body
-        assert 'class="detail-meta-value"' in body
+        assert 'class="vi-row"' in body
 
     def test_task_card_has_status_accent(self, conn):
         _seed_task(conn, "t1", status="in_progress")
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
         assert 'class="detail-section"' in body
-        assert 'class="detail-meta-value"' in body
+        assert 'class="vi-row"' in body  # the task window is a table of label and value rows
 
     def test_contact_uses_the_shared_meta_grid_not_the_old_table(self, conn):
         # Contacts field parity slices 2/5: phone and address are multi-
@@ -230,8 +231,8 @@ class TestDetailCardAndMetaGrid:
         )
         body = contacts_router.contact_detail("c1", _request("/contacts/c1"), conn=conn).body.decode()
         assert 'class="detail-section"' in body
-        assert 'class="detail-meta-grid"' in body
-        assert 'class="detail-meta-value"' in body
+        assert 'class="vi-rows"' in body
+        assert "+123" in body and "a@example.com" in body and "1 St" in body
         assert '<table class="detail-kv">' not in body
 
     def test_task_page_is_header_and_body_sections_only(self, conn):
@@ -247,7 +248,9 @@ class TestDetailCardAndMetaGrid:
         body = tasks_router.task_detail("t1", _request("/tasks/t1"), conn=conn).body.decode()
         modal = body[body.index('class="modal-body"'):body.index('class="modal-footer"')]
         assert "Work sessions" in modal
-        assert "<input" not in modal and "<form" not in modal and "<button" not in modal
+        # The editors of the in-place rows sit in inert <template> tags; the sessions themselves hold no controls.
+        live = re.sub(r"<template\b.*?</template>", "", modal, flags=re.S)
+        assert "<input" not in live and "<form" not in live and "<button" not in live
 
 
 class TestFooterActions:
@@ -264,12 +267,10 @@ class TestFooterActions:
         footer_pos = self._footer_pos(body)
         assert 'class="btn danger"' not in body
         delete_pos = _index(body, 'aria-label="Delete"')
-        edit_pos = _index(body, 'class="btn primary"')
-        done_pos = _index(body, ">Done</a>")
+        edit_pos = _index(body, 'class="btn primary btn-split-main"')
         assert delete_pos > footer_pos
-        assert edit_pos > footer_pos
-        assert done_pos > footer_pos
-        # Edit (the primary action) comes after the demoted Delete link.
+        assert edit_pos > footer_pos and "Edit fields" in body  # Done is the primary and Edit fields is in its menu
+        # Done (the primary action) comes after the demoted Delete button.
         assert edit_pos > delete_pos
 
     def test_task_delete_demoted_and_edit_primary(self, conn):
@@ -278,7 +279,8 @@ class TestFooterActions:
         footer_pos = self._footer_pos(body)
         assert 'class="btn danger"' not in body
         assert _index(body, 'aria-label="Delete"') > footer_pos
-        assert _index(body, 'class="btn primary"') > footer_pos
+        assert _index(body, 'class="btn primary btn-split-main"') > footer_pos  # Done is the primary, Edit fields sits in its menu
+        assert "Edit fields" in body and "Mark done" in body
         assert 'data-delete-undo-redirect="/tasks"' in body
 
     def test_task_delete_is_always_the_undo_path(self, conn):
@@ -298,7 +300,7 @@ class TestFooterActions:
         footer_pos = self._footer_pos(body)
         assert 'class="btn danger"' not in body
         assert _index(body, 'aria-label="Delete"') > footer_pos
-        assert _index(body, 'class="btn primary"') > footer_pos
+        assert _index(body, 'class="btn primary btn-split-main"') > footer_pos
         assert 'data-delete-undo-redirect="/contacts"' in body
 
 
@@ -316,3 +318,55 @@ class TestMissingObject:
     def test_contact_missing(self, conn):
         body = contacts_router.contact_detail("nope", _request("/contacts/nope"), conn=conn).body.decode()
         assert "Contact not found" in body
+
+
+class TestInlineFieldRoutes:
+    """The view windows of an event and a contact save a field in place."""
+
+    def _call(self, route, uid, field, value, conn):
+        import asyncio, json
+        request = _request("/x")
+
+        async def receive():
+            return {"type": "http.request", "body": json.dumps({"field": field, "value": value}).encode(), "more_body": False}
+
+        request._receive = receive
+        return asyncio.run(route(uid, request, conn=conn))
+
+    def test_an_event_location_and_description_are_saved(self, conn):
+        _seed_event(conn, "e1")
+        assert self._call(calendar_router.update_event_field, "e1", "location", "  Room A2 ", conn).status_code == 200
+        assert self._call(calendar_router.update_event_field, "e1", "description", " Bring notes ", conn).status_code == 200
+        event = db.get_event(conn, "e1")
+        assert event["location"] == "Room A2" and event["description"] == "Bring notes"
+
+    def test_an_event_title_is_not_inline_editable(self, conn):
+        _seed_event(conn, "e1")
+        assert self._call(calendar_router.update_event_field, "e1", "title", "x", conn).status_code == 400
+
+    def test_a_repeating_event_is_changed_in_its_form(self, conn):
+        _seed_event(conn, "e1", recurrence="FREQ=WEEKLY")
+        assert self._call(calendar_router.update_event_field, "e1", "location", "x", conn).status_code == 400
+
+    def test_contact_notes_are_saved_without_touching_the_rest(self, conn):
+        from src.routers import contacts as contacts_router
+        _seed_contact(conn, "c1", org="Acme")
+        assert self._call(contacts_router.update_contact_field, "c1", "notes", "  Office hours  ", conn).status_code == 200
+        contact = db.get_contact(conn, "c1")
+        assert contact["notes"] == "Office hours" and contact["org"] == "Acme"
+
+
+class TestMarkHabitToday:
+    """The habit window's Done menu marks today done; asking twice never un-marks it, and a plain task is refused."""
+
+    def test_today_is_marked_and_stays_marked(self, conn):
+        from src import clock
+        _seed_task(conn, "h1", is_habit=1, recurrence="FREQ=DAILY")
+        for _ in range(2):
+            resp = tasks_router.mark_habit_today_done("h1", _request("/tasks/h1"), conn=conn)
+            assert resp.status_code in (200, 303)
+        assert db.get_task_completion(conn, "h1", clock.today().isoformat()) is not None
+
+    def test_a_plain_task_is_refused(self, conn):
+        _seed_task(conn, "t1")
+        assert tasks_router.mark_habit_today_done("t1", _request("/tasks/t1"), conn=conn).status_code == 404

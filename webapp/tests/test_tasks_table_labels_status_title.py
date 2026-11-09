@@ -101,6 +101,22 @@ class TestUpdateFieldTitleRejectsBlank:
         assert db.get_task(conn, "t1")["title"] == "New title"
 
 
+class TestUpdateFieldDescription:
+    """The view modal edits the description in place through the same route."""
+
+    def test_description_is_saved_and_trimmed(self, conn):
+        _seed_task(conn, "t1")
+        resp = asyncio.run(tasks_router.update_field("t1", _json_request({"field": "description", "value": "  Bring the notebook  "}), conn=conn))
+        assert resp.status_code == 200
+        assert db.get_task(conn, "t1")["description"] == "Bring the notebook"
+
+    def test_description_may_be_cleared(self, conn):
+        _seed_task(conn, "t1")
+        asyncio.run(tasks_router.update_field("t1", _json_request({"field": "description", "value": "x"}), conn=conn))
+        asyncio.run(tasks_router.update_field("t1", _json_request({"field": "description", "value": ""}), conn=conn))
+        assert db.get_task(conn, "t1")["description"] == ""
+
+
 class TestTableMarkup:
     def test_only_the_status_is_edited_inline(self, conn):
         _seed_task(conn, "t1")

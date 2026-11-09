@@ -138,9 +138,8 @@ class TestSharedFooterPartial:
         _seed_event(conn, "e1")
         view = self.VIEWS["event"](conn, "e1").body.decode()
         form = self.FORMS["event"](conn, "e1").body.decode()
-        # Both states carry the ghost back link and a primary action.
-        for body in (view, form):
-            assert 'class="btn ghost"' in body
+        # The form carries the ghost Cancel link; the view's primary is Done, with Edit fields in its menu.
+        assert 'class="btn ghost"' in form and 'class="btn primary btn-split-main"' in view
         # View's primary is an Edit *link* into the edit form (data-modal),
         # the form's primary is a Save *button* tied back to its <form>.
         assert 'href="/events/e1/edit"' in view

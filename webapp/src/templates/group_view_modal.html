@@ -5,9 +5,8 @@
 {% from "_detail_section.html" import detail_section %}
 {% block title %}{{ group.name }}{% endblock %}
 {% block content %}
-{% set _extra %}<a class="btn ghost" href="/groups/{{ group.name|urlencode }}">{{ icon('external-link', 'icon-sm') }} Open page</a>{% endset %}
 {% set _cover %}{{ detail_cover('var(--cal-accent-' ~ (group.color or 'gray') ~ ')', banner, icon(group.icon or group_default_icon)) }}{% endset %}
-{% call modal(kind="view", title=((group.name)), size="medium", extra_html=_extra, retire=[{'action': 'delete', 'url': '/groups/' ~ (group.name|urlencode) ~ '/delete', 'mode': 'confirm', 'label': 'Delete the space "' ~ group.name ~ '"? Its shelves stay, ungrouped.', 'redirect': none, 'change': none}], edit_url='/groups/' ~ (group.name|urlencode) ~ '/edit', cover_html=_cover) %}
+{% call modal(kind="view", title=((group.name)), size="medium", done_menu=[{'label': 'Open page', 'icon': 'external-link', 'href': '/groups/' ~ (group.name|urlencode)}], retire=[{'action': 'delete', 'url': '/groups/' ~ (group.name|urlencode) ~ '/delete', 'mode': 'confirm', 'label': 'Delete the space "' ~ group.name ~ '"? Its shelves stay, ungrouped.', 'redirect': none, 'change': none}], edit_url='/groups/' ~ (group.name|urlencode) ~ '/edit', cover_html=_cover) %}
 {% call detail_section('Details') %}
     <div class="detail-meta-grid">
         <div class="detail-meta-item">

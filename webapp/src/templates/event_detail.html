@@ -4,78 +4,47 @@
 {% from "_label_pill.html" import label_pill, tag_pill with context %}
 {% from "_detail_cover.html" import detail_cover with context %}
 {% from "_detail_section.html" import detail_section %}
+{% from "_view_rows.html" import vi_rows, vi_row, vi_person %}
+{% from "_inputs.html" import text_input, textarea_input %}
 {% from "_linked_items.html" import linked_tasks_view %}
 {% block title %}{{ event.title if event else "Event" }}{% endblock %}
 {% block content %}
 {% if event %}
-{% set _delete = {'action': 'delete', 'url': ('/events/' ~ event.uid ~ '/delete-scope' ~ ('?occurrence_date=' ~ (occurrence_date | urlencode) if occurrence_date else '') if (event.recurrence or event.series_uid) else ('/events/' ~ event.uid ~ '/delete' if not (event.recurrence or event.series_uid) else none)), 'mode': ('link' if (event.recurrence or event.series_uid) else ('undo' if not (event.recurrence or event.series_uid) else none)), 'label': event.title, 'redirect': '/calendar', 'change': 'event'} %}
+{% set _delete = {'action': 'delete', 'url': ('/events/' ~ event.uid ~ '/delete-scope' ~ ('?occurrence_date=' ~ (occurrence_date | urlencode) if occurrence_date else '') if (event.recurrence or event.series_uid) else ('/events/' ~ event.uid ~ '/delete' if not (event.recurrence or event.series_uid) else none)), 'mode': ('link' if (event.recurrence or event.series_uid) else ('undo' if not (event.recurrence or event.series_uid) else none)), 'label': event.title, 'redirect': '/calendar', 'change': 'event', 'options': ([{'label': 'This event', 'url': '/events/' ~ event.uid ~ '/delete'}, {'label': 'This and following events', 'url': '/events/' ~ event.uid ~ '/delete-following'}, {'label': 'All events in the series', 'url': '/events/' ~ event.uid ~ '/delete-series'}] if event.series_uid else none)} %}
 {% set _retire = [_delete] %}
 {% if university and university.kind == 'class' %}
 {% set _a = university.attendance %}
 {% set _icons = {'attended': 'check', 'missed': 'x', 'excused': 'file-check', 'marked_present': 'user-check', 'made_up': 'rotate-ccw', 'cancelled': 'calendar-x'} %}
 {% set _retire = [] %}
-{% for key, label in _a.choices %}{% if key == 'made_up' %}{% set _ = _retire.append({'action': 'open', 'url': '/university/class/' ~ event.uid ~ '/makeup', 'icon': _icons[key], 'label': 'Make up on another day', 'menu_icon': 'check', 'menu_label': 'Attendance'}) %}{% else %}{% set _ = _retire.append({'action': 'status', 'url': '/university/class/' ~ event.uid ~ '/attendance', 'fields': {'status': key, 'keep_note': '1', 'back': 'calendar'}, 'icon': _icons[key], 'label': ('Cancel class' if key == 'cancelled' else label), 'menu_icon': 'check', 'menu_label': 'Attendance'}) %}{% endif %}{% endfor %}
-{% if _a.moved %}{% set _ = _retire.append({'action': 'status', 'url': '/university/class/' ~ event.uid ~ '/attendance', 'fields': {'status': 'attended', 'keep_note': '1', 'back': 'calendar'}, 'icon': 'rotate-ccw', 'label': 'Put back at its own time', 'menu_icon': 'check', 'menu_label': 'Attendance'}) %}{% endif %}
+{% set _class_menu = [] %}
+{% for key, label in _a.choices %}{% if key == 'made_up' %}{% set _ = _class_menu.append({'href': '/university/class/' ~ event.uid ~ '/makeup', 'modal': true, 'icon': _icons[key], 'label': 'Make up on another day'}) %}{% else %}{% set _ = _class_menu.append({'form_action': '/university/class/' ~ event.uid ~ '/attendance', 'fields': {'status': key, 'keep_note': '1', 'back': 'calendar'}, 'icon': _icons[key], 'label': ('Cancel class' if key == 'cancelled' else ('Mark ' ~ label|lower if key in ('attended', 'missed', 'excused') else label))}) %}{% endif %}{% endfor %}
+{% if _a.moved %}{% set _ = _class_menu.append({'form_action': '/university/class/' ~ event.uid ~ '/attendance', 'fields': {'status': 'attended', 'keep_note': '1', 'back': 'calendar'}, 'icon': 'rotate-ccw', 'label': 'Put back at its own time'}) %}{% endif %}
 {% endif %}
+{% set _done_menu = (_class_menu if (university and university.kind == 'class') else []) + university_menu(request, 'event', event.uid) + ([{'label': 'Attach to a way of evaluating', 'icon': 'file-check', 'href': '/settings/university/attach?kind=event&uid=' ~ event.uid, 'modal': true}] if university_attach else []) %}
 {% set _cover %}{{ detail_cover('var(--cal-accent-' ~ event.calendar_color ~ ')', banner, icon('calendar')) }}{% endset %}
-{% call modal(kind="view", title=((event.title)), size="small", retire=_retire, edit_url=(university.edit_url if (university and university.edit_url) else ('/events/' ~ event.uid ~ '/edit' ~ ('?occurrence_date=' ~ occurrence_date if occurrence_date and event.recurrence else ''))), cover_html=_cover) %}
-{% call detail_section('Details') %}
-    <div class="detail-meta-grid">
-        {% set _people = object_contacts(request, 'event', event.uid) %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Start</span>
-            <span class="detail-meta-value"><span class="color-dot cal-{{ event.calendar_color }}"></span>{% if event.all_day %}{{ event.start_at | relative_date }} (all day){% else %}{{ event.start_at | relative_date }} {{ event.start_at | fmt_time }}{% endif %}</span>
-        </div>
-        {% if event.end_at %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">End</span>
-            <span class="detail-meta-value">{% if event.all_day %}{{ event.end_at | relative_date }}{% else %}{{ event.end_at | relative_date }} {{ event.end_at | fmt_time }}{% endif %}</span>
-        </div>
-        {% endif %}
-        {% if event.tag_items %}
-        <div class="detail-meta-item detail-meta-wide">
-            <span class="detail-meta-label">Tags</span>
-            <span class="detail-meta-value">{% for tag in event.tag_items %}{{ tag_pill(tag) }} {% endfor %}</span>
-        </div>
-        {% endif %}
-        {% if _people %}
-        <div class="detail-meta-item detail-meta-wide">
-            <span class="detail-meta-label">Contacts</span>
-            <span class="detail-meta-value">{% for p in _people %}<a href="/contacts/{{ p.uid }}" data-modal>{{ p.full_name or 'Unnamed' }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
-        </div>
-        {% endif %}
-        {% if event.reminders %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Reminders</span>
-            <span class="detail-meta-value">{% for m in event.reminders %}{{ m }} min{% if not loop.last %}, {% endif %}{% endfor %} before</span>
-        </div>
-        {% endif %}
-        {% if event.recurrence %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Recurrence</span>
-            <span class="detail-meta-value">{{ event.recurrence | recurrence_text }}</span>
-        </div>
-        {% endif %}
-        {% if event.location %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Location</span>
-            <span class="detail-meta-value">{{ event.location }}</span>
-        </div>
-        {% endif %}
-        {% if event.meeting_url %}
-        <div class="detail-meta-item">
-            <span class="detail-meta-label">Meeting</span>
-            <span class="detail-meta-value"><a href="{{ event.meeting_url }}" target="_blank" rel="noopener">{{ icon('external-link', 'icon-sm') }} Join</a></span>
-        </div>
-        {% endif %}
-    </div>
+{% call modal(kind="view", title=((event.title)), size="small", retire=_retire, done_menu=_done_menu, edit_label=('Class content' if (university and university.kind == 'class') else 'Edit fields'), edit_url=(university.edit_url if (university and university.edit_url) else ('/events/' ~ event.uid ~ '/edit' ~ ('?occurrence_date=' ~ occurrence_date if occurrence_date and event.recurrence else ''))), cover_html=_cover) %}
+{% set _people = object_contacts(request, 'event', event.uid) %}
+{% set _can_inline = not (event.series_uid or event.recurrence) and not (university and university.kind == 'class') %}
+{% set _url = '/events/' ~ event.uid ~ '/update-field' %}
+{% set _loc_editor %}{{ text_input({'name': 'location', 'value': event.location or '', 'class': 'vi-input', 'aria-label': 'Location'}) }}{% endset %}
+{% set _desc_editor %}{{ textarea_input({'name': 'description', 'rows': 4, 'aria-label': 'Description'}, event.description or '') }}{% endset %}
+{% call vi_rows() %}
+{% call vi_row('clock', 'When') %}{% if not (university and university.kind == 'class') %}<span class="color-dot cal-{{ event.calendar_color }}"></span>{% endif %}{% if event.all_day %}{{ event.start_at | relative_date }} (all day){% else %}{{ event.start_at | relative_date }} {{ event.start_at | fmt_time }}{% if event.end_at %} to {{ event.end_at | fmt_time }}{% endif %}{% endif %}{% endcall %}
+{% if _can_inline %}{% call vi_row('map-pin', 'Location', 'location', _url, _loc_editor, 'Add a location') %}{% if event.location %}<span class="vi-text">{{ event.location }}</span>{% else %}<span class="vi-empty">Add a location</span>{% endif %}{% endcall %}
+{% elif event.location %}{% call vi_row('map-pin', 'Location') %}{{ event.location }}{% endcall %}{% endif %}
+{% if event.recurrence %}{% call vi_row('repeat', 'Repeats') %}{{ event.recurrence | recurrence_text }}{% endcall %}{% endif %}
+{% if event.reminders %}{% call vi_row('bell', 'Reminder') %}{% for m in event.reminders %}{{ m }} min{% if not loop.last %}, {% endif %}{% endfor %} before{% endcall %}{% endif %}
+{% if event.tag_items %}{% call vi_row('tag', 'Tags') %}{% for tag in event.tag_items %}{{ tag_pill(tag) }} {% endfor %}{% endcall %}{% endif %}
+{% if _people %}{% call vi_row('users', 'People') %}{% for p in _people %}<a href="/contacts/{{ p.uid }}" data-modal>{{ vi_person(p.full_name) }}</a>{% endfor %}{% endcall %}{% endif %}
+{% if event.meeting_url %}{% call vi_row('external-link', 'Meeting') %}<a href="{{ event.meeting_url }}" target="_blank" rel="noopener">Join</a>{% endcall %}{% endif %}
 {% endcall %}
 {% set _desc = (event.description or '').strip() %}
 {% if university and university.kind == 'class' and university.composed and _desc.startswith(university.composed) %}{% set _desc = _desc[university.composed|length:].strip() %}{% endif %}
-{% if _desc %}
+{% if _can_inline %}
+{% call detail_section('Description') %}<div class="vi-v vi-editable vi-desc" data-vi-field="description" data-vi-url="{{ _url }}" data-vi-empty="Add a description" tabindex="0" role="button" aria-label="Edit description"><span class="vi-display">{% if _desc %}<span class="detail-text">{{ _desc }}</span>{% else %}<span class="vi-empty">Add a description</span>{% endif %}</span><template class="vi-editor">{{ _desc_editor }}</template></div>{% endcall %}
+{% elif _desc %}
 {% call detail_section('Description') %}<p class="detail-text">{{ _desc }}</p>{% endcall %}
 {% endif %}
-
 
 {% if occurrence_date and event.recurrence %}
 {% call detail_section('This occurrence') %}
@@ -91,16 +60,14 @@
 {% endif %}
 {% if university and university.kind == 'class' %}
 {% call detail_section('Class') %}
-<div class="detail-meta-grid">
-    <div class="detail-meta-item"><span class="detail-meta-label">Attendance</span><span class="detail-meta-value">{{ university.attendance.label }}{% if university.attendance.note %}, {{ university.attendance.note }}{% endif %}</span></div>
-    {% if university.topics %}<div class="detail-meta-item detail-meta-wide"><span class="detail-meta-label">Covers</span><span class="detail-meta-value">{{ university.topics | join('; ') }}</span></div>{% endif %}
-    {% for u in university.upcoming %}<div class="detail-meta-item detail-meta-wide"><span class="detail-meta-label">Next, {{ u.date|relative_date }}</span><span class="detail-meta-value">{{ u.topic or u.label }}</span></div>{% endfor %}
-</div>
+{% call vi_rows() %}
+{% call vi_row('check', 'Attendance') %}<span class="cell-tag tag-{{ 'green' if university.attendance.label in ('Attended', 'Marked present') else 'gray' }}">{{ university.attendance.label }}</span>{% if university.attendance.note %} <span class="vi-empty">{{ university.attendance.note }}</span>{% endif %}{% endcall %}
+{% if university.topics %}{% call vi_row('book-open', 'Covers') %}{{ university.topics | join('; ') }}{% endcall %}{% endif %}
+{% for u in university.upcoming %}{% call vi_row('calendar', 'Next, ' ~ (u.date|relative_date)) %}{{ u.topic or u.label }}{% endcall %}{% endfor %}
+{% endcall %}
 {% endcall %}
 {% elif university and university.kind == 'exam' %}
 {% include "_university_exam.html" %}
-{% elif university_attach %}
-{% call detail_section('Examination') %}<a class="btn ghost" href="/settings/university/attach?kind=event&amp;uid={{ event.uid }}" data-modal>{{ icon('file-check', 'icon-sm') }} Attach to a way of evaluating</a>{% endcall %}
 {% endif %}
 {% if linked_tasks %}
 {% call detail_section('Linked tasks', linked_tasks|length) %}{{ linked_tasks_view(linked_tasks) }}{% endcall %}
