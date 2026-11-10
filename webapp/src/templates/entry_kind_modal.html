@@ -24,6 +24,12 @@
             {% else %}{{ text_input({'name': 'name', 'value': kind.name, 'required': true, 'autofocus': true}) }}{% endif %}
         </div>
         {{ look_picker('look-entry-kind', 'entry-kind-form', kind.color, kind.icon, colors, icon_groups, default_icon='tag', wide=true, label='Look') }}
+        <div class="field field-wide">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'entry-kind-form' %}{% set ms_name = 'match_mode' %}{% set ms_label = 'Detection' %}
+            {% set ms_items = [] %}{% for key, label in match_modes.items() %}{% set _ = ms_items.append({'uid': key, 'name': label}) %}{% endfor %}
+            {% set ms_selected = kind.match_mode | default('relative') %}{% set ms_wide = true %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
         <div class="field field-wide" data-repeatable-rows-scope>
             <div class="field-label-row">
                 <label>Fields</label>

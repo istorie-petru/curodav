@@ -70,6 +70,33 @@ def set_status(conn: sqlite3.Connection, event_uid: str, status: str, note: str 
     conn.commit()
 
 
+EXAM_NOTE = "Exam: "
+
+
+def sync_exam_overlaps(conn: sqlite3.Connection) -> int:
+    """A class that overlaps an exam event of the course sheets is cancelled (the calendar then hides it), noted "Exam: <title>"; once the exam moves
+    away or goes, that cancel is lifted. A class the student marked by hand is left alone. Returns how many classes changed. Safe to repeat."""
+    exams = []
+    for r in conn.execute("SELECT event_uid FROM university_milestones WHERE event_uid IS NOT NULL AND event_uid != ''").fetchall():
+        e = db.get_event(conn, r["event_uid"])
+        if e and (e.get("status") or "active") != "archived" and e.get("start_at") and not e.get("all_day"):
+            exams.append((e["start_at"][:16], (e.get("end_at") or e["start_at"])[:16], e.get("title") or "exam"))
+    changed = 0
+    for slot in conn.execute("SELECT series_uid FROM university_slots").fetchall():
+        for c in up.series_members(conn, slot["series_uid"]):
+            start, end = c["start_at"][:16], (c.get("end_at") or c["start_at"])[:16]
+            hit = next((t for s, e, t in exams if s < end and start < e), None)
+            mark = _mark(conn, c["uid"])
+            auto = bool(mark and mark["status"] == "cancelled" and (mark["note"] or "").startswith(EXAM_NOTE))
+            if hit and not mark:
+                set_status(conn, c["uid"], "cancelled", EXAM_NOTE + hit)
+                changed += 1
+            elif auto and not hit:
+                set_status(conn, c["uid"], "attended", "")
+                changed += 1
+    return changed
+
+
 def _put_back(conn: sqlite3.Connection, event: dict[str, Any], mark: sqlite3.Row) -> dict[str, Any]:
     event = {**event, "start_at": mark["original_start"], "end_at": mark["original_end"] or mark["original_start"], "updated_at": up._now()}
     db.upsert_event(conn, event)

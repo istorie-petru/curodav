@@ -101,18 +101,37 @@
   else init();
 })();
 
-// The header's back arrow returns to the view the user came from (page, view mode, filters, scroll) via real history;
-// its href, the parent page, is only the fallback for a fresh tab or an arrival from outside the app.
+// The header's back arrow goes one level up (its href, the parent page) and lands on the view the parent page was last on
+// (view mode, filters); a parent not visited in this tab opens as its plain URL.
 (function () {
-  var SKIP = /^\/(login|setup|logout)(\/|$)/;
+  var KEY = "cc_last_views", SKIP = /^\/(login|setup|logout)(\/|$)/;
+  function read() {
+    try { return JSON.parse(sessionStorage.getItem(KEY)) || {}; } catch (err) { return {}; }
+  }
+  function remember() {
+    if (SKIP.test(location.pathname)) return;
+    try {
+      var all = read(), keys = Object.keys(all);
+      if (all[location.pathname] === undefined && keys.length > 200) delete all[keys[0]];
+      all[location.pathname] = location.search;
+      sessionStorage.setItem(KEY, JSON.stringify(all));
+    } catch (err) { /* private mode: the back arrow just opens the plain parent */ }
+  }
+  ["pushState", "replaceState"].forEach(function (name) {
+    var original = history[name];
+    history[name] = function () { var out = original.apply(this, arguments); remember(); return out; };
+  });
+  window.addEventListener("pagehide", remember);
+  remember();
   document.addEventListener("click", function (e) {
     var back = e.target.closest && e.target.closest(".page-header-narrow-back");
     if (!back || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    var ref;
-    try { ref = new URL(document.referrer); } catch (err) { return; }
-    if (ref.origin !== location.origin || SKIP.test(ref.pathname) || history.length < 2) return;
-    if (ref.pathname + ref.search === location.pathname + location.search) return;
+    var target;
+    try { target = new URL(back.getAttribute("href"), location.href); } catch (err) { return; }
+    if (target.origin !== location.origin) return;
+    var saved = read()[target.pathname];
+    if (!saved || target.search) return;
     e.preventDefault();
-    history.back();
+    location.assign(target.pathname + saved);
   });
 })();

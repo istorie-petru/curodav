@@ -21,7 +21,7 @@
 {% endif %}{% endset %}
 {% call modal(kind="form", title=(('Edit ' if l else 'New ') ~ _noun), size="large", cover_html=(_cover if l and banner else none),
               back=(return_to if return_to else none), back_name='the previous window',
-              retire=([{'action': 'archive', 'url': '/labels/' ~ (l.name|urlencode) ~ '/archive', 'restore_url': '/labels/' ~ (l.name|urlencode) ~ '/unarchive', 'archived': l.archived_at, 'confirm': 'Archive ' ~ l.name ~ '? Everything tagged with it keeps the label.'}, {'action': 'delete', 'url': '/settings/labels/' ~ l.name ~ '/delete', 'mode': 'confirm', 'label': 'Remove "' ~ l.name ~ '" from every object that carries it? This doesn\'t delete anything else.'}] if l else none),
+              retire=([{'action': 'archive', 'url': '/labels/' ~ (l.name|urlencode) ~ '/archive', 'restore_url': '/labels/' ~ (l.name|urlencode) ~ '/unarchive', 'archived': l.archived_at, 'confirm': 'Archive ' ~ l.name ~ '? Everything tagged with it keeps the label.'}, {'action': 'delete', 'url': '/settings/labels/' ~ l.name ~ '/delete', 'mode': 'confirm', 'label': 'Remove "' ~ l.name ~ '" from every object that carries it? This doesn\'t delete anything else.'}] if l and not managed|default(none) else none),
               form='label-form', creating=(not l)) %}
 <div class="card">
 <form method="post" id="label-form" action="{{ '/settings/labels/' ~ l.name ~ '/update' if l else '/settings/labels/create' }}" data-cc-change="label" data-cc-action="{{ 'edit' if l else 'create' }}" data-follow-redirect>

@@ -6,6 +6,14 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [5.0.12]
+
+- View windows: the people of a task or event show their real contact photo in the avatar, with the colored initial only for a contact who has none.
+- University: an exam on a course sheet that overlaps a class marks that class cancelled (noted "Exam: ...") and the calendar hides it; moving or removing the exam lifts the cancel, and a class you marked by hand is left alone.
+- Settings, Organise: the University shelf opens in the normal shelf window, where its look, space and name can be changed (the semester follows a rename). Its tag list is read only, and each discipline tag opens the discipline edit window, also from the Tags list.
+- Entry types: a Detection dropdown in the add and edit windows picks how entries of that type are found in a note: Exact (the whole name only), Relative (the name and its inflected forms, as before) or Allow abbreviations (also shortened names, so Abraham Louis Lincon is found as A.L. Lincon or A. L. Lincon). Existing types stay Relative; the dotted links in the editor follow the same forms.
+- Header back arrow: goes one level up (Settings, Defaults to Settings) and opens the parent on the view and query it was last on in this tab.
+
 ## [5.0.11]
 
 - View windows: task, event, class, exam, contact, habit, library entry, glossary entry, space and shelf windows read as one quiet table of 44px rows. Quick fields are edited in place with the app's own components and no frame: due date, status, description, location, notes. The editor closes after a save, on Escape or when you click away, and a saved value is kept when it is opened again.

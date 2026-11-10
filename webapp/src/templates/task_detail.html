@@ -27,7 +27,7 @@
 {% call vi_row('flag', 'Status', 'status', _url, _status_editor) %}<span class="cell-tag tag-{{ status_colors[task.status] }}">{{ status_labels[task.status] }}</span>{% endcall %}
 {% if task_list %}{% call vi_row('list', 'List') %}<span class="cell-tag cal-{{ task_list.color }}">{{ task_list.name }}</span>{% endcall %}{% endif %}
 {% if task.tag_items %}{% call vi_row('tag', 'Tags') %}{% for tag in task.tag_items %}{{ tag_pill(tag) }} {% endfor %}{% endcall %}{% endif %}
-{% if _people %}{% call vi_row('users', 'People') %}{% for p in _people %}<a href="/contacts/{{ p.uid }}" data-modal>{{ vi_person(p.full_name) }}</a>{% endfor %}{% endcall %}{% endif %}
+{% if _people %}{% call vi_row('users', 'People') %}{% for p in _people %}<a href="/contacts/{{ p.uid }}" data-modal>{{ vi_person(p) }}</a>{% endfor %}{% endcall %}{% endif %}
 {% if task.recurrence %}{% call vi_row('repeat', 'Repeats') %}{{ task.recurrence | recurrence_text }}{% endcall %}{% endif %}
 {% endcall %}
 {% if university and university.kind == 'exam' %}

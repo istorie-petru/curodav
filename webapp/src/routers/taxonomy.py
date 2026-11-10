@@ -45,7 +45,7 @@ def rows_context(conn, request: Request, view: str) -> dict:
                                               for f in db.list_notebook_field_config(conn)]}
     elif view == "label_tags":
         ctx = {"request": request, "label_tags": tags.list_tags(conn),
-               "label_looks": {l["name"]: l for l in db.list_labels(conn)}}
+               "label_looks": {l["name"]: l for l in db.list_labels(conn)}, "discipline_shelf": tags.discipline_shelf(conn)}
     elif view == "time_blocks":
         from .settings import _time_block_days_label
 

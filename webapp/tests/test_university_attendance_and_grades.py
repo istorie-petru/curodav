@@ -60,7 +60,7 @@ def test_missed_classes_count_against_the_limit_and_excused_ones_do_not(conn, se
 
 
 def test_a_cancelled_class_keeps_its_event_archived_and_comes_back_when_marked_again(conn, sem):
-    lecture = _classes(conn, sem, "lecture")[0]
+    lecture = up.class_events(conn, sem["uid"], "Biology", "lecture")[0]
     ua.set_status(conn, lecture["uid"], "cancelled")
     assert db.get_event(conn, lecture["uid"])["status"] == "archived"
     held = next(k for k in ua.discipline_attendance(conn, sem["uid"], "Biology", date(2026, 10, 26))["kinds"] if k["kind"] == "lecture")["held"]
@@ -70,7 +70,7 @@ def test_a_cancelled_class_keeps_its_event_archived_and_comes_back_when_marked_a
 
 
 def test_marking_from_a_menu_keeps_the_note_and_rejects_what_is_not_a_class(conn, sem):
-    lecture = _classes(conn, sem, "lecture")[0]
+    lecture = up.class_events(conn, sem["uid"], "Biology", "lecture")[0]
     ua.set_status(conn, lecture["uid"], "missed", "sick")
     resp = university.attendance_save(lecture["uid"], status="excused", note="", back="", keep_note="1", conn=conn)
     assert resp.status_code == 303 and resp.headers["location"] == "/groups/University/disciplines/Biology"
@@ -165,9 +165,36 @@ def test_the_semester_lists_render_across_disciplines(conn, sem, frozen_today):
 
 
 def test_a_class_marked_present_after_being_missed_does_not_count_as_an_absence(conn, sem):
-    lecture = _classes(conn, sem, "lecture")[0]
+    lecture = up.class_events(conn, sem["uid"], "Biology", "lecture")[0]
     ua.set_status(conn, lecture["uid"], "marked_present")
     assert ua.statuses_of(conn, [lecture["uid"]])[lecture["uid"]]["status"] == "marked_present"
     data = ua.discipline_attendance(conn, sem["uid"], "Biology", date(2026, 10, 26))
     assert next(k for k in data["kinds"] if k["kind"] == "lecture")["missed"] == 0 and not data["missed"]
     assert db.get_event(conn, lecture["uid"])["status"] == "active"
+
+
+def test_an_exam_over_a_class_cancels_it_and_the_calendar_hides_it_until_the_exam_moves(conn, sem):
+    from src.routers import calendar as cal
+
+    lecture = up.class_events(conn, sem["uid"], "Biology", "lecture")
+    hit = next(c for c in lecture if c["start_at"][:10] == "2026-10-26")
+    ue.save_way(conn, sem["uid"], "Biology", {"id": "w1", "name": "Exam", "form": "Exam", "weight": "100", "subs": []})
+    ue.save_item(conn, sem["uid"], "Biology", "w1", {"uid": "", "title": "Exam", "day": "2026-10-26", "start": "11:00", "end": "13:00"})
+    assert ua.statuses_of(conn, [hit["uid"]])[hit["uid"]]["status"] == "cancelled"
+    others = [c["uid"] for c in lecture if c["uid"] != hit["uid"]]
+    assert not ua.statuses_of(conn, others)
+    events = [db.get_event(conn, hit["uid"]), db.get_event(conn, others[0])]
+    cal._annotate_skipped_classes(conn, events)
+    assert [e["uid"] for e in events] == [others[0]]
+    m = ue.list_milestones(conn, sem["uid"])[0]
+    ue.save_item(conn, sem["uid"], "Biology", "w1", {"uid": m["uid"], "title": "Exam", "day": "2026-10-27", "start": "14:00", "end": "16:00"})
+    assert not ua.statuses_of(conn, [hit["uid"]])
+    assert db.get_event(conn, hit["uid"])["status"] == "active"
+
+
+def test_a_class_marked_by_hand_is_left_alone_by_an_exam(conn, sem):
+    hit = next(c for c in up.class_events(conn, sem["uid"], "Biology", "lecture") if c["start_at"][:10] == "2026-10-26")
+    ua.set_status(conn, hit["uid"], "missed", "ill")
+    ue.save_way(conn, sem["uid"], "Biology", {"id": "w1", "name": "Exam", "form": "Exam", "weight": "100", "subs": []})
+    ue.save_item(conn, sem["uid"], "Biology", "w1", {"uid": "", "title": "Exam", "day": "2026-10-26", "start": "11:00", "end": "13:00"})
+    assert ua.statuses_of(conn, [hit["uid"]])[hit["uid"]]["status"] == "missed"

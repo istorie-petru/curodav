@@ -93,3 +93,35 @@ def test_detection_by_word_lookup_matches_words_phrases_and_aliases(tmp_path):
         assert nb._detect_glossary_term_uids(conn, content) == ["m"]
         content["blocks"][0]["data"]["text"] = "inmagazinat si magazinare"
         assert nb._detect_glossary_term_uids(conn, content) == []
+
+
+def _found(conn, text):
+    from src.db import notebook as nb
+    return nb._detect_glossary_term_uids(conn, {"blocks": [{"type": "paragraph", "data": {"text": text}}]})
+
+
+def test_an_entry_type_chooses_exact_relative_or_abbreviated_detection(tmp_path):
+    with db.connect(tmp_path / "c.sqlite") as conn:
+        for mode in ("exact", "abbreviation"):
+            assert db.save_entry_kind(conn, "", mode.title(), "tag", "teal", [], [], mode) is None
+        db.upsert_glossary_term(conn, {"uid": "t", "term": "magazin", "definition": "", "aliases": []})
+        db.upsert_glossary_term(conn, {"uid": "x", "term": "farmacie", "kind": "Exact", "definition": "", "aliases": []})
+        db.upsert_glossary_term(conn, {"uid": "p", "term": "Abraham Louis Lincon", "kind": "Abbreviation", "definition": "", "aliases": []})
+        assert _found(conn, "magazinul si farmaciile") == ["t"]  # relative: inflected; exact: not
+        assert _found(conn, "o farmacie") == ["x"]
+        for text in ("A.L. Lincon spoke", "A. L. Lincon spoke", "A. Lincon", "Abraham L. Lincon", "Abraham Louis Lincon"):
+            assert _found(conn, text) == ["p"], text
+        for text in ("B. L. Lincon", "Louis Lincon", "A.L. Linconxyz"):
+            assert _found(conn, text) == [], text
+        names = db.list_document_entry_names  # the editor draws the same shortened forms
+        assert "A. L. Lincon" in db.name_abbreviations("Abraham Louis Lincon") and names
+
+
+def test_the_type_modal_saves_and_validates_the_detection_mode(tmp_path):
+    with db.connect(tmp_path / "c.sqlite") as conn:
+        assert db.save_entry_kind(conn, "", "Person", "user", "blue", [], [], "abbreviation") is None
+        assert next(k for k in db.list_entry_kinds(conn) if k["name"] == "Person")["match_mode"] == "abbreviation"
+        assert db.save_entry_kind(conn, "Person", "Person", "user", "blue", [], []) is None
+        assert next(k for k in db.list_entry_kinds(conn) if k["name"] == "Person")["match_mode"] == "abbreviation"
+        assert db.save_entry_kind(conn, "Person", "Person", "user", "blue", [], [], "fuzzy")["field"] == "match_mode"
+        assert next(k for k in db.list_entry_kinds(conn) if k["name"] == "Term")["match_mode"] == "relative"

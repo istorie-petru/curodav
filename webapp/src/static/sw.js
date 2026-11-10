@@ -595,7 +595,7 @@
 // v148 (2026-10-17): one reference per entry section; entry_reference_pages.js and style.css changed.
 // v149 (2026-10-22): the worker no longer answers page navigations (that added a hop to every page load) and only
 // serves /static/ files cache-first by their exact versioned URL; the three script bundles replace ~46 script files.
-const CACHE_NAME = "cc-shell-v149";
+const CACHE_NAME = "cc-shell-v150";
 
 const SHELL_ASSETS = [
   "/static/manifest.webmanifest",

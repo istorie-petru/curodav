@@ -945,15 +945,18 @@ def search_link_targets(
 def list_document_entry_names(conn: sqlite3.Connection, notebook_uid: str) -> list[dict[str, Any]]:
     """The entries attached to a note with every name that links them in its text, for the dotted links."""
     rows = conn.execute(
-        "SELECT t.uid, t.term, t.kind, t.aliases_json FROM notebook_glossary_terms g JOIN glossary_terms t ON t.uid = g.term_uid "
-        "WHERE g.notebook_uid = ?", (notebook_uid,)).fetchall()
+        "SELECT t.uid, t.term, t.kind, t.aliases_json, k.match_mode FROM notebook_glossary_terms g JOIN glossary_terms t ON t.uid = g.term_uid "
+        "LEFT JOIN entry_kinds k ON k.name = t.kind WHERE g.notebook_uid = ?", (notebook_uid,)).fetchall()
     out = []
     for r in rows:
         try:
             aliases = json.loads(r["aliases_json"] or "[]")
         except (json.JSONDecodeError, TypeError):
             aliases = []
-        out.append({"uid": r["uid"], "kind": r["kind"], "names": [n for n in [r["term"], *aliases] if str(n).strip()]})
+        names = [n for n in [r["term"], *aliases] if str(n).strip()]
+        if r["match_mode"] == "abbreviation":
+            names += [v for n in names for v in name_abbreviations(str(n).strip())]
+        out.append({"uid": r["uid"], "kind": r["kind"], "names": names})
     return out
 
 
@@ -1397,8 +1400,13 @@ def list_entry_kinds(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return [{**dict(r), "fields": fields.get(r["name"], [])} for r in rows]
 
 
+MATCH_MODES = {"exact": "Exact", "relative": "Relative", "abbreviation": "Allow abbreviations"}
+DEFAULT_MATCH_MODE = "relative"
+
+
 def save_entry_kind(
-    conn: sqlite3.Connection, original: str, name: str, icon: str, color: str, keep_fields: list[str], new_fields: list[str]
+    conn: sqlite3.Connection, original: str, name: str, icon: str, color: str, keep_fields: list[str], new_fields: list[str],
+    match_mode: str | None = None,
 ) -> dict[str, str] | None:
     """Creates a kind (`original` empty) or updates one, renaming it everywhere when its name changes.
 
@@ -1407,6 +1415,8 @@ def save_entry_kind(
     name = (name or "").strip()
     if not name:
         return {"field": "name", "message": "A type needs a name"}
+    if match_mode is not None and match_mode not in MATCH_MODES:
+        return {"field": "match_mode", "message": "Pick exact, relative or allow abbreviations"}
     if original == ENTRY_KIND_DEFAULT and name != ENTRY_KIND_DEFAULT:
         return {"field": "name", "message": f"{ENTRY_KIND_DEFAULT} is the default type and keeps its name"}
     taken = {k["name"].lower() for k in list_entry_kinds(conn) if k["name"] != original}
@@ -1425,11 +1435,12 @@ def save_entry_kind(
             conn.execute("UPDATE entry_kinds SET name = ? WHERE name = ?", (name, original))
             conn.execute("UPDATE glossary_terms SET kind = ? WHERE kind = ?", (name, original))
             conn.execute("UPDATE entry_kind_fields SET kind = ? WHERE kind = ?", (name, original))
-        conn.execute("UPDATE entry_kinds SET icon = ?, color = ? WHERE name = ?", (icon or "tag", color or "teal", name))
+        conn.execute("UPDATE entry_kinds SET icon = ?, color = ?, match_mode = COALESCE(?, match_mode) WHERE name = ?", (icon or "tag", color or "teal", match_mode, name))
         conn.execute("DELETE FROM entry_kind_fields WHERE kind = ?", (name,))
     else:
         position = (conn.execute("SELECT COALESCE(MAX(position), 0) FROM entry_kinds").fetchone()[0] or 0) + 1
-        conn.execute("INSERT INTO entry_kinds (name, icon, color, position) VALUES (?, ?, ?, ?)", (name, icon or "tag", color or "teal", position))
+        conn.execute("INSERT INTO entry_kinds (name, icon, color, position, match_mode) VALUES (?, ?, ?, ?, ?)",
+                     (name, icon or "tag", color or "teal", position, match_mode or DEFAULT_MATCH_MODE))
     for position, field in enumerate(kept + added):
         conn.execute("INSERT INTO entry_kind_fields (kind, name, position) VALUES (?, ?, ?)", (name, field, position))
     conn.commit()
@@ -1709,19 +1720,27 @@ def _detect_glossary_term_uids(conn: sqlite3.Connection, content: dict[str, Any]
     text = text.lower()
     words = set(re.findall(r"\w+", text))
     detected = []
-    for row in conn.execute("SELECT uid, term, aliases_json FROM glossary_terms").fetchall():
+    modes = {r["name"]: r["match_mode"] for r in conn.execute("SELECT name, match_mode FROM entry_kinds")}
+    for row in conn.execute("SELECT uid, term, kind, aliases_json FROM glossary_terms").fetchall():
+        mode = modes.get(row["kind"]) or DEFAULT_MATCH_MODE
         try:
             aliases = json.loads(row["aliases_json"] or "[]")
         except (json.JSONDecodeError, TypeError):
             aliases = []
         names = [(row["term"] or "").strip().lower()] + [str(a).strip().lower() for a in aliases]
+        if mode == "abbreviation":
+            names += [v.lower() for n in names for v in name_abbreviations(n)]
         for n in names:
             if not n:
                 continue
             tokens = re.findall(r"\w+", n)
             if not tokens:
                 continue
-            if re.fullmatch(r"\w+", n):
+            if mode == "exact":
+                if (n in words) if re.fullmatch(r"\w+", n) else re.search(r"(?<!\w)" + re.escape(n) + r"(?!\w)", text):
+                    detected.append(row["uid"])
+                    break
+            elif re.fullmatch(r"\w+", n):
                 if any(n + ending in words for ending in _INFLECTIONS):
                     detected.append(row["uid"])
                     break
@@ -1729,6 +1748,32 @@ def _detect_glossary_term_uids(conn: sqlite3.Connection, content: dict[str, Any]
                 detected.append(row["uid"])
                 break
     return detected
+
+
+def name_abbreviations(name: str) -> list[str]:
+    """The ways a person's name is shortened: every given name may become its initial (A. L. Lincoln, A.L. Lincoln, A L Lincoln, A.L.Lincoln);
+    the last word is the surname and always stays whole. A name of one word has none."""
+    words = name.split()
+    if len(words) < 2:
+        return []
+    *given, surname = words
+    out: list[str] = []
+    for mask in range(1, 2 ** len(given)):
+        parts = [(w[0], True) if mask >> i & 1 else (w, False) for i, w in enumerate(given) if w]
+        for dot in (".", ""):
+            for sep in (" ", ""):
+                for last_sep in (" ", ""):
+                    if last_sep == "" and dot == "":
+                        continue
+                    text = ""
+                    for i, (w, short) in enumerate(parts):
+                        text += w + (dot if short else "")
+                        if i < len(parts) - 1:
+                            text += sep if short and parts[i + 1][1] else " "
+                    out.append(text + last_sep + surname)
+    if len(given) > 1:  # the first initial alone, the other given names dropped
+        out += [f"{given[0][0]}{dot}{sep}{surname}" for dot, sep in ((".", " "), (".", ""), ("", " "))]
+    return sorted(set(out), key=lambda v: (-len(v), v))
 
 
 # A name matches a word that starts with it and ends with an ordinary inflection (magazin: magazine, magazinul, magazinelor), never a longer

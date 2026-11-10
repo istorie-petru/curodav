@@ -118,6 +118,7 @@ def save_item(conn: sqlite3.Connection, semester_uid: str, discipline: str, way_
     existing = _milestone_row(conn, ms.get("uid") or "")
     uid = _save_milestone(conn, semester_uid, discipline, way, ms, existing["position"] if existing else position)
     conn.commit()
+    _sync_classes(conn)
     return uid
 
 
@@ -141,7 +142,14 @@ def attach_item(conn: sqlite3.Connection, semester_uid: str, discipline: str, wa
                   uid if kind == "event" else None, uid if kind == "task" else None, position))
     _tag_item(conn, kind, uid, discipline)
     conn.commit()
+    _sync_classes(conn)
     return m_uid
+
+
+def _sync_classes(conn: sqlite3.Connection) -> None:
+    from . import university_attendance
+
+    university_attendance.sync_exam_overlaps(conn)
 
 
 def delete_milestone(conn: sqlite3.Connection, uid: str) -> None:
@@ -151,6 +159,7 @@ def delete_milestone(conn: sqlite3.Connection, uid: str) -> None:
     _drop_milestone_items(conn, row)
     conn.execute("DELETE FROM university_milestones WHERE uid = ?", (uid,))
     conn.commit()
+    _sync_classes(conn)
 
 
 
@@ -272,6 +281,7 @@ def save_evaluation(conn: sqlite3.Connection, semester_uid: str, discipline: str
             if any(str(ms.get(k) or "").strip() for k in ("title", "day", "due", "notes")):
                 _save_milestone(conn, semester_uid, discipline, way, ms, i)
     conn.commit()
+    _sync_classes(conn)
     notes = evaluation_warnings(get_evaluation(conn, semester_uid, discipline, with_milestones=False))
     if removed:
         notes.append(f"{removed} milestone{'s' if removed != 1 else ''} removed with {'its' if removed == 1 else 'their'} events and tasks")

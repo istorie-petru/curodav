@@ -66,13 +66,25 @@ def test_the_move_check_reports_a_managed_shelf(conn):
     assert "managed" in (tags.move_error(conn, "Home", "University") or "")
 
 
-def test_the_edit_modal_is_a_read_only_notice(conn):
+def _request():
     from starlette.requests import Request
 
-    request = Request({"type": "http", "method": "GET", "path": "/", "query_string": b"", "scheme": "http",
-                       "server": ("testserver", 80), "root_path": "", "headers": []})
-    body = labels_router.edit_label_modal("University", request, conn=conn).body.decode()
-    assert "read only" in body and 'id="label-form"' not in body
+    return Request({"type": "http", "method": "GET", "path": "/", "query_string": b"", "scheme": "http",
+                    "server": ("testserver", 80), "root_path": "", "headers": []})
+
+
+def test_the_edit_modal_is_the_shelf_form_with_a_read_only_tag_list(conn):
+    body = labels_router.edit_label_modal("University", _request(), conn=conn).body.decode()
+    assert 'id="label-form"' in body and "data-tag-add" not in body and 'name="tag_idx"' not in body and "data-tag-remove" not in body
+
+
+def test_saving_the_shelf_changes_its_look_and_name_but_not_its_tags(conn):
+    conn.execute("INSERT INTO university_semesters (uid, shelf_name, name, created_at) VALUES ('s1', 'University', 'S1', '2026-10-01')")
+    labels_router.update_label("University", new_name="Uni", color="red", icon="", label_group="", description="", conn=conn, request=None, tag_rows=[])
+    assert db.get_label_config(conn, "Uni")["color"] == "red"
+    assert db.get_label_config(conn, "Uni")["managed_by"] == "university"
+    assert [t["name"] for t in tags.tags_of_label(conn, "Uni")] == ["University"]
+    assert conn.execute("SELECT shelf_name FROM university_semesters").fetchone()[0] == "Uni"
 
 
 def test_sync_and_quick_edits_on_events_and_tasks_are_not_blocked(conn):
@@ -91,3 +103,12 @@ def test_sync_and_quick_edits_on_events_and_tasks_are_not_blocked(conn):
 def test_a_managed_shelf_cannot_be_moved_between_spaces_by_someone_else(conn):
     with pytest.raises(tags.ManagedLabelError):
         db.set_group_members(conn, "School", ["University"])
+
+
+def test_a_linked_contact_comes_with_its_photo_url_only_when_it_has_a_photo(conn):
+    conn.execute("INSERT INTO contacts (uid, full_name, photo_b64, photo_type, photo_version) VALUES ('c1', 'Ana', 'AAAA', 'JPEG', 'v1')")
+    conn.execute("INSERT INTO contacts (uid, full_name) VALUES ('c2', 'Bob')")
+    for uid in ("c1", "c2"):
+        conn.execute("INSERT INTO object_contacts (object_type, object_id, contact_uid) VALUES ('event', 'e9', ?)", (uid,))
+    ana, bob = db.list_object_contacts(conn, "event", "e9")
+    assert ana["photo_url"] == "/contacts/c1/photo?v=v1" and "photo_url" not in bob and "photo_b64" not in ana

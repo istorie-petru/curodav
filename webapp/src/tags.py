@@ -277,6 +277,23 @@ def merge_tags(conn: sqlite3.Connection, name: str, dest: str) -> None:
 def label_renamed(conn: sqlite3.Connection, old: str, new: str) -> None:
     if _has(conn, "label_tags"):
         conn.execute("UPDATE label_tags SET label_name = ? WHERE label_name = ?", (new, old))
+    if _has(conn, "university_semesters"):
+        conn.execute("UPDATE university_semesters SET shelf_name = ? WHERE shelf_name = ? COLLATE NOCASE", (new, old))
+
+
+def discipline_shelf(conn: sqlite3.Connection) -> str:
+    """The shelf of the current University semester, lowercase, whose tags are disciplines with an edit window; "" when there is none."""
+    from . import modules
+
+    if not modules.is_enabled("university"):
+        return ""
+    try:
+        from . import university_plan
+
+        semester = university_plan.current_semester(conn)
+    except Exception:
+        return ""
+    return (semester or {}).get("shelf_name", "").lower()
 
 
 def label_removed(conn: sqlite3.Connection, name: str, into: str | None = None) -> None:

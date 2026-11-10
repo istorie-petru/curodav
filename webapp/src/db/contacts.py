@@ -809,11 +809,18 @@ def set_object_contacts(conn: sqlite3.Connection, object_type: str, object_id: s
 def list_object_contacts(conn: sqlite3.Connection, object_type: str, object_id: str) -> list[dict[str, Any]]:
     """The contacts linked to a task or event, by name."""
     rows = conn.execute(
-        "SELECT c.uid, c.full_name FROM object_contacts oc JOIN contacts c ON c.uid = oc.contact_uid "
+        "SELECT c.uid, c.full_name, c.photo_version, (c.photo_b64 IS NOT NULL AND c.photo_b64 != '') AS has_photo "
+        "FROM object_contacts oc JOIN contacts c ON c.uid = oc.contact_uid "
         "WHERE oc.object_type = ? AND oc.object_id = ? ORDER BY c.full_name",
         (object_type, object_id),
     ).fetchall()
-    return [dict(r) for r in rows]
+    out = []
+    for r in rows:
+        d = dict(r)
+        if d.pop("has_photo"):
+            d["photo_url"] = f"/contacts/{d['uid']}/photo?v={d.get('photo_version') or ''}"
+        out.append(d)
+    return out
 
 
 def list_contact_objects(conn: sqlite3.Connection, contact_uid: str, now_iso: str | None = None) -> dict[str, list[dict[str, Any]]]:

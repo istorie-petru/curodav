@@ -980,11 +980,11 @@ def save_citation_format(citation_format: str = Form("chicago"), conn=Depends(ge
 
 
 def _kind_modal(request: Request, conn, kind: dict | None):
-    kind = kind or {"name": "", "icon": "tag", "color": "teal", "fields": []}
+    kind = kind or {"name": "", "icon": "tag", "color": "teal", "fields": [], "match_mode": db.DEFAULT_MATCH_MODE}
     return templates.TemplateResponse(
         "entry_kind_modal.html",
         {"request": request, "active_tab": "settings_notebook", "kind": kind, "is_new": not kind["name"], "colors": COLORS,
-         "icon_groups": icon_groups_for(kind["icon"]), "in_use": sum(1 for e in db.list_glossary_terms(conn) if e["kind"] == kind["name"])},
+         "icon_groups": icon_groups_for(kind["icon"]), "match_modes": db.MATCH_MODES, "in_use": sum(1 for e in db.list_glossary_terms(conn) if e["kind"] == kind["name"])},
     )
 
 
@@ -1010,11 +1010,12 @@ def _kind_error(error: dict, x_requested_with):
 @field_settings_router.post("/entry-kinds")
 def save_entry_kind_form(
     original: str = Form(""), name: str = Form(""), color: str = Form("teal"), icon: str = Form("tag"),
-    field_keep: list[str] = Form([]), field_new: list[str] = Form([]),
+    field_keep: list[str] = Form([]), field_new: list[str] = Form([]), match_mode: str = Form(""),
     x_requested_with: str | None = Header(default=None), conn=Depends(get_db),
 ):
     error = db.save_entry_kind(conn, _s(original), name, _s(icon), color if color in COLORS else "teal",
-                               field_keep if isinstance(field_keep, list) else [], field_new if isinstance(field_new, list) else [])
+                               field_keep if isinstance(field_keep, list) else [], field_new if isinstance(field_new, list) else [],
+                               _s(match_mode) or None)
     if error:
         return _kind_error(error, x_requested_with)
     return respond(x_requested_with, "/settings/notebook")

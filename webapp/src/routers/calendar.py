@@ -230,6 +230,7 @@ def _annotate_skipped_classes(conn, events: list[dict]) -> None:
     for e in events:
         if (marks.get(e["uid"]) or {}).get("status") in ("missed", "excused", "cancelled"):
             e["skipped"] = True
+    events[:] = [e for e in events if (marks.get(e["uid"]) or {}).get("status") != "cancelled"]
 
 
 def _apply_task_label_filter(tasks: list[dict], label: str | None, conn=None) -> list[dict]:
@@ -1538,6 +1539,7 @@ def update_event(
             conn, uid, occurrence_date, (occ_initial_start, occ_initial_end), (occ_start_at, occ_end_at),
             (series["series_start"], series["series_end"]),
         )
+    _sync_exam_classes(conn, existing)
     return respond(x_requested_with, "/calendar", ok=True)
 
 
@@ -1557,7 +1559,16 @@ def delete_event(uid: str, x_requested_with: str | None = Header(default=None), 
         event_series.delete_scope(conn, uid, "this")  # one occurrence; the series row goes with its last one
     else:
         db.delete_event(conn, uid)
+    _sync_exam_classes(conn, event)
     return respond(x_requested_with, "/calendar", ok=True)
+
+
+def _sync_exam_classes(conn, event: dict | None) -> None:
+    """After an exam event changed or went, lifts or applies the cancel of the classes it overlaps."""
+    if event and _is_exam(conn, event):
+        from .. import university_attendance
+
+        university_attendance.sync_exam_overlaps(conn)
 
 
 # --------------------------------------------------------------------- #

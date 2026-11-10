@@ -111,6 +111,12 @@ def _glossary_terms_become_entries(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT OR IGNORE INTO entry_kinds (name, icon, color, position) VALUES ('Term', 'tag', 'teal', 0)")
 
 
+def _entry_kind_match_mode(conn: sqlite3.Connection) -> None:
+    """Each entry type chooses how its entries are found in a note: exact, relative (inflected forms) or with abbreviations of names."""
+    if "match_mode" not in _columns(conn, "entry_kinds"):
+        conn.execute("ALTER TABLE entry_kinds ADD COLUMN match_mode TEXT NOT NULL DEFAULT 'relative'")
+
+
 _CITATION_EXTRA_COLUMNS = ['subtitle', 'edition', 'volume', 'issue', 'pages', 'publisher', 'place', 'isbn', 'issn', 'accessed', 'institution', 'degree', 'editors', 'note']
 
 
@@ -583,6 +589,7 @@ MIGRATIONS: list[Migration] = [
     Migration(80, "Earlier versions of notes changed through the API", _note_versions),
     Migration(81, "Undoable history of changes made through the API", _api_changes),
     Migration(82, "API activity says where each call went", _activity_target),
+    Migration(83, "Entry types choose how their entries are detected", _entry_kind_match_mode),
 ]
 
 

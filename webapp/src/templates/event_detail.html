@@ -35,7 +35,7 @@
 {% if event.recurrence %}{% call vi_row('repeat', 'Repeats') %}{{ event.recurrence | recurrence_text }}{% endcall %}{% endif %}
 {% if event.reminders %}{% call vi_row('bell', 'Reminder') %}{% for m in event.reminders %}{{ m }} min{% if not loop.last %}, {% endif %}{% endfor %} before{% endcall %}{% endif %}
 {% if event.tag_items %}{% call vi_row('tag', 'Tags') %}{% for tag in event.tag_items %}{{ tag_pill(tag) }} {% endfor %}{% endcall %}{% endif %}
-{% if _people %}{% call vi_row('users', 'People') %}{% for p in _people %}<a href="/contacts/{{ p.uid }}" data-modal>{{ vi_person(p.full_name) }}</a>{% endfor %}{% endcall %}{% endif %}
+{% if _people %}{% call vi_row('users', 'People') %}{% for p in _people %}<a href="/contacts/{{ p.uid }}" data-modal>{{ vi_person(p) }}</a>{% endfor %}{% endcall %}{% endif %}
 {% if event.meeting_url %}{% call vi_row('external-link', 'Meeting') %}<a href="{{ event.meeting_url }}" target="_blank" rel="noopener">Join</a>{% endcall %}{% endif %}
 {% endcall %}
 {% set _desc = (event.description or '').strip() %}

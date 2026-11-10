@@ -19,6 +19,8 @@ This router owns:
 
 from __future__ import annotations
 
+import contextlib
+
 from datetime import date, datetime, timezone
 from urllib.parse import quote, unquote, urlparse
 
@@ -301,14 +303,14 @@ def _rows_of(tag_rows) -> list[dict]:
 def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
     """The label edit modal -- uses the unified label_form_modal.html."""
     cfg = db.effective_label_config(conn, name)
-    if cfg.get("managed_by"):
-        return templates.TemplateResponse("managed_notice_modal.html", {"request": request, "name": name, "module": modules.get(cfg["managed_by"])})
     banner = db.get_page_banner(conn, name)
     return templates.TemplateResponse(
         "label_form_modal.html",
         {
             "request": request,
             "l": cfg,
+            "managed": modules.get(cfg["managed_by"]) if cfg.get("managed_by") else None,
+            "discipline_shelf": tags.discipline_shelf(conn),
             "colors": COLORS,
             "icon_groups": icon_groups_for(cfg.get("icon")),
             "group_options": [g["name"] for g in db.list_groups(conn)],
@@ -352,7 +354,8 @@ def update_label(
     conn=Depends(get_db),
 ):
     new_name = (new_name or "").strip() or name
-    tag_rows = _rows_of(tag_rows)
+    owner = tags.managed_by(conn, name)
+    tag_rows = [] if owner else _rows_of(tag_rows)  # a managed shelf keeps its tags: the module adds, removes and renames them
     error = tags.validate_rows(conn, new_name, tag_rows)
     if error:
         raise HTTPException(400, error)
@@ -360,6 +363,11 @@ def update_label(
     page = _page_fields(page_fields, deadline_date, page_type, agenda_widget, tasks_widget, contacts_widget,
                         notebook_widget, sidebar_pin, widget_pin)
 
+    with tags.managed_writes(owner) if owner else contextlib.nullcontext():
+        return _update_label_rows(conn, request, name, new_name, owner, tag_rows, color, icon, label_group, description, page)
+
+
+def _update_label_rows(conn, request, name, new_name, owner, tag_rows, color, icon, label_group, description, page):
     renamed_from = None
     if new_name != name:
         _reject_reserved_label_name(new_name)

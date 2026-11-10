@@ -33,6 +33,17 @@
         <button type="button" class="icon-btn" data-tag-remove title="Remove tag" aria-label="Remove tag">{{ icon('x', 'icon-sm') }}</button>
     </div>
     {% endmacro %}
+    {% if managed | default(none) %}
+    <div class="field field-wide label-tags-field">
+        <div class="field-label-row"><label>Tags</label></div>
+        <div class="label-tags-readonly">
+            {% for t in label_tags | default([]) %}
+            {% if l and l.name|lower == discipline_shelf | default('') %}<a href="/settings/university/discipline/{{ t.name|urlencode }}/edit" data-modal class="cell-tag cal-{{ t.color }}" title="Edit the discipline {{ t.name }}">{% if t.icon %}{{ icon(t.icon, 'icon-sm') }} {% endif %}{{ t.name }}</a>
+            {% else %}<span class="cell-tag cal-{{ t.color }}">{% if t.icon %}{{ icon(t.icon, 'icon-sm') }} {% endif %}{{ t.name }}</span>{% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
     <div class="field field-wide label-tags-field">
         <div class="field-label-row">
             <label>Tags</label>
@@ -43,6 +54,7 @@
         </div>
         <template class="label-tag-template">{{ tag_row('__i__', none) }}</template>
     </div>
+    {% endif %}
     {{ details_start(l is not none and l) }}
     <input type="hidden" name="page_fields" value="1">
     

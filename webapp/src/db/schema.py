@@ -1117,7 +1117,8 @@ CREATE TABLE IF NOT EXISTS entry_kinds (
     name TEXT PRIMARY KEY,
     icon TEXT NOT NULL DEFAULT 'tag',
     color TEXT NOT NULL DEFAULT 'teal',
-    position REAL NOT NULL DEFAULT 0
+    position REAL NOT NULL DEFAULT 0,
+    match_mode TEXT NOT NULL DEFAULT 'relative'
 );
 
 -- Extra titled text blocks on a term (Example, "Remember", ...), user-defined per entry.
