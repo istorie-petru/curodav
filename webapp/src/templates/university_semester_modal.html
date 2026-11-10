@@ -7,7 +7,7 @@
 {% block content %}
 {% call modal(kind="form", title=('Edit semester' if semester else 'New semester'), size="medium", form='university-semester-form', creating=(not semester)) %}
 <div class="card">
-<form method="post" id="university-semester-form" action="/settings/university/semester">
+<form method="post" id="university-semester-form" action="/settings/academic/semester">
     <input type="hidden" name="uid" value="{{ semester.uid if semester else '' }}">
     <div class="field-grid">
         <div class="field field-wide"><label>Name</label>{{ text_input({'name': 'name', 'value': (semester.name if semester else ''), 'required': true}) }}</div>
@@ -16,6 +16,12 @@
             {% set ms_items = [] %}{% if not semester %}{% set _ = ms_items.append({'uid': '', 'name': 'Create one from the name'}) %}{% endif %}
             {% for n in shelves %}{% set _ = ms_items.append({'uid': n, 'name': n}) %}{% endfor %}
             {% set ms_selected = semester.shelf_name if semester else '' %}{% set ms_wide = false %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+        <div class="field field-wide">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'university-semester-form' %}{% set ms_name = 'space' %}{% set ms_label = 'Space' %}
+            {% set ms_items = [{'uid': '', 'name': 'No space'}] %}{% for n in spaces %}{% set _ = ms_items.append({'uid': n, 'name': n}) %}{% endfor %}
+            {% set ms_selected = space %}{% set ms_wide = false %}
             {% include '_widget_list_multiselect.html' %}
         </div>
         <div class="field"><label>Start date</label>{{ date_field('start_date', semester.start_date if semester else '', label='Start date') }}</div>

@@ -21,7 +21,7 @@ def _milestone_of(conn: sqlite3.Connection, column: str, uid: str) -> sqlite3.Ro
 def exam_urls(row: sqlite3.Row) -> dict[str, str]:
     """Where the way of evaluating and the grades of an exam item are edited."""
     d = quote(row["discipline_tag"], safe="")
-    return {"way_url": f"/settings/university/evaluation/{row['way_id']}/edit?discipline={d}", "grades_url": f"/settings/university/grades?discipline={d}"}
+    return {"way_url": f"/settings/academic/evaluation/{row['way_id']}/edit?discipline={d}", "grades_url": f"/settings/academic/grades?discipline={d}"}
 
 
 def _exam(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:

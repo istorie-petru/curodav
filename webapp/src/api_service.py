@@ -308,7 +308,7 @@ def _semester(conn: sqlite3.Connection, uid: str = "") -> dict[str, Any] | None:
 def _discipline_url(conn: sqlite3.Connection, semester: dict[str, Any], name: str) -> str:
     from . import university_plan as up
 
-    return f"/groups/{quote(up.semester_group(conn, semester))}/disciplines/{quote(name)}"
+    return f"/labels/{quote(semester['shelf_name'])}/disciplines/{quote(name)}"
 
 
 def _semester_out(s: dict[str, Any]) -> dict[str, Any]:

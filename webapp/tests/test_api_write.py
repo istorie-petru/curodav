@@ -161,3 +161,22 @@ def test_editor_saves_keep_a_version_now_and_then_and_after_an_ai_edit(tmp_path,
         assert [v["source"] for v in versions] == ["web", "mcp", "web"]
         assert "From Claude" in note_versions.get_version(c, versions[0]["uid"])["content_json"]
     client.__exit__(None, None, None)
+
+
+def test_entries_can_be_made_and_changed_but_not_deleted(conn):
+    from src import api_history, mcp_server
+
+    made = api_write.save_entry(conn, name="Kant", kind="person", aliases=["I. Kant"], definition="Philosopher", source="mcp")
+    api_write.save_entry(conn, uid=made["uid"], sections=[{"title": "Works", "text": "Groundwork"}], source="mcp")
+    entry = db.get_glossary_term(conn, made["uid"])
+    assert (entry["term"], entry["kind"], entry["definition"], entry["aliases"]) == ("Kant", "person", "Philosopher", ["I. Kant"])
+    assert [s["title"] for s in db.list_glossary_sections(conn, made["uid"])] == ["Works"]
+    with pytest.raises(api_write.EditError):
+        api_write.save_entry(conn, source="mcp")
+    assert not any("delete" in name for name in mcp_server.TOOLS_BY_NAME)
+    token = {"scopes": "write:notes"}
+    result = mcp_server.call_tool(conn, "save_entry", {"name": "Hegel"}, token)
+    uid = result["structuredContent"]["uid"]
+    change = conn.execute("SELECT uid FROM api_changes WHERE tool = 'save_entry' ORDER BY at DESC LIMIT 1").fetchone()
+    api_history.undo(conn, change["uid"])
+    assert db.get_glossary_term(conn, uid) is None

@@ -26,7 +26,8 @@ LIMITS_MS = {"request": 1000, "startup": 5000, "background": 30000}
 # A single measurement this many times over its limit is logged on the spot.
 EXTREME_FACTOR = 3
 # Browser metrics the editor reports (name -> slow limit in ms); anything else sent is dropped.
-BROWSER_LIMITS_MS = {"editor open": 3000, "editor typing": 100, "editor change": 100, "editor save": 2000}
+BROWSER_LIMITS_MS = {"editor open": 3000, "editor typing": 100, "editor change": 100, "editor save": 2000,
+                     "page open": 3000, "page back": 3000, "page wait": 1000, "page render": 2000}
 # Requests aggregated for trends; any other request is stored only when it runs over its limit.
 WATCHED_ROUTES = {"/", "/tasks", "/calendar", "/contacts", "/notebook", "/notebook/{uid}/content"}
 IGNORED_PATHS = ("/static", "/health", "/settings/logs/entries", "/perf/report")

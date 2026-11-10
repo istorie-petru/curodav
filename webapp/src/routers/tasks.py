@@ -868,7 +868,7 @@ def task_detail(uid: str, request: Request, month: str | None = None, conn=Depen
         return templates.TemplateResponse("habit_task_detail.html", ctx)
     from .. import modules
 
-    if task and modules.is_enabled("university"):
+    if task and modules.is_enabled("academic"):
         from .. import university_context
 
         ctx["university"] = university_context.for_task(conn, task)

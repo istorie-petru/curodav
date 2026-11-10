@@ -49,7 +49,7 @@ class TestHome:
         _doc(conn, "b", tags=["Reading"])
         _doc(conn, "c")
         body = notebook_router.list_documents(_request(), conn=conn).body.decode()
-        for text in ("Thesis", "Reading", "Unfiled", "Entries", "Citations", "Templates"):
+        for text in ("Thesis", "Reading", "Unfiled", "Entries", "Templates"):
             assert text in body
         assert "/notebook/folder?kind=project&amp;name=Thesis" in body or "/notebook/folder?kind=project&name=Thesis" in body
 

@@ -8,7 +8,7 @@
 {% macro grade_cell(id, label) %}{{ number_input({'name': 'grade_' ~ id, 'value': ('%g'|format(grades[id])) if id in grades else '', 'min': 0, 'step': 'any', 'aria-label': label ~ ', grade'}) }}{% endmacro %}
 {% call modal(kind="form", title='Grades: ' ~ d.name, size="medium", form='university-grades-form') %}
 <div class="card">
-<form method="post" id="university-grades-form" action="/settings/university/grades">
+<form method="post" id="university-grades-form" action="/settings/academic/grades">
     <input type="hidden" name="discipline" value="{{ d.name }}">
     <div class="uni-table">
         <span class="uni-table-head"></span><span class="uni-table-head">Passing grade</span><span class="uni-table-head">Grade</span>

@@ -15,7 +15,7 @@ WRITER = {"uid": "t1", "scopes": "read:university write:university"}
 
 @pytest.fixture()
 def conn(tmp_path, monkeypatch, frozen_today):
-    monkeypatch.setenv("CC_MODULES", "university")
+    monkeypatch.setenv("CC_MODULES", "academic")
     frozen_today(date(2026, 9, 20))
     with db.connect(tmp_path / "c.sqlite") as c:
         yield c

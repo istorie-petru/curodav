@@ -54,14 +54,17 @@ STORE_KEY = "modules_enabled"
 _stored: set[str] = set()  # the modules turned on in Settings, read from the database at start and kept in step by `set_enabled`
 
 
+LEGACY_KEYS = {"university": "academic"}  # the University module was renamed Academic; old settings and environments keep working
+
+
 def forced_keys() -> set[str]:
-    return {k.strip() for k in os.environ.get("CC_MODULES", "").split(",") if k.strip()}
+    return {LEGACY_KEYS.get(k.strip(), k.strip()) for k in os.environ.get("CC_MODULES", "").split(",") if k.strip()}
 
 
 def load_stored(conn) -> None:
     row = conn.execute("SELECT value FROM app_meta WHERE key = ?", (STORE_KEY,)).fetchone()
     _stored.clear()
-    _stored.update(k for k in ((row[0] if row else "") or "").split(",") if k)
+    _stored.update(LEGACY_KEYS.get(k, k) for k in ((row[0] if row else "") or "").split(",") if k)
 
 
 def set_enabled(conn, key: str, on: bool) -> None:

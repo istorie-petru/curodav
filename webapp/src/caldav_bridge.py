@@ -52,6 +52,7 @@ class CalDavBridge:
             password=settings.radicale_password,
             timeout=_RADICALE_REQUEST_TIMEOUT_SECONDS,
         )
+        self.request_timeout = _RADICALE_REQUEST_TIMEOUT_SECONDS
         self.principal = self.client.principal()
         # Multi-calendar: lazily-populated cache of CalDAV Calendar objects
         # keyed by collection path ("calendar", "work", ...). Each is a

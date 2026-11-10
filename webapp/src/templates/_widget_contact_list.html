@@ -6,9 +6,7 @@
         {{ avatar(c, lazy=True) }}
         <span class="contact-list-main">
             <span class="contact-list-name">{{ c.full_name or c.org or '(no name)' }}</span>
-            {% if c.org and c.full_name %}<span class="contact-list-org">{{ c.org }}</span>{% endif %}
             {% if c.emails %}<span class="contact-list-detail">{{ c.emails[0].value }}</span>{% endif %}
-            {% if c.phones %}<span class="contact-list-detail">{{ c.phones[0].value }}</span>{% endif %}
         </span>
     </a>
     {% endfor %}

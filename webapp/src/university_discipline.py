@@ -6,6 +6,7 @@ from __future__ import annotations
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import RedirectResponse
 
 from . import clock, db
 from . import university_attendance as ua
@@ -14,7 +15,7 @@ from . import university_plan as up
 from .deps import get_db, templates
 from .university import _enabled
 
-router = APIRouter(prefix="/groups/{group}/disciplines", tags=["university"], dependencies=[Depends(_enabled)])
+router = APIRouter(prefix="/labels/{group}/disciplines", tags=["university"], dependencies=[Depends(_enabled)])
 
 OLD_VIEWS = ("overview", "sheet", "bibliography", "exams", "contents", "attendance", "classes")
 
@@ -46,9 +47,21 @@ def build(conn, semester: dict, discipline: dict, today) -> dict:
             "notes_text": sheet["values"].get("summary", ""), "passing": ue.passing_grade(conn, uid, name)}
 
 
+legacy_router = APIRouter(prefix="/groups/{space}/disciplines", tags=["academic"])
+
+
+@legacy_router.get("/{name}")
+def legacy_discipline_page(space: str, name: str, request: Request, conn=Depends(get_db)):
+    """Discipline pages used to sit under the space; they are under the semester's shelf now."""
+    semester = up.semester_for_group(conn, space)
+    if not semester:
+        raise HTTPException(404, "No such semester")
+    return RedirectResponse(f"/labels/{quote(semester['shelf_name'], safe='')}/disciplines/{quote(name, safe='')}", status_code=307)
+
+
 @router.get("/{name}")
 def discipline_page(group: str, name: str, request: Request, conn=Depends(get_db)):
-    semester = up.semester_for_group(conn, group)
+    semester = up.semester_for_shelf(conn, group)
     if not semester:
         raise HTTPException(404, "No such semester")
     found = next((d for d in up.disciplines(conn, semester) if d["name"].lower() == name.lower()), None)
@@ -60,5 +73,5 @@ def discipline_page(group: str, name: str, request: Request, conn=Depends(get_db
     ctx = build(conn, semester, found, clock.today())
     ctx.update(dashboard_router._page_banner_context(conn, university.banner_scope(found["name"]), name=found["name"]))
     ctx.update(request=request, semester=semester, d=found, group=group, enc=quote(found["name"], safe=""),
-               crumbs=[{"url": f"/groups/{quote(group, safe='')}", "name": group}], WEEKDAYS=up.WEEKDAYS)
+               crumbs=[{"url": f"/labels/{quote(group, safe='')}", "name": group}], WEEKDAYS=up.WEEKDAYS)
     return templates.TemplateResponse("university_discipline_page.html", ctx)

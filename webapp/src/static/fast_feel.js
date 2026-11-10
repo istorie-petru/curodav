@@ -95,6 +95,29 @@
     };
   }
 
+  // Page loads, for the Timings page: how long a page takes to open (and when it was reached with Back or Forward), how much of that was
+  // waiting for the server and how much was the browser loading and running the page. One small report per page, sent when it is left.
+  const pageStats = {};
+  function addPage(name, ms, limit) {
+    if (!(ms >= 0) || ms > 600000) return;
+    pageStats[name] = { count: 1, total: ms, max: ms, slow: ms > limit ? 1 : 0 };
+  }
+  window.addEventListener("load", () => setTimeout(() => {
+    const nav = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+    if (!nav || !(nav.loadEventEnd > 0)) return;
+    addPage(nav.type === "back_forward" ? "page back" : "page open", nav.loadEventEnd, 3000);
+    addPage("page wait", nav.responseStart - nav.requestStart, 1000);
+    addPage("page render", nav.loadEventEnd - nav.responseEnd, 2000);
+  }, 0));
+  window.addEventListener("pagehide", () => {
+    if (!Object.keys(pageStats).length) return;
+    try {
+      navigator.sendBeacon("/perf/report", new Blob([JSON.stringify(pageStats)], { type: "application/json" }));
+    } catch (err) {
+      // Timing reports are best effort.
+    }
+  });
+
   window.ccPrefetch = { warm: warm, text: text };
   window.ccBusy = { begin: begin };
 })();

@@ -4,7 +4,7 @@
 {% block content %}
 {% call modal(kind="form", title='Attach: ' ~ title, size="small", form='university-attach-form') %}
 <div class="card">
-<form method="post" id="university-attach-form" action="/settings/university/attach">
+<form method="post" id="university-attach-form" action="/settings/academic/attach">
     <input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="uid" value="{{ uid }}"><input type="hidden" name="back" value="{{ back }}">
     <div class="field-grid">
         {% set ms_mode = 'single' %}{% set ms_form_id = 'university-attach-form' %}{% set ms_name = 'way' %}{% set ms_label = 'Way of evaluating' %}

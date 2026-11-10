@@ -32,7 +32,7 @@ SOURCES = {
     "anilist": {"used_for": "Anime and manga", "keyed": False},
     "tvmaze": {"used_for": "TV series", "keyed": False},
     "tmdb": {"used_for": "Films", "keyed": True},
-    "itunes": {"used_for": "Films without a TMDB key", "keyed": False},
+    "itunes": {"used_for": "Films", "keyed": False},
 }
 
 

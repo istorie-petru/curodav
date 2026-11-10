@@ -1,4 +1,4 @@
-"""The University module: registers itself with the module framework (src/modules.py) and serves its Settings page and windows.
+"""The Academic module (formerly University): registers itself with the module framework (src/modules.py) and serves its Settings page and windows.
 
 The Settings page under Modules describes the semester (its dates and class end date) and lists its disciplines. A discipline has its own
 page (`university_discipline.py`); the small windows in this file edit one thing at a time: a discipline, its course sheet, a timetable slot,
@@ -21,7 +21,7 @@ from . import university_attendance as ua
 from . import university_plan as up
 from .deps import get_db, templates
 
-MODULE = modules.register(modules.Module("university", "University", "/settings/university", icon="graduation-cap",
+MODULE = modules.register(modules.Module("academic", "Academic", "/settings/academic", icon="graduation-cap",
                                          description="Semesters, classes, exams and readings, with a study page"))
 
 
@@ -30,7 +30,7 @@ def _render_study(conn, request, name, label):
     return study_page.render(conn, request, name, label)
 
 
-modules.register_page_type(modules.PageType(up.PAGE_TYPE, "Study page", MODULE.key, _render_study))
+modules.register_page_type(modules.PageType(up.PAGE_TYPE, "Semester page", MODULE.key, _render_study))
 
 
 def _enabled() -> None:
@@ -38,16 +38,27 @@ def _enabled() -> None:
         raise HTTPException(404, "Not found")
 
 
-router = APIRouter(prefix="/settings/university", tags=["university"], dependencies=[Depends(_enabled)])
+legacy_router = APIRouter(prefix="/settings/university", tags=["academic"])
 
-HOME = "/settings/university"
+
+@legacy_router.get("")
+@legacy_router.get("/{rest:path}")
+def legacy_settings(request: Request, rest: str = ""):
+    """The module was called University; its old Settings addresses open the same page under the new name."""
+    query = request.url.query
+    return RedirectResponse(f"/settings/academic{'/' + rest if rest else ''}{'?' + query if query else ''}", status_code=307)
+
+
+router = APIRouter(prefix="/settings/academic", tags=["university"], dependencies=[Depends(_enabled)])
+
+HOME = "/settings/academic"
 
 _group: ContextVar[str] = ContextVar("university_group", default="")
 
 
 def url_for_discipline(name: str, view: str = "") -> str:
     """The page of a discipline (its course sheet), under the page of the space that holds the semester. `view` is kept for older callers."""
-    return f"/groups/{quote(_group.get(), safe='')}/disciplines/{quote(name, safe='')}"
+    return f"/labels/{quote(_group.get(), safe='')}/disciplines/{quote(name, safe='')}"
 
 
 def _note(url: str, message: str = "") -> RedirectResponse:
@@ -59,7 +70,7 @@ def _semester(conn) -> dict:
     semester = up.current_semester(conn)
     if not semester:
         raise HTTPException(409, "Create the semester first")
-    _group.set(up.semester_group(conn, semester))
+    _group.set(semester["shelf_name"])
     return semester
 
 
@@ -92,7 +103,7 @@ def university_settings(request: Request, conn=Depends(get_db)):
     ctx = {"request": request, "semester": semester, "semesters": up.list_semesters(conn)}
     if semester:
         from . import study_page
-        _group.set(up.attach_group(conn, semester))
+        _group.set(semester["shelf_name"])
         ctx.update(disciplines=up.disciplines(conn, semester), url_for_discipline=url_for_discipline, group=_group.get(),
                    calendar=semester.get("holiday_calendar") or "", credits_planned=up.credits_planned(conn, semester["uid"]),
                    defaults=up.defaults(conn),
@@ -118,12 +129,14 @@ def defaults_save(class_reminder: str = Form(""), exam_reminder: str = Form(""),
 def semester_form(request: Request, new: str = "", conn=Depends(get_db)):
     semester = None if new else up.current_semester(conn)
     return templates.TemplateResponse("university_semester_modal.html", {
-        "request": request, "semester": semester, "calendars": db.list_holiday_calendar_names(conn), "shelves": up.adoptable_shelves(conn, semester["shelf_name"] if semester else "")})
+        "request": request, "semester": semester, "calendars": db.list_holiday_calendar_names(conn), "shelves": up.adoptable_shelves(conn, semester["shelf_name"] if semester else ""),
+        "spaces": [g["name"] for g in db.list_groups(conn)], "space": up.semester_group(conn, semester) if semester else ""})
 
 
 @router.post("/semester")
 def semester_save(name: str = Form(""), start_date: str = Form(""), end_date: str = Form(""), class_end_date: str = Form(""),
-                  holiday_calendar: str = Form(""), uid: str = Form(""), credits_target: str = Form(""), shelf: str = Form(""), conn=Depends(get_db)):
+                  holiday_calendar: str = Form(""), uid: str = Form(""), credits_target: str = Form(""), shelf: str = Form(""), space: str | None = Form(None),
+                  conn=Depends(get_db)):
     existing = up.get_semester(conn, uid) if uid else None
     note = ""
     try:
@@ -133,7 +146,7 @@ def semester_save(name: str = Form(""), start_date: str = Form(""), end_date: st
             if plan["removed"]:
                 note = f"{plan['removed']} classes after {new_end.isoformat()} were removed" + (f", {plan['removed_with_text']} of them with contents" if plan["removed_with_text"] else "")
         up.save_semester(conn, uid=existing["uid"] if existing else None, name=name, shelf_name=shelf, start_date=start_date, end_date=end_date,
-                         class_end_date=class_end_date, holiday_calendar=holiday_calendar, credits_target=credits_target)
+                         class_end_date=class_end_date, holiday_calendar=holiday_calendar, credits_target=credits_target, space=space)
     except up.PlanError as exc:
         _bad(exc)
     return _note(HOME, note)
@@ -146,8 +159,7 @@ def semester_select(uid: str = Form(...), conn=Depends(get_db)):
     except up.PlanError as exc:
         _bad(exc)
     semester = up.get_semester(conn, uid)
-    group = up.semester_group(conn, semester)
-    return RedirectResponse(f"/groups/{quote(group, safe='')}" if group else HOME, status_code=303)
+    return RedirectResponse(f"/labels/{quote(semester['shelf_name'], safe='')}", status_code=303)
 
 
 # ---------------------------------------------------------------- disciplines
@@ -690,7 +702,7 @@ def attendance_save(event_uid: str, status: str = Form(...), note: str = Form(""
     if back == "calendar":
         return RedirectResponse("/calendar", status_code=303)
     if back == "semester":
-        return _note(f"/groups/{quote(up.semester_group(conn, semester), safe='')}")
+        return _note(f"/labels/{quote(semester['shelf_name'], safe='')}")
     return _note(url_for_discipline(discipline) if discipline else HOME)
 
 

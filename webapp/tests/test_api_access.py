@@ -320,7 +320,7 @@ def test_a_token_reads_only_the_areas_it_holds(app_client):
     assert app_client.get("/api/v1/tasks", headers=_bearer(secret)).status_code == 403
     assert app_client.get("/api/v1/university", headers=_bearer(secret)).status_code == 403
     tools = _tools(app_client, secret)
-    assert "get_note" in tools and "list_tasks" not in tools and "university_overview" not in tools
+    assert "get_note" in tools and "list_tasks" not in tools and "academic_overview" not in tools
     results = app_client.get("/api/v1/search?q=kant&kinds=task&kinds=note", headers=_bearer(secret)).json()["results"]
     assert {r["kind"] for r in results} <= {"note"}
 
@@ -328,4 +328,4 @@ def test_a_token_reads_only_the_areas_it_holds(app_client):
 def test_older_read_and_write_scopes_still_work(app_client):
     _uid, secret = _personal_token(app_client, "read write")
     assert {"edit_note", "list_tasks", "get_discipline"} <= _tools(app_client, secret)
-    assert "university_save_discipline" not in _tools(app_client, secret)
+    assert "academic_save_discipline" not in _tools(app_client, secret)

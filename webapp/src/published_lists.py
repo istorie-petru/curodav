@@ -220,9 +220,25 @@ def materialize_all(conn: sqlite3.Connection, bridge: Any) -> dict[str, dict[str
             continue
         try:
             results[row["id"]] = materialize(conn, bridge, row)
-        except Exception:
-            logger.exception("Failed to materialize published list %r (%s)", row["name"], row["id"])
+        except Exception as exc:
+            if is_timeout(exc):
+                logger.error("Radicale timed out while materializing published list %r (%s); a request waits at most %s s", row["name"], row["id"],
+                             getattr(bridge, "request_timeout", "?"))
+            else:
+                logger.exception("Failed to materialize published list %r (%s)", row["name"], row["id"])
     return results
+
+
+def is_timeout(exc: BaseException) -> bool:
+    """Whether an error, or what caused it, is a network timeout."""
+    import socket
+
+    seen = 0
+    while exc is not None and seen < 8:
+        if isinstance(exc, (socket.timeout, TimeoutError)) or "timeout" in type(exc).__name__.lower() or "timed out" in str(exc).lower():
+            return True
+        exc, seen = exc.__cause__ or exc.__context__, seen + 1
+    return False
 
 
 def collection_url(base_url: str, entity_type: str, collection_path: str) -> str:

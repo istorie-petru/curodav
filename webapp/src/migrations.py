@@ -590,6 +590,7 @@ MIGRATIONS: list[Migration] = [
     Migration(81, "Undoable history of changes made through the API", _api_changes),
     Migration(82, "API activity says where each call went", _activity_target),
     Migration(83, "Entry types choose how their entries are detected", _entry_kind_match_mode),
+    Migration(84, "The University module becomes Academic: the semester page moves to the semester shelf", migrations_university.academic_rename),
 ]
 
 

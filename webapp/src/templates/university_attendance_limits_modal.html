@@ -6,7 +6,7 @@
 {# A line per class kind the course has. Either a share of that kind's classes, or a fixed number of absences, which wins when both are set. #}
 {% call modal(kind="form", title='Absences allowed: ' ~ d.name, size="small", form='university-absences-form') %}
 <div class="card">
-<form method="post" id="university-absences-form" action="/settings/university/attendance/{{ d.name|urlencode }}">
+<form method="post" id="university-absences-form" action="/settings/academic/attendance/{{ d.name|urlencode }}">
     <div class="uni-table">
         <span class="uni-table-head"></span><span class="uni-table-head">% of classes</span><span class="uni-table-head">Or a number</span>
         {% for r in rows %}

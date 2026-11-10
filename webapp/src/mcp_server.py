@@ -103,7 +103,7 @@ TOOLS = [
          "Books, manga, articles, films, series and anime in progress, on hold, planned, and finished recently, with progress and rating.",
          {"finished_days": {"type": "integer", "minimum": 0, "maximum": 3650, "description": "How far back finished entries go."}}, (),
          lambda c, a, _t: api_service.media_now(c, **a)),
-    Tool("university_overview", "University semester",
+    Tool("academic_overview", "University semester",
          "The current (or named) semester with each discipline's teachers, absences against the limit, and grade.",
          {"semester_uid": _s("A semester uid; the current one when left out.")}, (),
          lambda c, a, _t: api_service.university_overview(c, **a)),
@@ -155,6 +155,14 @@ TOOLS = [
           "note_type": _s("A new note type.")}, ("uid", "revision", "properties"),
          lambda c, a, t: api_write.set_note_properties(c, a["uid"], a["revision"], a["properties"], note_type=a.get("note_type"),
                                                        source="mcp", token_uid=t.get("uid", "")), scope="write:notes"),
+    Tool("save_entry", "Save a notebook entry",
+         "Adds a notebook entry (a term, person, place or other kind; list_entry_kinds lists the kinds), or changes the one with uid; "
+         "fields left out keep their value, and sections, when given, replace all the sections. Entries cannot be deleted here.",
+         {"uid": _s("The entry to change; left out, a new one is added."), "name": _s("The entry's name; needed for a new entry."),
+          "kind": _s("Entry kind, such as person."), "aliases": {"type": "array", "items": {"type": "string"}, "description": "Other names."},
+          "definition": _s("The definition."),
+          "sections": {"type": "array", "items": {"type": "object"}, "description": "Extra text blocks, each {title, text}."}}, (),
+         lambda c, a, t: api_write.save_entry(c, **a, source="mcp", token_uid=t.get("uid", "")), scope="write:notes"),
     Tool("restore_note_version", "Restore a note version",
          "Puts an earlier version of a note back; the current content is kept as a version first.",
          {"version_uid": _s("A uid from list_note_versions.")}, ("version_uid",),
@@ -179,17 +187,18 @@ TOOLS = [
           "started_on": _s("YYYY-MM-DD."), "finished_on": _s("YYYY-MM-DD."), "rating": {"type": "number", "minimum": 0, "description": "Overall rating in the user's scale."},
           "criteria": {"type": "object", "description": "Criterion name to rating."}},
          ("uid",), lambda c, a, _t: api_library.set_tracking(c, **a), scope="write:library"),
-    Tool("university_save_semester", "Save a semester",
+    Tool("academic_save_semester", "Save a semester",
          "Creates a semester, or changes the name and dates of the one with uid. Dates are YYYY-MM-DD; the class end date is the last day of classes.",
          {"name": _s("The semester's name, such as Autumn 2026."), "start_date": _s("First day."), "end_date": _s("Last day, exams included."),
-          "class_end_date": _s("Last day of classes."), "uid": _s("The semester to change; left out, a new one is made.")}, ("name",),
+          "class_end_date": _s("Last day of classes."), "uid": _s("The semester to change; left out, a new one is made."),
+          "space": _s("An existing space for the semester's shelf; empty for none; left out, a new semester has none and an old one stays where it is.")}, ("name",),
          lambda c, a, _t: api_university.save_semester(c, **a), scope="write:university"),
-    Tool("university_save_discipline", "Save a discipline",
+    Tool("academic_save_discipline", "Save a discipline",
          "Adds a discipline to the semester (a free colour and an abbreviation are picked), or renames one given old_name.",
          {"name": _s("The discipline's name."), "old_name": _s("The current name, to rename it."), "color": _s("A colour name, such as blue."),
           "icon": _s("An icon name."), "semester_uid": _SEM}, ("name",),
          lambda c, a, _t: api_university.save_discipline(c, **a), scope="write:university"),
-    Tool("university_set_course_sheet", "Fill a course sheet",
+    Tool("academic_set_course_sheet", "Fill a course sheet",
          "Fills course sheet fields of a discipline by key. Keys: " + ", ".join(f"{k} ({label})" for k, label in SHEET_FIELDS)
          + ". Fields left out stay as they are. extra replaces the discipline's own added fields: a list of {section, label, value}, "
            "section one of identification, teaching, content.",
@@ -197,12 +206,12 @@ TOOLS = [
           "extra": {"type": "array", "items": {"type": "object"}, "description": "Own fields as {section, label, value}."},
           "semester_uid": _SEM}, ("discipline",),
          lambda c, a, _t: api_university.set_course_sheet(c, **a), scope="write:university"),
-    Tool("university_set_teachers", "Set the teachers",
+    Tool("academic_set_teachers", "Set the teachers",
          "Who teaches the lectures and who the seminars and labs, by name. A list that is left out stays as it is.",
          {"discipline": _s("Discipline name."), "lecture": {"type": "array", "items": {"type": "string"}, "description": "Names."},
           "seminar": {"type": "array", "items": {"type": "string"}, "description": "Names."}, "semester_uid": _SEM}, ("discipline",),
          lambda c, a, _t: api_university.set_teachers(c, **a), scope="write:university"),
-    Tool("university_save_class_slot", "Add a weekly class",
+    Tool("academic_save_class_slot", "Add a weekly class",
          "Adds a weekly class to the timetable and creates its classes up to the class end date, or changes the slot series_uid "
          "(from today on). kind is lecture, seminar, lab or other; weeks is all, odd or even; times are HH:MM.",
          {"discipline": _s("Discipline name."), "weekday": _s("Monday to Sunday."), "start": _s("HH:MM."), "end": _s("HH:MM."),
@@ -210,7 +219,7 @@ TOOLS = [
           "series_uid": _s("The slot to change, from get_discipline."), "semester_uid": _SEM},
          ("discipline", "weekday", "start", "end"),
          lambda c, a, _t: api_university.save_class_slot(c, **a), scope="write:university"),
-    Tool("university_save_evaluation", "Save a way of evaluating",
+    Tool("academic_save_evaluation", "Save a way of evaluating",
          "Adds a way of evaluating to a discipline, or replaces the one with way.id (from get_discipline); the other ways stay. "
          "way: {id?, name, weight (percent), form?, min_grade?, elimination?, criteria?, notes?, parts?: [{name, weight}], "
          "exams?: [{uid?, title, day (YYYY-MM-DD), start (HH:MM), end, location, due, notes}]}. Exams left out keep the current ones; "
@@ -218,14 +227,14 @@ TOOLS = [
          {"discipline": _s("Discipline name."), "way": {"type": "object", "description": "The way of evaluating."}, "semester_uid": _SEM},
          ("discipline", "way"),
          lambda c, a, _t: api_university.save_evaluation_way(c, **a), scope="write:university"),
-    Tool("university_save_reading", "Save a reading",
+    Tool("academic_save_reading", "Save a reading",
          "Adds a reading to a discipline, or changes the one with task_uid: a library entry (citation_uid) or a title and author, "
          "with pages or chapter in locator. category is obligatory, recommended or auxiliary.",
          {"discipline": _s("Discipline name."), "title": _s("Title."), "author": _s("Author."), "citation_uid": _s("A library entry."),
           "locator": _s("Pages or chapter."), "category": _s("obligatory, recommended or auxiliary."), "due": _s("YYYY-MM-DD."),
           "notes": _s("Notes."), "task_uid": _s("The reading to change."), "semester_uid": _SEM}, ("discipline",),
          lambda c, a, _t: api_university.save_reading(c, **a), scope="write:university"),
-    Tool("university_save_homework", "Save homework",
+    Tool("academic_save_homework", "Save homework",
          "Adds homework to a discipline, or changes the one with task_uid.",
          {"discipline": _s("Discipline name."), "title": _s("What to hand in."), "due": _s("YYYY-MM-DD."),
           "status": _s("active or done."), "task_uid": _s("The homework to change."), "semester_uid": _SEM}, ("discipline", "title"),
@@ -234,10 +243,12 @@ TOOLS = [
          {}, (), lambda c, a, _t: api_service.list_organisation(c)),
 ]
 _AREA = {"search": "read", "list_organisation": "read", "list_tasks": "read:calendar", "get_task": "read:calendar",
-         "list_events": "read:calendar", "get_event": "read:calendar", "university_overview": "read:university",
+         "list_events": "read:calendar", "get_event": "read:calendar", "academic_overview": "read:university",
          "list_exams": "read:university", "get_discipline": "read:university"}
 TOOLS = [replace(t, scope=_AREA[t.name]) if t.name in _AREA else t for t in TOOLS]
 TOOLS_BY_NAME = {t.name: t for t in TOOLS}
+# The University tools were renamed Academic; the old names still work for one release and are not listed.
+LEGACY_NAMES = {name.replace("academic_", "university_", 1): name for name in TOOLS_BY_NAME if name.startswith("academic_")}
 
 
 def _check_args(tool: Tool, args: Any) -> str | None:
@@ -269,6 +280,7 @@ def visible_tools(token: dict[str, Any] | None) -> list[Tool]:
 
 def call_tool(conn: sqlite3.Connection, name: str, args: Any, token: dict[str, Any] | None = None) -> dict[str, Any]:
     """A tools/call result. A bad argument or a missing object is a tool error the model can read, not a protocol error."""
+    name = LEGACY_NAMES.get(name, name)
     tool = TOOLS_BY_NAME[name]
     problem = _check_args(tool, args if args is not None else {})
     if problem:
@@ -313,6 +325,7 @@ def handle(conn: sqlite3.Connection, message: Any, token: dict[str, Any] | None 
         result = {"tools": [t.schema() for t in visible_tools(token)]}
     elif method == "tools/call":
         name = params.get("name")
+        name = LEGACY_NAMES.get(name, name)
         if name not in {t.name for t in visible_tools(token)}:
             return _error(msg_id, INVALID_PARAMS, f"Unknown tool: {name}")
         result = call_tool(conn, name, params.get("arguments"), token)

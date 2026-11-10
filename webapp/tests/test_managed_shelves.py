@@ -13,13 +13,13 @@ def conn(tmp_path):
         tags.add_default_tag(c, "University")
         db.upsert_label_config(c, {"name": "Home", "color": "green"})
         tags.add_default_tag(c, "Home")
-        with tags.managed_writes("university"):
-            tags.set_managed_by(c, "University", "university")
+        with tags.managed_writes("academic"):
+            tags.set_managed_by(c, "University", "academic")
         yield c
 
 
 def test_the_owner_may_change_its_shelf(conn):
-    with tags.managed_writes("university"):
+    with tags.managed_writes("academic"):
         db.upsert_label_config(conn, {"name": "University", "color": "red"})
         tags.apply_rows(conn, "University", [{"old": "University", "name": "University", "color": "red", "icon": "", "delete": False}], {"red"})
     assert db.get_label_config(conn, "University")["color"] == "red"
@@ -38,7 +38,7 @@ def test_the_owner_may_change_its_shelf(conn):
     lambda c: tags.move_tag(c, "University", "Home"),
     lambda c: tags.restore(c, "University"),
     lambda c: tags.set_managed_by(c, "University", None),
-    lambda c: db.upsert_label_config(c, {"name": "Home", "managed_by": "university"}),
+    lambda c: db.upsert_label_config(c, {"name": "Home", "managed_by": "academic"}),
 ])
 def test_everyone_else_is_refused(conn, action):
     with pytest.raises(tags.ManagedLabelError):
@@ -57,8 +57,8 @@ def test_an_unmanaged_shelf_is_unaffected(conn):
 
 
 def test_the_refusal_names_the_module_and_its_settings(conn):
-    modules.register(modules.Module("university", "University", "/settings/university"))
-    with pytest.raises(tags.ManagedLabelError, match="University module.*\\/settings\\/university"):
+    modules.register(modules.Module("academic", "Academic", "/settings/academic"))
+    with pytest.raises(tags.ManagedLabelError, match="Academic module.*\\/settings\\/academic"):
         db.rename_label(conn, "University", "Uni")
 
 
@@ -82,7 +82,7 @@ def test_saving_the_shelf_changes_its_look_and_name_but_not_its_tags(conn):
     conn.execute("INSERT INTO university_semesters (uid, shelf_name, name, created_at) VALUES ('s1', 'University', 'S1', '2026-10-01')")
     labels_router.update_label("University", new_name="Uni", color="red", icon="", label_group="", description="", conn=conn, request=None, tag_rows=[])
     assert db.get_label_config(conn, "Uni")["color"] == "red"
-    assert db.get_label_config(conn, "Uni")["managed_by"] == "university"
+    assert db.get_label_config(conn, "Uni")["managed_by"] == "academic"
     assert [t["name"] for t in tags.tags_of_label(conn, "Uni")] == ["University"]
     assert conn.execute("SELECT shelf_name FROM university_semesters").fetchone()[0] == "Uni"
 

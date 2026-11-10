@@ -114,7 +114,6 @@ def list_documents(request: Request, conn=Depends(get_db)):
             "recent_notes": recent,
             "label_report": _json.loads(report) if report else [],
             "glossary_count": len(db.list_glossary_terms(conn)),
-            "citation_count": len(db.list_citations(conn)),
             "template_count": len(db.list_notebook_documents(conn, scope="templates")),
             "journal_count": sum(m["count"] for m in db.list_journal_years(conn)),
             "pinned": db.list_pinned_notebook_documents(conn),

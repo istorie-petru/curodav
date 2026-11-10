@@ -57,11 +57,11 @@ def _run(fn, *args, **kwargs):
 
 
 def save_semester(conn: sqlite3.Connection, *, name: str, start_date: str = "", end_date: str = "", class_end_date: str = "",
-                  uid: str = "") -> dict[str, Any]:
+                  uid: str = "", space: str | None = None) -> dict[str, Any]:
     """Creates a semester, or changes the dates and name of the one with `uid`."""
     old = _semester(conn, uid) if uid else None
     saved = _run(_plan().save_semester, conn, uid=uid or None, name=name, shelf_name=old["shelf_name"] if old else "",
-                 start_date=start_date, end_date=end_date, class_end_date=class_end_date)
+                 start_date=start_date, end_date=end_date, class_end_date=class_end_date, space=space)
     return {"semester_uid": saved}
 
 

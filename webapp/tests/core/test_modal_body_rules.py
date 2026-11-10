@@ -24,11 +24,11 @@ START = [
     "/published-lists", "/quick/add", "/tasks/new", "/events/new", "/contacts/new", "/settings/labels/new", "/habits/new",
     "/groups/new", "/finance/transactions/new", "/settings/finance-accounts/new", "/notebook/new", "/library/new",
     "/notebook/glossary/new", "/settings/notebook/new", "/settings/holidays/new", "/settings/time-blocks/new",
-    "/export/modal", "/export/import-modal", "/settings/university", "/groups/University/disciplines/Biology",
-    "/settings/university/discipline/new", "/settings/university/evaluation/new?discipline=Biology",
-    "/settings/university/slot/new?discipline=Biology", "/settings/university/reading/new?discipline=Biology",
-    "/settings/university/homework/new?discipline=Biology", "/settings/university/sheet/Biology",
-    "/settings/university/attendance/Biology", "/settings/university/grades?discipline=Biology", "/settings/profile-photo/upload",
+    "/export/modal", "/export/import-modal", "/settings/academic", "/groups/University/disciplines/Biology",
+    "/settings/academic/discipline/new", "/settings/academic/evaluation/new?discipline=Biology",
+    "/settings/academic/slot/new?discipline=Biology", "/settings/academic/reading/new?discipline=Biology",
+    "/settings/academic/homework/new?discipline=Biology", "/settings/academic/sheet/Biology",
+    "/settings/academic/attendance/Biology", "/settings/academic/grades?discipline=Biology", "/settings/profile-photo/upload",
 ]
 # Pages that also open as a modal keep their own layout (modals-and-inputs.md, Modal kinds).
 PAGES = (r"/settings(/[a-z-]+)?$", r"/taxonomy", r"/dashboard/customize", r"/library$", r"/library/filters", r"/banners/editor")

@@ -38,7 +38,7 @@
         <div class="field-label-row"><label>Tags</label></div>
         <div class="label-tags-readonly">
             {% for t in label_tags | default([]) %}
-            {% if l and l.name|lower == discipline_shelf | default('') %}<a href="/settings/university/discipline/{{ t.name|urlencode }}/edit" data-modal class="cell-tag cal-{{ t.color }}" title="Edit the discipline {{ t.name }}">{% if t.icon %}{{ icon(t.icon, 'icon-sm') }} {% endif %}{{ t.name }}</a>
+            {% if l and l.name|lower == discipline_shelf | default('') %}<a href="/settings/academic/discipline/{{ t.name|urlencode }}/edit" data-modal class="cell-tag cal-{{ t.color }}" title="Edit the discipline {{ t.name }}">{% if t.icon %}{{ icon(t.icon, 'icon-sm') }} {% endif %}{{ t.name }}</a>
             {% else %}<span class="cell-tag cal-{{ t.color }}">{% if t.icon %}{{ icon(t.icon, 'icon-sm') }} {% endif %}{{ t.name }}</span>{% endif %}
             {% endfor %}
         </div>

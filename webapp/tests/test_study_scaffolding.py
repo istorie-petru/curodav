@@ -101,16 +101,16 @@ def test_the_university_tables_exist_and_the_migration_is_safe_twice(tmp_path):
 
 def test_the_university_module_is_registered_but_off_by_default(monkeypatch):
     monkeypatch.delenv("CC_MODULES", raising=False)
-    assert "university" in modules.MODULES and not modules.is_enabled("university")
+    assert "academic" in modules.MODULES and not modules.is_enabled("academic")
     assert modules.settings_items() == []
     assert all(label != "University" for _, label in [(u, t) for t, u in header_views.current_settings_groups()[3]["items"]])
 
 
 def test_turning_the_module_on_adds_its_settings_entry_and_page(monkeypatch, tmp_path):
-    monkeypatch.setenv("CC_MODULES", "university")
-    assert ("University", "/settings/university") in header_views.current_settings_groups()[3]["items"]
+    monkeypatch.setenv("CC_MODULES", "academic")
+    assert ("Academic", "/settings/academic") in header_views.current_settings_groups()[3]["items"]
     with db.connect(tmp_path / "c.sqlite") as conn:
-        assert "No semester yet" in university.university_settings(_request("/settings/university"), conn=conn).body.decode()
+        assert "No semester yet" in university.university_settings(_request("/settings/academic"), conn=conn).body.decode()
 
 
 def test_the_settings_page_is_not_found_while_the_module_is_off(monkeypatch, tmp_path):
@@ -125,19 +125,19 @@ def test_the_settings_page_is_not_found_while_the_module_is_off(monkeypatch, tmp
 
 def test_a_module_page_type_is_offered_only_while_the_module_is_on(monkeypatch):
     monkeypatch.delenv("CC_MODULES", raising=False)
-    assert "study" not in db.page_types()
-    monkeypatch.setenv("CC_MODULES", "university")
-    assert db.page_types()["study"] == "Study page" and "sections" in db.page_types()
+    assert "academic" not in db.page_types()
+    monkeypatch.setenv("CC_MODULES", "academic")
+    assert db.page_types()["academic"] == "Semester page" and "sections" in db.page_types()
 
 
 def test_a_shelf_with_a_module_page_type_keeps_it_while_the_module_is_on(monkeypatch, tmp_path):
-    monkeypatch.setenv("CC_MODULES", "university")
+    monkeypatch.setenv("CC_MODULES", "academic")
     with db.connect(tmp_path / "c.sqlite") as conn:
-        db.upsert_label_config(conn, {"name": "Uni", "page_type": "study"})
-        assert db.get_label_config(conn, "Uni")["page_type"] == "study"
+        db.upsert_label_config(conn, {"name": "Uni", "page_type": "academic"})
+        assert db.get_label_config(conn, "Uni")["page_type"] == "academic"
     monkeypatch.delenv("CC_MODULES")
     with db.connect(tmp_path / "d.sqlite") as conn:
-        db.upsert_label_config(conn, {"name": "Uni", "page_type": "study"})
+        db.upsert_label_config(conn, {"name": "Uni", "page_type": "academic"})
         assert db.get_label_config(conn, "Uni")["page_type"] == "sections"
 
 
@@ -150,14 +150,14 @@ def test_a_module_is_turned_on_and_off_from_settings_and_the_choice_is_stored(mo
     monkeypatch.delenv("CC_MODULES", raising=False)
     monkeypatch.setattr(modules, "_stored", set())
     with db.connect(tmp_path / "c.sqlite") as conn:
-        assert not modules.is_enabled("university")
-        settings_router.set_module("university", enabled="1", conn=conn)
-        assert modules.is_enabled("university") and ("University", "/settings/university") in header_views.current_settings_groups()[3]["items"]
+        assert not modules.is_enabled("academic")
+        settings_router.set_module("academic", enabled="1", conn=conn)
+        assert modules.is_enabled("academic") and ("Academic", "/settings/academic") in header_views.current_settings_groups()[3]["items"]
         modules._stored.clear()  # a restart forgets the memory, the database remembers
         modules.load_stored(conn)
-        assert modules.is_enabled("university")
-        settings_router.set_module("university", enabled="0", conn=conn)
-        assert not modules.is_enabled("university")
+        assert modules.is_enabled("academic")
+        settings_router.set_module("academic", enabled="0", conn=conn)
+        assert not modules.is_enabled("academic")
         with pytest.raises(HTTPException):
             settings_router.set_module("nope", enabled="1", conn=conn)
 
@@ -167,14 +167,14 @@ def test_the_environment_still_forces_a_module_on_and_general_settings_lists_mod
     from src.routers import settings as settings_router
 
     monkeypatch.setattr(modules, "_stored", set())
-    monkeypatch.setenv("CC_MODULES", "university")
-    assert modules.is_enabled("university") and "university" in modules.forced_keys()
+    monkeypatch.setenv("CC_MODULES", "academic")
+    assert modules.is_enabled("academic") and "academic" in modules.forced_keys()
     monkeypatch.delenv("CC_MODULES")
     with db.connect(tmp_path / "c.sqlite") as conn:
         req = _request("/settings/general")
         req.scope["app"] = fake_app()
         html = settings_router.settings_general(req, conn=conn).body.decode()
-        assert "University module" in html and "/settings/modules/university" in html
+        assert "Academic module" in html and "/settings/modules/academic" in html
 
 
 def _legacy_exams(conn):

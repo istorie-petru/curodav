@@ -13,7 +13,7 @@ assert university  # registers the module and its page type
 
 @pytest.fixture()
 def conn(tmp_path, monkeypatch):
-    monkeypatch.setenv("CC_MODULES", "university")
+    monkeypatch.setenv("CC_MODULES", "academic")
     with db.connect(tmp_path / "c.sqlite") as c:
         yield c
 
@@ -35,20 +35,28 @@ LECTURE = {"weekday": 0, "start": "10:00", "end": "12:00", "room": "A2", "kind":
 
 # ---- semester ----
 
-def test_a_semester_creates_a_managed_shelf_in_a_space_with_the_study_page(conn, sem):
+def test_a_semester_creates_a_managed_shelf_with_the_semester_page_and_no_space(conn, sem):
     cfg = db.get_label_config(conn, "University")
-    assert cfg["managed_by"] == "university" and cfg["label_group"] == "University"
-    assert db.get_group(conn, "University")["page_type"] == "study" and up.semester_for_group(conn, "University")["uid"] == sem["uid"]
+    assert cfg["managed_by"] == "academic" and not cfg["label_group"] and cfg["page_type"] == "academic" and cfg["sidebar_pin"]
+    assert up.semester_for_shelf(conn, "university")["uid"] == sem["uid"] and db.get_group(conn, "University") is None
     with pytest.raises(tags.ManagedLabelError):
         db.upsert_label_config(conn, {"name": "University", "color": "red"})
 
 
-def test_the_space_can_be_named_and_an_adopted_shelf_keeps_its_own_space(conn):
-    up.save_semester(conn, uid=None, name="Spring", shelf_name="Spring shelf", start_date="", end_date="", class_end_date="", group_name="Studies")
-    assert db.get_label_config(conn, "Spring shelf")["label_group"] == "Studies" and db.get_group(conn, "Studies")["page_type"] == "study"
-    db.upsert_label_config(conn, {"name": "Old", "color": "red", "label_group": "Mine"})
-    up.save_semester(conn, uid=None, name="Autumn", shelf_name="Old", start_date="", end_date="", class_end_date="", group_name="Other")
-    assert db.get_label_config(conn, "Old")["label_group"] == "Mine" and db.get_group(conn, "Mine")["page_type"] == "study"
+def test_the_semester_shelf_can_sit_in_any_existing_space_and_move_and_the_space_stays_ordinary(conn):
+    db.ensure_group(conn, "Studies")
+    db.ensure_group(conn, "Hobbies")
+    uid = up.save_semester(conn, uid=None, name="Spring", shelf_name="Spring shelf", start_date="", end_date="", class_end_date="", space="Studies")
+    assert db.get_label_config(conn, "Spring shelf")["label_group"] == "Studies" and db.get_group(conn, "Studies")["page_type"] == "dashboard"
+    up.save_semester(conn, uid=uid, name="Spring", shelf_name="", start_date="", end_date="", class_end_date="")
+    assert db.get_label_config(conn, "Spring shelf")["label_group"] == "Studies"
+    up.save_semester(conn, uid=uid, name="Spring", shelf_name="", start_date="", end_date="", class_end_date="", space="Hobbies")
+    assert db.get_label_config(conn, "Spring shelf")["label_group"] == "Hobbies" and db.get_group(conn, "Hobbies")["page_type"] == "dashboard"
+    up.save_semester(conn, uid=uid, name="Spring", shelf_name="", start_date="", end_date="", class_end_date="", space="")
+    assert not db.get_label_config(conn, "Spring shelf")["label_group"]
+    with pytest.raises(up.PlanError):
+        up.save_semester(conn, uid=uid, name="Spring", shelf_name="", start_date="", end_date="", class_end_date="", space="Nowhere")
+    assert db.get_group(conn, "Nowhere") is None
 
 
 def test_an_existing_shelf_is_adopted_by_name(conn):
@@ -501,7 +509,7 @@ def test_an_exam_item_opens_in_its_normal_form_and_offers_the_way_and_the_gradin
     task_uid = add_exam(conn, sem, title="", day="2027-01-20", start="09:00", end="11:30", weight="60")
     task = db.get_task(conn, task_uid)
     ctx = university_context.for_task(conn, task)
-    assert ctx["edit_url"] == "" and "/settings/university/evaluation/" in ctx["way_url"] and "/settings/university/grades?discipline=Biology" in ctx["grades_url"]
+    assert ctx["edit_url"] == "" and "/settings/academic/evaluation/" in ctx["way_url"] and "/settings/academic/grades?discipline=Biology" in ctx["grades_url"]
     assert [m["label"] for m in university_context.menu_for(conn, "task", task_uid)] == ["Open way of evaluating", "Open grading"]
     assert university_context.menu_for(conn, "task", "nothing") == []
 

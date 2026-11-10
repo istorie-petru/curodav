@@ -18,14 +18,14 @@ WHAT = {
     "search": "Search", "list_notes": "List notes", "get_note": "Read note", "list_citations": "List library",
     "get_citation": "Read library entry", "list_entries": "List entries", "get_entry": "Read entry", "list_entry_kinds": "List entry kinds",
     "list_tasks": "List tasks", "get_task": "Read task", "list_events": "List events", "get_event": "Read event",
-    "media_now": "Reading and watching", "university_overview": "Semester", "list_exams": "Exams", "get_discipline": "Read discipline",
+    "media_now": "Reading and watching", "academic_overview": "Semester", "list_exams": "Exams", "get_discipline": "Read discipline",
     "list_organisation": "Spaces and tags", "list_note_versions": "Note versions", "edit_note": "Edit note",
     "restore_note_version": "Restore note version", "create_note": "Create note", "rename_note": "Rename note", "set_note_tag": "Tag note",
     "set_note_properties": "Note properties", "library_entry_types": "Library types", "library_save_entry": "Save library entry",
-    "library_set_tracking": "Track library entry", "university_save_semester": "Save semester", "university_save_discipline": "Save discipline",
-    "university_set_course_sheet": "Course sheet", "university_set_teachers": "Teachers", "university_save_class_slot": "Timetable",
-    "university_save_evaluation": "Evaluation", "university_save_reading": "Reading",
-    "university_save_homework": "Homework",
+    "library_set_tracking": "Track library entry", "academic_save_semester": "Save semester", "academic_save_discipline": "Save discipline",
+    "academic_set_course_sheet": "Course sheet", "academic_set_teachers": "Teachers", "academic_save_class_slot": "Timetable",
+    "academic_save_evaluation": "Evaluation", "academic_save_reading": "Reading",
+    "academic_save_homework": "Homework",
 }
 
 
@@ -53,7 +53,7 @@ def describe_tool(conn: sqlite3.Connection, name: str, args: Any) -> tuple[str, 
         where = _title(conn, "events", "title", uid)
     elif name in ("get_entry",):
         where = _title(conn, "glossary_terms", "term", uid)
-    elif name in ("create_note", "university_save_semester"):
+    elif name in ("create_note", "academic_save_semester"):
         where = str(args.get("title") or args.get("name") or "")
     else:
         where = str(args.get("discipline") or args.get("name") or args.get("shelf") or args.get("tag") or args.get("q") or "")

@@ -256,21 +256,6 @@ def _avatar(contact: dict | None, cls: str = "", lazy: bool = False) -> Markup:
 templates.env.globals["avatar"] = _avatar
 
 
-def _study_children(conn, group: str) -> list[dict]:
-    """The disciplines of the current semester when the space holds one, so they show under it like shelves do."""
-    try:
-        from urllib.parse import quote
-        from . import tags, university_plan
-
-        semester = university_plan.semester_for_group(conn, group)
-        if not semester:
-            return []
-        return [{**t, "path": f"/groups/{group}/disciplines/{t['name']}", "href": f"/groups/{quote(group, safe='')}/disciplines/{quote(t['name'], safe='')}",
-                 "is_project": False, "abbreviation": ""} for t in tags.tags_of_label(conn, semester["shelf_name"])]
-    except Exception:
-        return []
-
-
 def _sidebar_groups(request: Request) -> list[dict]:
     """The nav rail's group section. Every group gets an entry
         that links to its page (/groups/<name>); its `children` are its members
@@ -294,7 +279,7 @@ def _sidebar_groups(request: Request) -> list[dict]:
                                       "is_project": False, "abbreviation": ""}
                                      for l in (picked or g["labels"]) for t in tags.tags_of_label(conn, l["name"])]
                 else:
-                    g["children"] = picked or _study_children(conn, g["name"])
+                    g["children"] = picked
             return groups
     except Exception:
         return []
@@ -612,7 +597,7 @@ templates.env.globals["label_color"] = _label_color
 def _university_locked(request: Request, kind: str, uid: str) -> bool:
     """Whether the University module owns this item's title and description (a class or an exam)."""
     from . import modules, university_plan
-    if not uid or not modules.is_enabled("university"):
+    if not uid or not modules.is_enabled("academic"):
         return False
     try:
         with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
@@ -979,10 +964,9 @@ def _discipline_href(request: Request, tag: dict) -> str:
             from urllib.parse import quote
 
             with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
-                row = conn.execute("SELECT s.shelf_name, l.label_group FROM university_semesters s JOIN label_config l ON l.name = s.shelf_name COLLATE NOCASE "
-                                   "WHERE s.shelf_name = ? COLLATE NOCASE", (label,)).fetchone()
-                if row and row["label_group"]:
-                    cache[label] = f"/groups/{quote(row['label_group'], safe='')}/disciplines/"
+                row = conn.execute("SELECT shelf_name FROM university_semesters WHERE shelf_name = ? COLLATE NOCASE", (label,)).fetchone()
+                if row:
+                    cache[label] = f"/labels/{quote(row['shelf_name'], safe='')}/disciplines/"
         except Exception:
             pass
     if not cache[label]:
@@ -997,7 +981,7 @@ templates.env.globals["discipline_href"] = _discipline_href
 def _university_menu(request: Request, kind: str, uid: str) -> list:
     """Menu entries opening the way of evaluating and the grading, for an exam event or task; [] otherwise."""
     from . import modules, university_context
-    if not uid or not modules.is_enabled("university"):
+    if not uid or not modules.is_enabled("academic"):
         return []
     try:
         with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:

@@ -96,12 +96,12 @@ def export_context(conn) -> dict:
     from .. import modules, university_plan
 
     university_items = []
-    if modules.is_enabled("university"):
+    if modules.is_enabled("academic"):
         semester = university_plan.current_semester(conn)
         if semester:
             names = [d["name"] for d in university_plan.disciplines(conn, semester)]
-            university_items = [{"uid": "university", "name": "University semester", "preview": f"Includes: {semester['name']} with {len(names)} disciplines"},
-                                *({"uid": f"university:{n}", "name": f"University: {n}", "preview": f"Includes: the timetable, topics, exams and readings of {n}"} for n in names)]
+            university_items = [{"uid": "university", "name": "Academic semester", "preview": f"Includes: {semester['name']} with {len(names)} disciplines"},
+                                *({"uid": f"university:{n}", "name": f"Academic: {n}", "preview": f"Includes: the timetable, topics, exams and readings of {n}"} for n in names)]
     return {
         "university_items": university_items,
         "contact_count": len(db.list_contacts(conn, include_archived=True)),
@@ -314,9 +314,9 @@ def download_selective(
     if data_type.startswith("university"):
         from .. import modules, university_plan
 
-        semester = university_plan.current_semester(conn) if modules.is_enabled("university") else None
+        semester = university_plan.current_semester(conn) if modules.is_enabled("academic") else None
         if not semester:
-            return _redirect_with_error("/settings", "There is no University semester to export.")
+            return _redirect_with_error("/settings", "There is no semester to export.")
         try:
             filename, text = university_plan.export_file(conn, semester, "semester" if data_type == "university" else "discipline:" + data_type.split(":", 1)[1])
         except university_plan.PlanError as exc:
@@ -675,8 +675,8 @@ def _import_one(conn, name: str, raw: bytes, skip_existing: bool) -> str:
         from .. import modules, university_plan
         from ..routers.labels import COLORS
 
-        if not modules.is_enabled("university"):
-            raise ValueError("Turn the University module on in Settings, General before importing a University file.")
+        if not modules.is_enabled("academic"):
+            raise ValueError("Turn the Academic module on in Settings, General before importing this file.")
         try:
             return university_plan.import_file(conn, text, COLORS)
         except university_plan.PlanError as exc:

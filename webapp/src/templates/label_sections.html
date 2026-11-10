@@ -43,13 +43,6 @@
 
 {% set show_tasks = label.agenda_widget or label.tasks_widget %}
 {% if show_tasks and (ov_total or ov_open_count) %}
-<p class="ov-line">
-    <span>{{ ov_open_count }} open</span>
-    {% if ov_overdue_count %}<span class="is-overdue">{{ ov_overdue_count }} overdue</span>{% endif %}
-    {% if glance and glance.today_count %}<span>{{ glance.today_count }} due today</span>{% endif %}
-    {% if glance and glance.week_count %}<span>{{ glance.week_count }} this week</span>{% endif %}
-    {% if ov_kind == 'project' and ov_total %}<span>{{ ov_done }} of {{ ov_total }} done · {{ ov_percent }}%</span>{% endif %}
-</p>
 {% if ov_kind == 'project' and ov_total %}<div class="ov-progress" role="progressbar" aria-label="Progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ ov_percent }}"><span class="ov-progress-fill" data-style="width:{{ ov_percent }}%"></span></div>{% endif %}
 {% endif %}
 

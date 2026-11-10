@@ -14,7 +14,7 @@ from test_university_pages import _html, _request  # noqa: F401
 
 @pytest.fixture()
 def conn(tmp_path, monkeypatch):
-    monkeypatch.setenv("CC_MODULES", "university")
+    monkeypatch.setenv("CC_MODULES", "academic")
     with db.connect(tmp_path / "c.sqlite") as c:
         yield c
 
@@ -100,7 +100,7 @@ def test_the_course_sheet_page_and_its_windows_render(conn, sem):
     from src.university_discipline import discipline_page
 
     ue.save_way(conn, sem["uid"], "Istoria Antică", {"id": "", "name": "Exam", "form": "Exam", "weight": "100", "subs": []})
-    page = _html(discipline_page("University", "Istoria Antică", _request(), conn=conn))
+    page = _html(discipline_page("Autumn 2026", "Istoria Antică", _request(), conn=conn))
     assert page.index(">Attendance<") < page.index(">Exam<") and "Add a way of evaluating" in page and "Add a class to the timetable" in page and "Add a book" in page
     for html in (_html(university.sheet_form("Istoria Antică", _request(), section="identification", conn=conn)),
                  _html(university.attendance_limits_form("Istoria Antică", _request(), conn=conn)), _html(university.grades_form(_request(), "Istoria Antică", conn=conn))):

@@ -11,12 +11,12 @@
 <div class="card table-scroll table-responsive">
     <div class="uni-card-head"><h2>Sources</h2></div>
     <table class="entity-table">
-        <thead><tr><th class="col-name">Source</th><th class="col-opt-2">Used for</th><th class="col-opt-1">Status</th><th class="col-actions-narrow"><span class="sr-only">Actions</span></th></tr></thead>
+        <thead><tr><th class="col-name">Source</th><th class="col-opt-2 col-text">Used for</th><th class="col-opt-1">Status</th><th class="col-actions-narrow"><span class="sr-only">Actions</span></th></tr></thead>
         <tbody>
         {% for s in sources %}
         <tr>
             <td class="col-name">{{ s.name }}</td>
-            <td class="col-opt-2">{{ s.used_for }}</td>
+            <td class="col-opt-2 col-text"><span class="cell-wrap">{{ s.used_for }}</span></td>
             <td class="col-opt-1">{{ s.status }}</td>
             <td class="col-actions-narrow"><a href="/settings/library/sources/{{ s.key }}/edit" data-modal class="icon-btn" title="Edit {{ s.name }}" aria-label="Edit {{ s.name }}">{{ icon('edit', 'icon-sm') }}</a></td>
         </tr>

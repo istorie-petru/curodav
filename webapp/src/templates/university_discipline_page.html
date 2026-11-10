@@ -17,10 +17,10 @@
 {% macro g(v) %}{{ '%g'|format(v) }}{% endmacro %}
 {% block content %}
 {% call page_header_narrow(d.name, d.icon or 'book-open', icon_color=d.color, banner=banner, banner_image_scope=banner_image_scope) %}
-    {{ edit_btn('/settings/university/discipline/' ~ enc ~ '/edit', 'Edit the discipline') }}
+    {{ edit_btn('/settings/academic/discipline/' ~ enc ~ '/edit', 'Edit the discipline') }}
 {% endcall %}
 {% include "_flash.html" %}
-{% set sheet_url = '/settings/university/sheet/' ~ enc ~ '?section=' %}
+{% set sheet_url = '/settings/academic/sheet/' ~ enc ~ '?section=' %}
 {% set st = standing %}
 <div class="uni-course">
 <section class="uni-sec">
@@ -32,22 +32,22 @@
     <h2 class="uni-sec-title">Timetable</h2>
     {% for s in slots %}
     {% call line(s.kind_label, items=[
-        {'href': '/settings/university/slot/' ~ s.series_uid ~ '/edit', 'icon': 'edit', 'label': 'Edit', 'modal': true},
-        {'form_action': '/settings/university/slot/' ~ s.series_uid ~ '/delete?discipline=' ~ enc, 'icon': 'trash', 'label': 'Delete', 'danger': true, 'confirm': 'Delete all classes of this slot?'}]) %}
+        {'href': '/settings/academic/slot/' ~ s.series_uid ~ '/edit', 'icon': 'edit', 'label': 'Edit', 'modal': true},
+        {'form_action': '/settings/academic/slot/' ~ s.series_uid ~ '/delete?discipline=' ~ enc, 'icon': 'trash', 'label': 'Delete', 'danger': true, 'confirm': 'Delete all classes of this slot?'}]) %}
         {{ s.weekday_name }} {{ s.start }} to {{ s.end }}{% if s.weeks != 'all' %}, {{ s.weeks }} weeks{% endif %}{% if s.room %}, {{ s.room }}{% endif %}{% if s.teacher_names %}<small class="uni-line-sub">{{ s.teacher_names }}</small>{% endif %}
     {% endcall %}
     {% endfor %}
-    {{ add_line('/settings/university/slot/new?discipline=' ~ enc, 'Add a class to the timetable') }}
+    {{ add_line('/settings/academic/slot/new?discipline=' ~ enc, 'Add a class to the timetable') }}
 </section>
 
 <section class="uni-sec">
     <h2 class="uni-sec-title">Examination</h2>
-    {% call line('Attendance', '/settings/university/attendance/' ~ enc, 'Edit the absences allowed') %}
+    {% call line('Attendance', '/settings/academic/attendance/' ~ enc, 'Edit the absences allowed') %}
         {% for a in attendance %}<span class="uni-line-row{{ ' is-over' if a.over }}">{{ a.label }}s:
             {% if a.limit is not none %}{{ a.missed }} missed of {{ a.limit }} allowed{% if a.percent is not none and a.number is none %} ({{ g(a.percent) }}%){% endif %}{% else %}{{ a.missed }} missed, no limit set{% endif %}</span>
         {% else %}<span class="text-muted">Choose what the course has first</span>{% endfor %}
     {% endcall %}
-    {% call line('Grade', '/settings/university/grades?discipline=' ~ enc, 'Edit the grades') %}
+    {% call line('Grade', '/settings/academic/grades?discipline=' ~ enc, 'Edit the grades') %}
         {% if st.final is not none %}<b>{{ g(st.final) }}</b>{% if st.passed is sameas false %} <span class="text-muted">not passed</span>{% endif %}
         {% elif st.so_far is not none %}{{ g(st.so_far) }} <span class="text-muted">so far, {{ st.graded }} of {{ st.weighted }} graded</span>
         {% else %}<span class="text-muted">No grades yet</span>{% endif %}
@@ -55,28 +55,28 @@
         {% for w in st.warnings %}<small class="uni-line-sub is-warning">{{ w }}</small>{% endfor %}
     {% endcall %}
     {% for w in st.ways %}
-    {% call line(w.name, '/settings/university/evaluation/' ~ w.id ~ '/edit?discipline=' ~ enc, 'Edit ' ~ w.name, items=[{'href': '/settings/university/milestone/new?discipline=' ~ enc ~ '&way=' ~ w.id, 'icon': 'plus', 'label': 'Add an event or task', 'modal': true}, {'href': '/settings/university/grades?discipline=' ~ enc, 'icon': 'award', 'label': 'Grades', 'modal': true}]) %}
+    {% call line(w.name, '/settings/academic/evaluation/' ~ w.id ~ '/edit?discipline=' ~ enc, 'Edit ' ~ w.name, items=[{'href': '/settings/academic/milestone/new?discipline=' ~ enc ~ '&way=' ~ w.id, 'icon': 'plus', 'label': 'Add an event or task', 'modal': true}, {'href': '/settings/academic/grades?discipline=' ~ enc, 'icon': 'award', 'label': 'Grades', 'modal': true}]) %}
         <span class="uni-line-row">{% if w.elimination %}Elimination{% elif w.weight is not none %}{{ g(w.weight) }}% of the grade{% else %}No weight{% endif %}{% if w.form %}, {{ w.form|lower }}{% endif %}</span>
         {% if w.elimination %}<small class="uni-line-sub">{% if w.passed %}Passed{% else %}Failed{% endif %}</small>
         {% elif w.grade is not none %}<small class="uni-line-sub">Grade {{ g(w.grade) }}, at least {{ g(w.minimum) }} to pass{% if w.passed is sameas false %}: not passed{% endif %}</small>{% endif %}
         {% for sub in w.subs %}<small class="uni-line-sub">{{ sub.name }}{% if sub.weight is not none %}, {{ g(sub.weight) }}%{% endif %}{% if sub.grade is not none %}, {{ g(sub.grade) }}{% endif %}</small>{% endfor %}
-        {% for m in w.milestones %}<small class="uni-line-sub"><a href="/settings/university/milestone/{{ m.uid }}/edit" data-modal>{{ m.title }}</a>, {{ (m.date|short_day) if m.date else 'no date' }}</small>{% endfor %}
+        {% for m in w.milestones %}<small class="uni-line-sub"><a href="/settings/academic/milestone/{{ m.uid }}/edit" data-modal>{{ m.title }}</a>, {{ (m.date|short_day) if m.date else 'no date' }}</small>{% endfor %}
         {% for n in w.linked_notes %}<small class="uni-line-sub">{{ icon('file-text', 'icon-sm') }} <a href="/notebook/{{ n.uid }}">{{ n.title or 'Untitled' }}</a></small>{% endfor %}
     {% endcall %}
     {% endfor %}
-    {{ add_line('/settings/university/evaluation/new?discipline=' ~ enc, 'Add a way of evaluating') }}
+    {{ add_line('/settings/academic/evaluation/new?discipline=' ~ enc, 'Add a way of evaluating') }}
 </section>
 
 <section class="uni-sec">
     <h2 class="uni-sec-title">Bibliography</h2>
     {% for r in readings %}
     {% call line(r.category_label, items=[
-        {'href': '/settings/university/reading/' ~ r.task_uid ~ '/edit', 'icon': 'edit', 'label': 'Edit', 'modal': true},
-        {'form_action': '/settings/university/reading/' ~ r.task_uid ~ '/delete?discipline=' ~ enc, 'icon': 'trash', 'label': 'Remove from the course', 'danger': true}]) %}
+        {'href': '/settings/academic/reading/' ~ r.task_uid ~ '/edit', 'icon': 'edit', 'label': 'Edit', 'modal': true},
+        {'form_action': '/settings/academic/reading/' ~ r.task_uid ~ '/delete?discipline=' ~ enc, 'icon': 'trash', 'label': 'Remove from the course', 'danger': true}]) %}
         {% if r.citation_id %}<a href="/library/{{ r.citation_id }}" data-modal>{{ r.title }}</a>{% else %}{{ r.title }}{% endif %}{% if r.author %}<small class="uni-line-sub">{{ r.author }}{% if r.locator %}, {{ r.locator }}{% endif %}</small>{% elif r.locator %}<small class="uni-line-sub">{{ r.locator }}</small>{% endif %}
     {% endcall %}
     {% endfor %}
-    {{ add_line('/settings/university/reading/new?discipline=' ~ enc, 'Add a book') }}
+    {{ add_line('/settings/academic/reading/new?discipline=' ~ enc, 'Add a book') }}
 </section>
 
 <section class="uni-sec">

@@ -1,12 +1,13 @@
-{% set page_add = ({'href': '/settings/university/semester', 'label': 'Set up a semester'} if not semester else {'href': '/settings/university/discipline/new', 'label': 'New discipline'}) %}
+{% set page_add = ({'href': '/settings/academic/semester', 'label': 'Set up a semester'} if not semester else {'href': '/settings/academic/discipline/new', 'label': 'New discipline'}) %}
 {% extends "base.html" %}
-{% block title %}University - Settings{% endblock %}
+{% block title %}Academic - Settings{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {% from "_empty_state.html" import empty_state %}
 {% from "_label_pill.html" import tag_pill %}
-{% call page_header_narrow("University", "graduation-cap") %}
-    {% if semester %}<a href="/groups/{{ group|urlencode }}" class="icon-btn" title="Open the study page" aria-label="Open the study page">{{ icon('arrow-right', 'icon-sm') }}</a>{% endif %}
+{% from "_view_rows.html" import vi_person %}
+{% call page_header_narrow("Academic", "graduation-cap") %}
+    {% if semester %}<a href="/labels/{{ group|urlencode }}" class="icon-btn" title="Open the study page" aria-label="Open the study page">{{ icon('arrow-right', 'icon-sm') }}</a>{% endif %}
 {% endcall %}
 {% include "_flash.html" %}
 <div id="modal-target">
@@ -17,8 +18,8 @@
 {% else %}
 <div class="card">
     <div class="card-title widget-header"><h2>{{ semester.name }}</h2><div class="spacer"></div>
-        <a href="/settings/university/semester?new=1" data-modal class="icon-btn" title="New semester" aria-label="New semester">{{ icon('plus', 'icon-sm') }}</a>
-        <a href="/settings/university/semester" data-modal class="icon-btn" title="Edit semester" aria-label="Edit semester">{{ icon('edit', 'icon-sm') }}</a></div>
+        <a href="/settings/academic/semester?new=1" data-modal class="icon-btn" title="New semester" aria-label="New semester">{{ icon('plus', 'icon-sm') }}</a>
+        <a href="/settings/academic/semester" data-modal class="icon-btn" title="Edit semester" aria-label="Edit semester">{{ icon('edit', 'icon-sm') }}</a></div>
     <p class="ov-line">
         <span>{{ semester.start_date|short_day if semester.start_date else 'No start date' }} to {{ semester.end_date|short_day if semester.end_date else 'no end date' }}</span>
         {% if semester.class_end_date %}<span>Classes end {{ semester.class_end_date|short_day }}</span>{% endif %}
@@ -28,7 +29,7 @@
     {% if semesters|length > 1 %}
     {% for s in semesters if s.uid != semester.uid %}
     <div class="sec-row"><span class="sec-lead">{{ icon('graduation-cap', 'icon-sm') }}</span><span class="sec-title">{{ s.name }}</span>
-        <span class="sec-pills"><form class="form-inline" method="post" action="/settings/university/semester/select"><input type="hidden" name="uid" value="{{ s.uid }}">
+        <span class="sec-pills"><form class="form-inline" method="post" action="/settings/academic/semester/select"><input type="hidden" name="uid" value="{{ s.uid }}">
             <button type="submit" class="btn ghost btn-sm">Make current</button></form></span></div>
     {% endfor %}
     {% endif %}
@@ -38,14 +39,14 @@
     <div class="card-title widget-header"><h2>Disciplines</h2><div class="spacer"></div></div>
     {% if disciplines %}
     <table class="entity-table">
-        <thead><tr><th class="col-name">Discipline</th><th class="col-opt-2">Teachers</th><th class="col-opt-1">Classes</th><th class="col-opt-1">Milestones</th><th class="col-opt-1">Readings</th><th class="col-actions">Actions</th></tr></thead>
+        <thead><tr><th class="col-name">Discipline</th><th class="col-opt-2 col-text">Teachers</th><th class="col-opt-1">Classes</th><th class="col-opt-1">Milestones</th><th class="col-opt-1">Readings</th><th class="col-actions">Actions</th></tr></thead>
         <tbody>
         {% for d in disciplines %}
         <tr>
             <td class="col-name">{{ tag_pill(d, href=url_for_discipline(d.name)) }}</td>
-            <td class="col-opt-2">{{ d.teachers | map(attribute='name') | join(', ') or 'None' }}</td>
+            <td class="col-opt-2 col-text"><div class="cell-people">{% for t in d.teachers %}{{ vi_person(t.contact) }}{% else %}<span class="muted">None</span>{% endfor %}</div></td>
             <td class="col-opt-1">{{ d.slots }}</td><td class="col-opt-1">{{ d.milestones }}</td><td class="col-opt-1">{{ d.readings }}</td>
-            <td class="col-actions"><a href="/settings/university/discipline/{{ d.name|urlencode }}/edit" data-modal class="icon-btn" title="Edit discipline" aria-label="Edit discipline">{{ icon('edit', 'icon-sm') }}</a></td>
+            <td class="col-actions"><a href="/settings/academic/discipline/{{ d.name|urlencode }}/edit" data-modal class="icon-btn" title="Edit discipline" aria-label="Edit discipline">{{ icon('edit', 'icon-sm') }}</a></td>
         </tr>
         {% endfor %}
         </tbody>
@@ -57,7 +58,7 @@
 
 <div class="card">
     <div class="card-title widget-header"><h2>Defaults</h2></div>
-    <form method="post" action="/settings/university/defaults" id="university-defaults-form">
+    <form method="post" action="/settings/academic/defaults" id="university-defaults-form">
         {% for key, label, items in [('class_reminder', 'Class reminder', reminder_items), ('exam_reminder', 'Exam reminder', reminder_items),
                                      ('class_length', 'Class length', length_items), ('passing_grade', 'Passing grade', grade_items)] %}
         <div class="settings-field-row">

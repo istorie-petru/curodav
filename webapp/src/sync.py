@@ -28,13 +28,16 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+import time
 
 from .log import get_logger
 from . import db, perf
 from .caldav_bridge import CalDavBridge
-from .published_lists import materialize_all
+from .published_lists import is_timeout, materialize_all
 
 logger = get_logger(__name__)
+
+SLOW_SYNC_SECONDS = 30  # a tick this long means Radicale is slow or timing out; it is logged so the Logs page shows it
 
 
 def full_refresh(bridge: CalDavBridge, conn: sqlite3.Connection) -> None:
@@ -58,12 +61,19 @@ def run_periodic(
     calls `full_refresh`, which materializes every published List (see
     module docstring)."""
     while not stop_event.is_set():
+        started = time.monotonic()
         try:
             with db.connect(db_path) as conn:
                 with perf.timed("background", "radicale sync"):
                     full_refresh(bridge, conn)
-        except Exception:
-            logger.exception("Background sync failed; will retry next interval")
+        except Exception as exc:
+            if is_timeout(exc):
+                logger.error("Radicale sync timed out; will retry next interval")
+            else:
+                logger.exception("Background sync failed; will retry next interval")
+        took = time.monotonic() - started
+        if took > SLOW_SYNC_SECONDS:
+            logger.warning("Radicale sync took %.0f s (over %s s); Radicale is slow or timing out, and a save can wait while it runs", took, SLOW_SYNC_SECONDS)
         stop_event.wait(interval_seconds)
 
 

@@ -6,7 +6,7 @@
 {# The two parts of the course sheet that are plain text: the title with its short name and what the course has, and the other notes. #}
 {% call modal(kind="form", title=(d.name ~ ': ' ~ ('title and short name' if sec.key == 'identification' else 'other notes')), size="medium", form='university-sheet-form') %}
 <div class="card">
-<form method="post" id="university-sheet-form" action="/settings/university/sheet/{{ d.name|urlencode }}">
+<form method="post" id="university-sheet-form" action="/settings/academic/sheet/{{ d.name|urlencode }}">
     <input type="hidden" name="section" value="{{ sec.key }}">
     <div class="field-grid">
         {% if sec.key == 'identification' %}

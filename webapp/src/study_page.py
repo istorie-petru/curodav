@@ -1,4 +1,4 @@
-"""The study page: the page of the space that holds the University semester, with the views Overview and Timeline.
+"""The study page: the page of the shelf that holds the Academic semester, with the views Overview and Timeline.
 
 Overview is a row of widget cards (the next class, the next examination, what is due, the semester, the absences), the weekly timetable
 drawn with the calendar's own event blocks (odd weeks in the left half of a day, even weeks in the right half) and cards of short lists.
@@ -86,13 +86,13 @@ def schedule(conn, semester: dict, group: str, editing: bool = False) -> dict:
         blocks = []
         for s in (x for x in slots if x["weekday"] == wd):
             look = looks.get(s["discipline"], {"color": "gray", "icon": ""})
-            url = (f"/settings/university/slot/{s['series_uid']}/edit" if editing
-                   else f"/groups/{quote(group, safe='')}/disciplines/{quote(s['discipline'], safe='')}")
+            url = (f"/settings/academic/slot/{s['series_uid']}/edit" if editing
+                   else f"/labels/{quote(group, safe='')}/disciplines/{quote(s['discipline'], safe='')}")
             blocks.append({"discipline": s["discipline"], "short": abbr.get(s["discipline"], s["discipline"]), "color": look.get("color") or "gray", "weeks": s["weeks"],
                            "start": s["start"], "end": s["end"], "room": s["room"], "kind_label": up.SLOT_KINDS.get(s["kind"], "Class"),
                            "from": _minutes(s["start"]), "to": max(_minutes(s["end"] or s["start"]), _minutes(s["start"]) + 30), "url": url, "modal": editing})
         layout_day(blocks, start_min, total_min)
-        cells = [{"top": round((h - first_h) * grid_layout.PX_PER_HOUR, 1), "url": f"/settings/university/slot/new?weekday={wd}&start={h:02d}:00",
+        cells = [{"top": round((h - first_h) * grid_layout.PX_PER_HOUR, 1), "url": f"/settings/academic/slot/new?weekday={wd}&start={h:02d}:00",
                   "label": f"Add a class on {up.WEEKDAYS[wd]} at {h:02d}:00"} for h in range(first_h, last_h)] if editing else []
         days.append({"label": up.WEEKDAYS[wd][:3], "blocks": blocks, "cells": cells})
     hours = [{"hour": h, "top": round((h - first_h) * grid_layout.PX_PER_HOUR, 1)} for h in range(first_h, last_h)]
@@ -159,8 +159,8 @@ def exams(conn, semester: dict, today: date) -> dict:
     for m in ue.list_milestones(conn, semester["uid"], today=today):
         way = ways.get((next((n for n in looks if n.lower() == m["discipline"].lower()), m["discipline"]), m["way_id"]), {})
         rows.append({**m, "look": looks.get(m["discipline"]) or {"name": m["discipline"], "color": "gray", "icon": ""}, "short": short(m["discipline"]),
-                     "eligible": way.get("eligible"), "grade": way.get("grade"), "url": f"/settings/university/evaluation/{m['way_id']}/edit?discipline={quote(m['discipline'], safe='')}",
-                     "grades_url": f"/settings/university/grades?discipline={quote(m['discipline'], safe='')}",
+                     "eligible": way.get("eligible"), "grade": way.get("grade"), "url": f"/settings/academic/evaluation/{m['way_id']}/edit?discipline={quote(m['discipline'], safe='')}",
+                     "grades_url": f"/settings/academic/grades?discipline={quote(m['discipline'], safe='')}",
                      "item_url": f"/events/{m['event_uid']}" if m["event_uid"] else (f"/tasks/{m['task_uid']}" if m["task_uid"] else "")})
     monday = up._monday(today)
     groups: list[dict] = []
@@ -183,7 +183,7 @@ def work(conn, semester: dict, today: date) -> list[dict]:
     for name, d in looks.items():
         for h in up.list_homework(conn, semester["uid"], name):
             if h["status"] not in _OPEN:
-                out.append({"kind": "Homework", "title": h["title"], "due": h["due"], "status": h["status"], "look": d, "url": f"/settings/university/homework/{h['task_uid']}/edit"})
+                out.append({"kind": "Homework", "title": h["title"], "due": h["due"], "status": h["status"], "look": d, "url": f"/settings/academic/homework/{h['task_uid']}/edit"})
     out.sort(key=lambda x: (not x["due"], x["due"] or "", x["title"]))
     for x in out:
         x["overdue"] = bool(x["due"]) and x["due"] < today.isoformat()
@@ -229,25 +229,25 @@ def overview(conn, semester: dict, group: str, today: date, now: datetime) -> di
             "exams_this_fortnight": len([r for r in coming if r["days_left"] <= 14]), "due": due[:6], "over": over,
             "absences": standing_rows, "missed": missed, "disciplines": list(looks.values()), "schedule": schedule(conn, semester, group),
             "unscheduled": [{"name": d["name"], "color": d.get("color") or "gray", "icon": d.get("icon") or "book-open", "short": up.short_name(conn, semester["uid"], d["name"]),
-                             "url": f"/groups/{quote(group, safe='')}/disciplines/{quote(d['name'], safe='')}"} for d in looks.values() if not d.get("slots")]}
+                             "url": f"/labels/{quote(group, safe='')}/disciplines/{quote(d['name'], safe='')}"} for d in looks.values() if not d.get("slots")]}
 
 
 def _page_add(semester: dict | None, view: str, disciplines: list[dict]) -> dict:
     """The header bar's add button of the study page: what can be added on the view that is open."""
     if not semester:
-        return {"href": "/settings/university/semester", "label": "Set up a semester"}
-    items = [{"href": "/settings/university/slot/new", "icon": "clock", "label": "New weekly class"},
-             {"href": "/settings/university/discipline/new", "icon": "book-open", "label": "New discipline"}]
+        return {"href": "/settings/academic/semester", "label": "Set up a semester"}
+    items = [{"href": "/settings/academic/slot/new", "icon": "clock", "label": "New weekly class"},
+             {"href": "/settings/academic/discipline/new", "icon": "book-open", "label": "New discipline"}]
     if view == "exams":
-        items += [{"href": f"/settings/university/evaluation/new?discipline={quote(d['name'], safe='')}", "icon": "file-check", "label": f"Examination: {d['name']}"}
+        items += [{"href": f"/settings/academic/evaluation/new?discipline={quote(d['name'], safe='')}", "icon": "file-check", "label": f"Examination: {d['name']}"}
                   for d in disciplines]
     return {"label": "Add", "items": items}
 
 
 def render(conn, request: Request, name: str, label: dict):
-    semester = up.semester_for_group(conn, name)
+    semester = up.semester_for_shelf(conn, name)
     today = clock.today()
-    base = f"/groups/{quote(name, safe='')}"
+    base = f"/labels/{quote(name, safe='')}"
     asked = request.query_params.get("view") or "overview"
     view = asked if asked in dict(VIEWS) else "overview"
     ctx = {"request": request, "label": label, "name": name, "enc": quote(name, safe=""), "semester": semester, "view": view,

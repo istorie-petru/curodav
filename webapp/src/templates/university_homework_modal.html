@@ -4,10 +4,10 @@
 {% from "_date_time_fields.html" import date_field with context %}
 {% block title %}{{ 'Edit homework' if item else 'New homework' }}{% endblock %}
 {% block content %}
-{% set _retire = [{'action': 'delete', 'url': '/settings/university/homework/' ~ item.task_uid ~ '/delete?discipline=' ~ (d.name|urlencode), 'mode': 'confirm', 'label': 'Delete this homework?', 'redirect': none, 'change': none}] if item else none %}
+{% set _retire = [{'action': 'delete', 'url': '/settings/academic/homework/' ~ item.task_uid ~ '/delete?discipline=' ~ (d.name|urlencode), 'mode': 'confirm', 'label': 'Delete this homework?', 'redirect': none, 'change': none}] if item else none %}
 {% call modal(kind="form", title=('Edit homework' if item else 'New homework'), size="small", form='university-homework-form', creating=(not item), retire=_retire) %}
 <div class="card">
-<form method="post" id="university-homework-form" action="/settings/university/homework">
+<form method="post" id="university-homework-form" action="/settings/academic/homework">
     <input type="hidden" name="discipline" value="{{ d.name }}">
     <input type="hidden" name="task_uid" value="{{ item.task_uid if item else '' }}">
     <div class="field-grid">

@@ -14,7 +14,7 @@
 {% if task %}
 {% set _cover %}{{ detail_cover('var(--cal-accent-' ~ status_colors[task.status] ~ ')', banner, icon('check-square')) }}{% endset %}
 {% set _retire = [{'action': 'delete', 'url': '/tasks/' ~ task.uid ~ '/delete', 'mode': 'undo', 'label': task.title, 'redirect': '/tasks', 'change': 'task'}] %}
-{% set _done_menu = ([{'label': 'Mark done', 'icon': 'check', 'form_action': '/tasks/' ~ task.uid ~ '/complete', 'change': 'task'}] if task.status not in ('done', 'archived') else []) + university_menu(request, 'task', task.uid) + ([{'label': 'Attach to a way of evaluating', 'icon': 'file-check', 'href': '/settings/university/attach?kind=task&uid=' ~ task.uid, 'modal': true}] if university_attach else []) %}
+{% set _done_menu = ([{'label': 'Mark done', 'icon': 'check', 'form_action': '/tasks/' ~ task.uid ~ '/complete', 'change': 'task'}] if task.status not in ('done', 'archived') else []) + university_menu(request, 'task', task.uid) + ([{'label': 'Attach to a way of evaluating', 'icon': 'file-check', 'href': '/settings/academic/attach?kind=task&uid=' ~ task.uid, 'modal': true}] if university_attach else []) %}
 {% call modal(kind="view", title=((task.title)), size="medium", retire=_retire, done_menu=_done_menu, edit_url=(university.edit_url if (university and university.edit_url) else ('/tasks/' ~ task.uid ~ '/edit')), cover_html=_cover) %}
 {% set _people = object_contacts(request, 'task', task.uid) %}
 {% set _url = '/tasks/' ~ task.uid ~ '/update-field' %}

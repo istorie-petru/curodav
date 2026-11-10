@@ -6,6 +6,14 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [5.0.13]
+
+- The University module is now Academic. Its semester page belongs to the semester shelf (`/labels/<shelf>`), so the space that holds the shelf stays an ordinary space for any shelves and tags. The semester window has a Space field; a new semester has no space until one is picked, and the module never creates or restyles a space. Discipline pages moved to `/labels/<shelf>/disciplines/<name>`, and the old addresses redirect. Migration 84 renames the stored keys, gives spaces that held the study page their default page back and pins the current semester shelf.
+- API and MCP: the university tools are now `academic_*` (the old names still work for one release), the semester tool takes a space, and a new `save_entry` tool adds and edits notebook entries under the notes write scope. Nothing in the API or MCP can delete a note or an entry.
+- Notebook: the Citations folder is gone from the notebook browser.
+- Pages: the summary line is gone from group and shelf pages; the contacts widget shows only name and email; the Teachers column of the Academic settings shows contacts with their avatar, and text columns in settings tables keep their own width.
+- Timings: every page now reports how long it takes to open (and to open with Back), how much was waiting for the server and how much was the browser. Radicale timeouts and sync runs over 30 seconds are written to the log.
+
 ## [5.0.12]
 
 - View windows: the people of a task or event show their real contact photo in the avatar, with the colored initial only for a contact who has none.

@@ -221,3 +221,37 @@ def set_note_properties(conn: sqlite3.Connection, uid: str, revision: str, prope
     if note_type is not None:
         doc["note_type"] = note_type.strip()
     return _save_note(conn, doc, source=source, token_uid=token_uid, summary="Properties changed")
+
+
+MAX_SECTIONS = 50
+
+
+def save_entry(conn: sqlite3.Connection, *, uid: str = "", name: str = "", kind: str | None = None, aliases: Any = None,
+               definition: str | None = None, sections: Any = None, source: str = "", token_uid: str = "") -> dict[str, Any]:
+    """Adds a notebook entry, or changes the one with `uid`; a field left out keeps its value. Entries are never deleted here."""
+    existing = db.get_glossary_term(conn, uid) if uid else None
+    if uid and existing is None:
+        raise EditError("not_found", f"No entry with uid {uid}")
+    name = (name or "").strip()
+    if not existing and not name:
+        raise EditError("invalid", "a new entry needs a name")
+    if aliases is not None and (not isinstance(aliases, list) or not all(isinstance(a, str) for a in aliases)):
+        raise EditError("invalid", "aliases must be a list of names")
+    if sections is not None:
+        if not isinstance(sections, list) or len(sections) > MAX_SECTIONS or not all(isinstance(x, dict) for x in sections):
+            raise EditError("invalid", f"sections must be a list of at most {MAX_SECTIONS} objects with title and text")
+    if kind is not None and not isinstance(kind, str):
+        raise EditError("invalid", "kind must be text")
+    if definition is not None and len(definition) > MAX_MARKDOWN:
+        raise EditError("invalid", "definition is too long")
+    row: dict[str, Any] = {"term": name or existing["term"], "definition": existing["definition"] if existing and definition is None else (definition or "").strip()}
+    if existing:
+        row["uid"] = uid
+    if kind is not None:
+        row["kind"] = kind.strip()
+    if aliases is not None:
+        row["aliases"] = aliases
+    saved = db.upsert_glossary_term(conn, row)
+    if sections is not None:
+        db.set_glossary_sections(conn, saved, [(str(x.get("title") or ""), str(x.get("text") or x.get("body") or "")) for x in sections])
+    return {"uid": saved}

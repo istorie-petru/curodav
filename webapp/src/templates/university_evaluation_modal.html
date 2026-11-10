@@ -29,10 +29,10 @@
     <button type="button" class="icon-btn" data-rows-remove title="Remove" aria-label="Remove">{{ icon('trash', 'icon-sm') }}</button>
 </div>
 {% endmacro %}
-{% set _retire = [{'action': 'delete', 'url': '/settings/university/evaluation/' ~ way.id ~ '/delete?discipline=' ~ (d.name|urlencode), 'mode': 'confirm', 'label': 'Delete this way of evaluating with its events and tasks?', 'redirect': none, 'change': none}] if way else none %}
+{% set _retire = [{'action': 'delete', 'url': '/settings/academic/evaluation/' ~ way.id ~ '/delete?discipline=' ~ (d.name|urlencode), 'mode': 'confirm', 'label': 'Delete this way of evaluating with its events and tasks?', 'redirect': none, 'change': none}] if way else none %}
 {% call modal(kind="form", title=(('Edit ' ~ way.name) if way else 'New way of evaluating'), size="large", form='university-evaluation-form', creating=(not way), retire=_retire) %}
 <div class="card">
-<form method="post" id="university-evaluation-form" action="/settings/university/evaluation" data-form-items="{{ form_items|tojson|forceescape }}">
+<form method="post" id="university-evaluation-form" action="/settings/academic/evaluation" data-form-items="{{ form_items|tojson|forceescape }}">
     <input type="hidden" name="discipline" value="{{ d.name }}"><input type="hidden" name="way_id" value="{{ way.id if way else '' }}">
     <div class="field-grid">
         <div class="field field-wide"><label>Title</label>{{ text_input({'name': 'name', 'value': (way.name if way else ''), 'required': true}) }}</div>

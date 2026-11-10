@@ -17,7 +17,7 @@ TOKEN = {"uid": "t1", "scopes": "read write:notes write:library write:university
 
 @pytest.fixture()
 def conn(tmp_path, monkeypatch, frozen_today):
-    monkeypatch.setenv("CC_MODULES", "university")
+    monkeypatch.setenv("CC_MODULES", "academic")
     frozen_today(date(2026, 9, 20))
     with db.connect(tmp_path / "c.sqlite") as c:
         yield c
@@ -48,8 +48,8 @@ def _snapshot_of_everything(conn):
 
 
 def _semester_with_biology(conn):
-    _call(conn, "university_save_semester", name="Autumn 2026", start_date="2026-10-05", end_date="2027-02-14", class_end_date="2026-12-18")
-    _call(conn, "university_save_discipline", name="Biology")
+    _call(conn, "academic_save_semester", name="Autumn 2026", start_date="2026-10-05", end_date="2027-02-14", class_end_date="2026-12-18")
+    _call(conn, "academic_save_discipline", name="Biology")
 
 
 def test_a_note_edit_is_undone_and_the_undo_can_be_undone(conn):
@@ -77,12 +77,12 @@ def test_a_library_change_is_undone_with_its_ratings(conn):
 
 def test_replacing_exams_is_undone_with_their_events_and_tasks(conn):
     _semester_with_biology(conn)
-    _call(conn, "university_save_class_slot", discipline="Biology", weekday="Monday", start="10:00", end="12:00")
-    _call(conn, "university_save_evaluation", discipline="Biology",
+    _call(conn, "academic_save_class_slot", discipline="Biology", weekday="Monday", start="10:00", end="12:00")
+    _call(conn, "academic_save_evaluation", discipline="Biology",
           way={"name": "Exam", "weight": "100", "exams": [{"title": "Written", "day": "2027-01-20", "start": "09:00", "end": "11:00"}]})
     before = _snapshot_of_everything(conn)
     way = api_service.get_discipline(conn, "Biology")["evaluation"][0]
-    _call(conn, "university_save_evaluation", discipline="Biology", way={"id": way["id"], "name": "Exam", "weight": "100", "exams": []})
+    _call(conn, "academic_save_evaluation", discipline="Biology", way={"id": way["id"], "name": "Exam", "weight": "100", "exams": []})
     assert api_service.get_discipline(conn, "Biology")["exams"] == []
     api_history.undo(conn, _latest(conn)["uid"])
     assert _snapshot_of_everything(conn) == before
@@ -90,16 +90,16 @@ def test_replacing_exams_is_undone_with_their_events_and_tasks(conn):
 
 def test_a_rebuilt_timetable_is_undone_exactly(conn):
     _semester_with_biology(conn)
-    series = _call(conn, "university_save_class_slot", discipline="Biology", weekday="Monday", start="10:00", end="12:00")["series_uid"]
+    series = _call(conn, "academic_save_class_slot", discipline="Biology", weekday="Monday", start="10:00", end="12:00")["series_uid"]
     before = _snapshot_of_everything(conn)
-    _call(conn, "university_save_class_slot", discipline="Biology", weekday="Tuesday", start="14:00", end="16:00", series_uid=series)
+    _call(conn, "academic_save_class_slot", discipline="Biology", weekday="Tuesday", start="14:00", end="16:00", series_uid=series)
     api_history.undo(conn, _latest(conn)["uid"])
     assert _snapshot_of_everything(conn) == before
 
 
 def test_undo_refuses_to_overwrite_a_later_change_unless_forced(conn):
     _semester_with_biology(conn)
-    _call(conn, "university_set_course_sheet", discipline="Biology", fields={"credits": "5"})
+    _call(conn, "academic_set_course_sheet", discipline="Biology", fields={"credits": "5"})
     change = _latest(conn)["uid"]
     sem = up.current_semester(conn)
     up.save_sheet(conn, sem["uid"], "Biology", {"credits": "6"})
@@ -112,7 +112,7 @@ def test_undo_refuses_to_overwrite_a_later_change_unless_forced(conn):
 
 def test_a_renamed_discipline_is_renamed_back(conn):
     _semester_with_biology(conn)
-    _call(conn, "university_save_discipline", name="Botany", old_name="Biology")
+    _call(conn, "academic_save_discipline", name="Botany", old_name="Biology")
     api_history.undo(conn, _latest(conn)["uid"])
     names = [d["name"] for d in up.disciplines(conn, up.current_semester(conn))]
     assert "Biology" in names and "Botany" not in names
@@ -121,7 +121,7 @@ def test_a_renamed_discipline_is_renamed_back(conn):
 def test_a_new_discipline_with_details_asks_to_undo_the_details_first(conn):
     _semester_with_biology(conn)
     added = api_history.list_changes(conn)[0]["uid"]
-    _call(conn, "university_save_class_slot", discipline="Biology", weekday="Monday", start="10:00", end="12:00")
+    _call(conn, "academic_save_class_slot", discipline="Biology", weekday="Monday", start="10:00", end="12:00")
     with pytest.raises(EditError) as err:
         api_history.undo(conn, added, force=True)
     assert "first" in str(err.value)

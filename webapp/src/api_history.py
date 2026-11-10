@@ -73,6 +73,13 @@ def _library(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
     return {"row": dict(row), "ratings": _rows(conn, "SELECT * FROM citation_ratings WHERE citation_uid = ? ORDER BY criterion_uid", (uid,))}
 
 
+def _entry(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
+    row = conn.execute("SELECT * FROM glossary_terms WHERE uid = ?", (uid,)).fetchone()
+    if row is None:
+        return None
+    return {"row": dict(row), "sections": _rows(conn, "SELECT * FROM glossary_term_sections WHERE term_uid = ? ORDER BY position, rowid", (uid,))}
+
+
 def _semester(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
     row = conn.execute("SELECT * FROM university_semesters WHERE uid = ?", (uid,)).fetchone()
     return {"row": dict(row)} if row else None
@@ -109,7 +116,7 @@ def _discipline(conn: sqlite3.Connection, key: list[str]) -> dict[str, Any]:
 
 
 SNAPSHOTS: dict[str, Callable[[sqlite3.Connection, Any], Any]] = {
-    "note": _note, "library": _library, "semester": _semester, "discipline": _discipline,
+    "note": _note, "library": _library, "entry": _entry, "semester": _semester, "discipline": _discipline,
 }
 
 
@@ -156,6 +163,16 @@ def _restore_library(conn: sqlite3.Connection, uid: str, snap: dict[str, Any] | 
     _put_rows(conn, "citation_ratings", snap["ratings"])
     conn.commit()
     media_books.push(conn, uid)
+
+
+def _restore_entry(conn: sqlite3.Connection, uid: str, snap: dict[str, Any] | None) -> None:
+    if snap is None:
+        db.delete_glossary_term(conn, uid)
+        return
+    conn.execute("DELETE FROM glossary_term_sections WHERE term_uid = ?", (uid,))
+    _put_rows(conn, "glossary_terms", [snap["row"]])
+    _put_rows(conn, "glossary_term_sections", snap["sections"])
+    conn.commit()
 
 
 def _restore_semester(conn: sqlite3.Connection, uid: str, snap: dict[str, Any] | None) -> None:
@@ -215,7 +232,7 @@ def _restore_discipline(conn: sqlite3.Connection, key: list[str], snap: dict[str
 
 
 RESTORES: dict[str, Callable[[sqlite3.Connection, Any, Any], None]] = {
-    "note": _restore_note, "library": _restore_library, "semester": _restore_semester, "discipline": _restore_discipline,
+    "note": _restore_note, "library": _restore_library, "entry": _restore_entry, "semester": _restore_semester, "discipline": _restore_discipline,
 }
 
 
@@ -319,11 +336,11 @@ RESTORES["rename"] = _undo_rename
 
 _LABELS = {
     "edit_note": "Edited note", "rename_note": "Renamed note", "set_note_tag": "Changed the tag of", "set_note_properties": "Changed the properties of",
-    "restore_note_version": "Restored an earlier version of", "create_note": "Created note", "library_save_entry": "Saved library entry",
-    "library_set_tracking": "Changed tracking of", "university_save_semester": "Saved semester", "university_save_discipline": "Saved discipline",
-    "university_set_course_sheet": "Filled the course sheet of", "university_set_teachers": "Set the teachers of",
-    "university_save_class_slot": "Changed the timetable of", "university_save_evaluation": "Changed the evaluation of",
-    "university_save_reading": "Saved a reading of", "university_save_homework": "Saved homework of",
+    "restore_note_version": "Restored an earlier version of", "create_note": "Created note", "save_entry": "Saved entry", "library_save_entry": "Saved library entry",
+    "library_set_tracking": "Changed tracking of", "academic_save_semester": "Saved semester", "academic_save_discipline": "Saved discipline",
+    "academic_set_course_sheet": "Filled the course sheet of", "academic_set_teachers": "Set the teachers of",
+    "academic_save_class_slot": "Changed the timetable of", "academic_save_evaluation": "Changed the evaluation of",
+    "academic_save_reading": "Saved a reading of", "academic_save_homework": "Saved homework of",
 }
 
 
@@ -344,6 +361,12 @@ def scope_for(conn: sqlite3.Connection, tool: str, args: dict[str, Any]) -> dict
         return {"kind": "note", "key": uid, "summary": f"{label} {doc['title'] if doc else ''}".strip()} if doc else None
     if tool == "create_note":
         return {"kind": "note", "key": None, "summary": f"{label} {args.get('title') or ''}".strip(), "key_after": lambda r: r["uid"]}
+    if tool == "save_entry":
+        uid = args.get("uid")
+        if uid:
+            t = db.get_glossary_term(conn, uid)
+            return {"kind": "entry", "key": uid, "summary": f"{label} {t['term']}"} if t else None
+        return {"kind": "entry", "key": None, "summary": f"{label} {args.get('name') or ''}".strip(), "key_after": lambda r: r["uid"]}
     if tool in ("library_save_entry", "library_set_tracking"):
         uid = args.get("uid")
         if uid:
@@ -352,10 +375,10 @@ def scope_for(conn: sqlite3.Connection, tool: str, args: dict[str, Any]) -> dict
         title = (args.get("entry") or {}).get("title") or ""
         return {"kind": "library", "key": None, "summary": f"{label} {title}".strip(), "key_after": lambda r: r["uid"]}
     try:
-        semester = api_service._semester(conn, args.get("semester_uid") or (args.get("uid") if tool == "university_save_semester" else ""))
+        semester = api_service._semester(conn, args.get("semester_uid") or (args.get("uid") if tool == "academic_save_semester" else ""))
     except api_service.NotFound:
         return None
-    if tool == "university_save_semester":
+    if tool == "academic_save_semester":
         if args.get("uid") and semester:
             return {"kind": "semester", "key": semester["uid"], "summary": f"{label} {semester['name']}"}
         return {"kind": "semester", "key": None, "summary": f"{label} {args.get('name') or ''}".strip(), "key_after": lambda r: r["semester_uid"]}
@@ -364,7 +387,7 @@ def scope_for(conn: sqlite3.Connection, tool: str, args: dict[str, Any]) -> dict
     from . import university_plan as up
 
     names = {d["name"].lower(): d["name"] for d in up.disciplines(conn, semester)}
-    if tool == "university_save_discipline":
+    if tool == "academic_save_discipline":
         old = names.get((args.get("old_name") or "").strip().lower())
         new = (args.get("name") or "").strip()
         if old and old.lower() != new.lower():

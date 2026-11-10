@@ -320,10 +320,12 @@ def create_app() -> FastAPI:
     from . import university
 
     app.include_router(university.router)
+    app.include_router(university.legacy_router)
     app.include_router(university.notes_router)
     from . import university_discipline
 
     app.include_router(university_discipline.router)
+    app.include_router(university_discipline.legacy_router)
     app.include_router(taxonomy.settings_router)
     app.include_router(taxonomy.calendar_router)
     app.include_router(labels.router)

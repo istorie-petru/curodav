@@ -3,11 +3,11 @@
 {% from "_modal.html" import modal %}
 {% block title %}{{ 'Edit book' if reading else 'New book' }}{% endblock %}
 {% block content %}
-{% set _retire = [{'action': 'delete', 'url': '/settings/university/reading/' ~ reading.task_uid ~ '/delete?discipline=' ~ (d.name|urlencode), 'mode': 'confirm', 'label': 'Remove this book from the course?', 'redirect': none, 'change': none}] if reading else none %}
-{% set _extra %}<a href="/library/new?return_to={{ ('/settings/university/reading/' ~ (reading.task_uid ~ '/edit' if reading else 'new?discipline=' ~ d.name))|urlencode }}" data-modal class="btn ghost">{{ icon('library', 'icon-sm') }} Add a book</a>{% endset %}
+{% set _retire = [{'action': 'delete', 'url': '/settings/academic/reading/' ~ reading.task_uid ~ '/delete?discipline=' ~ (d.name|urlencode), 'mode': 'confirm', 'label': 'Remove this book from the course?', 'redirect': none, 'change': none}] if reading else none %}
+{% set _extra %}<a href="/library/new?return_to={{ ('/settings/academic/reading/' ~ (reading.task_uid ~ '/edit' if reading else 'new?discipline=' ~ d.name))|urlencode }}" data-modal class="btn ghost">{{ icon('library', 'icon-sm') }} Add a book</a>{% endset %}
 {% call modal(kind="form", title=('Edit book' if reading else 'New book'), size="medium", form='university-reading-form', creating=(not reading), retire=_retire, extra_html=_extra) %}
 <div class="card">
-<form method="post" id="university-reading-form" action="/settings/university/reading">
+<form method="post" id="university-reading-form" action="/settings/academic/reading">
     <input type="hidden" name="discipline" value="{{ d.name }}">
     <input type="hidden" name="task_uid" value="{{ reading.task_uid if reading else '' }}">
     <div class="field-grid">

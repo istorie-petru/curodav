@@ -107,3 +107,24 @@ def attendance_origin(conn: sqlite3.Connection) -> None:
         conn.execute("UPDATE university_attendance SET kind = ?, original_start = ?, original_end = ? WHERE event_uid = ?",
                      (r["kind"], "" if legacy_extra else r["start_at"], "" if legacy_extra else (r["end_at"] or ""), r["event_uid"]))
     conn.commit()
+
+
+def academic_rename(conn: sqlite3.Connection) -> None:
+    """The University module became Academic and its page moved from the space to the semester shelf. Renames the stored keys, hands the
+    space back its default page, and gives each semester shelf the semester page. Nothing is deleted and no event, task or tag is touched."""
+    row = conn.execute("SELECT value FROM app_meta WHERE key = 'modules_enabled'").fetchone()
+    if row and "university" in (row[0] or "").split(","):
+        value = ",".join(sorted({"academic" if k == "university" else k for k in row[0].split(",") if k}))
+        conn.execute("UPDATE app_meta SET value = ? WHERE key = 'modules_enabled'", (value,))
+    old = conn.execute("SELECT value FROM app_meta WHERE key = 'university_current'").fetchone()
+    if old:
+        conn.execute("INSERT OR IGNORE INTO app_meta (key, value) VALUES ('academic_current', ?)", (old[0],))
+        conn.execute("DELETE FROM app_meta WHERE key = 'university_current'")
+    conn.execute("UPDATE label_config SET managed_by = 'academic' WHERE managed_by = 'university'")
+    conn.execute("UPDATE label_groups SET page_type = 'dashboard' WHERE page_type = 'study'")
+    current = conn.execute("SELECT value FROM app_meta WHERE key = 'academic_current'").fetchone()
+    newest = conn.execute("SELECT uid FROM university_semesters ORDER BY created_at DESC, uid LIMIT 1").fetchone()
+    pinned = (current[0] if current else None) or (newest[0] if newest else None)
+    conn.execute("UPDATE label_config SET page_type = 'academic' WHERE name IN (SELECT shelf_name FROM university_semesters) COLLATE NOCASE")
+    if pinned:
+        conn.execute("UPDATE label_config SET sidebar_pin = 1 WHERE name IN (SELECT shelf_name FROM university_semesters WHERE uid = ?) COLLATE NOCASE", (pinned,))

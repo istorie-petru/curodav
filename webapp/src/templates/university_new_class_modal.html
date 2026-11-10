@@ -5,7 +5,7 @@
 {% block content %}
 {% call modal(kind="form", title='New class on a date', size="small", form='university-new-class-form', creating=true) %}
 <div class="card">
-<form method="post" id="university-new-class-form" action="/settings/university/class">
+<form method="post" id="university-new-class-form" action="/settings/academic/class">
     <input type="hidden" name="discipline" value="{{ d.name }}">
     <div class="field-grid">
         <div class="field"><label>Date</label>{{ date_field('day', day, label='Date', required=true) }}</div>

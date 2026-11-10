@@ -174,7 +174,7 @@ def test_university_overview_and_exams_follow_the_current_semester(conn, monkeyp
     from university_helpers import add_exam
 
     assert university
-    monkeypatch.setenv("CC_MODULES", "university")
+    monkeypatch.setenv("CC_MODULES", "academic")
     frozen_today(date(2026, 11, 1))
     sid = up.save_semester(conn, uid=None, name="Autumn 2026", shelf_name="University", start_date="2026-10-05",
                            end_date="2027-02-14", class_end_date="2026-12-18")

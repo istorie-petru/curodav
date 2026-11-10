@@ -18,8 +18,8 @@ from typing import Any
 
 from . import app_defaults, clock, db, event_series, study_lists, tags
 
-MODULE_KEY = "university"
-PAGE_TYPE = "study"
+MODULE_KEY = "academic"
+PAGE_TYPE = "academic"
 SLOT_KINDS = {"lecture": "Lecture", "seminar": "Seminar", "lab": "Lab", "other": "Class"}
 PARITY = ("all", "odd", "even")
 WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -75,8 +75,7 @@ def _owner():
 
 # ---------------------------------------------------------------- semester
 
-CURRENT_KEY = "university_current"
-GROUP_NAME = "University"
+CURRENT_KEY = "academic_current"
 
 
 def list_semesters(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -123,19 +122,27 @@ def semester_group(conn: sqlite3.Connection, semester: dict[str, Any]) -> str:
     return ((row["label_group"] if row else "") or "").strip()
 
 
-def attach_group(conn: sqlite3.Connection, semester: dict[str, Any], group_name: str = "") -> str:
-    """Puts the semester's shelf in its space (made if needed) and gives the space the study page. Safe to repeat."""
-    group = semester_group(conn, semester) or db.ensure_group(conn, (group_name or GROUP_NAME).strip())
+def place_shelf(conn: sqlite3.Connection, semester: dict[str, Any], space: str | None = None, *, first: bool = False) -> str:
+    """Gives the semester's shelf the semester page and, when `space` is given, puts it in that space ("" takes it out of any space).
+    The module never makes or restyles a space: it must already exist. Safe to repeat."""
+    changes: dict[str, Any] = {"name": semester["shelf_name"], "page_type": PAGE_TYPE}
+    if first:
+        changes["sidebar_pin"] = 1
+    if space is not None:
+        space = space.strip()
+        found = db.get_group(conn, space) if space else None
+        if space and not found:
+            raise PlanError(f"There is no space called {space}")
+        changes["label_group"] = found["name"] if found else ""
     with _owner():
-        db.upsert_label_config(conn, {"name": semester["shelf_name"], "label_group": group, "page_type": "sections"})
-    style = db.get_group_style(conn, group)
-    if not style["icon"]:
-        db.set_group_style(conn, group, "graduation-cap", style["color"] if style["color"] != "gray" else "blue")
-    db.set_group_page_type(conn, group, PAGE_TYPE)
-    return group
+        db.upsert_label_config(conn, changes)
+    conn.execute("UPDATE label_config SET page_type = ? WHERE name = ? COLLATE NOCASE", (PAGE_TYPE, semester["shelf_name"]))  # kept even when the module is off
+    conn.commit()
+    return semester_group(conn, semester)
 
 
 def semester_for_group(conn: sqlite3.Connection, group: str) -> dict[str, Any] | None:
+    """The current semester when its shelf sits in `group`, else the newest semester whose shelf does (for old addresses)."""
     picked = current_semester(conn)
     if picked and semester_group(conn, picked).lower() == (group or "").strip().lower():
         return picked
@@ -145,8 +152,13 @@ def semester_for_group(conn: sqlite3.Connection, group: str) -> dict[str, Any] |
     return dict(row) if row else None
 
 
+def semester_for_shelf(conn: sqlite3.Connection, shelf: str) -> dict[str, Any] | None:
+    row = conn.execute("SELECT * FROM university_semesters WHERE shelf_name = ? COLLATE NOCASE", ((shelf or "").strip(),)).fetchone()
+    return dict(row) if row else None
+
+
 def save_semester(conn: sqlite3.Connection, *, uid: str | None, name: str, shelf_name: str, start_date: str, end_date: str,
-                  class_end_date: str, holiday_calendar: str = "", group_name: str = "", credits_target: str = "") -> str:
+                  class_end_date: str, holiday_calendar: str = "", space: str | None = None, credits_target: str = "") -> str:
     name, picked = name.strip(), shelf_name.strip()
     shelf_name = picked or name
     if not name:
@@ -185,7 +197,7 @@ def save_semester(conn: sqlite3.Connection, *, uid: str | None, name: str, shelf
          class_end.isoformat() if class_end else None, holiday_calendar.strip() or None, target, existing["created_at"] if existing else _now()),
     )
     conn.commit()
-    attach_group(conn, get_semester(conn, uid), group_name)
+    place_shelf(conn, get_semester(conn, uid), space if (space is not None or not existing) else None, first=not existing)
     if not existing:
         select_semester(conn, uid)
     if existing and (existing.get("class_end_date") or "") != (class_end.isoformat() if class_end else ""):
@@ -276,7 +288,8 @@ def _teacher_uids(conn: sqlite3.Connection, tag: str) -> list[str]:
 
 def teachers(conn: sqlite3.Connection, tag: str) -> list[dict[str, str]]:
     uids = _teacher_uids(conn, tag)
-    return [{"uid": u, "name": (db.get_contact(conn, u) or {}).get("full_name") or ""} for u in uids]
+    contacts = {u: db.get_contact(conn, u) or {} for u in uids}
+    return [{"uid": u, "name": contacts[u].get("full_name") or "", "contact": contacts[u]} for u in uids]
 
 
 def disciplines(conn: sqlite3.Connection, semester: dict[str, Any]) -> list[dict[str, Any]]:

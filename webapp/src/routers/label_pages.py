@@ -382,10 +382,6 @@ def label_page(name: str, request: Request, conn=Depends(get_db)):
     if not _label_exists(conn, name):
         return RedirectResponse(url="/settings/labels", status_code=303)
     label = db.effective_label_config(conn, name)
-    if label.get("managed_by") and modules.get(label["managed_by"]).key in modules.enabled_keys():
-        # A module's shelf has no page of its own: the module shows it on the page of its space.
-        group = (label.get("label_group") or "").strip()
-        return RedirectResponse(url=group_url(group) if group else "/settings", status_code=303)
     view = requested_view(request)
     if view == "agenda":
         return secretariat_page.render(

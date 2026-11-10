@@ -27,7 +27,7 @@ SCOPES = {
     "read:notes": "Read notes, entries and the library",
     "read:calendar": "Read tasks and events",
     "read:university": "Read university",
-    "write:notes": "Edit notes",
+    "write:notes": "Edit notes and entries",
     "write:library": "Edit the library",
     "write:university": "Edit university",
 }

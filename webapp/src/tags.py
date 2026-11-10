@@ -285,7 +285,7 @@ def discipline_shelf(conn: sqlite3.Connection) -> str:
     """The shelf of the current University semester, lowercase, whose tags are disciplines with an edit window; "" when there is none."""
     from . import modules
 
-    if not modules.is_enabled("university"):
+    if not modules.is_enabled("academic"):
         return ""
     try:
         from . import university_plan

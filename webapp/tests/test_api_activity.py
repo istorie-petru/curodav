@@ -20,7 +20,7 @@ def conn(tmp_path):
 def test_a_tool_call_says_what_and_where(conn):
     assert api_activity.describe_tool(conn, "get_note", {"uid": "n1"}) == ("Read note", "Kant lecture")
     assert api_activity.describe_tool(conn, "search", {"query": "duty"}) == ("Search", "“duty”")
-    assert api_activity.describe_tool(conn, "university_set_course_sheet", {"discipline": "Biology"}) == ("Course sheet", "Biology")
+    assert api_activity.describe_tool(conn, "academic_set_course_sheet", {"discipline": "Biology"}) == ("Course sheet", "Biology")
 
 
 def test_a_rest_call_says_what_and_where(conn):

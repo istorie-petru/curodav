@@ -219,7 +219,7 @@ def _annotate_skipped_classes(conn, events: list[dict]) -> None:
     """Marks the University classes that were missed, excused or cancelled (`skipped`), which every calendar view draws faded."""
     from .. import modules
 
-    if not events or not modules.is_enabled("university"):
+    if not events or not modules.is_enabled("academic"):
         return
     try:
         from .. import university_attendance
@@ -1303,7 +1303,7 @@ def _university_attachable(conn, event) -> bool:
     """A plain event the University module could attach to a way of evaluating (not a class, not already part of one)."""
     from .. import modules, university_context
 
-    if not event or not modules.is_enabled("university") or _university_context(conn, event):
+    if not event or not modules.is_enabled("academic") or _university_context(conn, event):
         return False
 
     return university_context.can_attach(conn)
@@ -1312,7 +1312,7 @@ def _university_attachable(conn, event) -> bool:
 def _university_context(conn, event):
     from .. import modules
 
-    if not event or not modules.is_enabled("university"):
+    if not event or not modules.is_enabled("academic"):
         return None
     from .. import university_context
 
@@ -1701,14 +1701,14 @@ def _is_exam(conn, event) -> bool:
     """An event that belongs to a way of evaluating of the course sheet; its date is changed there."""
     from .. import modules
 
-    return bool(event) and modules.is_enabled("university") and university_plan.is_locked(conn, "event", event["uid"]) and not university_plan.is_class(conn, event)
+    return bool(event) and modules.is_enabled("academic") and university_plan.is_locked(conn, "event", event["uid"]) and not university_plan.is_class(conn, event)
 
 
 def _is_class(conn, event) -> bool:
     """An event that is a class of a University slot: moving it cancels it and makes up a new one."""
     from .. import modules
 
-    return bool(event) and modules.is_enabled("university") and university_plan.is_class(conn, event)
+    return bool(event) and modules.is_enabled("academic") and university_plan.is_class(conn, event)
 
 
 @events_router.post("/events/{uid}/reschedule")
