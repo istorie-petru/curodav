@@ -957,6 +957,7 @@ def settings_notebook(request: Request, conn=Depends(get_db)):
             "citation_format": db.get_citation_format(conn),
             "journal_template": db.get_journal_template(conn),
             "entry_kinds": db.list_entry_kinds(conn),
+            "entry_subjects": db.list_entry_subjects(conn),
             "fields": [{**f, "templates": db.list_templates_using_field(conn, f["key"])} for f in db.list_notebook_field_config(conn)
                        if not (f["key"] == "author" and f.get("builtin"))],
             "journal_templates": [{"uid": "", "name": "None"}] + [
@@ -1023,6 +1024,42 @@ def save_entry_kind_form(
 @field_settings_router.post("/entry-kinds/delete")
 def delete_entry_kind_form(name: str = Query(...), x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     error = db.delete_entry_kind(conn, name)
+    if error:
+        return _kind_error(error, x_requested_with)
+    return respond(x_requested_with, "/settings/notebook")
+
+
+def _subject_modal(request: Request, subject: dict | None):
+    subject = subject or {"name": "", "color": "teal", "used": 0}
+    return templates.TemplateResponse(
+        "entry_subject_modal.html", {"request": request, "active_tab": "settings_notebook", "subject": subject, "is_new": not subject["name"], "colors": COLORS})
+
+
+@field_settings_router.get("/entry-subjects/new")
+def new_entry_subject_modal(request: Request):
+    return _subject_modal(request, None)
+
+
+@field_settings_router.get("/entry-subjects/edit")
+def edit_entry_subject_modal(request: Request, name: str, conn=Depends(get_db)):
+    subject = next((s for s in db.list_entry_subjects(conn) if s["name"] == name), None)
+    if subject is None:
+        return RedirectResponse(url="/settings/notebook", status_code=303)
+    return _subject_modal(request, subject)
+
+
+@field_settings_router.post("/entry-subjects")
+def save_entry_subject_form(original: str = Form(""), name: str = Form(""), color: str = Form("teal"),
+                            x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    error = db.save_entry_subject(conn, _s(original), name, color if color in COLORS else "teal")
+    if error:
+        return _kind_error(error, x_requested_with)
+    return respond(x_requested_with, "/settings/notebook")
+
+
+@field_settings_router.post("/entry-subjects/delete")
+def delete_entry_subject_form(name: str = Query(...), x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    error = db.delete_entry_subject(conn, name)
     if error:
         return _kind_error(error, x_requested_with)
     return respond(x_requested_with, "/settings/notebook")
@@ -1897,6 +1934,7 @@ def _glossary_edit_context(request: Request, t: dict | None, form_action: str, c
         "kind_field_groups": [k for k in db.list_entry_kinds(conn) if k["fields"]],
         "field_values": db.entry_field_values(conn, t["uid"], t["kind"]) if t else {},
         "current_kind": t["kind"] if t else "Term",
+        "subject_items": [{"uid": "", "name": "No subject"}] + [{"uid": x["name"], "name": x["name"]} for x in db.list_entry_subjects(conn)],
         "kind_items": [{"uid": k["name"], "name": k["name"]} for k in db.list_entry_kinds(conn)],
         "wiki_items": [{"uid": "", "name": "None"}] + [
             {"uid": d["uid"], "name": d["title"] or "Untitled"} for d in db.list_notebook_documents(conn)
@@ -1905,15 +1943,11 @@ def _glossary_edit_context(request: Request, t: dict | None, form_action: str, c
 
 
 @glossary_router.get("")
-def glossary_library(request: Request, q: str = "", kind: str = "", conn=Depends(get_db)):
-    """The Entries list: every entry grouped by kind, found by name, alternate name or text."""
-    entries = db.list_glossary_terms(conn, q, kind)
+def glossary_library(request: Request, q: str = "", kind: str = "", subject: str = "", conn=Depends(get_db)):
+    """The Entries list: every entry grouped by kind and subject, found by name, alternate name or text."""
+    entries = db.list_glossary_terms(conn, q, kind, subject)
     looks = db.entry_kind_looks(conn)
-    groups = []
-    for k in db.list_entry_kinds(conn):
-        members = [e for e in entries if e["kind"] == k["name"]]
-        if members:
-            groups.append({"kind": k["name"], "icon": k["icon"], "color": k["color"], "entries": members})
+    groups = db.group_entries_by_kind_and_subject(conn, entries)
     return templates.TemplateResponse(
         "notebook_glossary_list.html",
         {
@@ -1925,6 +1959,8 @@ def glossary_library(request: Request, q: str = "", kind: str = "", conn=Depends
             "total": len(entries),
             "q": q,
             "kind": kind,
+            "subject": subject,
+            "subject_items": [{"value": "", "name": "All subjects"}] + [{"value": x["name"], "name": x["name"]} for x in db.list_entry_subjects(conn)],
             "kind_items": [{"value": "", "name": "All kinds"}] + [{"value": k["name"], "name": k["name"]} for k in db.list_entry_kinds(conn)],
         },
     )
@@ -1963,6 +1999,7 @@ def entry_view_modal(uid: str, request: Request, return_to: str = "", conn=Depen
             "active_tab": "notebook",
             "entry": entry,
             "look": db.entry_kind_looks(conn).get(entry["kind"], {"icon": "tag", "color": "teal"}),
+            "subject_color": next((x["color"] for x in db.list_entry_subjects(conn) if x["name"] == entry["subject"]), "teal"),
             "sections": db.entry_custom_sections(conn, uid, entry["kind"]),
             "field_values": {k: v for k, v in db.entry_field_values(conn, uid, entry["kind"]).items() if v},
             "references": references,
@@ -1991,6 +2028,8 @@ def create_glossary_term(
     definition: str = Form(""),
     kind: str = Form(""),
     kind_new: str = Form(""),
+    subject: str = Form(""),
+    subject_new: str = Form(""),
     aliases: str = Form(""),
     wiki_uid: str = Form(""),
     reference_keys: list[str] = Form([]),
@@ -2005,7 +2044,7 @@ def create_glossary_term(
     term = term.strip()
     if not term:
         return RedirectResponse(url="/notebook/glossary", status_code=303)
-    uid = db.upsert_glossary_term(conn, {"term": term, "definition": definition.strip(), "kind": _s(kind_new) or _s(kind), **_entry_extras(aliases, wiki_uid)})
+    uid = db.upsert_glossary_term(conn, {"term": term, "definition": definition.strip(), "kind": _s(kind_new) or _s(kind), "subject": _s(subject_new) or _s(subject), **_entry_extras(aliases, wiki_uid)})
     db.set_glossary_term_references(conn, uid, _parse_reference_keys(reference_keys, ref_pages))
     entry_kind = db.get_glossary_term(conn, uid)["kind"]
     db.set_glossary_sections(conn, uid, _entry_sections(conn, entry_kind, kfields, section_title, section_body))
@@ -2020,6 +2059,8 @@ def update_glossary_term(
     definition: str = Form(""),
     kind: str = Form(""),
     kind_new: str = Form(""),
+    subject: str = Form(""),
+    subject_new: str = Form(""),
     aliases: str = Form(""),
     wiki_uid: str = Form(""),
     reference_keys: list[str] = Form([]),
@@ -2037,7 +2078,7 @@ def update_glossary_term(
             return JSONResponse({"error": "term not found"}, status_code=404)
         return RedirectResponse(url="/notebook/glossary", status_code=303)
     term = term.strip() or existing["term"]
-    db.upsert_glossary_term(conn, {"uid": uid, "term": term, "definition": definition.strip(), "kind": _s(kind_new) or _s(kind), **_entry_extras(aliases, wiki_uid)})
+    db.upsert_glossary_term(conn, {"uid": uid, "term": term, "definition": definition.strip(), "kind": _s(kind_new) or _s(kind), "subject": _s(subject_new) or _s(subject), **_entry_extras(aliases, wiki_uid)})
     db.set_glossary_term_references(conn, uid, _parse_reference_keys(reference_keys, ref_pages))
     entry_kind = db.get_glossary_term(conn, uid)["kind"]
     db.set_glossary_sections(conn, uid, _entry_sections(conn, entry_kind, kfields, section_title, section_body))

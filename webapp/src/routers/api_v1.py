@@ -13,7 +13,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 
-from .. import access_tokens, api_activity, api_history, api_service, api_write, note_versions
+from .. import access_tokens, api_activity, api_history, api_service, api_write, book_search, note_versions
 from ..api_auth import require, require_read
 from ..deps import get_db
 
@@ -71,10 +71,42 @@ def get_citation(request: Request, uid: str, conn=Depends(get_db), token=Depends
     return _found(api_service.get_citation, conn, uid)
 
 
+def _book(conn, caller, request: Request, run, *args, **kwargs):
+    access_tokens.log_activity(conn, caller["uid"], "api", *api_activity.describe_request(conn, "GET", request.url.path, request.query_params.get("q", "")))
+    try:
+        return run(conn, *args, **kwargs)
+    except book_search.BookError as exc:
+        raise HTTPException(status_code=422, detail={"error": "invalid", "message": str(exc)}) from None
+
+
+@router.get("/citations/{uid}/book/search")
+def search_book(request: Request, uid: str, q: str, mode: str = "words", edition: str = "", format: str = "", limit: Limit = 10,
+                conn=Depends(get_db), token=Depends(require("read:notes"))):
+    return _book(conn, token, request, book_search.search, uid, q, mode=mode, edition=edition, fmt=format, limit=limit)
+
+
+@router.get("/citations/{uid}/book/contents")
+def book_contents(request: Request, uid: str, edition: str = "", format: str = "", conn=Depends(get_db), token=Depends(require("read:notes"))):
+    return _book(conn, token, request, book_search.contents, uid, edition=edition, fmt=format)
+
+
+@router.get("/citations/{uid}/book/read")
+def read_book(request: Request, uid: str, hit: Annotated[int | None, Query(ge=0)] = None, section: Annotated[int | None, Query(ge=0)] = None,
+              before: Annotated[int, Query(ge=0, le=5)] = 1, after: Annotated[int, Query(ge=0, le=5)] = 1, edition: str = "", format: str = "",
+              conn=Depends(get_db), token=Depends(require("read:notes"))):
+    return _book(conn, token, request, book_search.read, uid, token=token["uid"], hit=hit, section=section, before=before, after=after, edition=edition, fmt=format)
+
+
 @router.get("/entries")
-def list_entries(request: Request, q: str = "", kind: str = "", conn=Depends(get_db), token=Depends(require("read:notes"))):
+def list_entries(request: Request, q: str = "", kind: str = "", subject: str = "", conn=Depends(get_db), token=Depends(require("read:notes"))):
     _log(conn, token, request)
-    return {"items": api_service.list_entries(conn, q=q, kind=kind)}
+    return {"items": api_service.list_entries(conn, q=q, kind=kind, subject=subject)}
+
+
+@router.get("/entry-subjects")
+def list_entry_subjects(request: Request, conn=Depends(get_db), token=Depends(require("read:notes"))):
+    _log(conn, token, request)
+    return {"items": api_service.list_entry_subjects(conn)}
 
 
 @router.get("/entry-kinds")

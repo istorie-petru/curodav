@@ -16,7 +16,6 @@
 <div class="ms-block is-event" data-row><input type="hidden" name="ev_uid" value="{{ m.uid }}"><input type="hidden" name="ev_location" value="{{ m.location }}">
     <div class="field ms-title"><label>Title</label>{{ text_input({'name': 'ev_title', 'value': m.raw_title}) }}</div>
     <button type="button" class="icon-btn" data-rows-remove title="Remove" aria-label="Remove">{{ icon('trash', 'icon-sm') }}</button>
-    <input type="hidden" name="ev_end_day" value="{{ m.end_day }}">
     <div class="field"><label>Date</label>{{ date_field('ev_day', m.day, label='Date', short=true) }}</div>
     <div class="field"><label>Start time</label>{{ time_field('ev_start', m.start, label='Start time') }}</div>
     <div class="field"><label>End time</label>{{ time_field('ev_end', m.end, label='End time') }}</div>

@@ -14,7 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any
 
-from . import access_tokens, api_history, api_library, api_service, api_university, api_write, note_versions
+from . import access_tokens, api_history, book_search, api_library, api_service, api_university, api_write, note_versions
 from .university_plan import SHEET_FIELDS
 
 PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26")
@@ -79,13 +79,40 @@ TOOLS = [
          lambda c, a, _t: api_service.list_citations(c, **a)),
     Tool("get_citation", "Read a citation", "One citation with its editions and the notes that cite it.",
          {"uid": _s("The citation's uid.")}, ("uid",), lambda c, a, _t: api_service.get_citation(c, a["uid"])),
+    Tool("search_book", "Search inside a book",
+         "Finds where words, a phrase or a pattern occur in the book file of a library entry (uid from list_citations), without sending the book: "
+         "each hit has a location (chapter, or page for a PDF) and a short snippet with the match in [brackets]. mode: words (every word, any order, "
+         "each may be a word start), phrase (exact order) or regex (extended regular expression, case-insensitive). Read around a hit with read_book.",
+         {"uid": _s("The library entry's uid."), "query": _s("Words, a phrase or a regex, by mode."),
+          "mode": {"type": "string", "enum": list(book_search.MODES), "description": "words (default), phrase or regex."},
+          "limit": {"type": "integer", "minimum": 1, "maximum": book_search.MAX_HITS, "description": "How many hits, at most 20."},
+          "edition": _s("An edition uid, when the entry has several."), "format": _s("epub, pdf and so on; the best available when left out.")},
+         ("uid", "query"), lambda c, a, _t: book_search.search(c, a["uid"], a["query"], mode=a.get("mode", "words"), edition=a.get("edition", ""),
+                                                               fmt=a.get("format", ""), limit=a.get("limit", 10))),
+    Tool("book_contents", "A book's chapters",
+         "The chapters of a book file with the number of passages in each (a PDF is listed as pages), so its shape can be seen without reading it.",
+         {"uid": _s("The library entry's uid."), "edition": _s("An edition uid."), "format": _s("epub, pdf and so on.")}, ("uid",),
+         lambda c, a, _t: book_search.contents(c, a["uid"], edition=a.get("edition", ""), fmt=a.get("format", ""))),
+    Tool("read_book", "Read a passage of a book",
+         "Returns the text around a hit from search_book (before and after count passages of about 1,000 characters, at most 5), or from the start "
+         "of a section from book_contents. At most about 6,000 characters per call and 60,000 an hour per book; next_hit continues where a call stopped "
+         "(use it as hit with before 0).",
+         {"uid": _s("The library entry's uid."), "hit": {"type": "integer", "minimum": 0, "description": "A hit number from search_book."},
+          "section": {"type": "integer", "minimum": 0, "description": "A section number from book_contents."},
+          "before": {"type": "integer", "minimum": 0, "maximum": 5, "description": "Passages before the hit; 1 when left out."},
+          "after": {"type": "integer", "minimum": 0, "maximum": 5, "description": "Passages after the hit; 1 when left out."},
+          "edition": _s("An edition uid."), "format": _s("epub, pdf and so on.")}, ("uid",),
+         lambda c, a, t: book_search.read(c, a["uid"], token=t.get("uid", ""), hit=a.get("hit"), section=a.get("section"), before=a.get("before", 1),
+                                           after=a.get("after", 1), edition=a.get("edition", ""), fmt=a.get("format", ""))),
     Tool("list_entries", "List entries", "Notebook entries (terms, people, places and other kinds), alphabetical.",
-         {"q": _s("Text in the name, alternate names or definition."), "kind": _s("Entry kind.")}, (),
+         {"q": _s("Text in the name, alternate names or definition."), "kind": _s("Entry kind."), "subject": _s("Entry subject, such as Archeology.")}, (),
          lambda c, a, _t: {"items": api_service.list_entries(c, **a)}),
     Tool("get_entry", "Read an entry", "One entry with its definition and sections.",
          {"uid": _s("The entry's uid.")}, ("uid",), lambda c, a, _t: api_service.get_entry(c, a["uid"])),
     Tool("list_entry_kinds", "List entry kinds", "Entry kinds with their fields.", {}, (),
          lambda c, a, _t: {"items": api_service.list_entry_kinds(c)}),
+    Tool("list_entry_subjects", "List entry subjects", "Subjects entries are filed under (with kind, they group the Entries page), with how many entries each has.", {}, (),
+         lambda c, a, _t: {"items": api_service.list_entry_subjects(c)}),
     Tool("list_tasks", "List tasks", "Tasks by due date, undated last. Habits are left out.",
          {"status": _s("Task status, such as active or done."), "tag": _s("Tag name."),
           "due_before": _s("ISO date; due before it."), "due_after": _s("ISO date; due on or after it."),
@@ -123,7 +150,12 @@ TOOLS = [
          "Changes a note block by block. Give the revision from get_note and a list of ops, each one of: "
          "{op: append, markdown}, {op: insert_after or insert_before, block_id, markdown}, {op: replace, block_id, markdown}, "
          "{op: delete, block_id}. Block ids come from get_note with include_blocks. Only paragraph, header, list, code, delimiter "
-         "and table blocks can be replaced or deleted. The note is kept as a version first, so the change can be undone.",
+         "and table blocks can be replaced or deleted. "
+         "Endnotes are Markdown footnotes ([^1] in the text, [^1]: words at the end). To cite a library source instead of typing the note, write the "
+         "definition as [@citation-uid, page] (uid from list_citations): the note is written in the user's citation style, repeated sources become "
+         "Ibid. or op. cit. by themselves, and the source joins the bibliography. Other forms: [full @uid, page], [cf. @uid, page], [idem @uid, page], "
+         "[passim @uid], [apud @original-uid in @secondary-uid, page]. "
+         "The note is kept as a version first, so the change can be undone.",
          {"uid": _s("The note's uid."), "revision": _s("The revision get_note returned."),
           "ops": {"type": "array", "items": {"type": "object"}, "description": "The operations, applied in order."},
           "summary": _s("A few words on what the change does, shown in the note's versions.")},
@@ -132,7 +164,8 @@ TOOLS = [
                                              summary=a.get("summary", "")), scope="write:notes"),
     Tool("create_note", "Create a note",
          "Makes one new note with a title, an optional note type, an optional tag (an existing tag name) and a Markdown body, "
-         "or starts it from a template (template_uid). Returns its uid and revision.",
+         "or starts it from a template (template_uid). Returns its uid and revision. "
+         "Endnotes cite a library source with a footnote definition [@citation-uid, page]; see edit_note.",
          {"title": _s("The title."), "note_type": _s("Note type, such as person."), "tag": _s("An existing tag name."),
           "markdown": _s("The body as Markdown."), "template_uid": _s("A template to start from instead of markdown.")}, ("title",),
          lambda c, a, t: api_write.create_note(c, **a, source="mcp", token_uid=t.get("uid", "")), scope="write:notes"),
@@ -159,7 +192,7 @@ TOOLS = [
          "Adds a notebook entry (a term, person, place or other kind; list_entry_kinds lists the kinds), or changes the one with uid; "
          "fields left out keep their value, and sections, when given, replace all the sections. Entries cannot be deleted here.",
          {"uid": _s("The entry to change; left out, a new one is added."), "name": _s("The entry's name; needed for a new entry."),
-          "kind": _s("Entry kind, such as person."), "aliases": {"type": "array", "items": {"type": "string"}, "description": "Other names."},
+          "kind": _s("Entry kind, such as person."), "subject": _s("Subject to file it under, such as Archeology; a new one is created; an empty text clears it."), "aliases": {"type": "array", "items": {"type": "string"}, "description": "Other names."},
           "definition": _s("The definition."),
           "sections": {"type": "array", "items": {"type": "object"}, "description": "Extra text blocks, each {title, text}."}}, (),
          lambda c, a, t: api_write.save_entry(c, **a, source="mcp", token_uid=t.get("uid", "")), scope="write:notes"),
@@ -295,6 +328,8 @@ def call_tool(conn: sqlite3.Connection, name: str, args: Any, token: dict[str, A
         return {"content": [{"type": "text", "text": f"Nothing found with uid {exc.args[0]}."}], "isError": True}
     except api_write.EditError as exc:
         return {"content": [{"type": "text", "text": f"{exc.code}: {exc}"}], "isError": True}
+    except book_search.BookError as exc:
+        return {"content": [{"type": "text", "text": str(exc)}], "isError": True}
     return {"content": [{"type": "text", "text": json.dumps(data, ensure_ascii=False, default=str)}], "structuredContent": data}
 
 

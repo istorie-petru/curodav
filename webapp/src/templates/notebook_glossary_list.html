@@ -19,6 +19,11 @@
         {% set fd_mode = 'single' %}
         {% set fd_form_id = 'entries-form' %}
         {% include '_filter_dropdown.html' %}
+        {% set fd_name = 'subject' %}
+        {% set fd_label = 'Subject' %}
+        {% set fd_items = subject_items %}
+        {% set fd_selected = subject %}
+        {% include '_filter_dropdown.html' %}
         </div>
     </form>
 {% endcall %}
@@ -26,7 +31,7 @@
 {% if groups %}
 <div class="card contact-list notebook-folder-list">
     {% for g in groups %}
-    {% call section_row(g.entries | length ~ ' entr' ~ ('ies' if g.entries | length != 1 else 'y')) %}<span class="cell-tag cal-{{ g.color }}">{{ icon(g.icon, 'icon-sm') }} {{ g.kind }}</span> <a href="/settings/notebook/entry-kinds/edit?name={{ g.kind | urlencode }}" data-modal class="icon-btn" title="Edit the {{ g.kind }} type" aria-label="Edit the {{ g.kind }} type">{{ icon('edit', 'icon-sm') }}</a>{% endcall %}
+    {% call section_row(g.entries | length ~ ' entr' ~ ('ies' if g.entries | length != 1 else 'y')) %}<span class="cell-tag cal-{{ g.color }}">{{ icon(g.icon, 'icon-sm') }} {{ g.kind }}</span><a href="/settings/notebook/entry-kinds/edit?name={{ g.kind | urlencode }}" data-modal class="icon-btn" title="Edit the {{ g.kind }} type" aria-label="Edit the {{ g.kind }} type">{{ icon('edit', 'icon-sm') }}</a>{% if g.subject %} <span class="cell-tag cal-{{ g.subject_color }}">{{ g.subject }}</span><a href="/settings/notebook/entry-subjects/edit?name={{ g.subject | urlencode }}" data-modal class="icon-btn" title="Edit the {{ g.subject }} subject" aria-label="Edit the {{ g.subject }} subject">{{ icon('edit', 'icon-sm') }}</a>{% endif %}{% endcall %}
     {% for e in g.entries %}
     <div class="contact-row-wrap" data-uid="{{ e.uid }}">
         <a class="contact-row" href="/notebook/glossary/{{ e.uid }}" data-modal>
@@ -44,7 +49,7 @@
     {% endfor %}
     {% endfor %}
 </div>
-{% elif q or kind %}
+{% elif q or kind or subject %}
 {% call empty_state('No entries match', icon_name='search', size='compact') %}<a href="/notebook/glossary">Clear search</a>{% endcall %}
 {% else %}
 {{ empty_state('No entries yet', icon_name='tag') }}

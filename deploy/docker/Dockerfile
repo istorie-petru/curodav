@@ -4,7 +4,10 @@
 # --frozen` to resolve the workspace at all.
 FROM python:3.12-slim AS base
 
-RUN pip install --no-cache-dir uv
+# poppler-utils gives book search its pdftotext (MCP tools search_book and read_book).
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir uv
 
 WORKDIR /app
 

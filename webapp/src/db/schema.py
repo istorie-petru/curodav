@@ -1101,7 +1101,14 @@ CREATE TABLE IF NOT EXISTS glossary_terms (
     updated_at TEXT,
     kind TEXT NOT NULL DEFAULT 'Term',
     aliases_json TEXT NOT NULL DEFAULT '[]',
-    wiki_uid TEXT NOT NULL DEFAULT ''
+    wiki_uid TEXT NOT NULL DEFAULT '',
+    subject TEXT NOT NULL DEFAULT ''
+);
+
+-- The subjects an entry can be filed under (Archeology, Ancient Greece, ...), each shown as a coloured pill.
+CREATE TABLE IF NOT EXISTS entry_subjects (
+    name TEXT PRIMARY KEY,
+    color TEXT NOT NULL DEFAULT 'teal'
 );
 
 -- The fields every entry of a kind has; a field's name is fixed once it is created.

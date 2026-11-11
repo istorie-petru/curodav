@@ -325,7 +325,7 @@ async def way_save(request: Request, conn=Depends(get_db)):
     for i, uid in enumerate(form.getlist("ev_uid")):
         milestones.setdefault(uid or f"new-event-{i}", {"uid": uid})
         milestones[uid or f"new-event-{i}"].update(title=form.getlist("ev_title")[i], day=form.getlist("ev_day")[i], start=form.getlist("ev_start")[i],
-                                                    end_day=form.getlist("ev_end_day")[i], end=form.getlist("ev_end")[i], location=form.getlist("ev_location")[i])
+                                                    end=form.getlist("ev_end")[i], location=form.getlist("ev_location")[i])
     for i, uid in enumerate(form.getlist("tk_uid")):
         milestones.setdefault(uid or f"new-task-{i}", {"uid": uid})
         entry = milestones[uid or f"new-task-{i}"]

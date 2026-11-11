@@ -117,6 +117,13 @@ def _entry_kind_match_mode(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE entry_kinds ADD COLUMN match_mode TEXT NOT NULL DEFAULT 'relative'")
 
 
+def _entry_subjects(conn: sqlite3.Connection) -> None:
+    """Entries can be filed under a subject, a coloured pill managed in the Notebook settings."""
+    if "subject" not in _columns(conn, "glossary_terms"):
+        conn.execute("ALTER TABLE glossary_terms ADD COLUMN subject TEXT NOT NULL DEFAULT ''")
+    conn.execute("CREATE TABLE IF NOT EXISTS entry_subjects (name TEXT PRIMARY KEY, color TEXT NOT NULL DEFAULT 'teal')")
+
+
 _CITATION_EXTRA_COLUMNS = ['subtitle', 'edition', 'volume', 'issue', 'pages', 'publisher', 'place', 'isbn', 'issn', 'accessed', 'institution', 'degree', 'editors', 'note']
 
 
@@ -591,6 +598,7 @@ MIGRATIONS: list[Migration] = [
     Migration(82, "API activity says where each call went", _activity_target),
     Migration(83, "Entry types choose how their entries are detected", _entry_kind_match_mode),
     Migration(84, "The University module becomes Academic: the semester page moves to the semester shelf", migrations_university.academic_rename),
+    Migration(85, "Entries get a subject", _entry_subjects),
 ]
 
 

@@ -16,7 +16,7 @@ import secrets
 import sqlite3
 from typing import Any
 
-from . import db, note_versions
+from . import api_endnotes, db, note_versions
 from .notebook_markdown import markdown_to_blocks
 
 PLAIN_TYPES = frozenset({"paragraph", "header", "list", "code", "delimiter", "table"})
@@ -35,6 +35,13 @@ class EditError(ValueError):
         self.code = code
 
 
+def _resolve_citations(conn: sqlite3.Connection, blocks: list[dict[str, Any]]) -> None:
+    try:
+        api_endnotes.resolve(conn, blocks)
+    except api_endnotes.CiteError as exc:
+        raise EditError("invalid", str(exc)) from None
+
+
 def _new_id() -> str:
     return secrets.token_urlsafe(8)[:10]
 
@@ -45,7 +52,7 @@ def _blocks_from(markdown: Any) -> list[dict[str, Any]]:
     if len(markdown) > MAX_MARKDOWN:
         raise EditError("invalid", "markdown is too long")
     prefix = _new_id()
-    blocks = markdown_to_blocks(markdown)
+    blocks = markdown_to_blocks(markdown, cite_notes=True)
     for block in blocks:
         block["id"] = _new_id()
         if block.get("type") == "paragraph":
@@ -98,6 +105,7 @@ def edit_note(conn: sqlite3.Connection, uid: str, revision: str, ops: Any, *, so
         raise EditError("conflict", "The note changed since it was read; read it again.")
     content = db.get_notebook_document_content(conn, uid) or {"blocks": []}
     new_blocks = apply_ops(content.get("blocks") or [], ops)
+    _resolve_citations(conn, new_blocks)
     version = note_versions.save(conn, uid, source=source, token_uid=token_uid, summary=summary)
     db.set_notebook_document_content(conn, uid, {**content, "blocks": new_blocks})
     updated = db.get_notebook_document(conn, uid)
@@ -166,7 +174,9 @@ def create_note(conn: sqlite3.Connection, *, title: str, note_type: str = "", ta
         raise EditError("not_found", f"No template with uid {template_uid}")
     if markdown and template:
         raise EditError("invalid", "give markdown or a template, not both")
-    content = template["content_json"] if template else json.dumps({"blocks": _blocks_from(markdown) if markdown else []})
+    new_blocks = _blocks_from(markdown) if markdown else []
+    _resolve_citations(conn, new_blocks)
+    content = template["content_json"] if template else json.dumps({"blocks": new_blocks})
     labels = _tag_labels(conn, tag)
     uid, now = str(uuid.uuid4()), clock.now().isoformat()
     db.upsert_notebook_document(conn, {
@@ -175,6 +185,9 @@ def create_note(conn: sqlite3.Connection, *, title: str, note_type: str = "", ta
         "tags": labels})
     if tag:
         tags.record(conn, "notebook", uid, [tag])
+    if new_blocks and not template:
+        db._rebuild_notebook_bibliography_from_footnotes(conn, uid, {"blocks": new_blocks})
+        conn.commit()
     return {"uid": uid, "revision": now}
 
 
@@ -226,7 +239,7 @@ def set_note_properties(conn: sqlite3.Connection, uid: str, revision: str, prope
 MAX_SECTIONS = 50
 
 
-def save_entry(conn: sqlite3.Connection, *, uid: str = "", name: str = "", kind: str | None = None, aliases: Any = None,
+def save_entry(conn: sqlite3.Connection, *, uid: str = "", name: str = "", kind: str | None = None, subject: str | None = None, aliases: Any = None,
                definition: str | None = None, sections: Any = None, source: str = "", token_uid: str = "") -> dict[str, Any]:
     """Adds a notebook entry, or changes the one with `uid`; a field left out keeps its value. Entries are never deleted here."""
     existing = db.get_glossary_term(conn, uid) if uid else None
@@ -242,6 +255,8 @@ def save_entry(conn: sqlite3.Connection, *, uid: str = "", name: str = "", kind:
             raise EditError("invalid", f"sections must be a list of at most {MAX_SECTIONS} objects with title and text")
     if kind is not None and not isinstance(kind, str):
         raise EditError("invalid", "kind must be text")
+    if subject is not None and not isinstance(subject, str):
+        raise EditError("invalid", "subject must be text")
     if definition is not None and len(definition) > MAX_MARKDOWN:
         raise EditError("invalid", "definition is too long")
     row: dict[str, Any] = {"term": name or existing["term"], "definition": existing["definition"] if existing and definition is None else (definition or "").strip()}
@@ -249,6 +264,8 @@ def save_entry(conn: sqlite3.Connection, *, uid: str = "", name: str = "", kind:
         row["uid"] = uid
     if kind is not None:
         row["kind"] = kind.strip()
+    if subject is not None:
+        row["subject"] = subject.strip()
     if aliases is not None:
         row["aliases"] = aliases
     saved = db.upsert_glossary_term(conn, row)

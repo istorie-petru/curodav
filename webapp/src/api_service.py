@@ -203,16 +203,20 @@ def list_entry_kinds(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return [{"name": k["name"], "icon": k["icon"], "color": k["color"], "fields": k["fields"]} for k in db.list_entry_kinds(conn)]
 
 
-def list_entries(conn: sqlite3.Connection, *, q: str = "", kind: str = "") -> list[dict[str, Any]]:
-    return [{"uid": t["uid"], "name": t["term"], "kind": t["kind"], "aliases": t["aliases"], "url": _url("entry", t["uid"])}
-            for t in db.list_glossary_terms(conn, q=q, kind=kind)]
+def list_entry_subjects(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    return [{"name": s["name"], "color": s["color"], "entries": s["used"]} for s in db.list_entry_subjects(conn)]
+
+
+def list_entries(conn: sqlite3.Connection, *, q: str = "", kind: str = "", subject: str = "") -> list[dict[str, Any]]:
+    return [{"uid": t["uid"], "name": t["term"], "kind": t["kind"], "subject": t["subject"] or None, "aliases": t["aliases"], "url": _url("entry", t["uid"])}
+            for t in db.list_glossary_terms(conn, q=q, kind=kind, subject=subject)]
 
 
 def get_entry(conn: sqlite3.Connection, uid: str) -> dict[str, Any]:
     t = db.get_glossary_term(conn, uid)
     if t is None:
         raise NotFound(uid)
-    return {"uid": t["uid"], "name": t["term"], "kind": t["kind"], "aliases": t["aliases"], "definition": t["definition"],
+    return {"uid": t["uid"], "name": t["term"], "kind": t["kind"], "subject": t["subject"] or None, "aliases": t["aliases"], "definition": t["definition"],
             "sections": [{"title": s["title"], "text": s["body"]} for s in db.list_glossary_sections(conn, uid)],
             "wiki_note_uid": t.get("wiki_uid") or None, "updated_at": t.get("updated_at"), "url": _url("entry", uid)}
 

@@ -1318,15 +1318,18 @@ def _entry_row(row: sqlite3.Row) -> dict[str, Any]:
     except (json.JSONDecodeError, TypeError):
         d["aliases"] = []
     d["kind"] = d.get("kind") or ENTRY_KIND_DEFAULT
+    d["subject"] = d.get("subject") or ""
     return d
 
 
-def list_glossary_terms(conn: sqlite3.Connection, q: str = "", kind: str = "") -> list[dict[str, Any]]:
-    """Entries, alphabetical by name. `q` is a case-insensitive match on name, alternate names or text; `kind` narrows to one kind."""
+def list_glossary_terms(conn: sqlite3.Connection, q: str = "", kind: str = "", subject: str = "") -> list[dict[str, Any]]:
+    """Entries, alphabetical by name. `q` is a case-insensitive match on name, alternate names or text; `kind` and `subject` narrow to one."""
     rows = conn.execute("SELECT * FROM glossary_terms ORDER BY term COLLATE NOCASE ASC").fetchall()
     terms = [_entry_row(r) for r in rows]
     if kind:
         terms = [t for t in terms if t["kind"] == kind]
+    if subject:
+        terms = [t for t in terms if t["subject"].casefold() == subject.casefold()]
     q = (q or "").strip().casefold()
     if q:
         terms = [
@@ -1360,6 +1363,9 @@ def upsert_glossary_term(conn: sqlite3.Connection, row: dict[str, Any]) -> str:
         kind = (row["kind"] or "").strip() or ENTRY_KIND_DEFAULT
         ensure_entry_kind(conn, kind)
         conn.execute("UPDATE glossary_terms SET kind = ? WHERE uid = ?", (kind, uid))
+    if row.get("subject") is not None:
+        subject = ensure_entry_subject(conn, row["subject"])
+        conn.execute("UPDATE glossary_terms SET subject = ? WHERE uid = ?", (subject, uid))
     if row.get("aliases") is not None:
         aliases = [a.strip() for a in row["aliases"] if a and a.strip()]
         conn.execute("UPDATE glossary_terms SET aliases_json = ? WHERE uid = ?", (json.dumps(aliases), uid))
@@ -1388,6 +1394,55 @@ def ensure_entry_kind(conn: sqlite3.Connection, name: str) -> None:
     icon, color = _KIND_STARTER_LOOKS.get(name.lower(), ("tag", "teal"))
     conn.execute("INSERT INTO entry_kinds (name, icon, color, position) VALUES (?, ?, ?, ?)", (name, icon, color, position))
     conn.commit()
+
+
+def ensure_entry_subject(conn: sqlite3.Connection, name: str) -> str:
+    """The stored spelling of a subject, creating it when new; an empty name means no subject."""
+    name = (name or "").strip()
+    if not name:
+        return ""
+    row = conn.execute("SELECT name FROM entry_subjects WHERE name = ? COLLATE NOCASE", (name,)).fetchone()
+    if row:
+        return row["name"]
+    conn.execute("INSERT INTO entry_subjects (name, color) VALUES (?, ?)", (name, "teal"))
+    conn.commit()
+    return name
+
+
+def list_entry_subjects(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Every subject with its colour and how many entries are filed under it, alphabetical."""
+    rows = conn.execute(
+        "SELECT s.name, s.color, (SELECT COUNT(*) FROM glossary_terms t WHERE t.subject = s.name) AS used "
+        "FROM entry_subjects s ORDER BY s.name COLLATE NOCASE").fetchall()
+    return [dict(r) for r in rows]
+
+
+def save_entry_subject(conn: sqlite3.Connection, original: str, name: str, color: str) -> dict[str, str] | None:
+    """Creates a subject (`original` empty) or updates one, renaming it on its entries when the name changes.
+
+    Returns {"field", "message"} when the input is refused."""
+    name = (name or "").strip()
+    if not name:
+        return {"field": "name", "message": "A subject needs a name"}
+    if any(s["name"].lower() == name.lower() and s["name"] != original for s in list_entry_subjects(conn)):
+        return {"field": "name", "message": "A subject with this name already exists"}
+    if original and conn.execute("SELECT 1 FROM entry_subjects WHERE name = ?", (original,)).fetchone():
+        conn.execute("UPDATE entry_subjects SET name = ?, color = ? WHERE name = ?", (name, color or "teal", original))
+        conn.execute("UPDATE glossary_terms SET subject = ? WHERE subject = ?", (name, original))
+    else:
+        conn.execute("INSERT INTO entry_subjects (name, color) VALUES (?, ?)", (name, color or "teal"))
+    conn.commit()
+    return None
+
+
+def delete_entry_subject(conn: sqlite3.Connection, name: str) -> dict[str, str] | None:
+    """Deletes a subject nobody uses; a subject with entries stays until they are moved."""
+    used = conn.execute("SELECT COUNT(*) FROM glossary_terms WHERE subject = ?", (name,)).fetchone()[0]
+    if used:
+        return {"field": "name", "message": f"{used} entr{'ies use' if used != 1 else 'y uses'} this subject, change them first"}
+    conn.execute("DELETE FROM entry_subjects WHERE name = ?", (name,))
+    conn.commit()
+    return None
 
 
 def list_entry_kinds(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -1604,6 +1659,21 @@ def group_entries_by_kind(conn: sqlite3.Connection, entries: list[dict[str, Any]
         members = [e for e in entries if (e.get("kind") or ENTRY_KIND_DEFAULT) == kind["name"]]
         if members:
             out.append({"kind": kind["name"], "icon": kind["icon"], "color": kind["color"], "entries": members})
+    return out
+
+
+def group_entries_by_kind_and_subject(conn: sqlite3.Connection, entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Entries grouped by kind and then by subject: Person Archeology, Person Ancient Greece, then the persons with no subject."""
+    colors = {s["name"]: s["color"] for s in list_entry_subjects(conn)}
+    out = []
+    for kind in list_entry_kinds(conn):
+        members = [e for e in entries if (e.get("kind") or ENTRY_KIND_DEFAULT) == kind["name"]]
+        names = sorted({e["subject"] for e in members if e.get("subject")}, key=str.casefold) + [""]
+        for subject in names:
+            group = [e for e in members if (e.get("subject") or "") == subject]
+            if group:
+                out.append({"kind": kind["name"], "icon": kind["icon"], "color": kind["color"], "subject": subject,
+                            "subject_color": colors.get(subject, "teal"), "entries": group})
     return out
 
 

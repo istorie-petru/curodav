@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import date, time
+from datetime import date, time, timedelta
 from typing import Any
 
 from . import clock, db
@@ -37,12 +37,16 @@ def _save_milestone(conn: sqlite3.Connection, semester_uid: str, discipline: str
     day, due = _date(ms.get("day"), "Date", False), _date(ms.get("due"), "Deadline", False)
     start = _clock(ms.get("start") or "09:00", "Start time")
     end = _clock(ms.get("end") or _plus_two_hours(start.strftime("%H:%M")), "End time")
-    end_day = _date(ms.get("end_day"), "End date", False) or day
+    uid = ms.get("uid") or ""
+    old = _milestone_row(conn, uid) if uid else None
+    end_day = _date(ms.get("end_day"), "End date", False) if "end_day" in ms else None
+    if day and end_day is None:
+        # The windows have no end-date field: a moved event keeps its length in days instead of its old end date.
+        span = (date.fromisoformat(old["end_day"]) - date.fromisoformat(old["day"])).days if old and old["day"] and old["end_day"] else 0
+        end_day = day + timedelta(days=max(span, 0))
     if day and (end_day, end) <= (day, start):
         raise PlanError("The event ends before it starts")
     title = _milestone_title(discipline, way["name"], ms.get("title") or "")
-    uid = ms.get("uid") or ""
-    old = _milestone_row(conn, uid) if uid else None
     uid = uid if old else str(uuid.uuid4())
     now = _now()
     event_uid, task_uid = (old["event_uid"] if old else None), (old["task_uid"] if old else None)

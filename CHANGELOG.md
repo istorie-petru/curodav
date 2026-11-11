@@ -6,6 +6,13 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [5.0.14]
+
+- Academic: an event of a way of evaluating (an exam, a test) can be moved to another day. The window kept a hidden old end date, so any later date saved the error "The event ends before it starts"; a moved event now keeps its length in days.
+- Notebook: entries have a Subject, a coloured pill such as Archeology or Ancient Greece. Subjects are created, recoloured, renamed and deleted (only when no entry uses them) in Settings, Notebook, under the Table dropdown's new Subjects view. The Subject field of the entry window picks one or types a new one. The Entries page groups by type and then by subject (Person Archeology, Person Ancient Greece, Term Archeology, then the entries with no subject) and has a Subject filter; the entry's view window shows its subject.
+- MCP and API: footnotes in `create_note` and `edit_note` Markdown can cite a library source. A definition written `[@citation-uid, page]` becomes a generated note in the citation style of Settings, the first citation in full, then Ibid. or op. cit. by position, and the source joins the bibliography; `[cf. @uid]`, `[idem @uid]`, `[passim @uid]`, `[full @uid]` and `[apud @uid in @uid]` force a kind.
+- MCP and API: new tools `search_book`, `book_contents` and `read_book` (and `/api/v1/citations/{uid}/book/...`) search a library entry's book by words, phrase or regex and read the passage around a hit, without sending the book. EPUB, text and FB2 are read in Python, PDF with `pdftotext`, other formats through Calibre's `ebook-convert` when present; the Docker image now includes poppler-utils. One call returns at most about 6,000 characters and one token at most 60,000 an hour per book. The index is a rebuildable `book_search.sqlite` next to the database. `list_entry_subjects` and a `subject` filter and field on the entry tools were added; nothing in the API or MCP can delete an entry or a note.
+
 ## [5.0.13]
 
 - The University module is now Academic. Its semester page belongs to the semester shelf (`/labels/<shelf>`), so the space that holds the shelf stays an ordinary space for any shelves and tags. The semester window has a Space field; a new semester has no space until one is picked, and the module never creates or restyles a space. Discipline pages moved to `/labels/<shelf>/disciplines/<name>`, and the old addresses redirect. Migration 84 renames the stored keys, gives spaces that held the study page their default page back and pins the current semester shelf.

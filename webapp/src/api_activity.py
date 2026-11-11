@@ -26,6 +26,7 @@ WHAT = {
     "academic_set_course_sheet": "Course sheet", "academic_set_teachers": "Teachers", "academic_save_class_slot": "Timetable",
     "academic_save_evaluation": "Evaluation", "academic_save_reading": "Reading",
     "academic_save_homework": "Homework",
+    "search_book": "Searched in a book", "book_contents": "Book chapters", "read_book": "Read a book passage",
 }
 
 
@@ -39,7 +40,9 @@ def describe_tool(conn: sqlite3.Connection, name: str, args: Any) -> tuple[str, 
     args = args if isinstance(args, dict) else {}
     what = WHAT.get(name, name or "Unknown tool")
     uid = str(args.get("uid") or "")
-    if args.get("query"):
+    if name in ("search_book", "book_contents", "read_book"):
+        where = " · ".join(x for x in (_title(conn, "citations", "title", uid), f"“{args['query']}”" if args.get("query") else "") if x)
+    elif args.get("query"):
         where = f"“{args['query']}”"
     elif name in ("get_note", "edit_note", "rename_note", "set_note_tag", "set_note_properties", "list_note_versions"):
         where = _title(conn, "notebook_documents", "title", uid)

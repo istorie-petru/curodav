@@ -289,7 +289,7 @@ def test_the_way_window_saves_a_way_with_components_events_and_tasks_apart_and_t
         async def form(self):
             return FakeForm({"discipline": "Biology", "way_id": "", "name": "Project", "form": "Project", "weight": "60", "sub_id": ["", ""], "sub_name": ["Theory", "Practice"],
                              "sub_weight": ["70", "20"], "ev_uid": ["", ""], "ev_title": ["Presentation", "Test"], "ev_day": ["2027-01-20", "2027-01-27"],
-                             "ev_start": ["10:00", "11:00"], "ev_end_day": ["2027-01-21", ""], "ev_end": ["12:00", ""], "ev_location": ["", ""], "tk_uid": [""], "tk_title": ["Send"], "tk_due": ["2027-01-05"]})
+                             "ev_start": ["10:00", "11:00"], "ev_end": ["12:00", ""], "ev_location": ["", ""], "tk_uid": [""], "tk_title": ["Send"], "tk_due": ["2027-01-05"]})
 
     resp = asyncio.run(university.way_save(FakeRequest(), conn=conn))
     assert "note=" in resp.headers["location"] and "The%20components" in resp.headers["location"]
@@ -297,10 +297,45 @@ def test_the_way_window_saves_a_way_with_components_events_and_tasks_apart_and_t
     assert (way["name"], way["form"], way["weight"]) == ("Project", "Project", 60.0) and [s["name"] for s in way["subs"]] == ["Theory", "Practice"]
     assert sorted((bool(m["event_uid"]), bool(m["task_uid"]), m["title"]) for m in way["milestones"]) == [(False, True, "Send"), (True, False, "Presentation"), (True, False, "Test")]
     presentation = next(m for m in way["milestones"] if m["title"] == "Presentation")
-    assert (presentation["day"], presentation["end_day"], presentation["end"]) == ("2027-01-20", "2027-01-21", "12:00")
-    assert db.get_event(conn, presentation["event_uid"])["end_at"] == "2027-01-21T12:00"
+    assert (presentation["day"], presentation["end_day"], presentation["end"]) == ("2027-01-20", "2027-01-20", "12:00")
+    assert db.get_event(conn, presentation["event_uid"])["end_at"] == "2027-01-20T12:00"
     html = _html(university.way_edit(way["id"], _request(), "Biology", conn=conn))
     assert 'name="ev_title"' in html and 'name="tk_due"' in html and 'name="sub_weight"' in html and 'value="Project"' in html and "university-preset" not in html
+
+
+def test_moving_an_exam_event_to_a_later_or_earlier_day_keeps_its_length_and_saves(conn, sem):
+    add_exam(conn, sem, title="Final", weight="60")
+    way = ue.get_evaluation(conn, sem["uid"], "Biology")[0]
+    m = next(x for x in way["milestones"] if x["day"])
+    for new_day in ("2027-02-10", "2027-01-03"):
+        ue.save_item(conn, sem["uid"], "Biology", way["id"], {"uid": m["uid"], "title": m["title"], "day": new_day, "start": m["start"], "end": m["end"]})
+        moved = next(x for x in ue.list_milestones(conn, sem["uid"]) if x["uid"] == m["uid"])
+        assert (moved["day"], moved["end_day"]) == (new_day, new_day)
+        assert db.get_event(conn, moved["event_uid"])["start_at"].startswith(new_day)
+    with pytest.raises(up.PlanError):
+        ue.save_item(conn, sem["uid"], "Biology", way["id"], {"uid": m["uid"], "title": m["title"], "day": "2027-01-03", "start": "12:00", "end": "09:00"})
+
+
+def test_the_way_window_moves_an_existing_event_to_a_later_day(conn, sem):
+    import asyncio
+
+    add_exam(conn, sem, title="Final", weight="60")
+    way = ue.get_evaluation(conn, sem["uid"], "Biology")[0]
+    m = next(x for x in way["milestones"] if x["day"])
+
+    class FakeForm(dict):
+        def getlist(self, key):
+            value = self.get(key, [])
+            return value if isinstance(value, list) else [value]
+
+    class FakeRequest:
+        async def form(self):
+            return FakeForm({"discipline": "Biology", "way_id": way["id"], "name": way["name"], "form": way["form"], "weight": "60", "ev_uid": [m["uid"]], "ev_title": [m["raw_title"]],
+                             "ev_day": ["2027-03-30"], "ev_start": [m["start"]], "ev_end": [m["end"]], "ev_location": [""]})
+
+    asyncio.run(university.way_save(FakeRequest(), conn=conn))
+    moved = next(x for x in ue.list_milestones(conn, sem["uid"]) if x["uid"] == m["uid"])
+    assert (moved["day"], moved["end_day"]) == ("2027-03-30", "2027-03-30")
 
 
 def test_a_new_way_has_no_milestones_of_its_own_whatever_its_type(conn, sem):

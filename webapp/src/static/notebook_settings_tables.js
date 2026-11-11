@@ -1,4 +1,4 @@
-// Notebook settings: one table card, a view dropdown switches between Entry types and Frontmatter fields,
+// Notebook settings: one table card, a view dropdown switches between Entry types, Subjects and Frontmatter fields,
 // the search box filters the visible rows, and the add button follows the view.
 (function () {
   const box = document.getElementById("nb-tables");
@@ -7,6 +7,7 @@
   const search = document.getElementById("nb-table-search");
   const views = {
     "entry-types": { table: "nb-table-entry-types" },
+    subjects: { table: "nb-table-subjects" },
     fields: { table: "nb-table-fields" },
   };
   let view = "entry-types";

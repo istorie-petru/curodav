@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import text_input %}
+{% block title %}{{ subject.name or 'New subject' }}{% endblock %}
+{% block content %}
+{% from "_look_picker.html" import look_picker %}
+{% call modal(kind="form", title=((subject.name or 'New subject')), size="small", retire=([({'action': 'delete', 'url': '/settings/notebook/entry-subjects/delete?name=' ~ (subject.name | urlencode), 'mode': 'confirm', 'label': 'Delete the "' ~ subject.name ~ '" subject?', 'redirect': none, 'change': none} if not is_new else none)] | select | list), form='entry-subject-form', creating=is_new, save_icon='check-square') %}
+<form method="post" id="entry-subject-form" action="/settings/notebook/entry-subjects" data-follow-redirect>
+    <input type="hidden" name="original" value="{{ subject.name }}">
+    <div class="field-grid">
+        <div class="field field-wide">
+            <label>Name</label>
+            {{ text_input({'name': 'name', 'value': subject.name, 'required': true, 'autofocus': true}) }}
+        </div>
+        {{ look_picker('look-entry-subject', 'entry-subject-form', subject.color, '', colors, {}, show_icon=false, wide=true, label='Colour') }}
+    </div>
+</form>
+{% endcall %}
+{% endblock %}

@@ -13,6 +13,12 @@
             <span class="detail-meta-label">Kind</span>
             <span class="cell-tag cal-{{ look.color }}">{{ icon(look.icon, 'icon-sm') }} {{ entry.kind }}</span>
         </div>
+        {% if entry.subject %}
+        <div class="detail-meta-item">
+            <span class="detail-meta-label">Subject</span>
+            <span class="cell-tag cal-{{ subject_color }}">{{ entry.subject }}</span>
+        </div>
+        {% endif %}
         {% if entry.aliases %}
         <div class="detail-meta-item">
             <span class="detail-meta-label">Also called</span>

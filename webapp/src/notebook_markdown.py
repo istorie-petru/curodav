@@ -184,26 +184,36 @@ def _build_list(lines: list[str]) -> dict:
     return {"style": "checklist" if checklist else style, "items": root["items"]}
 
 
-def _endnote_marker(note_id: str, text: str) -> str:
+CITE_NOTE = re.compile(r"^\[(?:(full|cf\.|idem|passim|apud)\s+)?@([\w-]+)(?:\s+in\s+@([\w-]+))?(?:,\s*(.+?))?\]$")
+
+
+def _endnote_marker(note_id: str, text: str, cite_notes: bool = False) -> str:
+    """A footnote definition written as [@citation-uid, page] becomes a marker that api_endnotes later fills with the generated citation."""
+    ident = f'data-note-id="md-{re.sub(r"[^A-Za-z0-9_-]", "", note_id)}"'
+    cite = CITE_NOTE.match(text.strip()) if cite_notes else None
+    if cite:
+        data = html.escape(json.dumps({"mode": cite.group(1) or "auto", "uid": cite.group(2), "secondary": cite.group(3) or "", "page": cite.group(4) or ""}), quote=True)
+        return f'<sup class="cdx-footnote-ref" {ident} data-note="" data-cite="{data}"></sup>'
     body = html.escape(inline_from_markdown(text), quote=True)
-    return f'<sup class="cdx-footnote-ref" data-note-id="md-{re.sub(r"[^A-Za-z0-9_-]", "", note_id)}" data-note="{body}"></sup>'
+    return f'<sup class="cdx-footnote-ref" {ident} data-note="{body}"></sup>'
 
 
-def _apply_endnotes(value, notes: dict[str, str]):
+def _apply_endnotes(value, notes: dict[str, str], cite_notes: bool = False):
     if isinstance(value, str):
-        return FOOTNOTE_MARK.sub(lambda m: _endnote_marker(m.group(1), notes[m.group(1)]) if m.group(1) in notes else m.group(0), value)
+        return FOOTNOTE_MARK.sub(lambda m: _endnote_marker(m.group(1), notes[m.group(1)], cite_notes) if m.group(1) in notes else m.group(0), value)
     if isinstance(value, list):
-        return [_apply_endnotes(v, notes) for v in value]
+        return [_apply_endnotes(v, notes, cite_notes) for v in value]
     if isinstance(value, dict):
-        return {k: (v if k in ("code", "language") else _apply_endnotes(v, notes)) for k, v in value.items()}
+        return {k: (v if k in ("code", "language") else _apply_endnotes(v, notes, cite_notes)) for k, v in value.items()}
     return value
 
 
-def markdown_to_blocks(markdown: str) -> list[dict]:
+def markdown_to_blocks(markdown: str, cite_notes: bool = False) -> list[dict]:
+    """Blocks from Markdown. With `cite_notes`, a footnote written as [@citation-uid, page] is left for api_endnotes to turn into a generated citation."""
     markdown = markdown.replace("\r\n", "\n").replace("\r", "\n")
     notes = {m.group(1): " ".join(m.group(2).split()) for m in FOOTNOTE_DEFINITION.finditer(markdown)}
     blocks = _markdown_blocks(FOOTNOTE_DEFINITION.sub("", markdown) if notes else markdown)
-    return _apply_endnotes(blocks, notes) if notes else blocks
+    return _apply_endnotes(blocks, notes, cite_notes) if notes else blocks
 
 
 def _markdown_blocks(markdown: str) -> list[dict]:

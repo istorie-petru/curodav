@@ -21,6 +21,16 @@
         {% set ms_wide = false %}
         {% set ms_pill = false %}
         {% include "_widget_list_multiselect.html" %}
+        {% set ms_form_id = 'glossary-term-form' %}
+        {% set ms_name = 'subject' %}
+        {% set ms_label = 'Subject' %}
+        {% set ms_items = subject_items %}
+        {% set ms_selected = t.subject if t else '' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_allow_new = true %}
+        {% set ms_wide = false %}
+        {% set ms_pill = false %}
+        {% include "_widget_list_multiselect.html" %}
         <div class="field">
             <label>Alternate names</label>
             {{ text_input({'name': 'aliases', 'value': (t.aliases | join(', ') if t else '')}) }}
