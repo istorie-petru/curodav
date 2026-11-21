@@ -198,6 +198,50 @@ recovery token somewhere safe. If you are ever locked out,
 Anything else broken? See
 [Maintenance & Troubleshooting](../../wiki/Maintenance-and-Troubleshooting).
 
+## `curodav-ctl` reference
+
+Every command, option and what it touches. Commands marked *root* need `sudo`.
+Only `status` runs as a normal user. `curodav-ctl` with no or an unknown command
+prints the usage line and exits with status 2.
+
+| Command | Options | What it does | Root |
+|---|---|---|---|
+| `install` | none | First install, run from a clone: creates the `curodav` user and the folders under `/srv/curodav`, installs uv and the book tools, writes the environment file and the systemd unit, deploys, starts the service, then offers an admin login and the DAV setup | yes |
+| `install --dav` | `--proxy=cloudflare` (default) or `--proxy=manual`; `--reconfigure` | Adds or changes public CalDAV/CardDAV (Radicale). `manual` skips Cloudflare Tunnel, for your own reverse proxy. `--reconfigure` asks again for the domain, tunnel name and Radicale user, and rotates the Radicale password. A plain re-run reuses the last answers | yes |
+| `install --library` | `--path=DIR` (default `/srv/curodav-library`) | Creates or adopts the book library folder (an existing Calibre library is kept as it is), gives the app write access, sets `CC_LIBRARY_PATH` and restarts. The path must be absolute and outside `/srv/curodav`, so `remove` never deletes books | yes |
+| `install --ocr` | `--langs=eng+ron` (default `eng`) | Installs `ocrmypdf`, tesseract and a language pack per code, sets `CC_OCR_LANGS`, restarts. Re-run with other languages to add them | yes |
+| `install --voice` | `--voices=NAME,NAME` (default `en_US-lessac-medium`) | Installs Piper in its own virtualenv, downloads the named voices (Piper names such as `ro_RO-mihai-medium`), creates the `curodav-piper` service on 127.0.0.1:5150, sets `CC_PIPER_URL`, restarts. The first voice is the default one. Re-run to add voices | yes |
+| `update` | none | Deploys the latest `main`: tries pending migrations on a copy of the database, snapshots the data, swaps `current` atomically, health-checks, and rolls code and data back on failure. Also refreshes the installed `curodav-ctl` and `curodav-update`, and adds any missing book tools | yes |
+| `status` | none | Checks Radicale reachability and that the environment file agrees with it. Changes nothing | no |
+| `revert` | `--yes` skips the question; `--keep-data` swaps the code only | Points `current` back at `previous` and restores the data snapshot taken by the update that made this release current, then restarts and health-checks. Data saved since that update is lost, so it asks first. There is no redo | yes |
+| `password-reset` | none | Asks for the recovery token, a new username and a new password, then restarts | yes |
+| `token` | `--new` | Prints the recovery token; `--new` replaces it and the old one stops working | yes |
+| `flairs` | none | Creates the flair-photos folder and `CC_FLAIRS_DIR` in an existing install. Safe to re-run | yes |
+| `remove` | none | Stops and removes the services and the `curodav` user and deletes `/srv/curodav` (releases and data). Asks you to type `yes`. The book library and the installed script stay | yes |
+
+`curodav-update` is the short form for the two commands you use most:
+
+| Command | Same as |
+|---|---|
+| `sudo curodav-update` | `sudo curodav-ctl update` |
+| `sudo curodav-update --revert [--yes] [--keep-data]` | `sudo curodav-ctl revert [--yes] [--keep-data]` |
+
+Settings these commands write to `/srv/curodav/shared/.env` (restart with
+`sudo systemctl restart curodav` after editing it by hand):
+
+| Variable | Set by | Meaning |
+|---|---|---|
+| `CC_LIBRARY_PATH` | `install --library` | The Calibre-compatible book folder |
+| `CC_OCR_LANGS` | `install --ocr` | Tesseract languages, joined with `+` |
+| `CC_PIPER_URL` | `install --voice` | Where the Piper read-aloud service listens |
+| `CC_FLAIRS_DIR` | `install`, `flairs` | Folder of flair photos |
+| `CC_AUTH_USERNAME`, `CC_AUTH_PASSWORD` | `install` (admin prompt) | Login set at install time |
+
+Where things live: releases in `/srv/curodav/releases`, the live one at
+`/srv/curodav/current`, the data and backups under `/srv/curodav/shared/data`.
+More detail on each step is in
+[Deploying with curodav-ctl](../../wiki/Deploying-with-curodav-ctl).
+
 ## Documentation
 
 The rest of the documentation lives on the **[project Wiki](../../wiki)**,
