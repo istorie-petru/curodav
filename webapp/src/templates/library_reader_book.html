@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}{{ c.title }} - Reader{% endblock %}
+{% block main_class %}notebook-main{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_empty_state.html" import empty_state %}
+{% from "_inputs.html" import switch_input, search_input %}
+{% call page_header_narrow(c.title, "book-open", sidebar_toggle=true) %}
+    <button type="button" class="icon-btn" data-reader-appearance title="Appearance" aria-label="Appearance" aria-haspopup="true" aria-expanded="false">{{ icon('type', 'icon-sm') }}</button>
+    <a href="/library/{{ c.uid }}" data-modal class="icon-btn" title="About this book" aria-label="About this book">{{ icon('info', 'icon-sm') }}</a>
+{% endcall %}
+<div id="modal-target">
+<div class="notebook-page-layout main-shell-body">
+    <div class="notebook-page-main">
+        <div class="reader-book" data-book-reader data-uid="{{ c.uid }}" data-file="{{ file_url }}" data-file-name="{{ file_name }}" data-kind="{{ kind }}" data-manga="{{ 'true' if manga else '' }}" data-ocr="{{ 'true' if ocr_available else '' }}"
+             data-reader='{{ reader | tojson }}' data-choices='{{ reader_choices | tojson }}' data-position='{{ position | tojson }}' data-annotations='{{ annotations | tojson }}' data-bookmarks='{{ bookmarks | tojson }}' data-lookups='{{ lookups | tojson }}' data-cite="{{ footnote | striptags }}" data-edition="{{ edition_uid }}" data-format="{{ file_format }}">
+            <div class="reader-stage"><foliate-view id="book-view"></foliate-view></div>
+            <p class="reader-error muted" data-reader-error hidden></p>
+            <div class="reader-ocr" data-reader-ocr hidden><span>This PDF has no text, so it can't be searched or highlighted.</span>
+                <button type="button" class="btn ghost" data-reader-ocr-start>{{ icon('scan-text', 'icon-sm') }} Make it searchable</button></div>
+            <div class="reader-foot">
+                <button type="button" class="icon-btn reader-square" data-reader-prev title="Previous" aria-label="Previous">{{ icon('chevron-left', 'icon-sm') }}</button>
+                <button type="button" class="icon-btn reader-square" data-reader-back title="Back to where you were" aria-label="Back to where you were" disabled>{{ icon('undo-2', 'icon-sm') }}</button>
+                {% if is_pdf or is_comic %}<span class="reader-page" data-reader-page></span>{% endif %}
+                <span class="reader-percent" data-reader-percent>0%</span>
+                <div class="reader-progress" data-reader-progress role="slider" tabindex="0" aria-label="Progress in the book" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <div class="reader-progress-track"><div class="reader-progress-fill" data-reader-fill></div><div class="reader-progress-ticks" data-reader-ticks></div></div>
+                    <div class="reader-progress-thumb" data-reader-thumb></div>
+                    <div class="reader-progress-tip" data-reader-tip hidden></div>
+                </div>
+                <button type="button" class="icon-btn reader-square" data-reader-next title="Next" aria-label="Next" >{{ icon('chevron-right', 'icon-sm') }}</button>
+                <button type="button" class="icon-btn reader-square" data-reader-bookmark title="Bookmark this place" aria-label="Bookmark this place">{{ icon('bookmark', 'icon-sm') }}</button>
+                {% if not is_comic %}<button type="button" class="icon-btn reader-square" data-reader-speak title="Read aloud" aria-label="Read aloud" aria-pressed="false">{{ icon('volume-2', 'icon-sm') }}</button>{% endif %}
+                <button type="button" class="icon-btn reader-square" data-reader-fullscreen title="Full screen" aria-label="Full screen" aria-pressed="false">{{ icon('maximize-2', 'icon-sm') }}</button>
+                <button type="button" class="icon-btn reader-square reader-side-toggle" data-reader-side title="Sidebar" aria-label="Sidebar" hidden>{{ icon('panel-right', 'icon-sm') }}</button>
+            </div>
+            <div class="reader-appearance" data-reader-panel hidden>
+                {% if kind == 'book' %}
+                {% for key in ['font_size', 'line_height', 'margin', 'font'] %}
+                <div class="reader-row"><span class="reader-row-label">{{ reader_labels[key] }}</span>
+                    <span class="reader-stepper"><button type="button" class="icon-btn" data-step="{{ key }}" data-dir="-1" aria-label="Less {{ reader_labels[key]|lower }}">{{ icon('minus', 'icon-sm') }}</button>
+                    <span class="reader-step-value" data-value-of="{{ key }}"></span>
+                    <button type="button" class="icon-btn" data-step="{{ key }}" data-dir="1" aria-label="More {{ reader_labels[key]|lower }}">{{ icon('plus', 'icon-sm') }}</button></span></div>
+                {% endfor %}
+                {% for key in ['theme', 'layout'] %}
+                <div class="reader-row"><span class="reader-row-label">{{ reader_labels[key] }}</span>
+                    <span class="segmented">{% for v, n in reader_choices[key] %}<button type="button" class="seg-btn" data-set="{{ key }}" data-val="{{ v }}">{{ n }}</button>{% endfor %}</span></div>
+                {% endfor %}
+                {% for key in ['justify', 'hyphenate'] %}
+                <div class="reader-row"><label class="reader-row-label" for="reader-{{ key }}">{{ reader_labels[key] }}</label>
+                    {{ switch_input({'id': 'reader-' ~ key, 'data-toggle': key, 'checked': (reader[key] == 'on')}) }}</div>
+                {% endfor %}
+                {% else %}
+                <div class="reader-row"><span class="reader-row-label">{{ reader_labels['layout'] }}</span>
+                    <span class="segmented">{% for v, n in reader_choices['layout'] if v != 'scrolled' %}<button type="button" class="seg-btn" data-set="layout" data-val="{{ v }}">{{ 'Two pages' if v == 'auto' else 'One page' }}</button>{% endfor %}</span></div>
+                {% if is_comic %}
+                <div class="reader-row"><span class="reader-row-label">{{ reader_labels['direction'] }}</span>
+                    <span class="segmented">{% for v, n in reader_choices['direction'] %}<button type="button" class="seg-btn" data-set="direction" data-val="{{ v }}">{{ n }}</button>{% endfor %}</span></div>
+                {% endif %}
+                <div class="reader-row"><span class="reader-row-label">{{ reader_labels['pdf_zoom'] }}</span>
+                    <span class="segmented">{% for v, n in reader_choices['pdf_zoom'] %}<button type="button" class="seg-btn" data-set="pdf_zoom" data-val="{{ v }}">{{ n }}</button>{% endfor %}</span></div>
+                {% endif %}
+                <div class="reader-row"><span class="reader-row-label">{{ reader_labels['brightness'] }}</span>
+                    <span class="reader-stepper"><button type="button" class="icon-btn" data-step="brightness" data-dir="-1" aria-label="Dimmer">{{ icon('minus', 'icon-sm') }}</button>
+                    <span class="reader-step-value" data-value-of="brightness"></span>
+                    <button type="button" class="icon-btn" data-step="brightness" data-dir="1" aria-label="Brighter">{{ icon('plus', 'icon-sm') }}</button></span></div>
+            </div>
+            <div class="reader-pop" id="reader-pop" hidden>
+                <div class="reader-pop-colors" role="group" aria-label="Highlight colour">{% for col in colors %}<button type="button" class="reader-swatch reader-swatch-{{ col }}" data-color="{{ col }}" title="Highlight in {{ col }}" aria-label="Highlight in {{ col }}"></button>{% endfor %}</div>
+                <div class="reader-pop-actions">
+                    <button type="button" data-act="cite">{{ icon('quote', 'icon-sm') }} Copy with citation</button>
+                    <button type="button" data-act="define">{{ icon('book-a', 'icon-sm') }} Define</button>
+                    <button type="button" data-act="find">{{ icon('search', 'icon-sm') }} Find in book</button>
+                    <button type="button" data-act="online" aria-haspopup="true">{{ icon('globe', 'icon-sm') }} Search online</button>
+                    <button type="button" data-act="note" hidden>{{ icon('pencil', 'icon-sm') }} Edit note</button>
+                    <button type="button" data-act="delete" hidden>{{ icon('trash', 'icon-sm') }} Remove highlight</button>
+                </div>
+                <div class="reader-pop-define" data-reader-define hidden></div>
+                <div class="reader-pop-sources" data-reader-sources hidden>
+                    {% for l in lookups %}<button type="button" data-source="{{ l.key }}" data-url="{{ l.url }}">{{ l.name }}</button>{% else %}<span class="muted">No sources on, turn some on in the Library settings</span>{% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <aside class="notebook-sidebar">
+        <div class="notebook-sidebar-head">
+            <div class="notebook-sidebar-select" data-notebook-sidebar-select>
+                <button type="button" class="notebook-sidebar-select-trigger" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="notebook-sidebar-select-icon">{{ icon('list', 'icon-sm') }}</span>
+                    <span class="notebook-sidebar-select-label">Chapters</span>
+                    <span class="notebook-sidebar-select-caret">{{ icon('chevron-down', 'icon-sm') }}</span>
+                </button>
+                <div class="notebook-sidebar-select-panel" role="listbox" aria-label="Sidebar views">
+                    <button type="button" class="notebook-sidebar-select-option active" role="option" aria-selected="true" data-notebook-sidebar-tab="chapters">{{ icon('list', 'icon-sm') }} Chapters</button>
+                    <button type="button" class="notebook-sidebar-select-option" role="option" aria-selected="false" data-notebook-sidebar-tab="search">{{ icon('search', 'icon-sm') }} Search</button>
+                    <button type="button" class="notebook-sidebar-select-option" role="option" aria-selected="false" data-notebook-sidebar-tab="bookmarks">{{ icon('bookmark', 'icon-sm') }} Bookmarks</button>
+                    <button type="button" class="notebook-sidebar-select-option" role="option" aria-selected="false" data-notebook-sidebar-tab="annotations">{{ icon('highlighter', 'icon-sm') }} Annotations</button>
+                    <button type="button" class="notebook-sidebar-select-option" role="option" aria-selected="false" data-notebook-sidebar-tab="cite">{{ icon('quote', 'icon-sm') }} Citation</button>
+                    <button type="button" class="notebook-sidebar-select-option" role="option" aria-selected="false" data-notebook-sidebar-tab="references">{{ icon('tag', 'icon-sm') }} References</button>
+                </div>
+            </div>
+        </div>
+        <div class="notebook-sidebar-panel is-active" data-notebook-sidebar-panel="chapters" role="tabpanel">
+            <nav class="notebook-toc reader-toc" data-reader-toc aria-label="Chapters"></nav>
+        </div>
+        <div class="notebook-sidebar-panel" data-notebook-sidebar-panel="search" role="tabpanel">
+            <form class="reader-search" data-reader-search-form>{{ search_input({'name': 'q', 'aria-label': 'Search in this book', 'autocomplete': 'off', 'data-reader-search-input': true}) }}</form>
+            <p class="reader-search-status muted" data-reader-search-status></p>
+            <ul class="reader-results" data-reader-results></ul>
+        </div>
+        <div class="notebook-sidebar-panel" data-notebook-sidebar-panel="bookmarks" role="tabpanel">
+            <ul class="reader-bookmarks" data-reader-bookmarks></ul>
+            <p class="vi-empty" data-reader-bookmarks-empty>Use the bookmark button to keep a place</p>
+        </div>
+        <div class="notebook-sidebar-panel" data-notebook-sidebar-panel="annotations" role="tabpanel">
+            <ul class="reader-annotations" data-reader-annotations></ul>
+            <p class="vi-empty" data-reader-annotations-empty>Select text to highlight it or add a note</p>
+        </div>
+        <div class="notebook-sidebar-panel" data-notebook-sidebar-panel="cite" role="tabpanel">
+            <p class="reader-cite">{{ footnote | safe }}</p>
+            <p class="reader-cite muted">{{ reference | safe }}</p>
+        </div>
+        <div class="notebook-sidebar-panel" data-notebook-sidebar-panel="references" role="tabpanel">
+            {% if cited_by %}{% for e in cited_by %}<a class="reader-ref" href="/notebook/glossary/{{ e.uid }}?return_to=/library/{{ c.uid }}/read">{{ e.term }}{% if e.pages %} <span class="muted">{{ e.pages }}</span>{% endif %}</a>{% endfor %}
+            {% else %}{{ empty_state('No entries cite this book yet', size='compact') }}{% endif %}
+        </div>
+    </aside>
+</div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script defer src="{{ static_url('notebook_sidebar.js') }}"></script>
+<script type="module" src="{{ static_url('library_book_reader.js') }}"></script>
+{% endblock %}

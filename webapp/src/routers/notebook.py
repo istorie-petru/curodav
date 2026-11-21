@@ -583,7 +583,6 @@ def document_page(uid: str, request: Request, back_to: str = "", back_label: str
             "journal_weeks": db.journal_year_weeks(conn, document["journal_week"][:4], db.week_key(clock.today())) if document.get("journal_week") else [],
             "sidebar_layout": db.get_notebook_settings(conn)["sidebar_layout"],
             "self_url": f"/notebook/{uid}", "self_title": document["title"],
-            "new_editor": editor != "legacy",
             "toolbar_icons": icon_font.toolbar_icons(),
             "editor_choice": editor,
         },
@@ -1278,6 +1277,7 @@ def _citation_edit_context(request: Request, c: dict | None, form_action: str, r
 
 
 CITATION_SORT_OPTIONS = [
+    ("status", "Status (reading first)"),
     ("title", "Title (A-Z)"),
     ("type", "Type"),
     ("year", "Year (newest first)"),
@@ -1303,6 +1303,9 @@ def _resolve_citation_year_range(year_from: str, year_to: str) -> tuple[int | No
     return lo, hi
 
 
+PER_PAGE_COOKIE = "library_per_page"
+
+
 @citations_router.get("")
 def citations_library(
     request: Request,
@@ -1310,24 +1313,36 @@ def citations_library(
     author: list[str] = Query([]),
     year_from: str = "",
     year_to: str = "",
-    sort: str = "title",
+    sort: str = "status",
     sort2: str = "title",
     q: str = "",
-    after: str = "",
     source: list[str] = Query([]),
     status: list[str] = Query([]),
     tag: list[str] = Query([]),
     shelf: list[str] = Query([]),
-    view: str = "",
+    offset: int = 0,
+    limit: int = 0,
+    fragment: str = "",
     conn=Depends(get_db),
 ):
+    """The Library: one page of entries, as many as fit the window (the page works that out and asks again), with a pager under them
+    that swaps the page in place."""
+    layout = "grid" if request.query_params.get("layout") == "grid" else "list"
+    if limit <= 0:
+        try:
+            limit = int(request.cookies.get(f"{PER_PAGE_COOKIE}_{layout}", "0"))
+        except ValueError:
+            limit = 0
+    limit = max(4, min(limit or 24, 200))
     source = source if isinstance(source, list) else []
-    media_books.pull(conn)
-    sort = sort if sort in _CITATION_SORT_KEYS else "title"
+    type = [t for t in type if t]
+    status = [s for s in status if s] if isinstance(status, list) else []
+    if not fragment:
+        media_books.pull_soon(conn)
+    sort = sort if sort in _CITATION_SORT_KEYS else "status"
     sort2 = sort2 if sort2 in _CITATION_SORT_KEYS else "title"
     type_labels = dict(db.CITATION_TYPES)
     year_lo, year_hi = _resolve_citation_year_range(year_from, year_to)
-    status = status if isinstance(status, list) else []
     tag = tag if isinstance(tag, list) else []
     shelf = shelf if isinstance(shelf, list) else []
     terms = library_query.parse(q, dict(db.type_options(conn, db.CITATION_TYPES)))
@@ -1339,42 +1354,28 @@ def citations_library(
     year_lo = terms["year_lo"] if terms["year_lo"] is not None else year_lo
     year_hi = terms["year_hi"] if terms["year_hi"] is not None else year_hi
     filters = dict(q=terms["text"], types=type, authors=author, year_lo=year_lo, year_hi=year_hi, sources=source, tags=tag, shelves=shelf, sort=sort, sort2=sort2)
-    searching = bool(view == "all" or q.strip() or type or author or year_lo is not None or year_hi is not None or source or status or tag or shelf or sort != "title" or sort2 != "title")
-    now = {}
-    if not searching:
-        now = media_router.now_sections(conn, filters, status, recent_first=True)
-        page = {"items": [], "total": sum(len(v) for v in now.values()), "next": ""}
-    else:
-        page = db.page_citations(conn, statuses=status, after=after, **filters)
+    offset = max(0, offset)
+    page = db.page_citations(conn, statuses=status, limit=limit, offset=offset, **filters)
+    if not page["items"] and offset and page["total"]:  # past the end (fewer results than before): the last page instead
+        offset = (page["total"] - 1) // limit * limit
+        page = db.page_citations(conn, statuses=status, limit=limit, offset=offset, **filters)
     citations = page["items"]
     sources = db.sources_for(conn, citations)
     media_router.decorate(conn, citations)
     for c in citations:
         c["type_label"] = type_labels.get(c["type"], c["type"])
         c["source"] = sources[c["uid"]]
-    params = [(k, v) for k, v in request.query_params.multi_items() if k != "after"]
-    return templates.TemplateResponse(
-        "notebook_citations_list.html",
-        {
-            "request": request,
-            "q": q,
-            "active_tab": "library",
-            "crumbs": _CITATIONS_CRUMB,
-            "citations": citations,
-            "searching": searching,
-            "library_total": sum(db.count_by_type(conn).values()),
-            "now": now,
-            "recent_days": media_router.RECENT_DAYS,
-            **media_router.list_controls(request, conn, type, sort),
-            "total": page["total"],
-            "next_href": "/library?" + urlencode([*params, ("after", page["next"])]) if page["next"] else "",
-            "current_query": request.url.query,
-            "active_filter_count": (
-                len(type) + len(author) + len(source) + len(status) + len(tag) + len(shelf) + (1 if (year_from or year_to) else 0)
-                + (1 if (sort != "title" or sort2 != "title") else 0)
-            ),
-        },
-    )
+    context = {
+        "request": request, "q": q, "active_tab": "library", "crumbs": _CITATIONS_CRUMB, "citations": citations, "layout": layout,
+        "library_total": sum(db.count_by_type(conn).values()), **media_router.list_controls(request, conn, type, sort),
+        "total": page["total"], "offset": offset, "limit": limit,
+        "current_query": request.url.query,
+        "active_filter_count": (
+            len(type) + len(author) + len(source) + len(status) + len(tag) + len(shelf) + (1 if (year_from or year_to) else 0)
+            + (1 if (sort != "status" or sort2 != "title") else 0)
+        ),
+    }
+    return templates.TemplateResponse("_library_results.html" if fragment else "notebook_citations_list.html", context)
 
 
 @citations_router.get("/filters")
@@ -1386,7 +1387,8 @@ def citations_filters_modal(
     status: list[str] = Query([]),
     year_from: str = "",
     year_to: str = "",
-    sort: str = "title",
+    q: str = "",
+    sort: str = "status",
     sort2: str = "title",
     conn=Depends(get_db),
 ):
@@ -1434,11 +1436,39 @@ def citations_filters_modal(
             "selected_year_from": year_from,
             "selected_year_to": display_year_to,
             "sort_items": [{"uid": k, "name": v} for k, v in CITATION_SORT_OPTIONS],
-            "selected_sort": sort,
+            "selected_sort": sort, "q": q, "layout": request.query_params.get("layout", ""),
             "selected_sort2": sort2,
             "apply_href": "/library" + (f"?{current_query}" if current_query else ""),
         },
     )
+
+
+@citations_router.get("/preview")
+def citations_preview(
+    request: Request,
+    type: list[str] = Query([]),
+    author: list[str] = Query([]),
+    source: list[str] = Query([]),
+    status: list[str] = Query([]),
+    year_from: str = "",
+    year_to: str = "",
+    q: str = "",
+    sort: str = "status",
+    sort2: str = "title",
+    conn=Depends(get_db),
+):
+    """The list shown beside the filters while they are changed: the first matches and their count."""
+    terms = library_query.parse(q, dict(db.type_options(conn, db.CITATION_TYPES)))
+    year_lo, year_hi = _resolve_citation_year_range(year_from, year_to)
+    page = db.page_citations(
+        conn, q=terms["text"], types=[t for t in [*type, *terms["types"]] if t], authors=author,
+        year_lo=terms["year_lo"] if terms["year_lo"] is not None else year_lo,
+        year_hi=terms["year_hi"] if terms["year_hi"] is not None else year_hi,
+        sources=[*source, *terms["sources"]], statuses=[s for s in [*status, *terms["statuses"]] if s], tags=terms["tags"], shelves=terms["shelves"],
+        sort=sort if sort in _CITATION_SORT_KEYS else "status", sort2=sort2 if sort2 in _CITATION_SORT_KEYS else "title", limit=40)
+    items = page["items"]
+    media_router.decorate(conn, items)
+    return templates.TemplateResponse("_library_preview.html", {"request": request, "items": items, "total": page["total"]})
 
 
 @citations_router.get("/search")

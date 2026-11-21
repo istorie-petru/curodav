@@ -59,9 +59,15 @@
     if (hidden) hidden.setAttribute("value", value || "");
     const shown = root.querySelector(".dtf-input");
     if (shown) shown.setAttribute("value", value ? text : "");
-    root.querySelectorAll("input.vi-status-radio").forEach((r) => { if (r.value === value) r.setAttribute("checked", ""); else r.removeAttribute("checked"); });
+    root.querySelectorAll("input.vi-status-radio, input.vi-choice-radio").forEach((r) => { if (r.value === value) r.setAttribute("checked", ""); else r.removeAttribute("checked"); });
     const trigger = root.querySelector(".multiselect-trigger .ms-summary");
-    if (trigger && field === "status") trigger.textContent = text;
+    if (trigger && (field === "status" || root.querySelector(".vi-choice-radio"))) trigger.textContent = text;
+  }
+
+  // A row whose editor is a list of choices other than the status (a rating, say): it saves the picked label as plain text.
+  function isChoice(host) {
+    const tpl = host.querySelector("template.vi-editor");
+    return !!(tpl && tpl.content.querySelector(".vi-choice-radio"));
   }
 
   function openEditor(host) {
@@ -79,7 +85,7 @@
       focusTarget.focus();
       if (focusTarget.setSelectionRange && /^(textarea|input)$/i.test(focusTarget.tagName)) { const end = focusTarget.value.length; focusTarget.setSelectionRange(end, end); }
     }
-    if (host.dataset.viField === "status") {
+    if (host.dataset.viField === "status" || isChoice(host)) {
       const trigger = box.querySelector(".multiselect-trigger");
       if (trigger) trigger.click();
     }
@@ -114,6 +120,10 @@
       const text = host.querySelector(".dtf-input").value;
       try { await save(host, e.target.value || null); paint(host, field, e.target.value ? text : "", ""); syncTemplate(host, field, e.target.value || "", text); } catch (err) { fail(err.message); }
       close(host);
+    } else if (e.target.classList.contains("vi-choice-radio")) {
+      const label = e.target.closest("label").textContent.trim();
+      try { await save(host, e.target.value); paint(host, field, e.target.value ? label : "", ""); syncTemplate(host, field, e.target.value, label); } catch (err) { fail(err.message); }
+      close(host);
     } else if (field === "status" && e.target.classList.contains("vi-status-radio")) {
       const label = e.target.closest("label").textContent.trim();
       try { await save(host, e.target.value); paint(host, field, label, e.target.dataset.color || "gray"); syncTemplate(host, field, e.target.value, label); } catch (err) { fail(err.message); }
@@ -127,7 +137,7 @@
   function closeChoiceEditors(except) {
     document.querySelectorAll(".vi-editable.is-editing").forEach((host) => {
       const f = host.dataset.viField;
-      if (host !== except && (f === "due_at" || f === "status")) close(host);
+      if (host !== except && (f === "due_at" || f === "status" || isChoice(host))) close(host);
     });
   }
   document.addEventListener("mousedown", (e) => {
@@ -136,7 +146,7 @@
   }, true);
   document.addEventListener("focusout", (e) => {
     const host = e.target.closest && e.target.closest(".vi-editable.is-editing");
-    if (!host || !(host.dataset.viField === "due_at" || host.dataset.viField === "status")) return;
+    if (!host || !(host.dataset.viField === "due_at" || host.dataset.viField === "status" || isChoice(host))) return;
     setTimeout(() => {
       const active = document.activeElement;
       if (host.isConnected && !host.contains(active) && !(active && active.closest && active.closest(keepOpenFor))) close(host);

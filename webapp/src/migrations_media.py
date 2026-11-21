@@ -97,3 +97,62 @@ def citation_series(conn: sqlite3.Connection) -> None:
     """A work can belong to a series; its volume number is the existing volume field."""
     if "series" not in _columns(conn, "citations"):
         conn.execute("ALTER TABLE citations ADD COLUMN series TEXT NOT NULL DEFAULT ''")
+
+
+def book_annotations(conn: sqlite3.Connection) -> None:
+    """Highlights and notes a reader keeps on the text of a book, by section."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS book_annotations (
+            uid TEXT PRIMARY KEY,
+            citation_uid TEXT NOT NULL,
+            section INTEGER NOT NULL DEFAULT 0,
+            quote TEXT NOT NULL,
+            note TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL
+        )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_book_annotations_citation ON book_annotations(citation_uid, section)")
+
+
+def reader_state(conn: sqlite3.Connection) -> None:
+    """Annotations can sit at a place in an EPUB (a CFI), and each book remembers where the reader stopped."""
+    if "cfi" not in _columns(conn, "book_annotations"):
+        conn.execute("ALTER TABLE book_annotations ADD COLUMN cfi TEXT NOT NULL DEFAULT ''")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS book_reading_state (
+            citation_uid TEXT PRIMARY KEY,
+            cfi TEXT NOT NULL DEFAULT '',
+            fraction REAL NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL
+        )""")
+
+
+def annotation_colors(conn: sqlite3.Connection) -> None:
+    """Highlights have a colour."""
+    if "color" not in _columns(conn, "book_annotations"):
+        conn.execute("ALTER TABLE book_annotations ADD COLUMN color TEXT NOT NULL DEFAULT 'yellow'")
+
+
+def bookmarks(conn: sqlite3.Connection) -> None:
+    """Bookmarks in a book."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS book_bookmarks (
+            uid TEXT PRIMARY KEY,
+            citation_uid TEXT NOT NULL,
+            section INTEGER NOT NULL DEFAULT 0,
+            cfi TEXT NOT NULL DEFAULT '',
+            label TEXT NOT NULL DEFAULT '',
+            fraction REAL NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_book_bookmarks_citation ON book_bookmarks(citation_uid)")
+
+
+def reading_time(conn: sqlite3.Connection) -> None:
+    """Seconds spent reading a book, by day, for the reading statistics."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS book_reading_time (
+            citation_uid TEXT NOT NULL,
+            day TEXT NOT NULL,
+            seconds INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (citation_uid, day)
+        )""")

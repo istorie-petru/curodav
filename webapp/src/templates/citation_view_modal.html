@@ -3,23 +3,38 @@
 {% from "_detail_section.html" import detail_section %}
 {% from "_view_rows.html" import vi_rows, vi_row, vi_link %}
 {% from "_label_pill.html" import tag_pill with context %}
+{% from "_inputs.html" import radio_input, text_input %}
 {% block title %}{{ c.title }}{% endblock %}
 {% block content %}
 
+{% set _readable = editions | selectattr('file_state', 'equalto', 'ok') | list %}
+{% set _menu = ([{'label': 'Read', 'icon': 'book-open', 'href': '/library/' ~ c.uid ~ '/read' ~ ('?edition=' ~ _readable[0].uid if _readable else '')}] if _readable else []) + ([{'label': 'Sync to Calibre', 'icon': 'refresh-cw', 'form_action': '/library/' ~ c.uid ~ '/sync'}] if has_book else []) %}
+{% set _upd = '/library/' ~ c.uid ~ '/update-field' %}
+{% set _status_editor %}<div class="multiselect widget-list-multiselect vi-status" data-ms data-ms-mode="single" data-ms-label="status"><button type="button" class="multiselect-trigger pill-select-trigger pill-gray" aria-label="Status" aria-haspopup="true" aria-expanded="false"><span class="ms-summary">{{ m.status_label or 'No status' }}</span><span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span></button><div class="multiselect-panel ms-panel">{% for k, l, col in status_choices %}<label class="multiselect-option">{{ radio_input({'name': 'vi-status-' ~ c.uid, 'value': k, 'class': 'vi-status-radio', 'data-color': col, 'checked': ((c.status or '') == k), 'autocomplete': 'off'}) }}<span class="pill-static pill-{{ col }}">{{ l }}</span></label>{% endfor %}</div></div>{% endset %}
+{% macro _text_editor(name, value) %}{{ text_input({'name': name, 'value': value or '', 'class': 'vi-input', 'aria-label': name|capitalize}) }}{% endmacro %}
 {% call modal(kind="view", title=c.title, size="medium", back=(return_to), back_name='Back',
-              retire=[{'action': 'delete', 'url': '/library/' ~ c.uid ~ '/delete', 'mode': 'confirm', 'label': delete_label, 'redirect': none, 'change': none}], edit_url='/library/' ~ c.uid ~ '/edit', done_menu=[]) %}
+              retire=[{'action': 'delete', 'url': '/library/' ~ c.uid ~ '/delete', 'mode': 'confirm', 'label': delete_label, 'redirect': none, 'change': none}], edit_url='/library/' ~ c.uid ~ '/edit', done_menu=_menu) %}
 <div class="media-view-top">
     {% call vi_rows() %}
     {% call vi_row('user', 'By') %}{{ authors or m.kind.name }}{% endcall %}
-    {% if c.year %}{% call vi_row('calendar', 'Year') %}{{ c.year }}{% endcall %}{% endif %}
-    {% call vi_row(m.kind.icon, 'Type') %}{{ m.kind.name if (m.kind.custom or c.type in ('book', 'manga', 'film', 'tv', 'anime')) else type_label }}{% if m.status_label %} <span class="vi-empty">{{ m.status_label }}</span>{% endif %}{% endcall %}
-    {% if m.stars %}{% call vi_row('star', 'Rating') %}<span class="media-view-stars">{{ m.stars }}</span>{% endcall %}{% endif %}
+    {% call vi_row(m.kind.icon, 'Type') %}{{ m.kind.name if (m.kind.custom or c.type in ('book', 'manga', 'film', 'tv', 'anime')) else type_label }}{% endcall %}
+    {% call vi_row('flag', 'Status', field='status', url=_upd, editor=_status_editor, empty='No status') %}{% if m.status_label %}<span class="cell-tag tag-{{ status_color }}">{{ m.status_label }}</span>{% else %}<span class="vi-empty">No status</span>{% endif %}{% endcall %}
+    {% call vi_row('calendar', 'Year', field='year', url=_upd, editor=_text_editor('year', c.year), empty='Add year') %}{% if c.year %}{{ c.year }}{% else %}<span class="vi-empty">Add year</span>{% endif %}{% endcall %}
+    {% if has_book %}
+    {% call vi_row('building', 'Publisher', field='publisher', url=_upd, editor=_text_editor('publisher', edition_first.publisher), empty='Add publisher') %}{% if edition_first.publisher %}{{ edition_first.publisher }}{% else %}<span class="vi-empty">Add publisher</span>{% endif %}{% endcall %}
+    {% call vi_row('hash', 'ISBN', field='isbn', url=_upd, editor=_text_editor('isbn', edition_first.isbn), empty='Add ISBN') %}{% if edition_first.isbn %}{{ edition_first.isbn }}{% else %}<span class="vi-empty">Add ISBN</span>{% endif %}{% endcall %}
+    {% endif %}
+    {% if advanced_rating %}{% if m.stars %}{% call vi_row('star', 'Rating') %}<span class="media-view-stars">{{ m.stars }}</span>{% endcall %}{% endif %}
+    {% else %}
+    {% set _score_editor %}<div class="multiselect widget-list-multiselect vi-status" data-ms data-ms-mode="single" data-ms-label="rating"><button type="button" class="multiselect-trigger" aria-label="Rating" aria-haspopup="true" aria-expanded="false"><span class="ms-summary">{{ m.stars or 'None' }}</span><span class="filter-caret">{{ icon('chevron-down', 'icon-sm') }}</span></button><div class="multiselect-panel ms-panel">{% for ch in score_choices %}<label class="multiselect-option">{{ radio_input({'name': 'vi-score-' ~ c.uid, 'value': ch.uid, 'class': 'vi-choice-radio', 'checked': (score_value == ch.uid), 'autocomplete': 'off'}) }}<span>{{ ch.name }}</span></label>{% endfor %}</div></div>{% endset %}
+    {% call vi_row('star', 'Rating', field='score', url=_upd, editor=_score_editor, empty='No rating') %}{% if m.stars %}<span class="media-view-stars">{{ m.stars }}</span>{% else %}<span class="vi-empty">No rating</span>{% endif %}{% endcall %}
+    {% endif %}
     {% if m.tag_items %}{% call vi_row('tag', 'Tags') %}{% for t in m.tag_items %}{{ tag_pill(t, '/library?tag=' ~ (t.name | urlencode)) }} {% endfor %}{% endcall %}{% endif %}
     {% for r in ratings %}{% call vi_row('award', r.name) %}{{ r.value }}{% endcall %}{% endfor %}
     {% if c.subtitle %}{% call vi_row('text', 'Subtitle') %}{{ c.subtitle }}{% endcall %}{% endif %}
     {% if c.keywords %}{% call vi_row('hash', 'Keywords') %}{{ c.keywords | join(', ') }}{% endcall %}{% endif %}
     {% if c.summary %}{% call vi_row('align-left', 'Summary') %}<span class="media-summary">{{ c.summary }}</span>{% endcall %}{% endif %}
-    {% for label, value in rows %}{% call vi_row('info', label) %}{% if label == 'URL' %}<a href="{{ value }}" target="_blank" rel="noopener noreferrer">{{ value }}</a>{% else %}{{ value }}{% endif %}{% endcall %}{% endfor %}
+    {% for label, value in rows if not (has_book and label in ('Publisher', 'ISBN')) %}{% call vi_row('info', label) %}{% if label == 'URL' %}<a href="{{ value }}" target="_blank" rel="noopener noreferrer">{{ value }}</a>{% else %}{{ value }}{% endif %}{% endcall %}{% endfor %}
     {% endcall %}
     <a href="/library/{{ c.uid }}/cover/modal" data-modal class="media-cover-button" title="Change the cover" aria-label="Change the cover">
         {% if m.cover %}<img class="media-cover-img" src="{{ m.cover }}" alt="">{% else %}<span class="media-cover-empty">{{ icon(m.kind.icon) }}</span>{% endif %}
@@ -28,7 +43,7 @@
 {% if editions %}
 {% call detail_section('Attached', count=editions|length) %}
 {% call vi_rows() %}
-{% for e in editions %}{% call vi_row('file', e.display) %}{% if e.isbn %}<span class="vi-empty">ISBN {{ e.isbn }}</span> {% endif %}{% if e.file_state == 'ok' %}<a href="/library/editions/{{ e.uid }}/file" target="_blank" rel="noopener">{{ e.file_label }}</a>{% elif e.file_state == 'missing' %}<span class="vi-empty">File missing, edit the edition to upload it again</span>{% endif %}{% if e.url %} <a href="{{ e.url }}" target="_blank" rel="noopener noreferrer">Link</a>{% endif %}{% endcall %}{% endfor %}
+{% for e in editions %}{% call vi_row('file', e.display) %}{% if e.isbn %}<span class="vi-empty">ISBN {{ e.isbn }}</span> {% endif %}{% if e.file_state == 'ok' %}<a href="/library/editions/{{ e.uid }}/file" target="_blank" rel="noopener">{{ e.file_label }}</a> <a href="/library/{{ c.uid }}/read?edition={{ e.uid }}">Read</a>{% elif e.file_state == 'missing' %}<span class="vi-empty">File missing, edit the edition to upload it again</span>{% endif %}{% if e.url %} <a href="{{ e.url }}" target="_blank" rel="noopener noreferrer">Link</a>{% endif %}{% endcall %}{% endfor %}
 {% endcall %}
 {% endcall %}
 {% endif %}

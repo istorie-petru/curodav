@@ -1,0 +1,45 @@
+{# One page of the Library (the table or the cards) and the pager under it; the page script swaps this part alone. #}
+{% from "_empty_state.html" import empty_state %}
+{% from "_media_cards.html" import media_card, entry_open, entry_menu with context %}
+<div id="library-results" data-total="{{ total }}" data-offset="{{ offset }}" data-limit="{{ limit }}" data-layout="{{ layout }}">
+{% if not citations %}
+{% if library_total %}{% call empty_state('Nothing in the library matches the current filters', size='compact') %}<a href="/library">Clear search</a>{% endcall %}
+{% else %}{{ empty_state('Nothing in the library yet', icon_name='book-open') }}{% endif %}
+{% elif layout == 'grid' %}
+<div class="media-grid library-grid" id="citations-list">{% for c in citations %}{{ media_card(c) }}{% endfor %}</div>
+{% else %}
+{% macro sort_head(key, label, cls) %}<th class="{{ cls }}"><a href="{{ sort_hrefs[key] }}" class="library-sort{% if sort == key %} is-active{% endif %}"{% if sort == key %} aria-sort="{{ 'descending' if key in ('year', 'rating') else 'ascending' }}"{% endif %}>{{ label }}</a></th>{% endmacro %}
+<div class="card table-scroll table-responsive" id="citations-list">
+    <table class="entity-table library-table">
+        <thead><tr>
+            {{ sort_head('title', 'Title', 'col-name') }}
+            {{ sort_head('type', 'Kind', 'col-opt-1') }}
+            <th class="col-opt-2">Status</th>
+            {{ sort_head('rating', 'Rating', 'col-opt-2') }}
+            {{ sort_head('year', 'Year', 'col-opt-1') }}
+            <th class="col-actions-narrow"><span class="sr-only">Actions</span></th>
+        </tr></thead>
+        <tbody>
+        {% for c in citations %}
+        <tr data-uid="{{ c.uid }}">
+            <td class="col-name"><a {{ entry_open(c) }} class="library-title">{{ c.title }}</a>
+                <span class="library-sub">{{ c.display_authors }}{% if c.source.files %} · {{ icon('file', 'icon-sm') }}{% if c.source.missing %} File missing{% endif %}{% elif c.source.url %} · {{ icon('link', 'icon-sm') }}{% endif %}{% if c.source.editions > 1 %} · {{ c.source.editions }} editions{% endif %}</span></td>
+            <td class="col-opt-1">{{ c.kind.name if (c.kind.custom or c.type in ('book', 'manga', 'film', 'tv', 'anime')) else c.type_label }}</td>
+            <td class="col-opt-2">{% if c.status_label %}<span class="library-kind library-status">{{ c.status_label }}</span>{% endif %}</td>
+            <td class="col-opt-2">{{ c.stars }}</td>
+            <td class="col-opt-1">{{ c.year }}</td>
+            <td class="col-actions-narrow">{{ entry_menu(c) }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% if total > limit %}
+<nav class="library-pager" aria-label="Pages">
+    <button type="button" class="icon-btn" data-library-page="prev" title="Previous page" aria-label="Previous page"{% if offset <= 0 %} disabled{% endif %}>{{ icon('chevron-left', 'icon-sm') }}</button>
+    <span class="library-pager-text">{{ offset + 1 }}–{{ [offset + limit, total] | min }} of {{ total }}</span>
+    <button type="button" class="icon-btn" data-library-page="next" title="Next page" aria-label="Next page"{% if offset + limit >= total %} disabled{% endif %}>{{ icon('chevron-right', 'icon-sm') }}</button>
+</nav>
+{% endif %}
+</div>

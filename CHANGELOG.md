@@ -6,6 +6,15 @@ tagged release. Format loosely follows
 
 ## [Unreleased]
 
+## [5.0.15]
+
+- Library: one list, reading first and the rest by title, as a table or cover cards, showing as many works as fit the window, with a pager under it that swaps pages in place. Clicking a work opens its window (status, rating, year, publisher and ISBN edit in place); Read, Edit and Delete are in its menu. Search and filters are one split window with a live list of matches. Add books takes several files at once and reads their title and author.
+- Reader: EPUB, MOBI, AZW3, FB2, PDF and comics (CBZ, and CBR and CB7 converted to CBZ) in a page reader built on foliate-js and PDF.js, in the manner of Foliate: two justified columns or two pages with the first alone, a progress bar with chapter marks, right-to-left manga, full screen, touch and keys. Word, OpenDocument, RTF and text books are converted once to EPUB with Calibre. Highlights in five colours with notes edited in the sidebar, bookmarks, search with context, chapters, citation, Define, online lookups, read aloud from the open page (the browser's voice or espeak-ng on the server) and OCR for scanned PDFs. The reader remembers where you stopped. Its settings, lookup sources and the library maintenance actions are in Settings, Library, which is now a short list of rows that open windows.
+- Notebook: a quote's toolbar can fill it from a book highlight, with its citation, and the book joins the note's bibliography. Editor.js is removed; Tiptap is the only editor, and a note it cannot hold opens read-only with a convert button.
+- Calibre: the import runs once at a time in the background and links a book to a matching entry instead of copying it, which caused the duplicates of large imports. Settings, Organise, Calibre lists the differences between the library and Curodav with a fix for each; maintenance actions (check and remove duplicates, reimport the list or metadata, write metadata to Calibre) run with a progress toast.
+- Reading statistics in the backend (`/library/stats`, `/api/v1/library/stats`): time read, progress, books finished, streaks. Goals are left for the habits feature.
+- `curodav-ctl` installs Calibre, LibreOffice Writer, poppler-utils, ocrmypdf with tesseract and espeak-ng when missing; `install --ocr --langs=eng+ron` adds OCR languages. `install --voice --voices=en_US-lessac-medium,ro_RO-mihai-medium` adds natural read-aloud voices: Piper in its own service on 127.0.0.1, used for each book in its language, with espeak-ng as the fallback; a reader setting can prefer the browser's voices. The Docker image includes ocrmypdf, tesseract and espeak-ng; Calibre and LibreOffice are left for you to add. Migrations 86 to 90.
+
 ## [5.0.14]
 
 - Academic: an event of a way of evaluating (an exam, a test) can be moved to another day. The window kept a hidden old end date, so any later date saved the error "The event ends before it starts"; a moved event now keeps its length in days.

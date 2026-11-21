@@ -158,6 +158,7 @@ def test_details_is_one_section_and_only_on_a_long_form(modals):
             return False
         nested = re.search(r'<details class="form-details[^"]*"[^>]*>(?:(?!</details>).)*<details class="form-details', body, re.S)
         forms = max(1, body.count("<form"))
-        return bool(nested) or sections > forms or body.count('class="field') < 6
+        untitled = body.count("<span>Details</span>")
+        return bool(nested) or untitled > forms or sections > 4 * forms or body.count('class="field') < 6
 
     _check(modals, "details", wrong)

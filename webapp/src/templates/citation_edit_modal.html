@@ -13,7 +13,7 @@
 {% endmacro %}
 {% block title %}{{ ("Edit " if c else "Add ") ~ noun|lower }}{% endblock %}
 {% block content %}
-{% call modal(kind="form", title=(("Edit " if c else "Add ") ~ noun|lower), size="medium", back=(return_to or (crumbs[-1].url if crumbs else '')), back_name=('Back' if return_to else (crumbs[-1].name if crumbs else '')), retire=([({'action': 'delete', 'url': '/library/' ~ c.uid ~ '/delete', 'mode': 'confirm', 'label': delete_label, 'redirect': none, 'change': none} if (c) else none)] | select | list), form='citation-form', creating=(not c), save_icon='check-square') %}
+{% call modal(kind="form", title=(("Edit " if c else "Add ") ~ noun|lower), size="large", back=(return_to or (crumbs[-1].url if crumbs else '')), back_name=('Back' if return_to else (crumbs[-1].name if crumbs else '')), retire=([({'action': 'delete', 'url': '/library/' ~ c.uid ~ '/delete', 'mode': 'confirm', 'label': delete_label, 'redirect': none, 'change': none} if (c) else none)] | select | list), form='citation-form', creating=(not c), save_icon='check-square') %}
 <form method="post" id="citation-form" action="{{ form_action }}" enctype="multipart/form-data"
       data-status-verbs='{{ status_verbs | tojson }}' data-verb-labels='{{ verb_labels | tojson }}'>
 {{ split_start('library-work', noun) }}
@@ -33,29 +33,15 @@
                     {{ text_input({'name': 'author_given', 'value': main_author.get('given', '')}) }}
                 </div>
                 {% set _types = [] %}{% for t_key, t_label in citation_types %}{% set _ = _types.append({'uid': t_key, 'name': t_label}) %}{% endfor %}
-                {{ single('type', 'Type', _types, (c.type if c else default_type), wide=true) }}
-                {{ details_start() }}
+                {{ single('type', 'Type', _types, (c.type if c else default_type), wide=false) }}
+                                <div class="field">
+                    <label>Original year</label>
+                    {{ text_input({'name': 'year', 'value': (c.year if c else '')}) }}
+                </div>
+{{ details_start(title='Publication') }}
                 <div class="field field-wide">
                     <label>Subtitle</label>
                     {{ text_input({'name': 'subtitle', 'value': (c.subtitle if c else '')}) }}
-                </div>
-                <div class="field field-wide" data-repeatable-rows-scope>
-                    <div class="field-label-row">
-                        <label>Other authors</label>
-                        <button type="button" class="icon-btn" data-repeatable-add="citation-author-rows" data-repeatable-template="citation-author-row-template" title="Add author" aria-label="Add author">{{ icon('plus', 'icon-sm') }}</button>
-                    </div>
-                    <div id="citation-author-rows">
-                        {% for a in ((c.authors if c else [])[1:]) %}
-                        {{ citation_author_row(a.family, a.given) }}
-                        {% endfor %}
-                    </div>
-                    <template id="citation-author-row-template">
-                        {{ citation_author_row('', '') }}
-                    </template>
-                </div>
-                <div class="field">
-                    <label>Original year</label>
-                    {{ text_input({'name': 'year', 'value': (c.year if c else '')}) }}
                 </div>
                 {% macro cfield(name, label, types, wide=false, labels='') %}
                 <div class="field{% if wide %} field-wide{% endif %}" data-cite-types="{{ types }}"{% if labels %} data-cite-labels="{{ labels }}"{% endif %}>
@@ -79,12 +65,6 @@
                     <label>Volume</label>
                     {{ number_input({'name': 'volume', 'value': (c.volume if c else ''), 'min': 0, 'step': 'any', 'inputmode': 'decimal'}) }}
                 </div>
-                <div class="field">
-                    <label>Keywords</label>
-                    {{ text_input({'name': 'keywords', 'value': (c.keywords | join(', ') if c else ''), 'autocomplete': 'off'}) }}
-                </div>
-                {% set tag_type = 'media' %}{% set tag_uid = (c.uid if c else '') %}{% set tag_old = [] %}{% set ms_form_id = 'citation-form' %}
-                {% include "_tag_row.html" %}
                 {{ cfield('editors', 'Editors', 'chapter conference-paper') }}
                 {{ cfield('issue', 'Issue', 'article-journal') }}
                 {{ cfield('pages', 'Pages', 'chapter article-journal conference-paper') }}
@@ -92,18 +72,42 @@
                 {{ cfield('degree', 'Degree', 'thesis') }}
                 {{ cfield('issn', 'ISSN', 'article-journal') }}
                 {{ cfield('accessed', 'Accessed', 'webpage') }}
+                {{ details_end() }}
+                {{ details_start(title="Notes") }}
+                <div class="field">
+                    <label>Keywords</label>
+                    {{ text_input({'name': 'keywords', 'value': (c.keywords | join(', ') if c else ''), 'autocomplete': 'off'}) }}
+                </div>
+                {% set tag_type = 'media' %}{% set tag_uid = (c.uid if c else '') %}{% set tag_old = [] %}{% set ms_form_id = 'citation-form' %}
+                {% include "_tag_row.html" %}
+                <div class="field field-wide" data-repeatable-rows-scope>
+                    <div class="field-label-row">
+                        <label>Other authors</label>
+                        <button type="button" class="icon-btn" data-repeatable-add="citation-author-rows" data-repeatable-template="citation-author-row-template" title="Add author" aria-label="Add author">{{ icon('plus', 'icon-sm') }}</button>
+                    </div>
+                    <div id="citation-author-rows">
+                        {% for a in ((c.authors if c else [])[1:]) %}
+                        {{ citation_author_row(a.family, a.given) }}
+                        {% endfor %}
+                    </div>
+                    <template id="citation-author-row-template">
+                        {{ citation_author_row('', '') }}
+                    </template>
+                </div>
                 <div class="field field-wide">
                     <label>Summary</label>
-                    {{ textarea_input({'name': 'summary', 'rows': 3}, (c.summary if c else '')) }}
+                    {{ textarea_input({'name': 'summary', 'rows': 2}, (c.summary if c else '')) }}
                 </div>
                 <div class="field field-wide">
                     <label>Note</label>
-                    {{ textarea_input({'name': 'note', 'rows': 3}, (c.note if c else '')) }}
+                    {{ textarea_input({'name': 'note', 'rows': 2}, (c.note if c else '')) }}
                 </div>
                 <div class="field field-wide switch-row">
                     <label for="citation-allow-duplicate">Allow duplicate</label>
                     {{ switch_input({'name': 'allow_duplicate', 'value': '1', 'id': 'citation-allow-duplicate'}) }}
                 </div>
+                {{ details_end() }}
+                {{ details_start(title="Attached file") }}
         <div class="field-wide" data-library-editions data-cite-types="{{ edition_types }}" data-editions='{{ edition_data | tojson }}'>
             <div class="field-grid">
                 {% if editions | length > 1 %}
@@ -136,37 +140,19 @@
                 {{ details_end() }}
             </div>
         </div>
-{{ split_side('Details') }}
-        <div class="card" data-find>
-            <div class="field-grid">
-                <div class="field field-wide">
-                    <label>Find details</label>
-                    {{ search_input({'aria-label': 'Title, ISBN or DOI', 'autocomplete': 'off', 'data-find-q': true}) }}
-                </div>
-            </div>
-            <div class="media-lookup-results" data-find-results role="listbox" aria-label="Results"></div>
-            <input type="hidden" name="found_provider" value="">
-            <input type="hidden" name="found_id" value="">
-            <input type="hidden" name="found_cover_url" value="">
-            <input type="hidden" name="found_total" value="">
-        </div>
+{{ split_side('Details', tabs=[('status', 'Status'), ('find', 'Find details')]) }}
+<div data-side-panel="status">
         <div class="card media-cover-card">
             <div class="media-cover-edit">
                 <span class="media-cover-preview" data-cover-preview>{% if c and c.cover_custom or c and c.cover_fetched %}<img src="{{ cover_src }}" alt="">{% else %}<span class="media-cover-empty">{{ icon('image') }}</span>{% endif %}</span>
                 <div class="field-grid media-cover-fields">
                     <div class="field field-wide">
                         <label>Cover</label>
-                        {{ upload_input('cover_file', accept='image/*', form='citation-form', label='Choose an image') }}
-                    </div>
-                    <div class="field field-wide switch-row">
-                        <label for="citation-cover-remove">Remove the cover</label>
-                        {{ switch_input({'name': 'cover_remove', 'value': '1', 'id': 'citation-cover-remove'}) }}
+                        {{ upload_input('cover_file', accept='image/*', form='citation-form', label='Choose an image', remove_name='cover_remove', current=('Current cover' if (c and (c.cover_custom or c.cover_fetched)) else none)) }}
                     </div>
                 </div>
             </div>
-        </div>
-        <div class="card">
-            <div class="field-grid">
+            <div class="field-grid media-status-fields">
                 {% set _statuses = [] %}{% for s_key, s_label in statuses %}{% set _ = _statuses.append({'uid': s_key, 'name': s_label}) %}{% endfor %}
                 {{ single('status', 'Status', _statuses, (c.status if c else '')) }}
                 {% if not advanced_rating %}
@@ -197,6 +183,22 @@
                 {% endif %}
             </div>
         </div>
+</div>
+<div data-side-panel="find" hidden>
+            <div data-find>
+                <div class="field-grid">
+                    <div class="field field-wide">
+                        <label class="sr-only">Find details</label>
+                        {{ search_input({'aria-label': 'Title, ISBN or DOI', 'autocomplete': 'off', 'data-find-q': true}) }}
+                    </div>
+                </div>
+                <div class="media-lookup-results" data-find-results role="listbox" aria-label="Results"></div>
+                <input type="hidden" name="found_provider" value="">
+                <input type="hidden" name="found_id" value="">
+                <input type="hidden" name="found_cover_url" value="">
+                <input type="hidden" name="found_total" value="">
+            </div>
+</div>
 {{ split_end() }}
 </form>
 {% endcall %}

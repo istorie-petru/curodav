@@ -264,3 +264,4 @@ def read(conn: sqlite3.Connection, citation_uid: str, *, token: str = "", hit: i
         return out
     finally:
         idx.close()
+

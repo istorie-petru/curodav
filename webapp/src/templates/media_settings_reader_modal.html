@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import switch_input %}
+{% block title %}Reader{% endblock %}
+{% block content %}
+{% call modal(kind="form", title="Reader", size="small", form='reader-form') %}
+<form method="post" action="/settings/library/reader" id="reader-form">
+    <div class="field-grid">
+        {% for r in reader_rows if r.key not in ('justify', 'hyphenate') %}
+        {% set ms_name = 'reader_' ~ r.key %}{% set ms_mode = 'single' %}{% set ms_label = r.label %}{% set ms_remote = '' %}
+        {% set ms_items = r.choices %}{% set ms_selected = r.value %}{% set ms_form_id = 'reader-form' %}{% set ms_wide = false %}
+        {% include "_widget_list_multiselect.html" %}
+        {% endfor %}
+        {% for key, label in [('justify', 'Full justification'), ('hyphenate', 'Auto-hyphenation')] %}
+        <div class="field field-wide switch-row">
+            <label for="reader-{{ key }}">{{ label }}</label>
+            <input type="hidden" name="reader_{{ key }}" value="off">
+            {{ switch_input({'name': 'reader_' ~ key, 'value': 'on', 'id': 'reader-' ~ key, 'checked': (reader[key] == 'on')}) }}
+        </div>
+        {% endfor %}
+    </div>
+</form>
+{% endcall %}
+{% endblock %}

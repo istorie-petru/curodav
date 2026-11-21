@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from "_inputs.html" import switch_input %}
+{% from "_empty_state.html" import empty_state %}
+{% block title %}Calibre - Settings{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% call page_header_narrow("Calibre", "book-open") %}{% endcall %}
+{% include "_flash.html" %}
+<div id="modal-target">
+<div class="settings-group">
+{% if not ready %}
+<div class="card">{% call empty_state('No book library found', 'book-open', 'Choose the library folder in the Library settings first.') %}
+    <a href="/settings/library" class="btn primary">Library settings</a>{% endcall %}</div>
+{% else %}
+<div class="card">
+    <form class="settings-field-row" method="post" action="/settings/calibre/auto" id="calibre-auto-form">
+        <label class="settings-field-label" for="calibre-auto">Keep in sync automatically
+            <span class="settings-field-hint">Changes made in Calibre are read into Curodav as they happen. When off, only the audit below changes anything.</span>
+        </label>
+        <span class="spacer"></span>
+        {{ switch_input({'name': 'auto', 'value': '1', 'id': 'calibre-auto', 'checked': auto, 'data-change-submit': true}) }}
+    </form>
+    <div class="settings-field-row">
+        <span class="settings-field-label">{{ path }}
+            <span class="settings-field-hint">{{ books }} books in Calibre, {{ linked }} linked to Curodav</span>
+        </span>
+        <span class="spacer"></span>
+        <form class="form-contents" method="post" action="/settings/calibre/refresh"><button type="submit" class="btn ghost">{{ icon('refresh-cw', 'icon-sm') }} Audit again</button></form>
+        {% if fixable %}<form class="form-contents" method="post" action="/settings/calibre/apply" data-confirm-sheet="Apply the suggested fix to all {{ fixable }} findings below? Details that differ are taken from Calibre.">
+            <input type="hidden" name="all" value="1"><button type="submit" class="btn primary">{{ icon('check', 'icon-sm') }} Fix all {{ fixable }}</button></form>{% endif %}
+    </div>
+</div>
+<div class="card table-scroll table-responsive">
+    <div class="uni-card-head"><h2>Audit</h2></div>
+    {% if issues %}
+    <p class="calibre-counts">{% for k, n in counts.items() %}<a href="/settings/calibre?kind={{ k }}" class="calibre-count{% if chosen == k %} is-active{% endif %}">{{ kinds[k] }} {{ n }}</a>{% endfor %}{% if chosen %}<a href="/settings/calibre" class="calibre-count">All</a>{% endif %}</p>
+    <table class="entity-table calibre-table">
+        <thead><tr><th class="col-name">Book</th><th class="col-opt-1">Finding</th><th class="col-opt-2 col-text">Calibre</th><th class="col-opt-2 col-text">Curodav</th><th class="col-actions">Fix</th></tr></thead>
+        <tbody>
+        {% for i in issues if not chosen or i.kind == chosen %}
+        <tr>
+            <td class="col-name">{{ i.title }}{% if i.by %}<span class="library-sub">{{ i.by }}</span>{% endif %}</td>
+            <td class="col-opt-1">{{ i.label }}<span class="library-sub">{{ i.detail }}</span></td>
+            <td class="col-opt-2 col-text"><span class="cell-wrap calibre-diff">{{ i.calibre }}</span></td>
+            <td class="col-opt-2 col-text"><span class="cell-wrap calibre-diff">{{ i.curodav }}</span></td>
+            <td class="col-actions">{% if i.fix %}
+                <form class="form-contents" method="post" action="/settings/calibre/apply"><input type="hidden" name="issue" value="{{ i.id }}">
+                    {% if i.kind == 'diff' %}<button type="submit" name="side" value="calibre" class="btn ghost">Use Calibre</button> <button type="submit" name="side" value="curodav" class="btn ghost">Use Curodav</button>
+                    {% else %}<button type="submit" class="btn ghost">{{ i.fix }}</button>{% endif %}
+                </form>{% endif %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    {% call empty_state('Everything matches', 'check', 'Every book is in both places with the same details.') %}{% endcall %}
+    {% endif %}
+</div>
+{% endif %}
+</div>
+</div>
+{% endblock %}

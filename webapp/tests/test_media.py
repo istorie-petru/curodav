@@ -234,14 +234,14 @@ def test_a_service_that_cannot_be_reached_is_reported_not_raised(conn, monkeypat
     assert out["results"] == [] and "could not be reached" in out["error"]
 
 
-def test_the_now_page_splits_reading_and_watching(conn, monkeypatch):
-    db.upsert_citation(conn, {"title": "Dune", "type": "book", "status": "current"})
-    db.upsert_citation(conn, {"title": "Frieren", "type": "anime", "status": "current"})
-    db.upsert_citation(conn, {"title": "Next", "type": "film", "status": "planned"})
-    ctx = media_router.now_sections(conn, {}, [], True)
-    assert [c["title"] for c in ctx["reading"]] == ["Dune"]
-    assert [c["title"] for c in ctx["watching"]] == ["Frieren"]
-    assert [c["title"] for c in ctx["planned"]] == ["Next"]
+def test_the_library_lists_reading_first_and_pages_by_number(conn):
+    for title in ("Zed", "Alpha", "Beta"):
+        db.upsert_citation(conn, {"title": title, "type": "book"})
+    db.upsert_citation(conn, {"title": "Middle", "type": "book", "status": "current"})
+    first = db.page_citations(conn, sort="status", limit=2)
+    second = db.page_citations(conn, sort="status", limit=2, offset=2)
+    assert [c["title"] for c in first["items"]] == ["Middle", "Alpha"] and first["total"] == 4
+    assert [c["title"] for c in second["items"]] == ["Beta", "Zed"]
 
 
 def test_the_library_can_be_filtered_by_status_and_sorted_by_rating(conn):

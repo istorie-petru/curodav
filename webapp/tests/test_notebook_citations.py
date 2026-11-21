@@ -126,7 +126,7 @@ class TestNotebookCitations:
 
 def _library(*args, **kwargs):
     """The All view of the Library, which holds the table."""
-    return notebook_router.citations_library(*args, view="all", **kwargs)
+    return notebook_router.citations_library(*args, **kwargs)
 
 
 class TestCitationsLibraryRouter:

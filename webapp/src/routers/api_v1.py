@@ -161,6 +161,13 @@ def media_now(request: Request, finished_days: Annotated[int, Query(ge=0, le=365
     return api_service.media_now(conn, finished_days=finished_days)
 
 
+@router.get("/library/stats")
+def library_stats(request: Request, range: str = "year", conn=Depends(get_db), token=Depends(require("read:notes"))):
+    """Reading statistics: time read, progress, books finished, streaks, for the week, month, year or all time."""
+    _log(conn, token, request)
+    return api_service.reading_stats(conn, range)
+
+
 @router.get("/university")
 def university_overview(request: Request, semester_uid: str = "", conn=Depends(get_db), token=Depends(require("read:university"))):
     _log(conn, token, request)

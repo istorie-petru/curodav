@@ -1,4 +1,4 @@
-"""The Tiptap editor is the default; ?editor=legacy loads the Editor.js scripts for notes it cannot hold yet."""
+"""The Tiptap editor is the only editor: Editor.js was removed, and the old ?editor=legacy address opens Tiptap too."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from starlette.testclient import TestClient
 from src import db, main
 
 
-def test_the_new_editor_is_the_default_and_legacy_stays_available(monkeypatch, tmp_path):
+def test_tiptap_is_the_only_editor(monkeypatch, tmp_path):
     path = tmp_path / "c.sqlite"
     monkeypatch.setenv("CC_DB_PATH", str(path))
     monkeypatch.setenv("CC_BACKUP_DIR", str(tmp_path / "bk"))
@@ -20,8 +20,7 @@ def test_the_new_editor_is_the_default_and_legacy_stays_available(monkeypatch, t
         page = client.get("/notebook/d1").text
         assert "tiptap.bundle.js" in page and "editorjs.umd.js" not in page
         legacy = client.get("/notebook/d1?editor=legacy").text
-        assert "editorjs.umd.js" in legacy and "tiptap.bundle.js" not in legacy
-        assert "notebook_table.css" in legacy and "notebook_table.css" not in page
+        assert "tiptap.bundle.js" in legacy and "editorjs.umd.js" not in legacy
 
 
 def test_every_link_to_a_note_opens_the_new_editor_and_a_note_it_cannot_hold_stays_there(monkeypatch, tmp_path):

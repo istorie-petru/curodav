@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import switch_input, text_input %}
+{% block title %}Look up{% endblock %}
+{% block content %}
+{% call modal(kind="form", title="Look up in the reader", size="small", form='lookups-form') %}
+<form method="post" action="/settings/library/lookups" id="lookups-form">
+    <div class="field-grid">
+        {% for l in lookups %}
+        <div class="field field-wide switch-row">
+            <label for="lookup-{{ l.key }}" title="{{ l.url }}">{{ l.name }}</label>
+            {% if l.custom %}<button type="submit" name="remove" value="{{ l.key }}" class="icon-btn" title="Remove {{ l.name }}" aria-label="Remove {{ l.name }}">{{ icon('trash', 'icon-sm') }}</button>{% endif %}
+            {{ switch_input({'name': 'on', 'value': l.key, 'id': 'lookup-' ~ l.key, 'checked': l.on}) }}
+        </div>
+        {% endfor %}
+        <div class="field">
+            <label for="lookup-new-name">New source</label>
+            {{ text_input({'name': 'add_name', 'id': 'lookup-new-name', 'autocomplete': 'off'}) }}
+        </div>
+        <div class="field">
+            <label for="lookup-new-url">Address with %s</label>
+            {{ text_input({'name': 'add_url', 'id': 'lookup-new-url', 'autocomplete': 'off'}, 'url') }}
+        </div>
+    </div>
+</form>
+{% endcall %}
+{% endblock %}

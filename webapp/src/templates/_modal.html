@@ -68,11 +68,11 @@
 <div class="modal-split-main">
 {% if main_title %}<h2 class="modal-split-title">{{ main_title }}</h2>{% endif %}
 {% endmacro %}
-{% macro split_side(title, title_id=None, side_class=None, attrs=None) %}
+{% macro split_side(title, title_id=None, side_class=None, attrs=None, tabs=None) %}
 </div>
 <aside class="modal-split-side{% if side_class %} {{ side_class }}{% endif %}" aria-label="{{ title }}"{% if attrs %} {{ attrs|safe }}{% endif %}>
 <div class="modal-split-head">
-<h2 class="modal-split-title"{% if title_id %} id="{{ title_id }}"{% endif %}>{{ title }}</h2>
+{% if tabs %}<div class="modal-split-tabs" role="tablist" aria-label="{{ title }}">{% for t in tabs %}<button type="button" class="modal-split-tab{% if loop.first %} is-active{% endif %}" role="tab" aria-selected="{{ 'true' if loop.first else 'false' }}" data-side-tab="{{ t[0] }}">{{ t[1] }}</button>{% endfor %}</div>{% else %}<h2 class="modal-split-title"{% if title_id %} id="{{ title_id }}"{% endif %}>{{ title }}</h2>{% endif %}
 <button type="button" class="icon-btn modal-split-toggle" data-modal-split-toggle aria-expanded="true" aria-label="Hide {{ title|lower }}" title="Hide {{ title|lower }}" data-label-show="Show {{ title|lower }}" data-label-hide="Hide {{ title|lower }}">{{ icon('chevron-right', 'icon-sm') }}</button>
 </div>
 <div class="modal-split-body">

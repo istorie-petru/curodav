@@ -1,0 +1,3 @@
+{% if items %}<ul class="library-preview-list">{% for c in items %}<li><span class="library-preview-title">{{ c.title }}</span><span class="library-preview-sub">{{ c.display_authors }}{% if c.status_label %}{{ ' · ' if c.display_authors }}{{ c.status_label }}{% endif %}</span></li>{% endfor %}</ul>
+{% if total > items|length %}<p class="muted library-preview-more">{{ total - items|length }} more</p>{% endif %}
+{% else %}<p class="muted library-preview-more">No matches</p>{% endif %}

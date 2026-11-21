@@ -106,6 +106,25 @@
       timer = setTimeout(function () { search(e.target); }, 500);
     }
   });
+  // The side pane has two tabs, Status and Find details; one panel is open at a time.
+  document.addEventListener("click", function (e) {
+    var tab = e.target.closest && e.target.closest("[data-side-tab]");
+    if (!tab) return;
+    var side = tab.closest(".modal-split-side");
+    var key = tab.getAttribute("data-side-tab");
+    side.querySelectorAll("[data-side-tab]").forEach(function (t) {
+      var on = t === tab;
+      t.classList.toggle("is-active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    side.querySelectorAll("[data-side-panel]").forEach(function (p) { p.hidden = p.getAttribute("data-side-panel") !== key; });
+    if (key === "find") {
+      var q = side.querySelector("[data-find-q]");
+      var title = field("title");
+      if (q && !q.value && title && title.value) { q.value = title.value; search(q); }
+      if (q) q.focus();
+    }
+  });
   // A new entry starts with the title typed in the window, so Find details opens already searching for it.
   document.addEventListener("cc-modal-content", function () {
     var q = document.querySelector("[data-find-q]");

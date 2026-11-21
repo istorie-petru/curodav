@@ -33,6 +33,6 @@ def test_the_page_lists_only_when_searching(tmp_path):
             by_year = cl.get("/library?q=year:1990-2000").text
         finally:
             app.dependency_overrides.clear()
-    assert "library-table" not in bare and "Alpha Book" not in bare
+    assert "library-table" in bare and "Alpha Book" in bare
     assert "Beta Film" in by_type and "Alpha Book" not in by_type
     assert "Alpha Book" in by_year and "Beta Film" not in by_year

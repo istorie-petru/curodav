@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import upload_input %}
+{% block title %}Add books{% endblock %}
+{% block content %}
+{% call modal(kind="form", title="Add books", size="small", form='add-books-form', save_label='Add') %}
+<form method="post" action="/library/add-books" id="add-books-form" enctype="multipart/form-data">
+    <div class="field-grid">
+        <div class="field field-wide">
+            {{ upload_input('files', accept=accept, form='add-books-form', label='Choose books', multiple=True, large=True, formats='EPUB, PDF, MOBI, CBZ and more') }}
+        </div>
+    </div>
+</form>
+{% endcall %}
+{% endblock %}

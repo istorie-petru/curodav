@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import os
 import sqlite3
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from .log import get_logger
 
 log = get_logger("media")
 
+_lock = threading.RLock()  # one read of the library at a time, so no book is imported twice
 PATH_KEY = "media_calibre_path"
 MAX_FILE_BYTES = 200 * 1024 * 1024
 ACCEPT = ",".join(f".{ext}" for ext in cl.FORMATS)
@@ -50,6 +52,9 @@ def set_library_path(conn: sqlite3.Connection, value: str) -> str | None:
                 return "That folder holds other files and no Calibre library"
             cl.create(path)
         cl.Library(path)
+    except PermissionError:
+        return (f"Curodav is not allowed to write in {path}. Make the folder yourself and give Curodav's user ownership of it "
+                f"(for example sudo mkdir -p {path} && sudo chown $USER {path}), or choose a folder Curodav can write in")
     except (OSError, cl.CalibreError) as exc:
         return f"That folder cannot be used: {exc}"
     db.set_app_meta(conn, PATH_KEY, str(path))
@@ -117,9 +122,36 @@ def uses_calibre(conn: sqlite3.Connection, type_key: str) -> bool:
     return db.kind_of(conn, type_key).uploads and library(conn) is not None
 
 
+class _own_writes:
+    """Curodav's own writes to the library are not news to it: when nothing else had changed the file, its new modified time is the synced one."""
+
+    def __init__(self, conn: sqlite3.Connection, lib: cl.Library | None):
+        self.conn, self.lib = conn, lib
+
+    def _stamp(self) -> str:
+        try:
+            return str(self.lib.db_path.stat().st_mtime_ns) if self.lib else ""
+        except OSError:
+            return ""
+
+    def __enter__(self) -> "_own_writes":
+        self.before = self._stamp()
+        self.was_synced = db.get_app_meta(self.conn, MTIME_KEY) == self.before
+        return self
+
+    def __exit__(self, *exc) -> None:
+        if self.was_synced and self.lib:
+            db.set_app_meta(self.conn, MTIME_KEY, self._stamp())
+
+
 def push(conn: sqlite3.Connection, citation_uid: str) -> None:
     """Writes the entry's editions into the Calibre library, making a Calibre book for each one that has none yet."""
     lib = library(conn)
+    with _own_writes(conn, lib):
+        _push(conn, lib, citation_uid)
+
+
+def _push(conn: sqlite3.Connection, lib: cl.Library | None, citation_uid: str) -> None:
     c = db.get_citation_raw(conn, citation_uid)
     if lib is None or c is None or not db.kind_of(conn, c["type"]).uploads:
         return
@@ -153,7 +185,8 @@ def store_file(conn: sqlite3.Connection, edition_uid: str, data: bytes, filename
     if not e.get("calibre_uuid"):
         push(conn, e["citation_uid"])
         e = db.get_edition(conn, edition_uid)
-    lib.add_format(e["calibre_uuid"], data, ext)
+    with _own_writes(conn, lib):
+        lib.add_format(e["calibre_uuid"], data, ext)
     refresh_formats(conn, edition_uid)
     return None
 
@@ -221,25 +254,84 @@ def import_plan(conn: sqlite3.Connection) -> dict[str, Any]:
     return {"new": new, "linked": len(books) - len(new), "formats": sum(len(b["formats"]) for b in new)}
 
 
-def import_books(conn: sqlite3.Connection) -> int:
-    """Makes an entry with one edition for every Calibre book not yet in Curodav; the files stay where Calibre keeps them."""
+def _same(a: str) -> str:
+    import re
+
+    return re.sub(r"[^a-z0-9]+", " ", (a or "").lower()).strip()
+
+
+def _unlinked_entries(conn: sqlite3.Connection) -> dict[str, list[dict[str, Any]]]:
+    """Curodav book and manga entries with no Calibre book yet, by normalised title."""
+    out: dict[str, list[dict[str, Any]]] = {}
+    for c in db.list_citations(conn):
+        if db.kind_of(conn, c["type"]).uploads and not any(e.get("calibre_uuid") for e in db.list_editions(conn, c["uid"])):
+            out.setdefault(_same(c["title"] + (f": {c['subtitle']}" if c.get("subtitle") else "")), []).append(c)
+            out.setdefault(_same(c["title"]), []).append(c)
+    return out
+
+
+def _family(name: str) -> str:
+    return _same(name.split()[-1]) if name.strip() else ""
+
+
+def _match(entries: dict[str, list[dict[str, Any]]], b: dict[str, Any], taken: set[str]) -> dict[str, Any] | None:
+    theirs = {_family(a) for a in b["authors"] if a != "Unknown"}
+    for c in entries.get(_same(b["title"]), []):
+        if c["uid"] in taken:
+            continue
+        mine = {_family(_display_name(a)) for a in c.get("authors") or [] if _display_name(a)}
+        if not mine or not theirs or mine & theirs:
+            return c
+    return None
+
+
+def counts(conn: sqlite3.Connection) -> tuple[int, int]:
+    """(books in the library not yet in Curodav, books already linked), from the uuids alone so a big library costs little."""
+    lib = library(conn)
+    if lib is None:
+        return 0, 0
+    have, linked = lib.uuids(), db.calibre_uuids(conn)
+    return len(have - linked), len(have & linked)
+
+
+def import_books(conn: sqlite3.Connection, progress: Any = None) -> int:
+    """Makes an entry with one edition for every Calibre book not yet in Curodav (a book that matches an entry without a Calibre
+    book is linked to it instead); the files stay where Calibre keeps them. Only one import runs at a time."""
     from . import media_metadata
 
     count = 0
-    for b in import_plan(conn)["new"]:
-        authors = []
-        for name, sort in zip(b["authors"], b["author_sorts"]):
-            family, _, given = sort.partition(",") if "," in sort else (name, "", "")
-            authors.append({"family": family.strip(), "given": given.strip()} if given else media_metadata.split_name(name))
-        uid = db.upsert_citation(conn, {"title": b["title"], "type": "manga" if _manga(b) else "book", "authors": authors, "year": b["pubdate"][:4],
-                                        "keywords": b["tags"], "summary": _plain(b["comments"]), "score": float(b["rating"] * 10) if b["rating"] else None})
-        edition = db.save_edition(conn, uid, {"year": b["pubdate"][:4], "publisher": b["publisher"], "isbn": b["isbn"], "doi": b["doi"]})
-        db.set_edition_calibre(conn, edition, b["uuid"], ",".join(f["format"] for f in b["formats"]))
-        if b["cover"] and b["cover"].is_file():
-            webp = media_metadata.to_webp(b["cover"].read_bytes())
-            if webp:
-                db.set_cover(conn, uid, webp, "fetched")
-        count += 1
+    with _lock:
+        plan = import_plan(conn)["new"]
+        if not plan:
+            return 0
+        entries = _unlinked_entries(conn)
+        taken: set[str] = set()
+        for n, b in enumerate(plan, 1):
+            if progress:
+                progress(n, len(plan))
+            if b["uuid"] in db.calibre_uuids(conn):
+                continue
+            formats = ",".join(f["format"] for f in b["formats"])
+            hit = _match(entries, b, taken)
+            if hit is not None:
+                taken.add(hit["uid"])
+                eds = db.list_editions(conn, hit["uid"]) or [db.get_edition(conn, db.save_edition(conn, hit["uid"], {}))]
+                db.set_edition_calibre(conn, eds[0]["uid"], b["uuid"], formats)
+                continue
+            authors = []
+            for name, sort in zip(b["authors"], b["author_sorts"]):
+                family, _, given = sort.partition(",") if "," in sort else (name, "", "")
+                authors.append({"family": family.strip(), "given": given.strip()} if given else media_metadata.split_name(name))
+            uid = db.upsert_citation(conn, {"title": b["title"], "type": "manga" if _manga(b) else "book", "authors": authors, "year": b["pubdate"][:4],
+                                            "keywords": b["tags"], "summary": _plain(b["comments"]), "score": float(b["rating"] * 10) if b["rating"] else None,
+                                            "series": b["series"], "volume": f"{b['series_index']:g}" if b["series"] else ""})
+            edition = db.save_edition(conn, uid, {"year": b["pubdate"][:4], "publisher": b["publisher"], "isbn": b["isbn"], "doi": b["doi"]})
+            db.set_edition_calibre(conn, edition, b["uuid"], formats)
+            if b["cover"] and b["cover"].is_file():
+                webp = media_metadata.to_webp(b["cover"].read_bytes())
+                if webp:
+                    db.set_cover(conn, uid, webp, "fetched")
+            count += 1
     return count
 
 
@@ -291,6 +383,7 @@ def push_all(conn: sqlite3.Connection) -> int:
     return count
 
 
+AUTO_KEY = "media_calibre_auto"
 SYNC_KEY = "media_calibre_synced"
 MTIME_KEY = "media_calibre_mtime"
 
@@ -343,18 +436,56 @@ def _pull_book(conn: sqlite3.Connection, e: dict[str, Any], book: dict[str, Any]
             db.set_cover(conn, c["uid"], webp, "fetched")
 
 
-def pull(conn: sqlite3.Connection, force: bool = False) -> dict[str, int]:
+def pull(conn: sqlite3.Connection, force: bool = False, progress: Any = None) -> dict[str, int]:
     """Reads what changed in the Calibre library since the last time (in Calibre, Calibre-Web or by hand) into Curodav:
     edited books update their editions and works, deleted ones lose their link, new ones become entries."""
+    none = {"updated": 0, "unlinked": 0, "added": 0}
     lib = library(conn)
-    if lib is None:
-        return {"updated": 0, "unlinked": 0, "added": 0}
+    if lib is None or (not force and db.get_app_meta(conn, AUTO_KEY) == "0"):
+        return none
     try:
         mtime = str(lib.db_path.stat().st_mtime_ns)
     except OSError:
-        return {"updated": 0, "unlinked": 0, "added": 0}
+        return none
     if not force and db.get_app_meta(conn, MTIME_KEY) == mtime:
-        return {"updated": 0, "unlinked": 0, "added": 0}
+        return none
+    if not _lock.acquire(blocking=False):
+        return none
+    try:
+        return _pull_locked(conn, lib, force, progress)
+    finally:
+        _lock.release()
+
+
+def pull_soon(conn: sqlite3.Connection, force: bool = False) -> None:
+    """What a page load does: when the library changed, read it in a background thread so the page does not wait for a big import."""
+    lib = library(conn)
+    if lib is None or (not force and db.get_app_meta(conn, AUTO_KEY) == "0"):
+        return
+    try:
+        if not force and db.get_app_meta(conn, MTIME_KEY) == str(lib.db_path.stat().st_mtime_ns):
+            return
+    except OSError:
+        return
+    row = conn.execute("PRAGMA database_list").fetchone()
+    path = Path(row[2]) if row and row[2] else None
+    if path is None:
+        pull(conn)
+        return
+    if _lock.acquire(blocking=False):
+        _lock.release()
+        threading.Thread(target=_pull_in_thread, args=(path, force), daemon=True, name="calibre-pull").start()
+
+
+def _pull_in_thread(path: Path, force: bool = False) -> None:
+    try:
+        with db.connect(path) as conn:
+            pull(conn, force=force)
+    except Exception:  # noqa: BLE001  a failed background read must not take the app down
+        log.exception("Reading the Calibre library failed")
+
+
+def _pull_locked(conn: sqlite3.Connection, lib: cl.Library, force: bool, progress: Any = None) -> dict[str, int]:
     since = db.get_app_meta(conn, SYNC_KEY) or ""
     started = cl._now()
     books = {b["uuid"]: b for b in lib.books()}
@@ -363,7 +494,9 @@ def pull(conn: sqlite3.Connection, force: bool = False) -> dict[str, int]:
     for e in linked:
         per_work[e["citation_uid"]] = per_work.get(e["citation_uid"], 0) + 1
     updated = unlinked = 0
-    for e in linked:
+    for n, e in enumerate(linked, 1):
+        if progress:
+            progress(n, len(linked))
         book = books.get(e["calibre_uuid"])
         if book is None:
             db.set_edition_calibre(conn, e["uid"], "", "")
@@ -371,7 +504,7 @@ def pull(conn: sqlite3.Connection, force: bool = False) -> dict[str, int]:
         elif force or (book["last_modified"] or "") > since:
             _pull_book(conn, e, book, per_work[e["citation_uid"]] == 1 and len(db.list_editions(conn, e["citation_uid"])) == 1)
             updated += 1
-    added = import_books(conn)
+    added = import_books(conn, progress)
     db.set_app_meta(conn, SYNC_KEY, started)
     db.set_app_meta(conn, MTIME_KEY, str(lib.db_path.stat().st_mtime_ns))
     if updated or unlinked or added:

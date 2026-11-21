@@ -56,17 +56,13 @@
 
 
 /* The Library page: kind chips, the table and its sortable headers. */
-.library-kinds{display:flex; flex-wrap:wrap; gap:var(--space-2); margin-bottom:var(--space-3);}
 .library-kind{display:inline-flex; align-items:center; gap:var(--space-1); padding:var(--space-1) var(--space-3); border-radius:999px;
    background:var(--accent-neutral-subtle); color:var(--fg-primary); font-size:var(--text-sm);}
-.library-kind.is-active{background:var(--accent); color:var(--fg-on-accent, #fff);}
-.library-kind-count{color:inherit; opacity:.7; font-variant-numeric:tabular-nums;}
 .library-table .library-cover-col{width:56px; min-width:56px; padding-right:0;}
 .library-table td{padding-block:var(--space-3);}
 .library-table .media-row-cover{width:40px; height:58px;}
 .library-status{white-space:nowrap; cursor:default;}
 .library-search{min-width:min(30ch, 100%);}
-.library-hint{margin-top:var(--space-4);}
 .library-title{color:var(--fg-primary); display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .library-sub{display:block; color:var(--fg-secondary); font-size:var(--text-sm); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .library-sub .icon{vertical-align:-2px;}
@@ -74,8 +70,6 @@
 .library-progress .media-progress{display:block; margin-top:var(--space-1); max-width:120px;}
 .library-sort{color:inherit;}
 .library-sort.is-active{color:var(--fg-primary);}
-.library-phone{display:none;}
-@container rtable (max-width:720px){ .library-phone{display:block;} }
 
 /* The view window: the cover beside the facts that matter most. */
 .media-view-head{display:flex; gap:var(--space-4); align-items:flex-start; margin-bottom:var(--space-4);}
@@ -91,12 +85,193 @@
 button.media-lookup-row{width:100%; border:0; background:none; text-align:left; font:inherit; color:inherit;}
 .media-lookup-row.is-picked{background:var(--accent-neutral-subtle);}
 .media-cover-edit{display:flex; gap:var(--space-3); align-items:flex-start;}
-.media-cover-preview{flex:none; width:72px; height:108px; border-radius:var(--radius-sm); overflow:hidden; background:var(--bg-secondary);
+.media-cover-preview{flex:none; width:104px; height:156px; border-radius:var(--radius-sm); overflow:hidden; background:var(--bg-secondary);
    display:flex; align-items:center; justify-content:center; color:var(--fg-tertiary);}
 .media-cover-preview img{width:100%; height:100%; object-fit:cover; display:block;}
-.media-cover-fields{flex:1; min-width:0;}
+.media-cover-fields{flex:1; min-width:0; align-content:center;}
+.media-cover-edit{margin-bottom:var(--space-4);}
+.media-status-fields{padding-top:var(--space-3); border-top:1px solid var(--separator);}
 
 /* Library item window: the rows on the left, the cover on the right; on a phone the cover goes first. */
 .media-view-top{display:grid; grid-template-columns:minmax(0, 1fr) 96px; gap:var(--space-4); align-items:start; margin-bottom:var(--space-4);}
 .media-view-top .media-cover-button{grid-column:2; grid-row:1;}
 @media (max-width:720px){.media-view-top{grid-template-columns:1fr;} .media-view-top .media-cover-button{grid-column:1; grid-row:1; width:72px; height:108px;} .media-view-top .vi-rows{grid-row:2;}}
+
+/* The Calibre audit: text only. */
+.calibre-counts{display:flex; flex-wrap:wrap; gap:var(--space-3); margin:0 0 var(--space-3); padding:0 var(--space-4);}
+.calibre-count{color:var(--fg-secondary); font-size:var(--text-sm); text-decoration:none;}
+.calibre-count.is-active{color:var(--fg-primary); font-weight:var(--font-weight-semibold, 600);}
+.calibre-diff{white-space:pre-line; font-size:var(--text-sm); color:var(--fg-secondary);}
+
+/* The reader: the text, with its annotations, citation and references beside it. */
+.reader{display:grid; grid-template-columns:minmax(0, 1fr) 300px; gap:var(--space-4); align-items:start; position:relative;}
+.reader-nav{display:flex; align-items:center; gap:var(--space-2); margin-bottom:var(--space-3);}
+.reader-jump{flex:1; min-width:0;}
+.reader-jump select{width:100%;}
+.reader-nav .is-disabled{pointer-events:none; opacity:.4;}
+.reader-title{margin:0 0 var(--space-3);}
+.reader-body{max-width:68ch; font-size:1.05rem; line-height:1.7;}
+.reader-body p{margin:0 0 var(--space-3);}
+.reader-mark{background:color-mix(in srgb, var(--accent) 30%, transparent); color:inherit; border-radius:2px; padding:0 1px;}
+.reader-mark.has-note{border-bottom:2px solid var(--accent);}
+.reader-side{display:flex; flex-direction:column; gap:var(--space-3); min-width:0;}
+.reader-annotations{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:var(--space-3);}
+.reader-annotations li{display:flex; flex-direction:column; gap:2px;}
+.reader-quote{color:var(--fg-primary); text-decoration:none;}
+.reader-note{color:var(--fg-secondary); font-size:var(--text-sm);}
+.reader-cite{margin:0 0 var(--space-2); font-size:var(--text-sm);}
+.reader-ref{display:block; padding:2px 0;}
+@media (max-width:900px){.reader{grid-template-columns:1fr;}}
+
+/* Compact library table: one line per book, title with the author beneath. */
+.library-table td{padding-block:var(--space-2);}
+.library-table .library-sub{margin-top:0;}
+
+/* The search and filter window: the matches on the left. */
+.library-preview-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column;}
+.library-preview-list li{display:flex; flex-direction:column; padding:var(--space-2) 0; border-bottom:1px solid var(--separator);}
+.library-preview-title{color:var(--fg-primary);}
+.library-preview-sub{color:var(--fg-secondary); font-size:var(--text-sm);}
+.library-preview-more{margin:var(--space-2) 0 0;}
+#library-preview{max-height:46vh; overflow:auto;}
+
+/* The entry window's main pane keeps two fields to a row, so it stays short. */
+.modal-split-main .field-grid{grid-template-columns:repeat(2, minmax(0, 1fr));}
+.modal-split-main .field-grid .field-wide{grid-column:1 / -1;}
+
+/* The side pane's tabs (Status and Find details): the head's own titles, one active at a time, vertical when the pane is collapsed. */
+.modal-split-tabs{display:flex; flex:1; min-width:0; gap:var(--space-3);}
+.modal-split-tab{border:0; background:none; padding:0; font:inherit; font-size:var(--text-sm); font-weight:var(--font-weight-bold); letter-spacing:.06em; text-transform:uppercase;
+   color:var(--fg-tertiary); cursor:pointer; white-space:nowrap;}
+.modal-split-tab:hover{color:var(--fg-secondary);}
+.modal-split-tab.is-active{color:var(--fg-primary);}
+.modal-split-tab:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+.modal-split.is-collapsed .modal-split-tabs{writing-mode:vertical-rl; flex:none;}
+@media (max-width:720px){.modal-split.is-collapsed .modal-split-tabs{writing-mode:horizontal-tb; flex:1;}}
+[data-side-panel][hidden]{display:none;}
+
+/* Cards: the title on one line with dots, then the status pill or rating and the actions menu. */
+.media-card-title-line{display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; -webkit-line-clamp:unset; -webkit-box-orient:unset;}
+.media-card-foot{display:flex; align-items:center; gap:var(--space-2); min-height:28px;}
+.media-card-foot .spacer{flex:1;}
+.media-card-stars-left{color:var(--fg-secondary); font-size:var(--text-sm);}
+
+/* The search and filter window's filters keep two to a row. */
+#citations-filters-grid{grid-template-columns:repeat(2, minmax(0, 1fr));}
+#citations-filters-grid .field-wide{grid-column:1 / -1;}
+
+/* The page reader: the book in a frame that fills the page, a thin bar above it. */
+.reader-book{position:relative; display:flex; flex-direction:column; gap:var(--space-2); padding:var(--space-3);}
+.reader-bar{display:flex; align-items:center; gap:var(--space-2); min-height:32px;}
+.reader-where{color:var(--fg-secondary); font-size:var(--text-sm); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;}
+.reader-percent{color:var(--fg-tertiary); font-size:var(--text-sm); font-variant-numeric:tabular-nums;}
+.reader-stage{height:calc(100dvh - 230px); min-height:420px; border-radius:var(--radius-md); overflow:hidden;}
+.reader-stage foliate-view{display:block; width:100%; height:100%;}
+.reader-toc-list{list-style:none; margin:0; padding-left:var(--space-3);}
+.reader-toc > .reader-toc-list{padding-left:0;}
+.reader-toc a{display:block; padding:3px 0; color:var(--fg-primary); text-decoration:none;}
+.reader-toc a:hover{color:var(--accent);}
+.reader-annotations li{position:relative; padding-right:28px;}
+.reader-annotations .icon-btn{position:absolute; right:0; top:0;}
+
+/* The page reader in the manner of Foliate: the text fills the page, a progress bar with the chapter marks sits underneath. */
+.reader-book{padding:0; gap:var(--space-2); background:none; border:0; box-shadow:none;}
+.reader-stage{height:calc(100dvh - 205px); min-height:420px; border-radius:var(--radius-md); border:1px solid var(--separator);}
+.reader-foot{display:flex; align-items:center; gap:var(--space-2); min-height:40px;}
+.reader-square{box-sizing:border-box; width:34px; height:34px; display:inline-grid; place-items:center; padding:0; border-radius:var(--radius-md); background:var(--bg-secondary);}
+.reader-square:disabled{opacity:.4;}
+.reader-percent{min-width:3.2em; text-align:right; color:var(--fg-secondary); font-size:var(--text-sm); font-variant-numeric:tabular-nums;}
+.reader-progress{position:relative; flex:1; height:24px; display:flex; align-items:center; cursor:pointer; touch-action:none;}
+.reader-progress-track{position:relative; width:100%; height:4px; border-radius:2px; background:var(--accent-neutral-subtle);}
+.reader-progress-fill{position:absolute; left:0; top:0; bottom:0; border-radius:2px; background:var(--accent);}
+.reader-progress-ticks span{position:absolute; top:-5px; width:1px; height:14px; background:var(--separator);}
+.reader-progress-thumb{position:absolute; top:50%; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; background:var(--accent); box-shadow:var(--elevation-1);}
+.reader-progress:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+.reader-progress-tip{position:absolute; bottom:26px; transform:translateX(-50%); padding:2px 6px; border-radius:var(--radius-sm); background:var(--bg-elevated); box-shadow:var(--elevation-1); font-size:var(--text-sm);}
+.reader-appearance{position:absolute; z-index:30; top:8px; right:8px; width:300px; display:flex; flex-direction:column; gap:var(--space-3); padding:var(--space-4); border-radius:var(--radius-card); background:var(--bg-elevated); box-shadow:var(--elevation-2, 0 8px 24px rgba(0,0,0,.3)); border:1px solid var(--separator);}
+.reader-appearance[hidden]{display:none;}
+.reader-row{display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);}
+.reader-row-label{color:var(--fg-secondary);}
+.reader-stepper{display:inline-flex; align-items:center; gap:var(--space-1);}
+.reader-step-value{min-width:3.4em; text-align:center; font-variant-numeric:tabular-nums;}
+.notebook-page-main:has(.reader-book), .reader-book, .reader-stage{min-width:0; max-width:100%;}
+.reader-stage foliate-view{min-width:0;}
+.reader-page{color:var(--fg-secondary); font-size:var(--text-sm); font-variant-numeric:tabular-nums; white-space:nowrap; margin-left:var(--space-2);}
+
+/* The selection menu: colours to highlight in, then what to do with the words. */
+.reader-pop{position:absolute; z-index:40; display:flex; flex-direction:column; gap:var(--space-1); padding:var(--space-2); min-width:210px; border-radius:var(--radius-md); background:var(--bg-elevated); border:1px solid var(--separator); box-shadow:var(--elevation-2, 0 4px 16px rgba(0,0,0,.3));}
+.reader-pop[hidden]{display:none;}
+.reader-pop-colors{display:flex; gap:var(--space-2); padding:var(--space-1);}
+.reader-pop-actions{display:flex; flex-direction:column;}
+.reader-pop-actions button, .reader-pop-sources button{display:flex; align-items:center; gap:var(--space-2); width:100%; border:0; background:none; color:var(--fg-primary); font:inherit; text-align:left; padding:var(--space-1) var(--space-2); border-radius:var(--radius-sm); cursor:pointer; white-space:nowrap;}
+.reader-pop-actions button:hover, .reader-pop-sources button:hover{background:var(--row-hover);}
+.reader-pop-actions button[hidden]{display:none;}
+.reader-pop-sources{display:flex; flex-direction:column; border-top:1px solid var(--separator); padding-top:var(--space-1);}
+.reader-pop-sources[hidden]{display:none;}
+.reader-swatch{width:22px; height:22px; padding:0; border-radius:50%; border:2px solid transparent; cursor:pointer; flex:none;}
+.reader-swatch.is-on{border-color:var(--fg-primary);}
+.reader-swatch-yellow{background:#e0b100;} .reader-swatch-orange{background:#e8803a;} .reader-swatch-green{background:#4caf50;}
+.reader-swatch-blue{background:#3b82f6;} .reader-swatch-pink{background:#e05297;}
+.reader-annotations li{border-left:3px solid var(--mark, #e0b100); padding-left:var(--space-2); padding-right:0; gap:var(--space-1);}
+.reader-annotations .icon-btn{position:static;}
+.reader-note{color:var(--fg-secondary); font-size:var(--text-sm); white-space:pre-wrap; cursor:text; border-radius:var(--radius-sm);}
+.reader-note.is-empty{color:var(--fg-tertiary);}
+.reader-note:hover{background:var(--row-hover);}
+.reader-note-edit{width:100%; box-sizing:border-box; font:inherit; font-size:var(--text-sm);}
+.reader-annotation-tools{display:flex; align-items:center; gap:var(--space-1);}
+.reader-annotation-tools .reader-swatch{width:16px; height:16px;}
+.reader-annotation-tools .icon-btn{margin-left:auto;}
+/* Search in the book */
+.reader-search{margin-bottom:var(--space-2);}
+.reader-search-status{margin:0 0 var(--space-2); font-size:var(--text-sm);}
+.reader-results, .reader-results ul{list-style:none; margin:0; padding:0;}
+.reader-result-group{margin-bottom:var(--space-3);}
+.reader-result-label{display:block; font-size:var(--text-sm); font-weight:var(--font-weight-bold); color:var(--fg-tertiary); margin-bottom:2px;}
+.reader-result{display:block; padding:var(--space-1) 0; color:var(--fg-secondary); font-size:var(--text-sm); text-decoration:none; border-bottom:1px solid var(--separator);}
+.reader-result:hover{color:var(--fg-primary);}
+.reader-result mark{background:color-mix(in srgb, var(--accent) 30%, transparent); color:var(--fg-primary); border-radius:2px;}
+.reader-side-toggle[hidden]{display:none;}
+/* Full screen: the book fills the whole window, the sidebar opens over its right edge on request. */
+.reader-book.is-fullscreen{position:fixed; inset:0; z-index:9000; padding:var(--space-3); background:var(--bg-primary); border-radius:0;}
+.reader-book.is-fullscreen .reader-stage{height:calc(100dvh - 80px);}
+html[data-reader-fullscreen] .notebook-sidebar{z-index:9500;}
+html[data-reader-fullscreen]:not([data-notebook-sidebar-collapsed]) .reader-book.is-fullscreen{right:240px;}
+@media (max-width:860px){.reader-book:not(.is-fullscreen) .reader-stage{height:calc(100dvh - 260px);}}
+
+/* Reader full screen hides the app's own navigation, the phone bar and its drawer included. */
+html[data-reader-fullscreen] .mobile-tabbar, html[data-reader-fullscreen] .mobile-nav-scrim, html[data-reader-fullscreen] #mobile-nav-drawer,
+html[data-reader-fullscreen] .tabbar, html[data-reader-fullscreen] .page-header-region{display:none !important;}
+html[data-reader-fullscreen] main{margin-left:0 !important; padding-bottom:0 !important;}
+
+/* Settings modals: a row's action sits at its right edge. */
+.vi-v.vi-v-end{margin-left:auto; flex:none; justify-content:flex-end; gap:var(--space-2);}
+[data-advanced-only][hidden]{display:none;}
+
+/* Reader: bookmarks, the Define card, read-aloud and the OCR offer */
+.reader-bookmarks{list-style:none; margin:0; padding:0;}
+.reader-bookmarks li{display:flex; align-items:center; gap:var(--space-2); padding:var(--space-1) 0; border-bottom:1px solid var(--separator);}
+.reader-bookmarks .reader-quote{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.reader-pop-define{max-width:300px; max-height:240px; overflow:auto; border-top:1px solid var(--separator); padding:var(--space-2); font-size:var(--text-sm); white-space:normal;}
+.reader-pop-define[hidden]{display:none;}
+.reader-pop-define p{margin:var(--space-1) 0;}
+[data-reader-speak].is-on{background:var(--accent); color:var(--accent-contrast, #fff);}
+.reader-ocr{display:flex; align-items:center; gap:var(--space-3); padding:var(--space-2) var(--space-3); border-radius:var(--radius-md); background:var(--accent-neutral-subtle);}
+.reader-ocr[hidden]{display:none;}
+
+/* The Notebook's book highlights window */
+.highlight-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:var(--space-2); max-height:55vh; overflow:auto;}
+.highlight-item{display:flex; gap:var(--space-3); width:100%; text-align:left; border:0; border-radius:var(--radius-md); padding:var(--space-2) var(--space-3); background:var(--bg-secondary); color:var(--fg-primary); font:inherit; cursor:pointer;}
+.highlight-item:hover{background:var(--row-hover);}
+.highlight-bar{flex:none; width:4px; border-radius:2px; background:#e0b100;}
+.highlight-bar-orange{background:#e8803a;} .highlight-bar-green{background:#4caf50;} .highlight-bar-blue{background:#3b82f6;} .highlight-bar-pink{background:#e05297;}
+.highlight-body{display:flex; flex-direction:column; gap:2px; min-width:0;}
+.highlight-quote{white-space:pre-line;}
+.highlight-note{color:var(--fg-secondary); font-size:var(--text-sm); font-style:italic;}
+.highlight-cite{color:var(--fg-tertiary); font-size:var(--text-sm);}
+.highlight-more{margin:var(--space-2) 0 0;}
+.nb-quote-menu{display:flex; flex-direction:column; gap:var(--space-2);}
+.nb-quote-pick{display:flex; align-items:center; gap:var(--space-2); width:auto; padding:0 var(--space-2);}
+
+/* The Library pager: under the list or the cards, never in the header. */
+.library-pager{display:flex; align-items:center; justify-content:center; gap:var(--space-3); padding:var(--space-2) 0;}
+.library-pager-text{color:var(--fg-secondary); font-size:var(--text-sm); font-variant-numeric:tabular-nums;}

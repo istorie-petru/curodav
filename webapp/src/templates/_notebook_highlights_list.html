@@ -1,0 +1,15 @@
+{% if items %}
+<ul class="highlight-list">
+{% for h in items %}
+    <li><button type="button" class="highlight-item" data-highlight-pick data-uid="{{ h.uid }}" data-citation-uid="{{ h.citation_uid }}" data-quote="{{ h.quote }}" data-citation="{{ h.citation }}" data-color="{{ h.color }}">
+        <span class="highlight-bar highlight-bar-{{ h.color }}"></span>
+        <span class="highlight-body">
+            <span class="highlight-quote">{{ h.quote }}</span>
+            {% if h.note %}<span class="highlight-note">{{ h.note }}</span>{% endif %}
+            <span class="highlight-cite">{{ h.citation }}</span>
+        </span>
+    </button></li>
+{% endfor %}
+</ul>
+{% if total > items|length %}<p class="muted highlight-more">{{ total - items|length }} more, narrow the search to see them</p>{% endif %}
+{% else %}<p class="muted highlight-more">No highlights match</p>{% endif %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import text_input %}
+{% block title %}Book library{% endblock %}
+{% block content %}
+{% call modal(kind="manage", title="Book library", size="small") %}
+<form method="post" action="/settings/library/books" id="library-books-form" class="field-grid">
+    <div class="field field-wide">
+        <label for="book-folder">Library folder</label>
+        <div class="settings-field-row">
+            {{ text_input({'name': 'path', 'value': calibre_path, 'id': 'book-folder', 'autocomplete': 'off'}) }}
+            <button type="submit" class="btn ghost" title="Use this folder" aria-label="Use this folder">{{ icon('check', 'icon-sm') }}</button>
+        </div>
+    </div>
+</form>
+<div class="vi-rows">
+    <div class="vi-row"><span class="vi-k">State</span><div class="vi-v"><span class="vi-display">{% if calibre_ready %}In use, {{ calibre_linked }} in Curodav{% else %}Not found yet{% endif %}</span></div></div>
+</div>
+{% if calibre_ready and calibre_new %}
+<form method="post" action="/settings/library/books/import" data-confirm-sheet="Add {{ calibre_new }} books from the Calibre library to Curodav? Their files stay where they are.">
+    <button type="submit" class="btn ghost">{{ icon('download', 'icon-sm') }} Add the {{ calibre_new }} new books</button>
+</form>
+{% endif %}
+{% if calibre_ready and legacy_files %}
+<form method="post" action="/settings/library/books/move-files" data-confirm-sheet="Move {{ legacy_files }} stored book files into the Calibre library? Each old copy is removed once the library holds it.">
+    <button type="submit" class="btn ghost">{{ icon('folder-input', 'icon-sm') }} Move {{ legacy_files }} files into it</button>
+</form>
+{% endif %}
+<a href="/settings/library/maintenance" data-modal class="btn ghost">{{ icon('wrench', 'icon-sm') }} Maintenance</a>
+{% endcall %}
+{% endblock %}

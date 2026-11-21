@@ -4,8 +4,11 @@
 # --frozen` to resolve the workspace at all.
 FROM python:3.12-slim AS base
 
-# poppler-utils gives book search its pdftotext (MCP tools search_book and read_book).
-RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils \
+# poppler-utils gives book search its pdftotext (MCP tools search_book and read_book), ocrmypdf with tesseract makes scanned PDFs
+# searchable (more languages: add tesseract-ocr-<code> and set CC_OCR_LANGS), and espeak-ng is the read-aloud voice. Calibre and
+# LibreOffice Writer (to open Word, OpenDocument, RTF, CBR and CB7 books) are left out because they add well over a gigabyte;
+# add `calibre libreoffice-writer` to this line to have them.
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils ocrmypdf tesseract-ocr tesseract-ocr-eng espeak-ng \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir uv
 

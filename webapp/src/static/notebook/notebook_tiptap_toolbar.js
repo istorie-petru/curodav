@@ -53,6 +53,36 @@
 
   function build(editor, mount, hooks) {
     try { glyphs = JSON.parse(mount.dataset.toolbarIcons || "{}"); } catch (e) { glyphs = {}; }
+
+    // The quote at the caret becomes a highlight made in the book reader: a window to search and filter them opens, and the
+    // chosen one replaces the quote's text, its source line gets the book's citation, and the book joins the document's bibliography.
+    var pickHandler = null;
+    function pickHighlight() {
+      var $from = editor.state.selection.$from;
+      var depth = 0;
+      for (var d = $from.depth; d > 0; d--) if ($from.node(d).type.name === "blockquote") { depth = d; break; }
+      if (!depth) return;
+      var from = $from.before(depth);
+      var to = $from.after(depth);
+      var attrs = $from.node(depth).attrs;
+      if (pickHandler) document.removeEventListener("cc-highlight-picked", pickHandler);
+      pickHandler = function (e) {
+        document.removeEventListener("cc-highlight-picked", pickHandler);
+        pickHandler = null;
+        var d2 = e.detail || {};
+        var content = [{ type: "paragraph", content: [{ type: "text", text: d2.quote || " " }] }];
+        if (d2.citation) content.push({ type: "quoteCaption", content: [{ type: "text", text: d2.citation }] });
+        editor.chain().focus().insertContentAt({ from: from, to: to }, { type: "blockquote", attrs: attrs, content: content }).run();
+        if (mount.dataset.uid && d2.citationUid) {
+          var body = new FormData();
+          body.set("notebook_uid", mount.dataset.uid);
+          body.set("citation_uid", d2.citationUid);
+          fetch("/notebook/highlights/attach", { method: "POST", headers: { "X-Requested-With": "fetch" }, body: body });
+        }
+      };
+      document.addEventListener("cc-highlight-picked", pickHandler);
+      if (window.CCModal) window.CCModal.open("/notebook/highlights");
+    }
     var root = el("div", "nbtb");
     var rowOne = el("div", "nbtb-row");
     // What the caret is in (table, timeline, callout, link, color) is shown on the same row as the other editing choices.
@@ -473,6 +503,7 @@
         var name = timeline ? "timeline" : "blockquote";
         var node = timeline || quote;
         colorMenu(rowTwo, "Color", node.attrs.color || "", function (color) { chain().updateAttributes(name, { color: color }).run(); }, !!timeline);
+        if (quote && !timeline) ibtn(rowTwo, "book-open", "Fill from a book highlight", function () { pickHighlight(); });
         if (quote && !timeline && !quote.lastChild.type.name.match(/quoteCaption/)) {
           ibtn(rowTwo, "message-square-plus", "Add source", function () {
             var $from = editor.state.selection.$from;

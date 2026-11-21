@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import switch_input %}
+{% block title %}Ratings{% endblock %}
+{% block content %}
+{% call modal(kind="form", title="Ratings", size="small", form='ratings-form') %}
+<form method="post" action="/settings/library/ratings" id="ratings-form">
+    <div class="field-grid">
+        {% set ms_mode = 'single' %}{% set ms_form_id = 'ratings-form' %}{% set ms_name = 'scale' %}{% set ms_label = 'Rating scale' %}{% set ms_remote = '' %}
+        {% set ms_items = scales %}{% set ms_selected = scale %}{% set ms_wide = true %}
+        {% include "_widget_list_multiselect.html" %}
+        <div class="field field-wide switch-row">
+            <label for="ratings-advanced">Advanced rating</label>
+            {{ switch_input({'name': 'advanced', 'value': '1', 'id': 'ratings-advanced', 'checked': advanced_rating}) }}
+        </div>
+    </div>
+</form>
+<div data-advanced-only{% if not advanced_rating %} hidden{% endif %}>
+<div class="vi-rows">
+    {% for cr in criteria %}
+    <div class="vi-row"><span class="vi-k">{{ cr.name }}</span><div class="vi-v vi-v-end"><span class="vi-display">{{ cr.weight|round(1)|string|replace('.0', '') }} · {{ cr.kind_names }}</span>
+        <a href="/settings/library/criteria/{{ cr.uid }}/edit" data-modal class="icon-btn" title="Edit {{ cr.name }}" aria-label="Edit {{ cr.name }}">{{ icon('edit', 'icon-sm') }}</a></div></div>
+    {% endfor %}
+</div>
+<a href="/settings/library/criteria/new" data-modal class="btn ghost">{{ icon('plus', 'icon-sm') }} Add a criterion</a>
+</div>
+{% endcall %}
+{% endblock %}

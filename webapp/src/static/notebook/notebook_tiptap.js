@@ -1,4 +1,4 @@
-// Page glue for the Tiptap editor (the default; ?editor=legacy is an explicit opt-in to the Editor.js one).
+// Page glue for the Tiptap editor, the Notebook's editor.
 // The note is stored as the same Editor.js block list, so the server side is unchanged; notes with content the
 // new editor cannot hold yet open read-only and are never saved from here.
 (function () {
@@ -355,10 +355,6 @@
         banner.setAttribute("role", "status");
         var what = handle.reasons.length ? "It holds " + handle.reasons.join(", ") + " blocks the new editor cannot hold yet" : "It holds content the new editor cannot hold yet";
         banner.append(what + ", so it is read-only here and nothing is changed. ");
-        var link = document.createElement("a");
-        link.href = "?editor=legacy";
-        link.textContent = "Open it in the old editor to edit";
-        banner.append(link, ". ");
         var convert = document.createElement("button");
         convert.type = "button";
         convert.className = "btn ghost btn-sm";

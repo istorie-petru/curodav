@@ -137,6 +137,7 @@ class TestSettingsHub:
             "/settings/appearance",
             "/settings/labels",
             "/settings/groups",
+            "/settings/calibre",
             "/settings/tags",
             "/settings/notebook",  # 2026-10-02
             "/settings/library",

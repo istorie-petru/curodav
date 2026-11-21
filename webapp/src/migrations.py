@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .migrations_citations import citation_editions
-from .migrations_media import cite_an_edition, citation_series, editions_in_calibre, media_tracking, progress_log
+from .migrations_media import annotation_colors, bookmarks, reading_time, book_annotations, cite_an_edition, reader_state, citation_series, editions_in_calibre, media_tracking, progress_log
 from . import migrations_university
 
 
@@ -599,6 +599,11 @@ MIGRATIONS: list[Migration] = [
     Migration(83, "Entry types choose how their entries are detected", _entry_kind_match_mode),
     Migration(84, "The University module becomes Academic: the semester page moves to the semester shelf", migrations_university.academic_rename),
     Migration(85, "Entries get a subject", _entry_subjects),
+    Migration(86, "Highlights and notes on the text of books", book_annotations),
+    Migration(87, "Where a book was left off and annotations placed by CFI", reader_state),
+    Migration(88, "Highlights have a colour", annotation_colors),
+    Migration(89, "Bookmarks in books", bookmarks),
+    Migration(90, "Time spent reading, by book and day", reading_time),
 ]
 
 

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ c.title }} - Reader{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_empty_state.html" import empty_state %}
+{% call page_header_narrow(c.title, "book-open") %}{% endcall %}
+<div id="modal-target">
+<div class="card">
+    {% call empty_state("This book can't be opened", 'book-open', message) %}
+    <a href="/library/{{ c.uid }}/edit" data-modal class="btn primary">{{ icon('paperclip', 'icon-sm') }} {{ 'Change the file' if has_file else 'Attach a file' }}</a>
+    {% endcall %}
+</div>
+</div>
+{% endblock %}

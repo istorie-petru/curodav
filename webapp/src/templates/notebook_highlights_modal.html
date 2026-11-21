@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal, split_start, split_side, split_end %}
+{% from "_inputs.html" import search_input, switch_input %}
+{% block title %}Book highlights{% endblock %}
+{% block content %}
+{% call modal(kind="pick", title="Book highlights", size="large", cancel_url='#') %}
+{{ split_start('book-highlights', 'Highlights') }}
+<div id="highlights-list" data-list-url="/notebook/highlights/list">{% include "_notebook_highlights_list.html" %}</div>
+{{ split_side('Filters') }}
+<form method="get" action="/notebook/highlights" id="highlights-filters-form" class="form-contents"></form>
+<div class="field-grid" id="highlights-filters-grid">
+    <div class="field field-wide">
+        <label class="sr-only">Search</label>
+        {{ search_input({'name': 'q', 'value': q, 'aria-label': 'Search the highlights', 'autocomplete': 'off', 'form': 'highlights-filters-form', 'autofocus': true}) }}
+    </div>
+    <div class="field field-wide">
+        {% set ms_mode = 'select' %}{% set ms_form_id = 'highlights-filters-form' %}{% set ms_name = 'book' %}{% set ms_label = 'Book' %}
+        {% set ms_items = book_items %}{% set ms_selected = selected_books %}{% set ms_remote = '' %}{% set ms_wide = true %}
+        {% include "_widget_list_multiselect.html" %}
+    </div>
+    <div class="field">
+        {% set ms_mode = 'select' %}{% set ms_form_id = 'highlights-filters-form' %}{% set ms_name = 'color' %}{% set ms_label = 'Colour' %}
+        {% set ms_items = colors %}{% set ms_selected = selected_colors %}{% set ms_remote = '' %}{% set ms_wide = false %}
+        {% include "_widget_list_multiselect.html" %}
+    </div>
+    <div class="field switch-row">
+        <label for="highlights-only-notes">With a note</label>
+        {{ switch_input({'name': 'notes', 'value': '1', 'id': 'highlights-only-notes', 'form': 'highlights-filters-form', 'checked': only_notes}) }}
+    </div>
+</div>
+{{ split_end() }}
+{% endcall %}
+{% endblock %}

@@ -51,9 +51,9 @@
 {# Details: the second section of every add and edit form. Main rows come first; everything optional sits behind this
    toggle (closed unless `open`, which edit forms set when a detail already has a value). Use as
    {{ details_start(open) }} ...rows... {{ details_end() }}. #}
-{% macro details_start(open=false) %}
+{% macro details_start(open=false, title='Details') %}
 <details class="form-details field-wide"{% if open %} open{% endif %}>
-    <summary class="form-details-toggle">{{ icon('chevron-right', 'icon-sm') }}<span>Details</span></summary>
+    <summary class="form-details-toggle">{{ icon('chevron-right', 'icon-sm') }}<span>{{ title }}</span></summary>
     <div class="field-grid form-details-grid">
 {% endmacro %}
 {% macro details_end() %}

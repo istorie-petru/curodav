@@ -17,7 +17,7 @@ from typing import Any
 from .. import config
 from .notebook import _attach_citation_authors
 
-PAGE_SIZE = 50
+PAGE_SIZE = 100
 MAX_PDF_BYTES = 50 * 1024 * 1024
 
 _YEAR = "CASE WHEN trim(year) != '' AND trim(year) NOT GLOB '*[^0-9-]*' THEN CAST(year AS INTEGER) END"
@@ -26,6 +26,7 @@ _AUTHOR_KEY = ("CASE WHEN trim(coalesce(json_extract(value, '$.family'), '')) !=
                "THEN trim(json_extract(value, '$.family')) || ', ' || trim(json_extract(value, '$.given')) "
                "ELSE trim(coalesce(json_extract(value, '$.family'), '') || coalesce(json_extract(value, '$.given'), '')) END")
 SORT_EXPRESSIONS = {
+    "status": "CASE WHEN status = 'current' THEN 0 ELSE 1 END",
     "title": "title COLLATE NOCASE",
     "type": "type",
     "year": f"coalesce(-({_YEAR}), 99999999)",
@@ -56,8 +57,9 @@ def page_citations(conn: sqlite3.Connection, *, q: str = "", types: list[str] | 
                    year_lo: int | None = None, year_hi: int | None = None, sources: list[str] | None = None, statuses: list[str] | None = None,
                    tags: list[str] | None = None, shelves: list[str] | None = None,
                    sort: str = "title", sort2: str = "title",
-                   after: str = "", limit: int = PAGE_SIZE) -> dict[str, Any]:
-    """One keyset page (never OFFSET): rows ordered by (sort, sort2, title, uid), the cursor of the next page or "", and the match count."""
+                   after: str = "", limit: int = PAGE_SIZE, offset: int = 0) -> dict[str, Any]:
+    """One page of rows ordered by (sort, sort2, title, uid), the cursor of the next page or "", and the match count. Pages follow
+    each other by keyset (`after`); `offset` is for a page picked by number (the Library's pager), used only without `after`."""
     where, args = ["1 = 1"], []
     match = fts_query(q)
     if match:
@@ -97,8 +99,8 @@ def page_citations(conn: sqlite3.Connection, *, q: str = "", types: list[str] | 
         where.append(f"({', '.join(keys)}) > ({', '.join('?' for _ in keys)})")
         args += cursor
     select_keys = ", ".join(f"{k} AS _k{i}" for i, k in enumerate(keys))
-    rows = conn.execute(f"SELECT *, {select_keys} FROM citations WHERE {' AND '.join(where)} ORDER BY {', '.join(keys)} LIMIT ?",
-                        [*args, limit + 1]).fetchall()
+    rows = conn.execute(f"SELECT *, {select_keys} FROM citations WHERE {' AND '.join(where)} ORDER BY {', '.join(keys)} LIMIT ? OFFSET ?",
+                        [*args, limit + 1, 0 if cursor else max(0, int(offset))]).fetchall()
     more = len(rows) > limit
     rows = rows[:limit]
     next_cursor = encode_cursor([rows[-1][f"_k{i}"] for i in range(len(keys))]) if more and rows else ""

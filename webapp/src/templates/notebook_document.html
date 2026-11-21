@@ -11,13 +11,9 @@
    base.html's extra_head block comment and
    static/notebook/vendor/NOTICE.md for why (CSP blocks unnonced inline
    <style>, which is all a third-party vendored bundle can produce). #}
-{% if new_editor %}<link rel="stylesheet" href="{{ static_url('notebook/notebook_tiptap.css') }}">{% else %}<link rel="stylesheet" href="{{ static_url('notebook/vendor/editorjs.css') }}">{% endif %}
-{% if not new_editor %}<link rel="stylesheet" href="{{ static_url('notebook/vendor/header.css') }}">{% endif %}
-{% if not new_editor %}<link rel="stylesheet" href="{{ static_url('notebook/vendor/list.css') }}">{% endif %}
-{% if not new_editor %}<link rel="stylesheet" href="{{ static_url('notebook/notebook_table.css') }}">{% endif %}
+<link rel="stylesheet" href="{{ static_url('notebook/notebook_tiptap.css') }}">
 <link rel="stylesheet" href="{{ static_url('notebook/notebook_mentions.css') }}">
 <link rel="stylesheet" href="{{ static_url('notebook/notebook_image.css') }}">
-{% if not new_editor %}<link rel="stylesheet" href="{{ static_url('notebook/vendor/inlinecode.css') }}">{% endif %}
 {# Notebook's own dark-theme + focus-outline patches on top of the vendor
    CSS above -- loaded last so its selectors' higher specificity (not
    source order) is what actually wins; see that file's own header
@@ -130,7 +126,6 @@
 {% endif %}
 {% endblock %}
 {% block extra_scripts %}
-{% if new_editor %}
 <script defer src="{{ static_url('perf_client.js') }}"></script>
 <script defer src="{{ static_url('notebook/notebook_save.js') }}"></script>
 <script defer src="{{ static_url('notebook/notebook_floating.js') }}"></script>
@@ -143,36 +138,7 @@
 <script defer src="{{ static_url('notebook/vendor/tiptap.bundle.js') }}"></script>
 <script defer src="{{ static_url('notebook/notebook_tiptap_toolbar.js') }}"></script>
 <script defer src="{{ static_url('notebook/notebook_tiptap.js') }}"></script>
-{% else %}
-<script defer src="{{ static_url('notebook/vendor/editorjs.umd.js') }}"></script>
-<script defer src="{{ static_url('notebook/vendor/header.umd.js') }}"></script>
-<script defer src="{{ static_url('notebook/vendor/list.umd.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_save.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_floating.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_glossary_autofill.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_mentions.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_table_model.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_table.js') }}"></script>
-<script defer src="{{ static_url('notebook/vendor/dragdrop.umd.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_image.js') }}"></script>
-<script defer src="{{ static_url('notebook/vendor/inlinecode.umd.js') }}"></script>
-<script defer src="{{ static_url('notebook/vendor/undo.umd.js') }}"></script>
-<script defer src="{{ static_url('notebook/vendor/prism.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_blocks.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_timeline.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_code.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_footnotes.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_toc.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_wikilinks.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_inline.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_block_tunes.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_block_drag.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_markdown.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_typing.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_undo.js') }}"></script>
-<script defer src="{{ static_url('perf_client.js') }}"></script>
-<script defer src="{{ static_url('notebook/notebook_editor.js') }}"></script>
-{% endif %}
 <script defer src="{{ static_url('notebook/notebook_entries.js') }}"></script>
 <script defer src="{{ static_url('notebook_sidebar.js') }}"></script>
+<script defer src="{{ static_url('notebook_highlights_picker.js') }}"></script>
 {% endblock %}

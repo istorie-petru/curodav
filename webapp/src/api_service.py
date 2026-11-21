@@ -180,6 +180,13 @@ def media_now(conn: sqlite3.Connection, *, finished_days: int = 60) -> dict[str,
     return {name: _with_tracking(conn, rows) for name, rows in sections.items()}
 
 
+def reading_stats(conn: sqlite3.Connection, range_name: str = "year") -> dict[str, Any]:
+    from . import book_stats
+
+    start, end = book_stats.period(range_name if range_name in ("week", "month", "year", "all") else "year", clock.today())
+    return book_stats.stats(conn, start, end, clock.today())
+
+
 def get_citation(conn: sqlite3.Connection, uid: str) -> dict[str, Any]:
     c = db.get_citation(conn, uid)
     if c is None:

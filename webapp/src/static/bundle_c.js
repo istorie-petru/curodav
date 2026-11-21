@@ -457,9 +457,15 @@ try {
     if (hidden) hidden.setAttribute("value", value || "");
     const shown = root.querySelector(".dtf-input");
     if (shown) shown.setAttribute("value", value ? text : "");
-    root.querySelectorAll("input.vi-status-radio").forEach((r) => { if (r.value === value) r.setAttribute("checked", ""); else r.removeAttribute("checked"); });
+    root.querySelectorAll("input.vi-status-radio, input.vi-choice-radio").forEach((r) => { if (r.value === value) r.setAttribute("checked", ""); else r.removeAttribute("checked"); });
     const trigger = root.querySelector(".multiselect-trigger .ms-summary");
-    if (trigger && field === "status") trigger.textContent = text;
+    if (trigger && (field === "status" || root.querySelector(".vi-choice-radio"))) trigger.textContent = text;
+  }
+
+  // A row whose editor is a list of choices other than the status (a rating, say): it saves the picked label as plain text.
+  function isChoice(host) {
+    const tpl = host.querySelector("template.vi-editor");
+    return !!(tpl && tpl.content.querySelector(".vi-choice-radio"));
   }
 
   function openEditor(host) {
@@ -477,7 +483,7 @@ try {
       focusTarget.focus();
       if (focusTarget.setSelectionRange && /^(textarea|input)$/i.test(focusTarget.tagName)) { const end = focusTarget.value.length; focusTarget.setSelectionRange(end, end); }
     }
-    if (host.dataset.viField === "status") {
+    if (host.dataset.viField === "status" || isChoice(host)) {
       const trigger = box.querySelector(".multiselect-trigger");
       if (trigger) trigger.click();
     }
@@ -512,6 +518,10 @@ try {
       const text = host.querySelector(".dtf-input").value;
       try { await save(host, e.target.value || null); paint(host, field, e.target.value ? text : "", ""); syncTemplate(host, field, e.target.value || "", text); } catch (err) { fail(err.message); }
       close(host);
+    } else if (e.target.classList.contains("vi-choice-radio")) {
+      const label = e.target.closest("label").textContent.trim();
+      try { await save(host, e.target.value); paint(host, field, e.target.value ? label : "", ""); syncTemplate(host, field, e.target.value, label); } catch (err) { fail(err.message); }
+      close(host);
     } else if (field === "status" && e.target.classList.contains("vi-status-radio")) {
       const label = e.target.closest("label").textContent.trim();
       try { await save(host, e.target.value); paint(host, field, label, e.target.dataset.color || "gray"); syncTemplate(host, field, e.target.value, label); } catch (err) { fail(err.message); }
@@ -525,7 +535,7 @@ try {
   function closeChoiceEditors(except) {
     document.querySelectorAll(".vi-editable.is-editing").forEach((host) => {
       const f = host.dataset.viField;
-      if (host !== except && (f === "due_at" || f === "status")) close(host);
+      if (host !== except && (f === "due_at" || f === "status" || isChoice(host))) close(host);
     });
   }
   document.addEventListener("mousedown", (e) => {
@@ -534,7 +544,7 @@ try {
   }, true);
   document.addEventListener("focusout", (e) => {
     const host = e.target.closest && e.target.closest(".vi-editable.is-editing");
-    if (!host || !(host.dataset.viField === "due_at" || host.dataset.viField === "status")) return;
+    if (!host || !(host.dataset.viField === "due_at" || host.dataset.viField === "status" || isChoice(host))) return;
     setTimeout(() => {
       const active = document.activeElement;
       if (host.isConnected && !host.contains(active) && !(active && active.closest && active.closest(keepOpenFor))) close(host);
@@ -2725,6 +2735,25 @@ try {
     if (e.target.matches && e.target.matches("[data-find-q]")) {
       clearTimeout(timer);
       timer = setTimeout(function () { search(e.target); }, 500);
+    }
+  });
+  // The side pane has two tabs, Status and Find details; one panel is open at a time.
+  document.addEventListener("click", function (e) {
+    var tab = e.target.closest && e.target.closest("[data-side-tab]");
+    if (!tab) return;
+    var side = tab.closest(".modal-split-side");
+    var key = tab.getAttribute("data-side-tab");
+    side.querySelectorAll("[data-side-tab]").forEach(function (t) {
+      var on = t === tab;
+      t.classList.toggle("is-active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    side.querySelectorAll("[data-side-panel]").forEach(function (p) { p.hidden = p.getAttribute("data-side-panel") !== key; });
+    if (key === "find") {
+      var q = side.querySelector("[data-find-q]");
+      var title = field("title");
+      if (q && !q.value && title && title.value) { q.value = title.value; search(q); }
+      if (q) q.focus();
     }
   });
   // A new entry starts with the title typed in the window, so Find details opens already searching for it.

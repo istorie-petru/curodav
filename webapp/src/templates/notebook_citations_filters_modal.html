@@ -1,17 +1,22 @@
-{% from "_inputs.html" import number_input %}
+{% from "_inputs.html" import number_input, search_input %}
 {% extends "base.html" %}
-{% block title %}Filter citations{% endblock %}
+{% from "_modal.html" import modal, split_start, split_side, split_end %}
+{% block title %}Search the library{% endblock %}
 {% block content %}
-<div id="modal-target" class="modal-stable-height">
-<div class="modal-header">
-<h1>Filter citations</h1>
-</div>
-<div class="modal-body">
-<div class="card">
-<form method="get" action="/library" id="citations-filters-form">
-    <input type="hidden" name="view" value="{{ view }}">
-    <div class="field-grid">
+{% set _actions %}<a href="/library" class="btn ghost">Clear</a> <a href="{{ apply_href }}" id="citations-filters-apply" class="btn primary">{{ icon('search', 'icon-sm') }} <span id="citations-filters-count">Show</span></a>{% endset %}
+{% call modal(kind="form", title="Search the library", size="large", cancel_url='/library', extra_html=_actions) %}
+{{ split_start('library-search', 'Matches') }}
+<form method="get" action="/library" id="citations-filters-form" class="form-contents">
+    {% if layout %}<input type="hidden" name="layout" value="{{ layout }}">{% endif %}
+</form>
+<div id="library-preview" data-preview-url="/library/preview"></div>
+{{ split_side('Filters') }}
+<div class="field-grid" id="citations-filters-grid">
         <div class="field field-wide">
+            <label class="sr-only">Search</label>
+            {{ search_input({'name': 'q', 'value': q, 'aria-label': 'Search the library', 'autocomplete': 'off', 'form': 'citations-filters-form', 'autofocus': true}) }}
+        </div>
+        <div class="field">
             {% set ms_mode = 'select' %}
             {% set ms_form_id = 'citations-filters-form' %}
             {% set ms_name = 'type' %}
@@ -20,7 +25,7 @@
             {% set ms_selected = selected_types %}
             {% include "_widget_list_multiselect.html" %}
         </div>
-        <div class="field field-wide">
+        <div class="field">
             {% set ms_mode = 'select' %}
             {% set ms_form_id = 'citations-filters-form' %}
             {% set ms_name = 'status' %}
@@ -29,7 +34,7 @@
             {% set ms_selected = selected_statuses %}{% set ms_remote = '' %}
             {% include "_widget_list_multiselect.html" %}
         </div>
-        <div class="field field-wide">
+        <div class="field">
             {% set ms_mode = 'select' %}
             {% set ms_form_id = 'citations-filters-form' %}
             {% set ms_name = 'source' %}
@@ -38,7 +43,7 @@
             {% set ms_selected = selected_sources %}{% set ms_remote = '' %}
             {% include "_widget_list_multiselect.html" %}
         </div>
-        <div class="field field-wide">
+        <div class="field">
             {% set ms_mode = 'select' %}
             {% set ms_form_id = 'citations-filters-form' %}
             {% set ms_name = 'author' %}
@@ -76,23 +81,6 @@
             {% include "_widget_list_multiselect.html" %}
         </div>
     </div>
-</form>
-</div>
-</div>
-<div class="modal-footer">
-    <a href="/library" class="btn ghost" data-modal-cancel>{{ icon('chevron-left', 'icon-sm') }} Cancel</a>
-    <span class="spacer"></span>
-    <a href="/library" class="btn ghost">Clear filters</a>
-    <a href="{{ apply_href }}" id="citations-filters-apply" class="btn primary">{{ icon('filter', 'icon-sm') }} Apply</a>
-</div>
-</div>
+{{ split_end() }}
+{% endcall %}
 {% endblock %}
-<!-- No extra_scripts block -- only ever opened via data-modal, so
-     anything outside #modal-target above is never part of what modal.js
-     actually injects (same note as notebook_field_edit_modal.html's own
-     footer comment). static/notebook_citations_filters.js is loaded from
-     notebook_citations_list.html instead -- the real page this modal is
-     always opened from -- since its document-level delegated listener
-     works regardless of whether this modal's markup existed at script-
-     load time. -->
-

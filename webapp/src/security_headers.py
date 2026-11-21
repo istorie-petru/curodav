@@ -60,6 +60,7 @@ this middleware puts in the response header -- and formats
 
 from __future__ import annotations
 
+import re
 import secrets
 
 CSP_POLICY = (
@@ -73,6 +74,24 @@ CSP_POLICY = (
     "frame-ancestors 'none'; "
     "base-uri 'self'"
 )
+
+# The book reader draws each chapter of an EPUB in a sandboxed blob: frame, with the book's own styles, images and fonts, so that
+# one page (and only that one) allows blob: frames, images and fonts and inline styles. Scripts stay locked to the page's own
+# files and nonce, and frames inherit that, so scripts inside a book never run.
+READER_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'nonce-{nonce}'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob:; "
+    "font-src 'self' data: blob:; "
+    "frame-src 'self' blob:; "
+    "worker-src 'self' blob:; "
+    "connect-src 'self' blob:; "
+    "form-action 'self'; "
+    "frame-ancestors 'none'; "
+    "base-uri 'self'"
+)
+_READER_PATH = re.compile(r"^/library/[0-9a-fA-F-]{8,}/read/?$")
 
 HSTS_VALUE = "max-age=31536000; includeSubDomains"
 
@@ -104,7 +123,7 @@ class SecurityHeadersMiddleware:
         # header/attribute, long enough that guessing it is infeasible.
         nonce = secrets.token_urlsafe(16)
         scope.setdefault("state", {})["csp_nonce"] = nonce
-        csp_value = CSP_POLICY.format(nonce=nonce)
+        csp_value = (READER_CSP if _READER_PATH.match(scope.get("path", "")) else CSP_POLICY).format(nonce=nonce)
 
         async def send_wrapper(message):
             if message["type"] == "http.response.start":

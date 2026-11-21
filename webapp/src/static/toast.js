@@ -17,7 +17,7 @@
     return [variant, title, message].join("|");
   }
 
-  function ccToast({ message, title, icon, className, actions, actionLabel, onAction, duration = 4500, variant = "default", persistent = false, typedConfirm }) {
+  function ccToast({ message, title, icon, className, actions, actionLabel, onAction, duration = 4500, variant = "default", persistent = false, typedConfirm, progress: progressValue }) {
     const config = VARIANT_CONFIG[variant] || VARIANT_CONFIG.default;
     const phrase = window.ccPhrase || ((t) => t);
     message = phrase(message);
@@ -50,6 +50,37 @@
     bodyEl.hidden = !message;
     bodyEl.textContent = message || "";
     content.appendChild(bodyEl);
+
+    // A progress bar for work that takes a while: a fraction from 0 to 1, or null for "working" with no known end.
+    let bar = null;
+    let barFill = null;
+    function setBar(value) {
+      if (value === undefined) return;
+      if (value === false) {
+        if (bar) bar.hidden = true;
+        return;
+      }
+      if (!bar) {
+        bar = document.createElement("span");
+        bar.className = "toast-bar";
+        bar.setAttribute("role", "progressbar");
+        barFill = document.createElement("span");
+        barFill.className = "toast-bar-fill";
+        bar.appendChild(barFill);
+        content.appendChild(bar);
+      }
+      bar.hidden = false;
+      bar.classList.toggle("is-indeterminate", value === null);
+      if (value === null) {
+        barFill.style.width = "";
+        bar.removeAttribute("aria-valuenow");
+      } else {
+        const pct = Math.max(0, Math.min(1, value)) * 100;
+        barFill.style.width = pct + "%";
+        bar.setAttribute("aria-valuenow", String(Math.round(pct)));
+      }
+    }
+    setBar(progressValue);
 
     let typedInput = null;
     if (typedConfirm) {
@@ -224,6 +255,7 @@
       } else {
         bodyEl.hidden = true;
       }
+      setBar(newOpts.progress);
       return true;
     }
 

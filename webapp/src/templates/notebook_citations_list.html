@@ -1,92 +1,15 @@
 {% set page_add = {'href': '/library/new', 'label': 'Add to the library'} %}
-{% from "_empty_state.html" import empty_state %}
 {% extends "base.html" %}
 {% block title %}Library{% endblock %}
 {% block main_class %}notebook-plain-title{% endblock %}
 {% block content %}
-{% from "_action_menu.html" import action_menu with context %}
-{% from "_label_pill.html" import tag_pill with context %}
 {% from "_library_views.html" import library_header with context %}
-{% from "_media_cards.html" import media_section with context %}
-{% from "_widget_cards.html" import wcard_stat %}
 {{ library_header() }}
-{% if kind_chips|length > 2 or kind_chips|selectattr('removable')|list %}
-<nav class="library-kinds" aria-label="Kinds">
-    {% for k in kind_chips %}<a href="{{ k.href }}" class="library-kind{% if k.active %} is-active{% endif %}"{% if k.active %} aria-current="true"{% endif %}>{% if k.icon %}{{ icon(k.icon, 'icon-sm') }} {% endif %}{{ k.label }} {% if k.removable %}<span class="sr-only">remove this filter</span>{{ icon('x', 'icon-sm') }}{% else %}<span class="library-kind-count">{{ k.count }}</span>{% endif %}</a>{% endfor %}
-</nav>
-{% endif %}
 <div id="modal-target">
-{% if not searching %}
-{% if not total %}
-<div class="card">{{ empty_state('Nothing in progress' if library_total else 'Nothing in the library yet', 'bookmark') }}</div>
-{% else %}
-<div class="card-grid wcard-grid media-stats">
-    {{ wcard_stat('Reading now', now.reading|length|string if now.reading else '', now.reading[0].title if now.reading else '') }}
-    {{ wcard_stat('Watching now', now.watching|length|string if now.watching else '', now.watching[0].title if now.watching else '') }}
-    {{ wcard_stat('Up next', now.planned|length|string if now.planned else '', now.planned[0].title if now.planned else '') }}
-    {{ wcard_stat('Finished lately', now.finished|length|string if now.finished else '', 'in the last ' ~ recent_days ~ ' days') }}
-</div>
-{{ media_section('Reading now', now.reading) }}
-{{ media_section('Watching now', now.watching) }}
-{{ media_section('On hold', now.paused) }}
-{{ media_section('Up next', now.planned) }}
-{{ media_section('Finished in the last ' ~ recent_days ~ ' days', now.finished) }}
-{% endif %}
-{% if library_total %}<p class="muted library-hint">{{ library_total }} {{ 'entry' if library_total == 1 else 'entries' }} in the library. Search above, or pick a kind, to list them.</p>{% endif %}
-{% else %}
-<div class="settings-group">
-{% if not citations %}
-{# Two distinct empty states (same "no documents at all" vs. "filters
-   narrowed it to nothing" rule notebook_list.html's Browse page already
-   follows) -- this one skips the table/empty_state_row below entirely
-   rather than showing "Nothing in the library yet" underneath a filter that's
-   plainly hiding real citations. #}
-{% call empty_state('Nothing in the library matches the current filters', size='compact') %}<a href="/library">Clear search</a>{% endcall %}
-{% else %}
-{% if citations %}
-{% macro sort_head(key, label, cls) %}<th class="{{ cls }}"><a href="{{ sort_hrefs[key] }}" class="library-sort{% if sort == key %} is-active{% endif %}"{% if sort == key %} aria-sort="{{ 'descending' if key in ('year', 'rating') else 'ascending' }}"{% endif %}>{{ label }}</a></th>{% endmacro %}
-<div class="card table-scroll table-responsive" id="citations-list">
-    <table class="entity-table library-table">
-        <thead><tr>
-            <th class="library-cover-col"><span class="sr-only">Cover</span></th>
-            {{ sort_head('title', 'Title', 'col-name') }}
-            {{ sort_head('type', 'Kind', 'col-opt-1') }}
-            <th class="col-opt-2">Status</th>
-            {{ sort_head('rating', 'Rating', 'col-opt-2') }}
-            {{ sort_head('year', 'Year', 'col-opt-1') }}
-            <th class="col-actions-narrow"><span class="sr-only">Actions</span></th>
-        </tr></thead>
-        <tbody>
-        {% for c in citations %}
-        <tr data-uid="{{ c.uid }}">
-            <td class="library-cover-col"><a href="/library/{{ c.uid }}" data-modal tabindex="-1" aria-hidden="true"><span class="media-row-cover">{% if c.cover %}<img src="{{ c.cover }}" alt="" loading="lazy">{% else %}{{ icon(c.kind.icon, 'icon-sm') }}{% endif %}</span></a></td>
-            <td class="col-name"><a href="/library/{{ c.uid }}" data-modal class="library-title">{{ c.title }}</a>
-                {% if c.tag_items %}<span class="library-tags">{% for t in c.tag_items[:3] %}{{ tag_pill(t, '/library?tag=' ~ (t.name | urlencode)) }}{% endfor %}</span>{% endif %}
-                <span class="library-sub">{{ c.display_authors }}{% if c.source.files %} · {{ icon('file', 'icon-sm') }}{% if c.source.missing %} File missing{% endif %}{% elif c.source.url %} · {{ icon('link', 'icon-sm') }}{% endif %}{% if c.source.editions > 1 %} · {{ c.source.editions }} editions{% endif %}</span>
-                <span class="library-sub library-phone">{{ c.status_label }}{% if c.stars %} · {{ c.stars }}{% endif %}</span></td>
-            <td class="col-opt-1">{{ c.kind.name if (c.kind.custom or c.type in ('book', 'manga', 'film', 'tv', 'anime')) else c.type_label }}</td>
-            <td class="col-opt-2">{% if c.status_label %}<span class="library-kind library-status">{{ c.status_label }}</span>{% endif %}</td>
-            <td class="col-opt-2">{{ c.stars }}</td>
-            <td class="col-opt-1">{{ c.year }}</td>
-            <td class="col-actions-narrow">{{ action_menu([
-                {'label': 'Edit', 'icon': 'edit', 'href': '/library/' ~ c.uid ~ '/edit', 'modal': true},
-                {'label': 'Delete', 'icon': 'trash', 'danger': true, 'form_action': '/library/' ~ c.uid ~ '/delete', 'confirm': 'Delete "' ~ c.title ~ '"? Any note or reading using it loses it, and its editions and their stored files are deleted too.'},
-            ], aria_label='More actions for ' ~ c.title) }}</td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-</div>
-<p class="muted" id="citations-count">{{ total }} {{ 'entry' if total == 1 else 'entries' }}{% if next_href %} · <a href="{{ next_href }}">Next page</a>{% endif %}</p>
-{% else %}
-{{ empty_state('Nothing in the library yet', icon_name='book-open') }}
-{% endif %}
-{% endif %}
-
-</div>
-{% endif %}
+{% include "_library_results.html" %}
 </div>
 {% endblock %}
 {% block extra_scripts %}
 <script defer src="{{ static_url('notebook_citations_filters.js') }}"></script>
+<script defer src="{{ static_url('library_browse.js') }}"></script>
 {% endblock %}

@@ -183,6 +183,10 @@ class Library:
             rows = conn.execute("SELECT id, uuid, title, sort, pubdate, series_index, path, has_cover, last_modified FROM books ORDER BY id").fetchall()
             return [self._book(conn, r) for r in rows]
 
+    def uuids(self) -> set[str]:
+        with self._conn() as conn:
+            return {r[0] for r in conn.execute("SELECT uuid FROM books")}
+
     def book(self, book_uuid: str) -> dict[str, Any] | None:
         with self._conn() as conn:
             row = conn.execute("SELECT id, uuid, title, sort, pubdate, series_index, path, has_cover, last_modified FROM books WHERE uuid = ?",

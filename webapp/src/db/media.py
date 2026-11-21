@@ -266,6 +266,11 @@ def set_tracking(conn: sqlite3.Connection, citation_uid: str, fields: dict[str, 
         conn.commit()
 
 
+def set_citation_year(conn: sqlite3.Connection, citation_uid: str, year: str) -> None:
+    conn.execute("UPDATE citations SET year = ?, updated_at = ? WHERE uid = ?", (year[:10], _now(), citation_uid))
+    conn.commit()
+
+
 def external_ids(c: dict[str, Any]) -> dict[str, str]:
     try:
         data = json.loads(c.get("external_json") or "{}")
@@ -310,6 +315,11 @@ def editions_with_local_files(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
 def editions_in_calibre(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     rows = conn.execute("SELECT * FROM citation_editions WHERE calibre_uuid != '' ORDER BY citation_uid, created_at").fetchall()
+    return [dict(r) for r in rows]
+
+
+def editions_for_uuid(conn: sqlite3.Connection, calibre_uuid: str) -> list[dict[str, Any]]:
+    rows = conn.execute("SELECT * FROM citation_editions WHERE calibre_uuid = ? ORDER BY created_at", (calibre_uuid,)).fetchall()
     return [dict(r) for r in rows]
 
 

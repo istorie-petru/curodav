@@ -94,6 +94,12 @@ def test_an_unknown_file_type_is_refused(lib):
 
 
 @pytest.mark.slow
+def _skip_if_calibre_is_open(run):
+    """calibredb refuses to run while the Calibre application or its server is open on this machine; that is the machine, not a fault."""
+    if run.returncode != 0 and "Another calibre program" in (run.stderr or ""):
+        pytest.skip("the Calibre application is open on this machine")
+
+
 @pytest.mark.skipif(shutil.which("calibredb") is None, reason="Calibre is not installed")
 def test_calibre_itself_reads_and_checks_a_library_curodav_wrote(lib, tmp_path):
     first = lib.add_book(_meta())
@@ -105,6 +111,7 @@ def test_calibre_itself_reads_and_checks_a_library_curodav_wrote(lib, tmp_path):
     env = {"HOME": str(tmp_path), "CALIBRE_CONFIG_DIRECTORY": str(tmp_path / "calibre-config"), "PATH": "/usr/bin:/bin"}
     listed = subprocess.run(["calibredb", "--library-path", str(lib.folder), "list", "--for-machine", "--fields", "title,authors,formats,identifiers,tags,uuid"],
                             capture_output=True, text=True, timeout=120, env=env)
+    _skip_if_calibre_is_open(listed)
     assert listed.returncode == 0, listed.stderr
     books = {b["uuid"]: b for b in json.loads(listed.stdout)}
     assert books[first]["title"] == "The Dispossessed" and books[first]["identifiers"] == {"isbn": "9780441478125"}
@@ -252,6 +259,7 @@ def test_an_edit_made_with_calibre_itself_is_read_back(conn, tmp_path):
     env = {"HOME": str(tmp_path), "CALIBRE_CONFIG_DIRECTORY": str(tmp_path / "calibre-config"), "PATH": "/usr/bin:/bin"}
     done = subprocess.run(["calibredb", "--library-path", str(lib.folder), "set_metadata", book_id, "--field", "tags:sf,classic", "--field", "publisher:Avon"],
                           capture_output=True, text=True, timeout=120, env=env)
+    _skip_if_calibre_is_open(done)
     assert done.returncode == 0, done.stderr
     assert media_books.pull(conn)["updated"] == 1
     c = db.get_citation(conn, uid)

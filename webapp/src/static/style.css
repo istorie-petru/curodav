@@ -1719,8 +1719,9 @@ img.avatar-circle{object-fit:cover;}
 .recurrence-ends-until{width:140px;}
 .recurrence-ends-count{width:64px;}
 .reminders-custom-input{margin-bottom:0;}
-.field-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:0 var(--space-4);}
-.field-grid .field-wide{grid-column:span 2;}
+.field-grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 var(--space-4);}
+.field-grid > *{min-width:0;}
+.field-grid .field-wide{grid-column:1 / -1;}
 /* Holiday calendar / Exclude Saturday / Exclude Sunday (_event_form_fields.html,
    toggled via the `hidden` attribute by static/recurrence_picker.js's sync())
    -- `.field{display:flex}` above is author CSS of equal specificity to the
@@ -4666,6 +4667,7 @@ input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-i
 .modal-body :is(h2, h3, .detail-section-head, .modal-section-title){font-size:var(--modal-fs-heading) !important;}
 .modal-body :is(label, legend, .field-hint, .field-error, .detail-meta-label, .form-details-toggle, small, .hint){font-size:var(--modal-fs-label) !important;}
 .switch-row{display:flex; align-items:center; min-height:42px;}
+.field.switch-row{flex-direction:row; justify-content:space-between; gap:var(--space-3);}
 .finance-txn-grid:not([data-status="scheduled"]) .finance-scheduled-only{display:none;}
 .finance-pending td{color:var(--fg-tertiary);}
 .finance-pending .label-name, .finance-pending a{color:inherit;}
@@ -5437,3 +5439,21 @@ input.is-greyed{opacity:.5; background:var(--bg-hover, transparent);}
 .modal-body .detail-meta-grid:not(.habit-stats-grid) > .detail-meta-item > .cell-tag{justify-self:start;}
 .detail-alias{font-weight:var(--font-weight-regular); color:inherit; opacity:.85;}
 .detail-alias-dot{display:inline-block; margin:0 .5em; color:inherit; opacity:.7;}
+
+/* Header bar controls: every button is the same 34px square, centred on the bar's own midline. */
+.page-header-narrow, .page-header-narrow-actions{align-items:center;}
+.page-header-narrow-actions > .btn.ghost, .page-header-narrow-actions > .icon-btn, .page-header-narrow-actions > .action-menu > .action-menu-trigger,
+.header-icon, .header-add{
+  box-sizing:border-box; flex:none; display:inline-grid; place-items:center; width:34px; height:34px; min-width:34px; padding:0; line-height:1;
+  border-radius:var(--radius-md, 8px);
+}
+.page-header-narrow-actions > .btn.ghost, .page-header-narrow-actions > .icon-btn{background:var(--hdr-glass); color:var(--hdr-fg); border:0; box-shadow:none;}
+.page-header-narrow-actions > .btn.ghost:hover, .page-header-narrow-actions > .icon-btn:hover{background:var(--hdr-glass-hover);}
+
+/* A toast for long work: a bar under the text that fills as the work goes, or slides when its end is not known. */
+.toast-bar{display:block; margin-top:var(--space-2); height:4px; border-radius:2px; background:var(--accent-neutral-subtle); overflow:hidden;}
+.toast-bar[hidden]{display:none;}
+.toast-bar-fill{display:block; height:100%; width:0; border-radius:2px; background:var(--accent); transition:width var(--dur-normal) var(--ease-standard);}
+.toast-bar.is-indeterminate .toast-bar-fill{width:35%; animation:toast-bar-slide 1.2s ease-in-out infinite;}
+@keyframes toast-bar-slide{0%{transform:translateX(-100%);} 100%{transform:translateX(300%);}}
+@media (prefers-reduced-motion: reduce){.toast-bar.is-indeterminate .toast-bar-fill{animation:none; width:100%;}}

@@ -9,6 +9,7 @@ EPUB, FB2 and plain text are read in Python. PDF needs poppler's `pdftotext`; ot
 from __future__ import annotations
 
 import re
+import os
 import shutil
 import subprocess
 import tempfile
@@ -22,6 +23,7 @@ from xml.etree import ElementTree
 
 PASSAGE_CHARS = 1000
 PASSAGE_MAX = 1500
+_ENV = {**os.environ, "QT_QPA_PLATFORM": "offscreen"}  # Calibre has no screen on a server
 CONVERT_SECONDS = 120
 TOOL_SECONDS = 90
 NATIVE = {"epub", "txt", "md", "fb2", "pdf"}
@@ -156,7 +158,7 @@ def _converted(path: Path) -> list[dict[str, Any]]:
     with tempfile.TemporaryDirectory(prefix="curodav-book-") as tmp:
         out = Path(tmp) / "book.epub"
         try:
-            run = subprocess.run([tool, str(path), str(out)], capture_output=True, timeout=CONVERT_SECONDS, check=False)
+            run = subprocess.run([tool, str(path), str(out)], capture_output=True, timeout=CONVERT_SECONDS, check=False, env=_ENV)
         except subprocess.TimeoutExpired:
             raise BookError("Converting that book took too long") from None
         if run.returncode != 0 or not out.is_file():
